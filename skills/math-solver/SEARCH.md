@@ -1906,6 +1906,12 @@ Supported patch add/update/delete/move operations protect `.search` snapshots an
 artifacts, generated `SEARCH_TREE.md`/`LINEAGE.md`, discovery pointers, and native
 records under custom roots. Combined unit/draft sequencing remains enforced.
 Read-only file references and command-like prose are not write authorization.
+A shell token with a component longer than 255 bytes names no file, so free text
+with a slash, such as the text of `task add`, is not probed as a path.
+The hooks read a record with the controller of their own plugin. When that
+controller cannot replay the record's log, the denial names the controller and
+says that a record written by another exactory-math, such as a newer release or a
+local runtime, needs a release that reads it; the log does not name its writer.
 Recognized managed mutations with corrupt state or unsupported visible shell or
 wrapper payloads fail closed with direct-call recovery guidance. The adapter does
 not parse arbitrary shell programs or JavaScript. Nested operations that the host

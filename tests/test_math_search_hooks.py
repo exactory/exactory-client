@@ -243,6 +243,26 @@ class MathSearchHookTests(unittest.TestCase):
             self.denied(self.hook("guard_attack_files.py", "PreToolUse", tool_name="exec_command",
                 tool_input={"cmd": command, "workdir": str(self.root)}))
 
+    def test_a_long_free_text_argument_with_a_slash_is_not_probed_as_a_path(self):
+        text = "Move 1 under reduce-and-translate: " + "state the reduction step by step " * 12 + "and write proofs/reduction.md"
+        self.assertGreater(len(text.split("/")[0].encode()), 255)
+        output = self.hook("guard_attack_files.py", "PreToolUse", tool_name="exec_command",
+            tool_input={"cmd": "exactory-math --attack-root " + repr(str(self.root)) + " task add attempt " + repr(text),
+                        "workdir": str(self.workspace)})
+        self.assertIsNone(output)
+
+    def test_a_record_that_the_installed_controller_cannot_replay_names_that_controller(self):
+        tree = json.loads(self.controller.store.tree_path.read_text())
+        proposal = next(event for event in tree["events"] if "proposal" in json.dumps(event) and '"main"' in json.dumps(event))
+        text = json.dumps(proposal).replace('"main"', '"a-category-of-a-newer-controller"', 1)
+        tree["events"][tree["events"].index(proposal)] = json.loads(text)
+        self.controller.store.tree_path.write_text(json.dumps(tree))
+        reason = self.denied(self.hook("guard_attack_files.py", "PreToolUse", tool_name="Write",
+            tool_input={"file_path": str(self.root / "attempt/notes.md")}))
+        self.assertIn("could not replay this record", reason)
+        self.assertIn(str(ROOT / "bin/exactory-math"), reason)
+        self.assertIn("Unknown enum value", reason)
+
     def test_controller_timeout_is_a_managed_recovery_error(self):
         module = runpy.run_path(str(ROOT / "hooks/math_search.py"))
         with patch.object(module["subprocess"], "run", side_effect=subprocess.TimeoutExpired("controller", 20)):
