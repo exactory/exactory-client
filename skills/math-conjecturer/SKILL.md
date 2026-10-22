@@ -239,7 +239,9 @@ and it is honest about its outcome.
 10. Cite evidence for each foothold and each obstruction. For a literature attempt, cite a listed
     full reading. For a solver foothold, cite an accepted `proof` or `reduction` acceptance. For a
     solver obstruction, cite an accepted `obstruction` or `counterexample` acceptance on an
-    obligation other than the root obligation.
+    obligation other than the root obligation. An acceptance under the milestone
+    `verified_strategy_obstruction` excludes only the producer's admitted strategy for its target
+    obligation: state it as an obstruction of that strategy, not of the route or the statement.
 11. Give `proportion: {extension_reason}`. When a delivered total exceeds a normal limit (24
     moves, 24 runs, 1 worker, 300 seconds), write the reason in `extension_reason`.
 12. Record a new attempt for every new statement id. When the solver delivers a later snapshot
@@ -459,7 +461,12 @@ evidence the record binds delivered to them.
 7. Treat only a ready `not_upheld` adjudication on the current evidence digest as a resolution of
    that one item.
 8. Resolve every material objection of both bars, of the applicable slate reviews and of both
-   result reviews with evidence, or with a focused adjudication that finds it not upheld. When a
+   result reviews with evidence, or with a focused adjudication that finds it not upheld or
+   `not_binding`: its claim holds, but the statement, the resolution criteria and the value
+   paragraphs do not rest on the contested premise or state their dependence on it. Name an
+   objection in `context.objection_id` by the identity that its packets deliver: two blind
+   reviewers who chose one id for different claims hold distinct identities, the later one
+   `<id>@<review id>` with its `stated_id`. When a
    slate objection or the bars change after the result reviews, the same reviewers can be
    reassigned (the harness permits the refresh when the review's currency changed and refuses a
    repeat otherwise).

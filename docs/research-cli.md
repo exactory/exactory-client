@@ -118,6 +118,29 @@ source gaps and charge the continuation to the same allowance. A request respons
 remains unresolved and cannot be recorded with `value-review`; a final phase
 assessment cannot use this interface to obtain a replacement answer.
 
+A local route fits an oversized input by withholding bodies in a fixed order:
+the evidence bodies of the replayed earlier turns, the bodies that a context
+repair's scientific history re-delivers, an HTML original whose complete
+extraction from the same capture stays, the bodies that an earlier turn of the
+session supplied, the full texts of a declared `text_delivery_priority`, whole
+requested sources that do not fit (they stay pending as `deferred_capacity` for
+the same reviewer), the captured responses of a problem record's bound searches,
+the packets of the slot's history, the replayed packets of earlier turns, the
+full texts of fully read works, and any other evidence body. The last two steps
+never withhold a source that the turn delivers on request or a protected
+evidence body. Each withheld body names its delivery and a note. A request that
+still does not fit is sent as it stands, and the route's refusal is recorded.
+The earlier orders of 0.56.0, of 0.56.1 and 0.57.0, and of the two records'
+local runtimes of 0.58.0 still rebuild the requests that they recorded, so those
+attempts stay authenticated.
+
+On the `codex_cli_v1` route, a problem result continuation can set
+`context.source_delivery: "complete-visible-v1"` with `prior_assignment_id`.
+The same reviewer then receives every full text that its result lineage
+requested, one complete authenticated main text per exact version, in a visible
+reversible encoding of the logical messages; further source requests remain
+actionable.
+
 A final assessment binds its assignment. `value-review` and `review-adjudication`
 check the observed output against its output contract: the shape of the payload,
 its locators against the delivered bytes, its citations against the delivered
@@ -186,6 +209,14 @@ including the required `reassessment` findings described in the
 Later exposure may invalidate its current approval while its exact original
 prospective provenance still permits historical recording. Bind a successor
 repair to all current events before using the finding as independent approval.
+
+A repair labels an inherited review `confirmed` only when its output repeats that
+review's support, value, objections and limitations exactly, under the objection
+identities that its packet delivered; any change, including wording, is
+`revised`. A prior material objection receives its finding in
+`objection_findings` and is not restated in `objections`. A repair whose two
+completed outputs were both refused no longer holds the slot, so another repair
+of the same predecessor can continue it.
 
 An ordinary third assignment cannot replace a completed adverse review. A
 replacement for a failed initial assignment inherits its native fixed slot;
@@ -1577,6 +1608,20 @@ packet refuses the run (`review_input_too_large`). The export estimates the
 packet and returns a `review_input_too_large` warning that names each registered
 text route whose limit it exceeds when the spec has no `text_priority`.
 
+When a local supporting proof is material, the spec also accepts optional
+`native_reviews: [{attempt_id, assignment_id}]`. Each entry names the current
+exact-statement solver attempt and an observed approving `native_math` result
+review of a proof or reduction checkpoint of that attempt. The export binds the
+complete reviewed checkpoint, its claim, the unchanged output and the bytes of its
+analytical dependency closure (every manifest with `verification: null`;
+certificate and Lean evidence are refused). Those bytes must appear in the actual
+requests of the supporting review and of the openness review; a descriptor or an
+omitted body supplies none. The packet then binds an `openness_delivery` record
+that selects one complete main representation per exact source version. This
+reports an observed approving review; it asserts neither native acceptance nor
+resolution of the original objective. A change of the attempt, the native
+snapshot, the observed review or the proof bytes makes the finding stale.
+
 For primary evidence used to screen a search hit, the spec also accepts optional
 `source_evidence: [{source_id, reason, locator?}]`. Each source ID names an exact
 current common acquisition record. The default delivers its complete captured
@@ -1937,7 +1982,22 @@ results given on the current problem evidence: the other current result review
 and the superseded reviews of both lineages. A refreshed reviewer sees its own
 earlier reviews in `historical_reviews`. A new version from the other current
 result review's finding is resolved by an adjudication or by a reassessment under
-changed evidence. Problem adjudication uses the existing review tools
+changed evidence.
+
+Blind reviewers cannot see each other's objections, so two of them can choose one
+id for different claims. In a problem record, an objection whose id an earlier
+review stated with another claim, and that no packet of the review's lineage
+delivered, is recorded under the identity `<id>@<review id>`. The review record
+keeps the observed output unchanged and adds `objection_identities`, the map from
+each such stated id to its identity. Packets deliver a qualified objection under
+its identity with `stated_id`, the id in the reviewer's own output, and findings,
+versions, adjudications and the post gate use the identity; name it in
+`context.objection_id`. A stated id and claim that an earlier review stated keep
+that objection's identity. A claim under an id that the review's lineage
+delivered is an output failure (`research_objection_identity_conflict`, check
+`review.objections`), recorded as a refusal: a reviewer changes a delivered
+objection through its finding. Earlier releases read `objection_identities` as
+absent, so a record that holds one needs 0.58.0 or later. Problem adjudication uses the existing review tools
 with `dossier_id: null`; changed value evidence, a changed material version of
 the adjudicated objection, or an earlier adjudicator packet that lacked a delivery
 that the post gate requires of it (below) retains the focused adjudicator and its
@@ -1954,6 +2014,18 @@ whose evidence was delivered, another assignment
 returns `review_adjudicator_fixed`, also when a delivery that the gate does not
 require of the earlier packet differs, such as the calibrations of another pair
 or `current_bar_calibrations`.
+For a material objection, the problem adjudicator can also find `not_binding`:
+the objection's claim holds on the delivered evidence, but the statement, its
+resolution criteria and its value paragraphs do not rest on the contested
+premise, or state their dependence on it explicitly, and the adjudicator cites
+the problem evidence that shows this. A ready, in-scope `not_binding`
+adjudication resolves the objection as `not_upheld` does. A rubric shortfall
+needs `not_upheld`. An adjudication decided on the adjudicator prompt before
+`not_binding` existed can be refreshed by the same adjudicator with the reason
+`protocol_changed`. A focused packet also delivers the complete current source of
+each full reading of the problem evidence (`focused-current-sources-v1`), because
+the adjudicator cannot request a source, and its recording checks those bytes in
+the actual request.
 The adjudicator template is `exactory-problem-review-v2/adjudicator`. For a
 below-threshold rubric grade, set `context.objection_id` to
 `rubric:<review_id>:<item>` with both original result review IDs. Items are
