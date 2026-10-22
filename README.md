@@ -35,6 +35,9 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.58.1](docs/releases/0.58.1.md) repairs the coverage check of a problem result review. 0.58.0 refused the
+whole actual request of a result in a bar slot that a context repair continued after the author recorded the statement.
+
 Version [0.58.0](docs/releases/0.58.0.md) ships the repairs that two problem records made in local runtimes
 on 2026-10-21 and 2026-10-22: a fixed order of input reductions on local routes, whole-source batches, two new Codex
 routes for framed and visual evidence, the version 4 result prompt, distinct identities for colliding objections,
