@@ -801,6 +801,8 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         self.addCleanup(terminate_group)
         launch = Store(self.workspace).snapshot()["records"]["probe_launch"]["lost-parent"]
         directory = self.workspace / launch["directory"]
+        # The watchdog leaves the group and closes its copy of the owner lock before it writes this receipt.
+        self.wait_for_file(directory / "watchdog.json")
         os.kill(json.loads((directory / "worker.json").read_text())["pid"], signal.SIGKILL)
         stdout, stderr = owner.communicate(timeout=5)
         self.assertEqual(owner.returncode, 0, stderr)
