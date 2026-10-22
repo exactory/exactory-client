@@ -2159,6 +2159,11 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
     if assignment['role'] == 'native_math':
         from .review_refusal import record_native_refusal
         record_native_refusal(store, assignment['id'], request_id=request_id)
+        refusal = store.snapshot()['records'].get('review_output_refusal', {}).get(payload['id'])
+        if refusal is not None:
+            # The refusal is the run's last mutation: the receipt names it and the revision after it, also on replay.
+            return dict(result, revision=refusal['recorded_revision'],
+                        output_refusal={key: refusal[key] for key in ('code', 'check', 'details')})
     return result
 
 

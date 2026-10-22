@@ -57,9 +57,11 @@ class NativeReviewOutputCheckTests(SearchCLIWorkspace, unittest.TestCase):
     def test_a_proposal_review_with_a_reviewer_string_is_refused_and_the_assignment_runs_again(self):
         malformed = copy.deepcopy(self.expected)
         malformed["reviewer"] = "claude-fable-5-1-admission"
-        self.run_assignment("attempt-1", malformed)
+        receipt = self.run_assignment("attempt-1", malformed)
         refusal = self.store.snapshot()["records"]["review_output_refusal"]["attempt-1"]
         self.assertEqual((refusal["code"], refusal["check"]), ("invalid_native_review", "native.output"))
+        # The receipt reports the refusal and the revision after it, so the next command starts from that revision.
+        self.assertEqual((receipt["revision"], receipt["output_refusal"]["check"]), (self.store.revision, "native.output"))
         self.assertFalse(self.state()["ready"])
         self.run_assignment("attempt-2", self.expected)
         state = self.state()
