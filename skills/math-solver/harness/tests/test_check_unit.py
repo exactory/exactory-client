@@ -41,7 +41,7 @@ class CheckUnitTest(AdmittedWorkspaceTest):
 
     def pay(self, *costs):
         if (self.workspace / "journal.jsonl").read_text():
-            self.tearDown()
+            self.doCleanups()
             self.setUp()
         self.history = [make_move(1, costs_paid=list(costs)), make_move(2)]
 
