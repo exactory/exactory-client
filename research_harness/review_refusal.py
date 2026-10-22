@@ -36,8 +36,10 @@ def _frozen_pdf_capture(link, packets):
                 if (provenance['source_id'] != link['source_id']
                         or provenance['original_descriptor']['sha256'] != link['artifact']['sha256']):
                     continue
+                # Acquisition stores an extraction as text/plain with its charset parameter.
                 texts = [artifact for artifact in delivery['evidence']
-                         if artifact['sha256'] in provenance['delivered_sha256'] and artifact['media_type'] == 'text/plain']
+                         if artifact['sha256'] in provenance['delivered_sha256']
+                         and artifact['media_type'].split(';', 1)[0].strip() == 'text/plain']
                 if len(texts) == 1:
                     return {'original': link['artifact'], 'text': texts[0]}
     return None

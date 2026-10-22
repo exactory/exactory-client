@@ -405,8 +405,15 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                          ("review_evidence_undelivered", {"record_kind": "problem_candidate", "id": "candidate-1", "digest": None}))
 
     def test_a_stop_assurance_written_as_not_assessed_passes_the_gate(self):
-        """The result prompt's own example writes the stop assurance as not_assessed with the reason that nothing
-        requires a stop; the gate counts that as the assurance passing. Every other assurance passes only as passed."""
+        """The version 2 result prompt's own example writes the stop assurance as not_assessed with the reason that
+        nothing requires a stop; the gate counts that as the assurance passing for a result on that prompt. Every
+        other assurance passes only as passed."""
+        original_prompt = protocol.canonical_prompt
+
+        def build_version_two_prompt(role, **options):
+            if role == "result" and options.get("orchestration") == "problem_creation":
+                options["version"] = 2
+            return original_prompt(role, **options)
         self.prepare_reviews(results=False)
         for reviewer in ("first", "second"):
             output = self.build_review_output("result")
@@ -415,7 +422,10 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                     if check["kind"] == "stop":
                         check["status"] = "not_assessed"
                         check["reason"] = "Nothing in the record requires a stop."
-            self.observe("result", reviewer, output)
+            with patch.object(protocol, "canonical_prompt", side_effect=build_version_two_prompt):
+                self.observe("result", reviewer, output)
+            self.assertEqual(self.store.snapshot()["records"]["review_assignment"]["result-" + reviewer]["prompt"]["template_id"],
+                             "exactory-problem-review-v2/result")
         records = self.store.snapshot()["records"]
         codes = {item["code"] for item in decisions.assess_problem_reviews(records, self.artifacts)["obligations"]}
         self.assertNotIn("problem_assurance_pending", codes)
