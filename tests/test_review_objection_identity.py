@@ -615,6 +615,14 @@ class QualifiedObjectionCollectionTests(unittest.TestCase):
         self.assertEqual(list(collect_qualified_objections(None)), [])
 
 
+class QualifiedObjectionShapeTests(unittest.TestCase):
+    def test_an_identity_map_whose_stated_id_is_the_word_stated_id_is_not_an_objection(self):
+        qualified = {"id": "stated_id@review-bar-second", "stated_id": "stated_id", "claim": "The second claim."}
+        packet = {"historical_reviews": [{"id": "review-bar-second", "objection_identities": {"stated_id": "stated_id@review-bar-second"},
+                                          "payload": {"objections": [qualified]}}]}
+        self.assertEqual(list(collect_qualified_objections(packet)), [qualified])
+
+
 class DossierObjectionIdentityTests(StrategyCase):
     """AI Science dossiers keep one claim per objection id for every reviewer."""
 

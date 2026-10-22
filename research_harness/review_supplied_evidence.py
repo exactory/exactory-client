@@ -51,14 +51,14 @@ def list_delivered_objections(packet):
 def collect_qualified_objections(value):
     """Yield every objection that the harness delivered in a packet under a qualified identity, wherever it sits: the
     material objections, the versions in their history, the records of their version evidence, the bars, own bars and
-    historical reviews, and the same parts of the earlier packets that a scientific history carries. The walk skips the
-    observed outputs of a scientific history: they are the reviewers' own text, and a source-request turn is checked
-    for its requests only, so an object in it can carry any key."""
+    historical reviews, and the same parts of the earlier packets that a scientific history carries. A qualified
+    objection has the text fields id, stated_id and claim. The walk skips the observed outputs of a scientific history,
+    which are the reviewers' own text, and the objection_identities maps of stored reviews, whose keys are stated ids."""
     if isinstance(value, dict):
-        if 'stated_id' in value:
+        if all(isinstance(value.get(key), str) for key in ('id', 'stated_id', 'claim')):
             yield value
         for key, item in value.items():
-            if key != 'observed_output':
+            if key not in ('observed_output', 'objection_identities'):
                 yield from collect_qualified_objections(item)
     elif isinstance(value, list):
         for item in value:
