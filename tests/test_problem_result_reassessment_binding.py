@@ -143,7 +143,7 @@ class ResultReassessmentBindingTests(unittest.TestCase):
                 output['objections'][0]['evidence'] = [explicit]
             self.contract(output)
 
-    def test_exact_current_v2_v3_v4_prompts_bind_records_and_old_or_edited_prompts_remain_strict(self):
+    def test_current_and_earlier_problem_result_prompts_bind_records_without_a_digest(self):
         self.prepare()
         for version in (2, 3, 4):
             prompt = protocol.canonical_prompt('result', version=version, repair=True, orchestration='problem_creation')
@@ -155,14 +155,17 @@ class ResultReassessmentBindingTests(unittest.TestCase):
         edited = copy.deepcopy(self.assignment['prompt'])
         edited['text'] += ' '
         version_one = protocol.canonical_prompt('result', version=1, repair=True, orchestration='problem_creation')
+        # 0.56.1 binds a record reference without a digest in the objections and the reassessment of every problem
+        # review, as the value arrays of a problem review always did; the prompt binds only what the reviewer is asked.
         for label, prompt in [('old-0551', old), ('edited', edited), ('version-one', version_one)]:
             output = copy.deepcopy(self.output)
             if label == 'version-one':
+                # A version 1 result has no rubric, so this output revises the retained version 2 result.
                 del output['value']['rubric']
                 del output['value']['rubric_evidence']
-            with self.subTest(prompt=label), self.assertRaises(ResearchError) as caught:
+                output['reassessment']['findings'][0]['disposition'] = 'revised'
+            with self.subTest(prompt=label):
                 self.contract(output, assignment=dict(self.assignment, prompt=prompt))
-            self.assertEqual(caught.exception.code, 'invalid_strategy')
 
     def test_changed_confirmed_content_stays_refused_and_only_one_exact_request_retry_can_bind(self):
         self.prepare()

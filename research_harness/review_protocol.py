@@ -1709,6 +1709,13 @@ def _uses_previous_repair_suffix(assignment):
     return assignment['prompt'] in candidates
 
 
+def is_version_2_problem_result(assignment):
+    """Whether a problem result was assigned on a version 2 result prompt, of 0.55.x or of 0.56.x: their example writes
+    the stop assurance as not_assessed when nothing requires a stop."""
+    return assignment['role'] == 'result' and assignment['prompt']['template_id'] in (
+        _PROBLEM_PROTOCOL + '/result', _PROBLEM_PROTOCOL + '/result/context-repair')
+
+
 def has_problem_result_rubric(assignment):
     """Version 2 through version 4 results retain the same required rubric schema."""
     return (assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] == 'result'

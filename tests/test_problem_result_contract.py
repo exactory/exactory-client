@@ -199,8 +199,9 @@ class PromptTerminalBoundaryTests(unittest.TestCase):
         }
         for repair, (native_hash, byte_hash) in expected.items():
             with self.subTest(repair=repair):
-                prompt = protocol.canonical_prompt('result', version=3, repair=repair,
-                                                   orchestration='problem_creation')
+                # The version 3 prompt was recorded with the context-repair suffix of 0.56.0.
+                prompt = protocol.canonical_prompt('result', version=3, repair=repair, orchestration='problem_creation',
+                                                   repair_prompt=protocol.context_repair.PROMPT_0560)
                 suffix = '/context-repair' if repair else ''
                 self.assertEqual(prompt['template_id'], 'exactory-problem-review-v3/result' + suffix)
                 self.assertEqual(prompt['template_hash'], native_hash)
