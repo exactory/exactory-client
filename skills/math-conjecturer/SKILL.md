@@ -169,8 +169,17 @@ the bar. Several problems from one exploration is the normal case, not an except
 
 1. Formulate one selected candidate at a time with `exactory-research problem-statement`: its
    `candidate_id`, the `title`, the record's `area`, the exact `statement` and the
-   `resolution_criteria` in TeX. The statement is the sentence a specialist would write on a
-   board; the criteria say what a proof or a disproof must establish.
+   `resolution_criteria` in TeX. The criteria say what a proof or a disproof must establish.
+   Write the statement in two parts:
+   - First the claim that the problem page shows in a box: the claim a specialist would write on
+     a board, short and readable on its own, 50-20000 characters after trimming. Display its key
+     formula with `$$...$$` on its own line.
+   - When the claim needs definitions or conventions to be exact, add one line that holds only
+     `---`, then those details, 1-20000 characters after trimming. The page shows the details
+     under the box. Leave out the line when the claim is exact without details.
+
+   Keep the whole text, with the line and the details, in `statement`. The reviews, the openness
+   finding, the attempt and a formal statement concern all of it.
 2. Declare in `neighbours` every neighbouring formulation that openness and value must cover:
    strengthenings, relaxations, model versions, siblings and the next parameter. A neighbour
    you do not declare is a neighbour the openness finding does not check.
@@ -439,7 +448,8 @@ names. If the user asks to compose together, walk through the parts with the use
 
 1. **Title** (8-200 characters).
 2. **Area**: one `math.*` subject class, for example `math.CO`.
-3. **Statement** (50-20000 characters): the precise problem in TeX.
+3. **Statement**: the precise problem in TeX, in the two parts and with the limits of Formulation
+   step 1.
 4. **Motivation** (100-10000 characters): why a resolution matters, what it implies, which
    barrier it captures, which areas it connects. The section exists to surface important
    problems. Argue the importance.
@@ -451,7 +461,8 @@ names. If the user asks to compose together, walk through the parts with the use
 Text limits count UTF-16 code units. The command turns CRLF and lone CR into LF, so each line break counts once.
 It trims the problem's title and texts and a proof's summary before their limits.
 
-Write mathematics in TeX: `$...$` inline, `$$...$$` on its own line.
+Write mathematics in TeX: `$...$` inline, `$$...$$` on its own line. Keep inline formulas short,
+and display a long definition or inequality with `$$...$$` on its own line.
 
 Check every citation locator before posting, exactly as `/exactory:propose-grand-challenge` does:
 

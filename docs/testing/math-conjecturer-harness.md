@@ -645,3 +645,25 @@ cite objects changed: `test_assessment_enters_the_evidence_digest_and_the_review
 `test_focused_review_delivers_and_permits_a_genuinely_new_source`
 (`test_research_problem_adjudication_contract`). Each now states the 0.56.x contract; no harness code changed.
 The seven modules together: 93 OK (Python 3.9.6). The run of the next head is recorded below when it completes.
+
+## Release 0.57.0
+
+`exactory post-problem` divides the statement text at its one line that holds only `---` and sends the text
+below that line as `statementDetails`, which the exactory problem page shows under the boxed statement (exactory
+pull request #89). The math-conjecturer skill asks for the statement in these two parts and for display
+formulas for long mathematics. Branch `feat/statement-box` from main `0536977` (0.56.1).
+
+### RED and GREEN evidence
+
+| Test (`tests/test_math_problems_cli.py`, `TestPostProblemStatementDetails`) | On main 0536977 | On the branch |
+| --- | --- | --- |
+| `test_the_line_divides_the_statement_from_its_details` | FAIL: the whole text was sent as the statement | OK |
+| `test_a_statement_without_the_line_is_sent_whole_and_without_details` | OK (the payload of a statement without the line is unchanged) | OK |
+| `test_the_line_may_hold_spaces_and_tabs_around_the_hyphens_and_end_with_crlf` | ERROR: no `statementDetails` in the body | OK |
+| `test_a_second_line_is_refused_before_any_request` | FAIL: the request was sent | OK |
+| `test_details_that_are_empty_after_trimming_are_refused_before_any_request` | FAIL: the request was sent | OK |
+| `test_the_statement_keeps_its_bounds_and_the_details_take_up_to_20000_characters` | FAIL: the bounds applied to the whole text, so a 49-character statement above the line was sent and 20000 characters of details were refused | OK |
+| `test_a_statement_file_is_divided_the_same_way` | ERROR: no `statementDetails` in the body | OK |
+
+Runs on the branch (`python3 -m unittest discover -s tests -p <module>`, Python 3.9.6): `test_math_problems_cli`
+179 OK; `test_research_problem_tools`, `test_codex`, `test_research_guidance` OK; `codex/generate.py --check` OK.

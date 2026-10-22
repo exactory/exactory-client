@@ -387,6 +387,67 @@ class TestIdsStayInTheirRoute(_MathCliTestCase):
         self.assertEqual(self.list_sent_requests(), [("GET", f"/api/v1/math-problems/{kept_id}") for kept_id in kept_ids])
 
 
+class TestPostProblemStatementDetails(_MathCliTestCase):
+    """The one line that holds only --- divides the statement, which the page shows in a box, from its details."""
+
+    def post_statement(self, text: str, expected_exit_code: int | None = None) -> tuple[str, str]:
+        self.answers[("POST", "/api/v1/math-problems")] = (201, {"id": _PROBLEM_ID})
+        argv = self.build_post_problem_argv()
+        argv[argv.index("--statement") + 1] = text
+        return self.run_cli(argv, expected_exit_code)
+
+    def test_the_line_divides_the_statement_from_its_details(self) -> None:
+        self.post_statement("s" * 60 + "\n---\n" + "Here $J_n$ is the matrix of ones.\n")
+        body = self.read_sent_body("POST", "/api/v1/math-problems")
+        self.assertEqual(body["statement"], "s" * 60)
+        self.assertEqual(body["statementDetails"], "Here $J_n$ is the matrix of ones.")
+
+    def test_a_statement_without_the_line_is_sent_whole_and_without_details(self) -> None:
+        text = "s" * 60 + "\n\nA second paragraph stays in the box, and so does a --- inside a line."
+        self.post_statement(text)
+        body = self.read_sent_body("POST", "/api/v1/math-problems")
+        self.assertEqual(body["statement"], text)
+        self.assertNotIn("statementDetails", body)
+
+    def test_the_line_may_hold_spaces_and_tabs_around_the_hyphens_and_end_with_crlf(self) -> None:
+        self.post_statement("s" * 60 + "\r\n  ---\t\r\n" + "d" * 5)
+        body = self.read_sent_body("POST", "/api/v1/math-problems")
+        self.assertEqual((body["statement"], body["statementDetails"]), ("s" * 60, "d" * 5))
+
+    def test_a_second_line_is_refused_before_any_request(self) -> None:
+        _, stderr_text = self.post_statement("s" * 60 + "\n---\nd\n---\ne", expected_exit_code=1)
+        self.assertEqual(self.sent, [])
+        self.assertIn("---", stderr_text)
+
+    def test_details_that_are_empty_after_trimming_are_refused_before_any_request(self) -> None:
+        self.post_statement("s" * 60 + "\n---\n \t\n", expected_exit_code=1)
+        self.assertEqual(self.sent, [])
+
+    def test_the_statement_keeps_its_bounds_and_the_details_take_up_to_20000_characters(self) -> None:
+        for text, is_accepted in (("s" * 49 + "\n---\n" + "d" * 10, False),
+                                  ("s" * 60 + "\n---\n" + "d" * 20000, True),
+                                  ("s" * 60 + "\n---\n" + "d" * 20001, False)):
+            with self.subTest(length=len(text)):
+                self.sent.clear()
+                if is_accepted:
+                    self.post_statement(text)
+                    self.assertEqual(self.read_sent_body("POST", "/api/v1/math-problems")["statementDetails"], "d" * 20000)
+                else:
+                    self.post_statement(text, expected_exit_code=1)
+                    self.assertEqual(self.sent, [])
+
+    def test_a_statement_file_is_divided_the_same_way(self) -> None:
+        self.answers[("POST", "/api/v1/math-problems")] = (201, {"id": _PROBLEM_ID})
+        path = self.scratch_dir / "statement.md"
+        path.write_text("s" * 60 + "\n---\nThe details.\n", encoding="utf-8")
+        argv = self.build_post_problem_argv()
+        index = argv.index("--statement")
+        argv[index:index + 2] = ["--statement-file", str(path)]
+        self.run_cli(argv)
+        body = self.read_sent_body("POST", "/api/v1/math-problems")
+        self.assertEqual((body["statement"], body["statementDetails"]), ("s" * 60, "The details."))
+
+
 class TestPostProblemInputs(_MathCliTestCase):
     def test_each_problem_text_field_counts_and_sends_trimmed_text(self) -> None:
         for flag, field, minimum, maximum in (("--title", "title", 8, 200), ("--statement", "statement", 50, 20000),

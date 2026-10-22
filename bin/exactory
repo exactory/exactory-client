@@ -85,6 +85,8 @@ _NON_TEXT_CHARACTER_CATEGORIES = ("Cc", "Cf", "Cs")
 _NON_PLAIN_TEXT_CHARACTER_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\ud800-\udfff]")
 # The line breaks that plainTextSchema accepts: a carriage return and a line feed as a pair, and each of the two alone.
 _LINE_BREAK_RE = re.compile(r"\r\n|\r|\n")
+# The one line of a problem statement that divides the statement, shown in a box, from its details.
+_STATEMENT_DETAILS_SEPARATOR_RE = re.compile(r"^[ \t]*---[ \t]*$", re.MULTILINE)
 # The character that starts a terminal color code.
 _ESCAPE_CHARACTER = "\x1b"
 # The refusal of an unpaired surrogate names where it comes from. In a command argument, it is what Python makes of
@@ -1006,12 +1008,21 @@ def _run_problem_history(args: argparse.Namespace) -> None:
     _print_page(_build_api_path("math-problems", args.problem_id, "status-events"), args)
 
 
+def _split_statement_details(text: str) -> tuple[str, str | None]:
+    """The text above and below the one line of a statement that holds only ---, or the whole text and no details."""
+    parts = _STATEMENT_DETAILS_SEPARATOR_RE.split(_normalize_plain_text_line_breaks(text))
+    if len(parts) > 2:
+        _exit_with_error("The statement has more than one line that holds only ---. Keep one such line, between the"
+                         " statement and its details.")
+    return (parts[0], parts[1]) if len(parts) == 2 else (text, None)
+
+
 def _run_post_problem(args: argparse.Namespace) -> None:
+    statement, statement_details = _split_statement_details(_read_inline_or_file_text(args.statement, args.statement_file))
     body = {
         "title": _require_plain_text_bounds("title", args.title, 8, 200, is_trim_required=True),
         "area": _require_math_area(args.area),
-        "statement": _require_plain_text_bounds(
-            "statement", _read_inline_or_file_text(args.statement, args.statement_file), 50, 20000, is_trim_required=True),
+        "statement": _require_plain_text_bounds("statement", statement, 50, 20000, is_trim_required=True),
         "motivation": _require_plain_text_bounds(
             "motivation", _read_inline_or_file_text(args.motivation, args.motivation_file), 100, 10000, is_trim_required=True),
         "currentState": _require_plain_text_bounds(
@@ -1021,6 +1032,9 @@ def _run_post_problem(args: argparse.Namespace) -> None:
             _read_inline_or_file_text(args.resolution_criteria, args.resolution_criteria_file), 50, 5000, is_trim_required=True),
         "citations": _read_citations_file(args.citations_file),
     }
+    if statement_details is not None:
+        body["statementDetails"] = _require_plain_text_bounds(
+            "text below the --- line", statement_details, 1, 20000, is_trim_required=True)
     if args.paper:
         _require_at_most(args.paper, "papers", _MAX_CREATION_PAPERS, "Attach the rest with link-problem-paper.")
         body["paperIdentifiers"] = args.paper
@@ -1550,7 +1564,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Post an open mathematical problem. Check every citation locator first.")
     post_problem.add_argument("--title", required=True, help="The problem title, 8-200 characters.")
     post_problem.add_argument("--area", required=True, help="One math.* subject class, for example math.CO.")
-    for name, bounds in (("statement", "the precise problem in TeX, 50-20000"),
+    for name, bounds in (("statement", "the precise problem in TeX, 50-20000 characters, shown in a box. To add"
+                                       " details under the box, add one line that holds only --- and then the"
+                                       " details, 1-20000"),
                          ("motivation", "why a resolution matters, 100-10000"),
                          ("current-state", "the prior work and why the problem is open, 100-10000"),
                          ("resolution-criteria", "what a proof or a disproof must establish, 50-5000")):
