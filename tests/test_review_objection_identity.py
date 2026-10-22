@@ -182,6 +182,69 @@ class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
             self.adjudicate("focused", QUALIFIED_ID, BARS, "not_binding", earlier_prompt=True)
         self.assertEqual(refused.exception.code, "invalid_review_adjudication")
 
+    def refresh_bars_with_the_identity_written(self):
+        """Refresh both bars recorded on the previous template: the other slot restates its objection verbatim, and the
+        qualified slot restates its objection under the qualified identity itself, so that its refreshed bar is
+        recorded without objection_identities. Record the slate with both refreshed bars and return their ids."""
+        self.observe_colliding_bars_on_previous_prompt()
+        self.refresh_bar("first", SHARED_ID, CLAIMS["first"])
+        output = self.build_review_output("bar")
+        output["value"]["objection_findings"] = [self.make_finding(QUALIFIED_ID, "continuing")]
+        output["objections"] = [dict(self.make_objection("second"), id=QUALIFIED_ID)]
+        self.observe("bar", "second", output, identifier="bar-second-v2")
+        bar_ids = ["review-bar-first-v2", "review-bar-second-v2"]
+        self.record_slate(bar_review_ids=bar_ids)
+        return bar_ids
+
+    def confirm_result_written_under_the_stated_id(self, reviewer):
+        """After refresh_bars_with_the_identity_written, record the reviewer's result, which restates the qualified
+        objection under the qualified identity itself, repair it, and record a repaired result that copies it unchanged
+        but writes the stated id, and labels it confirmed."""
+        bar_ids = self.refresh_bars_with_the_identity_written()
+        output = self.build_review_output("result")
+        output["value"]["bar_ids"] = bar_ids
+        output["value"]["objection_findings"] = [self.make_finding(SHARED_ID, "continuing"),
+                                                 self.make_finding(QUALIFIED_ID, "continuing")]
+        output["objections"] = [dict(self.make_objection("second"), id=QUALIFIED_ID)]
+        original = self.observe("result", reviewer, output)
+        assignment = self.repair_slot("result", original["assignment_id"], "replacement-" + reviewer)
+        repaired = {key: original["payload"][key] for key in ("stage", "support", "value", "objections", "limitations")}
+        repaired["objections"] = [dict(objection, id=SHARED_ID) for objection in repaired["objections"]]
+        repaired["reassessment"] = {"assignment_id": original["assignment_id"], "findings": [
+            {"review_id": original["id"], "disposition": "confirmed", "reason": "The result finding stands unchanged.",
+             "evidence": [self.supporting]}]}
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(repaired)):
+            self.mutate(protocol.invoke_assignment, {"id": "repair-attempt", "assignment_id": assignment["id"]}, credential="test-only")
+        return self.mutate(decisions.record_value_review, dict(repaired, id="review-repaired-result", dossier_id=None,
+                                                                assignment_id=assignment["id"]))["result"]
+
+    def test_a_context_repair_confirms_a_result_whose_qualified_objection_reaches_it_only_in_an_objection_history(self):
+        saved = self.confirm_result_written_under_the_stated_id("first")
+        self.assertEqual(saved["objection_identities"], {SHARED_ID: QUALIFIED_ID})
+
+    def test_a_context_repair_of_the_qualified_slot_confirms_a_result_through_its_scientific_history(self):
+        saved = self.confirm_result_written_under_the_stated_id("second")
+        self.assertEqual(saved["objection_identities"], {SHARED_ID: QUALIFIED_ID})
+
+    def test_a_context_repair_of_the_other_slot_confirms_its_own_objection_under_the_shared_id(self):
+        self.prepare_colliding_bars()
+        output = self.build_review_output("result")
+        output["value"]["objection_findings"] = [self.make_finding(SHARED_ID, "continuing"),
+                                                 self.make_finding(QUALIFIED_ID, "continuing")]
+        output["objections"] = [self.make_objection("first")]
+        original = self.observe("result", "first", output)
+        assignment = self.repair_slot("result", original["assignment_id"], "replacement-first")
+        repaired = {key: original["payload"][key] for key in ("stage", "support", "value", "objections", "limitations")}
+        repaired["reassessment"] = {"assignment_id": original["assignment_id"], "findings": [
+            {"review_id": original["id"], "disposition": "confirmed", "reason": "The result finding stands unchanged.",
+             "evidence": [self.supporting]}]}
+        with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(repaired)):
+            self.mutate(protocol.invoke_assignment, {"id": "repair-attempt", "assignment_id": assignment["id"]}, credential="test-only")
+        saved = self.mutate(decisions.record_value_review, dict(repaired, id="review-repaired-result", dossier_id=None,
+                                                                 assignment_id=assignment["id"]))["result"]
+        self.assertNotIn("objection_identities", saved)
+        self.assertEqual(list_identity_pairs(decisions.list_stated_objections(saved)), [(SHARED_ID, None)])
+
     def test_blind_bars_keep_two_objections_under_distinct_identities(self):
         self.prepare_colliding_bars()
         records = self.store.snapshot()["records"]
@@ -440,6 +503,28 @@ class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
         with self.assertRaises(ResearchError) as raised:
             self.observe("bar", "second", output)
         self.assertEqual(raised.exception.code, "research_objection_identity_conflict")
+
+
+class QualifiedObjectionCollectionTests(unittest.TestCase):
+    def test_every_part_of_a_packet_that_delivers_a_qualified_objection_is_read(self):
+        from research_harness.review_supplied_evidence import collect_qualified_objections
+
+        def qualify(name):
+            return {"id": name + "@review-bar-second", "stated_id": name, "claim": "Claim " + name + "."}
+        packet = {
+            "material_objections": [dict(qualify("material"), history=[qualify("history")],
+                                         version_review={"objections": [qualify("version-review")]},
+                                         version_evidence=[{"kind": "record", "record": {
+                                             "payload": {"objections": [qualify("version-record")]}}}])],
+            "bars": [{"objections": [qualify("bar")]}], "own_bars": [{"objections": [qualify("own-bar")]}],
+            "historical_reviews": [{"review": {"payload": {"objections": [qualify("historical")]}}}],
+            "scientific_history": [{"packet": {"historical_reviews": [{"objections": [qualify("earlier-packet")]}]}}],
+            "objections": [{"id": SHARED_ID, "claim": CLAIMS["first"]}]}
+        found = collect_qualified_objections(packet)
+        self.assertEqual(sorted(objection["stated_id"] for objection in found),
+                         sorted(["material", "history", "version-review", "version-record", "bar", "own-bar",
+                                 "historical", "earlier-packet"]))
+        self.assertEqual(collect_qualified_objections(None), [])
 
 
 class DossierObjectionIdentityTests(StrategyCase):

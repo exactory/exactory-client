@@ -48,10 +48,24 @@ def list_delivered_objections(packet):
 
 
 def list_packet_objections(packet):
-    """Every objection that a packet delivers: those that list_delivered_objections returns and the objections of the
-    bars and own bars that the packet delivers."""
+    """The objections in a packet's objection lists: those that list_delivered_objections returns and the objections of
+    the bars and own bars that the packet delivers. The earlier versions in a material objection's history and the
+    reviews and records of its version evidence are not read; collect_qualified_objections reads every part."""
     return list_delivered_objections(packet) + [objection for key in ('bars', 'own_bars') for review in packet.get(key, [])
                                                 for objection in review.get('objections', [])]
+
+
+def collect_qualified_objections(value):
+    """Every objection that a packet delivers under a qualified identity, wherever it sits: the material objections, the
+    versions in their history, the stating reviews and records of their version evidence, the bars, own bars and
+    historical reviews, and the same parts of the earlier packets that a scientific history carries. Only
+    research_decisions.apply_objection_identities writes stated_id, so these are the objects that carry it."""
+    if isinstance(value, dict):
+        return ([value] if 'stated_id' in value else []) + [objection for item in value.values()
+                                                            for objection in collect_qualified_objections(item)]
+    if isinstance(value, list):
+        return [objection for item in value for objection in collect_qualified_objections(item)]
+    return []
 
 
 

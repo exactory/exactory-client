@@ -10,7 +10,7 @@ import json
 from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, normalized_text, strings, text
-from .review_supplied_evidence import list_packet_objections
+from .review_supplied_evidence import collect_qualified_objections
 from . import strategy
 
 ROLES = ('bar', 'slate', 'result')
@@ -415,11 +415,10 @@ def validate_reassessment(records, artifacts, assignment, observed_output, *, re
     findings = strategy.items(reassessment['findings'], 'Reassessment findings')
     seen = set()
     originals = {saved['id']: saved.get('payload', saved) for saved in inherited}
-    # Collected over every part of the frozen packet that delivers objections and over the earlier packets that its
-    # scientific history carries: an inherited review recorded under a qualified identity itself delivers no stated_id.
-    packets = [] if packet is None else [packet] + [turn['packet'] for turn in packet.get('scientific_history', [])]
+    # Read wherever the frozen packet delivers a qualified objection: an inherited review recorded under a qualified
+    # identity itself delivers no stated_id.
     identities = {(objection['stated_id'], objection['claim']): objection['id']
-                  for each_packet in packets for objection in list_packet_objections(each_packet) if 'stated_id' in objection}
+                  for objection in collect_qualified_objections(packet)}
     for finding in findings:
         fields(finding, ('review_id', 'disposition', 'reason', 'evidence'), code='review_reassessment_mismatch')
         text(finding['review_id'], 'Historical review ID', code='review_reassessment_mismatch')

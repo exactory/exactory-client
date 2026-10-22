@@ -150,6 +150,50 @@ class StrategyObstructionAdmissionTests(unittest.TestCase):
                 self.assert_refused(state, value, ("invalid_record", message))
 
 
+class StrategyObstructionReferenceTests(unittest.TestCase):
+    def record_checkpoint_and_accept(self, state, node_id, milestone_id):
+        checkpoint = build_local_checkpoint(state, node_id, milestone_id)
+        state = event(state, "checkpoint_recorded", {"checkpoint": checkpoint, "digest": digest(checkpoint)})
+        acceptance = acceptance_record(state, state["nodes"][node_id]["obligation_id"], outcome="obstruction")
+        return event(state, "result_accepted", {"acceptance": acceptance, "digest": digest(acceptance)})
+
+    def test_a_strategy_obstruction_follows_its_target_when_another_admission_allocates_ids_first(self):
+        state = initial_state(contract(), "objective-000001")
+        first = decomposition_proposal()
+        first["attack_slug"] = "first-attack"
+        first["checkpoint_criteria"] = [build_strategy_obstruction("base-barrier", "new:base")]
+        second = decomposition_proposal()
+        second["attack_slug"] = "second-attack"
+        for item in second["decomposition"]["obligations"]:
+            item["claim"]["statement"] = "Second method: " + item["claim"]["statement"]
+        second["claim"] = copy.deepcopy(second["decomposition"]["obligations"][0]["claim"])
+        second["contribution"]["coverage"]["scope"] = second["claim"]["scope"]
+        for value in (first, second):
+            state = event(state, "proposal_recorded", {"proposal": value, "digest": digest(value)})
+        for proposal_id, value in (("proposal-000002", second), ("proposal-000001", first)):
+            state = event(state, "review_recorded", {"proposal_id": proposal_id, "review": review(value),
+                                                     "digest": digest(review(value))})
+            state = event(state, "proposal_admitted", {"proposal_id": proposal_id})
+        node = next(node for node in state["nodes"].values() if node["attack_slug"] == "first-attack")
+        self.assertNotEqual(node["obligation_id"], "obligation-000002")
+        self.assertEqual(node["checkpoint_criteria"], [build_strategy_obstruction("base-barrier", node["obligation_id"])])
+        self.assertEqual(state["obligations"][node["obligation_id"]]["claim"], node["claim"])
+        state = self.record_checkpoint_and_accept(state, node["id"], "base-barrier")
+        self.assertTrue(checkpoint_milestone(state, "checkpoint-000001"))
+
+    def test_a_strategy_obstruction_on_the_root_meets_its_milestone_and_decides_nothing(self):
+        value = proposal()
+        value["checkpoint_criteria"] = [build_strategy_obstruction("root-barrier", "obligation-000001")]
+        state = admitted(initial_state(contract(), "objective-000001"), value)
+        self.assertEqual(state["nodes"]["node-000001"]["obligation_id"], "obligation-000001")
+        before = (root_support(state), state["proof_status"], state["obligations"]["obligation-000001"]["status"])
+        state = self.record_checkpoint_and_accept(state, "node-000001", "root-barrier")
+        self.assertTrue(checkpoint_milestone(state, "checkpoint-000001"))
+        self.assertEqual((root_support(state), state["proof_status"], state["obligations"]["obligation-000001"]["status"]),
+                         before)
+        self.assertEqual(before, (None, "open", "open"))
+
+
 class StrategyObstructionCheckpointTests(unittest.TestCase):
     def setUp(self):
         state = route_state()
