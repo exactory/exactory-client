@@ -188,6 +188,50 @@ class ProblemResultContractTests(unittest.TestCase):
             [records['value_review']['review-result-first']], case.expected, digest(case.expected))
         self.assertTrue(pending)
 
+    def test_a_result_in_a_bar_slot_repaired_after_the_statement_keeps_its_actual_input(self):
+        """A context repair keeps the bar subject of the packet that it reassesses. When the bar predates the
+        statement, the repair assignment names the statement and its packet does not; the result that continues the
+        repaired slot still has its actual request counted."""
+        case = self.case
+        case.put('problem_selection', 'current', {'statement_id': None})
+        case.observe_bar_reviews()
+        case.put('problem_selection', 'current', {'statement_id': case.statement['id']})
+        case.replace_first_bar()
+        output = case.build_review_output('result')
+        output['value']['bar_ids'] = ['review-bar-replaced', 'review-bar-second']
+        case.observe('result', 'replacement', output)
+        records = case.read_records()
+        repair = records['review_assignment']['bar-replaced']
+        self.assertEqual(repair['subject'], {'kind': 'problem', 'statement_id': case.statement['id']})
+        self.assertEqual(json.loads(case.artifacts.read(repair['packet']))['subject'],
+                         {'kind': 'problem', 'statement_id': None})
+        packets = direction_reviews.collect_actual_input_packets(records, case.artifacts, 'result-replacement')
+        self.assertIn(repair['packet_digest'], [packet['digest'] for packet in packets])
+        pending = decisions._assess_problem_coverage(records, case.artifacts,
+            [records['value_review']['review-result-replacement']], case.expected, digest(case.expected))
+        self.assertEqual(pending, [])
+
+    def test_bound_ancestry_holds_a_bar_packet_to_the_field_and_a_result_packet_to_its_statement(self):
+        statement = {'kind': 'problem', 'statement_id': 'statement-1'}
+        records = {'review_assignment': {
+            'bar-repair': {'id': 'bar-repair', 'role': 'bar', 'reviewer_id': 'replacement', 'dossier_id': None,
+                           'subject': statement, 'packet_digest': 'a' * 64, 'context': {}},
+            'result-1': {'id': 'result-1', 'role': 'result', 'reviewer_id': 'replacement', 'dossier_id': None,
+                         'subject': statement, 'packet_digest': 'b' * 64, 'history_assignment_id': 'bar-repair',
+                         'context': {}}}}
+
+        def build_packet(identifier, subject):
+            assignment = records['review_assignment'][identifier]
+            return {'digest': assignment['packet_digest'], 'role': assignment['role'],
+                    'reviewer_id': assignment['reviewer_id'], 'dossier_id': None, 'subject': subject}
+        check = direction_reviews._matches_bound_input_ancestry
+        older_bar = build_packet('bar-repair', {'kind': 'problem', 'statement_id': None})
+        result = build_packet('result-1', statement)
+        self.assertTrue(check(records, 'result-1', [older_bar, result]))
+        self.assertFalse(check(records, 'result-1', [older_bar, build_packet('result-1',
+            {'kind': 'problem', 'statement_id': 'statement-2'})]))
+        self.assertFalse(check(records, 'result-1', [dict(older_bar, subject=None), result]))
+
 
 class PromptTerminalBoundaryTests(unittest.TestCase):
     def test_exact_version_three_prompt_bytes_and_recognition_are_preserved(self):
