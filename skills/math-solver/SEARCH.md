@@ -874,6 +874,7 @@ exactly the fields in the table. The list is nonempty and criterion IDs are uniq
 | --- | --- |
 | `accepted_obligation` | `obligation_id: ObligationRef` |
 | `accepted_case_set` | `obligation_id: ObligationRef`, `case_ids: [Text]` (nonempty) |
+| `accepted_standalone_claim` | None; only a standalone proposal may declare this criterion |
 | `verified_reduction` | `obligation_id: ObligationRef` |
 | `verified_obstruction` | `route_id: RouteRef` |
 | `hypothesis_recorded` | None |
@@ -1205,7 +1206,18 @@ claim, including scope and assumptions. It has null `milestone_id` and never
 fabricates a journal move. Sources, studies, and evidence are immutable pinned
 inputs. Neither origin contains its own review, avoiding a content-digest cycle.
 
-A local origin requires a declared milestone of its admitted producer. For
+A local origin requires a declared milestone of its admitted producer. An
+`accepted_standalone_claim` milestone permits a proof checkpoint for the exact
+admitted standalone producer claim, without installing a controller obligation.
+It is satisfied only by an accepted proof with `obligation_id: null` whose
+dependencies and proof policy remain valid. Its acceptance cannot target a root
+obligation, even if the standalone claim happens to match that obligation. It
+provides no root coverage or renewal credit and leaves root closure unchanged.
+Existing journal, evidence, and independent result review checks still apply.
+Previously admitted milestones remain immutable; this criterion requires a
+reviewed proposal and does not authorize rewriting earlier admissions.
+
+For the other milestone kinds,
 `accepted_obligation`, `accepted_case_set`, or `verified_reduction`, the checkpoint
 claim must equal the named milestone obligation. For `verified_obstruction` or
 `hypothesis_recorded`, it must equal the producer's admitted claim. Permitted
@@ -1599,7 +1611,7 @@ verified resume can clear an existing pause.
 {action: "hook_stop", delivery_id: Text | null, session_id: Text | null,
  turn_id: Text | null, stop_hook_active: Boolean | null}
 {action: "side_interval", node_id: NodeID, max_moves: Integer[1,24],
- message_id: Text, provenance: Provenance}
+ message_id: Text, instruction?: Text, provenance: Provenance}
 ```
 
 The host/operator must authenticate explicit user instruction for resume and side
@@ -1610,6 +1622,19 @@ rearm later pauses. Side intervals stay within the admitted node's current accou
 and remaining move allowance, and are measured from its cumulative used moves.
 Main work keeps priority even during a side interval. Standalone nodes can also
 run when admitted main work is externally blocked; they confer no root coverage.
+
+The public `search side-interval NODE --spec FILE` command requires exactly
+`max_moves`, `message_id`, `instruction`, and `provenance` in its spec. Use the
+actual explicit user instruction and the existing authenticated host/operator
+command boundary. It records the existing bounded side-interval control action;
+it requires no additional mathematical review beyond the standalone admission.
+The instruction is optional only for replay of older internal records. A new
+public allocation enters the strategy context and requires a current strategy
+reassessment before research, including when no earlier evidence exists. Old
+records without an instruction retain their historical strategy context.
+The command creates no account, spending, reservation, resource refund, external
+block, or proof credit. It cannot resume a paused objective or change main-work
+priority, and ordinary execution limits and pending-work guards still apply.
 
 Stop accounting is objective-wide, capped at 40 continuations. Repeated delivery
 IDs do not consume another count. For a previously continuing delivery, the returned
@@ -1727,6 +1752,7 @@ Public command specs are closed records:
 | replan | The documented `replan_recorded` payload |
 | reassess | The reviewed record under [Mandatory strategy reassessment](#mandatory-strategy-reassessment) |
 | focus | `{focus: "focused"|"ambiguous"|"unrelated", provenance: Provenance, session_id: Text}` |
+| side-interval ID | `{max_moves: Integer[1,24], message_id: Text, instruction: Text, provenance: Provenance}` |
 | pause, resume, hook-stop | The respective `ControlInput` without `action` |
 | audit, render, status, next, strategy-context | `{}`; no spec file |
 

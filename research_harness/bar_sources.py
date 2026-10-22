@@ -319,6 +319,8 @@ def _source(records, artifacts, request, original_rows):
                     for c in work.get('fulltexts', []) if c.get('availability') == 'available']
     if request['depth'] == 'fulltext':
         from .components import validate_binding
+        from .graph import main_captures
+        result['source_alternatives'] = []
         for capture in work.get('fulltexts', []):
             if capture.get('availability') == 'available':
                 source = captured_source(records, artifacts, capture['source_id'])
@@ -337,7 +339,21 @@ def _source(records, artifacts, request, original_rows):
                 validate_binding(records, artifacts, work['id'], capture)
                 visual_captures, visual_pending = _html_assets(records, artifacts, work, capture)
                 captures.extend(visual_captures)
-                result['source_scope_pending'].extend(visual_pending)
+                result['source_alternatives'].append({
+                    'source_id': source['id'], 'version_id': work['id'],
+                    'original_descriptor': descriptor(capture['original']),
+                    'extraction_descriptor': descriptor(capture['text']),
+                    'source_scope_pending': visual_pending})
+        main_sources = {(capture['source_id'], capture['original']['sha256'])
+                        for capture in (main_captures(records, work) if work.get('fulltexts') else [])}
+        for alternative in result['source_alternatives']:
+            alternative['main_representation'] = (alternative['source_id'],
+                                                  alternative['original_descriptor']['sha256']) in main_sources
+        complete_main = any(alternative['main_representation'] and not alternative['source_scope_pending']
+                            for alternative in result['source_alternatives'])
+        if not complete_main:
+            for alternative in result['source_alternatives']:
+                result['source_scope_pending'].extend(alternative['source_scope_pending'])
         scopes, unit_captures, unit_pending = _declared_units(records, artifacts, work)
         captures.extend(unit_captures)
         result['declared_bundles'] = scopes
@@ -367,8 +383,14 @@ def _source(records, artifacts, request, original_rows):
             **{key: capture[key] for key in ('kind', 'url', 'html_sha256', 'unit_id', 'bundle_id') if key in capture},
             'delivery_mode': 'extracted-text-only' if text_only else 'exact-bytes',
             'delivered_sha256': [a['sha256'] for a in capture['artifacts']]})
-    if result['evidence'] and not result['source_scope_pending'] and any(capture['completeness'] == 'complete' for capture in captures):
-        result.update(status='delivered', reason='All available native captures at the requested depth are supplied. Delivery does not certify complete reading or scientific support.')
+    complete_source = (complete_main if request['depth'] == 'fulltext' else
+                       any(capture['completeness'] == 'complete' for capture in captures))
+    if result['evidence'] and not result['source_scope_pending'] and complete_source:
+        reason = ('At least one validated complete main representation satisfies the requested full-text depth. '
+                  'Alternative-specific source gaps remain recorded. Delivery does not certify complete reading or scientific support.'
+                  if request['depth'] == 'fulltext' else
+                  'All available native captures at the requested depth are supplied. Delivery does not certify complete reading or scientific support.')
+        result.update(status='delivered', reason=reason)
     elif result['evidence']:
         result.update(status='partial', reason='The supplied captures are partial, of unknown completeness, or have pending required source units; the requested source depth remains pending.')
     else:

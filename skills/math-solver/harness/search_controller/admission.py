@@ -153,6 +153,8 @@ def validate_proposal_context(state, proposal, proposal_id):
         else:
             s.require(child_scope == parent_scope, "Named coverage requires exact scope identity")
     for criterion in proposal["checkpoint_criteria"] + proposal["retreat_criteria"]:
+        if criterion["kind"] == "accepted_standalone_claim":
+            s.require(category == "standalone", "Own-claim proof milestones require standalone admission")
         if "obligation_id" in criterion:
             reference(refs, criterion["obligation_id"], "criterion obligation")
         if "route_id" in criterion:

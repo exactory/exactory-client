@@ -356,6 +356,7 @@ class ProblemAttemptTests(ProblemCase):
         self.assertEqual(describe_evidence(records, self.artifacts)["attempt"], {
             "id": "attempt-1", "digest": digest(saved), "record_references": [{"kind": "record",
                 "record_kind": "native_attempt", "id": native_id, "digest": digest(records["native_attempt"][native_id])}],
+            "cite": {"kind": "record", "record_kind": "problem_attempt", "id": "attempt-1"},
             "kind": "solver", "outcomes": payload["outcomes"], "proportion": payload["proportion"],
             "state": native["state"], "totals": native["totals"], "literature": None,
             "applicability": payload["solver"]["applicability"],
@@ -371,6 +372,7 @@ class ProblemAttemptTests(ProblemCase):
             "id": "literature-2", "digest": digest(literary), "native_attempt_digest": None})
         self.assertEqual(describe_evidence(records, self.artifacts)["attempt"], {
             **{key: literary[key] for key in ("id", "kind", "outcomes", "proportion", "literature")},
+            "cite": {"kind": "record", "record_kind": "problem_attempt", "id": "literature-2"},
             "digest": digest(literary), "acceptances": []})
 
     def test_milestone_attempt_and_next_order(self):

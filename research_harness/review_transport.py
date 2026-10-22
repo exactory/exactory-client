@@ -25,9 +25,11 @@ EXCLUDED_SOURCES = ('author_history', 'prior_assessments', 'startup_memory',
                     'project_instructions', 'hooks', 'shared_cache', 'tool_context', 'fork_resume')
 # Local reviewer adapters run a subscription CLI of the host and inspect its observed input. The Claude Code adapter is
 # the reviewer of a Claude Code session; the Codex adapter is the reviewer of a Codex session.
-LOCAL_ADAPTERS = {'claude_cli_v1': 'review_claude_transport', 'codex_cli_v1': 'review_codex_transport'}
+LOCAL_ADAPTERS = {'claude_cli_v1': 'review_claude_transport', 'codex_cli_v1': 'review_codex_transport',
+                  'codex_cli_framed_v1': 'review_codex_framed_transport',
+                  'codex_cli_visual_v1': 'review_codex_visual_transport'}
 # Both local adapters carry text only: a binary artifact is named in the packet without its bytes.
-TEXT_ONLY_ADAPTERS = frozenset(LOCAL_ADAPTERS)
+TEXT_ONLY_ADAPTERS = frozenset(name for name in LOCAL_ADAPTERS if name != 'codex_cli_visual_v1')
 TEXT_ONLY_DELIVERY_VARIABLE = 'EXACTORY_REVIEW_TEXT_ONLY_DELIVERY'
 
 
@@ -110,6 +112,12 @@ REPEATABLE_KEYS = ('bars', 'own_bars', 'material_objections', 'source_inventory'
 REPEATED_PART_NOTE = 'This part of the earlier packet is repeated unchanged in the current packet.'
 DELIVERY_SUMMARY_NOTE = ('This source delivery of an earlier turn is summarized in the replay: its request and status are '
                          'kept, and its evidence was delivered in that turn.')
+HTML_ORIGINAL_OMISSION_NOTE = (
+    'The HTML original body is withheld because the local reviewer input limit does not admit it. '
+    'The exact native plain-text extraction from the same capture is supplied in full as separate evidence. '
+    'The HTML artifact descriptor identifies the retained original bytes. Visual layout, figures, or formulas '
+    'may lose information in extraction. This delivery does not establish inspection of the HTML original. '
+    'Use the delivered extraction for citations, retain any source gaps, and request needed original material.')
 REPEATED_EVIDENCE_NOTE = ('This problem evidence was delivered in full in an earlier turn of this review session, and the '
                           'replayed history carries that packet.')
 
@@ -174,7 +182,7 @@ def _compact_history_message(message, repeated=None):
     return dict(message, content=PACKET_LABEL + json.dumps(replayed, sort_keys=True, ensure_ascii=False))
 
 
-def _elide_packet_bodies(supplied):
+def _elide_packet_bodies(supplied, protected=()):
     """Deterministic reductions of a packet that re-delivers earlier turns' sources (a context-repair packet) or
     declares a delivery priority of its full texts. Each is applied only while the input is too large."""
     for turn in supplied.get('scientific_history', []):
@@ -183,7 +191,9 @@ def _elide_packet_bodies(supplied):
     yield 'scientific_history'
     supplied_before = {entry.get('sha256') for entry in supplied.get('previously_supplied_evidence', []) if isinstance(entry, dict)}
     for evidence in supplied.get('evidence', []):
-        if isinstance(evidence, dict) and (evidence.get('artifact') or {}).get('sha256') in supplied_before:
+        if (isinstance(evidence, dict)
+                and (evidence.get('artifact') or {}).get('sha256') in supplied_before
+                and (evidence.get('artifact') or {}).get('sha256') not in protected):
             _elide_body(evidence, 'body-elided-previously-supplied', ELIDED_BODY_NOTE)
     yield 'previously_supplied_evidence'
     # A native packet may declare the delivery priority of its full texts; bodies are elided from the lowest
@@ -192,8 +202,59 @@ def _elide_packet_bodies(supplied):
     entries = {(evidence.get('artifact') or {}).get('sha256'): evidence
                for evidence in supplied.get('evidence', []) if isinstance(evidence, dict)}
     for sha256 in reversed(priority):
-        if sha256 in entries and _elide_body(entries[sha256], 'body-elided-route-limit', ELIDED_TEXT_NOTE):
+        if (sha256 not in protected and sha256 in entries
+                and _elide_body(entries[sha256], 'body-elided-route-limit', ELIDED_TEXT_NOTE)):
             yield 'text_delivery_priority:' + sha256
+
+
+def _complete_text_entry(evidence):
+    reference = evidence.get('artifact') or {}
+    content = evidence.get('content')
+    if evidence.get('encoding') != 'utf-8' or not isinstance(content, str) or not content:
+        return False
+    data = content.encode('utf-8')
+    return len(data) == reference.get('size') and hashlib.sha256(data).hexdigest() == reference.get('sha256')
+
+
+def _elide_html_originals(supplied):
+    """Withhold oversized HTML only with its complete, same-capture native extraction."""
+    entries = {(entry.get('artifact') or {}).get('sha256'): entry
+               for entry in supplied.get('evidence', []) if isinstance(entry, dict)}
+    for delivery in supplied.get('source_deliveries', []):
+        if (delivery.get('request') or {}).get('depth') != 'fulltext':
+            continue
+        for provenance in delivery.get('source_provenance', []):
+            original = provenance.get('original_descriptor') or {}
+            if (provenance.get('kind') is not None or provenance.get('capture_method') != 'http'
+                    or provenance.get('origin_verified') is not True
+                    or provenance.get('completeness') != 'complete'
+                    or provenance.get('delivery_mode') != 'extracted-text-only'
+                    or original.get('media_type') not in ('text/html', 'application/xhtml+xml')):
+                continue
+            original_sha = original.get('sha256')
+            html = entries.get(original_sha)
+            captured = provenance.get('delivered_sha256', [])
+            if html is None or original_sha not in captured or not _complete_text_entry(html):
+                continue
+            extractions = [entries[sha] for sha in captured if sha != original_sha and sha in entries
+                           and (entries[sha].get('artifact') or {}).get('media_type', '').split(';')[0] == 'text/plain'
+                           and _complete_text_entry(entries[sha])]
+            if len(extractions) != 1:
+                continue
+            html.update(content='', delivery='body-elided-html-original-route-limit', note=HTML_ORIGINAL_OMISSION_NOTE)
+            for related in supplied.get('source_deliveries', []):
+                affected = False
+                for source in related.get('source_provenance', []):
+                    delivered = source.get('delivered_sha256', [])
+                    if original_sha in delivered:
+                        source.setdefault('captured_delivery_sha256', list(delivered))
+                        source['delivered_sha256'] = [sha for sha in delivered if sha != original_sha]
+                        affected = True
+                if affected:
+                    related.setdefault('transport_omissions', []).append({
+                        'sha256': original_sha, 'reason': 'local_input_limit',
+                        'extraction_sha256': extractions[0]['artifact']['sha256'], 'note': HTML_ORIGINAL_OMISSION_NOTE})
+            yield 'html_original:' + original_sha
 
 
 def _build_local_request(route, prompt, supplied, messages):
@@ -223,23 +284,44 @@ def _fit_local_input(route, prompt, supplied, history, limit, measure):
 
     messages = _compact_history(supplied, history)
     request = _build_local_request(route, prompt, supplied, messages)
-    reductions = _elide_packet_bodies(supplied)
-    while not fits(request):
-        if next(reductions, None) is None:
-            break
-        request = _build_local_request(route, prompt, supplied, messages)
     index = 0
     while not fits(request) and index < len(messages):
         messages[index] = _elide_history_bodies(messages[index])
         request = _build_local_request(route, prompt, supplied, messages)
         index += 1
+    from .problem_openness_sources import protected_evidence
+    protected = protected_evidence(supplied)
+    reductions = _elide_packet_bodies(supplied, protected)
+    if not fits(request):
+        # The first reduction removes only bodies inside scientific history.
+        next(reductions, None)
+        request = _build_local_request(route, prompt, supplied, messages)
+    originals = _elide_html_originals(supplied)
+    while not fits(request):
+        if next(originals, None) is None:
+            break
+        request = _build_local_request(route, prompt, supplied, messages)
+    # Preserve each full extraction that justified withholding an HTML original.
+    protected.update(omission['extraction_sha256']
+                     for delivery in supplied.get('source_deliveries', [])
+                     for omission in delivery.get('transport_omissions', [])
+                     if 'extraction_sha256' in omission)
+    while not fits(request):
+        if next(reductions, None) is None:
+            break
+        request = _build_local_request(route, prompt, supplied, messages)
+    if not fits(request):
+        from .review_source_capacity import fit
+        batched = fit(supplied, lambda packet: _build_local_request(route, prompt, packet, messages),
+                      measure, limit, protected_evidence(supplied))
+        if batched is not None:
+            return batched
     return request
 
 
 def _fit_codex_input(route, prompt, supplied, history):
     """The Codex app-server admits 1,048,576 characters of input."""
-    from . import review_codex_transport
-    return _fit_local_input(route, prompt, supplied, history, CODEX_INPUT_LIMIT_CHARS, review_codex_transport.packet_text)
+    return _fit_local_input(route, prompt, supplied, history, CODEX_INPUT_LIMIT_CHARS, _local_adapter(route).packet_text)
 
 
 def _fit_claude_input(route, prompt, supplied, history):
@@ -249,10 +331,34 @@ def _fit_claude_input(route, prompt, supplied, history):
                             review_claude_transport.packet_text)
 
 
+def logical_messages(request):
+    """Recover the exact declared logical messages solely from an actual request."""
+    from . import review_exact_text, review_exact_text_v2
+    messages = request['input']
+    if len(messages) == 1 and messages[0].get('role') == 'user':
+        for codec in (review_exact_text, review_exact_text_v2):
+            if codec.is_encoded(messages[0].get('content')):
+                return codec.decode(messages[0]['content'])
+    return messages
+
+
 def request_body(route, prompt, packet, history=()):
     """History contains only the same reviewer's verified, canonical bar exchange."""
     validate_route(route)
     supplied = json.loads(json.dumps(packet))
+    from .problem_openness_sources import apply_delivery
+    apply_delivery(supplied)
+    if route['adapter'] == 'codex_cli_visual_v1':
+        from .review_visual_inputs import probe_request, source_request
+        if set(supplied) == {'allowed_control', 'evidence_control', 'evidence'}:
+            return probe_request(route, prompt, supplied)
+        request = source_request(route, prompt, supplied, history)
+        from .review_visual_context_repair import MARKER, validate_profile
+        if MARKER in supplied:
+            from .review_exact_text_cost_v1 import optimize_request
+            validate_profile(supplied[MARKER])
+            request = optimize_request(request)
+        return request
     files = []
     for evidence in supplied.get('evidence', []):
         if not isinstance(evidence, dict) or evidence.get('encoding') != 'base64':
@@ -280,7 +386,18 @@ def request_body(route, prompt, packet, history=()):
                'input': list(history) + [{'role': 'user', 'content': content}],
                'tools': [], 'store': False, 'max_output_tokens': route['configuration']['max_output_tokens'],
                'text': {'format': {'type': 'json_object'}}}
-    if route['adapter'] == 'codex_cli_v1':
+    from .review_source_complete import MARKER, project
+    if MARKER in supplied:
+        if route['adapter'] != 'codex_cli_v1':
+            raise ResearchError('review_complete_source_route', 'Complete visible source input uses the unchanged Codex local route')
+        from .review_exact_text import encode
+        messages, complete_sources = project(supplied, list(history))
+        request['input'] = [{'role': 'user', 'content': encode(messages, complete_sources)}]
+        if len(_local_adapter(route).packet_text(request)) > CODEX_INPUT_LIMIT_CHARS:
+            from .review_exact_text_v2 import encode as encode_v2
+            request['input'] = [{'role': 'user', 'content': encode_v2(messages, complete_sources)}]
+        return request
+    if route['adapter'] in {'codex_cli_v1', 'codex_cli_framed_v1'}:
         return _fit_codex_input(route, prompt, supplied, history)
     if route['adapter'] == 'claude_cli_v1':
         return _fit_claude_input(route, prompt, supplied, history)

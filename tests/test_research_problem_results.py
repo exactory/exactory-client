@@ -133,7 +133,32 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
             evidence = packet["problem_evidence"]
             self.assertIn(dict(record_ref, record=other), evidence["assessment_evidence"])
             self.assertIn(dict(source_ref, reading_ids=["assessment-only-reading"]), evidence["assessment_evidence"])
-            self.assertIn(reading, [row["reading"] for row in evidence["readings"]])
+            delivered = next(row for row in evidence["readings"] if row["id"] == reading["id"])
+            self.assertEqual(delivered["digest"], digest(reading))
+            self.assertEqual(delivered["version_id"], reading["version_id"])
+            self.assertEqual(delivered["depth"], reading["depth"])
+            compact = delivered["reading"]
+            self.assertEqual({key: value for key, value in compact.items() if key != "inspections"},
+                             {key: value for key, value in reading.items() if key != "inspections"})
+            self.assertEqual(len(compact["inspections"]), len(reading["inspections"]))
+            for index, (raw, inspection) in enumerate(zip(reading["inspections"], compact["inspections"])):
+                link, locator = raw["link"], raw["link"]["locator"]
+                body = next(row for row in packet["evidence"] if row["artifact"] == link["artifact"])
+                self.assertEqual(body["encoding"], "utf-8")
+                self.assertEqual(body["content"].encode("utf-8"), self.artifacts.read(link["artifact"]))
+                start, end = locator["start"], locator["end"]
+                whole = not body["content"][:start].strip() and not body["content"][end:].strip()
+                self.assertEqual(inspection, dict({key: value for key, value in raw.items() if key != "link"},
+                    index=index, version_id=link["version_id"], start=start, end=end, whole_text=whole))
+                passages = [row for row in evidence["passages"]
+                            if row["reading_id"] == reading["id"] and row["inspection_index"] == index]
+                text = body["content"][start:end]
+                self.assertEqual(passages, [] if whole else [{"reading_id": reading["id"],
+                    "inspection_index": index, "version_id": link["version_id"],
+                    "start": start, "end": end, "text": text}])
+                reconstructed = dict(source_ref["link"], locator={"kind": "text", "start": inspection["start"],
+                    "end": inspection["end"], "quote": text if whole else passages[0]["text"]})
+                self.assertEqual(reconstructed, link)
             self.assertIn("assessment-only-reading", [row["reading_id"] for row in evidence["passages"]])
             self.assertIn("2601.00002v1", [row["locator"] for row in evidence["citations"]])
         assessed = research_decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)

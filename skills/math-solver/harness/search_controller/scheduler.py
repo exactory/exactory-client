@@ -225,7 +225,9 @@ def record_control(state, payload):
         s.validate_provenance(payload["provenance"])
         control["focus"] = payload["focus"]
     elif action == "side_interval":
-        s.closed(payload, "action node_id max_moves message_id provenance")
+        s.closed(payload, "action node_id max_moves message_id provenance" + (" instruction" if "instruction" in payload else ""))
+        if "instruction" in payload:
+            s.text(payload["instruction"])
         node = reference(state["nodes"], payload["node_id"], "side node")
         s.require(node["category"] == "standalone", "Side interval requires standalone admission")
         s.integer(payload["max_moves"], 1, 24)
@@ -237,6 +239,9 @@ def record_control(state, payload):
         control["side_instruction_ids"].append(payload["message_id"])
         control["side_interval"] = {"node_id": node["id"], "account_id": node["account_id"],
                                     "start_used_moves": account["used_moves"], "max_moves": payload["max_moves"]}
+        if "instruction" in payload:
+            control["side_interval"].update({key: copy.deepcopy(payload[key])
+                                             for key in ["instruction", "message_id", "provenance"]})
     else:
         s.closed(payload, "action delivery_id session_id turn_id stop_hook_active")
         for key in ["delivery_id", "session_id", "turn_id"]:

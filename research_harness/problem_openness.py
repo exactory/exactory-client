@@ -89,6 +89,18 @@ def prepare_openness(records, artifacts, value, revision):
                                 {"artifact_digests": sorted(required_artifacts - delivered)})
     record = dict(finding, id=value["assignment_id"], assignment_id=value["assignment_id"],
                   statement_id=statement["id"], review=output, recorded_revision=revision)
+    from .problem_openness_reviews import validate_native_reviews
+    native_reviews = validate_native_reviews(records, artifacts, packet, state)
+    if native_reviews is not None:
+        record["native_reviews"] = native_reviews
+    from .problem_openness_sources import validate_delivery
+    delivery = validate_delivery(records, artifacts, packet, state)
+    if delivery is not None:
+        record["openness_delivery"] = delivery
+    from .problem_openness_screening import validate_source_evidence
+    source_evidence = validate_source_evidence(records, artifacts, packet, state)
+    if source_evidence is not None:
+        record["source_evidence"] = source_evidence
     return [immutable_record(records, "problem_openness", record["id"], record)], record
 
 
@@ -99,6 +111,22 @@ def assess_openness(records, artifacts):
     affected = {"openness_id": finding["id"], "statement_id": None if statement is None else statement["id"]}
     if statement is None or finding["statement_digest"] != compute_statement_digest(statement):
         return [obligation("problem_openness_stale", "Reassess openness of the current exact claim.", **affected)]
+    if "native_reviews" in finding or "source_evidence" in finding:
+        from .problem_openness_reviews import observed_review, validate_native_reviews
+        try:
+            _, state, packet = observed_review(records, artifacts, finding["assignment_id"])
+            current = validate_native_reviews(records, artifacts, packet, state)
+            if current != finding.get("native_reviews") or state["output"] != finding["review"]:
+                raise ResearchError("openness_native_review_mismatch", "The recorded native review binding changed")
+            from .problem_openness_sources import validate_delivery
+            if validate_delivery(records, artifacts, packet, state) != finding.get("openness_delivery"):
+                raise ResearchError("openness_source_delivery_mismatch", "The recorded source representation changed")
+            from .problem_openness_screening import validate_source_evidence
+            if validate_source_evidence(records, artifacts, packet, state) != finding.get("source_evidence"):
+                raise ResearchError("openness_screening_evidence_mismatch", "The recorded screening source evidence changed")
+        except ResearchError as error:
+            return [obligation("problem_openness_stale", "Reassess changed or unavailable observed openness evidence.",
+                               cause=error.code, **affected)]
     minimum = finding.get("minimum")
     if minimum is None:
         assignment = records.get("review_assignment", {}).get(finding.get("assignment_id"))
@@ -137,7 +165,7 @@ def assess_openness(records, artifacts):
 def export_openness(store, spec, destination):
     records = store.snapshot()["records"]
     marker = require_problem(records)
-    fields(spec, ("assignment_id", "reviewer_id", "minimum"))
+    fields(spec, ("assignment_id", "reviewer_id", "minimum"), ("native_reviews", "source_evidence"))
     text(spec["assignment_id"], "Openness assignment ID")
     text(spec["reviewer_id"], "Openness reviewer ID")
     fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"), ("text_priority",))
@@ -176,6 +204,18 @@ def export_openness(store, spec, destination):
                "settling_work_id": spec["minimum"]["settling_work_id"], "duplicate_resolutions": spec["minimum"]["duplicate_resolutions"]}
     include_record(statement)
     scientific_context = {"openness_minimum": minimum}
+    if "source_evidence" in spec:
+        from .problem_openness_screening import resolve_source_evidence
+        source_evidence, source_artifacts = resolve_source_evidence(records, artifacts, spec["source_evidence"], materialize=True)
+        scientific_context["source_evidence"] = source_evidence
+        from .review_verbatim_text import MARKER
+        scientific_context["review_text_encoding"] = MARKER
+        evidence.update(source_artifacts)
+    if "native_reviews" in spec:
+        from .problem_openness_reviews import resolve_native_reviews
+        native_reviews, native_evidence = resolve_native_reviews(records, artifacts, spec["native_reviews"])
+        scientific_context["native_reviews"] = native_reviews
+        evidence.update(native_evidence)
     if spec["minimum"].get("text_priority"):
         # The research record declares which decisive full texts a text-limited route delivers first; the transport
         # applies the route limit to the rest.
@@ -197,6 +237,9 @@ def export_openness(store, spec, destination):
               "reviewer": {"source": "host", "actor_id": spec["reviewer_id"], "attestation_id": ATTESTATION_PREFIX + spec["assignment_id"]},
               "scientific_context": scientific_context, "evidence": [evidence[key] for key in sorted(evidence)],
               "execution_provenance": [], "unmaterialized_digests": []}
+    if "native_reviews" in scientific_context:
+        from .problem_openness_sources import build_delivery
+        scientific_context["openness_delivery"] = build_delivery(records, artifacts, packet)
     reference = artifacts.put(json.dumps(packet, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(), "application/json")
     load_packet(artifacts, reference, spec["reviewer_id"])
     from .review_delivery import deliver_packet

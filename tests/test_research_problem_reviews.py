@@ -1,6 +1,7 @@
 """Problem bars withhold the claim; observed results cover its exact evidence."""
 
 import copy
+import importlib
 import json
 import sys
 import types
@@ -22,6 +23,9 @@ CHECKS = ("problem_statement", "problem_openness", "problem_value", "problem_cit
 class ProblemReviewTests(LiteratureCase):
     def setUp(self):
         super().setUp()
+        # Load dependencies before replacing the claim validator for this fixture.
+        importlib.import_module('research_harness.problem_candidates')
+        importlib.import_module('research_harness.problem_evidence')
         self.put("workspace", "problem", {"version": 1, "orchestration": "problem_creation",
             "slug": "bounded-sequences", "area": "math.CO", "field": "Extremal bounded sequences",
             "authors": ["author", "coauthor"]})
@@ -184,16 +188,18 @@ class ProblemReviewTests(LiteratureCase):
             dict(output, id="review-bar-first", dossier_id=None, assignment_id="bar-first"))["result"]
         self.assertEqual(saved["payload"]["value"]["evidence"], output["value"]["evidence"])
 
-    def test_problem_templates_are_version_two_and_other_prompts_unchanged(self):
+    def test_problem_result_template_is_version_three_and_other_prompts_unchanged(self):
         hashes = {"bar": "88b53e388fa267f8aa5f72da297b28ebdab5ac6e020f81b4be6c2b756d30f3ca",
             "slate": "38fed1d12ce4376f4144d3dd6c57e2e9475db73a30b7a86c8471f00c84588312",
-            "result": "236703cb1f256d93b60cfa4c82ea7e2eb76fcd7a66c9984542767c675e4e32bc",
-            "native_math": "911fd529e31ca9bf8efba3c743ecdd4d9c7e4cfe11ed7d97ed830e7002c81872"}
+            "result": "236703cb1f256d93b60cfa4c82ea7e2eb76fcd7a66c9984542767c675e4e32bc"}
         for role, expected in hashes.items():
             self.assertEqual(protocol.canonical_prompt(role)["template_hash"], expected)
+        self.assertEqual(protocol.canonical_prompt("native_math", version=3)["template_hash"],
+                         "911fd529e31ca9bf8efba3c743ecdd4d9c7e4cfe11ed7d97ed830e7002c81872")
         for role in ("bar", "result", "adjudicator"):
             prompt = protocol.canonical_prompt(role, orchestration="problem_creation")
-            self.assertEqual(prompt["template_id"], "exactory-problem-review-v2/" + role)
+            self.assertEqual(prompt["template_id"],
+                             ("exactory-problem-review-v3/" if role == "result" else "exactory-problem-review-v2/") + role)
         self.assertIn("nearest known problems", protocol.canonical_prompt("bar", orchestration="problem_creation")["text"])
         result = protocol.canonical_prompt("result", orchestration="problem_creation")["text"]
         for kind in CHECKS + ITEMS + ('value.rubric', 'value.rubric_evidence', 'max(B1, B2) at least 2',
@@ -233,10 +239,10 @@ class ProblemReviewTests(LiteratureCase):
 
     def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
         version_two = {"bar": "e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b",
-                       "result": "4ac669f17499b113cb9fcea6a091045bfe39f637b99c03eaeb8360051c0f273e",
+                       "result": "dbe0052d524fce3b04fd975777f3c19d163e5e13bb6e56fc50943d547782fc93",
                        "adjudicator": "80a3eeb2a0cd65f1edf434c74a245b68cc8bb33a2edffffcdadbd562a35dd346"}
         for role, expected in version_two.items():
-            self.assertEqual(protocol.canonical_prompt(role, orchestration="problem_creation")["template_hash"], expected)
+            self.assertEqual(protocol.canonical_prompt(role, version=2, orchestration="problem_creation")["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
         self.assertEqual(slate["template_id"], "exactory-problem-review-v2/slate")
         for content in ("value.rubric_potential", "not_assessed", "B1", "B2", "priority", "level 1",
@@ -338,10 +344,10 @@ class ProblemReviewTests(LiteratureCase):
         records = self.read_records()
         review = records['value_review']['review-result-first']
         assignment = records['review_assignment'][review['assignment_id']]
-        with patch.object(protocol, 'PROBLEM_PROTOCOL', 'exactory-problem-review-next'):
+        with patch.object(protocol, 'PROBLEM_RESULT_PROTOCOL', 'exactory-problem-review-next'):
             for suffix in ('/result', '/result/context-repair'):
                 with self.subTest(suffix=suffix):
-                    assignment['prompt']['template_id'] = protocol.PROBLEM_PROTOCOL + suffix
+                    assignment['prompt']['template_id'] = protocol.PROBLEM_RESULT_PROTOCOL + suffix
                     self.assertEqual(decisions.assess_rubric_reviews(
                         records, self.artifacts, [review], digest(self.expected)), [])
 

@@ -26,7 +26,7 @@ class ProblemAdjudicationContractTests(delivery_fixtures.ProblemDeliveryCase):
         item = {"kind": "reading", "version_id": version, "reading_id": "read-new-comparator"}
         self.mutate(self.load_problem_module().record_value,
             self.build_value([self.item, item], identifier="value-2"))
-        return self.artifacts.put(self.artifacts.read(capture["text"]), "text/plain")
+        return capture["text"]
 
     def assign_focused_review(self, **context):
         return self.assign("adjudicator", "focused-third", identifier="focused",

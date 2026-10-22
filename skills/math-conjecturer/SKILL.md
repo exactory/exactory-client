@@ -250,7 +250,28 @@ result and its source; start no solver work to reproduce an established result.
    bounded or complete coverage.
 2. Read every decisive prior or settling work in full. Keep an unavailable source as a gap.
 3. Write the openness spec `{assignment_id, reviewer_id, minimum: {searches: [{formulation,
-   search_id}], settling_work_id, duplicate_resolutions}}`.
+   search_id}], settling_work_id, duplicate_resolutions}}`. When a local supporting proof is
+   material, add `native_reviews: [{attempt_id, assignment_id}]`. Use the current exact-statement
+   solver attempt and its observed approving native result review of a proof or reduction
+   checkpoint. This interface requires analytical evidence manifests with `verification: null`
+   throughout the dependency closure; certificate and Lean evidence need a future typed delivery
+   contract. The exporter binds the full reviewed checkpoint, exact claim, unchanged output
+   and scientific dependency bytes. This reports an observed approving review, without asserting
+   that native acceptance used it or that the original objective was resolved.
+   For captured primary evidence used to screen a search hit, add optional
+   `source_evidence: [{source_id, reason, locator?}]`. The source must be a retained common
+   acquisition record. Without a locator the exact captured response is supplied; an optional
+   `{kind: "span", start, end, sha256, excerpt?}` selects an exact UTF-8 text substring using
+   Unicode character offsets. The complete source provenance record and selected original
+   bytes reach the reviewer, with an explicit partial-access scope and no fulltext reading
+   credit. Imported sources retain their actual origin-verification status. A partial publisher
+   preview can support a screening judgment only within the evidence the reviewer receives.
+   These exports also carry the explicit `openness-verbatim-evidence-v1` text-encoding
+   marker. If ordinary Codex serialization exceeds its input limit, register and probe a
+   separate `codex_cli_framed_v1` route at `codex://local`. That route supplies the exact
+   evidence bodies as reversible visible text blocks and authenticates the observed framed
+   input. Keep earlier proof observations on their unchanged original route. Framing does not
+   permit omitted required evidence or change any scientific gate.
 4. Run `exactory-research export --kind problem-openness --spec openness-spec.json --destination
    openness-packet`.
 5. Put the exported packet in the `context` of a `review-assignment` with that assignment id and
@@ -262,7 +283,22 @@ result and its source; start no solver work to reproduce an established result.
 8. On `already_solved`, redirect to the settling result, or record a new statement.
 9. When a neighbour is added, a new material search is not bound, a bound search or reading
    changes, or the finding no longer covers the current formulation, refresh the finding
-   (`problem_openness_stale`).
+   (`problem_openness_stale`). A supplied native review also becomes stale when its current
+   solver attempt, native snapshot, observed review or proof bytes change. Its required proof
+   bytes must have reached both the original reviewer and the openness reviewer in their actual
+   authenticated requests. An omitted body or artifact descriptor alone supplies no proof bytes.
+   Screening evidence also becomes stale when its source record, original response, selected
+   bytes or authenticated reviewer delivery changes. Both the original acquisition record and
+   the selected text must remain delivered, even under route input limits.
+   New packets with native support also bind a versioned `openness_delivery` record. It selects
+   one authenticated complete main representation per exact source version while retaining all
+   full reading records and evidence descriptors. Alternate bodies are explicitly marked as
+   omitted; required supplements and inspected visuals remain protected. A complete extraction
+   may be represented by exact UTF-8 byte bounds inside a fully delivered mandatory proof
+   artifact only when its size and SHA-256 match. This never substitutes a partial excerpt,
+   normalized text or an omitted container, and it makes no claim that omitted original layout
+   was delivered. Recording and later assessment check the actual request and current source
+   bindings. Historical packets without this delivery record retain their original behavior.
 
 ## Value and the rubric
 
