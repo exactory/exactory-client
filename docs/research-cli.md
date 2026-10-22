@@ -73,7 +73,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
-| `review-output-correction` | `{id, assignment_id, route_id}`. Once per assignment, ask the same reviewer, on a verified route of the same provider and model, to relabel as `revised` the reassessment findings of its refused problem result that it labeled `confirmed` although their content changed. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. |
+| `review-output-correction` | `{id, assignment_id, route_id}`. For a problem result reassessment whose two completed, authenticated outputs both have recorded refusals, the latest for `review_reassessment_mismatch`: when relabeling the latest output's `confirmed` findings whose content changed as `revised` would satisfy its output contract, ask the same reviewer once for that relabeling. Use a verified route with the original endpoint, model and adapter; a `codex_cli_visual_v1` assignment can use `codex_cli_v1` instead. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. |
 | `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
 | `source-impact` | Bind an explicit impact classification for the complete source delta since the selected decision. |
@@ -118,8 +118,9 @@ source gaps and charge the continuation to the same allowance. A request respons
 remains unresolved and cannot be recorded with `value-review`; a final phase
 assessment cannot use this interface to obtain a replacement answer.
 
-A local route fits an oversized input by applying these reductions in order,
-one at a time, until the input fits:
+A text route fits an oversized request, other than a `complete-visible-v1`
+continuation, by applying these reductions in order, one at a time, until the
+input fits:
 
 1. the evidence bodies of the replayed earlier turns of the session;
 2. the bodies that the scientific history of a context repair re-delivers;
@@ -137,8 +138,8 @@ one at a time, until the input fits:
     stay pending as `deferred_capacity` for the same reviewer;
 11. any other evidence body of a problem packet, largest first.
 
-Steps 9 and 11 never withhold a protected body or a source that the turn
-delivers on request. Each withheld body names its delivery and a note. A
+The reductions of steps 9 and 11 keep every protected body and every source
+that the turn delivers on request. Each withheld body names its delivery and a note. A
 request that still does not fit is sent as it stands, and the route's refusal
 is recorded. The orders of the two records' local runtimes, of 0.56.1 and
 0.57.0, and of 0.56.0 still rebuild the requests that they recorded, so those
@@ -146,10 +147,12 @@ attempts stay authenticated.
 
 On the `codex_cli_v1` route, a problem result continuation can set
 `context.source_delivery: "complete-visible-v1"` with `prior_assignment_id`.
-The same reviewer then receives every full text that its result lineage
-requested, one complete authenticated main text per exact version, in a visible
-reversible encoding of the logical messages; further source requests remain
-actionable.
+For each full text that its result lineage requested and that is available with
+its complete required source units, the same reviewer then receives one complete
+authenticated main text per exact version, in a visible reversible encoding of
+the logical messages. An incomplete or unavailable request stays pending, and
+further source requests remain actionable. Such a continuation and a visual
+route do not use the reductions above.
 
 A final assessment binds its assignment. `value-review` and `review-adjudication`
 check the observed output against its output contract: the shape of the payload,
@@ -161,9 +164,13 @@ and disposition. When the output fails one of these checks, the command returns
 the error and writes one immutable `review_output_refusal` record for the
 attempt, with the code, the details and the name of the check. A `native_math`
 review is recorded by `exactory-math`, not by this harness, so `review-run`
-checks its output when the run completes: the exact `subject_digest`,
-`claim_digest` and `reviewer` of the packet, the decision vocabulary and the
-closed fields of the native proposal, result or recovery review. A failure writes
+checks its output when an authenticated run completes. A proposal review and an
+approval of a result or a recovery have the closed fields of the native review,
+with the packet's exact `subject_digest` and `reviewer`; a proposal review and a
+result approval also have its `claim_digest`. A result or recovery output with
+the decision `revise` or `reject` is kept only as an assessment, and it needs
+only that decision and a nonempty `reason`. A problem record's openness coverage
+can be a nonempty string, list or object. A failure writes
 the refusal record (check `native.output`) at once, and the receipt of
 `review-run` names it under `output_refusal` with the revision after it. A check that
 depends on the store (a pending source request, a reading that is not current, a
@@ -1610,19 +1617,25 @@ stale (`problem_openness_stale`).
 On a text route (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1`) the
 packet's full-text bodies count against the route's input limit. The optional
 `minimum.text_priority` lists version ids of read works, the decisive ones first.
-While the input exceeds the limit, the route withholds the bodies of the listed
-full texts from the end of the list, one at a time; the reading records, with
-their notes and inspected excerpts, are always delivered, and a body that is not
-listed is never withheld this way. A listed version needs a captured full text.
-Without the field no body is withheld, and a route whose limit is below the
-packet refuses the run (`review_input_too_large`). The export estimates the
-packet and returns a `review_input_too_large` warning that names each registered
-text route whose limit it exceeds when the spec has no `text_priority`.
+While the input exceeds the limit, the route withholds the full-text bodies of
+the listed versions from the end of the list, one at a time. It keeps every
+reading record, with its notes and inspected excerpts, and every protected body
+(required proof bytes, selected source texts and screening evidence), also when
+the body is listed. A listed version needs a captured full text. Without the
+field the route withholds no full text by priority; the binary originals that a
+text route never carries and the projection of an `openness_delivery` record
+still apply, and a request that stays above the limit fails on the route (the
+Claude route reports `review_input_too_large`). Without `text_priority`, the
+export estimates the packet and returns a `review_input_too_large` warning that
+names each registered text route whose limit the estimate exceeds; the estimate
+counts the packet and its UTF-8 evidence as JSON strings, so a delivery
+projection or a framed route can send less.
 
 When a local supporting proof is material, the spec also accepts optional
 `native_reviews: [{attempt_id, assignment_id}]`. Each entry names the current
 exact-statement solver attempt and an observed approving `native_math` result
-review of a proof or reduction checkpoint of that attempt. The export binds the
+output with `schema_version: 2` for a proof or reduction checkpoint of that
+attempt. The export binds the
 complete reviewed checkpoint, its claim, the unchanged output and the bytes of its
 analytical dependency closure (every manifest with `verification: null`;
 certificate and Lean evidence are refused). Those bytes must appear in the actual
@@ -2004,7 +2017,7 @@ each such stated id to its identity. Packets deliver a qualified objection under
 its identity with `stated_id`, the id in the reviewer's own output, and findings,
 versions, adjudications and the post gate use the identity; name it in
 `context.objection_id`. A stated id and claim that an earlier review stated keep
-that objection's identity. A claim under an id that the review's lineage
+that objection's identity. A different claim under an id that the review's lineage
 delivered is an output failure (`research_objection_identity_conflict`, check
 `review.objections`), recorded as a refusal: a reviewer changes a delivered
 objection through its finding. Earlier releases read `objection_identities` as
@@ -2174,7 +2187,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_rubric_review_required` | Obtain a version 2 result review with full rubric grades for the named review. |
 | `exploratory_evidence` | Preserve the probe observation and obtain admissible support for the claim. |
 | `problem_formal_check_missing`, `problem_formal_check_stale` | Bind the requested check for the current value evidence to its authenticated native completion. |
-| `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. In a problem record, `bundle` returns this code as a warning when the bundle's work has none of them, before a reading binds the bundle. |
+| `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. In a problem record, `bundle` returns this code as a warning when the bundle's work has none of them, before a full reading binds the bundle. |
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. |

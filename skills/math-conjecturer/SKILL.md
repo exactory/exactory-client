@@ -264,12 +264,14 @@ result and its source; start no solver work to reproduce an established result.
    search_id}], settling_work_id, duplicate_resolutions}}`. For a text route, add
    `minimum.text_priority`: the version ids of the read works, the decisive ones first (the works
    that state a formulation open or hold the strongest partial result). While the packet exceeds
-   the route's input limit, the route withholds full-text bodies from the end of that list and
-   still delivers every reading record. The export warns with `review_input_too_large` when the
-   list is missing and a registered text route's limit is below the packet. When a local supporting proof is
+   the route's input limit, the route withholds the full-text bodies of the listed versions from
+   the end of that list. It still delivers every reading record and every protected body (required
+   proof bytes, selected source texts and screening evidence). The export warns with
+   `review_input_too_large` when the list is missing and the estimated packet exceeds a registered
+   text route's limit. When a local supporting proof is
    material, add `native_reviews: [{attempt_id, assignment_id}]`. Use the current exact-statement
-   solver attempt and its observed approving native result review of a proof or reduction
-   checkpoint. This interface requires analytical evidence manifests with `verification: null`
+   solver attempt and its observed approving native result review, with `schema_version: 2`, of a
+   proof or reduction checkpoint. This interface requires analytical evidence manifests with `verification: null`
    throughout the dependency closure; certificate and Lean evidence need a future typed delivery
    contract. The exporter binds the full reviewed checkpoint, exact claim, unchanged output
    and scientific dependency bytes. This reports an observed approving review, without asserting
@@ -458,12 +460,14 @@ evidence the record binds delivered to them.
    `attempt` or `calibration`, and name both original result review ids in
    `context.review_ids`. Run the assignment with `review-run` and record the observed finding
    with `review-adjudication`.
-7. Treat only a ready `not_upheld` adjudication on the current evidence digest as a resolution of
-   that one item.
+7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
+   as a resolution of that one item.
 8. Resolve every material objection of both bars, of the applicable slate reviews and of both
-   result reviews with evidence, or with a focused adjudication that finds it not upheld or
-   `not_binding`: its claim holds, but the statement, the resolution criteria and the value
-   paragraphs do not rest on the contested premise or state their dependence on it. Name an
+   result reviews with evidence, or with a ready focused adjudication on the current evidence
+   that finds it `not_upheld` or `not_binding`. `not_binding` means that the objection's claim
+   holds, but each affected part of the statement, the resolution criteria and the value
+   paragraphs either does not depend on the contested premise or states that dependence
+   explicitly. Name an
    objection in `context.objection_id` by the identity that its packets deliver: two blind
    reviewers who chose one id for different claims hold distinct identities, the later one
    `<id>@<review id>` with its `stated_id`. When a

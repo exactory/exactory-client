@@ -91,5 +91,25 @@ class NativeReviewOutputCheckTests(SearchCLIWorkspace, unittest.TestCase):
                 self.assertEqual(caught.exception.code, "invalid_native_review")
 
 
+class NativeResultAssessmentTests(unittest.TestCase):
+    """A result or recovery that is not approved authorizes nothing, so it needs only its decision and a reason."""
+
+    packet = {"kind": "result", "subject_digest": "1" * 64, "claim_digest": "2" * 64, "contract": {},
+              "reviewer": {"source": "host", "actor_id": "reviewer", "attestation_id": "review-assignment:a"}}
+
+    def test_a_revision_with_findings_or_without_objections_is_kept(self):
+        findings = {key: "Assessed." for key in ("statement", "assumptions", "scope", "dependencies", "policy")}
+        for output in ({"decision": "revise", "reason": "The proof omits a case.", "findings": findings},
+                       {"decision": "reject", "reason": "The claim is false.", "objections": []},
+                       {"decision": "revise", "reason": "A gap remains."}):
+            with self.subTest(output=output):
+                validate_output(self.packet, output)
+
+    def test_a_revision_without_a_reason_or_with_another_decision_is_refused(self):
+        for output in ({"decision": "revise"}, {"decision": "revise", "reason": " "}, {"decision": "pending", "reason": "x"}):
+            with self.subTest(output=output), self.assertRaises(ResearchError):
+                validate_output(dict(self.packet, kind="recovery", claim_digest=None), output)
+
+
 if __name__ == "__main__":
     unittest.main()

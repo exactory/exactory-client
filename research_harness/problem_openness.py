@@ -256,9 +256,11 @@ def export_openness(store, spec, destination):
                         if (review_transport.local_input_limit(route) or estimate) < estimate)
         if routes:
             result["warnings"] = [{"code": "review_input_too_large", "message":
-                "This packet is larger than the input limit of these text routes, and review-run sends it as it stands "
-                "without minimum.text_priority. List the read full texts in minimum.text_priority, the decisive ones "
-                "first, so that a route withholds the bodies from the end of the list.",
+                "The estimated size of this packet exceeds the input limit of the text routes in route_ids, and "
+                "without minimum.text_priority a route withholds no full text by priority. List the version ids of the "
+                "read works in minimum.text_priority, the decisive ones first, so that a route withholds full-text bodies "
+                "from the end of the list. The estimate counts the packet and its UTF-8 evidence as JSON strings, so a "
+                "delivery projection or a framed route can send less.",
                 "details": {"route_ids": routes, "estimated_characters": estimate}}]
     return result
 

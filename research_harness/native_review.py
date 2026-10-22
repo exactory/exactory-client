@@ -241,14 +241,13 @@ def _validate_openness(openness, claim_digest, *, structured_coverage):
 def validate_output(packet, output):
     """Check an observed native review against the shape that its prompt states and the native controller records:
     the exact subject, claim and reviewer bindings of the packet, the decision vocabulary and the closed fields. A
-    result or recovery that is not an approval is retained only as an assessment, so it needs its decision and reason."""
+    result or recovery that is not an approval is retained only as an assessment and authorizes nothing, so it needs
+    only its decision and a reason."""
     _require(isinstance(output, dict), "A native review is one JSON object")
     kind = packet["kind"]
     if kind != "proposal" and output.get("decision") != "approve":
-        _closed(output, ("decision", "reason", "objections"),
-                "A result or recovery that is not approved is exactly {decision,reason,objections}")
-        _require(output["decision"] in ("revise", "reject") and _nonempty(output["reason"])
-                 and isinstance(output["objections"], list), "Use decision revise or reject with a reason and objections")
+        _require(output.get("decision") in ("revise", "reject") and _nonempty(output.get("reason")),
+                 "A result or recovery that is not approved needs decision revise or reject and a nonempty reason")
         return
     _require(output.get("subject_digest") == packet["subject_digest"], "Use the exact native.subject_digest")
     _require(output.get("reviewer") == packet["reviewer"], "Use the exact native.reviewer object")
@@ -270,7 +269,9 @@ def validate_output(packet, output):
         _require(output["claim_digest"] == packet["claim_digest"], "Use the exact native.claim_digest")
         _closed(output["findings"], RESULT_FINDINGS + (("openness",) if version == 2 else ()),
                 "Result findings are statement, assumptions, scope, dependencies and policy, with openness in version 2")
-        _require(all(_nonempty(output["findings"][key]) for key in RESULT_FINDINGS), "Every result finding is a nonempty string")
+        _require(all(_nonempty(output["findings"][key]) for key in RESULT_FINDINGS),
+                 "findings.statement, findings.assumptions, findings.scope, findings.dependencies and findings.policy "
+                 "must each be a nonempty string; in schema_version 2, findings.openness is an object")
         if version == 2:
             _validate_openness(output["findings"]["openness"], packet["claim_digest"],
                                structured_coverage=packet["contract"].get("orchestration") == "problem_creation")

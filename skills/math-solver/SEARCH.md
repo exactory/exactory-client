@@ -971,11 +971,12 @@ bundles. The reviewer returns that same declaration as `findings.openness.minimu
 and binds its search and reading digests in `findings.openness.evidence`. The
 records must exist in this objective's associated common review store; copying a
 record from another workspace does not establish that association.
-`OpennessMinimum` has no delivery priority of full texts, so a text route
-delivers this packet whole or refuses it as too large. A problem record exports
-its openness packet with `exactory-research export --kind problem-openness`
-instead, whose `minimum.text_priority` lets a text route withhold full-text
-bodies in a declared order.
+`OpennessMinimum` has no delivery priority of full texts, so a text route cannot
+withhold this packet's full texts by priority; it still omits binary originals,
+which a text route never carries. A problem record exports its openness packet
+with `exactory-research export --kind problem-openness` instead, whose
+`minimum.text_priority` lets a text route withhold full-text bodies in a declared
+order.
 
 ```sh
 exactory-math --attack-root attack search review-packet --spec native-review.json --json
@@ -1911,8 +1912,10 @@ Supported patch add/update/delete/move operations protect `.search` snapshots an
 artifacts, generated `SEARCH_TREE.md`/`LINEAGE.md`, discovery pointers, and native
 records under custom roots. Combined unit/draft sequencing remains enforced.
 Read-only file references and command-like prose are not write authorization.
-A shell token with a component longer than 255 bytes names no file, so free text
-with a slash, such as the text of `task add`, is not probed as a path.
+The hook skips a shell token as a path when one of its slash-separated
+components is longer than 255 bytes, since such a token names no file; free text
+of that length, such as a long `task add` text with a slash, is not probed. A
+shorter token with a slash is still probed as a path.
 The hooks read a record with the controller of their own plugin. When that
 controller cannot replay the record's log, the denial names the controller and
 says that a record written by another exactory-math, such as a newer release or a
