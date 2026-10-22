@@ -50,34 +50,30 @@ def list_delivered_objections(packet):
 
 def _list_review_objections(review):
     """The objections of a delivered review: a stored record, its payload, or a first packet's wrapper of either."""
-    review = review.get('review', review) if isinstance(review, dict) else {}
-    objections = review.get('payload', review).get('objections', []) if isinstance(review.get('payload', review), dict) else []
-    return objections if isinstance(objections, list) else []
+    review = review.get('review', review)
+    return review.get('payload', review).get('objections', [])
 
 
 def collect_qualified_objections(packet):
     """Yield every objection that the harness delivered in a packet under a qualified identity: in its material
-    objections, the versions in their history and the reviews that their version evidence projects, in its bars, own
-    bars, historical reviews and historical bars, and in the packets that its scientific history carries. Only these
+    objections, bars, own bars, historical reviews and historical bars, in the earlier versions and the version
+    evidence reviews of each objection found, and in the packets that its scientific history carries. Only these
     objection lists are read: other delivered content and the observed outputs of a scientific history can hold an
     object of any shape. A qualified objection has the text fields id, stated_id and claim."""
-    if not isinstance(packet, dict):
+    if packet is None:
         return
-    objections = []
-    for objection in packet.get('material_objections', []):
-        if isinstance(objection, dict):
-            objections += [objection, *objection.get('history', [])]
-            objections += [item for entry in objection.get('version_evidence', [])
-                           if isinstance(entry, dict) and entry.get('kind') == 'record'
-                           for item in _list_review_objections(entry.get('record'))]
+    pending = list(packet.get('material_objections', []))
     for key in ('bars', 'own_bars', 'historical_reviews', 'historical_bars'):
-        objections += [item for review in packet.get(key, []) for item in _list_review_objections(review)]
-    for objection in objections:
-        if isinstance(objection, dict) and all(isinstance(objection.get(key), str) for key in ('id', 'stated_id', 'claim')):
+        pending += [item for review in packet.get(key, []) for item in _list_review_objections(review)]
+    while pending:
+        objection = pending.pop(0)
+        if all(isinstance(objection.get(key), str) for key in ('id', 'stated_id', 'claim')):
             yield objection
+        pending += objection.get('history', [])
+        pending += [item for entry in objection.get('version_evidence', []) if entry.get('kind') == 'record'
+                    for item in _list_review_objections(entry['record'])]
     for turn in packet.get('scientific_history', []):
-        if isinstance(turn, dict):
-            yield from collect_qualified_objections(turn.get('packet'))
+        yield from collect_qualified_objections(turn['packet'])
 
 
 def supplied_context(records, artifacts, assignment_ids, *, frozen=False):

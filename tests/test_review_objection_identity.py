@@ -624,6 +624,13 @@ class QualifiedObjectionShapeTests(unittest.TestCase):
                   "scientific_history": [{"packet": {"problem_evidence": {"value": spoof}}}]}
         self.assertEqual(list(collect_qualified_objections(packet)), [])
 
+    def test_a_qualified_objection_in_the_version_evidence_of_a_historical_objection_is_read(self):
+        qualified = {"id": SHARED_ID + "@review-slate-second", "stated_id": SHARED_ID, "claim": "The second claim."}
+        packet = {"scientific_history": [{"packet": {"historical_reviews": [{"review": {"objections": [
+            {"id": "later", "claim": "A later objection.", "version_evidence": [
+                {"kind": "record", "record": {"objections": [qualified]}}]}]}}]}}]}
+        self.assertEqual(list(collect_qualified_objections(packet)), [qualified])
+
     def test_an_identity_map_whose_stated_id_is_the_word_stated_id_is_not_an_objection(self):
         qualified = {"id": "stated_id@review-bar-second", "stated_id": "stated_id", "claim": "The second claim."}
         packet = {"historical_reviews": [{"id": "review-bar-second", "objection_identities": {"stated_id": "stated_id@review-bar-second"},

@@ -74,7 +74,9 @@ def _is_delivered_text(reference, content):
     unless its bytes carry the PDF signature."""
     from .fulltext import detect_media_type
     data = content.encode('utf-8')
-    return (reference.get('media_type') == 'application/octet-stream' and len(data) == reference.get('size')
+    media = reference.get('media_type')
+    media = media.split(';', 1)[0].strip().lower() if isinstance(media, str) else None
+    return (media == 'application/octet-stream' and len(data) == reference.get('size')
             and hashlib.sha256(data).hexdigest() == reference.get('sha256')
             and detect_media_type(data, 'application/octet-stream')[0] == 'application/octet-stream')
 
