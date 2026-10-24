@@ -35,6 +35,10 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.59.0](docs/releases/0.59.0.md) lets result coverage rely on the bound search records when a text route
+withholds their captured response bodies. It also corrects Darwin process inspection, installs the PDF renderer
+from the Ubuntu archive only in continuous integration, and fixes reassessment of compacted scientific history.
+
 Version [0.58.1](docs/releases/0.58.1.md) repairs the coverage check of a problem result review. 0.58.0 refused the
 whole actual request of a result in a bar slot that a context repair continued after the author recorded the statement.
 

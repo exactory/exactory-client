@@ -750,3 +750,36 @@ tests). With read-only commands on the Sidorenko girth-six store (revision 432),
 authenticate. `next` keeps only the bodies that the route withheld at the text limit for each result review (11 and 20
 captured search responses); 0.58.0 had also listed every part of the problem evidence for the result in the repaired
 slot.
+
+## Release 0.59.0
+
+0.59.0 changes result coverage to require the bound search records without requiring their captured response
+bodies, corrects Darwin process inspection, installs the PDF renderer from the Ubuntu archive only in continuous
+integration and fixes reassessment of compacted scientific history. The branch `release/0.59.0` starts at `bbd3f33`
+(0.58.1), and its record is
+`misc/harness-improvement/20261024003929-result-coverage-blocked-by-withheld-search-responses` of the exactory repository.
+
+### RED and GREEN evidence
+
+The RED evidence records the test results on 0.58.1 (`bbd3f33`), and the GREEN evidence records the results on the
+release branch.
+
+| Test | On bbd3f33 | On the branch |
+| --- | --- | --- |
+| `test_result_coverage_accepts_bound_search_records_when_response_bodies_are_elided` | FAIL: `artifact_digests` lists the withheld response digest | OK |
+| `test_result_coverage_requires_computation_bytes_when_search_responses_are_elided` | FAIL: `artifact_digests` also lists the withheld response digest | OK |
+| `test_result_coverage_requires_matching_bound_search_records` | OK | OK |
+| `test_a_result_without_the_captured_response_bytes_still_covers_the_bound_searches` | FAIL: the rewritten 0.55.0 test still finds the captured response bytes unassessed | OK |
+| `test_darwin_group_enumeration_raises_when_libproc_sets_errno` | FAIL: the failed call returns an empty group | OK |
+| `test_darwin_process_identity_raises_io_error_for_short_result_despite_stale_esrch` | FAIL: the short result does not raise the expected error | OK |
+| `test_darwin_empty_group_returns_no_members_despite_stale_errno` | OK | OK |
+| `test_darwin_group_enumeration_grows_full_buffers_and_returns_every_member` | OK | OK |
+| `test_darwin_process_identity_raises_permission_error_despite_stale_esrch` | OK | OK |
+| `test_a_compacted_history_turn_delivers_no_repeated_objections` | FAIL: `AttributeError` | OK |
+| `test_a_reassessment_confirms_a_qualified_result_with_compacted_scientific_history` | FAIL: `AttributeError` | OK |
+
+Three tests of `test_research_problem_results` also pin the new explanation of `problem_evidence_unassessed`:
+`test_assessment_references_are_delivered_and_covered`, `test_assessment_artifact_bytes_are_attached_and_covered` and
+`test_assessment_local_artifact_record_bytes_are_attached_and_covered`.
+
+The release runs are recorded below.
