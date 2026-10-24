@@ -427,8 +427,14 @@ preference never admits a candidate that the thresholds refuse.
 ## Reviews and the decision
 
 The reviews are the independent judgment the claim rests on. The two bar reviewers graded the
-field blind; now they grade the realized statement against their own bar, with every piece of
-evidence the record binds delivered to them.
+field blind; now they grade the realized statement against their own bar, on the current problem
+evidence that each reviewer's actual request delivers. The post gate's result coverage check
+(`problem_evidence_unassessed`) requires that request to carry every part of the current
+evidence, deliver every reading and attach the bytes of the artifacts of the assessment
+evidence, the computations and the formal checks. The search records in that evidence satisfy
+the check for the bound searches, so a text route may withhold the bodies of their captured
+responses at its input limit. The [CLI reference](../../docs/research-cli.md#problem-creation)
+states the exact rule.
 
 1. Keep the two bars of the slate for the result reviews and the decision.
 2. Assign one result review to each of the two bar reviewers. Each result review continues that
@@ -443,11 +449,12 @@ evidence the record binds delivered to them.
    retirement; the replacement reviewer gives the final reassessment in the preserved slot.
 3. Assign each result review with `review-assignment`, role `result` and `dossier_id: null`;
    the harness uses the template `exactory-problem-review-v2/result`, delivers the current bars,
-   the statement, the openness finding, the value evidence, the assessment with its references
-   resolved, the attempt and the cited results, and every applicable objection. Run the
-   assignment with `review-run` and record the observed review with `value-review`. Replace a
-   recorded version 1 result review with a version 2 review before the post
-   (`problem_rubric_review_required`).
+   the statement, the openness finding with its bound search records, the value evidence, the
+   assessment with its references resolved, the attempt and the cited results, the citations,
+   the readings with their inline passages, the computations, the formal checks, and every
+   applicable objection. Run the assignment with `review-run` and record the observed review
+   with `value-review`. Replace a recorded version 1 result review with a version 2 review
+   before the post (`problem_rubric_review_required`).
 4. Answer a reviewer's source request with a continuation assignment of the same role, route and
    reviewer.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
