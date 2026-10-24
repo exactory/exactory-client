@@ -643,7 +643,7 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
             if not any(has_attachment(evaluation, packet, reference) for packet in current)})
         if missing or missing_readings or missing_artifacts:
             obligations.append(obligation('problem_evidence_unassessed',
-                'Obtain both observed results covering the current problem evidence and every delivered source and output.',
+                'Obtain both observed results from actual requests that carry the current problem evidence, deliver every reading of it and attach the exact bytes of the artifacts of its assessment evidence, computations and formal checks.',
                 review_id=review['id'], missing=missing, reading_ids=missing_readings, artifact_digests=missing_artifacts))
     return obligations
 

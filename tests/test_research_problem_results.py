@@ -185,7 +185,7 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
         self.assertEqual(sorted([row for row in assessed["obligations"] if row["code"] == "problem_evidence_unassessed"],
                                 key=lambda row: row["review_id"]), [{
             "code": "problem_evidence_unassessed",
-            "explanation": "Obtain both observed results covering the current problem evidence and every delivered source and output.",
+            "explanation": "Obtain both observed results from actual requests that carry the current problem evidence, deliver every reading of it and attach the exact bytes of the artifacts of its assessment evidence, computations and formal checks.",
             "review_id": "review-assessment-omitted-" + reviewer,
             "missing": ["assessment_evidence"], "reading_ids": [], "artifact_digests": []}
             for reviewer in ("first", "second")])
@@ -226,7 +226,7 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
                 self.assertEqual(sorted([row for row in assessed['obligations']
                                          if row['code'] == 'problem_evidence_unassessed'], key=lambda row: row['review_id']), [{
                     'code': 'problem_evidence_unassessed',
-                    'explanation': 'Obtain both observed results covering the current problem evidence and every delivered source and output.',
+                    'explanation': 'Obtain both observed results from actual requests that carry the current problem evidence, deliver every reading of it and attach the exact bytes of the artifacts of its assessment evidence, computations and formal checks.',
                     'review_id': 'review-assessment-artifact-True-' + reviewer,
                     'missing': [], 'reading_ids': [], 'artifact_digests': [artifact['sha256']]}
                     for reviewer in ('first', 'second')])
@@ -270,7 +270,7 @@ class ProblemResultReviewTests(ProblemDeliveryCase):
                 self.assertEqual(sorted([row for row in assessed['obligations']
                                          if row['code'] == 'problem_evidence_unassessed'], key=lambda row: row['review_id']), [{
                     'code': 'problem_evidence_unassessed',
-                    'explanation': 'Obtain both observed results covering the current problem evidence and every delivered source and output.',
+                    'explanation': 'Obtain both observed results from actual requests that carry the current problem evidence, deliver every reading of it and attach the exact bytes of the artifacts of its assessment evidence, computations and formal checks.',
                     'review_id': 'review-assessment-artifact-True-' + reviewer,
                     'missing': [], 'reading_ids': [], 'artifact_digests': [artifact['sha256']]}
                     for reviewer in ('first', 'second')])

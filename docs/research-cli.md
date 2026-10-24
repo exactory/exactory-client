@@ -141,11 +141,16 @@ input fits:
 Steps 4 to 6, 9 and 11 keep every protected body and every source that the turn
 delivers on request. A requested source loses a body only in step 3, where its
 HTML original is withheld while its complete extraction is delivered, and in
-step 10, where a whole source is deferred as pending. Each withheld body names its delivery and a note. A
-request that still does not fit is sent as it stands, and the route's refusal
-is recorded. The orders of the two records' local runtimes, of 0.56.1 and
-0.57.0, and of 0.56.0 still rebuild the requests that they recorded, so those
-attempts stay authenticated.
+step 10, where a whole source is deferred as pending. Each withheld body names
+its delivery and a note. The post gate's coverage check of a problem result
+(`problem_evidence_unassessed`) rests on the search records in
+`problem_evidence.openness_searches`, with their queries, coverage and the
+disposition of every found work, which no step withholds; it accepts a request
+in which step 6 withheld the bodies of their captured responses, and a route
+that admits those bodies delivers them. A request that still does not fit is
+sent as it stands, and the route's refusal is recorded. The orders of the two
+records' local runtimes, of 0.56.1 and 0.57.0, and of 0.56.0 still rebuild the
+requests that they recorded, so those attempts stay authenticated.
 
 On the `codex_cli_v1` route, a problem result continuation can set
 `context.source_delivery: "complete-visible-v1"` with `prior_assignment_id`.
@@ -1873,13 +1878,26 @@ claim from the acceptance's checkpoint. Reviewer evidence carries the openness
 finding as recorded, `{id, outcome, statement_digest, reason, coverage,
 searched_at, evidence, minimum}`, and `openness_searches`: for every search that
 its minimum binds, `{formulation, search_digest, search, sources}` with the search
-record and its captured source records, whose response bytes are attached to the
-packet. The evidence binding adds `openness_searches: [{formulation,
-search_digest, source_digests}]`. The twelve evidence keys `claim`, `openness`,
-`openness_searches`, `value`, `assessment`, `assessment_evidence`, `attempt`,
-`results`, `citations`, `readings`, `computations` and `formal_checks` must be
-present and equal the current expected values in the observed result packets,
-including null or empty values; omissions return `problem_evidence_unassessed`.
+record (its queries, coverage and the disposition of every found work) and its
+captured source records, whose response bytes are attached to the packet. The
+evidence binding adds `openness_searches: [{formulation, search_digest,
+source_digests}]`. The post gate checks the coverage of each problem result on
+the actual request that its reviewer received, in the observed packets whose
+`problem_evidence_digest` is the current evidence digest. The twelve evidence
+keys `claim`, `openness`, `openness_searches`, `value`, `assessment`,
+`assessment_evidence`, `attempt`, `results`, `citations`, `readings`,
+`computations` and `formal_checks` must be present in one of those packets and
+equal the current expected values, including null or empty values. The same
+request must deliver every reading of the evidence and attach the exact bytes
+of every artifact of the assessment evidence, including the artifact of a
+`local_artifact` record reference, of the computations and of the formal
+checks. A shortfall returns `problem_evidence_unassessed` for that review with
+the keys that are absent or differ in `missing`, the ids of the undelivered
+readings in `reading_ids` and the digests of the unattached artifacts in
+`artifact_digests`. Coverage of the bound searches rests on their search
+records: a text route that withholds the bodies of their captured responses at
+its input limit (reduction step 6) leaves the coverage intact, and a route that
+admits those bodies delivers them.
 
 The problem bar uses `exactory-problem-review-v2/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and
