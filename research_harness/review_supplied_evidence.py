@@ -59,12 +59,16 @@ def collect_qualified_objections(packet):
     objections, bars, own bars, historical reviews and historical bars, in the earlier versions and the version
     evidence reviews of each objection found, and in the packets that its scientific history carries. Only these
     objection lists are read: other delivered content and the observed outputs of a scientific history can hold an
-    object of any shape. A qualified objection has the text fields id, stated_id and claim."""
+    object of any shape. A repeated-part placeholder delivers no objections at that position. A qualified objection
+    has the text fields id, stated_id and claim."""
     if packet is None:
         return
-    pending = list(packet.get('material_objections', []))
+    material = packet.get('material_objections', [])
+    pending = list(material) if isinstance(material, list) else []
     for key in ('bars', 'own_bars', 'historical_reviews', 'historical_bars'):
-        pending += [item for review in packet.get(key, []) for item in _list_review_objections(review)]
+        reviews = packet.get(key, [])
+        if isinstance(reviews, list):
+            pending += [item for review in reviews for item in _list_review_objections(review)]
     while pending:
         objection = pending.pop(0)
         if all(isinstance(objection.get(key), str) for key in ('id', 'stated_id', 'claim')):
