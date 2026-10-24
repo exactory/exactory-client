@@ -1928,10 +1928,12 @@ reviewer's session and slot as a refresh, and its `problem_refresh` adds
 `previous_problem_review_currency` and `problem_review_currency`. A completed
 result review whose assignment is on a supported earlier result template is
 refreshed the same way even when the currency is unchanged, and its
-`problem_refresh` then carries the reason `prompt_contract_changed`. Otherwise,
-under the same currency, a new assignment returns `review_resampling_forbidden`,
-unless the reviewer's latest result review carries `review_evidence_undelivered`.
-The result template
+`problem_refresh` then adds the previous and the current template ids and
+hashes, under the reason `prompt_contract_changed`, or `evidence_undelivered`
+when the refreshed review also cites content its packets did not deliver.
+Otherwise, under the same currency, a new assignment returns
+`review_resampling_forbidden`, unless the reviewer's latest result review
+carries `review_evidence_undelivered`. The result template
 `exactory-problem-review-v5/result` receives `problem_evidence`
 with the claim, attempt, accepted results, openness, value, assessment, resolved
 `assessment_evidence`, citations, delivered readings/passages,
@@ -2220,7 +2222,7 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
 | `problem_rubric_below_threshold` | Repair self-assessment shortfalls, or repair or independently adjudicate the named review shortfalls. `source` distinguishes `self` and `review`; ids and `{item, required, graded}` shortfalls identify the judgment. |
 | `problem_rubric_review_required` | The named result review was recorded on the version 1 result template, which has no rubric grades. Assign the result role again to the same reviewer: the harness continues the review on the current result template, which grades every rubric item. |
-| `problem_rubric_regrade_required` | The current self-assessment (`assessment_id`, null when it grades A7) or the named result reviews (`review_ids`, possibly empty) were graded with exactly `A1` through `A6`, before A7, and the statement is not posted. Record a new self-assessment that grades A7 when `assessment_id` is not null, and assign the result role again to the reviewer of each review in `review_ids`: the harness continues that review in the same session and slot on the current result template, and its packet carries `problem_refresh` with reason `prompt_contract_changed`. The earlier records are read without error and stay unchanged; while this obligation is listed, their below-threshold shortfalls are not listed. Bars on `exactory-problem-review-v2/bar` and slate reviews on `exactory-problem-review-v2/slate` stay valid and are not reassigned for A7 alone (`review_resampling_forbidden`); a version 1 bar still needs its calibration refresh (`problem_bar_calibration_required`), a slate review is refreshed when its candidates or bars change, and a bar or a slate review is refreshed to repair `review_evidence_undelivered`. |
+| `problem_rubric_regrade_required` | The current self-assessment (`assessment_id`, null when it grades A7) or the named result reviews (`review_ids`, possibly empty) were graded with exactly `A1` through `A6`, before A7, and the statement is not posted. Record a new self-assessment that grades A7 when `assessment_id` is not null, and assign the result role again to the reviewer of each review in `review_ids`: the harness continues that review in the same session and slot on the current result template, and its packet carries `problem_refresh` with the previous and the current template, under the reason `prompt_contract_changed`, or `evidence_undelivered` when that review also cites content its packets did not deliver. The earlier records are read without error and stay unchanged; while this obligation is listed, their below-threshold shortfalls are not listed. Bars on `exactory-problem-review-v2/bar` and slate reviews on `exactory-problem-review-v2/slate` stay valid and are not reassigned for A7 alone (`review_resampling_forbidden`); a version 1 bar still needs its calibration refresh (`problem_bar_calibration_required`), a slate review is refreshed when its candidates or bars change, and a bar or a slate review is refreshed to repair `review_evidence_undelivered`. |
 | `exploratory_evidence` | Preserve the probe observation and obtain admissible support for the claim. |
 | `problem_formal_check_missing`, `problem_formal_check_stale` | Bind the requested check for the current value evidence to its authenticated native completion. |
 | `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. In a problem record, `bundle` returns this code as a warning when the bundle's work has none of them, before a full reading binds the bundle. |

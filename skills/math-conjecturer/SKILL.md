@@ -481,9 +481,11 @@ states the exact rule.
    reviews named in `review_ids` were graded without A7: record a new self-assessment that
    grades A7 when one is named, and assign the result role again to the reviewer of each named
    review. The harness continues that review in the same session and slot on the current
-   template, with `problem_refresh` reason `prompt_contract_changed`, and lists below-threshold
-   shortfalls only for grades that cover A7. Bars on `exactory-problem-review-v2/bar` and slate
-   reviews on `exactory-problem-review-v2/slate` stay valid and are not reassigned for A7 alone
+   template; its packet carries `problem_refresh` with the previous and the current template,
+   under the reason `prompt_contract_changed`, or `evidence_undelivered` when that review also
+   cites content its packets did not deliver. The gate lists below-threshold shortfalls only
+   for grades that cover A7. Bars on `exactory-problem-review-v2/bar` and slate reviews on
+   `exactory-problem-review-v2/slate` stay valid and are not reassigned for A7 alone
    (`review_resampling_forbidden`); a version 1 bar still needs its calibration refresh
    (`problem_bar_calibration_required`), a slate review is refreshed when its candidates or bars
    change, and a bar or a slate review is refreshed to repair `review_evidence_undelivered`.
