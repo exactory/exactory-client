@@ -21,7 +21,7 @@ def install_rubric_anchors(case):
 
 
 def passing_grades():
-    return {"admission": {"A" + str(index): "pass" for index in range(1, 7)},
+    return {"admission": {"A" + str(index): "pass" for index in range(1, 8)},
             "significance": {"B1": 2, "B2": 0}, "priority": 2, "attempt": "pass",
             "accessibility": "E-F", "calibration": "pass"}
 

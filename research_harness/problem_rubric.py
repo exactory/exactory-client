@@ -4,13 +4,15 @@ from .errors import ResearchError
 from .operations import fields
 
 
-ADMISSION_ITEMS = ("A1", "A2", "A3", "A4", "A5", "A6")
+ADMISSION_ITEMS_BEFORE_A7 = ("A1", "A2", "A3", "A4", "A5", "A6")
+ADMISSION_ITEMS = ADMISSION_ITEMS_BEFORE_A7 + ("A7",)
 GROUNDS = ("B1", "B2")
 CRITERIA = ("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8")
 ACCESSIBILITY_CLASSES = ("E-F", "E-A", "E-N")
 VERDICTS = ("pass", "fail")
 LEVELS = (0, 1, 2, 3)
-ITEMS = ADMISSION_ITEMS + GROUNDS + ("priority", "attempt", "accessibility", "calibration")
+NON_ADMISSION_ITEMS = GROUNDS + ("priority", "attempt", "accessibility", "calibration")
+ITEMS = ADMISSION_ITEMS + NON_ADMISSION_ITEMS
 _SHORTFALL_ITEMS = ADMISSION_ITEMS + ("significance", "priority", "attempt", "calibration")
 
 # The normative anchors of RUBRIC.md 0.2, one text per item: what the item requires and the
@@ -42,6 +44,13 @@ ANCHORS = {
     "A6": {"definition": "Readiness: the harness has read in full every decisive source of the claim and can state "
                          "the claim's standing in its literature. A decisive source that is unavailable, or "
                          "mathematics the harness cannot assess, fails.",
+           "threshold": "pass"},
+    "A7": {"definition": "Direction after a refutation: when a counterexample or another proof that the record has read in full "
+                         "refutes a conjecture that the question concerns, the question studies the world that the refutation "
+                         "reveals: the mechanism or the structure of the counterexamples, how far and how strongly the statement "
+                         "fails, what falls with it, or the statement that replaces it. A question whose purpose is to find where "
+                         "the refuted statement still holds, on a restricted class or under added hypotheses, fails, whatever its "
+                         "other grades. A question that no refutation concerns passes.",
            "threshold": "pass"},
     "significance": {
         "definition": "Significance is graded on two grounds on one four-level scale, and the higher ground counts; "
@@ -104,7 +113,12 @@ ANCHORS = {
 }
 
 
-def validate_grades(grades, *, potential=False):
+def was_graded_before_a7(grades):
+    admission = grades["admission"]
+    return isinstance(admission, dict) and set(admission) == set(ADMISSION_ITEMS_BEFORE_A7)
+
+
+def validate_grades(grades, *, potential=False, allow_previous=False):
     code = "invalid_rubric_grades"
     required = ("significance", "priority") if potential else (
         "admission", "significance", "priority", "attempt", "accessibility", "calibration")
@@ -115,7 +129,9 @@ def validate_grades(grades, *, potential=False):
             raise ResearchError(code, "Rubric levels must be integers from 0 to 3")
     verdicts = [grades["readiness"]] if potential and "readiness" in grades else []
     if not potential:
-        fields(grades["admission"], ADMISSION_ITEMS, code=code)
+        admission = grades["admission"]
+        previous = allow_previous and was_graded_before_a7(grades)
+        fields(admission, ADMISSION_ITEMS_BEFORE_A7 if previous else ADMISSION_ITEMS, code=code)
         verdicts.extend(grades["admission"].values())
         verdicts.extend((grades["attempt"], grades["calibration"]))
         if grades["accessibility"] not in ACCESSIBILITY_CLASSES:
@@ -126,9 +142,9 @@ def validate_grades(grades, *, potential=False):
 
 
 def assess_grades(grades):
-    validate_grades(grades)
+    validate_grades(grades, allow_previous=True)
     shortfalls = [{"item": item, "required": "pass", "graded": grades["admission"][item]}
-                  for item in ADMISSION_ITEMS if grades["admission"][item] != "pass"]
+                  for item in ADMISSION_ITEMS if item in grades["admission"] and grades["admission"][item] != "pass"]
     minimum = 2 if grades["accessibility"] == "E-F" else 3
     if max(grades["significance"].values()) < minimum:
         shortfalls.append({"item": "significance", "required": "max(B1, B2) >= " + str(minimum),

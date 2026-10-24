@@ -42,14 +42,14 @@ class ProblemResultContractTests(unittest.TestCase):
         old = protocol.canonical_prompt('result', version=2, orchestration='problem_creation')
         current = protocol.canonical_prompt('result', orchestration='problem_creation')
         self.assertEqual(old['template_hash'], 'dbe0052d524fce3b04fd975777f3c19d163e5e13bb6e56fc50943d547782fc93')
-        self.assertEqual(current['template_id'], 'exactory-problem-review-v4/result')
+        self.assertEqual(current['template_id'], 'exactory-problem-review-v5/result')
         marker = 'A valid final response, with the placeholders replaced by the delivered values: '
         example, _ = json.JSONDecoder().raw_decode(current['text'].split(marker, 1)[1])
         self.assertEqual([row['status'] for row in example['value']['assurances'] if row['kind'] == 'stop'], ['passed'])
         self.assertNotEqual(current['template_hash'], old['template_hash'])
         for role in ('bar', 'slate', 'adjudicator'):
             self.assertEqual(protocol.canonical_prompt(role, orchestration='problem_creation')['template_id'],
-                             'exactory-problem-review-v2/' + role)
+                             ('exactory-problem-review-v2/' if role == 'adjudicator' else 'exactory-problem-review-v5/') + role)
 
     def test_current_result_explains_native_page_order_and_bounded_citations(self):
         current = protocol.canonical_prompt('result', orchestration='problem_creation')['text']
@@ -334,12 +334,12 @@ class PromptTerminalBoundaryTests(unittest.TestCase):
                 changed['prompt']['text'] += ' '
                 self.assertFalse(protocol._prompt_matches(changed))
 
-    def test_new_version_four_has_only_the_native_terminal_space_correction(self):
+    def test_version_four_keeps_only_the_native_terminal_space_correction(self):
         for repair in (False, True):
             with self.subTest(repair=repair):
                 old = protocol.canonical_prompt('result', version=3, repair=repair,
                                                 orchestration='problem_creation')
-                current = protocol.canonical_prompt('result', repair=repair, orchestration='problem_creation')
+                current = protocol.canonical_prompt('result', version=4, repair=repair, orchestration='problem_creation')
                 suffix = '/context-repair' if repair else ''
                 self.assertEqual(current['template_id'], 'exactory-problem-review-v4/result' + suffix)
                 self.assertEqual(current['text'], old['text'] if repair else old['text'][:-1])
@@ -349,7 +349,7 @@ class PromptTerminalBoundaryTests(unittest.TestCase):
                     self.assertEqual(len(old['text']) - len(current['text']), 1)
                 assignment = {'role': 'result', 'subject': {'kind': 'problem'}, 'prompt': current,
                               'reassessment_required': repair}
-                self.assertFalse(protocol.is_previous_prompt(assignment))
+                self.assertTrue(protocol.is_previous_prompt(assignment))
                 self.assertTrue(protocol._prompt_matches(assignment))
                 changed = copy.deepcopy(assignment)
                 changed['prompt']['text'] += ' '

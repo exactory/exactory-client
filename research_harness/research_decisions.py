@@ -86,7 +86,7 @@ def _validate_slate_potential(value, packet):
 
 def _validate_value(records, artifacts, value, stage, dossier, historical=(), *, expected_checks=ALL_CHECKS, problem=None,
                     problem_objections=(), problem_rubric_required=True, slate_packet=None,
-                    evidence_validator=validate_evidence_contract, require_two_bars=True):
+                    evidence_validator=validate_evidence_contract, require_two_bars=True, allow_previous_rubric=False):
     rubric_required = problem is not None and stage == "result" and problem_rubric_required
     potential_required = problem is not None and stage == "slate"
     fields(value, ("status", "consequence", "bar_ids", "objective_adequacy", "method_adequacy", "reason", "evidence",
@@ -94,9 +94,10 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
            (("rubric", "rubric_evidence") if rubric_required else ()) +
            (("rubric_potential",) if potential_required else ()), code="invalid_value_review")
     if rubric_required:
-        problem_rubric.validate_grades(value["rubric"])
-        fields(value["rubric_evidence"], problem_rubric.ITEMS, code="invalid_value_review")
-        for item in problem_rubric.ITEMS:
+        problem_rubric.validate_grades(value["rubric"], allow_previous=allow_previous_rubric)
+        items = tuple(value["rubric"]["admission"]) + problem_rubric.NON_ADMISSION_ITEMS
+        fields(value["rubric_evidence"], items, code="invalid_value_review")
+        for item in items:
             text(value["rubric_evidence"][item], "Rubric item evidence", code="invalid_value_review")
     strategy.choice(value["status"], ("sufficient", "insufficient", "unresolved"), "Scientific consequence", "invalid_value_review")
     for key in ("consequence", "reason"):
@@ -245,7 +246,8 @@ def validate_review_contract(records, artifacts, assignment, output):
                         expected_checks=expected_checks, problem={} if problem else None,
                         problem_rubric_required=(has_problem_result_rubric(assignment) if problem else not is_previous_prompt(assignment)),
                         problem_objections=delivered_objections, slate_packet=packet,
-                        evidence_validator=contract_evidence, require_two_bars=len(delivered_bars) >= 2)
+                        evidence_validator=contract_evidence, require_two_bars=len(delivered_bars) >= 2,
+                        allow_previous_rubric=bool(problem and is_previous_prompt(assignment)))
         if stage != "bar":
             undelivered = find_undelivered_bar_ids(records, artifacts, assignment["id"], output["value"]["bar_ids"], packets=packets)
             if undelivered:
@@ -957,13 +959,25 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
 def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
     """Require current rubric results and independently adjudicate named shortfalls."""
     from .review_protocol import has_problem_result_rubric, adjudication_state
+    from .problem_claims import find_assessment, find_current_statement
+    from .problem_delivery import find_post
     obligations = []
+    assessment = find_assessment(records)
+    assessment_id, review_ids = None, []
+    if assessment is not None:
+        problem_rubric.validate_grades(assessment['grades'], allow_previous=True)
+        if problem_rubric.was_graded_before_a7(assessment['grades']):
+            assessment_id = assessment['id']
     for review in reviews:
         assignment = records['review_assignment'][review['assignment_id']]
         findings = review['payload']['value']
         if not has_problem_result_rubric(assignment):
             obligations.append(obligation('problem_rubric_review_required', 'Obtain a problem result with the required rubric grades.',
                                           review_id=review['id']))
+            continue
+        problem_rubric.validate_grades(findings['rubric'], allow_previous=True)
+        if problem_rubric.was_graded_before_a7(findings['rubric']):
+            review_ids.append(review['id'])
             continue
         pending = []
         for shortfall in problem_rubric.assess_grades(findings['rubric']):
@@ -991,6 +1005,12 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
         if pending:
             obligations.append(obligation('problem_rubric_below_threshold', 'Repair or independently adjudicate each rubric shortfall.',
                                           source='review', review_id=review['id'], shortfalls=pending))
+    statement = find_current_statement(records)
+    posted = find_post(records, statement) is not None
+    if (assessment_id is not None or review_ids) and not posted:
+        obligations.append(obligation('problem_rubric_regrade_required',
+            'Record a new self-assessment that grades A7, and obtain both result reviews on the current result template, before the post.',
+            assessment_id=assessment_id, review_ids=sorted(review_ids)))
     return obligations
 
 
