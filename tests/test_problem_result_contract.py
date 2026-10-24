@@ -140,6 +140,80 @@ class ProblemResultContractTests(unittest.TestCase):
         active.start()
         self.addCleanup(active.stop)
 
+    def add_bound_openness_search(self):
+        from research_harness.acquisition import import_response
+        from research_harness.literature import record_search
+        from research_harness.problem_evidence import describe_openness_searches
+        case = self.case
+        query = 'bounded sequence comparison'
+        captured = import_response(case.store, 'mcp',
+            json.dumps({'query': query, 'results': [], 'metadata': 'r' * 300000}).encode(),
+            source_url='https://example.org/search', captured_at='2026-09-07T12:00:00Z',
+            media_type='application/json', mappings=[], expected_revision=case.store.revision,
+            request_id='bound-search-response')
+        source_id = captured['source_ids'][0]
+        case.mutate(record_search, {'id': 'bound-search', 'profile': 'research', 'purpose': 'direct',
+            'question': case.statement['statement'], 'queries': [query],
+            'responses': [{'source_id': source_id, 'query': query,
+                'query_locator': {'kind': 'json', 'pointer': '/query', 'value': query}, 'results_pointer': '/results'}],
+            'captured_at': '2026-09-07T12:00:00Z', 'scope': case.statement['statement'],
+            'found_work_ids': [], 'verdict': 'nothing-new', 'cited_work_ids': [], 'dispositions': [],
+            'impact': 'No matching prior contribution was exposed in this saved search.', 'gaps': []})
+        records = case.read_records()
+        search = records['literature_search']['bound-search']
+        case.expected['openness']['minimum'] = {'searches': [
+            {'formulation': case.statement['statement'], 'search_digest': digest(search)}]}
+        case.expected['openness_searches'] = describe_openness_searches(records, case.expected['openness'])
+        return records['source'][source_id]['response']
+
+    def observe_elided_search_result(self, response):
+        case = self.case
+        case.observe_bar_reviews()
+        self.local_projection()
+        limit = patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 250000)
+        limit.start()
+        self.addCleanup(limit.stop)
+        case.observe('result', 'first')
+        records = case.read_records()
+        packets = direction_reviews.collect_actual_input_packets(records, case.artifacts, 'result-first')
+        current = [packet for packet in packets if packet.get('problem_evidence_digest') == digest(case.expected)]
+        self.assertTrue(current)
+        responses = [entry for packet in current for entry in packet['evidence'] if entry['artifact'] == response]
+        self.assertTrue(responses)
+        self.assertTrue(all(entry.get('delivery') == 'body-elided-route-limit' and entry.get('content') == ''
+                            for entry in responses))
+        return records
+
+    def test_result_coverage_accepts_bound_search_records_when_response_bodies_are_elided(self):
+        case = self.case
+        case.add_reading_and_computation()
+        response = self.add_bound_openness_search()
+        records = self.observe_elided_search_result(response)
+        pending = decisions._assess_problem_coverage(records, case.artifacts,
+            [records['value_review']['review-result-first']], case.expected, digest(case.expected))
+        self.assertEqual(pending, [])
+
+    def test_result_coverage_requires_computation_bytes_when_search_responses_are_elided(self):
+        case = self.case
+        binary = self.binary_computation()
+        response = self.add_bound_openness_search()
+        records = self.observe_elided_search_result(response)
+        pending = decisions._assess_problem_coverage(records, case.artifacts,
+            [records['value_review']['review-result-first']], case.expected, digest(case.expected))
+        self.assertEqual([row['code'] for row in pending], ['problem_evidence_unassessed'])
+        self.assertEqual(pending[0]['artifact_digests'], [binary['sha256']])
+
+    def test_result_coverage_requires_matching_bound_search_records(self):
+        case = self.case
+        response = self.add_bound_openness_search()
+        records = self.observe_elided_search_result(response)
+        expected = copy.deepcopy(case.expected)
+        expected['openness_searches'][0]['search']['queries'] = ['a different formulation']
+        pending = decisions._assess_problem_coverage(records, case.artifacts,
+            [records['value_review']['review-result-first']], expected, digest(case.expected))
+        self.assertEqual([row['code'] for row in pending], ['problem_evidence_unassessed'])
+        self.assertEqual(pending[0]['missing'], ['openness_searches'])
+
     def test_saved_binary_is_not_covered_when_actual_native_text_route_omits_it(self):
         case = self.case
         binary = self.binary_computation()
