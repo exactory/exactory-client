@@ -782,4 +782,63 @@ Three tests of `test_research_problem_results` also pin the new explanation of `
 `test_assessment_references_are_delivered_and_covered`, `test_assessment_artifact_bytes_are_attached_and_covered` and
 `test_assessment_local_artifact_record_bytes_are_attached_and_covered`.
 
-The release runs are recorded below.
+### Release runs
+
+The local runs used a detached checkout of `7b196f7`, the last commit before the release files and the second round of
+texts (client tree `433776e7a5a3ba7fc1a13eca12e841d9d3399436`, marketplace commit
+`016d6360c714cac59f7f95571ef14a46005d7220`), on macOS (Darwin), Python 3.12.8 and Python 3.9.6.
+
+- The full suite used `ci/unittest_shards.py run`, with 6 shards per Python. Each Python discovered 3453 test ids,
+  with the same discovery digest on both. `ci/unittest_shards.py verify` succeeded: every discovered test ran
+  exactly once on each Python, 6906 tests in all, with no failure, error, skip, expected failure or unexpected success.
+- The math-solver harness suite ran 878 tests on each Python, with no failure. Its command was
+  `python -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness`.
+
+The two later commits change only version files, documentation, the skill text and version pins of tests.
+`3a4894c` changes the two manifests, the README, the release note, this log and the version pins of `test_codex`,
+`test_manifest` and `test_research_guidance` (in `test_research_guidance` the pin of the manifest version and the pin of
+the release note file `docs/releases/0.59.0.md`); `27a844c` changes `docs/research-cli.md` and
+`skills/math-conjecturer/SKILL.md`.
+On `27a844c`, the nine test modules that read those files pass on Python 3.12.8 and 3.9.6, 349 tests on each Python.
+The modules are `test_codex`, `test_lab`, `test_manifest`, `test_math_problems_cli`, `test_research_guidance`,
+`test_research_problem_tools`, `test_research_provenance`, `test_user_authorized_publication` and
+`test_workspace_init_retry`.
+
+`codex/generate.py --check`, `compileall` and the JSON validation of the 19 tracked JSON files pass on `27a844c` on
+Python 3.12.8 and 3.9.6.
+
+The continuous integration (CI) push run 40080777029 on `27a844c` succeeded. It runs Python 3.9.25, 3.12.14 and
+3.14.7, with four general shards and the remaining checks for each Python. The pull request's CI runs the same matrix
+on each commit pushed to the branch, including the commit that adds this record.
+
+### Store compatibility
+
+Read-only commands ran with the release code `7b196f7` on copies of the three problem stores. The copies were made
+without the math-search pointer files, and SQLite `integrity_check` returned `ok` for each copy. The scripts are
+`bin/store_states.py` and `bin/post_gate_state.py` of the record named at the top of this section.
+
+- The Sidorenko girth-six store, revision 432, has 4 routes and 37 assignments, with 33 ready and no difference in route
+  or assignment state from 0.58.1. The post gate is ready with no obligation. Under 0.58.1 it lists
+  `problem_evidence_unassessed` for both result reviews, with 20 and 11 withheld captured search responses.
+- The extremal-graph-stability store, revision 301, has 5 routes and 33 assignments, with 30 ready and no difference
+  from commit `5011adb` on the 0.58.0 release branch. The post gate is ready, as at `5011adb`. The released 0.58.0 and
+  0.58.1 raise `AttributeError` on the same read. Commit `8205041`, which came after `5011adb` on that branch,
+  introduced the crash.
+- The stretched-LR store, revision 572, has 13 routes and 47 assignments, with 6 ready and no difference from 0.58.1.
+  The post gate lists the same six obligations as under 0.58.1. The two coverage obligations differ only in three
+  ways: each no longer lists its 10 captured search response digests, the explanation is the new text, and their order
+  changes because the obligations are sorted by content digest. They still list all twelve evidence keys as missing
+  and the same 14 reading ids, because their requests do not authenticate under either release, as 0.58.0 recorded.
+
+### Reviews
+
+The reviews used Astra 6 (`gpt-6-astra`), with settings verified from the `turn_context` of each session record.
+
+- Code and design were reviewed at `xhigh` through codex-plugin-cc. Round 1 on `3a4894c` had no finding and returned
+  `VERDICT: RELEASE`. The reviewer's read-only sandbox refused a temporary directory, so the review ran no test.
+- The texts that an agent reads were reviewed at `max` through the Codex CLI. Round 1 on `3a4894c` returned
+  `VERDICT: REVISE` with four findings (T1 to T4, two major and two minor). The supervisor accepted all four, and Claude
+  Fable 5.1 fixed them in `27a844c`. Round 2 on `27a844c` found T1 to T4 resolved, had no new finding and returned
+  `VERDICT: RELEASE`.
+
+The prompts and the answers are in the record named at the top of this section.
