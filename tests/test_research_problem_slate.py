@@ -196,7 +196,7 @@ class ProblemSlateTests(ProblemDeliveryCase):
         records = self.read_records()
         assignment = records["review_assignment"][payload["assignment_id"]]
         packet = json.loads(self.artifacts.read(assignment["packet"]))
-        self.assertEqual(assignment["prompt"]["template_id"], "exactory-problem-review-v2/slate")
+        self.assertEqual(assignment["prompt"]["template_id"], "exactory-problem-review-v5/slate")
         self.assertEqual(assignment["subject"], {"kind": "problem", "statement_id": None})
         self.assertEqual(assignment["history_assignment_id"], "bar-first")
         self.assertEqual((packet["protocol"], packet["subject"]), ("exactory-problem-review-v2", assignment["subject"]))
@@ -404,9 +404,9 @@ class ProblemSlateTests(ProblemDeliveryCase):
                 packet = json.loads(self.artifacts.read(assignment["packet"]))
                 self.assertEqual((assignment["context"], assignment["history_assignment_id"], assignment["slot_id"]),
                                  ({"prior_assignment_id": earlier["id"]}, earlier["id"], earlier["slot_id"]))
-                self.assertEqual(assignment["prompt"]["template_id"], "exactory-problem-review-v2/bar")
+                self.assertEqual(assignment["prompt"]["template_id"], "exactory-problem-review-v5/bar")
                 self.assertEqual(packet["problem_refresh"], {"assignment_id": earlier["id"],
-                    "previous_template_id": "exactory-problem-review-v1/bar", "template_id": "exactory-problem-review-v2/bar"})
+                    "previous_template_id": "exactory-problem-review-v1/bar", "template_id": "exactory-problem-review-v5/bar"})
         self.assert_error("review_resampling_forbidden", lambda: self.assign("bar", "first", identifier="bar-first-third"))
         bar_review_ids = ["review-bar-first-v2", "review-bar-second-v2"]
         self.assertEqual(self.record_slate(bar_review_ids=bar_review_ids)["bar_review_ids"], bar_review_ids)

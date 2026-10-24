@@ -292,12 +292,16 @@ def resolve_assessment_record(records, item, reference):
 
 
 def resolve_assessment_evidence(records):
-    from .problem_rubric import ITEMS
+    from .problem_rubric import (ADMISSION_ITEMS_BEFORE_A7, ITEMS, NON_ADMISSION_ITEMS,
+                                validate_grades, was_graded_before_a7)
     assessment, statement = find_assessment(records), find_current_statement(records)
     if assessment is None or statement is None or assessment["statement_id"] != statement["id"]:
         return []
+    validate_grades(assessment["grades"], allow_previous=True)
     seen, resolved = set(), []
-    for item in ITEMS:
+    items = (ADMISSION_ITEMS_BEFORE_A7 + NON_ADMISSION_ITEMS
+             if was_graded_before_a7(assessment["grades"]) else ITEMS)
+    for item in items:
         for reference in assessment["items"][item]["evidence"]:
             identity = digest(reference)
             if identity in seen:

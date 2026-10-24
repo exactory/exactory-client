@@ -156,6 +156,9 @@ def assess_assessment(records, artifacts):
     if assessment["statement_id"] != statement_id:
         pending.append(obligation("problem_assessment_stale", "Record a new self-assessment for the current statement.",
                                   assessment_id=assessment["id"], statement_id=statement_id))
+    problem_rubric.validate_grades(assessment["grades"], allow_previous=True)
+    if problem_rubric.was_graded_before_a7(assessment["grades"]):
+        return pending
     shortfalls = problem_rubric.assess_grades(assessment["grades"])
     if shortfalls:
         pending.append(obligation("problem_rubric_below_threshold", "Repair each named shortfall with evidence, or revise or withdraw the candidate.",

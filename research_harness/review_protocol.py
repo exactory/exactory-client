@@ -143,10 +143,25 @@ _PROBLEM_ADJUDICATOR_PROMPT_V1 = (
     '(null when no correction is requested, otherwise a boolean).')
 
 _PROBLEM_PROTOCOL = 'exactory-problem-review-v2'
-PROBLEM_PROTOCOL = _PROBLEM_PROTOCOL
+PROBLEM_PROTOCOL = 'exactory-problem-review-v5'
 _PROBLEM_RESULT_PROTOCOL_V3 = 'exactory-problem-review-v3'
-PROBLEM_RESULT_PROTOCOL = 'exactory-problem-review-v4'
+_PROBLEM_RESULT_PROTOCOL_V4 = 'exactory-problem-review-v4'
+PROBLEM_RESULT_PROTOCOL = 'exactory-problem-review-v5'
 _ANCHOR = problem_rubric.ANCHORS
+_PROBLEM_BAR_REFUTATION = (
+    ' Sixth, the conjectures of this field that a counterexample or another proof has refuted, with the '
+    'works that refute them, and the questions about the world that each refutation reveals: the '
+    'mechanism or the structure of the counterexamples, how far and how strongly the statement fails, '
+    'what other results fall with it, or the statement that replaces it. The standard of this field '
+    'excludes a question whose purpose is to find where a refuted statement still holds, whatever its '
+    'other merits and whatever form it takes; its usual forms ask for a restricted class or for added '
+    'hypotheses under which the refuted statement holds, with a value case that rests on that survival. '
+    'The purpose is read from the question and its value case, not from its surface form, and an added '
+    'value argument changes neither the purpose nor the exclusion.')
+_PROBLEM_SLATE_REFUTATION = (
+    " Where a candidate's purpose is to find where a refuted statement still holds, say so as an "
+    'objection that names the candidate in candidate_ids and states that no grade, other merit or '
+    'acknowledgment of the refutation resolves it.')
 _LINK_EXAMPLE = ('{"kind":"source","link":{"version_id":"<version id of the delivered source>","source_id":"<source id of the '
                  'delivery>","artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"},'
                  '"locator":{"kind":"<as delivered>"}}}')
@@ -192,7 +207,7 @@ _PROBLEM_PROMPTS = {
         'not reasons against a question by themselves: the absence of a route to progress (a question '
         'without footholds is admissible when its significance case reaches level 3), and the absence '
         'of further consequences when the explanation the resolution would give is itself the '
-        'significance. Ask for the held sources or the decisive comparators that you need and do not '
+        'significance.' + _PROBLEM_BAR_REFUTATION + ' Ask for the held sources or the decisive comparators that you need and do not '
         'have. Do not assess any withheld statement, candidate, title, neighbouring formulation or '
         'author value claim. Accessibility is a description, not a value; do not let it move a level.',
     'slate': 'Continue your own bar assessment. The packet now lists every current candidate of the '
@@ -215,7 +230,7 @@ _PROBLEM_PROMPTS = {
         'the real competitors. Where a candidate restates a known question, is a parameter variant of '
         'a settled case, or rests on a pattern alone, say so as an objection and name the candidate in '
         'the objection\'s candidate_ids; an objection that concerns the slate as a whole carries an '
-        'empty list. Readiness is the author\'s own verdict and is not yours to grade.',
+        'empty list.' + _PROBLEM_SLATE_REFUTATION + ' Readiness is the author\'s own verdict and is not yours to grade.',
     'result': 'The packet holds the realized problem statement with its resolution criteria and the '
         'parts of the record that exist for it: the openness finding with its bound searches and '
         'readings, the value paragraphs with their bound evidence, the self-assessment with every '
@@ -237,7 +252,7 @@ _PROBLEM_PROMPTS = {
         'supports its stated inputs and nothing beyond; it is never a proof. A requested formal check '
         'counts only against its bound, authenticated native completion. Then grade every rubric item '
         'with the anchors that follow and name the delivered evidence for each grade. '
-        + ' '.join('A' + str(index) + '. ' + _ANCHOR['A' + str(index)]['definition'] for index in range(1, 7)) + ' '
+        + ' '.join('A' + str(index) + '. ' + _ANCHOR['A' + str(index)]['definition'] for index in range(1, 8)) + ' '
         + _ANCHOR['significance']['definition'] + ' Grade each ground with the meanings your bar states. '
         + _ANCHOR['priority']['definition'] + ' '
         + _ANCHOR['attempt']['definition'] + ' Judge a solver attempt on the delivered native contract, its '
@@ -249,6 +264,10 @@ _PROBLEM_PROMPTS = {
         'own grades even when an adjudication is available. Every prior material objection, from a bar, a '
         'slate review or a result review, requires a finding: resolved, continuing or contested, with its '
         'evidence.'}
+_PROBLEM_PROMPTS_BEFORE_A7 = {
+    'bar': _PROBLEM_PROMPTS['bar'].replace(_PROBLEM_BAR_REFUTATION, ''),
+    'slate': _PROBLEM_PROMPTS['slate'].replace(_PROBLEM_SLATE_REFUTATION, ''),
+    'result': _PROBLEM_PROMPTS['result'].replace('A7. ' + _ANCHOR['A7']['definition'] + ' ', '')}
 _PROBLEM_BAR_EXAMPLE = (
     '{"stage":"bar","support":null,"value":{"status":"sufficient","consequence":"...","bar_ids":[],'
     '"objective_adequacy":"not_assessed","method_adequacy":"not_assessed","reason":"...",'
@@ -284,9 +303,9 @@ _PROBLEM_RESULT_EXAMPLE = (
     '{"kind":"problem_value","status":"passed","reason":"...","evidence":[' + _RESULT_RECORD_EXAMPLE + ']},'
     '{"kind":"problem_citations","status":"passed","reason":"...","evidence":[' + _RESULT_RECORD_EXAMPLE + ']},'
     '{"kind":"stop","status":"not_assessed","reason":"Nothing in the record requires a stop.","evidence":[' + _RESULT_RECORD_EXAMPLE + ']}],'
-    '"objection_findings":[],"rubric":{"admission":{"A1":"pass","A2":"pass","A3":"pass","A4":"pass","A5":"pass","A6":"pass"},'
+    '"objection_findings":[],"rubric":{"admission":{"A1":"pass","A2":"pass","A3":"pass","A4":"pass","A5":"pass","A6":"pass","A7":"pass"},'
     '"significance":{"B1":2,"B2":1},"priority":2,"attempt":"pass","accessibility":"E-F","calibration":"pass"},'
-    '"rubric_evidence":{"A1":"...","A2":"...","A3":"...","A4":"...","A5":"...","A6":"...","B1":"...","B2":"...",'
+    '"rubric_evidence":{"A1":"...","A2":"...","A3":"...","A4":"...","A5":"...","A6":"...","A7":"...","B1":"...","B2":"...",'
     '"priority":"...","attempt":"...","accessibility":"...","calibration":"..."}},"objections":[],"limitations":["..."]}')
 # The version 2 result prompt of 0.55.0 and 0.55.1 cited records with their digests; an assignment on it stays verified.
 _PROBLEM_RESULT_EXAMPLE_0551 = (
@@ -298,9 +317,9 @@ _PROBLEM_RESULT_EXAMPLE_0551 = (
     '{"kind":"problem_value","status":"passed","reason":"...","evidence":[' + _LINK_EXAMPLE + ']},'
     '{"kind":"problem_citations","status":"passed","reason":"...","evidence":[' + _LINK_EXAMPLE + ']},'
     '{"kind":"stop","status":"not_assessed","reason":"Nothing in the record requires a stop.","evidence":[' + _RECORD_EXAMPLE + ']}],'
-    '"objection_findings":[],"rubric":{"admission":{"A1":"pass","A2":"pass","A3":"pass","A4":"pass","A5":"pass","A6":"pass"},'
+    '"objection_findings":[],"rubric":{"admission":{"A1":"pass","A2":"pass","A3":"pass","A4":"pass","A5":"pass","A6":"pass","A7":"pass"},'
     '"significance":{"B1":2,"B2":1},"priority":2,"attempt":"pass","accessibility":"E-F","calibration":"pass"},'
-    '"rubric_evidence":{"A1":"...","A2":"...","A3":"...","A4":"...","A5":"...","A6":"...","B1":"...","B2":"...",'
+    '"rubric_evidence":{"A1":"...","A2":"...","A3":"...","A4":"...","A5":"...","A6":"...","A7":"...","B1":"...","B2":"...",'
     '"priority":"...","attempt":"...","accessibility":"...","calibration":"..."}},"objections":[],"limitations":["..."]}')
 _PROBLEM_RESULT_RESPONSE_0551 = (
     ' Return the exact JSON response shape: ' + json.dumps(_PROBLEM_RESULT_SCHEMA) +
@@ -308,7 +327,7 @@ _PROBLEM_RESULT_RESPONSE_0551 = (
     'not_assessed, and exactly the assurances problem_statement, problem_openness, problem_value, '
     'problem_citations and stop, each {kind,status:passed|failed|not_assessed,reason,evidence}. Give '
     'value.rubric with integer levels 0 to 3 and verdicts pass or fail, and value.rubric_evidence with '
-    'nonempty text for exactly A1, A2, A3, A4, A5, A6, B1, B2, priority, attempt, accessibility and '
+    'nonempty text for exactly A1, A2, A3, A4, A5, A6, A7, B1, B2, priority, attempt, accessibility and '
     'calibration, naming the delivered evidence for each grade. Name the findings and the exact supplied '
     'evidence in reason and evidence. Every prior material objection requires an objection_findings entry '
     '{id,status:resolved|continuing|contested,reason,evidence}. ' + _REVIEW_GRAMMAR +
@@ -319,7 +338,7 @@ _PROBLEM_RESULT_RESPONSE = (
     'not_assessed, and exactly the assurances problem_statement, problem_openness, problem_value, '
     'problem_citations and stop, each {kind,status:passed|failed|not_assessed,reason,evidence}. Give '
     'value.rubric with integer levels 0 to 3 and verdicts pass or fail, and value.rubric_evidence with '
-    'nonempty text for exactly A1, A2, A3, A4, A5, A6, B1, B2, priority, attempt, accessibility and '
+    'nonempty text for exactly A1, A2, A3, A4, A5, A6, A7, B1, B2, priority, attempt, accessibility and '
     'calibration, naming the delivered evidence for each grade. Name the findings and the exact supplied '
     'evidence in reason and evidence. Every prior material objection requires an objection_findings entry '
     '{id,status:resolved|continuing|contested,reason,evidence}. objections lists only the material objections that you '
@@ -330,6 +349,16 @@ _PROBLEM_RESULT_RESPONSE = (
 _PROBLEM_RESULT_RESPONSE_V3 = _PROBLEM_RESULT_RESPONSE.replace(
     '{"kind":"stop","status":"not_assessed","reason":"Nothing in the record requires a stop."',
     '{"kind":"stop","status":"passed","reason":"The assessed record contains no condition requiring a stop."')
+_PROBLEM_RESULT_SCHEMA_BEFORE_A7 = copy.deepcopy(_PROBLEM_RESULT_SCHEMA)
+del _PROBLEM_RESULT_SCHEMA_BEFORE_A7['value']['rubric']['admission']['A7']
+del _PROBLEM_RESULT_SCHEMA_BEFORE_A7['value']['rubric_evidence']['A7']
+_PROBLEM_RESULT_RESPONSES_BEFORE_A7 = {
+    version: response.replace(json.dumps(_PROBLEM_RESULT_SCHEMA), json.dumps(_PROBLEM_RESULT_SCHEMA_BEFORE_A7))
+                     .replace('A6, A7, B1', 'A6, B1')
+                     .replace('"A6":"pass","A7":"pass"', '"A6":"pass"')
+                     .replace('"A6":"...","A7":"..."', '"A6":"..."')
+    for version, response in ((1, _PROBLEM_RESULT_RESPONSE_0551), (2, _PROBLEM_RESULT_RESPONSE),
+                              (3, _PROBLEM_RESULT_RESPONSE_V3))}
 _PROBLEM_RESULT_STATUS_GUIDANCE = (
     ' Assurance status definitions: passed means you assessed the stated check against the delivered evidence and it holds; '
     'failed means you assessed it and found it does not hold; not_assessed means you could not complete that assessment. '
@@ -575,13 +604,17 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
                 'rendered_prompt_hash': digest(prompt), 'parameters': {'role': role, 'orchestration': orchestration},
                 'text': prompt}
     if orchestration == 'problem_creation' and role in _PROBLEM_PROMPTS:
-        prompts = _PROBLEM_PROMPTS_V1 if version == 1 else _PROBLEM_PROMPTS
+        prompts = (_PROBLEM_PROMPTS_V1 if version == 1 else
+                   _PROBLEM_PROMPTS_BEFORE_A7 if version in (2, 3, 4) else _PROBLEM_PROMPTS)
         if role not in prompts:
             raise ResearchError('invalid_review_role', 'The problem slate review begins with version 2')
         response = _PROBLEM_RESPONSE_V1 if version == 1 else _PROBLEM_RESPONSES[role]
+        if role == 'result' and version == 2:
+            response = _PROBLEM_RESULT_RESPONSES_BEFORE_A7[2]
         current_result = role == 'result' and version not in (1, 2)
         if current_result:
-            response = _PROBLEM_RESULT_RESPONSE_V3
+            response = (_PROBLEM_RESULT_RESPONSES_BEFORE_A7[3] if version in (3, 4)
+                        else _PROBLEM_RESULT_RESPONSE_V3)
         prompt = _COMMON + prompts[role] + response.replace('ROLE', role) + bar_sources.PROMPT
         if current_result:
             prompt += _PROBLEM_RESULT_STATUS_GUIDANCE
@@ -596,8 +629,10 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
         if current_result and version != 3:
             # A new contract avoids native CLI trimming while exact v3 replay stays unchanged.
             prompt = prompt.rstrip(' ')
-        template = ((_PROBLEM_RESULT_PROTOCOL_V3 if version == 3 else PROBLEM_RESULT_PROTOCOL)
-                    if current_result else _PROBLEM_PROTOCOL_V1 if version == 1 else _PROBLEM_PROTOCOL)
+        template = ((_PROBLEM_RESULT_PROTOCOL_V3 if version == 3 else
+                     _PROBLEM_RESULT_PROTOCOL_V4 if version == 4 else PROBLEM_RESULT_PROTOCOL)
+                    if current_result else _PROBLEM_PROTOCOL_V1 if version == 1 else
+                    _PROBLEM_PROTOCOL if version in (2, 3, 4) else PROBLEM_PROTOCOL)
         return {'template_id': template + '/' + role + suffix, 'template_hash': digest(prompt),
                 'rendered_prompt_hash': digest(prompt), 'parameters': parameters, 'text': prompt}
     if role == 'native_math':
@@ -689,14 +724,16 @@ def find_current_problem_bar_ids(records, artifacts):
 
 
 def require_calibrated_bars(records, bars):
-    """A version 2 result needs the version 2 calibration of every current bar and every bar the latest slate cites."""
+    """Refuse version 1 bars, including those cited by the latest slate, before a result review."""
     from .problem_candidates import find_slate
     slate = find_slate(records)
     cited = [] if slate is None else [records['value_review'][identifier] for identifier in slate['bar_review_ids']]
     for review in bars + cited:
         if is_previous_prompt(records['review_assignment'][review['assignment_id']]):
             raise ResearchError('problem_bar_calibration_required',
-                                'Refresh this bar on the version 2 template before the result review', {'review_id': review['id']})
+                                'Before the result review, assign this version 1 bar again to the same reviewer '
+                                'with an empty context: the harness refreshes it on the current bar template in '
+                                'the same session and slot', {'review_id': review['id']})
 
 
 def collect_result_objections(records, artifacts, subject, evidence_digest, bars):
@@ -1648,7 +1685,8 @@ def previous_problem_result_prompt(repair=False, repair_prompt=None):
     suffix of that time unless repair_prompt names another."""
     if repair_prompt is None:
         repair_prompt = context_repair.PROMPT_0560
-    prompt = _COMMON + _PROBLEM_PROMPTS['result'] + _PROBLEM_RESULT_RESPONSE_0551.replace('ROLE', 'result') + bar_sources.PROMPT
+    prompt = (_COMMON + _PROBLEM_PROMPTS_BEFORE_A7['result']
+              + _PROBLEM_RESULT_RESPONSES_BEFORE_A7[1].replace('ROLE', 'result') + bar_sources.PROMPT)
     parameters = {'role': 'result', 'orchestration': 'problem_creation'}
     suffix = ''
     if repair:
@@ -1660,14 +1698,15 @@ def previous_problem_result_prompt(repair=False, repair_prompt=None):
 
 
 def _list_previous_problem_result_prompts(repair):
-    """The result prompts that a later contract superseded: the version 2 prompt of 0.55.x, and the version 2 prompt
-    of 0.56.x and the version 3 prompt, each with every context-repair suffix that an assignment may have recorded."""
+    """The result prompts that a later contract superseded: the version 2 prompts of 0.55.x and 0.56.x and the
+    version 3 and version 4 prompts. Context-repair variants use the 0.56.0 suffix for 0.55.x and every recorded
+    suffix for the later prompts."""
     if not repair:
         return [previous_problem_result_prompt()] + [
-            canonical_prompt('result', version=version, orchestration='problem_creation') for version in (2, 3)]
+            canonical_prompt('result', version=version, orchestration='problem_creation') for version in (2, 3, 4)]
     return [previous_problem_result_prompt(True)] + [
         canonical_prompt('result', version=version, repair=True, orchestration='problem_creation', repair_prompt=suffix)
-        for version in (2, 3) for suffix in context_repair.EARLIER_PROMPTS + (context_repair.PROMPT,)]
+        for version in (2, 3, 4) for suffix in context_repair.EARLIER_PROMPTS + (context_repair.PROMPT,)]
 
 
 def is_previous_prompt(assignment):
@@ -1703,7 +1742,8 @@ def _uses_previous_repair_suffix(assignment):
     candidates = []
     for earlier in context_repair.EARLIER_PROMPTS:
         if problem and role in _PROBLEM_PROMPTS:
-            candidates.append(canonical_prompt(role, repair=True, orchestration='problem_creation', repair_prompt=earlier))
+            candidates.extend(canonical_prompt(role, repair=True, version=version,
+                orchestration='problem_creation', repair_prompt=earlier) for version in (2, 6))
         elif role in bar_sources.ROLES:
             candidates.append(canonical_prompt(role, repair=True, repair_prompt=earlier))
     return assignment['prompt'] in candidates
@@ -1717,11 +1757,11 @@ def is_version_2_problem_result(assignment):
 
 
 def has_problem_result_rubric(assignment):
-    """Version 2 through version 4 results retain the same required rubric schema."""
+    """Whether a problem result uses a supported prompt that requires rubric grades."""
     return (assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] == 'result'
             and assignment['prompt']['template_id'] in tuple(
                 protocol + '/result' + suffix
-                for protocol in (_PROBLEM_PROTOCOL, _PROBLEM_RESULT_PROTOCOL_V3, PROBLEM_RESULT_PROTOCOL)
+                for protocol in (_PROBLEM_PROTOCOL, _PROBLEM_RESULT_PROTOCOL_V3, _PROBLEM_RESULT_PROTOCOL_V4, PROBLEM_RESULT_PROTOCOL)
                 for suffix in ('', '/context-repair')))
 
 
@@ -1729,6 +1769,8 @@ def _prompt_matches(assignment):
     repair = assignment.get('reassessment_required') is True
     if assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] in _PROBLEM_PROMPTS:
         return (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, orchestration='problem_creation')
+                or (assignment['role'] in ('bar', 'slate') and assignment['prompt'] == canonical_prompt(
+                    assignment['role'], repair=repair, version=2, orchestration='problem_creation'))
                 or is_previous_prompt(assignment) or _uses_previous_repair_suffix(assignment))
     if (assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] == 'adjudicator'
             and assignment['prompt'] in (canonical_prompt('adjudicator', orchestration='problem_creation'),

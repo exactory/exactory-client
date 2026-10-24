@@ -97,6 +97,12 @@ def assess_post(records, artifacts):
     posted = find_post(records, statement)
     if posted is not None:
         pending.append(obligation("problem_already_posted", "This exact statement already has a recorded post.", post_id=posted["id"], problem_id=posted["problem_id"]))
+    # The collected pair and the decision's pair can each require a regrade.
+    regrades = [row for row in pending if row["code"] == "problem_rubric_regrade_required"]
+    if regrades:
+        pending = [row for row in pending if row["code"] != "problem_rubric_regrade_required"]
+        pending.append(dict(regrades[0], review_ids=sorted({identifier for row in regrades
+                                                          for identifier in row["review_ids"]})))
     unique = list({digest(row): row for row in pending}.values())
     slate = find_current_slate(records)
     milestone = "exploration"

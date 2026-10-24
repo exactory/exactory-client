@@ -26,6 +26,7 @@ class ProblemReviewTests(LiteratureCase):
         # Load dependencies before replacing the claim validator for this fixture.
         importlib.import_module('research_harness.problem_candidates')
         importlib.import_module('research_harness.problem_evidence')
+        importlib.import_module('research_harness.problem_delivery')
         self.put("workspace", "problem", {"version": 1, "orchestration": "problem_creation",
             "slug": "bounded-sequences", "area": "math.CO", "field": "Extremal bounded sequences",
             "authors": ["author", "coauthor"]})
@@ -43,8 +44,11 @@ class ProblemReviewTests(LiteratureCase):
             "passages": [], "computations": [], "formal_checks": []}
         # Isolate the review contract from the independently implemented claim validator.
         claims = types.ModuleType("research_harness.problem_claims")
+        claims.find_assessment = importlib.import_module('research_harness.problem_claims').find_assessment
         claims.find_current_statement = lambda records: records.get("problem_statement", {}).get(
             records.get("problem_selection", {}).get("current", {}).get("statement_id"))
+        claims.compute_statement_digest = lambda statement: digest({
+            key: statement[key] for key in ("statement", "resolution_criteria")})
         claims.describe_problem_evidence = lambda records, artifacts: copy.deepcopy(self.expected)
         claims.compute_problem_evidence_digest = lambda records, artifacts: digest(self.expected)
         replacement = patch.dict(sys.modules, {"research_harness.problem_claims": claims})
@@ -188,7 +192,7 @@ class ProblemReviewTests(LiteratureCase):
             dict(output, id="review-bar-first", dossier_id=None, assignment_id="bar-first"))["result"]
         self.assertEqual(saved["payload"]["value"]["evidence"], output["value"]["evidence"])
 
-    def test_problem_result_template_is_version_four_and_other_prompts_unchanged(self):
+    def test_problem_templates_are_version_five_and_other_prompts_unchanged(self):
         hashes = {"bar": "88b53e388fa267f8aa5f72da297b28ebdab5ac6e020f81b4be6c2b756d30f3ca",
             "slate": "38fed1d12ce4376f4144d3dd6c57e2e9475db73a30b7a86c8471f00c84588312",
             "result": "236703cb1f256d93b60cfa4c82ea7e2eb76fcd7a66c9984542767c675e4e32bc"}
@@ -199,7 +203,7 @@ class ProblemReviewTests(LiteratureCase):
         for role in ("bar", "result", "adjudicator"):
             prompt = protocol.canonical_prompt(role, orchestration="problem_creation")
             self.assertEqual(prompt["template_id"],
-                             ("exactory-problem-review-v4/" if role == "result" else "exactory-problem-review-v2/") + role)
+                             ("exactory-problem-review-v2/" if role == "adjudicator" else "exactory-problem-review-v5/") + role)
         self.assertIn("nearest known problems", protocol.canonical_prompt("bar", orchestration="problem_creation")["text"])
         result = protocol.canonical_prompt("result", orchestration="problem_creation")["text"]
         for kind in CHECKS + ITEMS + ('value.rubric', 'value.rubric_evidence', 'max(B1, B2) at least 2',
@@ -237,7 +241,7 @@ class ProblemReviewTests(LiteratureCase):
             self.assertIn("under version_evidence and version_source_mappings, which you may cite",
                           protocol.canonical_prompt(role, orchestration="problem_creation")["text"])
 
-    def test_problem_slate_template_is_version_two_only_and_keeps_bar_and_result_bytes(self):
+    def test_problem_slate_template_is_version_five_and_keeps_previous_prompt_bytes(self):
         version_two = {"bar": "e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b",
                        "result": "dbe0052d524fce3b04fd975777f3c19d163e5e13bb6e56fc50943d547782fc93",
                        "adjudicator": "80a3eeb2a0cd65f1edf434c74a245b68cc8bb33a2edffffcdadbd562a35dd346"}
@@ -247,7 +251,7 @@ class ProblemReviewTests(LiteratureCase):
             self.assertEqual(protocol.canonical_prompt(role, version=2, orchestration="problem_creation",
                                                        **(before if role == "adjudicator" else {}))["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
-        self.assertEqual(slate["template_id"], "exactory-problem-review-v2/slate")
+        self.assertEqual(slate["template_id"], "exactory-problem-review-v5/slate")
         for content in ("value.rubric_potential", "not_assessed", "B1", "B2", "priority", "level 1",
                         "neither openness nor significance", "Continue your own bar assessment"):
             self.assertIn(content, slate["text"])
@@ -277,7 +281,7 @@ class ProblemReviewTests(LiteratureCase):
             current = protocol.canonical_prompt(role, repair=True, orchestration="problem_creation")
             for suffix in review_context_repair.EARLIER_PROMPTS:
                 earlier = protocol.canonical_prompt(role, repair=True, orchestration="problem_creation", repair_prompt=suffix)
-                template = ("exactory-problem-review-v4/" if role == "result" else "exactory-problem-review-v2/") + role
+                template = "exactory-problem-review-v5/" + role
                 self.assertEqual((current["template_id"], earlier["template_id"]), (template + "/context-repair",) * 2)
                 self.assertNotEqual(current["template_hash"], earlier["template_hash"])
                 recorded = {"role": role, "subject": {"kind": "problem", "statement_id": None},

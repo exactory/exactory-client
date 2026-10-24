@@ -160,7 +160,7 @@ class ResultReassessmentBindingTests(unittest.TestCase):
         for label, prompt in [('old-0551', old), ('edited', edited), ('version-one', version_one)]:
             output = copy.deepcopy(self.output)
             if label == 'version-one':
-                # A version 1 result has no rubric, so this output revises the retained version 2 result.
+                # A version 1 result has no rubric, so this output revises the retained result.
                 del output['value']['rubric']
                 del output['value']['rubric_evidence']
                 output['reassessment']['findings'][0]['disposition'] = 'revised'

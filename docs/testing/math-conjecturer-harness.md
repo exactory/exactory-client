@@ -865,3 +865,92 @@ The reviews used Astra 6 (`gpt-6-astra`), with settings verified from the `turn_
   `VERDICT: RELEASE`.
 
 The prompts and the answers are in the record named at the top of this section.
+
+## Release 0.60.0
+
+0.60.0 makes problem selection after a refutation an absolute principle, adds the admission item A7, direction
+after a refutation, and uses version 5 review templates for new bar, slate and result assignments. The branch
+`release/0.60.0` starts at `7015012` (0.59.0), and its record is
+`misc/harness-improvement/20261024093334-problem-choice-after-refutation` of the exactory repository.
+
+### RED and GREEN evidence
+
+The RED evidence is the failing run on 0.59.0 (`7015012`) in `logs/lane-a/red-7015012.log` of the record named at the
+top of this section. All 15 tests of `tests/test_problem_direction_after_refutation.py` failed there, with 20 failures
+counting subtests. The GREEN evidence is the passing run on the release branch.
+
+| Test | On 7015012 | On the branch |
+| --- | --- | --- |
+| `test_new_self_assessment_requires_a7` | FAIL | OK |
+| `test_new_self_assessment_requires_a7_evidence` | FAIL | OK |
+| `test_failed_self_a7_is_a_post_shortfall` | FAIL | OK |
+| `test_new_result_requires_a7` | FAIL | OK |
+| `test_new_result_requires_a7_evidence` | FAIL | OK |
+| `test_failed_result_a7_is_released_only_by_its_not_upheld_adjudication` | FAIL | OK |
+| `test_previous_records_read_and_name_one_regrade_obligation_without_mutation` | FAIL | OK |
+| `test_previous_records_still_refuse_other_admission_item_sets` | FAIL | OK |
+| `test_partial_result_refresh_merges_regrade_obligations_from_the_saved_decision` | FAIL | OK |
+| `test_previous_result_refresh_retains_reviewer_session_slot_and_recorded_requests` | FAIL | OK |
+| `test_previous_rubric_shortfall_can_still_be_adjudicated` | FAIL | OK |
+| `test_result_prompt_delivers_the_a7_anchor_and_complete_response_shapes` | FAIL | OK |
+| `test_bar_prompt_states_the_sixth_point_after_the_fifth` | FAIL | OK |
+| `test_slate_prompt_names_the_excluded_candidate_in_an_objection` | FAIL | OK |
+| `test_previous_prompt_bytes_authenticate_without_refreshing_bars_or_slates` | FAIL (6 subtests) | OK |
+
+### Release runs
+
+The local runs used a detached checkout of `361b5e2`, the last commit before the text fixes of `24be1a3` (client tree
+`ca98cdad49bc89949e40274f4269f22dc691c471`, marketplace commit `016d6360c714cac59f7f95571ef14a46005d7220`), on macOS
+(Darwin), Python 3.12.8 and Python 3.9.6.
+
+- The full suite used `ci/unittest_shards.py run`, with 6 shards per Python. Each Python discovered 3468 test ids,
+  with the same discovery digest on both. In the first run every test passed except that shard 4 skipped
+  `test_manifest.TestMarketplaceManifest.test_marketplace_lists_one_plugin_and_the_rename` on both Pythons: the test
+  reads the marketplace manifest from the directory next to the plugin checkout, and the run copy had none.
+  `ci/unittest_shards.py verify` failed on that skip. Shard 4 then ran again on both Pythons with the marketplace
+  checkout of `016d636` next to the run copy, and the skipped test passed. `ci/unittest_shards.py verify` then
+  succeeded on the twelve receipts: every discovered test ran exactly once on each Python, 6936 tests in all, with no
+  failure, error, skip, expected failure or unexpected success. The receipts and logs of the first run of shard 4 are
+  kept in the record, in `logs/release-runs/attempt-1-shard-4-without-sibling-marketplace/`.
+- The math-solver harness suite ran 878 tests on each Python, with no failure, error or skip. Its command was
+  `python -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness`.
+
+`24be1a3` changes only `skills/math-conjecturer/SKILL.md`, `docs/research-cli.md` and `docs/releases/0.60.0.md`. On
+`24be1a3`, the five test modules that read those files or pin the release version pass on Python 3.12.8 and 3.9.6,
+74 tests on each Python: `test_codex`, `test_manifest`, `test_research_guidance`, `test_research_problem_tools` and
+`test_user_authorized_publication`. `codex/generate.py --check` passes on `24be1a3`.
+
+The pull request's continuous integration (CI) runs Python 3.9.25, 3.12.14 and 3.14.7 on each commit pushed to the
+branch, including the commit that adds this record; its results are posted on the pull request.
+
+### Store compatibility
+
+Read-only commands ran with the installed 0.59.0 and with the release code `361b5e2` on copies of the three problem
+stores. The copies were made on 2026-10-24 without the math-search pointer files, and SQLite `integrity_check` returned
+`ok` for each copy. The scripts are `bin/store_states.py` and `bin/post_gate_state.py` of the 0.59.0 record,
+`misc/harness-improvement/[DONE]/20261024003929-result-coverage-blocked-by-withheld-search-responses`.
+
+- Sidorenko girth-six, revision 432: 4 routes and 37 assignments, with 33 ready. The post gate is ready with no
+  obligation, and `next` gives the milestone `post` with `problem_already_posted`.
+- extremal-graph-stability, revision 301: 5 routes and 33 assignments, with 30 ready. The post gate is ready with no
+  obligation, and `next` gives the milestone `post` with `problem_already_posted`.
+- stretched-LR positivity, revision 572: 13 routes and 47 assignments, with 6 ready. The post gate lists the same six
+  obligations as under 0.59.0, and `next` gives the milestone `post` with the same obligations.
+
+For each store, the route and assignment states, the post gate and the output of `next` are the same under both
+releases apart from the runtime fields and the elapsed time. All three statements are posted, so none receives
+`problem_rubric_regrade_required`.
+
+### Reviews
+
+- The texts that an agent reads were reviewed by Astra 6 (`gpt-6-astra`) at `max` through the Codex CLI, with settings
+  verified from the `turn_context` of each session record. Round 1 on `08d3c5d` returned `VERDICT: REVISE` with six
+  findings (T1 to T6, four major and two minor). The supervisor accepted T4 and T5, accepted T1, T2 and T3 in part, and
+  did not accept T6; the changes are in `361b5e2`. Round 2 on `361b5e2` found T1 to T5 resolved as judged, had no major
+  finding and returned `VERDICT: RELEASE` with three minor findings (T7 to T9), all accepted and fixed in `24be1a3`.
+- The final review was done by Claude Opus 5.5, as the owner asked, on `7015012..24be1a3`. It rendered the 24 prompts
+  that 0.59.0 assigned with `7015012` and with the release branch, and they are identical on Python 3.12.8 and 3.9.6,
+  template identifiers and hashes included. It found the two defects of this section that the commit adding these
+  subsections fixes: the location of the RED log and the missing release runs.
+
+The prompts and the answers are in the record named at the top of this section.

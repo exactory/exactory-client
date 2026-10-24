@@ -355,7 +355,7 @@ class PromptAndDeliveryCompatibilityTests(unittest.TestCase):
         current = review_protocol.canonical_prompt('result', orchestration='problem_creation')
         self.assertNotEqual(previous['text'], current['text'])
         self.assertEqual(previous['template_id'], legacy['template_id'])
-        self.assertEqual(current['template_id'], 'exactory-problem-review-v4/result')
+        self.assertEqual(current['template_id'], 'exactory-problem-review-v5/result')
         self.assertIn('with record_kind, id and digest copied from the delivery', previous['text'])
         assignment = {'role': 'result', 'subject': {'kind': 'problem', 'statement_id': 's'}, 'prompt': previous}
         self.assertTrue(review_protocol.is_previous_prompt(assignment))

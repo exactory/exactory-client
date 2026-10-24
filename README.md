@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.60.0](docs/releases/0.60.0.md) makes problem selection after a refutation an absolute principle: choose
+questions about the world the refutation reveals. It adds the admission item A7, direction after a refutation,
+and version 5 review templates. Earlier assessments and result reviews that lack A7 must be graded again before
+posting a statement that is not yet posted; earlier records and posted problems stay unchanged.
+
 Version [0.59.0](docs/releases/0.59.0.md) lets result coverage rely on the bound search records when a text route
 withholds their captured response bodies. It also corrects Darwin process inspection, installs the PDF renderer
 from the Ubuntu archive only in continuous integration, and fixes reassessment of compacted scientific history.
