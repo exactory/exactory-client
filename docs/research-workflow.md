@@ -75,16 +75,16 @@ operations of the Mathematics section.
 
 | Claim | Minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed version 2 result reviews | Current selected statement, attempt, accepted results, assessment and decisive evidence bound by `problem_evidence_digest`. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed result reviews that grade every rubric item, A7 included | Current selected statement, attempt, accepted results, assessment and decisive evidence bound by `problem_evidence_digest`. |
 
 | Milestone | Condition computed from records |
 | --- | --- |
 | `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
-| `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind version 2 bars; no statement exists yet, or the current slate selects no candidate. |
+| `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind bars that state the calibration of levels 2 and 3 (a bar on the version 1 template is refreshed first); no statement exists yet, or the current slate selects no candidate. |
 | `formulation` | The current slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
 | `attempt` | `problem-attempt` records a current, proportionate unresolved solver or critically assessed literature attempt; `assess_attempt` returns no obligations. |
 | `openness` | The attempt passes and an observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
-| `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both version 2 result reviews cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
+| `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both result reviews, grading every rubric item including A7, cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
 
 The exploration records each candidate question with `problem-candidate`: its
@@ -101,9 +101,10 @@ nor significance. A slate that selects no candidate records the reason and is th
 legitimate no-post outcome: `next` reports `problem_no_post` until a new slate
 selects a candidate.
 
-The slate cites version 2 bars. A bar recorded on the version 1 template returns
-`problem_bar_calibration_required`; assigning the bar again to the same reviewer
-refreshes it on version 2 in the same session and slot. A focused slate review by
+The slate cites bars that state the calibration of levels 2 and 3. A bar recorded
+on the version 1 template returns `problem_bar_calibration_required`; assigning
+the bar again to the same reviewer refreshes it on the current bar template in
+the same session and slot. A focused slate review by
 a bar reviewer is optional and is bound to the exact candidate set and the current
 bars; after a candidate is added or superseded, or a bar is refreshed, assigning
 the slate again to the same reviewer refreshes the review in its session, with the
@@ -224,7 +225,7 @@ store with `exactory-math search deliver-closure`, then bind it with
 `problem-formal-check`.
 
 Record the rubric with `problem-assessment`: an evidence reference and note
-for every item, a primary ground B1 or B2 and a criterion V1 to V8. All six
+for every item, a primary ground B1 or B2 and a criterion V1 to V8. All seven
 admission items must pass, `max(B1, B2) >= 2` (at least 3 for accessibility
 `E-A` or `E-N`), priority must be at least 2, and attempt and calibration must
 pass. Levels are integers 0 to 3 and the grounds never add. This assessment
@@ -274,8 +275,12 @@ pair's evidence, and the post gate accepts the adjudication only when its packet
 delivered them. The same adjudicator reassesses only after a changed version,
 changed evidence or an incomplete earlier packet, and the refresh names its
 reason.
-Original grades remain visible. Version 1 assignments stay verified, while
-the post gate requires version 2 result reviews. Reviewers must be independent of every recorded
+Original grades remain visible. Assignments recorded on the earlier templates
+stay verified, the version 1 ones included, while the post gate of a statement
+not yet posted requires both result reviews to grade every rubric item, A7
+included: a version 1 result review, which has no rubric grades, gives
+`problem_rubric_review_required`, and a result review graded with `A1` through
+`A6` gives `problem_rubric_regrade_required`. Reviewers must be independent of every recorded
 author, and pending source requests remain obligations. Record a `post`
 decision only after the current minimum and observed pair pass. `unresolved`
 openness blocks; `already_solved` redirects to the established result or a new

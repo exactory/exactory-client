@@ -15,22 +15,29 @@ from test_research_problem_delivery import ProblemDeliveryCase
 
 
 A7_DEFINITION = (
-    "Direction after a refutation: when a counterexample or another proof that the record has read in full "
-    "refutes a conjecture that the question concerns, the question studies the world that the refutation "
-    "reveals: the mechanism or the structure of the counterexamples, how far and how strongly the statement "
-    "fails, what falls with it, or the statement that replaces it. A question whose purpose is to find where "
-    "the refuted statement still holds, on a restricted class or under added hypotheses, fails, whatever its "
-    "other grades. A question that no refutation concerns passes.")
+    "Direction after a refutation: when a counterexample or another proof that the record has read in "
+    "full and has not found wrong refutes a conjecture that the question concerns, the question studies "
+    "the world that the refutation reveals, such as the mechanism or the structure of the "
+    "counterexamples, how far and how strongly the statement fails, what other results fall with it, or "
+    "the statement that replaces it. A question whose purpose is to find where the refuted statement "
+    "still holds, on a restricted class or under added hypotheses, fails whatever its other grades; the "
+    "item is judged on the purpose and the value case of the question, not on its surface form. A "
+    "question that no refutation concerns passes.")
 BAR_POINT = (
-    "Sixth, the conjectures of this field that a counterexample or another proof has refuted, with the works "
-    "that refute them, and the questions about the world that each refutation reveals. A question whose "
-    "purpose is to find where a refuted statement still holds is not one this field should take up.")
+    " Sixth, the conjectures of this field that a counterexample or another proof has refuted, with the "
+    "works that refute them, and the questions about the world that each refutation reveals: the "
+    "mechanism or the structure of the counterexamples, how far and how strongly the statement fails, "
+    "what other results fall with it, or the statement that replaces it. The standard of this field "
+    "excludes a question whose purpose is to find where a refuted statement still holds, on a restricted "
+    "class or under added hypotheses, whatever its other merits; the exclusion is judged on the purpose "
+    "and the value case of a question, not on its surface form.")
 SLATE_SENTENCE = (
     "Where a candidate's purpose is to find where a refuted statement still holds, say so as an objection "
     "that names the candidate in candidate_ids.")
 REGRADE_EXPLANATION = (
-    "Record a new self-assessment that grades A7, and obtain both result reviews on the current result "
-    "template, before the post.")
+    "Before the post, record a new self-assessment that grades A7 when assessment_id names one, and "
+    "assign the result role again to the reviewer of each review in review_ids; that assignment "
+    "continues the review on the current result template.")
 PREVIOUS_HASHES = {
     ('bar', False): 'e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b',
     ('bar', True): '6b383f8edaf372617444e25f84d5022563bd5b45fb8767810d867e90aaf8bcea',

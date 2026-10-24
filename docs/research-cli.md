@@ -1469,7 +1469,7 @@ already recorded in the configuration.
 
 | Claim | Mechanical minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, evidence-bound value, rubric self-assessment and projected citations | Two observed bar reviews and two observed version 2 result reviews meeting the rubric thresholds after focused adjudication | The explicit `problem_evidence_digest` binds the selected claim, attempt, accepted results, assessment and decisive evidence. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, evidence-bound value, rubric self-assessment and projected citations | Two observed bar reviews and two observed result reviews that grade every rubric item, A7 included, and meet the rubric thresholds after focused adjudication | The explicit `problem_evidence_digest` binds the selected claim, attempt, accepted results, assessment and decisive evidence. |
 
 Every mutation below uses `--file FILE --expected-revision REVISION
 --request-id ID`. Read the revision before a new mutation; an interrupted retry
@@ -1513,18 +1513,19 @@ significance.
 
 A version 1 bar lacks the calibration of levels 2 and 3. Assign the bar again to
 the same reviewer with an empty `context`: the assignment refreshes the version 1
-bar on the version 2 template. It continues that reviewer's bar session and slot,
-the version 1 bar stays in its history, and the packet carries `problem_refresh`
-with `{assignment_id, previous_template_id, template_id}`. The refresh packet also
-carries `historical_reviews` with the version 1 bar, whose objections the refreshed
-bar addresses. The refreshed bar gives
-an `objection_findings` entry for every material objection of the version 1 bar
-(`review_objection_history_incomplete`); until it is recorded, those objections
-stay current. Cite the refreshed bars
-in the slate; the slate and result reviews then continue the version 2 sessions,
-because only the latest bar of each slot is current. A reviewer whose latest bar
-is on version 2 cannot be assigned another bar (`review_resampling_forbidden`),
-unless its latest bar carries `review_evidence_undelivered` (the refresh below).
+bar on the current bar template, `exactory-problem-review-v5/bar`. It continues
+that reviewer's bar session and slot, the version 1 bar stays in its history, and
+the packet carries `problem_refresh` with `{assignment_id, previous_template_id,
+template_id}`. The refresh packet also carries `historical_reviews` with the
+version 1 bar, whose objections the refreshed bar addresses. The refreshed bar
+gives an `objection_findings` entry for every material objection of the version 1
+bar (`review_objection_history_incomplete`); until it is recorded, those
+objections stay current. Cite the refreshed bars in the slate; the slate and
+result reviews then continue the refreshed sessions, because only the latest bar
+of each slot is current. A reviewer whose latest bar is on
+`exactory-problem-review-v2/bar` or `exactory-problem-review-v5/bar` cannot be
+assigned another bar (`review_resampling_forbidden`), unless its latest bar
+carries `review_evidence_undelivered` (the refresh below).
 
 A focused slate review is optional. `review_ids` lists zero to two observed
 problem slate reviews from distinct reviewers and slots. Each must assess exactly
@@ -1532,7 +1533,7 @@ the slate's bars and current candidates and keep its observed independence;
 otherwise `problem_slate_review_unverified` names `review_id`. Assign a slate
 review with `review-assignment`, role `slate` and `dossier_id: null`, to one of
 the two bar reviewers: it continues that reviewer's bar session and slot
-(`review_bar_continuity`). The template is `exactory-problem-review-v2/slate` and
+(`review_bar_continuity`). The template is `exactory-problem-review-v5/slate` and
 the subject is `{kind: "problem", statement_id: null}`. The packet carries the
 area, field, source inventory, `bar_ids`, `bars`, the reviewer's own bars and
 `candidates`: the id, record digest, statement, source kind and reference,
@@ -1819,11 +1820,11 @@ required deliverables needs its own binding. A binding for another requested
 claim on the same output supplies no formal-check credit.
 
 Record the rubric self-assessment with `problem-assessment`. `grades` has exactly
-`{admission: {A1, A2, A3, A4, A5, A6}, significance: {B1, B2}, priority, attempt,
-accessibility, calibration}`. Admission, attempt and calibration verdicts are
-`pass` or `fail`; significance and priority levels are integers 0 to 3;
-accessibility is `E-F`, `E-A` or `E-N`. `items` has exactly `A1` through `A6`,
-`B1`, `B2`, `priority`, `attempt`, `accessibility` and `calibration`, each
+`{admission: {A1, A2, A3, A4, A5, A6, A7}, significance: {B1, B2}, priority,
+attempt, accessibility, calibration}`. Admission, attempt and calibration
+verdicts are `pass` or `fail`; significance and priority levels are integers 0
+to 3; accessibility is `E-F`, `E-A` or `E-N`. `items` has exactly `A1` through
+`A7`, `B1`, `B2`, `priority`, `attempt`, `accessibility` and `calibration`, each
 `{evidence: [refs], note}` with nonempty evidence and a nonempty text note.
 References use the shared strategy evidence shapes: a held artifact descriptor
 `{path, sha256, size, media_type}`, `{kind: "source", link}` for a full reading,
@@ -1901,7 +1902,7 @@ bound searches rests on their search records: a text route that withholds the
 bodies of their captured responses at its input limit (reduction step 6) leaves
 the coverage intact, and a route that admits those bodies delivers them.
 
-The problem bar uses `exactory-problem-review-v2/bar` and receives `area`,
+The problem bar uses `exactory-problem-review-v5/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and
 value withheld. The selected statement must retain the record's area, so the
 bars remain established for their original scope; a statement in another area
@@ -1927,7 +1928,7 @@ reviewer's session and slot as a refresh, and its `problem_refresh` adds
 `previous_problem_review_currency` and `problem_review_currency`; under the same
 currency it returns `review_resampling_forbidden`, unless the reviewer's latest
 result review carries `review_evidence_undelivered`. The result template
-`exactory-problem-review-v2/result` receives `problem_evidence`
+`exactory-problem-review-v5/result` receives `problem_evidence`
 with the claim, attempt, accepted results, openness, value, assessment, resolved
 `assessment_evidence`, citations, delivered readings/passages,
 admissions/executions/assessments/output validations and bound native closures.
@@ -1990,12 +1991,20 @@ reviewer (`review_not_independent`); an assignment's unknown author is refused
 with `problem_author_unknown`. Existing route probes, source-request
 continuations, assignment currency and independence checks apply.
 The blind bar also states the specialist's meaning of levels 2 and 3 of B1,
-B2 and comparative priority for the field and line. Each version 2 result adds
+B2 and comparative priority for the field and line. A result review on a
+template that carries the rubric (`exactory-problem-review-v2/result` and the
+later result templates through `exactory-problem-review-v5/result`) adds
 `value.rubric` with the same full grades shape and `value.rubric_evidence` with
-nonempty evidence-and-reasoning text for exactly the assessment item keys.
-Both result reviews must meet the thresholds after any focused adjudication.
-Recorded version 1 problem assignments retain their exact authenticated prompt
-and remain verified; posting requires version 2 result reviews.
+nonempty evidence-and-reasoning text for exactly its graded items; a review on
+the current template grades `A1` through `A7`, and a review recorded on one of
+the earlier ones with `A1` through `A6` is read as recorded. Both result reviews
+must meet the thresholds after any focused adjudication. Recorded problem
+assignments on the earlier templates, the version 1 ones included, retain their
+exact authenticated prompt and remain verified. For a statement not yet posted,
+the post gate requires both result reviews to grade every rubric item, A7
+included: a version 1 result review, which has no rubric grades, gives
+`problem_rubric_review_required`, and a result review graded with `A1` through
+`A6` gives `problem_rubric_regrade_required`.
 
 Material objections from both bars and both observed result histories remain
 post obligations (`research_objection_unresolved`), including predecessor
@@ -2075,7 +2084,7 @@ the actual request.
 The adjudicator template is `exactory-problem-review-v2/adjudicator`. For a
 below-threshold rubric grade, set `context.objection_id` to
 `rubric:<review_id>:<item>` with both original result review IDs. Items are
-`A1` through `A6`, `significance`, `priority`, `attempt` or `calibration`.
+`A1` through `A7`, `significance`, `priority`, `attempt` or `calibration`.
 The packet identifies the grade and required threshold and carries both
 results' `rubric_grades` and `rubric_definition`, `{item, definition, threshold}`
 of the adjudicated item. Every problem adjudicator packet carries
@@ -2206,7 +2215,8 @@ records retain nonmanaged dependency composition and empirical meaning.
 | `problem_assessment_evidence_missing` | Supply item evidence with the exact stored record digest at recording and projection, or at least one matching full source reading at projection; names `item` and the record ids or `link`. Re-record an assessment after a mutable record changes. |
 | `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
 | `problem_rubric_below_threshold` | Repair self-assessment shortfalls, or repair or independently adjudicate the named review shortfalls. `source` distinguishes `self` and `review`; ids and `{item, required, graded}` shortfalls identify the judgment. |
-| `problem_rubric_review_required` | Obtain a version 2 result review with full rubric grades for the named review. |
+| `problem_rubric_review_required` | The named result review was recorded on the version 1 result template, which has no rubric grades. Assign the result role again to the same reviewer: the harness continues the review on the current result template, which grades every rubric item. |
+| `problem_rubric_regrade_required` | The current self-assessment (`assessment_id`, null when it grades A7) or the named result reviews (`review_ids`, possibly empty) were graded with exactly `A1` through `A6`, before A7, and the statement is not posted. Record a new self-assessment that grades A7 when `assessment_id` is not null, and assign the result role again to the reviewer of each review in `review_ids`: the harness continues that review in the same session and slot on the current result template, and its packet carries `problem_refresh` with reason `prompt_contract_changed`. The earlier records are read without error and stay unchanged; while this obligation is listed, their below-threshold shortfalls are not listed. Bars on `exactory-problem-review-v2/bar` and slate reviews on `exactory-problem-review-v2/slate` stay valid; assigning such a bar again returns `review_resampling_forbidden`, and such a slate review is refreshed only when its candidates or bars change. |
 | `exploratory_evidence` | Preserve the probe observation and obtain admissible support for the claim. |
 | `problem_formal_check_missing`, `problem_formal_check_stale` | Bind the requested check for the current value evidence to its authenticated native completion. |
 | `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. In a problem record, `bundle` returns this code as a warning when the bundle's work has none of them, before a full reading binds the bundle. |
@@ -2224,9 +2234,10 @@ statement or with a current slate that selects no candidate, `formulation` when
 the current slate selects a candidate and a statement is selected, `attempt` when
 `assess_attempt` returns no obligations,
 `openness` after that with current `supported_open`, `value` with
-valid value evidence and a passing current rubric self-assessment, both bars,
-both version 2 result reviews passing the assurances and rubric after
-adjudication, and a current post decision, and `post` with a recorded post.
+valid value evidence, a passing current rubric self-assessment that grades A7,
+both bars, both result reviews grading every rubric item, A7 included, and
+passing the assurances and rubric after adjudication, and a current post
+decision, and `post` with a recorded post.
 `next` names the first missing condition in the order slate, statement,
 attempt, openness, value, reviews, decision, export. A stale slate leads with
 `problem_slate_stale`. When the current slate selects no candidate, `next` is

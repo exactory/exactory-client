@@ -154,7 +154,8 @@ def _verify_bars(records, artifacts, bar_review_ids):
     for bar in bars:
         if is_previous_prompt(records["review_assignment"][bar["assignment_id"]]):
             raise ResearchError("problem_bar_calibration_required",
-                                "Obtain a version 2 bar from this reviewer: assign the bar again to refresh it",
+                                "Assign this version 1 bar again to the same reviewer with an empty context: the "
+                                "harness refreshes it on the current bar template in the same session and slot",
                                 {"review_id": bar["id"]})
     validate_problem_bars(records, artifacts, bars)
     pending = _independence(records, artifacts, bars)

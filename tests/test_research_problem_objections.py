@@ -508,7 +508,7 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
                 self.observe("bar", reviewer, output)
 
     def refresh_version_one_bars(self, findings):
-        """Refresh both bars on version 2, the first with these findings on O1, and cite them in the slate."""
+        """Refresh both bars on the current template, the first with these findings on O1, and cite them in the slate."""
         for reviewer in ("first", "second"):
             output = self.build_review_output("bar")
             if reviewer == "first":

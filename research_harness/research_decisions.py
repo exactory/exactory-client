@@ -1009,7 +1009,9 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
     posted = find_post(records, statement) is not None
     if (assessment_id is not None or review_ids) and not posted:
         obligations.append(obligation('problem_rubric_regrade_required',
-            'Record a new self-assessment that grades A7, and obtain both result reviews on the current result template, before the post.',
+            'Before the post, record a new self-assessment that grades A7 when assessment_id names one, and '
+            'assign the result role again to the reviewer of each review in review_ids; that assignment '
+            'continues the review on the current result template.',
             assessment_id=assessment_id, review_ids=sorted(review_ids)))
     return obligations
 

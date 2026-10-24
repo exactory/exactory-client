@@ -72,6 +72,17 @@ closes it. It has a budget, and it has a legitimate outcome in which nothing is 
    (profile `research`; purpose `literature`, `screening` or `experiment`). To spend beyond it,
    record a new budget with the reason.
 
+One principle of problem selection is absolute, and no rubric grade, review or other
+consideration outweighs it. When a counterexample or another proof refutes a conjecture, the
+refutation is a fact about mathematics. Choose questions about the world that the refutation
+reveals, for example the mechanism or the structure of the counterexamples, how far and how
+strongly the statement fails, what other results fall with it, or the statement that replaces
+it. A question whose purpose is to find where the refuted statement still holds is excluded: it
+asks for a restricted class or added hypotheses under which the refuted statement holds, and
+its value case rests on that survival. This skill calls such a question one of the excluded
+kind. The test reads the purpose and the value case of a question, not its surface form, and a
+question that no refutation concerns is not affected.
+
 Candidates come from five kinds of source. Record the kind and the reference with every
 candidate:
 
@@ -90,9 +101,11 @@ candidate:
 Use the shared tools in any order, and state the question, the depth and the budget of every
 tool call:
 
-- `search`, `read` and `expand` establish the state of the field, the neighbours of a candidate,
-  the decisive prior and settling works, and the community evidence of an active line. Read
-  every decisive work in full; an abstract settles nothing.
+- `search`, `read` and `expand` establish the state of the field, including the conjectures of
+  the area that a counterexample or another proof has refuted and the works that refute them,
+  the neighbours of a candidate, the decisive prior and settling works, and the community
+  evidence of an active line. Read every decisive work in full, including each refuting work;
+  an abstract settles nothing.
 - The population tool (`exactory-cohort`) gives bounded evidence of activity in a line (ground
   B1). Use it only where standing evidence is needed and does not exist yet, and never as
   evidence of significance by itself.
@@ -129,12 +142,12 @@ significance.
    runs the Claude Code CLI itself as an isolated reviewer on the owner's subscription; in a
    Codex session a `codex_cli_v1` route. Two reviewers are two routes with distinct models or
    reviewer ids. Assign each bar with `review-assignment`, role `bar` and `dossier_id: null`;
-   the harness uses the template `exactory-problem-review-v2/bar`. Run the assignment with
+   the harness uses the template `exactory-problem-review-v5/bar`. Run the assignment with
    `review-run` and record the observed bar with `value-review`. The bars fix what levels 2 and 3
    of significance and priority mean in this field before the candidates can shape the answer.
 5. When `problem-slate` returns `problem_bar_calibration_required`, the named bar was recorded
    on the version 1 prompt. Assign the bar again to the same reviewer with an empty `context`;
-   the harness refreshes it on the version 2 prompt in the same session and slot. The refreshed
+   the harness refreshes it on the current prompt in the same session and slot. The refreshed
    bar gives a finding on every objection the version 1 bar stated; until it is recorded, those
    objections stay in force. Name the refreshed bar in `bar_review_ids`.
 6. Compare the candidates by their mathematical payoff, their neighbours, the tests that would
@@ -144,15 +157,17 @@ significance.
    on a judgment you cannot make yourself, obtain a focused slate review before you record the
    slate. Assign it with `review-assignment`, role `slate` and `dossier_id: null`, to one of the
    two bar reviewers; the harness builds the packet from the current candidates and the two
-   bars and uses the template `exactory-problem-review-v2/slate`. Run it with `review-run` and
+   bars and uses the template `exactory-problem-review-v5/slate`. Run it with `review-run` and
    record it with `value-review`. A slate review's objection names the candidates it concerns;
    such an objection follows the candidate into the result reviews and the post gate until it is
    resolved with evidence or found not upheld.
 8. Record the selection with `exactory-research problem-slate`. Give every current candidate
    exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
-   `rejected` with the reason. Name both bars in `bar_review_ids`. When slate reviews were
-   recorded, put their ids in `review_ids` (at most two, from distinct reviewers); otherwise
-   leave `review_ids` empty. Write the `comparison`, and a `reason` when nothing is selected.
+   `rejected` with the reason. A candidate of the excluded kind is `rejected` with the
+   principle as the reason, whatever its potential grades: no evidence can raise it. Name both
+   bars in `bar_review_ids`. When slate reviews were recorded, put their ids in `review_ids` (at
+   most two, from distinct reviewers); otherwise leave `review_ids` empty. Write the
+   `comparison`, and a `reason` when nothing is selected.
 9. Select only a candidate whose potential reaches `max(B1, B2) >= 2` with readiness `pass`.
    Defer a candidate at level 1 with the evidence that would raise it, and reconsider it when
    that evidence is recorded.
@@ -352,9 +367,9 @@ grade it; the codes and grades stay in the assessment record, out of the public 
 
 ### The rubric
 
-Admission has six items, each `pass` or `fail`. A1 precision: the statement and the criteria are
-exact mathematical statements, and a proof or a disproof meets them without ambiguity; when a
-formal statement is supplied, its correspondence to the intended mathematics is assessed. A2
+Admission has seven items, each `pass` or `fail`. A1 precision: the statement and the criteria
+are exact mathematical statements, and a proof or a disproof meets them without ambiguity; when
+a formal statement is supplied, its correspondence to the intended mathematics is assessed. A2
 openness: a current `supported_open` finding covers the exact statement, with dated coverage and
 the known status recorded for each declared neighbour (a neighbour found settled is a recorded
 status, not a failure), and every decisive source is read in full. A3 contribution: the record
@@ -365,7 +380,11 @@ unresolved. A4 clarity: an appropriate researcher can understand the statement. 
 considered: the record lists the routine routes considered and answers each specific objection of
 triviality. The record certifies nothing about what routine methods cannot do. A6 readiness: the
 harness read every decisive source in full and can state the claim's standing. A decisive source
-that is unavailable, or mathematics the harness cannot assess, fails A6.
+that is unavailable, or mathematics the harness cannot assess, fails A6. A7 direction after a
+refutation: when a counterexample or another proof that the record has read in full and has not
+found wrong refutes a conjecture that the question concerns, the question studies the world that
+the refutation reveals; a question of the excluded kind fails A7 whatever its other grades, and a
+question that no refutation concerns passes.
 
 Significance has two grounds, B1 (standing in an active line) and B2 (influence), graded on one
 scale. The significance is the higher of the two grades; the grounds never add. Level 0, absent:
@@ -415,10 +434,12 @@ both result reviews must meet them, after any adjudication.
 
 A candidate is revised when the shortfall is one that evidence can repair: an admission item that
 a reading, a computation or a formal statement can settle, significance at level 1, or priority at
-level 1. A candidate is refused when it is an arbitrary parameter variant, a conjecture resting on
-a numerical pattern alone, a question whose only support is the solver's exhaustion, a programme
-without definite resolution conditions, a bare restatement of a known question, or a claim about a
-question whose decisive literature or mathematics the harness cannot assess.
+level 1. A candidate is refused when it is of the excluded kind, an arbitrary parameter variant, a
+conjecture resting on a numerical pattern alone, a question whose only support is the solver's
+exhaustion, a programme without definite resolution conditions, a bare restatement of a known
+question, or a claim about a question whose decisive literature or mathematics the harness cannot
+assess. Evidence cannot repair a question of the excluded kind, and no grade outweighs its
+refusal.
 
 Among admissible candidates, class `E-F` is preferred, then the higher significance level, then
 the higher priority level. A reasoned departure for significance is permitted and recorded. The
@@ -448,13 +469,20 @@ states the exact rule.
    probe another route, and continue the slot with a `context_repair` assignment that names the
    retirement; the replacement reviewer gives the final reassessment in the preserved slot.
 3. Assign each result review with `review-assignment`, role `result` and `dossier_id: null`;
-   the harness uses the template `exactory-problem-review-v2/result`, delivers the current bars,
+   the harness uses the template `exactory-problem-review-v5/result`, delivers the current bars,
    the statement, the openness finding with its bound search records, the value evidence, the
    assessment with its references resolved, the attempt and the cited results, the citations,
    the readings with their inline passages, the computations, the formal checks, and every
    applicable objection. Run the assignment with `review-run` and record the observed review
-   with `value-review`. Replace a recorded version 1 result review with a version 2 review
-   before the post (`problem_rubric_review_required`).
+   with `value-review`. Replace a recorded version 1 result review, which has no rubric grades,
+   before the post (`problem_rubric_review_required`). When the gate or `next` lists
+   `problem_rubric_regrade_required`, the self-assessment named in `assessment_id` or the result
+   reviews named in `review_ids` were graded without A7: record a new self-assessment that
+   grades A7 when one is named, and assign the result role again to the reviewer of each named
+   review. The harness continues that review in the same session and slot on the current
+   template, with `problem_refresh` reason `prompt_contract_changed`, and lists below-threshold
+   shortfalls only for grades that cover A7. Bars and slate reviews recorded on earlier
+   templates stay valid, and assigning one again is refused (`review_resampling_forbidden`).
 4. Answer a reviewer's source request with a continuation assignment of the same role, route and
    reviewer.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
@@ -463,10 +491,11 @@ states the exact rule.
 6. Assign an adjudication with `review-assignment`, role `adjudicator` and `dossier_id: null`,
    to a fresh independent assessor; the harness uses the template
    `exactory-problem-review-v2/adjudicator`. For a rubric grade, set `context.objection_id` to
-   `rubric:<review_id>:<item>`, where the item is `A1` to `A6`, `significance`, `priority`,
+   `rubric:<review_id>:<item>`, where the item is `A1` to `A7`, `significance`, `priority`,
    `attempt` or `calibration`, and name both original result review ids in
-   `context.review_ids`. Run the assignment with `review-run` and record the observed finding
-   with `review-adjudication`.
+   `context.review_ids`. An adjudication of A7 decides only whether the question is of the
+   excluded kind. Run the assignment with `review-run` and record the observed finding with
+   `review-adjudication`.
 7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
    as a resolution of that one item.
 8. Resolve every material objection of both bars, of the applicable slate reviews and of both
@@ -571,6 +600,8 @@ Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
 
 - Do not post on the support of a numerical pattern, a solver's exhaustion, or an abstract you
   did not read in full.
+- Do not pose a question whose purpose is to find where a refuted statement still holds,
+  whatever its grades; study the world that the refutation reveals.
 - Do not present unresolved work as difficulty, or an attempt without a scope as an
   obstruction.
 - Do not let a selection stand in for openness or significance; the slate authorizes research,

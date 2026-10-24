@@ -76,7 +76,7 @@
     "id": "problem-assessment-1",
     "statement_id": "statement-1",
     "grades": {
-      "admission": {"A1": "pass", "A2": "pass", "A3": "pass", "A4": "pass", "A5": "pass", "A6": "pass"},
+      "admission": {"A1": "pass", "A2": "pass", "A3": "pass", "A4": "pass", "A5": "pass", "A6": "pass", "A7": "pass"},
       "significance": {"B1": 2, "B2": 0},
       "priority": 2, "attempt": "pass", "accessibility": "E-F", "calibration": "pass"
     },
@@ -102,6 +102,10 @@
         "note": "The cited evidence supports this judgment within its recorded scope."
       },
       "A6": {
+        "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
+        "note": "The cited evidence supports this judgment within its recorded scope."
+      },
+      "A7": {
         "evidence": [{"kind": "record", "record_kind": "reading", "id": "full-reading-1", "digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}],
         "note": "The cited evidence supports this judgment within its recorded scope."
       },

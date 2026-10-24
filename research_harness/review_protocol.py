@@ -149,9 +149,13 @@ _PROBLEM_RESULT_PROTOCOL_V4 = 'exactory-problem-review-v4'
 PROBLEM_RESULT_PROTOCOL = 'exactory-problem-review-v5'
 _ANCHOR = problem_rubric.ANCHORS
 _PROBLEM_BAR_REFUTATION = (
-    ' Sixth, the conjectures of this field that a counterexample or another proof has refuted, with the works '
-    'that refute them, and the questions about the world that each refutation reveals. A question whose '
-    'purpose is to find where a refuted statement still holds is not one this field should take up.')
+    ' Sixth, the conjectures of this field that a counterexample or another proof has refuted, with the '
+    'works that refute them, and the questions about the world that each refutation reveals: the '
+    'mechanism or the structure of the counterexamples, how far and how strongly the statement fails, '
+    'what other results fall with it, or the statement that replaces it. The standard of this field '
+    'excludes a question whose purpose is to find where a refuted statement still holds, on a restricted '
+    'class or under added hypotheses, whatever its other merits; the exclusion is judged on the purpose '
+    'and the value case of a question, not on its surface form.')
 _PROBLEM_SLATE_REFUTATION = (
     " Where a candidate's purpose is to find where a refuted statement still holds, say so as an objection "
     'that names the candidate in candidate_ids.')
@@ -717,14 +721,16 @@ def find_current_problem_bar_ids(records, artifacts):
 
 
 def require_calibrated_bars(records, bars):
-    """A version 2 result needs the version 2 calibration of every current bar and every bar the latest slate cites."""
+    """Refuse version 1 bars, including those cited by the latest slate, before a result review."""
     from .problem_candidates import find_slate
     slate = find_slate(records)
     cited = [] if slate is None else [records['value_review'][identifier] for identifier in slate['bar_review_ids']]
     for review in bars + cited:
         if is_previous_prompt(records['review_assignment'][review['assignment_id']]):
             raise ResearchError('problem_bar_calibration_required',
-                                'Refresh this bar on the version 2 template before the result review', {'review_id': review['id']})
+                                'Before the result review, assign this version 1 bar again to the same reviewer '
+                                'with an empty context: the harness refreshes it on the current bar template in '
+                                'the same session and slot', {'review_id': review['id']})
 
 
 def collect_result_objections(records, artifacts, subject, evidence_digest, bars):
@@ -1689,8 +1695,9 @@ def previous_problem_result_prompt(repair=False, repair_prompt=None):
 
 
 def _list_previous_problem_result_prompts(repair):
-    """The result prompts that a later contract superseded: the version 2 prompt of 0.55.x, and the version 2 prompt
-    of 0.56.x and the version 3 prompt, each with every context-repair suffix that an assignment may have recorded."""
+    """The result prompts that a later contract superseded: the version 2 prompts of 0.55.x and 0.56.x and the
+    version 3 and version 4 prompts. Context-repair variants use the 0.56.0 suffix for 0.55.x and every recorded
+    suffix for the later prompts."""
     if not repair:
         return [previous_problem_result_prompt()] + [
             canonical_prompt('result', version=version, orchestration='problem_creation') for version in (2, 3, 4)]
@@ -1747,7 +1754,7 @@ def is_version_2_problem_result(assignment):
 
 
 def has_problem_result_rubric(assignment):
-    """Version 2 through version 4 results retain the same required rubric schema."""
+    """Whether a problem result uses a supported prompt that requires rubric grades."""
     return (assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] == 'result'
             and assignment['prompt']['template_id'] in tuple(
                 protocol + '/result' + suffix

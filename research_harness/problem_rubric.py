@@ -15,7 +15,7 @@ NON_ADMISSION_ITEMS = GROUNDS + ("priority", "attempt", "accessibility", "calibr
 ITEMS = ADMISSION_ITEMS + NON_ADMISSION_ITEMS
 _SHORTFALL_ITEMS = ADMISSION_ITEMS + ("significance", "priority", "attempt", "calibration")
 
-# The normative anchors of RUBRIC.md 0.2, one text per item: what the item requires and the
+# The normative anchors of RUBRIC.md 0.3, one text per item: what the item requires and the
 # threshold for posting. The reviewer prompts state them, the adjudicator packet delivers the one
 # it adjudicates, and the skill restates them for the author.
 ANCHORS = {
@@ -45,12 +45,14 @@ ANCHORS = {
                          "the claim's standing in its literature. A decisive source that is unavailable, or "
                          "mathematics the harness cannot assess, fails.",
            "threshold": "pass"},
-    "A7": {"definition": "Direction after a refutation: when a counterexample or another proof that the record has read in full "
-                         "refutes a conjecture that the question concerns, the question studies the world that the refutation "
-                         "reveals: the mechanism or the structure of the counterexamples, how far and how strongly the statement "
-                         "fails, what falls with it, or the statement that replaces it. A question whose purpose is to find where "
-                         "the refuted statement still holds, on a restricted class or under added hypotheses, fails, whatever its "
-                         "other grades. A question that no refutation concerns passes.",
+    "A7": {"definition": "Direction after a refutation: when a counterexample or another proof that the record has read in "
+                         "full and has not found wrong refutes a conjecture that the question concerns, the question studies "
+                         "the world that the refutation reveals, such as the mechanism or the structure of the "
+                         "counterexamples, how far and how strongly the statement fails, what other results fall with it, or "
+                         "the statement that replaces it. A question whose purpose is to find where the refuted statement "
+                         "still holds, on a restricted class or under added hypotheses, fails whatever its other grades; the "
+                         "item is judged on the purpose and the value case of the question, not on its surface form. A "
+                         "question that no refutation concerns passes.",
            "threshold": "pass"},
     "significance": {
         "definition": "Significance is graded on two grounds on one four-level scale, and the higher ground counts; "
