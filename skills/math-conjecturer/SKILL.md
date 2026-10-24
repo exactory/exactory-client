@@ -77,11 +77,12 @@ consideration outweighs it. When a counterexample or another proof refutes a con
 refutation is a fact about mathematics. Choose questions about the world that the refutation
 reveals, for example the mechanism or the structure of the counterexamples, how far and how
 strongly the statement fails, what other results fall with it, or the statement that replaces
-it. A question whose purpose is to find where the refuted statement still holds is excluded: it
-asks for a restricted class or added hypotheses under which the refuted statement holds, and
-its value case rests on that survival. This skill calls such a question one of the excluded
-kind. The test reads the purpose and the value case of a question, not its surface form, and a
-question that no refutation concerns is not affected.
+it. A question whose purpose is to find where the refuted statement still holds is excluded,
+whatever form it takes; its usual forms ask for a restricted class or for added hypotheses
+under which the refuted statement holds, with a value case that rests on that survival. This
+skill calls such a question one of the excluded kind. Read the purpose from the question and
+its value case, not from its surface form; an added value argument changes neither the purpose
+nor the exclusion. A question that no refutation concerns is not affected.
 
 Candidates come from five kinds of source. Record the kind and the reference with every
 candidate:
@@ -381,10 +382,10 @@ considered: the record lists the routine routes considered and answers each spec
 triviality. The record certifies nothing about what routine methods cannot do. A6 readiness: the
 harness read every decisive source in full and can state the claim's standing. A decisive source
 that is unavailable, or mathematics the harness cannot assess, fails A6. A7 direction after a
-refutation: when a counterexample or another proof that the record has read in full and has not
-found wrong refutes a conjecture that the question concerns, the question studies the world that
-the refutation reveals; a question of the excluded kind fails A7 whatever its other grades, and a
-question that no refutation concerns passes.
+refutation: a reported counterexample or another reported proof against a conjecture that the
+question concerns counts as a refutation unless the record shows it wrong, and the question then
+studies the world that the refutation reveals; a question of the excluded kind fails A7 whatever
+its other grades, and a question that no refutation concerns passes.
 
 Significance has two grounds, B1 (standing in an active line) and B2 (influence), graded on one
 scale. The significance is the higher of the two grades; the grounds never add. Level 0, absent:
@@ -481,8 +482,11 @@ states the exact rule.
    grades A7 when one is named, and assign the result role again to the reviewer of each named
    review. The harness continues that review in the same session and slot on the current
    template, with `problem_refresh` reason `prompt_contract_changed`, and lists below-threshold
-   shortfalls only for grades that cover A7. Bars and slate reviews recorded on earlier
-   templates stay valid, and assigning one again is refused (`review_resampling_forbidden`).
+   shortfalls only for grades that cover A7. Bars on `exactory-problem-review-v2/bar` and slate
+   reviews on `exactory-problem-review-v2/slate` stay valid and are not reassigned for A7 alone
+   (`review_resampling_forbidden`); a version 1 bar still needs its calibration refresh
+   (`problem_bar_calibration_required`), a slate review is refreshed when its candidates or bars
+   change, and a bar or a slate review is refreshed to repair `review_evidence_undelivered`.
 4. Answer a reviewer's source request with a continuation assignment of the same role, route and
    reviewer.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade

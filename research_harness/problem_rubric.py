@@ -45,14 +45,16 @@ ANCHORS = {
                          "the claim's standing in its literature. A decisive source that is unavailable, or "
                          "mathematics the harness cannot assess, fails.",
            "threshold": "pass"},
-    "A7": {"definition": "Direction after a refutation: when a counterexample or another proof that the record has read in "
-                         "full and has not found wrong refutes a conjecture that the question concerns, the question studies "
-                         "the world that the refutation reveals, such as the mechanism or the structure of the "
-                         "counterexamples, how far and how strongly the statement fails, what other results fall with it, or "
-                         "the statement that replaces it. A question whose purpose is to find where the refuted statement "
-                         "still holds, on a restricted class or under added hypotheses, fails whatever its other grades; the "
-                         "item is judged on the purpose and the value case of the question, not on its surface form. A "
-                         "question that no refutation concerns passes.",
+    "A7": {"definition": "Direction after a refutation: a reported counterexample or another reported proof against a "
+                         "conjecture that the question concerns counts as a refutation unless the record shows it wrong, and "
+                         "the question then studies the world that the refutation reveals, such as the mechanism or the "
+                         "structure of the counterexamples, how far and how strongly the statement fails, what other results "
+                         "fall with it, or the statement that replaces it. A question whose purpose is to find where the "
+                         "refuted statement still holds fails whatever its other grades and whatever form it takes; its usual "
+                         "forms ask for a restricted class or for added hypotheses under which the refuted statement holds, "
+                         "with a value case that rests on that survival. The purpose is read from the question and its value "
+                         "case, not from its surface form, and an added value argument changes neither the purpose nor the "
+                         "grade. A question that no refutation concerns passes.",
            "threshold": "pass"},
     "significance": {
         "definition": "Significance is graded on two grounds on one four-level scale, and the higher ground counts; "

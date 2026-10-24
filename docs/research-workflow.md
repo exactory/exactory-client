@@ -121,8 +121,10 @@ slate slot by a context repair also refreshes its slate review there.
 A result review is refused before dispatch while a current or cited bar is on
 the version 1 template, and every result packet carries the current bars, also
 after a context repair. A result reviewer whose completed review was given under
-other evidence, other bars or other material objection versions reassesses in the
-same session and slot; under the same conditions a repeat is refused.
+other evidence, other bars or other material objection versions, or on a
+supported earlier result template, reassesses in the same session and slot; under
+the same conditions a repeat is refused, unless it repairs
+`review_evidence_undelivered`.
 
 Formulate a selected candidate with `problem-statement` and its `candidate_id`;
 the post gate requires the latest slate to select the current statement's

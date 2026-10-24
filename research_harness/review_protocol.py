@@ -153,12 +153,15 @@ _PROBLEM_BAR_REFUTATION = (
     'works that refute them, and the questions about the world that each refutation reveals: the '
     'mechanism or the structure of the counterexamples, how far and how strongly the statement fails, '
     'what other results fall with it, or the statement that replaces it. The standard of this field '
-    'excludes a question whose purpose is to find where a refuted statement still holds, on a restricted '
-    'class or under added hypotheses, whatever its other merits; the exclusion is judged on the purpose '
-    'and the value case of a question, not on its surface form.')
+    'excludes a question whose purpose is to find where a refuted statement still holds, whatever its '
+    'other merits and whatever form it takes; its usual forms ask for a restricted class or for added '
+    'hypotheses under which the refuted statement holds, with a value case that rests on that survival. '
+    'The purpose is read from the question and its value case, not from its surface form, and an added '
+    'value argument changes neither the purpose nor the exclusion.')
 _PROBLEM_SLATE_REFUTATION = (
-    " Where a candidate's purpose is to find where a refuted statement still holds, say so as an objection "
-    'that names the candidate in candidate_ids.')
+    " Where a candidate's purpose is to find where a refuted statement still holds, say so as an "
+    'objection that names the candidate in candidate_ids and states that no grade, other merit or '
+    'acknowledgment of the refutation resolves it.')
 _LINK_EXAMPLE = ('{"kind":"source","link":{"version_id":"<version id of the delivered source>","source_id":"<source id of the '
                  'delivery>","artifact":{"path":"<path>","sha256":"<sha256>","size":0,"media_type":"<media type>"},'
                  '"locator":{"kind":"<as delivered>"}}}')
