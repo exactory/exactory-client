@@ -76,7 +76,7 @@ class RemoteExecutionTests(DevelopmentCase):
                                              "sha256": hashlib.sha256(interpreter.resolve().read_bytes()).hexdigest()})
 
     def test_no_runner_stays_pending_and_reconciliation_reuses_the_only_job(self):
-        admission = admit_lab(self, backend="colab", timeout=0.1, body="print('{\"metric\": 3}')\n")
+        admission = admit_lab(self, backend="colab", body="print('{\"metric\": 3}')\n")
         identity = {"expected_revision": self.store.revision, "request_id": "pending-run"}
         self.assert_error("execution_recovery_required", lambda: execution.launch_execution(self.store, admission["id"], **identity))
         before = self.store.snapshot()["records"]

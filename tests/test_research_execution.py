@@ -121,10 +121,11 @@ class ResearchExecutionTests(DevelopmentCase):
 
     def test_actual_timeout_is_retained_without_result_validation(self):
         self.require_launcher()
-        admission = admit_lab(self, body="import time\nprint('started', flush=True)\ntime.sleep(30)\n", timeout=0.15)
+        admission = admit_lab(self, body="import time\nprint('started', flush=True)\ntime.sleep(30)\n")
         api = importlib.import_module("research_harness.execution")
         result = api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="timeout")
         self.assertTrue(result["timed_out"])
+        self.assertLess(result["duration_s"], 30)
         records = self.store.snapshot()["records"]
         outcome = records["execution"][records["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
         self.assertEqual(outcome["status"], "timed_out")

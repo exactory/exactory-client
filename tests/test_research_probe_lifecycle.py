@@ -1,5 +1,6 @@
 """Probe intent, reservation, ownership and reconciliation contracts."""
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -150,7 +151,7 @@ class ProbeSupervisionTests(unittest.TestCase):
             root = Path(temporary)
             work = root / "run/work"
             work.mkdir(parents=True)
-            (work / "program.py").write_text('import time\nprint("started", flush=True)\ntime.sleep(10)\n')
+            (work / "program.py").write_text('import time\ntime.sleep(10)\n')
             config = {"directory": "run", "argv": [sys.executable, "program.py"], "timeout_seconds": 0.2}
             spawn = subprocess.Popen
             def launch_after_preparation(*args, **kwargs):
@@ -159,8 +160,10 @@ class ProbeSupervisionTests(unittest.TestCase):
             with (root / "owner.lock").open("wb") as owner:
                 with mock.patch.object(probe_worker.subprocess, "Popen", side_effect=launch_after_preparation):
                     terminal = probe_worker.run_probe_process(root, config, owner.fileno(), find_probe_process_identity(os.getpid()), "fixture")
+            supervision = json.loads((root / "run/supervision.json").read_bytes())
+            self.assertGreaterEqual(supervision["execution_started"] - supervision["started"], 0.3)
+            self.assertEqual(supervision["deadline"], supervision["execution_started"] + config["timeout_seconds"])
             self.assertEqual(terminal["exit_status"], "timed_out")
-            self.assertEqual((root / "run/stdout").read_bytes(), b"started\n")
             self.assertGreaterEqual(terminal["elapsed_seconds"], 0.5)
 
     def test_deadline_clock_uses_the_shared_kernel_origin_on_python_39(self):

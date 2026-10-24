@@ -811,6 +811,29 @@ The continuous integration (CI) push run 40080777029 on `27a844c` succeeded. It 
 3.14.7, with four general shards and the remaining checks for each Python. The pull request's CI runs the same matrix
 on each commit pushed to the branch, including the commit that adds this record.
 
+The pull request CI run 40080782587 on `27a844c` failed one test on Python 3.12.14 (general shard 2):
+`test_research_probe_lifecycle.ProbeSupervisionTests.test_supervisor_startup_leaves_the_requested_time_for_the_program`,
+with the program's stdout empty. The push run 40080777029 on the same tree passed it. A probe program's deadline
+starts once the supervisor reports ready, before the worker writes `supervision.json` and opens the launch gate,
+so the program's time includes that write and the start of its interpreter. The test gave that 0.2 seconds and
+asserted that the program had printed. An interpreter start delayed by 0.3 seconds reproduces the failure on Python
+3.12.8 and 3.9.6, as well as the same empty-output failures in
+`test_lab.TestProbe.test_timeout_retains_partial_output_and_records_timed_out` and
+`test_research_execution.ResearchExecutionTests.test_actual_timeout_is_retained_without_result_validation`.
+Under the same delay,
+`RemoteExecutionTests.test_no_runner_stays_pending_and_reconciliation_reuses_the_only_job` in
+`test_research_remote_execution` fails with `result["ok"]` false because its program does not finish within the
+0.1-second timeout.
+The commit adding this paragraph changes the supervisor startup test to read `supervision.json` and assert that
+`execution_started - started` is at least the injected 0.3-second launch delay and that `deadline` equals
+`execution_started + timeout_seconds`, keeping its 0.2-second timeout and assertions on timed-out status and elapsed
+time. The partial output test uses the 2-second default of `TestProbe.run_probe`, asserts the retained stdout and
+timed-out status, and requires elapsed time below the program's 10-second sleep. The actual timeout test uses the
+5-second default of `admit_lab`, asserts retained output and timed-out status without result validation, and requires
+duration below the program's 30-second sleep. The remote execution test now uses the 5-second default of `admit_lab`.
+The commit changes no production code. With interpreter start delayed by 0.3 and by 1.0 seconds, all four tests pass
+on Python 3.12.8 and 3.9.6.
+
 ### Store compatibility
 
 Read-only commands ran with the release code `7b196f7` on copies of the three problem stores. The copies were made
