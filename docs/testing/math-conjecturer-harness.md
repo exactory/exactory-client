@@ -865,3 +865,36 @@ The reviews used Astra 6 (`gpt-6-astra`), with settings verified from the `turn_
   `VERDICT: RELEASE`.
 
 The prompts and the answers are in the record named at the top of this section.
+
+## Release 0.60.0
+
+0.60.0 makes problem selection after a refutation an absolute principle, adds the admission item A7, direction
+after a refutation, and uses version 5 review templates for new bar, slate and result assignments. The branch
+`release/0.60.0` starts at `7015012` (0.59.0), and its record is
+`misc/harness-improvement/20261024093334-problem-choice-after-refutation` of the exactory repository.
+
+### RED and GREEN evidence
+
+The RED evidence is the failing run on 0.59.0 (`7015012`) in `.lane-logs/red.log`. All 15 tests of
+`tests/test_problem_direction_after_refutation.py` failed there, with 20 failures counting subtests. The GREEN
+evidence is the passing run on the release branch.
+
+| Test | On 7015012 | On the branch |
+| --- | --- | --- |
+| `test_new_self_assessment_requires_a7` | FAIL | OK |
+| `test_new_self_assessment_requires_a7_evidence` | FAIL | OK |
+| `test_failed_self_a7_is_a_post_shortfall` | FAIL | OK |
+| `test_new_result_requires_a7` | FAIL | OK |
+| `test_new_result_requires_a7_evidence` | FAIL | OK |
+| `test_failed_result_a7_is_released_only_by_its_not_upheld_adjudication` | FAIL | OK |
+| `test_previous_records_read_and_name_one_regrade_obligation_without_mutation` | FAIL | OK |
+| `test_previous_records_still_refuse_other_admission_item_sets` | FAIL | OK |
+| `test_partial_result_refresh_merges_regrade_obligations_from_the_saved_decision` | FAIL | OK |
+| `test_previous_result_refresh_retains_reviewer_session_slot_and_recorded_requests` | FAIL | OK |
+| `test_previous_rubric_shortfall_can_still_be_adjudicated` | FAIL | OK |
+| `test_result_prompt_delivers_the_a7_anchor_and_complete_response_shapes` | FAIL | OK |
+| `test_bar_prompt_states_the_sixth_point_after_the_fifth` | FAIL | OK |
+| `test_slate_prompt_names_the_excluded_candidate_in_an_objection` | FAIL | OK |
+| `test_previous_prompt_bytes_authenticate_without_refreshing_bars_or_slates` | FAIL (6 subtests) | OK |
+
+The release runs are recorded below.
