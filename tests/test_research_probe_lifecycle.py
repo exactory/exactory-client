@@ -1,5 +1,6 @@
 """Probe intent, reservation, ownership and reconciliation contracts."""
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -130,6 +131,18 @@ class ProbeConfigurationTests(LiteratureCase):
 
 
 class ProbeSupervisionTests(unittest.TestCase):
+    def patch_darwin_libproc(self, **functions):
+        import ctypes
+        from types import SimpleNamespace
+        from unittest import mock
+        from research_harness import probe_supervision
+        self.addCleanup(ctypes.set_errno, ctypes.get_errno())
+        for patcher in (mock.patch.object(probe_supervision.sys, "platform", "darwin"),
+                        mock.patch.object(ctypes, "CDLL", return_value=SimpleNamespace(**functions))):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        return probe_supervision
+
     def test_supervisor_startup_leaves_the_requested_time_for_the_program(self):
         from unittest import mock
         from research_harness import probe_worker
@@ -138,7 +151,7 @@ class ProbeSupervisionTests(unittest.TestCase):
             root = Path(temporary)
             work = root / "run/work"
             work.mkdir(parents=True)
-            (work / "program.py").write_text('import time\nprint("started", flush=True)\ntime.sleep(10)\n')
+            (work / "program.py").write_text('import time\ntime.sleep(10)\n')
             config = {"directory": "run", "argv": [sys.executable, "program.py"], "timeout_seconds": 0.2}
             spawn = subprocess.Popen
             def launch_after_preparation(*args, **kwargs):
@@ -147,8 +160,10 @@ class ProbeSupervisionTests(unittest.TestCase):
             with (root / "owner.lock").open("wb") as owner:
                 with mock.patch.object(probe_worker.subprocess, "Popen", side_effect=launch_after_preparation):
                     terminal = probe_worker.run_probe_process(root, config, owner.fileno(), find_probe_process_identity(os.getpid()), "fixture")
+            supervision = json.loads((root / "run/supervision.json").read_bytes())
+            self.assertGreaterEqual(supervision["execution_started"] - supervision["started"], 0.3)
+            self.assertEqual(supervision["deadline"], supervision["execution_started"] + config["timeout_seconds"])
             self.assertEqual(terminal["exit_status"], "timed_out")
-            self.assertEqual((root / "run/stdout").read_bytes(), b"started\n")
             self.assertGreaterEqual(terminal["elapsed_seconds"], 0.5)
 
     def test_deadline_clock_uses_the_shared_kernel_origin_on_python_39(self):
@@ -169,6 +184,71 @@ class ProbeSupervisionTests(unittest.TestCase):
     def test_group_members_include_the_current_process_identity(self):
         from research_harness.probe_supervision import find_probe_group_members, find_probe_process_identity
         self.assertIn(find_probe_process_identity(os.getpid()), find_probe_group_members(os.getpgrp()))
+
+    def test_darwin_group_enumeration_raises_when_libproc_sets_errno(self):
+        import ctypes
+        import errno
+        def list_group(group, buffer, size):
+            ctypes.set_errno(errno.EPERM)
+            return 0
+        probe_supervision = self.patch_darwin_libproc(proc_listpgrppids=list_group)
+        with self.assertRaises(OSError) as raised:
+            probe_supervision.find_probe_group_members(10)
+        self.assertEqual(raised.exception.errno, errno.EPERM)
+        self.assertEqual(raised.exception.strerror, "Cannot enumerate the probe process group")
+        self.assertEqual(raised.exception.filename, 10)
+
+    def test_darwin_empty_group_returns_no_members_despite_stale_errno(self):
+        import ctypes
+        import errno
+        def list_group(group, buffer, size):
+            return 0
+        probe_supervision = self.patch_darwin_libproc(proc_listpgrppids=list_group)
+        for error in (0, errno.EPERM):
+            with self.subTest(errno=error):
+                ctypes.set_errno(error)
+                self.assertEqual(probe_supervision.find_probe_group_members(10), [])
+
+    def test_darwin_group_enumeration_grows_full_buffers_and_returns_every_member(self):
+        import ctypes
+        from unittest import mock
+        members = [{"pid": pid, "process_group": 10, "start_identity": [pid]} for pid in range(100, 170)]
+        identities = {member["pid"]: member for member in members}
+        capacities = []
+        def list_group(group, buffer, size):
+            self.assertEqual(group, 10)
+            self.assertEqual(size, ctypes.sizeof(buffer))
+            capacities.append(len(buffer))
+            for index, member in enumerate(members[:len(buffer)]):
+                buffer[index] = member["pid"]
+            return min(len(members), len(buffer))
+        probe_supervision = self.patch_darwin_libproc(proc_listpgrppids=list_group)
+        with mock.patch.object(probe_supervision, "find_probe_process_identity", side_effect=identities.__getitem__):
+            self.assertEqual(probe_supervision.find_probe_group_members(10), members)
+        self.assertEqual(capacities, [32, 64, 128])
+
+    def test_darwin_process_identity_raises_permission_error_despite_stale_esrch(self):
+        import ctypes
+        import errno
+        def read_identity(pid, flavor, arg, buffer, size):
+            ctypes.set_errno(errno.EPERM)
+            return 0
+        probe_supervision = self.patch_darwin_libproc(proc_pidinfo=read_identity)
+        ctypes.set_errno(errno.ESRCH)
+        with self.assertRaises(OSError) as raised:
+            probe_supervision.find_probe_process_identity(10)
+        self.assertEqual(raised.exception.errno, errno.EPERM)
+
+    def test_darwin_process_identity_raises_io_error_for_short_result_despite_stale_esrch(self):
+        import ctypes
+        import errno
+        def read_identity(pid, flavor, arg, buffer, size):
+            return size - 1
+        probe_supervision = self.patch_darwin_libproc(proc_pidinfo=read_identity)
+        ctypes.set_errno(errno.ESRCH)
+        with self.assertRaises(OSError) as raised:
+            probe_supervision.find_probe_process_identity(10)
+        self.assertEqual(raised.exception.errno, errno.EIO)
 
     def test_retry_cleanup_retains_reservation_until_all_group_members_exit(self):
         from types import SimpleNamespace

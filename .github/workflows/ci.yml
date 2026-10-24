@@ -65,8 +65,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install pdftoppm, which renders the PDF pages of native visual delivery
         run: |
-          sudo apt-get update
-          sudo apt-get install -y poppler-utils
+          # The runner image's third-party repositories can fail apt-get update.
+          apt_sources=$(mktemp -d "$RUNNER_TEMP/ubuntu-apt.XXXXXX")
+          cat > "$apt_sources/ubuntu.sources" <<'EOF'
+          Types: deb
+          URIs: http://archive.ubuntu.com/ubuntu
+          Suites: noble noble-updates noble-security
+          Components: main
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          sudo apt-get -o Dir::Etc::SourceList=/dev/null -o Dir::Etc::SourceParts="$apt_sources" update
+          sudo apt-get -o Dir::Etc::SourceList=/dev/null -o Dir::Etc::SourceParts="$apt_sources" install -y poppler-utils
       - name: Install Lean and build the real smoke fixture
         uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
         with:

@@ -28,6 +28,7 @@ def find_probe_process_identity(pid):
         library.proc_pidinfo.argtypes = (ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int)
         library.proc_pidinfo.restype = ctypes.c_int
         info = ProcessInfo()
+        ctypes.set_errno(0)
         size = library.proc_pidinfo(pid, 3, 0, ctypes.byref(info), ctypes.sizeof(info))
         if size != ctypes.sizeof(info):
             error = ctypes.get_errno()
@@ -60,9 +61,12 @@ def find_probe_group_members(group):
         capacity = 32
         while True:
             buffer = (ctypes.c_int * capacity)()
+            # xnu's libsyscall/wrappers/libproc/libproc.c returns 0 and sets errno on failure.
+            ctypes.set_errno(0)
             count = library.proc_listpgrppids(group, buffer, ctypes.sizeof(buffer))
-            if count < 0:
-                raise OSError(ctypes.get_errno(), "Cannot enumerate the probe process group", group)
+            error = ctypes.get_errno()
+            if count == 0 and error:
+                raise OSError(error, "Cannot enumerate the probe process group", group)
             if count < capacity:
                 candidates = list(buffer[:count])
                 break

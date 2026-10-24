@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from research_harness import research_decisions as decisions, review_protocol as protocol
+from research_harness import review_context_repair as context_repair, review_transport as transport
 from research_harness.errors import ResearchError
 from research_harness.review_supplied_evidence import collect_qualified_objections
 from strategy_fixtures import StrategyCase
@@ -486,6 +487,28 @@ class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
                          [("review-result-second", [(QUALIFIED_ID, None)])])
         self.assertIn((QUALIFIED_ID, SHARED_ID), list_identity_pairs(packet["material_objections"]))
 
+    def test_a_reassessment_confirms_a_qualified_result_with_compacted_scientific_history(self):
+        self.prepare_colliding_bars()
+        output = self.build_review_output("result")
+        output["value"]["objection_findings"] = [self.make_finding(SHARED_ID), self.make_finding(QUALIFIED_ID, "continuing")]
+        output["objections"] = [dict(self.make_objection("second"), id=QUALIFIED_ID)]
+        original = self.observe("result", "second", output)
+        assignment = self.repair_slot("result", original["assignment_id"], "replacement-second")
+        records = self.store.snapshot()["records"]
+        packet = context_repair.frozen_reassessment_packet(records, self.artifacts, assignment)
+        request = json.loads(self.artifacts.read(records["review_attempt"]["attempt-result-second"]["request"]))
+        replayed = transport._compact_history(packet, transport.logical_messages(request))
+        earlier = json.loads(replayed[-1]["content"][len(transport.PACKET_LABEL):])
+        for key in ("bars", "own_bars", "material_objections"):
+            self.assertEqual(earlier[key], {"delivery": "repeated-in-the-current-packet", "note": transport.REPEATED_PART_NOTE})
+        packet["scientific_history"][-1]["packet"] = earlier
+        repaired = {key: original["payload"][key] for key in ("stage", "support", "value", "objections", "limitations")}
+        repaired["objections"] = [dict(objection, id=SHARED_ID) for objection in repaired["objections"]]
+        repaired["reassessment"] = {"assignment_id": original["assignment_id"], "findings": [
+            {"review_id": original["id"], "disposition": "confirmed", "reason": "The result finding stands unchanged.",
+             "evidence": [self.supporting]}]}
+        self.assertIsNone(context_repair.validate_reassessment(records, self.artifacts, assignment, repaired, packet=packet))
+
     def test_a_context_repair_of_the_other_slot_confirms_a_result_recorded_under_the_identity_written_under_the_stated_id(self):
         saved = self.repair_result_recorded_under_the_identity("first", "confirmed")
         self.assertEqual(list_identity_pairs(decisions.list_stated_objections(saved)), [(QUALIFIED_ID, SHARED_ID)])
@@ -597,6 +620,16 @@ class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
 
 
 class QualifiedObjectionCollectionTests(unittest.TestCase):
+    def test_a_compacted_history_turn_delivers_no_repeated_objections(self):
+        qualified = {"id": QUALIFIED_ID, "stated_id": SHARED_ID, "claim": CLAIMS["second"]}
+        repeated = {"delivery": "repeated-in-the-current-packet", "note": transport.REPEATED_PART_NOTE}
+        for keys in (("bars",), ("own_bars",), ("material_objections",), ("bars", "own_bars", "material_objections")):
+            with self.subTest(parts=keys):
+                packet = {"material_objections": [qualified], "bars": [{"objections": [qualified]}],
+                          "own_bars": [{"objections": [qualified]}],
+                          "scientific_history": [{"packet": {key: repeated for key in keys}}]}
+                self.assertEqual(list(collect_qualified_objections(packet)), [qualified, qualified, qualified])
+
     def test_every_part_of_a_packet_that_delivers_a_qualified_objection_is_read(self):
         def qualify(name):
             return {"id": name + "@review-bar-second", "stated_id": name, "claim": "Claim " + name + "."}
