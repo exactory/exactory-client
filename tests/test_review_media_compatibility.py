@@ -182,6 +182,40 @@ class MediaCompatibilityTests(unittest.TestCase):
                     self.assertEqual(source['response']['media_type'], media)
                     self.assertEqual(self.artifacts.read(source['response']), response)
 
+    def test_import_rejects_invalid_descriptor_media_types_before_admission(self):
+        response = b'{"id":"https://example.org/p","title":"An authored title"}'
+        for provider in ('web', 'mcp'):
+            for index, media in enumerate((' application/json ', 'application/json ; charset=utf-8')):
+                with self.subTest(provider=provider, media=media):
+                    store = Store(self.root / (provider + str(index)), create=True)
+                    before = store.snapshot()
+                    with self.assertRaises(ResearchError) as raised:
+                        import_response(store, provider, response, source_url='https://example.org/search',
+                                        captured_at='2026-10-25T00:00:00+00:00', request_id='invalid-type',
+                                        expected_revision=store.revision, media_type=media,
+                                        mappings=[{'id': '/id', 'title': '/title'}])
+                    after = store.snapshot()
+                    self.assertEqual(after, before)
+                    self.assertNotIn('acquisition_operation', after['records'])
+                    self.assertEqual(list((store.root / 'research/sources/objects').glob('*')), [])
+                    self.assertEqual(raised.exception.code, 'invalid_import')
+
+    def test_parameterized_html_import_preserves_the_valid_descriptor(self):
+        store = Store(self.root, create=True)
+        response = b'<p>https://example.org/p An authored title</p>'
+        media = 'text/html; charset=utf-8'
+        mappings = [{'id': {'start': 3, 'end': 24}, 'title': {'start': 25, 'end': 42}}]
+        for provider in ('web', 'mcp'):
+            with self.subTest(provider=provider):
+                result = import_response(store, provider, response, source_url='https://example.org/search',
+                                         captured_at='2026-10-25T00:00:00+00:00', request_id=provider + '-html',
+                                         expected_revision=store.revision, media_type=media, mappings=mappings)
+                records = store.snapshot()['records']
+                self.assertEqual(records['acquisition_operation'][provider + '-html']['state'], 'finished')
+                source = records['source'][result['source_ids'][0]]
+                self.assertEqual(source['response']['media_type'], media)
+                self.assertEqual(self.artifacts.read(source['response']), response)
+
 
 if __name__ == '__main__':
     unittest.main()

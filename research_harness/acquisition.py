@@ -75,7 +75,7 @@ import copy
 import re
 from datetime import date, datetime, timedelta, timezone
 
-from .artifacts import ArtifactStore
+from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, base_media_type, extract, extraction_measures
@@ -675,6 +675,12 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
     if provider in ("web", "mcp"):
         if base_media_type(media_type) not in ("application/json", "text/plain", "text/html"):
             raise ResearchError("invalid_import", "Web/MCP import must declare JSON, text or HTML media type")
+        try:
+            describe_artifact(response, media_type)
+        except ResearchError as error:
+            raise ResearchError("invalid_import",
+                                "Import media type must have no whitespace around type/subtype, "
+                                "and the text after a semicolon must be non-empty printable ASCII") from error
         page = parse_mapped(response, media_type, mappings)
     else:
         adapter = _provider(provider)
