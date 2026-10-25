@@ -95,6 +95,11 @@ inapplicable dimensions require reasons. Distinguish fitted parameters, external
 inputs, derivations, and selection choices. A reproduction command documents how
 to check a claim; it does not show that an execution occurred. The ledger precedes
 the draft, and `manuscript.claim_evidence` binds each claim to actual evidence.
+The pin accepts a reference there only when it is evidence of the current
+candidate, that is, a reference that the selected assessment, or a retained
+branch's plan or assessment, cites. `exactory-research check-claims --file FILE`
+lists the references outside the candidate without changing the store. The
+write skill's stage 1 says when to run it and what to do with its output.
 `manuscript.citation_accounting` records, for each fully read or search-cited
 work that the bibliography does not name, the bibliography key that cites it
 or the reason it is not cited.

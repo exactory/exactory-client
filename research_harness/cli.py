@@ -218,11 +218,13 @@ def build_parser():
                   "population-query": "Rank the enumerated population's stored abstracts by query terms without changing the store.",
                   "policy-report": "Describe the preparation set under the recorded or a hypothetical policy, without changing the store.",
                   "gate": "Validate a current gate without mutation.", "export": "Rebuild disposable projections or deliver exact reviewer bytes.",
-                  "check-claims": "Check manuscript claim references against current candidate evidence.",
+                  "check-claims": ("List the manuscript claim references outside the current candidate's evidence "
+                                   "without changing the store."),
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
         item.add_argument("--workspace", default=".")
         if command == "check-claims":
-            item.add_argument("--file", required=True)
+            item.add_argument("--file", required=True, help="The claim_evidence array of a manuscript payload, "
+                              "or the whole payload, as UTF-8 JSON without duplicate keys or nonfinite numbers.")
         if command in ("status", "next"):
             item.add_argument("--summary", action="store_true",
                               help="Return a bounded advisory view; the same current evaluation still runs.")

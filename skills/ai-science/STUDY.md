@@ -157,7 +157,18 @@ actual immutable evidence reference, source/result locator, scope, assumptions,
 units, population/denominator, interval, outcome, and comparison baseline where
 applicable. Unknown and inapplicable dimensions retain reasons. Distinguish fitted
 parameters, external inputs, derivations, and selection choices. A suggested
-command is a reproduction instruction, not evidence that it ran.
+command is a reproduction instruction, not evidence that it ran. The manuscript
+pin accepts a reference only when it is evidence of the current candidate, that
+is, a reference that the selected assessment, or a retained branch's plan or
+assessment, cites. Build the ledger before the result dossier is delivered and
+run `exactory-research check-claims --file FILE` on its `claim_evidence` array.
+The command needs the candidate but not the readiness review. It lists every
+reference outside the candidate with its claim id and changes nothing. A
+reference enters the candidate through a new assessment that cites it and a
+checkpoint of that assessment. After the readiness review this also costs a new
+review, so run the check before the delivery. For each listed reference, cite a
+candidate reference instead or record such an assessment. Then run the check
+again, until it exits 0.
 
 ## Reviews and continuation
 
@@ -168,7 +179,9 @@ Use the [decision protocol](../../docs/research-decisions.md) for exact delivery
 context verification and objection handling. A manuscript export later delivers
 the exact paper and claim evidence for distinct blind reviews.
 Original review JSON, provenance, digests, and receipts stay retained. The current
-whole gate decides mechanical eligibility; a historical review does not.
+whole gate decides mechanical eligibility; a historical review does not. Before
+the result delivery, run `check-claims` on the claim ledger (above), so that the
+delivered candidate carries every reference that the manuscript will cite.
 
 [LOOP.md](LOOP.md) governs development and manuscript iteration. The write skill's
 [WORKSPACE.md](../write/WORKSPACE.md) describes the human review and learning files.

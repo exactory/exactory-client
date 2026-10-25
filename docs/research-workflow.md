@@ -856,6 +856,18 @@ exactory-research checkpoint --file checkpoint.json --expected-revision REVISION
 exactory-research export --kind readiness --destination reviews/research-candidate-001
 ```
 
+Before that delivery, build the manuscript's claim ledger (write skill, stage 1)
+and run `exactory-research check-claims --file FILE` on its `claim_evidence`
+array. The manuscript pin accepts a reference only when it is evidence of the
+current candidate, that is, a reference that the selected assessment, or a
+retained branch's plan or assessment, cites. The check needs the candidate but
+not the readiness review. It lists every reference outside the candidate with
+its claim id and exits 1, or exits 0 with an empty list, and it changes nothing.
+For each listed reference, cite a candidate reference instead, or record an
+assessment that cites it, for example in its `findings`, and checkpoint that
+assessment. Then run the check again. A reference that enters the candidate
+after the readiness review needs a new review as well, so the check comes first.
+
 In managed author research, add the candidate's result memo and evidence to the
 same strategy dossier. Include claims, failures, nearest-work comparisons,
 committed consequences and unresolved work items. Deliver a canonical combined
@@ -939,7 +951,12 @@ separate from scientific proof, replication, or refutation. Every quantitative
 claim keeps its conditions and evidence. Add registry-verified citations as used;
 neither a citation count nor a page count establishes research quality.
 
-Pin the exact PDF, abstract, bibliography, claim ledger, optional sources, and
+Run `exactory-research check-claims --file manuscript.json` on the finished
+input first and resolve every listed reference, as the result milestone
+describes. A reference outside the current candidate fails the pin with
+`publication_evidence_mismatch`: the message names the first claim id and
+reference, and `mismatches` in the details lists every pair. Then pin the exact
+PDF, abstract, bibliography, claim ledger, optional sources, and
 claim-to-evidence mappings with `manuscript`. The pin also accounts for the
 literature that the study used. Every work with a full-text reading, and every
 work that a selected five-purpose search cites, is cited by the bibliography or
@@ -964,6 +981,7 @@ or later tool exposure. Preserve contaminated returns without giving them
 independent approval credit.
 
 ```sh
+exactory-research check-claims --file manuscript.json
 exactory-research manuscript --file manuscript.json --expected-revision REVISION --request-id pin-manuscript-001
 exactory-research export --kind manuscript --destination reviews/manuscript-001
 exactory-research manuscript-review --file manuscript-review-a.json --expected-revision REVISION --request-id record-manuscript-review-a

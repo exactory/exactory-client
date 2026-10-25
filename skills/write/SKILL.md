@@ -115,6 +115,21 @@ derivations, and selection choices; unknown or inapplicable dimensions need reas
 Source support, contradiction, unsupported attribution, and unresolved access are
 separate from an independent scientific proof, replication, or refutation.
 
+In a managed study, the pin accepts a reference in `manuscript.claim_evidence`
+only when it is evidence of the current candidate. The candidate's evidence is
+every reference that the selected assessment, or a retained branch's plan or
+assessment, cites. Build the `claim_evidence` array with the ledger and run
+`exactory-research check-claims --file FILE` on it, or on the whole `manuscript`
+input. The command needs the candidate but not the readiness review. It lists
+every reference outside the candidate with its claim id and exits 1, or exits 0
+with an empty list, and it changes nothing. For each listed reference, cite a
+candidate reference instead, for example the same output at the locator that
+the assessment cites. Or record an assessment that cites it, for example in its
+`findings`, and checkpoint that assessment. Then run the check again, until it
+exits 0. A reference that enters the candidate after the readiness review needs
+a new readiness review as well. So the check belongs before the readiness
+delivery (STUDY.md). State its result in the stage report.
+
 A claim without a source does not enter the draft: drop it, and name every
 dropped claim in the stage report so the user can supply a source later. Never
 invent a number.
@@ -168,6 +183,12 @@ While drafting:
   mid-draft goes to the ledger first, under stage 1's rules, then into the text.
 - Add every reference through `exactory-check add` at the moment you cite it.
 - Compile to PDF and fix LaTeX errors before the stage report.
+
+Run `exactory-research check-claims --file manuscript.json` on the finished
+`manuscript` input first and resolve every listed reference under stage 1's
+rules. A reference outside the current candidate fails the pin with
+`publication_evidence_mismatch`: the message names the first claim id and
+reference, and `mismatches` in the details lists every pair.
 
 Pin the exact PDF, abstract, bibliography, claims, and optional sources with
 `exactory-research manuscript`, including actual claim-to-evidence mappings and

@@ -114,14 +114,15 @@ def validate_claim_evidence(claim_evidence, candidate):
         text(link["claim_id"], "Claim ID")
         if not isinstance(link["evidence"], list) or not link["evidence"]:
             raise ResearchError("publication_evidence_mismatch",
-                                "Claim " + link["claim_id"] + " must link actual current candidate evidence")
+                                "Claim " + link["claim_id"] + " needs a nonempty evidence array "
+                                "of current candidate references")
         mismatches.extend({"claim_id": link["claim_id"], "evidence": reference}
                           for reference in link["evidence"] if digest(reference) not in allowed)
     if mismatches:
         first = mismatches[0]
         reference = json.dumps(first["evidence"], ensure_ascii=False, sort_keys=True)
         raise ResearchError("publication_evidence_mismatch",
-                            "Claim " + first["claim_id"] + " references evidence outside the current candidate: "
+                            "Claim " + first["claim_id"] + " links evidence outside the current candidate: "
                             + reference, {"mismatches": mismatches})
 
 
