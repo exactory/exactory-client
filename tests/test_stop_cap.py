@@ -25,21 +25,57 @@ class TestStopCap(unittest.TestCase):
             "slug": "sample", "stage": "experiment", "status": "running",
             "autopilot": True, "waiting": None,
         }))
+        self.review = self.workspace / "reviews/independent"
+        self.review.mkdir(parents=True)
 
-    def run_stop(self, host, script, active, cwd=None):
+    def run_stop(self, host, script, active, cwd=None, assigned_session=None):
         command = [sys.executable, str(ROOT / "hooks" / script)]
         if host == "codex":
             command = [sys.executable, str(ROOT / "codex/hook.py"), script]
         payload = {"hook_event_name": "Stop", "cwd": str(cwd or self.workspace), "session_id": "session"}
         if active is not None:
             payload["stop_hook_active"] = active
+        environment = {**os.environ, "EXACTORY_ATTACK_MAX": "2", "EXACTORY_AUTOPILOT_MAX": "2"}
+        environment.pop("EXACTORY_ASSIGNED_SESSION", None)
+        if assigned_session is not None:
+            environment["EXACTORY_ASSIGNED_SESSION"] = assigned_session
         result = subprocess.run(
             command, input=json.dumps(payload), text=True, capture_output=True,
-            timeout=30, env={**os.environ, "EXACTORY_ATTACK_MAX": "2",
-                             "EXACTORY_AUTOPILOT_MAX": "2"},
+            timeout=30, env=environment,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout) if result.stdout.strip() else None
+
+    def test_assigned_session_preserves_counter(self):
+        counter = self.workspace / ".exactory/autopilot_count"
+        original = b"0001\r\n"
+        for host in ("claude", "codex"):
+            for marker in ("independent-review", "0", " "):
+                with self.subTest(host=host, marker=marker):
+                    counter.write_bytes(original)
+                    result = self.run_stop(host, "continue_autopilot.py", False, self.review, marker)
+                    self.assertEqual(counter.read_bytes(), original)
+                    self.assertIsNone(result)
+
+    def test_assigned_session_leaves_counter_absent(self):
+        counter = self.workspace / ".exactory/autopilot_count"
+        for host in ("claude", "codex"):
+            with self.subTest(host=host):
+                if counter.exists():
+                    counter.unlink()
+                result = self.run_stop(host, "continue_autopilot.py", False, self.review, "independent-review")
+                self.assertFalse(counter.exists())
+                self.assertIsNone(result)
+
+    def test_unassigned_session_advances_counter(self):
+        counter = self.workspace / ".exactory/autopilot_count"
+        for host in ("claude", "codex"):
+            for marker in (None, ""):
+                with self.subTest(host=host, marker=marker):
+                    counter.write_bytes(b"0001\r\n")
+                    result = self.run_stop(host, "continue_autopilot.py", False, self.review, marker)
+                    self.assertEqual(result["decision"], "block")
+                    self.assertEqual(counter.read_bytes(), b"2")
 
     def exercise_cap(self, host, script):
         # A normal stop must not reset progress just because this flag is false.

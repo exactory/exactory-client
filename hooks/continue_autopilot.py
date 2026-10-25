@@ -43,6 +43,8 @@ def _find_workspace(start_dir: Path) -> Path | None:
 
 def main() -> None:
     payload = json.load(sys.stdin)
+    if os.environ.get("EXACTORY_ASSIGNED_SESSION"):
+        return
     workspace = _find_workspace(Path(payload.get("cwd") or ".").resolve())
     if workspace is None:
         sys.exit(0)

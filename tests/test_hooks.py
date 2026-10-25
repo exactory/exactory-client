@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -36,6 +37,8 @@ _NO_IDENTIFIER_BIB_TEXT = """@misc{ghost2020,
 
 
 def _run_hook(script_path: Path, payload: dict, timeout_seconds: float | None = None) -> subprocess.CompletedProcess:
+    environment = os.environ.copy()
+    environment.pop("EXACTORY_ASSIGNED_SESSION", None)
     return subprocess.run(
         [sys.executable, str(script_path)],
         input=json.dumps(payload),
@@ -43,6 +46,7 @@ def _run_hook(script_path: Path, payload: dict, timeout_seconds: float | None = 
         capture_output=True,
         check=True,
         timeout=timeout_seconds,
+        env=environment,
     )
 
 
