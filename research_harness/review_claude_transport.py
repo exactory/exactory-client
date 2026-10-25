@@ -36,6 +36,10 @@ FLAGS = ('-p', '--safe-mode', '--tools', '', '--strict-mcp-config', '--mcp-confi
 ENVIRONMENT = ('PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR', 'CLAUDE_CONFIG_DIR')
 SYSTEM_PROMPT_FILE = 'system-prompt.txt'
 OUTPUT_CONTENT_TYPES = ('text', 'thinking', 'redacted_thinking')
+# Only the basic redraw notification is context-free. The CLI also defines optional fields (notably
+# prompts_screened) that can concern input handling; any extra field must remain an issue.
+UI_NOTICE_SUBTYPES = ('ui_invalidate',)
+UI_NOTICE_FIELDS = frozenset(('type', 'subtype', 'event', 'uuid', 'session_id'))
 
 
 def clean_environment(environment):
@@ -83,10 +87,17 @@ def _replayed_text(message):
     return '\n'.join(part['text'] for part in content)
 
 
+def _ui_notice(event):
+    return (event.get('subtype') in UI_NOTICE_SUBTYPES and set(event) == UI_NOTICE_FIELDS
+            and event['event'] == 'ui.render'
+            and all(isinstance(event[key], str) and event[key] for key in ('uuid', 'session_id')))
+
+
 def inspect_stream(events, request, route, control):
     """Inspect the observed stream of one invocation; never the reviewer's self-report."""
     expected = packet_text(request)
     issues, outputs, replays, sessions = [], [], [], set()
+    notices = []
     initializations = [event for event in events if event.get('type') == 'system' and event.get('subtype') == 'init']
     if len(initializations) != 1:
         issues.append('session_initialization')
@@ -98,7 +109,7 @@ def inspect_stream(events, request, route, control):
                 issues.append(code)
         if initialization.get('model') != route['model']:
             issues.append('model_mismatch')
-    for event in events:
+    for index, event in enumerate(events):
         kind = event.get('type')
         if event.get('session_id'):
             sessions.add(event['session_id'])
@@ -106,7 +117,9 @@ def inspect_stream(events, request, route, control):
             issues.append('excluded_control_exposed')
         if kind == 'system':
             # thinking_tokens reports the thinking budget that the turn used; it carries no context and no capability.
-            if event.get('subtype') not in ('init', 'thinking_tokens'):
+            if _ui_notice(event):
+                notices.append({'event_index': index, 'event': dict(event)})
+            elif event.get('subtype') not in ('init', 'thinking_tokens'):
                 issues.append('system_event_' + str(event.get('subtype')))
         elif kind == 'user':
             text = _replayed_text(event.get('message'))
@@ -134,7 +147,7 @@ def inspect_stream(events, request, route, control):
         issues.append('provider_output_mismatch')
     if len(sessions) != 1:
         issues.append('session_identity')
-    return {'input_verified': not issues, 'issues': sorted(set(issues)),
+    return {'input_verified': not issues, 'issues': sorted(set(issues)), 'notices': notices,
             'session_id': next(iter(sessions)) if len(sessions) == 1 else None,
             'request_digest': digest(request), 'packet_digest': digest(expected), 'event_digest': digest(events),
             'assistant_output_digest': digest(outputs), 'excluded_controls': [control],

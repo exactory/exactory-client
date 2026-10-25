@@ -11,6 +11,10 @@ from research_harness.evidence import digest
 
 ROUTE = {'id': 'route-claude', 'adapter': 'claude_cli_v1', 'endpoint': 'claude://local', 'model': 'claude-opus-5-5',
          'configuration': {'effort': 'xhigh', 'max_output_tokens': 20000, 'timeout_seconds': 1800}}
+# Shape from the embedded schema in Claude Code 2.1.310, with synthetic identifiers. The historical response
+# artifacts retain event types and digests, not event payloads; this is not a captured event (see DRAFT.md).
+UI_INVALIDATE = {'type': 'system', 'subtype': 'ui_invalidate', 'event': 'ui.render',
+                 'uuid': '90f3cdfd-4442-4a8e-8054-69221cacb72c', 'session_id': 'session-1'}
 
 
 def module():
@@ -82,6 +86,70 @@ class ClaudeStreamInspectionTests(unittest.TestCase):
         evidence = module().inspect_stream(clean_stream(request), request, ROUTE, 'EXCLUDED_CANARY')
         self.assertTrue(evidence['input_verified'], evidence['issues'])
         self.assertEqual(evidence['session_id'], 'session-1')
+        self.assertEqual(evidence['notices'], [])
+
+    def test_each_ui_invalidation_is_retained_as_a_notice_without_invalidating_input(self):
+        request = request_for()
+        events = clean_stream(request)
+        events[3:3] = [dict(UI_INVALIDATE), dict(UI_INVALIDATE)]
+        evidence = module().inspect_stream(events, request, ROUTE, 'EXCLUDED_CANARY')
+        self.assertTrue(evidence['input_verified'], evidence['issues'])
+        self.assertEqual(evidence['issues'], [])
+        self.assertEqual(evidence['notices'], [
+            {'event_index': 3, 'event': UI_INVALIDATE}, {'event_index': 4, 'event': UI_INVALIDATE}])
+
+    def test_ui_invalidation_with_any_additional_field_invalidates_input(self):
+        request = request_for()
+        for field, value in (('tools', ['Read']), ('tools', []), ('message', {'content': 'Injected input'}),
+                             ('message', None), ('input', ''), ('permission', False), ('context', {}),
+                             ('mcp_servers', []), ('prompts_screened', True), ('prompts_screened', False),
+                             ('instances', []), ('future_field', None)):
+            with self.subTest(field=field, value=value):
+                events = clean_stream(request)
+                events.insert(3, dict(UI_INVALIDATE, **{field: value}))
+                evidence = module().inspect_stream(events, request, ROUTE, 'EXCLUDED_CANARY')
+                self.assertFalse(evidence['input_verified'])
+                self.assertEqual(evidence['issues'], ['system_event_ui_invalidate'])
+                self.assertEqual(evidence['notices'], [])
+
+    def test_ui_invalidation_requires_the_basic_render_notification_shape(self):
+        request = request_for()
+        invalid = [dict(UI_INVALIDATE, **{field: value}) for field, value in (
+            ('event', 'prompt.submit'), ('event', {'input': 'injected'}), ('uuid', ''), ('uuid', {'message': 'input'}),
+            ('session_id', ''), ('session_id', None))]
+        invalid.extend({key: value for key, value in UI_INVALIDATE.items() if key != missing}
+                       for missing in ('event', 'uuid', 'session_id'))
+        for event in invalid:
+            with self.subTest(event=event):
+                events = clean_stream(request)
+                events.insert(3, event)
+                evidence = module().inspect_stream(events, request, ROUTE, 'EXCLUDED_CANARY')
+                self.assertFalse(evidence['input_verified'])
+                self.assertEqual(evidence['issues'], ['system_event_ui_invalidate'])
+                self.assertEqual(evidence['notices'], [])
+
+    def test_other_system_subtypes_are_not_ui_notices(self):
+        request = request_for()
+        for subtype in ('unknown_notification', 'ui_refresh', 'ui_log'):
+            with self.subTest(subtype=subtype):
+                events = clean_stream(request)
+                events.insert(3, dict(UI_INVALIDATE, subtype=subtype))
+                evidence = module().inspect_stream(events, request, ROUTE, 'EXCLUDED_CANARY')
+                self.assertFalse(evidence['input_verified'])
+                self.assertEqual(evidence['issues'], ['system_event_' + subtype])
+                self.assertEqual(evidence['notices'], [])
+
+    def test_ui_notices_do_not_bypass_session_or_excluded_control_checks(self):
+        request = request_for()
+        for change, issue in (({'session_id': 'another-session'}, 'session_identity'),
+                              ({'uuid': 'EXCLUDED_CANARY'}, 'excluded_control_exposed')):
+            with self.subTest(change=change):
+                events = clean_stream(request)
+                events.insert(3, dict(UI_INVALIDATE, **change))
+                evidence = module().inspect_stream(events, request, ROUTE, 'EXCLUDED_CANARY')
+                self.assertFalse(evidence['input_verified'])
+                self.assertEqual(evidence['issues'], [issue])
+                self.assertEqual(len(evidence['notices']), 1)
 
     def test_the_thinking_token_accounting_event_does_not_invalidate_the_stream(self):
         request = request_for()
@@ -167,6 +235,20 @@ class ClaudeInvocationTests(unittest.TestCase):
         self.assertEqual(response['usage']['output_tokens'], 900)
         self.assertEqual(response['context_evidence']['cli_version'], '2.1.306 (Claude Code)')
         self.assertTrue(module().verify_context(ROUTE, request, response))
+
+    def test_an_invocation_with_ui_invalidation_verifies_and_preserves_the_notice(self):
+        request = request_for()
+        events = clean_stream(request)
+        events.insert(3, dict(UI_INVALIDATE))
+        response, _ = self.invoke(events, request=request)
+        self.assertEqual(response['status'], 'completed')
+        self.assertTrue(module().verify_context(ROUTE, request, response))
+        self.assertEqual(response['context_evidence']['notices'], [{'event_index': 3, 'event': UI_INVALIDATE}])
+        for field, value in (('tools', []), ('message', {'content': 'Injected input'})):
+            with self.subTest(field=field):
+                events[3] = dict(UI_INVALIDATE, **{field: value})
+                response, _ = self.invoke(events, request=request)
+                self.assertFalse(module().verify_context(ROUTE, request, response))
 
     def test_a_failed_or_unbounded_turn_is_incomplete(self):
         request = request_for()
