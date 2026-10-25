@@ -92,18 +92,21 @@ using excluded synthetic tokens and an allowed-input positive control. Keep
 author-history isolation, prior-assessment isolation and identity masking separate.
 An unverified or contaminated assignment cannot supply independent approval.
 
-While a study runs on autopilot, its Stop hook asks every session that stops
-inside the study directory to continue the study, and each stop it blocks is one
-advance toward the study's safety cap (`EXACTORY_AUTOPILOT_MAX`, default 50).
-The review routes of the harness run their reviewers in a temporary directory
-outside the study, where the hook finds no study. A session that a study script
-or a person starts inside the study for one assignment, such as a code review in
-`reviews/<name>/`, needs the environment variable `EXACTORY_ASSIGNED_SESSION`
-set to any nonempty value when its CLI is started: the hook then lets that
-session stop and leaves the advance count unchanged. Setting the variable from a
-command inside the session does not reach the hook. The session that coordinates
-the study runs without the variable, because a coordinator started with it is
-never asked to continue.
+While a study is on autopilot, is not at stage `complete` and has no `waiting`
+reason, its Stop hook asks every session that stops inside the study directory,
+at any depth, to continue the study, and each stop it blocks with that request
+is one advance toward the study's safety cap (`EXACTORY_AUTOPILOT_MAX`, default
+50). At the cap, the hook blocks one more stop, to ask for a summary, and that
+block is not an advance; the hook then lets the session stop until the next
+user turn. The review routes of the harness start their reviewers with hooks
+disabled, so the Stop hook never runs in them, wherever their working directory
+is. A session that a study script or a person starts inside the study for one
+assignment, such as a code review in `reviews/<name>/`, needs the environment
+variable `EXACTORY_ASSIGNED_SESSION` set to any nonempty value when its CLI is
+started: the hook then lets that session stop and leaves the advance count
+unchanged. Setting the variable from a command inside the session does not
+reach the hook. The session that coordinates the study runs without the
+variable, because a coordinator started with it is never asked to continue.
 
 Inspect observed `bar`, `slate` and `result` outputs for `source_requests` before
 recording final value or support reviews. Follow the [native continuation contract](../../docs/research-decisions.md#reviewer-delivery-and-disagreement)

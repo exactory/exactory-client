@@ -601,7 +601,7 @@ nothing.
 | `EXACTORY_API_KEY` | API key, sent as a Bearer token. Optional: it wins over the file that `exactory login` writes. | none |
 | `EXACTORY_API_URL` | API base URL. | `https://www.exactory.ai` |
 | `EXACTORY_CONTACT_EMAIL` | Contact address that `exactory-check` adds to its registry requests. | none |
-| `EXACTORY_ASSIGNED_SESSION` | Any nonempty value marks a session that was started for one assignment inside a study directory, such as a code review in `reviews/`. The Stop hook of a study on autopilot asks every session that stops inside the study to continue the study, up to a cap; it lets a marked session stop and does not count that stop. Set it when the session's CLI is started, and not for the session that coordinates the study. | none |
+| `EXACTORY_ASSIGNED_SESSION` | Any nonempty value marks a session that was started for one assignment inside a study directory, such as a code review in `reviews/`. While a study is on autopilot, is not at its final stage (`complete`) and has no `waiting` reason, its Stop hook asks every session that stops inside the study to continue the study, up to a cap; it lets a marked session stop and does not count that stop. Set it when the session's CLI is started, and not for the session that coordinates the study. | none |
 | `ZENODO_SANDBOX_TOKEN` | Zenodo sandbox token, used for test deposits. | none |
 | `ZENODO_TOKEN` | Zenodo production token, used for real deposits. | none |
 
