@@ -19,6 +19,21 @@ def facts_record(node_id="node-000001", **updates):
     return value
 
 
+def side_interval_state(state):
+    from tests.search_fixtures import review
+    p = proposal("standalone")
+    p["attack_slug"] = "side"
+    state = event(state, "proposal_recorded", {"proposal": p, "digest": digest(p)})
+    for actor in ["one", "two"]:
+        r = review(p, actor)
+        state = event(state, "review_recorded", {"proposal_id": "proposal-000002", "review": r, "digest": digest(r)})
+    state = event(state, "proposal_admitted", {"proposal_id": "proposal-000002"})
+    account = state["accounts"][state["nodes"]["node-000002"]["account_id"]]
+    account["used_moves"] = 3
+    return event(state, "control_recorded", {"action": "side_interval", "node_id": "node-000002",
+                 "max_moves": 2, "message_id": "side-allocation", "provenance": provenance("operator")})
+
+
 class SchedulerTests(unittest.TestCase):
     def setUp(self):
         self.assertIsNotNone(importlib.util.find_spec("search_controller.scheduler"),
@@ -178,23 +193,78 @@ class SchedulerTests(unittest.TestCase):
 
     def test_explicit_side_interval_is_bounded_and_main_still_wins(self):
         from search_controller.scheduler import next_action
-        state = route_state()
-        p = proposal("standalone")
-        p["attack_slug"] = "side"
-        state = event(state, "proposal_recorded", {"proposal": p, "digest": digest(p)})
-        from tests.search_fixtures import review
-        for actor in ["one", "two"]:
-            r = review(p, actor)
-            state = event(state, "review_recorded", {"proposal_id": "proposal-000002", "review": r, "digest": digest(r)})
-        state = event(state, "proposal_admitted", {"proposal_id": "proposal-000002"})
-        state = event(state, "control_recorded", {"action": "side_interval", "node_id": "node-000002",
-                    "max_moves": 2, "message_id": "side-allocation", "provenance": provenance("operator")})
+        state = side_interval_state(route_state())
         self.assertEqual(next_action(state)["node_id"], "node-000001")
         state["nodes"]["node-000001"]["status"] = "finished"
         self.assertEqual(next_action(state)["node_id"], "node-000002")
         account = state["accounts"][state["nodes"]["node-000002"]["account_id"]]
         account["used_moves"] += 2
         self.assertEqual(next_action(state)["kind"], "replan")
+
+    def test_allocated_side_interval_runs_while_root_finalization_waits(self):
+        from search_controller.scheduler import next_action
+        state = side_interval_state(accepted(route_state(), "obligation-000001"))
+        account = state["accounts"][state["nodes"]["node-000002"]["account_id"]]
+        for used_moves in [3, 4]:
+            with self.subTest(used_moves=used_moves):
+                account["used_moves"] = used_moves
+                before = copy.deepcopy(state)
+                self.assertEqual(next_action(state), {"kind": "execute_node", "node_id": "node-000002"})
+                self.assertEqual(state, before)
+
+    def test_ineligible_side_interval_returns_to_root_finalization(self):
+        from search_controller.scheduler import next_action
+        original = side_interval_state(accepted(route_state(), "obligation-000001"))
+        for defect in ["exhausted", "no_interval", "wrong_node", "wrong_account", "finished", "suspended", "account_exhausted"]:
+            with self.subTest(defect=defect):
+                state = copy.deepcopy(original)
+                interval = state["control"]["side_interval"]
+                node = state["nodes"]["node-000002"]
+                if defect == "exhausted":
+                    state["accounts"][node["account_id"]]["used_moves"] += 2
+                elif defect == "no_interval":
+                    state["control"]["side_interval"] = None
+                elif defect == "wrong_node":
+                    interval["node_id"] = "node-000001"
+                elif defect == "wrong_account":
+                    interval["account_id"] = state["nodes"]["node-000001"]["account_id"]
+                elif defect == "finished":
+                    node["status"] = "finished"
+                elif defect == "suspended":
+                    state["control"]["node_facts"][node["id"]] = {"suspended": True}
+                else:
+                    state["accounts"][node["account_id"]]["used_moves"] = 24
+                self.assertEqual(next_action(state), {"kind": "finalize_root", "outcome": "proof",
+                                                     "acceptance_ids": ["acceptance-000001"]})
+
+    def test_root_finalization_precedes_unallocated_externally_blocked_standalone_work(self):
+        from search_controller.scheduler import next_action
+        state = side_interval_state(accepted(route_state(), "obligation-000001"))
+        state["control"]["side_interval"] = None
+        state["control"]["main_external_block"] = "Waiting for an external review"
+        self.assertEqual(next_action(state)["kind"], "finalize_root")
+
+    def test_allocated_side_interval_preserves_earlier_scheduler_priorities(self):
+        from search_controller.scheduler import next_action
+        original = side_interval_state(accepted(route_state(), "obligation-000001"))
+        for kind in ["paused", "blocked", "handoff", "resolved", "execution_pending", "reconcile_move", "reconcile_run", "prepare_result"]:
+            with self.subTest(kind=kind):
+                state = copy.deepcopy(original)
+                if kind in {"paused", "resolved"}:
+                    state["execution_status"] = kind
+                elif kind == "blocked":
+                    state["control"]["state_error"] = "Unresolved audit error"
+                elif kind == "handoff":
+                    state["control"]["focus"] = "ambiguous"
+                elif kind in {"execution_pending", "reconcile_run"}:
+                    state["runs"]["run-000001"] = {"id": "run-000001",
+                        "status": "launched" if kind == "execution_pending" else "reserved"}
+                elif kind == "reconcile_move":
+                    state["control"]["pending_moves"] = ["move-000001"]
+                else:
+                    state = event(state, "node_facts_recorded", {"facts": facts_record(
+                        status="result_ready", result_action="snapshot")})
+                self.assertEqual(next_action(state)["kind"], kind)
 
     def test_ready_alternative_at_retreat_node_precedes_root_restart(self):
         from search_controller.scheduler import next_action

@@ -109,6 +109,13 @@ def _frontier(state, oid, visiting=None):
     return None
 
 
+def _side_interval_allocated(state, node):
+    interval = state["control"]["side_interval"]
+    return (interval is not None and interval["node_id"] == node["id"]
+            and node["account_id"] == interval["account_id"] and
+            state["accounts"][node["account_id"]]["used_moves"] - interval["start_used_moves"] < interval["max_moves"])
+
+
 def next_action(state):
     """Return one closed tagged action; never mutate state or spend resources."""
     control = state["control"]
@@ -147,6 +154,9 @@ def next_action(state):
     except SearchError as exc:
         return {"kind": "blocked", "reason": exc.code}
     if support is not None:
+        for node in sorted(state["nodes"].values(), key=lambda item: item["id"]):
+            if node["category"] == "standalone" and _side_interval_allocated(state, node) and ready(state, node):
+                return {"kind": "execute_node", "node_id": node["id"]}
         return {"kind": "finalize_root", "outcome": support["outcome"], "acceptance_ids": support["acceptance_ids"]}
     for nid, facts in sorted(control["node_facts"].items()):
         if facts.get("cashout_action"):
@@ -188,10 +198,7 @@ def next_action(state):
         if state["nodes"][nid]["category"] != "standalone")
     if externally_blocked or control["side_interval"]:
         for node in sorted(state["nodes"].values(), key=lambda item: item["id"]):
-            interval = control["side_interval"]
-            allocated = (interval is not None and interval["node_id"] == node["id"]
-                         and node["account_id"] == interval["account_id"] and
-                         state["accounts"][node["account_id"]]["used_moves"] - interval["start_used_moves"] < interval["max_moves"])
+            allocated = _side_interval_allocated(state, node)
             if node["category"] == "standalone" and (externally_blocked or allocated) and ready(state, node):
                 return {"kind": "execute_node", "node_id": node["id"]}
     return {"kind": "replan", "round": control["nonprogress_replans"] + 1,
