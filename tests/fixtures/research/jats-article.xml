@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS article//EN" "missing-jats.dtd">
+<article xmlns:xlink="http://www.w3.org/1999/xlink">
+  <front>
+    <journal-meta><journal-title>An authored journal.</journal-title></journal-meta>
+    <article-meta>
+      <title-group><article-title>An authored JATS article.</article-title></title-group>
+      <contrib-group><contrib><name>A. Author</name></contrib></contrib-group>
+      <abstract><title>Abstract</title><p>An authored <italic>abstract</italic> sentence.</p></abstract>
+      <kwd-group><kwd>Authored metadata.</kwd></kwd-group>
+    </article-meta>
+  </front>
+  <body>
+    <sec><title>Results and Discussion</title>
+      <p>An authored result for an α-oxide device with 2 × 3 sites &amp; no gap.</p>
+      <p>Mixed <bold>inline</bold> text preserves H<sub>2</sub>O and x<sup>2</sup>.</p>
+      <fig id="f1"><label>Figure 1</label><caption><p>An authored figure caption.</p></caption>
+        <graphic xlink:href="fig-1.tif"/>
+      </fig>
+      <fig id="f2"><label>Figure 2</label><graphic href="fig-2.png"/><graphic xlink:href="fig-1.tif"/></fig>
+    </sec>
+    <sec><title>Conclusion</title><p>An authored conclusion sentence.</p></sec>
+  </body>
+  <back>
+    <ref-list><title>References</title><ref><mixed-citation>An authored reference entry.</mixed-citation></ref>
+    </ref-list>
+  </back>
+</article>

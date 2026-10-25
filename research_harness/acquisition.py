@@ -78,7 +78,7 @@ from datetime import date, datetime, timedelta, timezone
 from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
-from .fulltext import GENERIC_BINARY_MEDIA_TYPES, base_media_type, extract, extraction_measures
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, base_media_type, extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, normalize_identifier, version_of
 from .imports import parse_mapped
@@ -602,6 +602,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
     attempts, pending, extracted, observed_identifier = [], [], None, None
     try:
         response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml",
+                                         *sorted(XML_MEDIA_TYPES),
                                          *sorted(GENERIC_BINARY_MEDIA_TYPES)), budget=budget,
                             not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
@@ -638,6 +639,9 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                                      if extracted and extracted["text"] is not None else
                                      {"text_bytes": None, "page_count": None, "max_line_length": None,
                                       "whitespace_fraction": None, "expansion_ratio": None}))}
+
+    if extracted and "visual_asset_names" in extracted:
+        capture["visual_asset_names"] = extracted["visual_asset_names"]
 
     if component is not None:
         from .components import validate_spec
