@@ -16,10 +16,21 @@ reason to truncate. Missing, scanned, malformed or timed-out extraction remains
 pending.
 The default pdftotext invocation uses explicit argv, a timeout, a private temp
 directory, and a bounded output read. HTML requires article-body structure with
-nonempty content blocks beyond titles, metadata and abstracts. includes_abstract
-only describes nonempty abstract content actually saved in the extraction.
-HTTP success or arbitrary extracted text is not evidence of full-text
-availability. No function here creates a reading record.
+nonempty content blocks beyond titles, metadata and abstracts. XML
+(application/xml or text/xml) is read as a JATS article when the local name of
+its root element is article: the text of the whole document is saved with a
+break at each block element, body content is text in paragraphs, list items,
+table cells and similar elements inside body outside headings, abstracts and
+metadata, and the href of each graphic inside a fig is returned as
+visual_asset_names, names only. The parser matches element names by local
+name, loads no external DTD or entity and expands no declared entity: an
+internal entity declaration is 'xml_internal_entity', a reference to an
+external entity or to one that only an external DTD defines is
+'xml_external_entity', invalid XML is 'malformed_xml', an article without body
+content is 'landing_page', and other XML stays 'unsupported_fulltext'.
+includes_abstract only describes nonempty abstract content actually saved in
+the extraction. HTTP success or arbitrary extracted text is not evidence of
+full-text availability. No function here creates a reading record.
 """
 
 import math
