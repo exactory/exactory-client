@@ -35,6 +35,12 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.62.0](docs/releases/0.62.0.md) reads JATS XML articles and keeps the images of a PubMed Central figure
+together. It checks claim evidence before the manuscript pin, reports changed bundle files and restores their pinned
+bytes with backups. It creates a draft marker from explicit study metadata, admits mechanically checked format-only
+reruns, and gives missing hook scripts a message and an exit status for their event. The release note records the
+provisional choices, the remaining gaps and the work left for later releases.
+
 Version [0.61.0](docs/releases/0.61.0.md) reads PDFs served as `binary/octet-stream` and the article body of a
 PubMed Central page. Review delivery and its projection agree on media-type spellings while earlier reviews still
 authenticate. A session started for one assignment can stop inside an autopilot study without changing its counter.
