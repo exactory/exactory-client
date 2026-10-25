@@ -125,6 +125,26 @@ class BinaryPdfTests(unittest.TestCase):
                 read_locator(artifacts, altered["original"], selected, capture=altered)
             self.assertEqual(raised.exception.code, "invalid_locator")
 
+    def test_stored_pdf_media_spellings_use_the_same_captured_page_map(self):
+        captured = self.acquire(authored_pdf())["capture"]
+        artifacts = ArtifactStore(self.root)
+        locator = {"kind": "pdf", "page_index": 0, "printed_page": "1", "region": [0, 0, 1, 1]}
+        for media in ("Binary/Octet-Stream", "binary/octet-stream; charset=utf-8", "APPLICATION/OCTET-STREAM",
+                      "Application/PDF", "APPLICATION/PDF; version=1.4"):
+            capture = copy.deepcopy(captured)
+            capture["original"]["media_type"] = media
+            capture["extraction"]["media_type"] = "Application/PDF; version=1.4"
+            before = copy.deepcopy(capture)
+            with self.subTest(media=media):
+                try:
+                    read_locator(artifacts, capture["original"], locator, capture=capture)
+                except ResearchError as error:
+                    self.fail(f"A PDF spelling must retain its captured page map: {error.code}")
+                self.assertEqual(capture, before)
+                with self.assertRaises(ResearchError) as raised:
+                    read_locator(artifacts, capture["original"], dict(locator, page_index=1), capture=capture)
+                self.assertEqual(raised.exception.code, "invalid_locator")
+
     def test_non_pdf_binary_and_binary_html_stay_unsupported(self):
         for index, body in enumerate((b"unrelated binary content\x00", b"<article class='article-body'><p>A body.</p></article>")):
             with self.subTest(index=index):

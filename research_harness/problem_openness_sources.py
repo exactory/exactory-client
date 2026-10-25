@@ -138,10 +138,12 @@ def protected_evidence(supplied):
 
 
 def _complete(entry):
+    from .review_transport import is_binary_evidence
     require(entry is not None and entry.get("encoding") == "utf-8" and isinstance(entry.get("content"), str),
             "Deliver the complete source or its complete required proof container")
     data = entry["content"].encode("utf-8")
     reference = entry["artifact"]
+    require(not is_binary_evidence(data, reference["media_type"]), "Binary originals require native delivery")
     require(len(data) == reference["size"] and hashlib.sha256(data).hexdigest() == reference["sha256"],
             "Delivered source bytes must match their exact size and digest")
     return data

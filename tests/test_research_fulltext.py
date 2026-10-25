@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from research_harness.errors import ResearchError
-from research_harness.fulltext import PdfExtractor, _Article, extract
+from research_harness.fulltext import PdfExtractor, _Article, detect_media_type, extract
 
 
 class FulltextTests(unittest.TestCase):
@@ -96,6 +96,54 @@ class FulltextTests(unittest.TestCase):
                     self.assertIsNone(result["text"])
                     self.assertEqual(result["media_type"], media)
                     self.assertEqual(result["format_detection"], "reported_media_type")
+
+    def test_generic_binary_media_detection_keeps_nonexact_reported_types(self):
+        for media in ("Binary/Octet-Stream", "binary/octet-stream; charset=utf-8", "APPLICATION/OCTET-STREAM",
+                      " Application/Octet-Stream ; charset=utf-8 "):
+            for data in (b"%PDF-1.4\nAn authored PDF.\n%%EOF\n", b"%PDF-1.7\n%\xff\xfe\n%%EOF\n"):
+                with self.subTest(media=media, data=data):
+                    self.assertEqual(detect_media_type(data, media), (media, "reported_media_type"))
+            with self.subTest(media=media, body="non-pdf"):
+                self.assertEqual(detect_media_type(b"An authored non-PDF body.", media),
+                                 (media, "reported_media_type"))
+
+    def test_generic_binary_media_spellings_extract_pdfs_and_keep_non_pdf_reports(self):
+        for media in ("Binary/Octet-Stream", "binary/octet-stream; charset=utf-8", "APPLICATION/OCTET-STREAM",
+                      " Binary/Octet-Stream ; charset=utf-8 "):
+            for data in (b"%PDF-1.4\nAn authored PDF.\n%%EOF\n", b"%PDF-1.7\n%\xff\xfe\n%%EOF\n"):
+                with self.subTest(media=media, data=data):
+                    result = extract(data, media, extractor=lambda data: {"status": "extracted", "text": "A page.\f"})
+                    self.assertEqual(result["status"], "extracted")
+                    self.assertEqual(result["text"], "A page.\f")
+                    self.assertEqual(result["media_type"], "application/pdf")
+                    self.assertEqual(result["format_detection"], "pdf_signature_from_generic_binary")
+            with self.subTest(media=media, body="non-pdf"):
+                result = extract(b"An authored non-PDF body.", media)
+                self.assertEqual(result["status"], "unsupported_fulltext")
+                self.assertIsNone(result["text"])
+                self.assertEqual(result["media_type"], media)
+                self.assertEqual(result["format_detection"], "reported_media_type")
+
+    def test_declared_pdf_media_spellings_extract_without_rewriting_the_reported_type(self):
+        for media in ("Application/PDF", "APPLICATION/PDF; version=1.4", " Application/PDF "):
+            with self.subTest(media=media):
+                result = extract(b"%PDF-1.4\nAn authored PDF.\n%%EOF\n", media,
+                                 extractor=lambda data: {"status": "extracted", "text": "A page.\f"})
+                self.assertEqual(result["status"], "extracted")
+                self.assertEqual(result["media_type"], media)
+                self.assertEqual(result["format_detection"], "reported_media_type")
+                malformed = extract(b"An authored non-PDF body.", media)
+                self.assertEqual(malformed["status"], "malformed_pdf")
+
+    def test_html_media_spellings_extract_without_rewriting_the_reported_type(self):
+        data = b'<article class="article-body"><p>An authored body.</p></article>'
+        for media in ("text/html", "Text/HTML; charset=utf-8", "Application/XHTML+XML", " text/html "):
+            with self.subTest(media=media):
+                result = extract(data, media)
+                self.assertEqual(result["status"], "extracted")
+                self.assertIn("An authored body.", result["text"])
+                self.assertEqual(result["media_type"], media)
+                self.assertEqual(result["format_detection"], "reported_media_type")
 
     def test_pmc_main_article_body_retains_references_without_counting_them_as_body(self):
         data = (Path(__file__).parent / "fixtures/research/pmc-main-article-body.html").read_bytes()

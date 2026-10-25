@@ -6,8 +6,8 @@ media_type, format_detection}. media_type is the type the extraction used and
 format_detection names how it was decided: 'reported_media_type', or
 'pdf_signature_from_generic_binary' for an application/octet-stream or
 binary/octet-stream body whose bytes start with the PDF signature.
-detect_media_type(data, media_type) makes that decision; review delivery uses it
-as well. PDF extractor injection accepts bytes and returns {status, text}; its
+detect_media_type(data, media_type) keeps reported spellings for review delivery;
+extraction recognizes their normalized base types. PDF extractor injection accepts bytes and returns {status, text}; its
 successful status is 'extracted'.
 extraction_measures(text, original_size) describes an extraction (bytes, pages,
 longest line, whitespace fraction, expansion) so a coordinator sees layout
@@ -190,6 +190,11 @@ class _Article(HTMLParser):
 GENERIC_BINARY_MEDIA_TYPES = frozenset({"application/octet-stream", "binary/octet-stream"})
 
 
+def base_media_type(media_type):
+    """Normalize a type for comparisons without changing the reported descriptor or capture."""
+    return media_type.split(";", 1)[0].strip().lower() if isinstance(media_type, str) else ""
+
+
 def detect_media_type(data, media_type):
     """Return the media type these bytes are handled as, and how it was decided: a body reported as generic binary
     whose bytes start with the PDF signature is a PDF, and every other body keeps its reported type."""
@@ -199,11 +204,14 @@ def detect_media_type(data, media_type):
 
 
 def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
-    media_type, format_detection = detect_media_type(data, media_type)
+    # Extraction may recognize base types; review construction keeps the exact reported spelling.
+    detected_type, format_detection = detect_media_type(data, base_media_type(media_type))
+    if format_detection != "reported_media_type":
+        media_type = detected_type
     result = {"status": "unsupported_fulltext", "text": None, "includes_abstract": None, "visual_inspection_required": True,
               "extractor": None, "version": None, "options": {},
               "media_type": media_type, "format_detection": format_detection}
-    if media_type == "application/pdf":
+    if base_media_type(media_type) == "application/pdf":
         if extractor is None and ocr:
             from .ocr import OcrPdfExtractor
             extractor = OcrPdfExtractor()
@@ -219,7 +227,7 @@ def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
         if result["status"] == "extracted" and (not isinstance(result["text"], str) or not result["text"].strip()):
             result["status"], result["text"] = "empty_text", None
         return result
-    if media_type not in ("text/html", "application/xhtml+xml"):
+    if base_media_type(media_type) not in ("text/html", "application/xhtml+xml"):
         return result
     try:
         text = data.decode("utf-8-sig")

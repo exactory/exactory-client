@@ -113,7 +113,7 @@ def validate_request(artifacts, frozen, request):
     if MARKER not in frozen:
         return
     import json
-    from .review_input_projection import collect_attachments, find_attachment
+    from .review_input_projection import collect_attachments, project_evidence
     from .review_transport import logical_messages, PACKET_LABEL
     try:
         message = logical_messages(request)[-1]
@@ -131,22 +131,7 @@ def validate_request(artifacts, frozen, request):
         actual = json.loads(content[len(PACKET_LABEL):])
         if actual.get(MARKER) != frozen[MARKER]:
             _incomplete({'reason': 'The actual input does not retain its exact frozen current-source requirements.'})
-        binary_digests = {entry['artifact']['sha256'] for entry in frozen.get('evidence', [])
-                          if entry.get('encoding') == 'base64'
-                          or entry['artifact']['media_type'] == 'application/pdf'
-                          or entry['artifact']['media_type'].startswith('image/')}
-        for entry in actual.get('evidence', []):
-            reference = entry['artifact']
-            binary = (reference['sha256'] in binary_digests or reference['media_type'] == 'application/pdf'
-                      or reference['media_type'].startswith('image/'))
-            if entry.get('encoding') != 'base64' and not binary:
-                continue
-            entry.pop('content', None)
-            if entry.get('encoding') != 'base64' or entry.get('delivery') != 'attached-exact-bytes':
-                continue
-            matched = find_attachment(attachments, reference)
-            if matched is not None:
-                entry['content'] = matched
+        project_evidence(actual, attachments)
         validate(artifacts, actual)
     except (KeyError, IndexError, TypeError, ValueError) as error:
         _incomplete({'reason': 'The actual focused packet or its binary attachments are malformed.'})

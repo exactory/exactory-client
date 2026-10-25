@@ -76,6 +76,25 @@ class FrozenPdfCaptureTests(StrategyCase):
                 except ResearchError as error:
                     self.fail(f"A generic binary descriptor lacks frozen PDF inference: {error.code}")
 
+    def test_generic_binary_media_spellings_do_not_invent_a_frozen_pdf_page_map(self):
+        source = self.metadata(1)
+        text = self.artifacts.put(b'An extracted page.\f', 'text/plain; charset=utf-8')
+        for media in ('Binary/Octet-Stream', 'binary/octet-stream; charset=utf-8', 'APPLICATION/OCTET-STREAM'):
+            original = self.artifacts.put(BINARY_PDF, media)
+            link = {'version_id': source, 'source_id': 'binary-source', 'artifact': original,
+                    'locator': {'kind': 'pdf', 'page_index': 99, 'printed_page': None, 'region': [0, 0, 1, 1]}}
+            packet = {'source_deliveries': [{'request': {'version_id': source}, 'evidence': [original, text],
+                      'source_provenance': [{'source_id': 'binary-source', 'original_descriptor': original,
+                                             'delivered_sha256': [original['sha256'], text['sha256']]}]}]}
+            for packets in ((), (packet,)):
+                with self.subTest(media=media, frozen_delivery=bool(packets)):
+                    try:
+                        validate_evidence_contract({}, self.artifacts, [{'kind': 'source', 'link': link}],
+                                                   packets=packets)
+                    except ResearchError as error:
+                        self.fail(f"A media-type spelling cannot establish frozen PDF inference: {error.code}")
+                    self.assertEqual(original['media_type'], media)
+
 
 if __name__ == '__main__':
     unittest.main()

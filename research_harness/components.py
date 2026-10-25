@@ -9,6 +9,7 @@ import re
 
 from .errors import ResearchError
 from .evidence import digest
+from .fulltext import base_media_type
 from .operations import fields, strings, text
 from .source_links import (captured_source, complete_original, contains, exact_work,
                            fulltext_capture, read_locator, validate_link)
@@ -150,7 +151,7 @@ def find_component_page_obligations(records, artifacts, bundle):
                    and u['link'] is not None and u['link']['source_id'] == capture['source_id'] for u in bundle['units']):
             pending.append(obligation('component_requirement_missing', 'Fill the existing required supplement unit.',
                                       version_id=work['id'], unit_id=spec['unit_id']))
-        if capture['extraction']['media_type'] != 'application/pdf':
+        if base_media_type(capture['extraction']['media_type']) != 'application/pdf':
             continue
         pages = artifacts.read(capture['text']).decode('utf-8').split('\f')
         if not pages[-1].strip():
