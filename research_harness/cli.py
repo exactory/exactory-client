@@ -10,6 +10,7 @@ import time
 from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions,
                 principles, reading, resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
+from .drafting import draft_obligations
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -370,6 +371,11 @@ def status_report(store, *, counters=False):
         milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
         if milestone is not None:
             report = gate_state(records, evaluation, milestone, profile=profile)
+    draft_pending = draft_obligations(records, store.root)
+    if draft_pending:
+        obligations = report["obligations"] + draft_pending
+        report = dict(report, ready=False, obligations=obligations,
+                      counts=dict(report["counts"], obligations=len(obligations)))
     diagnostics = {"evaluation": dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     # The cohort inventory names the next unread abstract; every other stage
     # takes the highest-priority current obligation in preparation order.
@@ -403,7 +409,8 @@ def status_report(store, *, counters=False):
                 limits=limits_report(records), **tool_status, **diagnostics, **scope_status,
                 round=round_summary(round_report) if round_report else None,
                 grand_challenge=current_challenge["payload"] if current_challenge else None,
-                next=upcoming or (order_obligations(obligations)[0] if obligations else None),
+                next=draft_pending[0] if draft_pending else (
+                    upcoming or (order_obligations(obligations)[0] if obligations else None)),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),
                 remote_observations=list(records.get("remote_observation", {}).values()),
