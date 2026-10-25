@@ -101,7 +101,7 @@ The unit states the lemma in its widest true form, gives at least one applicatio
 
 Source: the residue after the inventory: the journal, the map of ceilings, a corrected conjecture, a strengthened conjecture with its evidence.
 
-The unit contains the problem-shape record, every route with where it stops and why (with the barrier theorems where they exist), the neighbouring statements marked known true or false, and the open sub-questions in one sentence each. This is the one form where "where every known approach breaks down" is acceptable content. When the content is too thin for a survey, it goes to a preprint, a research blog, or the problem's discussion thread as a progress note that says how far the attack got.
+The unit contains the problem-shape record, every route with where it stops and why (with the barrier theorems where they exist), the neighbouring statements marked known true or false, and the open sub-questions in one sentence each. This is the one form where "where every known approach breaks down" is acceptable content. When the content is too thin for a survey, it goes to a preprint, a research blog, or, when the problem is posted in the exactory Mathematics section, to the problem's discussion as a progress note that says how far the attack got. Activity and unproved evidence stay in the discussion; a statement the attack proved is a unit of its own form, and on a posted problem it is a partial result (see "Preparing a post to a posted problem").
 
 ### Full proof
 
@@ -147,3 +147,30 @@ Several results become one unit when one implies the other, when one is the inpu
 - Has someone already proved it? Search hardest here, by statement.
 - Is it on the path to the target, or off to the side? This decides the venue, not whether it is publishable.
 - Does every claim in the unit point to a proof or to a deterministic run?
+
+## Preparing a post to a posted problem
+
+When the objective is a problem posted in the exactory Mathematics section, a unit can go to that problem's Proofs tab through the `math-section` skill, as a complete proof, a disproof, or a partial result. This section prepares the post. It posts nothing: the harness runs none of the commands it writes down, and the post follows the user's instruction.
+
+Prepare a unit whose result the controller accepted through its independent result review and `search accept` (`SEARCH.md#checkpoints-and-accepted-results`). A unit that is only locally finished (`units/FINISHED.json`) is not prepared here; the user can still post it through the `math-section` skill.
+
+The problem id comes from the user's instruction, or from the `posted.json` that the `math-conjecturer` skill wrote when it posted the problem. The attack records no problem id.
+
+Write three files under `proof-posts/<attack-slug>/unit-<n>/` in the directory that holds the controller root (beside `attack/` by default), outside the attack workspace, so that no frozen or digested unit file changes:
+
+1. `statement.md`: for a partial result, the unit's `statement` in TeX, 20 to 5,000 characters, self-contained, every quantifier and hypothesis explicit, the problem's notation defined or referenced. A complete claim takes no statement file.
+2. `summary.md`: the brief explanation, 100 to 20,000 characters: what the result establishes, how it bears on the problem, and where its evidence is.
+3. `command.txt`: the exact commands, one per line, in order. When the unit has neither a deposited write-up nor a Lean solution, the first line is the deposit of its write-up with `exactory-draft deposit ... --math-problem <problem-id>`, under the `deposit` skill and the deposit section of the `math-section` skill; a production deposit is permanent and keeps its own approval rule (`--confirm-publish`). The next line is `exactory post-proof <problem-id>` with `--claim`, `--method`, `--statement-file statement.md` for a partial result, `--summary-file summary.md`, and `--writeup <arxiv-id-with-version-or-DOI>`, or `--lean-url <commit-pinned-url>` with `--lean-theorem <name>` for a partial result and with `--formal-statement-version <n>` for a complete claim.
+
+The claim follows what the unit's evidence proves, read against the exact posted statement:
+
+- `full-proof` or `second-proof` of the exact posted claim: `proves` when the direction is `true`, `disproves` when it is `false`. A `counterexample` unit that refutes the exact posted claim: `disproves`.
+- `conditional-or-special-case`, `quantitative-improvement`, `reduction-or-equivalence`, `barrier`, a `counterexample` of a stronger or neighbouring statement, and a `new-machinery` unit whose lemma bears on the problem: `partial`.
+- `counterexample-or-computational-evidence`: `partial` only when its computation proves a stated finite statement, exhaustive and with exact or certified arithmetic, and that statement is the unit's `statement`. Otherwise the unit is evidence: it goes to the problem's discussion or to a linked paper, not to the Proofs tab.
+- `survey-or-problem-paper`: never a proof. It goes to a linked paper.
+- `formalisation` and `formal-proof-write-up`: the claim of the result they formalize or write up.
+- `algorithm`: the claim of the statement its correctness proof establishes, under the same reading.
+
+The method follows the unit's evidence, not its form: `written-proof` for a human-readable argument; `counterexample` for an exhibited object with its verification; `computer-assisted` for an argument that depends on an exhaustive or certified computation (a deterministic step with `result.json` status `pass` among the unit's evidence); `formal-proof` for a Lean proof with no separate human-readable argument as the main evidence.
+
+A partial result never resolves the problem. Post only when the user instructs it, after the deposit when `command.txt` names one.
