@@ -65,6 +65,39 @@ class ActualInputProjectionTests(unittest.TestCase):
                 projected = packets_from_request({'input': [self.message(packet)]}, native_attachments=True)
                 self.assertEqual(projected[0]['evidence'][0]['content'], data.decode())
 
+    def test_binary_octet_stream_pdf_requires_exact_native_attachment_bytes(self):
+        packet = copy.deepcopy(self.packet)
+        packet['evidence'][0]['artifact']['media_type'] = 'binary/octet-stream'
+        projected = packets_from_request(self.request(packet=packet), native_attachments=True)
+        self.assertEqual(projected[0]['evidence'][0].get('content'), self.encoded)
+        for encoding, content in (('utf-8', self.data.decode()), ('base64', self.encoded)):
+            packet['evidence'][0].update(encoding=encoding, content=content)
+            with self.subTest(encoding=encoding):
+                projected = packets_from_request({'input': [self.message(packet)]}, native_attachments=True)
+                self.assertNotIn('content', projected[0]['evidence'][0])
+                self.assertEqual(projected[0]['evidence'][0]['encoding'], 'omitted')
+
+    def test_binary_octet_stream_text_requires_matching_descriptor_and_non_pdf_bytes(self):
+        data = b'{"result": 7}'
+        for media in ('binary/octet-stream', 'binary/octet-stream; charset=utf-8', 'Binary/Octet-Stream'):
+            packet = copy.deepcopy(self.packet)
+            reference = describe_artifact(data, media)
+            for changed in ({}, {'sha256': '0' * 64}, {'size': len(data) + 1}):
+                packet['evidence'] = [{'artifact': dict(reference, **changed),
+                                       'encoding': 'utf-8', 'content': data.decode()}]
+                with self.subTest(media=media, changed=changed):
+                    projected = packets_from_request({'input': [self.message(packet)]}, native_attachments=True)
+                    evidence = projected[0]['evidence'][0]
+                    if changed:
+                        self.assertNotIn('content', evidence)
+                    else:
+                        self.assertEqual(evidence['content'], data.decode())
+            packet['evidence'] = [{'artifact': describe_artifact(self.data, media),
+                                   'encoding': 'utf-8', 'content': self.data.decode()}]
+            with self.subTest(media=media, body='pdf'):
+                projected = packets_from_request({'input': [self.message(packet)]}, native_attachments=True)
+                self.assertNotIn('content', projected[0]['evidence'][0])
+
     def test_inline_base64_prose_is_not_native_file_delivery(self):
         packet = copy.deepcopy(self.packet)
         packet['evidence'][0]['content'] = self.encoded

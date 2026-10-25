@@ -70,6 +70,36 @@ class GenericBinaryEvidenceTests(unittest.TestCase):
                     protocol._evidence(self.store, {'cited': reference})
                 self.assertEqual(raised.exception.code, 'review_evidence_unreadable')
 
+    def test_binary_octet_stream_pdf_is_withheld_on_a_text_only_route(self):
+        for data in (ASCII_PDF, BINARY_PDF):
+            with self.subTest(data=data):
+                reference = self.store.put(data, 'binary/octet-stream')
+                try:
+                    with transport.text_only_delivery(True):
+                        entry, = protocol._evidence(self.store, {'cited': reference})
+                except ResearchError as error:
+                    self.fail(f"A generic binary PDF should be withheld without refusing delivery: {error.code}")
+                self.assertEqual(entry['artifact'], reference)
+                self.assertEqual(entry['encoding'], 'omitted')
+                self.assertEqual(entry['delivery'], 'bytes-omitted-on-text-route')
+                self.assertEqual(entry['content'], '')
+
+    def test_binary_octet_stream_pdf_is_attached_as_pdf_without_relabeling_its_descriptor(self):
+        for data in (ASCII_PDF, BINARY_PDF):
+            with self.subTest(data=data):
+                reference = self.store.put(data, 'binary/octet-stream')
+                try:
+                    entry, = protocol._evidence(self.store, {'cited': reference})
+                except ResearchError as error:
+                    self.fail(f"A generic binary PDF should be attached as PDF: {error.code}")
+                self.assertEqual(entry['encoding'], 'base64')
+                request = transport.request_body(RESPONSES, 'Review.', {'evidence': [entry]})
+                content = request['input'][-1]['content']
+                self.assertEqual(content[1]['file_data'],
+                                 'data:application/pdf;base64,' + base64.b64encode(data).decode('ascii'))
+                delivered = json.loads(content[0]['text'][len(transport.PACKET_LABEL):])['evidence'][0]
+                self.assertEqual(delivered['artifact'], reference)
+
 
 class GenericBinarySourceDeliveryTests(StrategyCase):
     metadata = LiteratureCase.metadata

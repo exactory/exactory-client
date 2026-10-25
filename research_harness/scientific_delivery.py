@@ -16,6 +16,7 @@ from .artifacts import describe_artifact, validate_reference
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES
 from .operations import fields, text
 from .source_links import read_locator, captured_source, complete_original
 from .scientific_json import parse_scientific_json
@@ -316,7 +317,7 @@ class ScientificDelivery:
             if original_pdf:
                 if not complete_original({"source": source, "capture": capture}):
                     raise ResearchError(_PRIVATE, "Source components require a complete verified HTTP original")
-                inferred = (ref["media_type"] == "application/octet-stream"
+                inferred = (ref["media_type"] in GENERIC_BINARY_MEDIA_TYPES
                             and capture.get("extraction", {}).get("media_type") == "application/pdf"
                             and capture.get("extraction", {}).get("format_detection") == "pdf_signature_from_generic_binary")
                 if ref["media_type"] != "application/pdf" and not inferred:

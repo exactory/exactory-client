@@ -46,6 +46,25 @@ class PublicSourceDeliveryTests(LiteratureCase):
         self.assertEqual((target / derivative["artifact"]["path"]).read_bytes(), self.artifacts.read(ref))
         self.assertEqual((target / capture["original"]["path"]).read_bytes(), self.artifacts.read(capture["original"]))
 
+    def test_stored_binary_octet_stream_pdf_delivers_its_exact_source_jpeg_component(self):
+        capture, ref, projection = self.capture_pdf()
+        records = self.store.snapshot()["records"]
+        source = records["source"][capture["source_id"]]
+        stored = records["work"][source["requested_identifier"]]["fulltexts"][-1]
+        stored["original"]["media_type"] = "binary/octet-stream"
+        stored["extraction"]["format_detection"] = "pdf_signature_from_generic_binary"
+        source["response"]["media_type"] = "binary/octet-stream"
+        source["headers"]["content-type"] = "binary/octet-stream"
+        try:
+            manifest, target = self.project(ref, projection, records=records,
+                                            manifest={"evidence": ref, "original_source": stored["original"]})
+        except ResearchError as error:
+            self.fail(f"A stored generic binary PDF must admit its exact JPEG source component: {error.code}")
+        derivative = json.loads((target / manifest["evidence"]["path"]).read_bytes())
+        self.assertEqual(derivative["source_sha256"], capture["original"]["sha256"])
+        self.assertEqual((target / derivative["artifact"]["path"]).read_bytes(), self.artifacts.read(ref))
+        self.assertEqual(manifest["original_source"]["media_type"], "binary/octet-stream")
+
     def test_source_component_rejects_wrong_span_source_role_and_media(self):
         capture, ref, projection = self.capture_pdf()
         records = self.store.snapshot()["records"]

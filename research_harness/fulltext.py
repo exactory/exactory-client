@@ -4,10 +4,11 @@ extract(data, media_type, *, extractor=None, layout=True) -> {status, text,
 includes_abstract, visual_inspection_required, extractor, version, options,
 media_type, format_detection}. media_type is the type the extraction used and
 format_detection names how it was decided: 'reported_media_type', or
-'pdf_signature_from_generic_binary' for an application/octet-stream body whose
-bytes start with the PDF signature. detect_media_type(data, media_type) makes
-that decision; review delivery uses it as well. PDF extractor injection accepts
-bytes and returns {status, text}; its successful status is 'extracted'.
+'pdf_signature_from_generic_binary' for an application/octet-stream or
+binary/octet-stream body whose bytes start with the PDF signature.
+detect_media_type(data, media_type) makes that decision; review delivery uses it
+as well. PDF extractor injection accepts bytes and returns {status, text}; its
+successful status is 'extracted'.
 extraction_measures(text, original_size) describes an extraction (bytes, pages,
 longest line, whitespace fraction, expansion) so a coordinator sees layout
 padding before a reader does; a high value is a signal to inspect, never a
@@ -139,19 +140,22 @@ class _Article(HTMLParser):
         properties = set((attributes.get("itemprop") or "").lower().split())
         roles = set((attributes.get("role") or "").lower().split())
         parent = self.stack[-1][1] if self.stack else {"skip": False, "article": False, "abstract": False,
-                                                    "body": False, "heading": False, "metadata": False, "content": False}
+                                                    "body": False, "heading": False, "metadata": False,
+                                                    "references": False, "content": False}
         state = dict(parent)
         state["skip"] = state["skip"] or tag in ("script", "style", "nav", "form", "noscript")
         state["article"] = state["article"] or tag == "article" or bool(classes & {"ltx_document", "article-body", "article__body", "jats_body"})
         state["abstract"] = (state["abstract"] or tag == "abstract" or "doc-abstract" in roles or "abstract" in properties
                              or bool(classes & {"abstract", "ltx_abstract", "article-abstract"}) or attributes.get("id") in ("abstract", "Abs1"))
-        state["body"] = state["body"] or bool(classes & {"article-body", "article__body", "jats_body", "ltx_section"})
+        state["body"] = state["body"] or bool(
+            classes & {"article-body", "article__body", "jats_body", "ltx_section", "main-article-body"})
         state["heading"] = state["heading"] or tag in ("h1", "h2", "h3", "h4", "h5", "h6", "title") or "heading" in roles or bool(properties & {"headline", "name"}) or bool(
             classes & {"title", "subtitle", "article-title", "article__title", "ltx_title", "jats_title"})
         state["metadata"] = state["metadata"] or tag in ("header", "footer", "aside", "address", "time") or bool(
             properties & {"author", "affiliation", "datepublished", "datemodified", "datecreated", "publisher", "identifier", "keywords", "copyrightnotice"}) or bool(
             classes & {"metadata", "article-meta", "article__meta", "article-info", "authors", "author", "affiliation",
                        "affiliations", "article-author", "article-authors", "byline", "journal", "publication-date", "ltx_authors", "ltx_date"})
+        state["references"] = state["references"] or "ref-list" in classes
         state["content"] = state["content"] or tag in ("p", "li", "dd", "td", "pre", "blockquote") or bool(
             classes & {"ltx_para", "ltx_p", "paragraph"})
         self.has_article |= state["article"]
@@ -170,22 +174,26 @@ class _Article(HTMLParser):
             self.text.append("\n")
 
     def handle_data(self, data):
-        state = self.stack[-1][1] if self.stack else {}
-        if state.get("skip"):
+        state = self.stack[-1][1] if self.stack else None
+        if state and state["skip"]:
             return
         self.all_text.append(data)
-        if state.get("article"):
+        if state and state["article"]:
             self.text.append(data)
-            if state.get("abstract") and not state.get("heading") and data.strip():
+            if state["abstract"] and not state["heading"] and data.strip():
                 self.included_abstract = True
-            if state.get("body") and state.get("content") and not any(state.get(key) for key in ("abstract", "heading", "metadata")):
+            if state["body"] and state["content"] and not any(
+                    state[key] for key in ("abstract", "heading", "metadata", "references")):
                 self.body_text.append(data)
+
+
+GENERIC_BINARY_MEDIA_TYPES = frozenset({"application/octet-stream", "binary/octet-stream"})
 
 
 def detect_media_type(data, media_type):
     """Return the media type these bytes are handled as, and how it was decided: a body reported as generic binary
     whose bytes start with the PDF signature is a PDF, and every other body keeps its reported type."""
-    if media_type == "application/octet-stream" and data.startswith(b"%PDF-"):
+    if media_type in GENERIC_BINARY_MEDIA_TYPES and data.startswith(b"%PDF-"):
         return "application/pdf", "pdf_signature_from_generic_binary"
     return media_type, "reported_media_type"
 

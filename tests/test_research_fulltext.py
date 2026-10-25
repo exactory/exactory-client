@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from research_harness.errors import ResearchError
-from research_harness.fulltext import PdfExtractor, extract
+from research_harness.fulltext import PdfExtractor, _Article, extract
 
 
 class FulltextTests(unittest.TestCase):
@@ -79,6 +79,60 @@ class FulltextTests(unittest.TestCase):
                 result = extract(raw, "text/html")
                 self.assertNotEqual(result["status"], "extracted")
                 self.assertIsNone(result["text"])
+
+    def test_binary_octet_stream_requires_a_pdf_signature_for_extraction(self):
+        pdf = b"%PDF-1.4\nAn authored synthetic PDF.\n%%EOF\n"
+        for media in ("application/octet-stream", "binary/octet-stream"):
+            with self.subTest(media=media):
+                result = extract(pdf, media, extractor=lambda data: {"status": "extracted", "text": "A PDF page.\f"})
+                self.assertEqual(result["status"], "extracted")
+                self.assertEqual(result["text"], "A PDF page.\f")
+                self.assertEqual(result["media_type"], "application/pdf")
+                self.assertEqual(result["format_detection"], "pdf_signature_from_generic_binary")
+            for body in (b"unrelated binary content\x00", b"<article class='article-body'><p>A body.</p></article>"):
+                with self.subTest(media=media, body=body):
+                    result = extract(body, media)
+                    self.assertEqual(result["status"], "unsupported_fulltext")
+                    self.assertIsNone(result["text"])
+                    self.assertEqual(result["media_type"], media)
+                    self.assertEqual(result["format_detection"], "reported_media_type")
+
+    def test_pmc_main_article_body_retains_references_without_counting_them_as_body(self):
+        data = (Path(__file__).parent / "fixtures/research/pmc-main-article-body.html").read_bytes()
+        for media in ("text/html", "application/xhtml+xml"):
+            with self.subTest(media=media):
+                result = extract(data, media)
+                self.assertEqual(result["status"], "extracted")
+                self.assertTrue(result["includes_abstract"])
+                for expected in ("2. Results and Discussion", "3. Conclusion", "An authored result sentence.",
+                                 "An authored conclusion sentence.", "An authored abstract sentence."):
+                    self.assertIn(expected, result["text"])
+                self.assertIn("References", result["text"])
+                self.assertIn("An authored reference entry.", result["text"])
+                self.assertLess(result["text"].index("An authored conclusion sentence."),
+                                result["text"].index("References"))
+                self.assertLess(result["text"].index("References"),
+                                result["text"].index("An authored reference entry."))
+        parser = _Article()
+        parser.feed(data.decode())
+        parser.close()
+        body = "".join(parser.body_text)
+        self.assertIn("An authored result sentence.", body)
+        for excluded in ("An authored abstract sentence.", "Keywords:", "An authored author and affiliation.",
+                         "Results and Discussion", "Conclusion", "References", "An authored reference entry.",
+                         "An authored publisher notice."):
+            self.assertNotIn(excluded, body)
+        # Body markers alone must not promote abstracts, headings, metadata or references to full text.
+        for content in (b'<section class="abstract"><h2>Abstract</h2><p>Only an abstract.</p></section>',
+                        b'<h2 class="pmc_sec_title">A section heading only.</h2>',
+                        b'<header><p>Only metadata.</p></header><div class="article-meta"><p>A date.</p></div>',
+                        b'<section class="ref-list"><ol class="ref-list"><li>A reference only.</li></ol></section>'):
+            for classes in (b"body main-article-body", b"article-body"):
+                raw = b'<article><section class="' + classes + b'">' + content + b'</section></article>'
+                with self.subTest(classes=classes, content=content):
+                    result = extract(raw, "text/html")
+                    self.assertEqual(result["status"], "landing_page")
+                    self.assertIsNone(result["text"])
 
     def test_article_body_class_does_not_turn_title_metadata_or_abstract_into_body(self):
         pages = [

@@ -8,7 +8,7 @@ from pathlib import Path
 from research_harness.acquisition import acquire_fulltext, acquire_work
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
-from research_harness.source_links import validate_link
+from research_harness.source_links import read_locator, validate_link
 from research_harness.storage import Store
 from research_fixtures import atom, entry, client, xml_response
 
@@ -80,6 +80,50 @@ class BinaryPdfTests(unittest.TestCase):
         self.assertEqual(result["status"], "complete")
         source = self.store.snapshot()["records"]["source"][result["capture"]["source_id"]]
         self.assertNotIn("content-type", source["headers"])
+
+    def test_binary_octet_stream_acquisition_preserves_reported_type_and_original(self):
+        original = authored_pdf()
+        result = self.acquire(original, headers={"Content-Type": "binary/octet-stream"})
+        self.assertEqual(result["status"], "complete")
+        capture = result["capture"]
+        source = self.store.snapshot()["records"]["source"][capture["source_id"]]
+        self.assertEqual(source["headers"]["content-type"], "binary/octet-stream")
+        self.assertEqual(source["response"]["media_type"], "binary/octet-stream")
+        self.assertEqual(capture["original"]["media_type"], "binary/octet-stream")
+        self.assertEqual(ArtifactStore(self.root).read(capture["original"]), original)
+        self.assertEqual(capture["extraction_status"], "extracted")
+        self.assertEqual(capture["extraction"]["page_count"], 1)
+        self.assertEqual(capture["extraction"]["format_detection"], "pdf_signature_from_generic_binary")
+        for index, body in enumerate((b"unrelated binary content\x00", b"<article><p>HTML.</p></article>")):
+            with self.subTest(body=body):
+                pending = self.acquire(body, headers={"Content-Type": "binary/octet-stream"},
+                                       request_id=f"binary-unsupported-{index}")
+                self.assertEqual(pending["pending"], [{"code": "unsupported_fulltext"}])
+                self.assertEqual(pending["capture"]["original"]["media_type"], "binary/octet-stream")
+                self.assertIsNone(pending["capture"]["text"])
+
+    def test_stored_binary_octet_stream_pdf_uses_only_a_successful_captured_page_map(self):
+        capture = self.acquire(authored_pdf())["capture"]
+        capture["original"] = dict(capture["original"], media_type="binary/octet-stream")
+        locator = {"kind": "pdf", "page_index": 0, "printed_page": "1", "region": [0, 0, 1, 1]}
+        artifacts = ArtifactStore(self.root)
+        try:
+            read_locator(artifacts, capture["original"], locator, capture=capture)
+        except ResearchError as error:
+            self.fail(f"The stored generic binary PDF has a successful page map: {error.code}")
+        for change in ("outside-page", "missing-map", "pending-extraction", "missing-inference"):
+            altered, selected = copy.deepcopy(capture), dict(locator)
+            if change == "outside-page":
+                selected["page_index"] = 1
+            elif change == "missing-map":
+                altered["text"] = None
+            elif change == "pending-extraction":
+                altered["extraction_status"] = "malformed_pdf"
+            else:
+                altered["extraction"].pop("format_detection")
+            with self.subTest(change=change), self.assertRaises(ResearchError) as raised:
+                read_locator(artifacts, altered["original"], selected, capture=altered)
+            self.assertEqual(raised.exception.code, "invalid_locator")
 
     def test_non_pdf_binary_and_binary_html_stay_unsupported(self):
         for index, body in enumerate((b"unrelated binary content\x00", b"<article class='article-body'><p>A body.</p></article>")):

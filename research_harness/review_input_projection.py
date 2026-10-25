@@ -6,6 +6,7 @@ import hashlib
 
 from . import review_transport as transport
 from .errors import ResearchError
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES, detect_media_type
 from .workspace import strict_json
 
 
@@ -33,7 +34,6 @@ def collect_attachments(parts):
 def find_attachment(attached, reference):
     """The base64 body of an actual attachment of exactly the descriptor's bytes, attached as the media type that
     request construction attaches for the descriptor: a PDF reported as generic binary is attached as a PDF."""
-    from .fulltext import detect_media_type
     found = attached.get((reference.get('size'), reference.get('sha256')))
     if found is None:
         return None
@@ -66,19 +66,18 @@ def _binary(reference):
     if not isinstance(media, str):
         raise ResearchError('review_input_unreadable', 'Evidence requires an explicit native media type')
     media = media.split(';', 1)[0].strip().lower()
-    return media in ('application/pdf', 'application/octet-stream') or media.startswith('image/')
+    return media == 'application/pdf' or media in GENERIC_BINARY_MEDIA_TYPES or media.startswith('image/')
 
 
 def _is_delivered_text(reference, content):
     """Whether request construction delivered these exact bytes as text: a body reported as generic binary is text
     unless its bytes carry the PDF signature."""
-    from .fulltext import detect_media_type
     data = content.encode('utf-8')
     media = reference.get('media_type')
     media = media.split(';', 1)[0].strip().lower() if isinstance(media, str) else None
-    return (media == 'application/octet-stream' and len(data) == reference.get('size')
+    return (media in GENERIC_BINARY_MEDIA_TYPES and len(data) == reference.get('size')
             and hashlib.sha256(data).hexdigest() == reference.get('sha256')
-            and detect_media_type(data, 'application/octet-stream')[0] == 'application/octet-stream')
+            and detect_media_type(data, media)[0] == media)
 
 
 def packets_from_request(request, *, native_attachments=False):

@@ -7,6 +7,7 @@ from functools import wraps
 from .artifacts import ArtifactStore, validate_reference
 from .errors import ResearchError
 from .evidence import digest
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES
 from .operations import immutable_record, prepared_mutation
 
 PROTOCOL = 'exactory-review-output-refusal-v1'
@@ -25,7 +26,7 @@ def contract_check(name):
 
 def _frozen_pdf_capture(link, packets):
     """Find a PDF page map only where a frozen source delivery binds it to the original."""
-    if link['artifact']['media_type'] == 'application/octet-stream':
+    if link['artifact']['media_type'] in GENERIC_BINARY_MEDIA_TYPES:
         # Native format-inference qualification is not present in this projection.
         return None
     for packet in packets:
@@ -68,7 +69,8 @@ def validate_evidence_contract(records, artifacts, values, *, required=True, pac
             kind = link['locator'].get('kind') if isinstance(link['locator'], dict) else None
             capture = _frozen_pdf_capture(link, packets) if kind == 'pdf' else None
             if (kind == 'pdf' and capture is None
-                    and link['artifact']['media_type'] in ('application/pdf', 'application/octet-stream')):
+                    and (link['artifact']['media_type'] == 'application/pdf'
+                         or link['artifact']['media_type'] in GENERIC_BINARY_MEDIA_TYPES)):
                 # Page-map-dependent checks cannot classify an output without a delivered page map.
                 continue
             if capture is not None:

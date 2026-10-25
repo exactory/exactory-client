@@ -21,6 +21,7 @@ import copy
 import hashlib
 
 from .errors import ResearchError
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES
 from .identities import normalize_identifier, version_of
 from .imports import _pointer
 from .operations import fields, is_finite_number, text
@@ -120,7 +121,7 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
         return value
     if kind == "pdf":
         fields(locator, ("kind", "page_index", "printed_page", "region"), code="invalid_locator")
-        inferred_pdf = (artifact["media_type"] == "application/octet-stream" and capture is not None
+        inferred_pdf = (artifact["media_type"] in GENERIC_BINARY_MEDIA_TYPES and capture is not None
                         and capture.get("availability") == "available"
                         and capture.get("extraction_status") == "extracted"
                         and capture.get("extraction", {}).get("media_type") == "application/pdf"
