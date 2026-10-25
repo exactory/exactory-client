@@ -23,7 +23,7 @@ from .raster_containers import validate_gif, validate_png, validate_webp
 
 VISUAL_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp", "image/svg+xml")
 _VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
-_URL = re.compile(r"url\(\s*['\"]?([^)'\"]+)['\"]?\s*\)", re.I)
+_URL = re.compile(r"""url\(\s*(?:"([^"]*)"|'([^']*)'|([^'"\)]*))\s*\)""", re.I)
 _STATIC_FUNCTIONS = {"url", "rgb", "rgba", "hsl", "hsla", "matrix", "translate", "scale", "rotate", "skewx", "skewy"}
 _SVG_DYNAMIC = {"script", "foreignobject", "style", "animate", "animatetransform", "animatemotion", "set", "discard"}
 
@@ -31,6 +31,11 @@ _SVG_DYNAMIC = {"script", "foreignobject", "style", "animate", "animatetransform
 def _unsupported_style(value):
     return ("\\" in value or "@" in value or any(function.lower() not in _STATIC_FUNCTIONS
             for function in re.findall(r"([A-Za-z_-]+)\s*\(", value)))
+
+
+def _style_urls(value):
+    for match in _URL.finditer(value):
+        yield next(part for part in match.groups() if part is not None)
 
 
 def validate_visual(data, media_type):
@@ -67,7 +72,7 @@ def validate_visual(data, media_type):
                     if key.rsplit("}", 1)[-1] in ("href", "src") and not value.startswith("#"):
                         raise ResearchError("visual_asset_dependencies_unsupported", "External SVG resources are not self-contained visual bytes")
                 style = " ".join(node.attrib.values())
-                if _unsupported_style(style) or any(not v.strip().startswith("#") for v in _URL.findall(style)):
+                if _unsupported_style(style) or any(not v.strip().startswith("#") for v in _style_urls(style)):
                     raise ResearchError("visual_asset_dependencies_unsupported", "External SVG style resources remain unsupported")
         except (ET.ParseError, ValueError) as error:
             raise ResearchError("malformed_visual_asset", "The saved SVG is malformed") from error
@@ -178,7 +183,7 @@ def resource_inventory(content, source_url, anchor):
                 item["href"] = attrs.get("href")
             pending.append(item)
             if node["tag"] == "style" and node["start"] not in selected_starts:
-                for raw in _URL.findall(content[node["start"]:node["end"]]):
+                for raw in _style_urls(content[node["start"]:node["end"]]):
                     resource(raw.strip(), node, "style")
     for node in selected_nodes + ancestors:
         attrs, tag = dict(node["attrs"]), node["tag"]
@@ -218,7 +223,7 @@ def resource_inventory(content, source_url, anchor):
         style += " " + presentation
         if _unsupported_style(style) or any(k.rsplit(":", 1)[-1] == "base" for k in attrs):
             pending.append({"code": "visual_style_unsupported"})
-        for raw in _URL.findall(style):
+        for raw in _style_urls(style):
             resource(raw.strip(), node, "style")
     return {"start": start, "end": end, "resources": [{"url": url, "references": references} for url, references in sorted(resources.items())],
             "pending": pending}
