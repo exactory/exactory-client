@@ -954,3 +954,83 @@ releases apart from the runtime fields and the elapsed time. All three statement
   subsections fixes: the location of the RED log and the missing release runs.
 
 The prompts and the answers are in the record named at the top of this section.
+
+## Release 0.60.1
+
+0.60.1 repairs the threshold checks of a posted statement's self-assessment and result reviews graded before
+the admission item A7, direction after a refutation. The branch `release/0.60.1` starts at `4127fc5` (0.60.0),
+and its record is `misc/harness-improvement/20261024093334-problem-choice-after-refutation` of the exactory
+repository.
+
+### RED and GREEN evidence
+
+The RED evidence is the failing run on 0.60.0 (`4127fc5`) in `logs/lane-a-0601/red-4127fc5.log` of the record named
+at the top of this section. All three new tests of `tests/test_problem_direction_after_refutation.py` failed there,
+with three failures. The GREEN evidence is the passing run on the release branch.
+
+| Test | On 4127fc5 | On the branch |
+| --- | --- | --- |
+| `test_posted_previous_self_assessment_lists_its_shortfall` | FAIL | OK |
+| `test_posted_previous_result_reviews_list_their_shortfalls` | FAIL | OK |
+| `test_posted_previous_rubric_adjudication_releases_only_its_review` | FAIL | OK |
+
+### Release runs
+
+The local runs used a detached checkout of `05ccebb`, the last commit before the text changes of `0348c60` (client tree
+`c13b3bc13818414aad71bfc90cd9f1596f0b7727`, marketplace commit `016d6360c714cac59f7f95571ef14a46005d7220`), on macOS
+(Darwin), Python 3.12.8 and Python 3.9.6. The evidence is in `logs/release-runs-0.60.1/` (`verify.json`, `receipts/`,
+the shard and harness logs) and `logs/release-runs-0.60.1-driver.log` of the record named at the top of this section.
+
+- The full suite used `ci/unittest_shards.py run`, with 6 shards per Python and the marketplace checkout next to the
+  run copy. Each Python discovered 3471 test ids, with the same discovery digest on both.
+  `ci/unittest_shards.py verify` succeeded on the twelve receipts: every discovered test ran exactly once on each
+  Python, 6942 tests in all, with no failure, error, skip, expected failure or unexpected success.
+- The math-solver harness suite ran 878 tests on each Python, with no failure, error or skip. Its command was
+  `python -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness`.
+
+`0348c60` changes only `skills/math-conjecturer/SKILL.md`, `docs/releases/0.60.1.md` and this testing log. On
+`0348c60`, the five test modules that read those files or pin the release version pass on Python 3.12.8 and 3.9.6,
+79 tests on each Python: `test_codex`, `test_manifest`, `test_research_guidance`,
+`test_problem_direction_after_refutation` and `test_research_problem_tools`. `codex/generate.py --check` passes on
+`0348c60`.
+
+The pull request's continuous integration (CI) runs Python 3.9.25, 3.12.14 and 3.14.7 on each commit pushed to the
+branch, including the commit that adds this record; its results are posted on the pull request.
+
+### Store compatibility
+
+Read-only commands ran with 0.60.0 (`4127fc5`) and with the release code `2d5d052` on copies of the three problem
+stores. The copies were made on 2026-10-24 without the math-search pointer files. The scripts are
+`bin/store_states.py` and `bin/post_gate_state.py` of the 0.59.0 record,
+`misc/harness-improvement/[DONE]/20261024003929-result-coverage-blocked-by-withheld-search-responses`, together with
+`exactory-research next --workspace`. The evidence is in `logs/stores-0.60.1/` of the record named at the top of this
+section.
+
+- Sidorenko girth-six, revision 432: 4 routes and 37 assignments, with 33 ready. The post gate is ready with no
+  obligation, and `next` gives the milestone `post` with `problem_already_posted`.
+- extremal-graph-stability, revision 301: 5 routes and 33 assignments, with 30 ready. The post gate is ready with no
+  obligation, and `next` gives the milestone `post` with `problem_already_posted`.
+- stretched-LR positivity, revision 572: 13 routes and 47 assignments, with 6 ready. The post gate lists the same six
+  obligations as under 0.60.0, and `next` gives the milestone `post` with unchanged obligations.
+
+For each store, the route and assignment states, the post gate and the output of `next` are the same under both
+releases apart from the runtime fields (`executable`, `package_digest`) and the elapsed time. All three statements
+are posted, so 0.60.1 checks their grades made before A7, and it lists no new obligation for them.
+
+### Reviews
+
+- The code was reviewed by Astra 6 (`gpt-6-astra`) at `xhigh` through codex-plugin-cc, with settings verified from
+  the session record. Round 1 on `4127fc5`, after the merge of 0.60.0, returned `VERDICT: RELEASE` with one minor
+  finding, F1, which this release repairs. Round 2 on `05ccebb` found F1 repaired, found no new defect and returned
+  `VERDICT: RELEASE` with one minor finding, F2: this section ended with "The release runs are recorded below."
+  before any run was recorded. The commit adding these subsections resolves F2.
+- The texts were reviewed by Astra 6 at `max` through the Codex CLI, with settings verified. Round 3 on `05ccebb`
+  returned `VERDICT: RELEASE` with one minor finding, T10: in "the records it names", "it" could mean the gate.
+  The finding was accepted and fixed in `0348c60` by a rewrite from Claude Fable 5.1. Round 4 on `0348c60` reported
+  no findings and returned `VERDICT: RELEASE`.
+- The final review was done by Claude Opus 5.5, as the owner asked, on `4127fc5` to the head of `release/0.60.1`: every
+  changed line of the code, the tests, the skill, the release note, the README and this testing log, and the two
+  callers of the changed functions, `assess_minimum` and `assess_problem_reviews`, which serve `assess_post`,
+  `prepare_decision` and `next`. It found no defect.
+
+The prompts and the answers are in the record named at the top of this section.

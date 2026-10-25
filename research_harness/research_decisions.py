@@ -963,6 +963,8 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
     from .problem_delivery import find_post
     obligations = []
     assessment = find_assessment(records)
+    statement = find_current_statement(records)
+    posted = find_post(records, statement) is not None
     assessment_id, review_ids = None, []
     if assessment is not None:
         problem_rubric.validate_grades(assessment['grades'], allow_previous=True)
@@ -976,7 +978,7 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
                                           review_id=review['id']))
             continue
         problem_rubric.validate_grades(findings['rubric'], allow_previous=True)
-        if problem_rubric.was_graded_before_a7(findings['rubric']):
+        if problem_rubric.was_graded_before_a7(findings['rubric']) and not posted:
             review_ids.append(review['id'])
             continue
         pending = []
@@ -1005,8 +1007,6 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
         if pending:
             obligations.append(obligation('problem_rubric_below_threshold', 'Repair or independently adjudicate each rubric shortfall.',
                                           source='review', review_id=review['id'], shortfalls=pending))
-    statement = find_current_statement(records)
-    posted = find_post(records, statement) is not None
     if (assessment_id is not None or review_ids) and not posted:
         obligations.append(obligation('problem_rubric_regrade_required',
             'Before the post, record a new self-assessment that grades A7 when assessment_id names one, and '

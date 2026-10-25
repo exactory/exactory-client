@@ -483,12 +483,19 @@ states the exact rule.
    review. The harness continues that review in the same session and slot on the current
    template; its packet carries `problem_refresh` with the previous and the current template,
    under the reason `prompt_contract_changed`, or `evidence_undelivered` when that review also
-   cites content its packets did not deliver. The gate lists below-threshold shortfalls only
-   for grades that cover A7. Bars on `exactory-problem-review-v2/bar` and slate reviews on
-   `exactory-problem-review-v2/slate` stay valid and are not reassigned for A7 alone
-   (`review_resampling_forbidden`); a version 1 bar still needs its calibration refresh
-   (`problem_bar_calibration_required`), a slate review is refreshed when its candidates or bars
-   change, and a bar or a slate review is refreshed to repair `review_evidence_undelivered`.
+   cites content its packets did not deliver. While `problem_rubric_regrade_required` is listed,
+   the gate does not list the below-threshold shortfalls of the self-assessment and the result
+   reviews that the obligation names in `assessment_id` and `review_ids`. The gate still checks
+   a self-assessment or a result review that grades A7 against the thresholds for posting and
+   lists the shortfalls as `problem_rubric_below_threshold` beside that obligation. For a posted
+   statement, the gate lists no `problem_rubric_regrade_required`. Instead, the gate checks a
+   self-assessment or a result review graded without A7 on the items that the record grades and
+   lists the shortfalls as `problem_rubric_below_threshold`. Bars on
+   `exactory-problem-review-v2/bar` and slate reviews on `exactory-problem-review-v2/slate` stay
+   valid and are not reassigned for A7 alone (`review_resampling_forbidden`); a version 1 bar
+   still needs its calibration refresh (`problem_bar_calibration_required`), a slate review is
+   refreshed when its candidates or bars change, and a bar or a slate review is refreshed to
+   repair `review_evidence_undelivered`.
 4. Answer a reviewer's source request with a continuation assignment of the same role, route and
    reviewer.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
