@@ -1297,7 +1297,7 @@ class DevelopmentTests(DevelopmentCase):
 
 
 class FormatOnlyRerunTests(DevelopmentCase):
-    def assessed_run(self, *, max_executions=4):
+    def prepare_assessed_run(self, *, max_executions=4):
         self.prepared_study()
         plan, execution = self.run_cycle(self.plan(max_executions=max_executions))
         assessment = self.assessment(plan, execution)
@@ -1307,19 +1307,19 @@ class FormatOnlyRerunTests(DevelopmentCase):
         self.mutate(self.development().assess_cycle, assessment)
         return plan, execution, assessment
 
-    def format_payload(self, execution, **changes):
+    def compute_format_only_payload(self, execution, **changes):
         original = self.store.snapshot()["records"]["execution_admission"][execution["origin"]["admission_id"]]
         payload = {key: copy.deepcopy(original[key]) for key in
                    ("cycle_id", "plan_digest", "command", "reserved_units")}
         return dict(payload, id="format-run", format_only_of=execution["id"], **changes)
 
-    def retained_format_admission(self, execution):
+    def seed_format_only_admission(self, execution):
         # Seed the additive record through real storage so recording and launch checks
         # fail on their own missing rules, independently of admission's new field.
         records = self.store.snapshot()["records"]
         plan = records["cycle_plan"][execution["cycle_id"]]
         account = records["strategy_account"][plan["strategy_key"]]
-        admission = dict(self.format_payload(execution), strategy_key=plan["strategy_key"],
+        admission = dict(self.compute_format_only_payload(execution), strategy_key=plan["strategy_key"],
                          admitted_revision=self.store.revision + 1, request_id="retained-format-admission",
                          dependencies=plan["dependencies"])
         admission["digest"] = digest(admission)
@@ -1344,12 +1344,12 @@ class FormatOnlyRerunTests(DevelopmentCase):
 
     def test_format_only_admission_preserves_failed_assessment_budget_and_legacy_replay(self):
         api = self.development()
-        plan, execution, assessment = self.assessed_run()
+        plan, execution, assessment = self.prepare_assessed_run()
         checkpoint = self.save_checkpoint(select=False)
         before = self.store.snapshot()["records"]
         original = before["execution_admission"]["run-1"]
         try:
-            admission = self.mutate(api.admit_execution, self.format_payload(execution))["result"]
+            admission = self.mutate(api.admit_execution, self.compute_format_only_payload(execution))["result"]
         except ResearchError as error:
             self.fail("An assessed failure must allow a declared checked format-only run: " + error.code)
         after = self.store.snapshot()["records"]
@@ -1368,9 +1368,9 @@ class FormatOnlyRerunTests(DevelopmentCase):
 
     def test_format_only_recording_accepts_json_serialization_and_renamed_identical_outputs(self):
         api = self.development()
-        _, original, assessment = self.assessed_run()
+        _, original, assessment = self.prepare_assessed_run()
         baseline = self.store.snapshot()["records"]["execution"][original["id"]]
-        admission = self.retained_format_admission(original)
+        admission = self.seed_format_only_admission(original)
         execution = self.execution(admission)
         value = json.loads(self.artifacts.read(original["outputs"][0]["artifact"]))
         formatted = self.artifacts.put(json.dumps(value, indent=2, sort_keys=True).encode(), "application/json")
@@ -1393,8 +1393,8 @@ class FormatOnlyRerunTests(DevelopmentCase):
         self.assertEqual(self.store.snapshot(), snapshot)
 
     def test_format_only_launch_validation_accepts_the_assessed_failure(self):
-        _, execution, _ = self.assessed_run()
-        admission = self.retained_format_admission(execution)
+        _, execution, _ = self.prepare_assessed_run()
+        admission = self.seed_format_only_admission(execution)
         before = self.store.snapshot()
         try:
             checked = self.development().validate_admitted_execution(before["records"], self.artifacts, admission["id"])
@@ -1404,8 +1404,8 @@ class FormatOnlyRerunTests(DevelopmentCase):
         self.assertEqual(self.store.snapshot(), before)
 
     def test_format_only_launch_validation_still_refuses_changed_plan_dependencies(self):
-        _, execution, _ = self.assessed_run()
-        admission = self.retained_format_admission(execution)
+        _, execution, _ = self.prepare_assessed_run()
+        admission = self.seed_format_only_admission(execution)
         self.refresh_synthesis("after-format-admission")
         self.assert_error("plan_dependencies_stale", lambda: self.development().validate_admitted_execution(
             self.store.snapshot()["records"], self.artifacts, admission["id"]))
@@ -1414,7 +1414,7 @@ class FormatOnlyRerunTests(DevelopmentCase):
         api = self.development()
         self.prepared_study()
         _, unassessed = self.run_cycle()
-        payload = self.format_payload(unassessed)
+        payload = self.compute_format_only_payload(unassessed)
         self.assert_error("format_only_reference_invalid", lambda: self.mutate(api.admit_execution, payload))
         assessed = self.assessment(self.plan(), unassessed)
         self.mutate(api.assess_cycle, assessed)
@@ -1428,16 +1428,17 @@ class FormatOnlyRerunTests(DevelopmentCase):
         self.assert_error("format_only_reference_invalid", lambda: self.mutate(api.admit_execution, payload))
 
     def test_format_only_admission_keeps_the_original_strategy_budget(self):
-        _, execution, _ = self.assessed_run(max_executions=1)
+        _, execution, _ = self.prepare_assessed_run(max_executions=1)
         before = self.store.snapshot()
         self.assert_error("strategy_budget_exhausted",
-                          lambda: self.mutate(self.development().admit_execution, self.format_payload(execution)))
+                          lambda: self.mutate(self.development().admit_execution,
+                                              self.compute_format_only_payload(execution)))
         self.assertEqual(self.store.snapshot(), before)
 
     def test_format_only_admission_cannot_replace_an_unreconciled_run(self):
-        _, execution, _ = self.assessed_run()
-        self.retained_format_admission(execution)
-        payload = self.format_payload(execution)
+        _, execution, _ = self.prepare_assessed_run()
+        self.seed_format_only_admission(execution)
+        payload = self.compute_format_only_payload(execution)
         payload["id"] = "second-format-run"
         before = self.store.snapshot()
         self.assert_error("execution_pending", lambda: self.mutate(self.development().admit_execution, payload))
@@ -1458,7 +1459,7 @@ class FormatOnlyRerunTests(DevelopmentCase):
         self.mutate(api.assess_cycle, assessed)
         before = self.store.snapshot()["records"]
         try:
-            admission = self.mutate(api.admit_execution, self.format_payload(original))["result"]
+            admission = self.mutate(api.admit_execution, self.compute_format_only_payload(original))["result"]
         except ResearchError as error:
             self.fail("A checked conversion must retain the reviewed tranche without repeating its science: "
                       + error.code)
@@ -1471,59 +1472,59 @@ class FormatOnlyRerunTests(DevelopmentCase):
         self.assertEqual(after["strategy_account"][admission["strategy_key"]]["charged_units"], 2)
 
     def test_format_only_recording_refuses_changed_json_values(self):
-        _, original, _ = self.assessed_run()
-        execution = self.execution(self.retained_format_admission(original))
+        _, original, _ = self.prepare_assessed_run()
+        execution = self.execution(self.seed_format_only_admission(original))
         value = json.loads(self.artifacts.read(execution["outputs"][0]["artifact"]))
         value["result"]["bound"] = 10
         execution["outputs"][0]["artifact"] = self.artifacts.put(json.dumps(value).encode(), "application/json")
         self.assert_conversion_refused(execution)
 
     def test_format_only_recording_distinguishes_json_booleans_from_numbers(self):
-        _, original, _ = self.assessed_run()
-        execution = self.execution(self.retained_format_admission(original))
+        _, original, _ = self.prepare_assessed_run()
+        execution = self.execution(self.seed_format_only_admission(original))
         value = json.loads(self.artifacts.read(execution["outputs"][0]["artifact"]))
         value["result"]["values"][1] = True
         execution["outputs"][0]["artifact"] = self.artifacts.put(json.dumps(value).encode(), "application/json")
         self.assert_conversion_refused(execution)
 
     def test_format_only_recording_refuses_dropped_json_outputs(self):
-        _, original, _ = self.assessed_run()
-        execution = self.execution(self.retained_format_admission(original))
+        _, original, _ = self.prepare_assessed_run()
+        execution = self.execution(self.seed_format_only_admission(original))
         execution["outputs"] = execution["outputs"][:1]
         self.assert_conversion_refused(execution)
 
     def test_format_only_recording_refuses_requirement_relabelling(self):
-        _, original, _ = self.assessed_run()
-        execution = self.execution(self.retained_format_admission(original))
+        _, original, _ = self.prepare_assessed_run()
+        execution = self.execution(self.seed_format_only_admission(original))
         execution["outputs"][0]["requirement_id"] = "checks"
         execution["outputs"][1]["requirement_id"] = "measurements"
         self.assert_conversion_refused(execution)
 
     def test_format_only_recording_refuses_json_disguised_as_new_text(self):
-        _, original, _ = self.assessed_run()
-        execution = self.execution(self.retained_format_admission(original))
+        _, original, _ = self.prepare_assessed_run()
+        execution = self.execution(self.seed_format_only_admission(original))
         changed = b'{"result":{"values":[0,1,4,9],"bound":10},"validation":{"passed":true}}'
         execution["outputs"].append({"id": "new-text", "requirement_id": "measurements",
                                      "artifact": self.artifacts.put(changed, "text/plain")})
         self.assert_conversion_refused(execution)
 
     def test_format_only_recording_refuses_unverified_svg_conversion(self):
-        _, original, _ = self.assessed_run()
-        execution = self.execution(self.retained_format_admission(original))
+        _, original, _ = self.prepare_assessed_run()
+        execution = self.execution(self.seed_format_only_admission(original))
         artifact = self.artifacts.put(b'<svg><text>same result</text></svg>', "image/svg+xml")
         execution["outputs"].append({"id": "svg", "requirement_id": "measurements", "artifact": artifact})
         self.assert_conversion_refused(execution)
 
     def test_format_only_recording_refuses_invalid_json_even_when_python_would_parse_it(self):
-        _, original, _ = self.assessed_run()
-        execution = self.execution(self.retained_format_admission(original))
+        _, original, _ = self.prepare_assessed_run()
+        execution = self.execution(self.seed_format_only_admission(original))
         execution["outputs"][0]["artifact"] = self.artifacts.put(b'{"bound":9,"bound":10}', "application/json")
         self.assert_conversion_refused(execution)
 
     def test_format_only_results_cannot_supply_changed_reopening_evidence(self):
         api = self.development()
-        plan, original, assessed = self.assessed_run()
-        converted = self.execution(self.retained_format_admission(original))
+        plan, original, assessed = self.prepare_assessed_run()
+        converted = self.execution(self.seed_format_only_admission(original))
         value = json.loads(self.artifacts.read(original["outputs"][0]["artifact"]))
         formatted = self.artifacts.put(json.dumps(value, indent=2).encode(), "application/json")
         for output in converted["outputs"]:

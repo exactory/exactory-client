@@ -901,7 +901,7 @@ def _command(artifacts, value):
             _text(value["seed_reason"], "Seed explanation")
 
 
-def _format_only_execution(records, artifacts, plan, admission):
+def _resolve_format_only_execution(records, artifacts, plan, admission):
     if "format_only_of" not in admission:
         return None
     identifier = admission["format_only_of"]
@@ -919,25 +919,25 @@ def _format_only_execution(records, artifacts, plan, admission):
     return earlier
 
 
-def _json_equal(left, right):
+def _is_json_equal(left, right):
     if isinstance(left, bool) or isinstance(right, bool):
         return type(left) is type(right) and left == right
     if isinstance(left, dict) and isinstance(right, dict):
-        return left.keys() == right.keys() and all(_json_equal(left[key], right[key]) for key in left)
+        return left.keys() == right.keys() and all(_is_json_equal(left[key], right[key]) for key in left)
     if isinstance(left, list) and isinstance(right, list):
-        return len(left) == len(right) and all(_json_equal(a, b) for a, b in zip(left, right))
+        return len(left) == len(right) and all(_is_json_equal(a, b) for a, b in zip(left, right))
     return left == right
 
 
-def _format_only_outputs(artifacts, earlier, execution):
-    def retained(output):
+def _validate_format_only_outputs(artifacts, earlier, execution):
+    def parse_retained_output(output):
         data = artifacts.read(output["artifact"])
         is_json = is_json_media_type(output["artifact"]["media_type"])
         return output, data, is_json, strict_json(data) if is_json else None
 
     try:
-        originals = [retained(output) for output in earlier["payload"]["outputs"]]
-        converted = [retained(output) for output in execution["outputs"]]
+        originals = [parse_retained_output(output) for output in earlier["payload"]["outputs"]]
+        converted = [parse_retained_output(output) for output in execution["outputs"]]
     except ResearchError as error:
         if error.code != "invalid_json":
             raise
@@ -952,7 +952,7 @@ def _format_only_outputs(artifacts, earlier, execution):
                 continue
             if output["id"] in by_id and original["id"] != output["id"]:
                 continue
-            if data == old_data or is_json and old_json and _json_equal(value, old_value):
+            if data == old_data or is_json and old_json and _is_json_equal(value, old_value):
                 matches.append(original["id"])
         if not matches:
             raise ResearchError("format_only_output_mismatch",
@@ -986,7 +986,7 @@ that run. An idempotent admission response retains its original reservation.
             raise ResearchError("plan_digest_mismatch", "Admit the exact immutable plan the launcher will execute")
         account = records["strategy_account"][plan["strategy_key"]]
         require_accounted_usage(records, artifacts, plan["strategy_key"])
-        earlier = _format_only_execution(records, artifacts, plan, value)
+        earlier = _resolve_format_only_execution(records, artifacts, plan, value)
         if earlier is None:
             _validate_reopening(context, plan["payload"], account)
         if not context.verify_plan_dependencies(plan, format_only=earlier is not None):
@@ -1044,7 +1044,7 @@ def validate_admitted_execution(records, artifacts, admission_id):
             raise ResearchError("research_decision_stale", "The admitted execution must retain its exact reviewed decision")
     account = records["strategy_account"][plan["strategy_key"]]
     require_accounted_usage(records, artifacts, plan["strategy_key"])
-    earlier = _format_only_execution(records, artifacts, plan, admission)
+    earlier = _resolve_format_only_execution(records, artifacts, plan, admission)
     if earlier is None:
         _validate_reopening(context, plan["payload"], account)
     if not context.verify_plan_dependencies(plan, format_only=earlier is not None):
@@ -1138,9 +1138,9 @@ def record_execution(store, payload, *, expected_revision, request_id, _observat
         # Completed output recording must work after policy/literature changes:
         # it preserves actual history, which a fresh assessment may revalidate.
         _execution_artifacts(artifacts, value)
-        earlier = _format_only_execution(records, artifacts, plan, admission) if admission else None
+        earlier = _resolve_format_only_execution(records, artifacts, plan, admission) if admission else None
         if earlier is not None:
-            _format_only_outputs(artifacts, earlier, value)
+            _validate_format_only_outputs(artifacts, earlier, value)
         probe_origins = find_probe_artifact_origins(records, [output["artifact"] for output in value["outputs"]], artifacts=artifacts)
         if probe_origins and admission:
             from .execution_evidence import validate_probe_execution_observation
