@@ -964,10 +964,9 @@ repository.
 
 ### RED and GREEN evidence
 
-The RED evidence is `.lane-logs/red-0601.log`, the failing run on 0.60.0 (`4127fc5`), kept in the record named
-at the top of this section as `logs/lane-a-0601/red-4127fc5.log`. All three new tests of
-`tests/test_problem_direction_after_refutation.py` failed there, with three failures. The GREEN evidence is
-the passing run on the release branch.
+The RED evidence is the failing run on 0.60.0 (`4127fc5`) in `logs/lane-a-0601/red-4127fc5.log` of the record named
+at the top of this section. All three new tests of `tests/test_problem_direction_after_refutation.py` failed there,
+with three failures. The GREEN evidence is the passing run on the release branch.
 
 | Test | On 4127fc5 | On the branch |
 | --- | --- | --- |
