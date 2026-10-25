@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.61.0](docs/releases/0.61.0.md) reads PDFs served as `binary/octet-stream` and the article body of a
+PubMed Central page. Review delivery and its projection agree on media-type spellings while earlier reviews still
+authenticate. A session started for one assignment can stop inside an autopilot study without changing its counter.
+The full-text reference states how redirects and retries count against the request budget.
+
 Version [0.60.1](docs/releases/0.60.1.md) repairs the threshold checks of a posted statement's self-assessment and
 result reviews graded before the admission item A7, direction after a refutation. Their below-threshold shortfalls
 are listed again, and a current focused adjudication can release the shortfall of a review. The behavior for a
@@ -601,6 +606,7 @@ nothing.
 | `EXACTORY_API_KEY` | API key, sent as a Bearer token. Optional: it wins over the file that `exactory login` writes. | none |
 | `EXACTORY_API_URL` | API base URL. | `https://www.exactory.ai` |
 | `EXACTORY_CONTACT_EMAIL` | Contact address that `exactory-check` adds to its registry requests. | none |
+| `EXACTORY_ASSIGNED_SESSION` | Any nonempty value marks a session that was started for one assignment inside a study directory, such as a code review in `reviews/`. While a study is on autopilot, is not at its final stage (`complete`) and has no `waiting` reason, its Stop hook asks every session that stops inside the study to continue the study, up to a cap; it lets a marked session stop and does not count that stop. Set it when the session's CLI is started, and not for the session that coordinates the study. | none |
 | `ZENODO_SANDBOX_TOKEN` | Zenodo sandbox token, used for test deposits. | none |
 | `ZENODO_TOKEN` | Zenodo production token, used for real deposits. | none |
 

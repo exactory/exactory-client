@@ -228,11 +228,12 @@ def _compact_link(link):
 
 
 def _html_assets(records, artifacts, work, capture):
+    from .fulltext import base_media_type
     from .html_visuals import _VisualMarkup, resource_inventory, validate_visual
     from .source_links import span_locator
     from .visual_assets import current_asset
     original = capture['original']
-    if original['media_type'] not in ('text/html', 'application/xhtml+xml'):
+    if base_media_type(original['media_type']) not in ('text/html', 'application/xhtml+xml'):
         return [], []
     content = artifacts.read(original).decode('utf-8')
     parser = _VisualMarkup(content)

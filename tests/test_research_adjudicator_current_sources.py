@@ -115,6 +115,24 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
             self.assertFalse(saved_state["ready"])
             self.assertIn("review_current_source_incomplete", {row["code"] for row in saved_state["obligations"]})
 
+    def test_recorded_text_units_follow_the_original_construction_decision(self):
+        from research_harness import review_adjudicator_sources as current
+        _, original = self.prepare_current_comparator()
+        data = b"%PDF-1.4\nAn authored ASCII source unit.\n%%EOF\n"
+        for media in ("Binary/Octet-Stream", "binary/octet-stream; charset=utf-8",
+                      "APPLICATION/OCTET-STREAM", "Application/PDF"):
+            frozen = copy.deepcopy(original)
+            reference = self.artifacts.put(data, media)
+            manifest = frozen["current_source_delivery"]
+            manifest["required_units"][0]["artifact"] = reference
+            manifest["sources"][0]["evidence"].append(reference)
+            frozen["current_evidence"].append(reference)
+            frozen["evidence"].append({'artifact': reference, 'encoding': 'utf-8', 'content': data.decode()})
+            request = {"input": [{"role": "user", "content": transport.PACKET_LABEL + json.dumps(frozen)}]}
+            with self.subTest(media=media):
+                current.validate(self.artifacts, frozen)
+                current.validate_request(self.artifacts, frozen, request)
+
     def test_binary_units_require_actual_attachments_but_original_provenance_alone_does_not(self):
         from research_harness import review_adjudicator_sources as current
         assignment, frozen = self.prepare_current_comparator()

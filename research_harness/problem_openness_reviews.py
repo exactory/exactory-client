@@ -115,7 +115,7 @@ def required_evidence(artifacts, packet, native):
 
 def actual_delivery(records, artifacts, state, packet, required):
     """Inspect the authenticated current request, including its exact binary attachments."""
-    from .review_input_projection import collect_attachments, find_attachment
+    from .review_input_projection import collect_attachments, find_attachment, project_evidence
     from .review_transport import PACKET_LABEL
     attempt = records["review_attempt"][state["attempt_id"]]
     request = strict_json(artifacts.read(attempt["request"]))
@@ -144,6 +144,7 @@ def actual_delivery(records, artifacts, state, packet, required):
         require(actual.get("scientific_context", {}).get("openness_delivery") == packet["scientific_context"]["openness_delivery"],
                 "The actual request must retain the exact source representation contract", UNDELIVERED)
     entries = {row["digest"]: row for row in packet["evidence"]}
+    project_evidence(supplied, attachments)
     supplied_entries = supplied.get("evidence", [])
     for identity in required:
         require(identity in entries, "The openness packet must retain every scientific dependency", MISSING, digest=identity)

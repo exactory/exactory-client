@@ -15,6 +15,7 @@ from html.parser import HTMLParser
 from urllib.parse import unquote_to_bytes, urldefrag, urljoin
 
 from .errors import ResearchError
+from .fulltext import base_media_type
 from .http import safe_url
 from .jpeg import validate_jpeg
 from .raster_containers import validate_gif, validate_png, validate_webp
@@ -34,6 +35,7 @@ def _unsupported_style(value):
 
 def validate_visual(data, media_type):
     """Validate a supported byte container; this does not prove its meaning."""
+    media_type = base_media_type(media_type)
     valid = False
     if media_type == "image/png":
         validate_png(data)

@@ -15,6 +15,7 @@ from research_harness import review_transport as transport
 from research_harness.acquisition import acquire_fulltext
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
+from research_harness.review_input_projection import packets_from_request
 
 # A PDF carries a binary comment after its header, so its bytes are not valid UTF-8.
 BINARY_PDF = b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n% Authored fixture for injected extraction.\n%%EOF\n"
@@ -22,6 +23,9 @@ ASCII_PDF = b"%PDF-1.4\n% An ASCII-only authored fixture.\n%%EOF\n"
 RESPONSES = {'id': 'route-api', 'adapter': 'openai_responses_v1', 'model': 'gpt-6',
              'endpoint': 'https://api.example.test/v1/responses',
              'configuration': {'max_output_tokens': 20000, 'timeout_seconds': 600}}
+TEXT_ONLY = {'id': 'route-text', 'adapter': 'claude_cli_v1', 'model': 'fixture-model',
+             'endpoint': 'claude://local',
+             'configuration': {'effort': 'high', 'max_output_tokens': 20000, 'timeout_seconds': 600}}
 
 
 class GenericBinaryEvidenceTests(unittest.TestCase):
@@ -29,6 +33,92 @@ class GenericBinaryEvidenceTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.store = ArtifactStore(Path(directory.name))
+
+    def check_construction_and_projection(self, data, media, attached_type, text_only):
+        reference = self.store.put(data, media)
+        with patch.dict('os.environ', {transport.TEXT_ONLY_DELIVERY_VARIABLE: '0'}):
+            try:
+                with transport.text_only_delivery(text_only):
+                    entry, = protocol._evidence(self.store, {'cited': reference})
+            except ResearchError as error:
+                self.fail(f"A media-type spelling must not make evidence unreadable: {error.code}")
+        packet = {'protocol': 'exactory-problem-review-v2', 'role': 'result', 'reviewer_id': 'first',
+                  'dossier_id': None, 'subject': {'kind': 'problem', 'statement_id': 'statement-1'},
+                  'digest': '1' * 64, 'evidence': [entry]}
+        request = transport.request_body(TEXT_ONLY if text_only else RESPONSES, 'Review.', packet)
+        projected, = packets_from_request(request, native_attachments=not text_only)
+        actual, = projected['evidence']
+        self.assertEqual(reference['media_type'], media)
+        self.assertEqual(entry['artifact'], reference)
+        self.assertEqual(actual['artifact'], reference)
+        self.assertEqual(self.store.read(reference), data)
+        if attached_type is None:
+            self.assertEqual((entry['encoding'], entry['content']), ('utf-8', data.decode()))
+            self.assertEqual((actual['encoding'], actual.get('content')), ('utf-8', data.decode()))
+            self.assertIsInstance(request['input'][-1]['content'], str)
+        elif text_only:
+            self.assertEqual((entry['encoding'], entry['content']), ('omitted', ''))
+            self.assertEqual(entry['delivery'], 'bytes-omitted-on-text-route')
+            self.assertEqual(actual['encoding'], 'omitted')
+            self.assertNotIn('content', actual)
+            self.assertNotIn(base64.b64encode(data).decode('ascii'), json.dumps(request))
+        else:
+            encoded = base64.b64encode(data).decode('ascii')
+            self.assertEqual((entry['encoding'], entry['content']), ('base64', encoded))
+            self.assertEqual((actual['encoding'], actual.get('content')), ('base64', encoded))
+            parts = request['input'][-1]['content']
+            self.assertEqual(len(parts), 2)
+            kind = 'input_file' if attached_type == 'application/pdf' else 'input_image'
+            key = 'file_data' if kind == 'input_file' else 'image_url'
+            self.assertEqual(parts[1]['type'], kind)
+            self.assertEqual(parts[1][key], 'data:' + attached_type + ';base64,' + encoded)
+            serialized = json.loads(parts[0]['text'][len(transport.PACKET_LABEL):])
+            self.assertEqual(serialized['evidence'][0]['artifact'], reference)
+
+    def test_generic_binary_media_spellings_agree_from_construction_through_projection(self):
+        for media in ('application/octet-stream', 'binary/octet-stream', 'Binary/Octet-Stream',
+                      'binary/octet-stream; charset=utf-8', 'APPLICATION/OCTET-STREAM'):
+            for data, attached_type in ((ASCII_PDF, 'application/pdf'), (BINARY_PDF, 'application/pdf'),
+                                        (b'An authored non-PDF UTF-8 body.', None)):
+                for text_only in (False, True):
+                    with self.subTest(media=media, data=data, text_only=text_only):
+                        if media not in ('application/octet-stream', 'binary/octet-stream'):
+                            if data == BINARY_PDF:
+                                self.check_unreadable_evidence(data, media, text_only)
+                                continue
+                            attached_type = None
+                        self.check_construction_and_projection(data, media, attached_type, text_only)
+
+    def test_declared_pdf_media_spellings_agree_from_construction_through_projection(self):
+        for media in ('application/pdf', 'Application/PDF', 'APPLICATION/PDF; version=1.7'):
+            for data in (ASCII_PDF, BINARY_PDF):
+                for text_only in (False, True):
+                    with self.subTest(media=media, data=data, text_only=text_only):
+                        if media != 'application/pdf' and data == BINARY_PDF:
+                            self.check_unreadable_evidence(data, media, text_only)
+                        else:
+                            attached_type = 'application/pdf' if media == 'application/pdf' else None
+                            self.check_construction_and_projection(data, media, attached_type, text_only)
+
+    def check_unreadable_evidence(self, data, media, text_only):
+        reference = self.store.put(data, media)
+        with patch.dict('os.environ', {transport.TEXT_ONLY_DELIVERY_VARIABLE: '0'}):
+            with transport.text_only_delivery(text_only), self.assertRaises(ResearchError) as raised:
+                protocol._evidence(self.store, {'cited': reference})
+        self.assertEqual(raised.exception.code, 'review_evidence_unreadable')
+        self.assertEqual(reference['media_type'], media)
+
+    def test_image_media_spellings_agree_from_construction_through_projection(self):
+        image = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2'
+                                 'FzhVAAAAAElFTkSuQmCC')
+        for media in ('image/png', 'image/PNG', 'image/png; profile=fixture',
+                      'Image/PNG', 'IMAGE/PNG; profile=fixture'):
+            for text_only in (False, True):
+                with self.subTest(media=media, text_only=text_only):
+                    if media.startswith('image/'):
+                        self.check_construction_and_projection(image, media, media, text_only)
+                    else:
+                        self.check_unreadable_evidence(image, media, text_only)
 
     def test_text_only_route_withholds_a_generic_binary_pdf_like_a_declared_pdf(self):
         for index, data in enumerate((BINARY_PDF, ASCII_PDF)):
@@ -69,6 +159,36 @@ class GenericBinaryEvidenceTests(unittest.TestCase):
                 with self.assertRaises(ResearchError) as raised:
                     protocol._evidence(self.store, {'cited': reference})
                 self.assertEqual(raised.exception.code, 'review_evidence_unreadable')
+
+    def test_binary_octet_stream_pdf_is_withheld_on_a_text_only_route(self):
+        for data in (ASCII_PDF, BINARY_PDF):
+            with self.subTest(data=data):
+                reference = self.store.put(data, 'binary/octet-stream')
+                try:
+                    with transport.text_only_delivery(True):
+                        entry, = protocol._evidence(self.store, {'cited': reference})
+                except ResearchError as error:
+                    self.fail(f"A generic binary PDF should be withheld without refusing delivery: {error.code}")
+                self.assertEqual(entry['artifact'], reference)
+                self.assertEqual(entry['encoding'], 'omitted')
+                self.assertEqual(entry['delivery'], 'bytes-omitted-on-text-route')
+                self.assertEqual(entry['content'], '')
+
+    def test_binary_octet_stream_pdf_is_attached_as_pdf_without_relabeling_its_descriptor(self):
+        for data in (ASCII_PDF, BINARY_PDF):
+            with self.subTest(data=data):
+                reference = self.store.put(data, 'binary/octet-stream')
+                try:
+                    entry, = protocol._evidence(self.store, {'cited': reference})
+                except ResearchError as error:
+                    self.fail(f"A generic binary PDF should be attached as PDF: {error.code}")
+                self.assertEqual(entry['encoding'], 'base64')
+                request = transport.request_body(RESPONSES, 'Review.', {'evidence': [entry]})
+                content = request['input'][-1]['content']
+                self.assertEqual(content[1]['file_data'],
+                                 'data:application/pdf;base64,' + base64.b64encode(data).decode('ascii'))
+                delivered = json.loads(content[0]['text'][len(transport.PACKET_LABEL):])['evidence'][0]
+                self.assertEqual(delivered['artifact'], reference)
 
 
 class GenericBinarySourceDeliveryTests(StrategyCase):

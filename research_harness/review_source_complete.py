@@ -69,7 +69,8 @@ def selection(records, artifacts, deliveries):
             _native_alternative(records, artifacts, request['version_id'], row)
         eligible = [row for row in choices if row['main_representation'] and not row['source_scope_pending']]
         _require(bool(eligible), 'A requested complete source needs a complete authenticated main representation')
-        choice = min(eligible, key=lambda row: (row['original_descriptor']['media_type'] != 'application/pdf', row['source_id']))
+        choice = min(eligible, key=lambda row: (
+            row['original_descriptor']['media_type'] != 'application/pdf', row['source_id']))
         selected = choice['extraction_descriptor']['sha256']
         original = choice['original_descriptor']['sha256']
         protected.update((selected, original))
@@ -225,10 +226,12 @@ def validate(records, artifacts, assignment, packet):
 
 
 def _complete(entry):
+    from .review_transport import is_binary_evidence
     _require(entry is not None and entry.get('encoding') == 'utf-8' and isinstance(entry.get('content'), str),
              'Supply every selected complete source and required scientific artifact')
     data = entry['content'].encode('utf-8')
     reference = entry['artifact']
+    _require(not is_binary_evidence(data, reference['media_type']), 'Binary originals require native delivery')
     _require(len(data) == reference['size'] and hashlib.sha256(data).hexdigest() == reference['sha256'],
              'Complete supplied bytes must match their exact artifact size and digest')
     return entry['content']

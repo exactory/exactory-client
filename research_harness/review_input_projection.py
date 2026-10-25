@@ -6,6 +6,7 @@ import hashlib
 
 from . import review_transport as transport
 from .errors import ResearchError
+from .fulltext import detect_media_type
 from .workspace import strict_json
 
 
@@ -33,12 +34,15 @@ def collect_attachments(parts):
 def find_attachment(attached, reference):
     """The base64 body of an actual attachment of exactly the descriptor's bytes, attached as the media type that
     request construction attaches for the descriptor: a PDF reported as generic binary is attached as a PDF."""
-    from .fulltext import detect_media_type
     found = attached.get((reference.get('size'), reference.get('sha256')))
     if found is None:
         return None
     media, encoded, data = found
-    return encoded if media == detect_media_type(data, reference.get('media_type'))[0] else None
+    reported = reference.get('media_type')
+    if not isinstance(reported, str) or not transport.is_binary_evidence(data, reported):
+        return None
+    expected, _ = detect_media_type(data, reported)
+    return encoded if media == expected else None
 
 
 def _require_problem_packet(packet):
@@ -61,24 +65,36 @@ def _require_problem_packet(packet):
         raise ResearchError('review_input_unreadable', 'Use a native problem review packet with its exact identity')
 
 
-def _binary(reference):
-    media = reference.get('media_type')
-    if not isinstance(media, str):
-        raise ResearchError('review_input_unreadable', 'Evidence requires an explicit native media type')
-    media = media.split(';', 1)[0].strip().lower()
-    return media in ('application/pdf', 'application/octet-stream') or media.startswith('image/')
-
-
-def _is_delivered_text(reference, content):
-    """Whether request construction delivered these exact bytes as text: a body reported as generic binary is text
-    unless its bytes carry the PDF signature."""
-    from .fulltext import detect_media_type
-    data = content.encode('utf-8')
-    media = reference.get('media_type')
-    media = media.split(';', 1)[0].strip().lower() if isinstance(media, str) else None
-    return (media == 'application/octet-stream' and len(data) == reference.get('size')
-            and hashlib.sha256(data).hexdigest() == reference.get('sha256')
-            and detect_media_type(data, 'application/octet-stream')[0] == 'application/octet-stream')
+def project_evidence(packet, attached):
+    """Retain exact text or native attachments using construction's reported-type and byte decisions."""
+    for entry in packet.get('evidence', []):
+        if not isinstance(entry, dict) or not isinstance(entry.get('artifact'), dict):
+            raise ResearchError('review_input_unreadable', 'Evidence entries require native artifact descriptors')
+        reference = entry['artifact']
+        media = reference.get('media_type')
+        if not isinstance(media, str):
+            raise ResearchError('review_input_unreadable', 'Evidence requires an explicit native media type')
+        content = entry.get('content')
+        if (entry.get('encoding') == 'omitted' and content == ''
+                and entry.get('delivery') != 'bytes-omitted-on-text-route'):
+            continue
+        if entry.get('encoding') == 'utf-8' and isinstance(content, str):
+            data = content.encode('utf-8')
+            exact = (len(data) == reference.get('size')
+                     and hashlib.sha256(data).hexdigest() == reference.get('sha256'))
+            if not transport.is_binary_evidence(data, media) and (exact or not content):
+                # Empty bodies retain existing omission/containment markers without supplying bytes.
+                continue
+        elif entry.get('encoding') != 'base64' and not transport.is_binary_evidence(b'', media):
+            if entry.get('delivery') != 'bytes-omitted-on-text-route':
+                continue
+        entry.pop('content', None)
+        content = find_attachment(attached, reference) if entry.get('delivery') == 'attached-exact-bytes' else None
+        if content is not None:
+            entry.update(content=content, encoding='base64')
+        else:
+            entry['encoding'] = 'omitted'
+            entry['delivery'] = 'bytes-absent-from-actual-native-input'
 
 
 def packets_from_request(request, *, native_attachments=False):
@@ -112,22 +128,7 @@ def packets_from_request(request, *, native_attachments=False):
         repeated = {'delivery': 'repeated-in-the-current-packet', 'note': transport.REPEATED_PART_NOTE}
         packet = {key: value for key, value in packet.items() if value != repeated}
         attached = collect_attachments(parts) if native_attachments else {}
-        for entry in packet.get('evidence', []):
-            if not isinstance(entry, dict) or not isinstance(entry.get('artifact'), dict):
-                raise ResearchError('review_input_unreadable', 'Evidence entries require native artifact descriptors')
-            reference = entry['artifact']
-            if entry.get('encoding') != 'base64' and not _binary(reference):
-                continue
-            if (entry.get('encoding') == 'utf-8' and isinstance(entry.get('content'), str)
-                    and _is_delivered_text(reference, entry['content'])):
-                continue
-            entry.pop('content', None)
-            content = find_attachment(attached, reference) if entry.get('delivery') == 'attached-exact-bytes' else None
-            if content is not None:
-                entry.update(content=content, encoding='base64')
-            else:
-                entry['encoding'] = 'omitted'
-                entry['delivery'] = 'bytes-absent-from-actual-native-input'
+        project_evidence(packet, attached)
         packets.append(packet)
     return packets
 

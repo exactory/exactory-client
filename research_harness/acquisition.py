@@ -58,7 +58,8 @@ url, original/text artifacts, availability (available|pending), extraction_statu
 includes_abstract, visual_inspection_required, and extraction (extractor, version,
 media_type, format_detection, options, and the measures of the extracted text).
 media_type is the type the extraction used and format_detection names how it was
-decided, so a PDF served as application/octet-stream is identifiable afterwards.
+decided, so a PDF served as application/octet-stream or binary/octet-stream is
+identifiable afterwards.
 A capture with different extraction options is a distinct capture of the same
 original. Missing bytes, extraction or exact-version agreement remain pending.
 All PDF/HTML captures retain a separate visual inspection obligation for
@@ -74,10 +75,10 @@ import copy
 import re
 from datetime import date, datetime, timedelta, timezone
 
-from .artifacts import ArtifactStore
+from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
-from .fulltext import extract, extraction_measures
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES, base_media_type, extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, normalize_identifier, version_of
 from .imports import parse_mapped
@@ -600,7 +601,8 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
     http, artifacts = http or HttpClient(), ArtifactStore(store.root)
     attempts, pending, extracted, observed_identifier = [], [], None, None
     try:
-        response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml", "application/octet-stream"), budget=budget,
+        response = http.get(url, accept=("application/pdf", "text/html", "application/xhtml+xml",
+                                         *sorted(GENERIC_BINARY_MEDIA_TYPES)), budget=budget,
                             not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
         if component is None and identifier.startswith("arxiv:"):
@@ -671,8 +673,14 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
     except (TypeError, ValueError, AttributeError) as error:
         raise ResearchError("invalid_import", "Import capture time must contain an explicit timezone") from error
     if provider in ("web", "mcp"):
-        if media_type not in ("application/json", "text/plain", "text/html"):
+        if base_media_type(media_type) not in ("application/json", "text/plain", "text/html"):
             raise ResearchError("invalid_import", "Web/MCP import must declare JSON, text or HTML media type")
+        try:
+            describe_artifact(response, media_type)
+        except ResearchError as error:
+            raise ResearchError("invalid_import",
+                                "Import media type must have no whitespace around type/subtype, "
+                                "and the text after a semicolon must be non-empty printable ASCII") from error
         page = parse_mapped(response, media_type, mappings)
     else:
         adapter = _provider(provider)
@@ -688,6 +696,8 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
     attempts = [{"url": source_url, "captured_at": captured_at, "status": 200,
                  "headers": {"content-type": media_type}, "body": response, "complete": True, "error": None}]
     sources = prepare_sources(artifacts, attempts, provider, request_id)
+    if provider in ("web", "mcp"):
+        sources[0]["response"] = artifacts.put(response, media_type)
     sources[0]["http_status"] = None
     sources[0]["imported"] = True
     sources[0].update({"capture_method": "external_import", "content_scope": "tool_response" if provider in ("web", "mcp") else "provider_response",
