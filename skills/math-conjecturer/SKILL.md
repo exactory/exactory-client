@@ -483,9 +483,12 @@ states the exact rule.
    review. The harness continues that review in the same session and slot on the current
    template; its packet carries `problem_refresh` with the previous and the current template,
    under the reason `prompt_contract_changed`, or `evidence_undelivered` when that review also
-   cites content its packets did not deliver. The gate lists below-threshold shortfalls only
-   for grades that cover A7. Bars on `exactory-problem-review-v2/bar` and slate reviews on
-   `exactory-problem-review-v2/slate` stay valid and are not reassigned for A7 alone
+   cites content its packets did not deliver. While `problem_rubric_regrade_required` is listed,
+   the gate does not list the below-threshold shortfalls of the records it names. For a posted
+   statement, the gate lists no `problem_rubric_regrade_required`. It checks a self-assessment
+   or a result review graded without A7 against the items it grades and lists its shortfalls as
+   `problem_rubric_below_threshold`. Bars on `exactory-problem-review-v2/bar` and slate reviews
+   on `exactory-problem-review-v2/slate` stay valid and are not reassigned for A7 alone
    (`review_resampling_forbidden`); a version 1 bar still needs its calibration refresh
    (`problem_bar_calibration_required`), a slate review is refreshed when its candidates or bars
    change, and a bar or a slate review is refreshed to repair `review_evidence_undelivered`.

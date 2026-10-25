@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.60.1](docs/releases/0.60.1.md) repairs the threshold checks of a posted statement's self-assessment and
+result reviews graded before the admission item A7, direction after a refutation. Their below-threshold shortfalls
+are listed again, and a current focused adjudication can release the shortfall of a review. The behavior for a
+statement not yet posted is unchanged.
+
 Version [0.60.0](docs/releases/0.60.0.md) makes problem selection after a refutation an absolute principle: choose
 questions about the world the refutation reveals. It adds the admission item A7, direction after a refutation,
 and version 5 review templates. Earlier assessments and result reviews that lack A7 must be graded again before

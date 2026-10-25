@@ -954,3 +954,25 @@ releases apart from the runtime fields and the elapsed time. All three statement
   subsections fixes: the location of the RED log and the missing release runs.
 
 The prompts and the answers are in the record named at the top of this section.
+
+## Release 0.60.1
+
+0.60.1 repairs the threshold checks of a posted statement's self-assessment and result reviews graded before
+the admission item A7, direction after a refutation. The branch `release/0.60.1` starts at `4127fc5` (0.60.0),
+and its record is `misc/harness-improvement/20261024093334-problem-choice-after-refutation` of the exactory
+repository.
+
+### RED and GREEN evidence
+
+The RED evidence is `.lane-logs/red-0601.log`, the failing run on 0.60.0 (`4127fc5`), kept in the record named
+at the top of this section as `logs/lane-a-0601/red-4127fc5.log`. All three new tests of
+`tests/test_problem_direction_after_refutation.py` failed there, with three failures. The GREEN evidence is
+the passing run on the release branch.
+
+| Test | On 4127fc5 | On the branch |
+| --- | --- | --- |
+| `test_posted_previous_self_assessment_lists_its_shortfall` | FAIL | OK |
+| `test_posted_previous_result_reviews_list_their_shortfalls` | FAIL | OK |
+| `test_posted_previous_rubric_adjudication_releases_only_its_review` | FAIL | OK |
+
+The release runs are recorded below.
