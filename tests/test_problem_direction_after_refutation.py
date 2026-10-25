@@ -225,6 +225,55 @@ class ProblemDirectionTests(ProblemDeliveryCase):
         posted['problem_post'] = {'posted': {'statement_digest': self.load_problem_module().compute_statement_digest(self.selected)}}
         self.assertEqual(decisions.assess_problem_reviews(posted, self.artifacts)['obligations'], [])
 
+    def test_posted_previous_self_assessment_lists_its_shortfall(self):
+        self.prepare_previous_record()
+        claims = self.load_problem_module()
+        posted = copy.deepcopy(self.store.snapshot()['records'])
+        posted['problem_post'] = {'posted': {'statement_digest': claims.compute_statement_digest(self.selected)}}
+        posted['problem_assessment']['assessment-1']['grades']['admission']['A1'] = 'fail'
+        reviews = decisions.assess_problem_reviews(posted, self.artifacts)
+        self.assertNotIn('problem_rubric_regrade_required', [row['code'] for row in reviews['obligations']])
+        pending = claims.assess_assessment(posted, self.artifacts)
+        self.assertEqual([(row['code'], row['source'], row['assessment_id'], row['shortfalls']) for row in pending], [
+            ('problem_rubric_below_threshold', 'self', 'assessment-1',
+             [{'item': 'A1', 'required': 'pass', 'graded': 'fail'}])])
+
+    def test_posted_previous_result_reviews_list_their_shortfalls(self):
+        self.prepare_previous_record(failed_item='A1')
+        posted = copy.deepcopy(self.store.snapshot()['records'])
+        claims = self.load_problem_module()
+        posted['problem_post'] = {'posted': {'statement_digest': claims.compute_statement_digest(self.selected)}}
+        report = decisions.assess_problem_reviews(posted, self.artifacts)
+        self.assertNotIn('problem_rubric_regrade_required', [row['code'] for row in report['obligations']])
+        below = [row for row in report['obligations'] if row['code'] == 'problem_rubric_below_threshold']
+        self.assertEqual(sorted((row['source'], row['review_id'], row['shortfalls']) for row in below), [
+            ('review', identifier, [{'item': 'A1', 'required': 'pass', 'graded': 'fail'}])
+            for identifier in ('review-result-first', 'review-result-second')])
+
+    def test_posted_previous_rubric_adjudication_releases_only_its_review(self):
+        self.prepare_previous_record(failed_item='A1')
+        report = decisions.assess_problem_reviews(self.store.snapshot()['records'], self.artifacts)
+        assignment = self.assign('adjudicator', 'focused-third', identifier='posted-focused',
+            review_ids=report['review_ids'], objection_id='rubric:review-result-first:A1')
+        output = {'objection_id': 'rubric:review-result-first:A1', 'disposition': 'not_upheld',
+            'reason': 'The delivered statement is precise and has exact resolution criteria.',
+            'evidence': [self.supporting], 'correction_admissible': None}
+        with patch.object(transport, 'send_request', return_value=self.build_provider_response(output)):
+            self.mutate(protocol.invoke_assignment,
+                {'id': 'posted-focused-attempt', 'assignment_id': assignment['id']}, credential='test-only')
+        self.mutate(protocol.record_adjudication, dict(output, id='posted-finding', assignment_id=assignment['id']))
+        posted = copy.deepcopy(self.store.snapshot()['records'])
+        state = protocol.adjudication_state(posted, self.artifacts, 'posted-finding')
+        self.assertTrue(state['ready'], state['obligations'])
+        self.assertEqual(state['disposition'], 'not_upheld')
+        claims = self.load_problem_module()
+        posted['problem_post'] = {'posted': {'statement_digest': claims.compute_statement_digest(self.selected)}}
+        after = decisions.assess_problem_reviews(posted, self.artifacts)
+        self.assertNotIn('problem_rubric_regrade_required', [row['code'] for row in after['obligations']])
+        below = [row for row in after['obligations'] if row['code'] == 'problem_rubric_below_threshold']
+        self.assertEqual([(row['source'], row['review_id'], row['shortfalls']) for row in below], [
+            ('review', 'review-result-second', [{'item': 'A1', 'required': 'pass', 'graded': 'fail'}])])
+
     def test_previous_records_still_refuse_other_admission_item_sets(self):
         self.prepare_previous_record()
         records = self.store.snapshot()['records']

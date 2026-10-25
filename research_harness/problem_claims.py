@@ -148,6 +148,7 @@ def record_assessment(store, payload, *, expected_revision, request_id):
 
 
 def assess_assessment(records, artifacts):
+    from .problem_delivery import find_post
     assessment, statement = find_assessment(records), find_current_statement(records)
     statement_id = None if statement is None else statement["id"]
     if assessment is None:
@@ -157,7 +158,7 @@ def assess_assessment(records, artifacts):
         pending.append(obligation("problem_assessment_stale", "Record a new self-assessment for the current statement.",
                                   assessment_id=assessment["id"], statement_id=statement_id))
     problem_rubric.validate_grades(assessment["grades"], allow_previous=True)
-    if problem_rubric.was_graded_before_a7(assessment["grades"]):
+    if problem_rubric.was_graded_before_a7(assessment["grades"]) and find_post(records, statement) is None:
         return pending
     shortfalls = problem_rubric.assess_grades(assessment["grades"])
     if shortfalls:
