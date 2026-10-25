@@ -333,6 +333,48 @@ def export_packet(controller, spec):
                 "subject_digest": value["subject_digest"], "claim_digest": value["claim_digest"]}
 
 
+def packet_context_drift(supplied, expected, state):
+    """Allow only unrelated local completion during an independent standalone review.
+
+    Reconstruct the earlier inventory from unchanged admissions and the supplied
+    live statuses. Every other packet field, including the full evidence closure,
+    must still match. A local finish is not proof acceptance or a new finding.
+    """
+    if supplied == expected:
+        return []
+    subject = expected["subject"]
+    independent = (expected["kind"] == "proposal" and subject["category"] == "standalone"
+                   and subject["relationship"] == "standalone" and subject["anchor"]["kind"] == "objective"
+                   and subject["native_parent"] is None and subject["logical_predecessor"] is None
+                   and not subject["equivalent_node_ids"] and not subject["inherited_evidence"]
+                   and not subject["inherited_assumption_ids"] and not subject["claim"]["assumption_ids"]
+                   and subject["budget"]["mode"] == "new")
+    comparable = copy.deepcopy(expected)
+    drift = []
+    old_nodes = supplied["scientific_context"].get("nodes")
+    if independent and isinstance(old_nodes, list):
+        from .strategy_refresh import inventory
+        earlier = dict(state, nodes=copy.deepcopy(state["nodes"]))
+        context = comparable["scientific_context"]
+        for index, (old, node) in enumerate(zip(old_nodes, context["nodes"])):
+            if (not isinstance(old, dict) or old.get("id") != node["id"] or node["status"] != "finished"
+                    or old.get("status") not in ("admitted", "active", "waiting", "result_ready")
+                    or s.claim_identity(node["claim"]) == s.claim_identity(subject["claim"])):
+                continue
+            drift.append({"path": "/scientific_context/nodes/{}/status".format(index),
+                          "from": old["status"], "to": node["status"]})
+            node["status"] = old["status"]
+            earlier["nodes"][node["id"]]["status"] = old["status"]
+        previous_strategies = inventory(earlier)
+        if previous_strategies != context["current"]["strategies"]:
+            drift.append({"path": "/scientific_context/current/strategies",
+                          "from": previous_strategies, "to": context["current"]["strategies"]})
+            context["current"]["strategies"] = previous_strategies
+    s.require(supplied == comparable,
+              "The reviewer packet omits or changes required native scientific evidence", "review_packet_mismatch")
+    return sorted(drift, key=lambda row: row["path"])
+
+
 def require_review(root, state, content, value, *, subject=None, new=False, common_guard=None):
     """Check actual invocation and exact native evidence, not self-attestation."""
     from research_harness.artifacts import ArtifactStore
@@ -375,7 +417,9 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             minimum = value.get("findings", {}).get("openness", {}).get("minimum")
             expected = packet(root, state, content, subject, kind(value), value.get("claim_digest"), value["reviewer"], artifacts,
                               openness=minimum, common_records=records)
-            s.require(supplied == expected, "The reviewer packet omits or changes required native scientific evidence", "review_packet_mismatch")
+            drift = packet_context_drift(supplied, expected, state)
+            if drift:
+                current = dict(current, context_drift=drift)
         for entry in supplied["evidence"]:
             artifacts.read(entry["artifact"])
         if supplied["kind"] == "result" and value.get("schema_version") == 2:
@@ -461,8 +505,12 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
         new_review = s.digest(value) not in recorded_reviews
         if new_review:
             prepare_subject(controller, state, content, subject)
-        require_review(controller.root, state, content, value, subject=subject,
-                       new=new_review or command in {"accept", "complete"}, common_guard=guard)
+        checked = require_review(controller.root, state, content, value, subject=subject,
+                                 new=new_review or command in {"accept", "complete"}, common_guard=guard)
+        if command == "review" and checked.get("context_drift"):
+            for operation in candidate["operations"]:
+                if operation["kind"] == "review_recorded" and operation["payload"]["review"] == value:
+                    operation["payload"]["context_drift"] = checked["context_drift"]
     if command == "admit":
         from .evidence import audit_admission
         audit_admission(controller.root, state, state["proposals"][target]["record"], content, common_guard=guard)
