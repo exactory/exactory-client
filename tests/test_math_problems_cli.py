@@ -1104,7 +1104,7 @@ class TestProofsChecksAndDiscussion(_MathCliTestCase):
         solution_url = f"https://github.com/o/r/tree/{_SHA}/Solution"
         evidence_url = "https://github.com/checker/runs/actions/runs/123456789"
         self.run_cli(["add-formal-statement", _PROBLEM_ID, "--lean-url", statement_url, "--proof-target", "statement"])
-        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120,
+        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "formal-proof", "--summary", "p" * 120,
                       "--lean-url", solution_url, "--formal-statement-version", "1"])
         self.run_cli(["post-lean-check", _PROOF_ID, "--outcome", "pass",
                       "--tool", "leanprover/comparator at commit 1a2b3c4", "--lean-toolchain", "leanprover/lean4:v4.22.0",
@@ -1112,7 +1112,8 @@ class TestProofsChecksAndDiscussion(_MathCliTestCase):
                       "--evidence-url", evidence_url])
 
         self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs"), {
-            "claim": "proves", "summary": "p" * 120, "lean": {"url": solution_url, "formalStatementVersion": 1},
+            "claim": "proves", "method": "formal-proof", "summary": "p" * 120,
+            "lean": {"url": solution_url, "formalStatementVersion": 1},
         })
         self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-proofs/{_PROOF_ID}/lean-checks"), {
             "outcome": "pass", "tool": "leanprover/comparator at commit 1a2b3c4",
@@ -1121,10 +1122,12 @@ class TestProofsChecksAndDiscussion(_MathCliTestCase):
         })
 
     def test_local_checks_refuse_an_unversioned_arxiv_write_up_and_a_non_github_evidence_link(self) -> None:
-        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120,
+        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof",
+                                       "--summary", "p" * 120,
                                        "--writeup", "2601.12345"], expected_exit_code=1)
         self.assertIn("2601.12345v2", stderr_text)
-        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120], expected_exit_code=1)
+        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof",
+                      "--summary", "p" * 120], expected_exit_code=1)
         self.run_cli(["post-lean-check", _PROOF_ID, "--outcome", "fail", "--tool", "t", "--lean-toolchain", "v",
                       "--evidence-url", "https://example.org/log.txt"], expected_exit_code=1)
         self.assertEqual(self.sent, [])
@@ -1148,17 +1151,19 @@ class TestProofsChecksAndDiscussion(_MathCliTestCase):
                 _, stderr_text = self.run_cli(["post-lean-check", _PROOF_ID, "--outcome", "pass", "--tool", "t",
                                                "--lean-toolchain", "v", "--evidence-url", url], expected_exit_code=1)
                 self.assertIn(reason, stderr_text)
-        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120,
+        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "formal-proof",
+                                       "--summary", "p" * 120,
                                        "--lean-url", f"https://github.com/o/r/tree/{_SHA}/Solution/..",
                                        "--formal-statement-version", "1"], expected_exit_code=1)
         self.assertIn(_MOVED_PATH_REASON, stderr_text)
         self.assertEqual(self.sent, [])
 
     def test_a_versioned_arxiv_write_up_and_a_revision_are_forwarded(self) -> None:
-        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "disproves", "--summary", "d" * 120,
+        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "disproves", "--method", "counterexample", "--summary", "d" * 120,
                       "--writeup", "2601.12345v2", "--supersedes", _PROOF_ID])
         self.assertEqual(self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs"),
-                         {"claim": "disproves", "summary": "d" * 120, "writeup": "2601.12345v2", "supersedesProofId": _PROOF_ID})
+                         {"claim": "disproves", "method": "counterexample", "summary": "d" * 120,
+                          "writeup": "2601.12345v2", "supersedesProofId": _PROOF_ID})
 
     def test_reads_and_the_discussion(self) -> None:
         self.run_cli(["proofs", _PROBLEM_ID])
@@ -1210,8 +1215,8 @@ _LEAN_SOLUTION_URL = f"https://github.com/o/r/tree/{_SHA}/Solution"
 
 
 class TestPostProofInputs(_MathCliTestCase):
-    def build_post_proof_argv(self, *extra: str) -> list[str]:
-        return ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "p" * 120, *extra]
+    def build_post_proof_argv(self, *extra: str, claim: str = "proves") -> list[str]:
+        return ["post-proof", _PROBLEM_ID, "--claim", claim, "--method", "written-proof", "--summary", "p" * 120, *extra]
 
     def read_proof_body(self) -> dict:
         return self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs")
@@ -1219,14 +1224,16 @@ class TestPostProofInputs(_MathCliTestCase):
     def test_a_proof_sends_only_the_parts_it_was_given(self) -> None:
         lean = ["--lean-url", _LEAN_SOLUTION_URL, "--formal-statement-version", "2"]
         lean_part = {"url": _LEAN_SOLUTION_URL, "formalStatementVersion": 2}
-        for extra_args, sent_parts in (
-                (["--writeup", "2601.12345v2"], {"writeup": "2601.12345v2"}),
-                (lean, {"lean": lean_part}),
-                ([*lean, "--writeup", "10.5281/zenodo.123456"], {"writeup": "10.5281/zenodo.123456", "lean": lean_part})):
-            with self.subTest(extra_args=extra_args):
-                self.sent.clear()
-                self.run_cli(self.build_post_proof_argv(*extra_args))
-                self.assertEqual(self.read_proof_body(), {"claim": "proves", "summary": "p" * 120, **sent_parts})
+        for claim in ("proves", "disproves"):
+            for extra_args, sent_parts in (
+                    (["--writeup", "2601.12345v2"], {"writeup": "2601.12345v2"}),
+                    (lean, {"lean": lean_part}),
+                    ([*lean, "--writeup", "10.5281/zenodo.123456"], {"writeup": "10.5281/zenodo.123456", "lean": lean_part})):
+                with self.subTest(claim=claim, extra_args=extra_args):
+                    self.sent.clear()
+                    self.run_cli(self.build_post_proof_argv(*extra_args, claim=claim))
+                    self.assertEqual(self.read_proof_body(),
+                                     {"claim": claim, "method": "written-proof", "summary": "p" * 120, **sent_parts})
 
     def test_a_proof_without_a_writeup_and_without_a_lean_solution_is_refused_with_its_remedy(self) -> None:
         for extra_args in ([], ["--formal-statement-version", "1"]):
@@ -1237,12 +1244,13 @@ class TestPostProofInputs(_MathCliTestCase):
         self.assertEqual(self.sent, [])
 
     def test_a_lean_solution_and_its_formal_statement_version_come_together(self) -> None:
-        for extra_args in (["--writeup", "2601.12345v2", "--lean-url", _LEAN_SOLUTION_URL],
-                           ["--writeup", "2601.12345v2", "--formal-statement-version", "1"]):
-            with self.subTest(extra_args=extra_args):
-                _, stderr_text = self.run_cli(self.build_post_proof_argv(*extra_args), expected_exit_code=1)
-                self.assertIn("A Lean solution names the formal statement version it targets."
-                              " Give --lean-url and --formal-statement-version together.", stderr_text)
+        for claim in ("proves", "disproves"):
+            for extra_args in (["--writeup", "2601.12345v2", "--lean-url", _LEAN_SOLUTION_URL],
+                               ["--writeup", "2601.12345v2", "--formal-statement-version", "1"]):
+                with self.subTest(claim=claim, extra_args=extra_args):
+                    _, stderr_text = self.run_cli(self.build_post_proof_argv(*extra_args, claim=claim), expected_exit_code=1)
+                    self.assertIn("A Lean solution names the formal statement version it targets."
+                                  " Give --lean-url and --formal-statement-version together.", stderr_text)
         self.assertEqual(self.sent, [])
 
     def test_a_writeup_that_names_a_version_or_a_record_is_sent_trimmed(self) -> None:
@@ -1279,7 +1287,8 @@ class TestPostProofInputs(_MathCliTestCase):
                                    (" \ufeff" + "s" * 20000 + "\ufeff ", "s" * 20000), (" " * 120, None)):
             with self.subTest(summary_length=len(summary)):
                 self.sent.clear()
-                argv = ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", summary, "--writeup", "2601.12345v2"]
+                argv = ["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof",
+                        "--summary", summary, "--writeup", "2601.12345v2"]
                 if expected is not None:
                     self.run_cli(argv)
                     self.assertEqual(self.read_proof_body()["summary"], expected)
@@ -1290,12 +1299,13 @@ class TestPostProofInputs(_MathCliTestCase):
     def test_the_summary_can_come_from_a_file(self) -> None:
         summary_path = self.scratch_dir / "summary.tex"
         summary_path.write_text("s" * 100 + "\n", encoding="utf-8")
-        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "disproves", "--summary-file", str(summary_path),
+        self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "disproves", "--method", "counterexample",
+                      "--summary-file", str(summary_path),
                       "--writeup", "2601.12345v2"])
         self.assertEqual(self.read_proof_body()["summary"], "s" * 100)
 
     def test_a_missing_summary_file_is_refused_before_any_request(self) -> None:
-        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves",
+        _, stderr_text = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof",
                                        "--summary-file", str(self.scratch_dir / "absent.tex"),
                                        "--writeup", "2601.12345v2"], expected_exit_code=1)
         self.assertIn("does not exist", stderr_text)
@@ -1311,6 +1321,177 @@ class TestPostProofInputs(_MathCliTestCase):
     def test_an_empty_revision_id_is_sent_for_the_server_to_judge(self) -> None:
         self.run_cli(self.build_post_proof_argv("--writeup", "2601.12345v2", "--supersedes", ""))
         self.assertEqual(self.read_proof_body()["supersedesProofId"], "")
+
+
+class TestPostPartialProofInputs(_MathCliTestCase):
+    def build_post_partial_proof_argv(self, *extra: str) -> list[str]:
+        return ["post-proof", _PROBLEM_ID, "--claim", "partial", "--method", "written-proof",
+                "--summary", "p" * 120, *extra]
+
+    def read_proof_body(self) -> dict:
+        return self.read_sent_body("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs")
+
+    def test_a_partial_result_sends_its_statement_and_writeup(self) -> None:
+        statement = "For every $n \\leq 7$,\n the bound holds."
+        padded = " \ufeff" + statement.replace("\n", "\r\n") + "\ufeff \n"
+        path = self.scratch_dir / "statement.tex"
+        path.write_bytes(padded.encode("utf-8"))
+        for option, value in (("--statement", padded), ("--statement-file", str(path))):
+            with self.subTest(option=option):
+                self.sent.clear()
+                self.run_cli(self.build_post_partial_proof_argv(option, value, "--writeup", "2601.12345v2"))
+                self.assertEqual(self.read_proof_body(), {
+                    "claim": "partial", "method": "written-proof", "summary": "p" * 120,
+                    "resultStatement": statement, "writeup": "2601.12345v2",
+                })
+                self.assertEqual(self.list_sent_requests(), [("POST", f"/api/v1/math-problems/{_PROBLEM_ID}/proofs")])
+
+    def test_a_partial_result_sends_its_lean_theorem_and_optional_writeup(self) -> None:
+        for writeup in ([], ["--writeup", "2601.12345v2"]):
+            with self.subTest(writeup=writeup):
+                self.sent.clear()
+                self.run_cli(self.build_post_partial_proof_argv(
+                    "--statement", "s" * 20, "--method", "formal-proof", "--lean-url", _LEAN_SOLUTION_URL,
+                    "--lean-theorem", "Results.finite_bound₁'", "--supersedes", _PROOF_ID, *writeup))
+                self.assertEqual(self.read_proof_body(), {
+                    "claim": "partial", "method": "formal-proof", "summary": "p" * 120, "resultStatement": "s" * 20,
+                    "lean": {"url": _LEAN_SOLUTION_URL, "theorem": "Results.finite_bound₁'"},
+                    "supersedesProofId": _PROOF_ID, **({"writeup": "2601.12345v2"} if writeup else {}),
+                })
+
+    def test_every_claim_sends_each_method(self) -> None:
+        for claim in ("proves", "disproves", "partial"):
+            for method in ("written-proof", "counterexample", "computer-assisted", "formal-proof"):
+                with self.subTest(claim=claim, method=method):
+                    self.sent.clear()
+                    statement = ["--statement", "s" * 20] if claim == "partial" else []
+                    self.run_cli(["post-proof", _PROBLEM_ID, "--claim", claim, "--method", method,
+                                  "--summary", "p" * 120, "--writeup", "2601.12345v2", *statement])
+                    self.assertEqual(self.read_proof_body(), {
+                        "claim": claim, "method": method, "summary": "p" * 120, "writeup": "2601.12345v2",
+                        **({"resultStatement": "s" * 20} if statement else {}),
+                    })
+
+    def test_every_claim_requires_a_method_from_the_vocabulary(self) -> None:
+        for claim in ("proves", "disproves", "partial"):
+            for method in (None, "direct-proof", ""):
+                with self.subTest(claim=claim, method=method):
+                    argv = ["post-proof", _PROBLEM_ID, "--claim", claim, "--summary", "p" * 120,
+                            "--writeup", "2601.12345v2"]
+                    if claim == "partial":
+                        argv += ["--statement", "s" * 20]
+                    if method is not None:
+                        argv += ["--method", method]
+                    err = io.StringIO()
+                    with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+                        self.run_cli(argv)
+                    self.assertEqual(caught.exception.code, 2)
+                    self.assertIn("--method", err.getvalue())
+        self.assertEqual(self.sent, [])
+
+    def test_a_partial_result_requires_a_statement_before_any_request(self) -> None:
+        _, err = self.run_cli(self.build_post_partial_proof_argv("--writeup", "2601.12345v2"), expected_exit_code=1)
+        self.assertIn("Give --statement or --statement-file", err)
+        self.assertEqual(self.sent, [])
+
+    def test_a_complete_claim_refuses_either_statement_option_before_reading_a_file(self) -> None:
+        for claim in ("proves", "disproves"):
+            for option, value in (("--statement", ""), ("--statement-file", "absent.tex")):
+                with self.subTest(claim=claim, option=option):
+                    _, err = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", claim, "--method", "written-proof",
+                                          "--summary", "p" * 120, "--writeup", "2601.12345v2", option, value],
+                                         expected_exit_code=1)
+                    self.assertIn("only with --claim partial", err)
+        self.assertEqual(self.sent, [])
+
+    def test_the_statement_options_are_mutually_exclusive(self) -> None:
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            self.run_cli(self.build_post_partial_proof_argv(
+                "--statement", "s" * 20, "--statement-file", "statement.tex", "--writeup", "2601.12345v2"))
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("not allowed with argument", err.getvalue())
+        self.assertEqual(self.sent, [])
+
+    def test_the_statement_has_trimmed_utf16_bounds_for_inline_and_file_text(self) -> None:
+        for statement, expected in (("", None), (" \ufeff\n", None), ("s" * 19, None), ("s" * 20, "s" * 20),
+                                     ("s" * 5000, "s" * 5000), ("s" * 5001, None),
+                                     (" \ufeff" + "s" * 20 + "\ufeff ", "s" * 20),
+                                     (" \ufeff" + "s" * 5000 + "\ufeff ", "s" * 5000),
+                                     ("😀" * 9 + "s", None), ("😀" * 10, "😀" * 10),
+                                     ("😀" * 2500, "😀" * 2500), ("😀" * 2500 + "s", None)):
+            path = self.scratch_dir / "statement.tex"
+            path.write_text(statement, encoding="utf-8")
+            for option, value in (("--statement", statement), ("--statement-file", str(path))):
+                with self.subTest(option=option, statement_length=len(statement)):
+                    self.sent.clear()
+                    argv = self.build_post_partial_proof_argv(option, value, "--writeup", "2601.12345v2")
+                    if expected is not None:
+                        self.run_cli(argv)
+                        self.assertEqual(self.read_proof_body()["resultStatement"], expected)
+                    else:
+                        _, err = self.run_cli(argv, expected_exit_code=1)
+                        self.assertIn("The result statement is", err)
+                        self.assertEqual(self.sent, [])
+
+    def test_a_partial_result_without_evidence_names_the_partial_lean_options(self) -> None:
+        _, err = self.run_cli(self.build_post_partial_proof_argv("--statement", "s" * 20), expected_exit_code=1)
+        self.assertIn("--writeup, or --lean-url with --lean-theorem", err)
+        self.assertEqual(self.sent, [])
+
+    def test_a_partial_result_refuses_a_formal_statement_version(self) -> None:
+        for lean in ([], ["--lean-url", _LEAN_SOLUTION_URL],
+                     ["--lean-url", _LEAN_SOLUTION_URL, "--lean-theorem", "Results.bound"]):
+            with self.subTest(lean=lean):
+                _, err = self.run_cli(self.build_post_partial_proof_argv(
+                    "--statement", "s" * 20, "--writeup", "2601.12345v2", "--formal-statement-version", "1", *lean),
+                    expected_exit_code=1)
+                self.assertIn("--formal-statement-version", err)
+                self.assertIn("partial", err)
+        self.assertEqual(self.sent, [])
+
+    def test_a_partial_lean_url_and_theorem_come_together(self) -> None:
+        for lean in (["--lean-url", _LEAN_SOLUTION_URL], ["--lean-theorem", "Results.bound"]):
+            with self.subTest(lean=lean):
+                _, err = self.run_cli(self.build_post_partial_proof_argv(
+                    "--statement", "s" * 20, "--writeup", "2601.12345v2", *lean), expected_exit_code=1)
+                self.assertIn("Give --lean-url and --lean-theorem together", err)
+        self.assertEqual(self.sent, [])
+
+    def test_a_complete_claim_refuses_a_lean_theorem(self) -> None:
+        for claim in ("proves", "disproves"):
+            for lean in ([], ["--lean-url", _LEAN_SOLUTION_URL, "--formal-statement-version", "1"]):
+                with self.subTest(claim=claim, lean=lean):
+                    _, err = self.run_cli(["post-proof", _PROBLEM_ID, "--claim", claim, "--method", "written-proof",
+                                          "--summary", "p" * 120, "--writeup", "2601.12345v2",
+                                          "--lean-theorem", "Results.bound", *lean], expected_exit_code=1)
+                    self.assertIn("--lean-theorem only with --claim partial", err)
+        self.assertEqual(self.sent, [])
+
+    def test_a_partial_lean_theorem_accepts_the_server_name_vocabulary(self) -> None:
+        for theorem in ("x", "_", "Classical.choice", "Results.bound₁'!?", "数学.定理₂", "A.n²Ⅻ", "a" * 200, "𐐀" * 100):
+            with self.subTest(theorem=theorem):
+                self.sent.clear()
+                self.run_cli(self.build_post_partial_proof_argv(
+                    "--statement", "s" * 20, "--lean-url", _LEAN_SOLUTION_URL, "--lean-theorem", theorem))
+                self.assertEqual(self.read_proof_body()["lean"], {"url": _LEAN_SOLUTION_URL, "theorem": theorem})
+
+    def test_a_partial_lean_theorem_refuses_invalid_names_before_any_request(self) -> None:
+        for theorem in ("", ".x", "x.", "x..y", "1x", "x.1y", "Ⅻx", "'x", "x-y", "x y", " x", "x ",
+                        "x\n", "x\u200b", "e\u0301", "«theorem»", chr(0xD800), "a" * 201, "𐐀" * 100 + "x"):
+            with self.subTest(theorem=theorem):
+                _, err = self.run_cli(self.build_post_partial_proof_argv(
+                    "--statement", "s" * 20, "--lean-url", _LEAN_SOLUTION_URL, "--lean-theorem", theorem),
+                    expected_exit_code=1)
+                self.assertIn("The Lean theorem", err)
+        self.assertEqual(self.sent, [])
+
+    def test_a_partial_lean_solution_requires_a_pinned_source_link(self) -> None:
+        _, err = self.run_cli(self.build_post_partial_proof_argv(
+            "--statement", "s" * 20, "--lean-url", "https://github.com/o/r/blob/main/Solution.lean",
+            "--lean-theorem", "Results.bound"), expected_exit_code=1)
+        self.assertIn("full 40-character commit SHA", err)
+        self.assertEqual(self.sent, [])
 
 
 class TestLeanCheckInputs(_MathCliTestCase):
@@ -1634,7 +1815,7 @@ class TestPagedReads(_MathCliTestCase):
 # route with the id in {id}, and its other options. The id is only a path segment here, so one UUID serves every command.
 _ID_COMMANDS = (
     ("post-proof", "POST", "/api/v1/math-problems/{id}/proofs",
-     ("--claim", "proves", "--summary", "p" * 120, "--writeup", "2601.12345v2")),
+     ("--claim", "proves", "--method", "written-proof", "--summary", "p" * 120, "--writeup", "2601.12345v2")),
     ("post-lean-check", "POST", "/api/v1/math-proofs/{id}/lean-checks",
      ("--outcome", "pass", "--tool", "t", "--lean-toolchain", "v", "--evidence-url", _CHECK_RUN_URL)),
     ("post-discussion", "POST", "/api/v1/math-problems/{id}/posts", ("--body", "Is $n = 7$ within reach?")),
@@ -1721,8 +1902,10 @@ class TestSubmitMathProblemInputs(_MathCliTestCase):
 class TestNewCommandParsers(unittest.TestCase):
     def test_the_parser_refuses_a_command_line_that_misses_a_required_option(self) -> None:
         valid = [
-            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "s"],
-            ["post-proof", _PROBLEM_ID, "--claim", "disproves", "--summary-file", "summary.tex"],
+            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof", "--summary", "s"],
+            ["post-proof", _PROBLEM_ID, "--claim", "disproves", "--method", "counterexample", "--summary-file", "summary.tex"],
+            ["post-proof", _PROBLEM_ID, "--claim", "partial", "--method", "computer-assisted", "--summary", "s",
+             "--statement", "A result statement."],
             ["post-lean-check", _PROOF_ID, "--outcome", "fail", "--tool", "t", "--lean-toolchain", "v",
              "--evidence-url", _CHECK_RUN_URL],
             ["post-discussion", _PROBLEM_ID, "--body", "b"],
@@ -1739,12 +1922,14 @@ class TestNewCommandParsers(unittest.TestCase):
             _cli._build_parser().parse_args(argv)
         check_options = ["--outcome", "pass", "--tool", "t", "--lean-toolchain", "v", "--evidence-url", _CHECK_RUN_URL]
         refused = [
-            ["post-proof", _PROBLEM_ID, "--summary", "s"],
-            ["post-proof", _PROBLEM_ID, "--claim", "proves"],
-            ["post-proof", _PROBLEM_ID, "--claim", "shows", "--summary", "s"],
-            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "s", "--summary-file", "summary.tex"],
-            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--summary", "s", "--formal-statement-version", "one"],
-            ["post-proof", "--claim", "proves", "--summary", "s"],
+            ["post-proof", _PROBLEM_ID, "--method", "written-proof", "--summary", "s"],
+            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof"],
+            ["post-proof", _PROBLEM_ID, "--claim", "shows", "--method", "written-proof", "--summary", "s"],
+            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof",
+             "--summary", "s", "--summary-file", "summary.tex"],
+            ["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof", "--summary", "s",
+             "--formal-statement-version", "one"],
+            ["post-proof", "--claim", "proves", "--method", "written-proof", "--summary", "s"],
             ["post-lean-check", _PROOF_ID, *check_options[2:]],
             ["post-lean-check", _PROOF_ID, "--outcome", "maybe", *check_options[2:]],
             ["post-lean-check", _PROOF_ID, *check_options[:2], *check_options[4:]],
@@ -1804,10 +1989,13 @@ class TestNewCommandParsers(unittest.TestCase):
 # that mirror the server read ASCII digits only.
 
 # One valid command line for each option that reads a text file: the option, and the command line before it. The
-# first three are the file options of the proof, check, and discussion commands, which share one reader. The
+# proof, check, and discussion commands share one reader. The
 # citations file and the verdict file of verify have a reader each.
 _TEXT_FILE_OPTION_COMMANDS = (
-    ("--summary-file", ["post-proof", _PROBLEM_ID, "--claim", "proves", "--writeup", "2601.12345v2"]),
+    ("--summary-file", ["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof",
+                        "--writeup", "2601.12345v2"]),
+    ("--statement-file", ["post-proof", _PROBLEM_ID, "--claim", "partial", "--method", "written-proof",
+                          "--summary", "s" * 100, "--writeup", "2601.12345v2"]),
     ("--output-excerpt-file", ["post-lean-check", _PROOF_ID, "--outcome", "pass", "--tool", "t",
                                "--lean-toolchain", "v", "--evidence-url", _CHECK_RUN_URL]),
     ("--body-file", ["post-discussion", _PROBLEM_ID]),
@@ -2148,7 +2336,10 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
         add_formal_statement = ["add-formal-statement", _PROBLEM_ID, "--lean-url", _LEAN_SOURCE_URL, "--proof-target",
                                 "statement"]
         declare_status = ["declare-status", _PROBLEM_ID, "--status", "open"]
-        post_proof = ["post-proof", _PROBLEM_ID, "--claim", "proves", "--writeup", "2601.12345v2"]
+        post_proof = ["post-proof", _PROBLEM_ID, "--claim", "proves", "--method", "written-proof",
+                      "--writeup", "2601.12345v2"]
+        post_partial_proof = ["post-proof", _PROBLEM_ID, "--claim", "partial", "--method", "written-proof",
+                              "--summary", "s" * 100, "--writeup", "2601.12345v2"]
         post_lean_check = ["post-lean-check", _PROOF_ID, "--outcome", "pass", "--tool", "t", "--lean-toolchain", "v",
                            "--evidence-url", _CHECK_RUN_URL]
         citation = "H. Minc, Permanents, 1978, chapter 2."
@@ -2175,6 +2366,10 @@ class TestPlainTextOfFreeTextFields(_MathCliTestCase):
             ("post-proof --summary", "summary", 100, lambda text: [*post_proof, "--summary", text]),
             ("post-proof --summary-file", "summary", 100,
              lambda text: [*post_proof, "--summary-file", self.write_text_file(text)]),
+            ("post-proof --statement", "result statement", 20,
+             lambda text: [*post_partial_proof, "--statement", text]),
+            ("post-proof --statement-file", "result statement", 20,
+             lambda text: [*post_partial_proof, "--statement-file", self.write_text_file(text)]),
             ("post-lean-check --tool", "tool", 1, lambda text: replace_option(list(post_lean_check), "--tool", text)),
             ("post-lean-check --lean-toolchain", "Lean toolchain", 1,
              lambda text: replace_option(list(post_lean_check), "--lean-toolchain", text)),

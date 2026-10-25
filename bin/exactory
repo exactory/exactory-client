@@ -66,9 +66,10 @@ _MATH_REPORT_KINDS = ("math_problem", "math_status_event", "math_formal_statemen
                       "math_lean_check", "math_post", "math_problem_paper", "math_github_link")
 # The statuses of a problem (design 2026-10-12 §4); the server owns the vocabulary.
 _MATH_PROBLEM_STATUSES = ("open", "proved", "disproved")
-# The claims of a proof (design 2026-10-12 §6) and the outcomes of a Lean check report (§7); the
-# server owns both vocabularies.
-_MATH_PROOF_CLAIMS = ("proves", "disproves")
+# The claims and methods of a proof (design 2026-10-25 §4.1-4.2) and the outcomes of a Lean check
+# report (design 2026-10-12 §7); the server owns these vocabularies.
+_MATH_PROOF_CLAIMS = ("proves", "disproves", "partial")
+_MATH_PROOF_METHODS = ("written-proof", "counterexample", "computer-assisted", "formal-proof")
 _MATH_LEAN_CHECK_OUTCOMES = ("pass", "fail")
 # Every posted link mirrors the server's link rules (design 2026-10-12 §12): at most 500 UTF-16
 # code units, checked first, and no character of the Unicode categories Cc, Cf, or Cs (control
@@ -955,6 +956,18 @@ def _require_lean_source_url(url: str) -> str:
     return url
 
 
+def _require_lean_name(field_name: str, name: str) -> str:
+    """Mirror leanNameSchema in math-links.ts: 1-200 UTF-16 units, with Unicode letters and numbers."""
+    _require_utf16_bounds(field_name, name, 1, 200)
+    for atom in name.split("."):
+        if (not atom or (atom[0] != "_" and not unicodedata.category(atom[0]).startswith("L"))
+                or any(unicodedata.category(character)[0] not in ("L", "N") and character not in "_'!?"
+                       for character in atom[1:])):
+            _exit_with_error(f"The {field_name} is not a Lean name. Give names joined by single dots, each starting"
+                             " with a letter or _, followed by letters, numbers, _, ', ! or ?.")
+    return name
+
+
 # Mirrors checkEvidenceUrlSchema (design 2026-10-12 §7): a GitHub Actions run, or a file at a
 # full commit. The URL is sent exactly as given.
 _CHECK_EVIDENCE_URL_RE = re.compile(
@@ -1118,13 +1131,32 @@ _ARXIV_WITHOUT_VERSION_RE = re.compile(
 def _run_post_proof(args: argparse.Namespace) -> None:
     summary = _require_plain_text_bounds("summary", _read_inline_or_file_text(args.summary, args.summary_file),
                                          100, 20000, is_trim_required=True)
+    body = {"claim": args.claim, "method": args.method, "summary": summary}
+    is_partial = args.claim == "partial"
+    if is_partial:
+        if args.statement is None and args.statement_file is None:
+            _exit_with_error("A partial result states what it proves. Give --statement or --statement-file.")
+        body["resultStatement"] = _require_plain_text_bounds(
+            "result statement", _read_inline_or_file_text(args.statement, args.statement_file),
+            20, 5000, is_trim_required=True)
+        if args.formal_statement_version is not None:
+            _exit_with_error("A partial result does not target a formal statement version."
+                             " Remove --formal-statement-version.")
+    else:
+        if args.statement is not None or args.statement_file is not None:
+            _exit_with_error("Give --statement or --statement-file only with --claim partial.")
+        if args.lean_theorem is not None:
+            _exit_with_error("Give --lean-theorem only with --claim partial.")
+    lean_target_option = "--lean-theorem" if is_partial else "--formal-statement-version"
     if args.writeup is None and args.lean_url is None:
         _exit_with_error("A proof carries a write-up, a Lean solution, or both. Add --writeup, or --lean-url with"
-                         " --formal-statement-version.")
-    if (args.lean_url is None) != (args.formal_statement_version is None):
+                         f" {lean_target_option}.")
+    if is_partial and (args.lean_url is None) != (args.lean_theorem is None):
+        _exit_with_error("A partial Lean solution names the theorem of its result. Give --lean-url and"
+                         " --lean-theorem together.")
+    if not is_partial and (args.lean_url is None) != (args.formal_statement_version is None):
         _exit_with_error("A Lean solution names the formal statement version it targets. Give --lean-url and"
                          " --formal-statement-version together.")
-    body = {"claim": args.claim, "summary": summary}
     if args.writeup is not None:
         writeup = args.writeup.strip(_JAVASCRIPT_TRIM_CHARACTERS)
         if _ARXIV_WITHOUT_VERSION_RE.fullmatch(writeup):
@@ -1132,8 +1164,11 @@ def _run_post_proof(args: argparse.Namespace) -> None:
                              f" for example {writeup}v2.")
         body["writeup"] = writeup
     if args.lean_url is not None:
-        body["lean"] = {"url": _require_lean_source_url(args.lean_url),
-                        "formalStatementVersion": args.formal_statement_version}
+        body["lean"] = {"url": _require_lean_source_url(args.lean_url)}
+        if is_partial:
+            body["lean"]["theorem"] = _require_lean_name("Lean theorem", args.lean_theorem)
+        else:
+            body["lean"]["formalStatementVersion"] = args.formal_statement_version
     if args.supersedes is not None:
         body["supersedesProofId"] = args.supersedes
     _send_math_write("POST", _build_api_path("math-problems", args.problem_id, "proofs"), body)
@@ -1531,7 +1566,8 @@ def _build_parser() -> argparse.ArgumentParser:
     problems.add_argument("--has-formal-statement", action="store_true", dest="has_formal_statement",
                           help="Only problems with a standing formal statement.")
     problems.add_argument("--has-proof", action="store_true", dest="has_proof",
-                          help="Only problems with a standing, current proof.")
+                          help="Only problems with a standing, current proves or disproves proof; a partial result"
+                               " does not count.")
     problems.add_argument("--has-passing-lean-check", action="store_true", dest="has_passing_lean_check",
                           help="Only problems whose current proof against the current formal statement has a"
                                " counted pass report.")
@@ -1647,21 +1683,42 @@ def _build_parser() -> argparse.ArgumentParser:
 
     post_proof = commands.add_parser(
         "post-proof", allow_abbrev=False,
-        help="Post a proof or a disproof of a problem: a write-up at an exact version, a commit-pinned"
+        help="Post a proof, a disproof, or a partial result of a problem: a write-up at an exact version, a commit-pinned"
              " Lean solution, or both.")
     post_proof.add_argument("problem_id")
-    post_proof.add_argument("--claim", required=True, choices=_MATH_PROOF_CLAIMS)
+    post_proof.add_argument("--claim", required=True, choices=_MATH_PROOF_CLAIMS,
+                            help="proves or disproves: a complete proof or a complete disproof of the problem's"
+                                 " statement. partial: a proof of another statement that bears on the problem; it"
+                                 " never resolves the problem.")
+    post_proof.add_argument("--method", required=True, choices=_MATH_PROOF_METHODS,
+                            help="How the result was obtained: a human-readable argument (written-proof), an exhibited"
+                                 " object with its verification (counterexample), an argument that depends on an"
+                                 " exhaustive or certified computation (computer-assisted), or a Lean proof with no"
+                                 " separate human-readable argument as the main evidence (formal-proof).")
     proof_summary = post_proof.add_mutually_exclusive_group(required=True)
-    proof_summary.add_argument("--summary", help="The proof's summary in TeX, 100-20000 characters.")
+    proof_summary.add_argument("--summary",
+                               help="The brief explanation shown under the method, in TeX, 100-20000 characters.")
     proof_summary.add_argument("--summary-file", dest="summary_file", help="A file with the summary.")
+    proof_statement = post_proof.add_mutually_exclusive_group()
+    proof_statement.add_argument("--statement",
+                                 help="The statement a partial result proves, in TeX, 20-5000 characters: one"
+                                      " self-contained statement, every quantifier and hypothesis explicit. Required"
+                                      " with the partial claim, refused with the others.")
+    proof_statement.add_argument("--statement-file", dest="statement_file", help="A file with the result statement.")
     post_proof.add_argument("--writeup",
                             help="The write-up: an arXiv id with its version (2601.12345v2), a Zenodo DOI or"
                                  " record URL.")
     post_proof.add_argument("--lean-url", dest="lean_url",
                             help="The Lean solution: a github.com blob or tree URL at a full commit SHA.")
+    post_proof.add_argument("--lean-theorem", dest="lean_theorem",
+                            help="The Lean theorem that states a partial result; given with the Lean URL of a partial"
+                                 " claim, in place of a formal statement version.")
     post_proof.add_argument("--formal-statement-version", type=int, dest="formal_statement_version",
-                            help="The formal statement version the Lean solution targets.")
-    post_proof.add_argument("--supersedes", help="Your earlier proof of this problem that this one revises.")
+                            help="The formal statement version the Lean solution of a complete claim targets; refused"
+                                 " with the partial claim.")
+    post_proof.add_argument("--supersedes",
+                            help="Your earlier proof of this problem that this one revises. The claim may change; the"
+                                 " problem's status does not.")
     post_proof.set_defaults(handler=_run_post_proof)
 
     proofs = commands.add_parser("proofs", allow_abbrev=False, help="List a problem's current proofs.")

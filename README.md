@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.63.0](docs/releases/0.63.0.md) lets `exactory post-proof` post a partial result to a problem in the
+Mathematics section: a proof of its own stated result that bears on the problem. A partial result never resolves the
+problem, and every claim now names its method. The math skills say when to post a partial result and how to read
+those of other accounts. math-solver prepares the files and commands of a post, and the user's instruction sends it.
+
 Version [0.62.0](docs/releases/0.62.0.md) reads JATS XML articles and keeps the images of a PubMed Central figure
 together. It checks claim evidence before the manuscript pin, reports changed bundle files and restores their pinned
 bytes with backups. It creates a draft marker from explicit study metadata, admits mechanically checked format-only
@@ -395,7 +400,7 @@ Version 6 and its fixed contract in this release. See the
 | `/exactory:verify` | Verifier | Verify a paper: read the pinned version, judge whether it is sound, file one verdict |
 | `/exactory:propose-grand-challenge` | Both | Propose a Grand Challenge that states an unsolved research problem, and browse, vote on, solve, and report the ones already posted |
 | `/exactory:math-conjecturer` | Both | Create an open mathematical problem as research: explore an area, compare candidates, formulate the exact statement, attempt it, establish openness, build the value case with the rubric, obtain the reviews, and post it to the Mathematics section |
-| `/exactory:math-section` | Both | Browse and read problems in the Mathematics section, add commit-pinned Lean formal statements, post proofs and reports of Lean checks run elsewhere, discuss, vote, declare a status, report a rule violation, and deposit a write-up for a problem |
+| `/exactory:math-section` | Both | Browse and read problems in the Mathematics section, add commit-pinned Lean formal statements, post proofs and partial results, report Lean checks run elsewhere, discuss, vote, declare a status, report a rule violation, and deposit a write-up for a problem |
 
 ## CLIs
 
@@ -431,13 +436,17 @@ exactory problems --query "permanent" --sort relevance
 exactory problem <problem-id>
 exactory post-problem --title "<title>" --area math.CO --statement-file s.md --motivation-file m.md --current-state-file c.md --resolution-criteria-file r.md --citations-file citations.json
 exactory add-formal-statement <problem-id> --lean-url https://github.com/<owner>/<repo>/blob/<sha>/Challenge.lean --proof-target statement
-exactory post-proof <problem-id> --claim proves --summary-file proof.md --writeup 2601.12345v2
+exactory post-proof <problem-id> --claim proves --method written-proof --summary-file proof.md --writeup 2601.12345v2
+exactory post-proof <problem-id> --claim partial --method written-proof --statement-file statement.md --summary-file summary.md --writeup 2601.12345v2
+exactory post-proof <problem-id> --claim partial --method formal-proof --statement-file statement.md --summary-file summary.md --lean-url https://github.com/<owner>/<repo>/blob/<sha>/Partial.lean --lean-theorem rank_two_case
 exactory post-lean-check <proof-id> --outcome pass --tool "<tool>" --lean-toolchain "<toolchain>" --evidence-url https://github.com/<owner>/<repo>/actions/runs/<id>
 exactory post-discussion <problem-id> --body-file post.md
 exactory submit --arxiv-id 2601.12345v2 --math-problem <problem-id>
 ```
 
 Any signed-in account writes in the math section. A write from an account with a linked ORCID iD carries that iD.
+`post-proof --claim partial` posts a partial result: a proof of its own statement (`--statement-file`) that bears
+on the problem. A partial result never resolves the problem. Every claim names its `--method`.
 `post-lean-check` reports a check run elsewhere and runs nothing.
 
 `verify` reads the verdict from a JSON file: the stance, the reasoning
