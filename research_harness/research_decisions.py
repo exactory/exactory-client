@@ -1363,7 +1363,8 @@ def _intent_budget(records, dossier, unit, requested):
     return {"unit": unit, "limit": limit, "reserved": consumed, "requested": requested}
 
 
-def validate_cycle_decision(records, artifacts, plan_payload, decision_record, *, reserved_units=None):
+def validate_cycle_decision(records, artifacts, plan_payload, decision_record, *, reserved_units=None,
+                            format_only=False):
     """Bind each cycle and resource reservation to the reviewed bounded question."""
     if decision_record is None:
         if strategy.managed_research(records):
@@ -1404,6 +1405,8 @@ def validate_cycle_decision(records, artifacts, plan_payload, decision_record, *
             continue
         cycle = records.get("cycle", {}).get(plan["id"], {})
         if cycle.get("status") in ("complete", "failed", "budget_paused"):
+            if format_only and plan["id"] == plan_payload["id"]:
+                continue
             prior_payload = plan.get("payload", {})
             prior_question = normalized_text(prior_payload.get("question", ""))
             prior_methods = {normalized_text(prior_payload.get("distinguishing_test", "")),

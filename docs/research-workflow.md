@@ -856,6 +856,18 @@ exactory-research checkpoint --file checkpoint.json --expected-revision REVISION
 exactory-research export --kind readiness --destination reviews/research-candidate-001
 ```
 
+Before that delivery, build the manuscript's claim ledger (write skill, stage 1)
+and run `exactory-research check-claims --file FILE` on its `claim_evidence`
+array. The manuscript pin accepts a reference only when it is evidence of the
+current candidate, that is, a reference that the selected assessment, or a
+retained branch's plan or assessment, cites. The check needs the candidate but
+not the readiness review. It lists every reference outside the candidate with
+its claim id and exits 1, or exits 0 with an empty list, and it changes nothing.
+For each listed reference, cite a candidate reference instead, or record an
+assessment that cites it, for example in its `findings`, and checkpoint that
+assessment. Then run the check again. A reference that enters the candidate
+after the readiness review needs a new review as well, so the check comes first.
+
 In managed author research, add the candidate's result memo and evidence to the
 same strategy dossier. Include claims, failures, nearest-work comparisons,
 committed consequences and unresolved work items. Deliver a canonical combined
@@ -939,7 +951,12 @@ separate from scientific proof, replication, or refutation. Every quantitative
 claim keeps its conditions and evidence. Add registry-verified citations as used;
 neither a citation count nor a page count establishes research quality.
 
-Pin the exact PDF, abstract, bibliography, claim ledger, optional sources, and
+Run `exactory-research check-claims --file manuscript.json` on the finished
+input first and resolve every listed reference, as the result milestone
+describes. A reference outside the current candidate fails the pin with
+`publication_evidence_mismatch`: the message names the first claim id and
+reference, and `mismatches` in the details lists every pair. Then pin the exact
+PDF, abstract, bibliography, claim ledger, optional sources, and
 claim-to-evidence mappings with `manuscript`. The pin also accounts for the
 literature that the study used. Every work with a full-text reading, and every
 work that a selected five-purpose search cites, is cited by the bibliography or
@@ -964,12 +981,31 @@ or later tool exposure. Preserve contaminated returns without giving them
 independent approval credit.
 
 ```sh
+exactory-research check-claims --file manuscript.json
 exactory-research manuscript --file manuscript.json --expected-revision REVISION --request-id pin-manuscript-001
 exactory-research export --kind manuscript --destination reviews/manuscript-001
 exactory-research manuscript-review --file manuscript-review-a.json --expected-revision REVISION --request-id record-manuscript-review-a
 exactory-research manuscript-review --file manuscript-review-b.json --expected-revision REVISION --request-id record-manuscript-review-b
 exactory-research gate publication
 ```
+
+The working files of the pinned bundle stay as pinned until its measurement is
+complete, that is, until the three measurement reviews and their predictions
+are recorded (next section). `manuscript-review` and `manuscript-prediction`
+read the PDF, the abstract, the bibliography, the claims file and the sources
+at their paths and refuse with `publication_artifact_changed` when one differs
+from its pinned bytes. Do not recompile the PDF or change those files while a
+review or a prediction of the bundle is still to be recorded. `status` names
+each differing file under `bundle_drift`, with the bundle's `bundle_digest`,
+while the measurement is incomplete. `exactory-research restore --bundle DIGEST`
+writes the pinned bytes back. It first stores the current bytes of each
+differing file as a backup artifact and reports it under `restored` as
+`backup`, `{sha256, path, size, media_type}`, with the bytes at that `path`
+under `research/sources/objects/`. It records nothing, so keep its output: no
+record names a backup. Once the measurement is complete, read the backup back
+to continue the displaced edit in the next revision. The same command restores
+the files of any recorded bundle, for example the measured bundle before its
+deposit.
 
 Managed publication uses the current exact bundle, two applicable accepting
 reviews, current decision requirements and existing citation/remote receipt checks.

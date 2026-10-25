@@ -10,6 +10,7 @@ import time
 from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions,
                 principles, reading, resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
+from .drafting import draft_obligations
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -117,7 +118,8 @@ OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
-from .publication import list_publication_receipts, prepare_publication, record_manuscript_review
+from .publication import check_claims, list_publication_receipts, prepare_publication, record_manuscript_review
+from .publication_files import bundle_drift, restore_bundle
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
@@ -209,7 +211,8 @@ def build_parser():
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
         add_identity(item)
-    for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export", "recover"):
+    for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
+                    "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
             help={"status": "Read current obligations and source paths.", "next": "Read actionable current preparation obligations.",
                   "obligations": "Read one revision-bound page of the obligations that carry a code.",
@@ -217,8 +220,13 @@ def build_parser():
                   "population-query": "Rank the enumerated population's stored abstracts by query terms without changing the store.",
                   "policy-report": "Describe the preparation set under the recorded or a hypothetical policy, without changing the store.",
                   "gate": "Validate a current gate without mutation.", "export": "Rebuild disposable projections or deliver exact reviewer bytes.",
+                  "check-claims": ("List the manuscript claim references outside the current candidate's evidence "
+                                   "without changing the store."),
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
         item.add_argument("--workspace", default=".")
+        if command == "check-claims":
+            item.add_argument("--file", required=True, help="The claim_evidence array of a manuscript payload, "
+                              "or the whole payload, as UTF-8 JSON without duplicate keys or nonfinite numbers.")
         if command in ("status", "next"):
             item.add_argument("--summary", action="store_true",
                               help="Return a bounded advisory view; the same current evaluation still runs.")
@@ -269,6 +277,14 @@ def build_parser():
                                 help="Read the context-isolation evidence for one exact runtime route.")
     route.add_argument("--workspace", default=".")
     route.add_argument("--route-id", required=True)
+    restore = commands.add_parser("restore", allow_abbrev=False,
+                                  help="Write the pinned files of a recorded manuscript bundle back to their paths. "
+                                       "The command first stores each differing working file as a backup artifact. "
+                                       "The revision does not change.")
+    restore.add_argument("--workspace", default=".")
+    restore.add_argument("--bundle", required=True,
+                         help="The digest of a recorded manuscript bundle as the pin returned it: 64 lowercase "
+                              "hexadecimal digits. It names any recorded bundle, not only the selected one.")
     return parser
 
 
@@ -359,6 +375,11 @@ def status_report(store, *, counters=False):
         milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
         if milestone is not None:
             report = gate_state(records, evaluation, milestone, profile=profile)
+    draft_pending = draft_obligations(records, store.root)
+    if draft_pending:
+        obligations = report["obligations"] + draft_pending
+        report = dict(report, ready=False, obligations=obligations,
+                      counts=dict(report["counts"], obligations=len(obligations)))
     diagnostics = {"evaluation": dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     # The cohort inventory names the next unread abstract; every other stage
     # takes the highest-priority current obligation in preparation order.
@@ -366,6 +387,7 @@ def status_report(store, *, counters=False):
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
     tool_status = {}
+    tool_status["bundle_drift"] = bundle_drift(records, evaluation) if profile == "research" else None
     if records.get("probe_intent") or records.get("probe"):
         tool_status["probes"] = summarize_probes(records)
     provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
@@ -391,7 +413,8 @@ def status_report(store, *, counters=False):
                 limits=limits_report(records), **tool_status, **diagnostics, **scope_status,
                 round=round_summary(round_report) if round_report else None,
                 grand_challenge=current_challenge["payload"] if current_challenge else None,
-                next=upcoming or (order_obligations(obligations)[0] if obligations else None),
+                next=draft_pending[0] if draft_pending else (
+                    upcoming or (order_obligations(obligations)[0] if obligations else None)),
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),
                 remote_observations=list(records.get("remote_observation", {}).values()),
@@ -473,8 +496,15 @@ def run(args):
         if args.summary:
             return (next_summary if args.command == "next" else status_summary)(report)
         return report
+    if args.command == "restore":
+        return restore_bundle(store, args.bundle)
     if args.command == "obligations":
         return obligations_page(status_report(store), args.code, limit=args.limit, cursor=args.cursor)
+    if args.command == "check-claims":
+        payload = strict_json(Path(args.file).read_bytes())
+        check_command_bounds(payload)
+        ledger = payload.get("claim_evidence") if isinstance(payload, dict) else payload
+        return check_claims(store, ledger)
     if args.command == "batches":
         from .batches import export_batches
         if args.candidates and not args.loop:

@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" guard_attack_files.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 2; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" guard_attack_files.py",
             "timeout": 30
           }
         ]
@@ -17,12 +17,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" guard_experiment_exec.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 2; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" guard_experiment_exec.py",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" enforce_decision_log.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 2; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" enforce_decision_log.py",
             "timeout": 15
           }
         ]
@@ -32,7 +32,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" enforce_unit_flow.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 2; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" enforce_unit_flow.py",
             "timeout": 15
           }
         ]
@@ -44,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" check_references_edit.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 1; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" check_references_edit.py",
             "timeout": 15
           }
         ]
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" record_paper_authorship.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 1; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" record_paper_authorship.py",
             "timeout": 15
           }
         ]
@@ -64,7 +64,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" record_attack_activity.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 1; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" record_attack_activity.py",
             "timeout": 15
           }
         ]
@@ -75,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/session_start.py\"",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/session_start.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 1; }; exec python3 \"${PLUGIN_ROOT}/codex/session_start.py\"",
             "timeout": 10
           }
         ]
@@ -84,7 +84,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" resume_attack.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 1; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" resume_attack.py",
             "timeout": 30
           }
         ]
@@ -95,12 +95,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" continue_autopilot.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 0; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" continue_autopilot.py",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "python3 \"${PLUGIN_ROOT}/codex/hook.py\" continue_attack.py",
+            "command": "[ -f \"${PLUGIN_ROOT}/codex/hook.py\" ] || { printf '%s\\n' '[exactory] The Exactory plugin was updated during this session; start a new session.' >&2; exit 0; }; exec python3 \"${PLUGIN_ROOT}/codex/hook.py\" continue_attack.py",
             "timeout": 30
           }
         ]

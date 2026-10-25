@@ -16,10 +16,21 @@ reason to truncate. Missing, scanned, malformed or timed-out extraction remains
 pending.
 The default pdftotext invocation uses explicit argv, a timeout, a private temp
 directory, and a bounded output read. HTML requires article-body structure with
-nonempty content blocks beyond titles, metadata and abstracts. includes_abstract
-only describes nonempty abstract content actually saved in the extraction.
-HTTP success or arbitrary extracted text is not evidence of full-text
-availability. No function here creates a reading record.
+nonempty content blocks beyond titles, metadata and abstracts. XML
+(application/xml or text/xml) is read as a JATS article when the local name of
+its root element is article: the text of the whole document is saved with a
+break at each block element, body content is text in paragraphs, list items,
+table cells and similar elements inside body outside headings, abstracts and
+metadata, and the href of each graphic inside a fig is returned as
+visual_asset_names, names only. The parser matches element names by local
+name, loads no external DTD or entity and expands no declared entity: an
+internal entity declaration is 'xml_internal_entity', a reference to an
+external entity or to one that only an external DTD defines is
+'xml_external_entity', invalid XML is 'malformed_xml', an article without body
+content is 'landing_page', and other XML stays 'unsupported_fulltext'.
+includes_abstract only describes nonempty abstract content actually saved in
+the extraction. HTTP success or arbitrary extracted text is not evidence of
+full-text availability. No function here creates a reading record.
 """
 
 import math
@@ -32,6 +43,7 @@ import tempfile
 import time
 from html.parser import HTMLParser
 from pathlib import Path
+from xml.parsers import expat
 
 from .errors import ResearchError
 
@@ -187,7 +199,93 @@ class _Article(HTMLParser):
                 self.body_text.append(data)
 
 
+class _JatsArticle:
+    """Read article text and figure names without resolving XML dependencies."""
+
+    blocks = frozenset({"front", "body", "back", "abstract", "trans-abstract", "sec", "title", "subtitle",
+                        "article-title", "journal-title", "contrib", "kwd", "p", "list", "list-item", "def-list",
+                        "def-item", "term", "def", "disp-quote", "preformat", "fig", "caption", "label",
+                        "table-wrap", "table", "tr", "td", "th", "ref-list", "ref", "ack", "break"})
+
+    def __init__(self):
+        self.root = None
+        self.stack = []
+        self.text = []
+        self.body_text = []
+        self.abstract_text = []
+        self.visual_asset_names = []
+        self.declaration = None
+
+    def start(self, name, attrs):
+        tag = name.rsplit("}", 1)[-1]
+        if self.root is None:
+            self.root = tag
+        state = dict(self.stack[-1]) if self.stack else dict.fromkeys(
+            ("body", "abstract", "heading", "metadata", "content", "figure"), False)
+        state["body"] |= tag == "body"
+        state["abstract"] |= tag in ("abstract", "trans-abstract")
+        state["heading"] |= tag in ("title", "subtitle", "article-title", "alt-title", "label")
+        state["metadata"] |= tag in ("front", "back", "article-meta", "journal-meta", "ref-list", "ref",
+                                    "kwd-group", "contrib-group", "aff", "permissions", "author-notes")
+        state["content"] |= tag in ("p", "list-item", "def", "td", "preformat", "disp-quote")
+        state["figure"] |= tag == "fig"
+        self.stack.append(state)
+        if tag in self.blocks:
+            self.text.append("\n")
+        if tag == "graphic" and state["figure"]:
+            for attribute, value in attrs.items():
+                if attribute.rsplit("}", 1)[-1] == "href" and value.strip():
+                    asset = value.strip()
+                    if asset not in self.visual_asset_names:
+                        self.visual_asset_names.append(asset)
+
+    def end(self, name):
+        self.stack.pop()
+        if name.rsplit("}", 1)[-1] in self.blocks:
+            self.text.append("\n")
+
+    def characters(self, data):
+        if not self.stack:
+            return
+        state = self.stack[-1]
+        self.text.append(data)
+        if state["abstract"] and not state["heading"]:
+            self.abstract_text.append(data)
+        if state["body"] and state["content"] and not any(
+                state[key] for key in ("abstract", "heading", "metadata")):
+            self.body_text.append(data)
+
+    def default(self, token):
+        # DefaultHandler also sees declarations that EntityDeclHandler omits.
+        if token == "<!ENTITY":
+            self.declaration = []
+        elif self.declaration is not None and token.strip():
+            if token == ">":
+                self.declaration = None
+                return
+            self.declaration.append(token)
+            value_index = 2 if self.declaration[0] == "%" else 1
+            if len(self.declaration) == value_index + 1 and token[0] in "\"'":
+                raise ResearchError("xml_internal_entity",
+                                    "JATS XML with an internal entity declaration is not extracted")
+
+    def external_entity(self, *args):
+        raise ResearchError("xml_external_entity", "JATS XML requiring an external entity is not extracted")
+
+    def parse(self, data):
+        parser = expat.ParserCreate(namespace_separator="}")
+        parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+        parser.StartElementHandler = self.start
+        parser.EndElementHandler = self.end
+        parser.CharacterDataHandler = self.characters
+        parser.DefaultHandler = self.default
+        parser.ExternalEntityRefHandler = self.external_entity
+        parser.SkippedEntityHandler = self.external_entity
+        parser.Parse(data, True)
+
+
 GENERIC_BINARY_MEDIA_TYPES = frozenset({"application/octet-stream", "binary/octet-stream"})
+XML_MEDIA_TYPES = frozenset({"application/xml", "text/xml"})
 
 
 def base_media_type(media_type):
@@ -226,6 +324,24 @@ def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
                        "version": extracted.get("version"), "options": extracted.get("options", {"layout": layout})})
         if result["status"] == "extracted" and (not isinstance(result["text"], str) or not result["text"].strip()):
             result["status"], result["text"] = "empty_text", None
+        return result
+    if base_media_type(media_type) in XML_MEDIA_TYPES:
+        result["extractor"] = "jats"
+        article = _JatsArticle()
+        try:
+            article.parse(data)
+        except ResearchError as error:
+            result["status"] = error.code
+        except (expat.ExpatError, LookupError, ValueError):
+            result["status"] = "malformed_xml"
+        else:
+            if article.root == "article":
+                result["status"] = "landing_page"
+                if "".join(article.body_text).strip():
+                    result.update({"status": "extracted",
+                                   "text": re.sub(r"\n[ \t]*\n+", "\n\n", "".join(article.text)).strip(),
+                                   "includes_abstract": bool("".join(article.abstract_text).strip()),
+                                   "visual_asset_names": article.visual_asset_names})
         return result
     if base_media_type(media_type) not in ("text/html", "application/xhtml+xml"):
         return result

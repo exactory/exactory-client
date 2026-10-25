@@ -115,6 +115,21 @@ derivations, and selection choices; unknown or inapplicable dimensions need reas
 Source support, contradiction, unsupported attribution, and unresolved access are
 separate from an independent scientific proof, replication, or refutation.
 
+In a managed study, the pin accepts a reference in `manuscript.claim_evidence`
+only when it is evidence of the current candidate. The candidate's evidence is
+every reference that the selected assessment, or a retained branch's plan or
+assessment, cites. Build the `claim_evidence` array with the ledger and run
+`exactory-research check-claims --file FILE` on it, or on the whole `manuscript`
+input. The command needs the candidate but not the readiness review. It lists
+every reference outside the candidate with its claim id and exits 1, or exits 0
+with an empty list, and it changes nothing. For each listed reference, cite a
+candidate reference instead, for example the same output at the locator that
+the assessment cites. Or record an assessment that cites it, for example in its
+`findings`, and checkpoint that assessment. Then run the check again, until it
+exits 0. A reference that enters the candidate after the readiness review needs
+a new readiness review as well. So the check belongs before the readiness
+delivery (STUDY.md). State its result in the stage report.
+
 A claim without a source does not enter the draft: drop it, and name every
 dropped claim in the stage report so the user can supply a source later. Never
 invent a number.
@@ -169,6 +184,12 @@ While drafting:
 - Add every reference through `exactory-check add` at the moment you cite it.
 - Compile to PDF and fix LaTeX errors before the stage report.
 
+Run `exactory-research check-claims --file manuscript.json` on the finished
+`manuscript` input first and resolve every listed reference under stage 1's
+rules. A reference outside the current candidate fails the pin with
+`publication_evidence_mismatch`: the message names the first claim id and
+reference, and `mismatches` in the details lists every pair.
+
 Pin the exact PDF, abstract, bibliography, claims, and optional sources with
 `exactory-research manuscript`, including actual claim-to-evidence mappings and
 `citation_accounting`. The pin accounts for every work that the study read in
@@ -184,6 +205,23 @@ for each listed work, and for no other work:
   link to the preprint that you read;
 - `{"work_id": ..., "reason": ...}` when the paper does not cite the work,
   saying why the work does not bear on the paper.
+
+After the pin, the pinned working files (the PDF, the abstract, the
+bibliography, the claims file and the sources when pinned) stay as pinned until
+the bundle's measurement is complete: three assessors with a review and a
+prediction each (WORKSPACE.md, "The measurement"). `manuscript-review` and
+`manuscript-prediction` read those files and refuse with
+`publication_artifact_changed` when one differs. So do not recompile the PDF,
+and do not change the other files, until the last review and prediction of the
+bundle are recorded. If `exactory-research status` lists a file under
+`bundle_drift`, run `exactory-research restore --bundle DIGEST` with the
+`bundle_digest` it reports, the `digest` that the pin returned. The command
+stores the current bytes of each differing file as a backup artifact, then
+writes the pinned bytes, and lists each file under `restored` with its
+`backup` reference. Keep that output: no record names a backup, and its `path`
+under `research/sources/objects/` is where you read the displaced edit back
+after the measurement, for the next revision.
+
 Stage report: present the compiled draft, evidence scope and limitations, citation
 findings, and where refreshed searches changed the text. Include a citation map:
 for each of the five purposes, the keys cited; for each named law, model,

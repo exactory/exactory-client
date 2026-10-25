@@ -73,11 +73,14 @@ def constitution_contract():
 
 
 def _validate_objective(target):
-    fields(target, ("kind", "id", "statement"), code="invalid_target")
+    fields(target, ("kind", "id", "statement"), ("title", "category"), code="invalid_target")
     if target["kind"] != "objective":
         raise ResearchError("invalid_target", "A research target must identify the complete objective")
     for key in ("id", "statement"):
         text(target[key], "Objective " + key, code="invalid_target")
+    for key in ("title", "category"):
+        if key in target:
+            text(target[key], "Objective " + key, code="invalid_target")
 
 
 def _validate_target(records, artifacts, profile, target):

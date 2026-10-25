@@ -136,7 +136,13 @@ cohort predictions and keep their medians and spread. Give each the exact artifa
 prescribed evidence and cohort definition, without author advocacy, scores,
 revision history, strategic decisions or another reviewer's answer. Use verified
 context routes for these assignments. The two accepting current publication reviews
-remain a separate requirement of the managed publication gate.
+remain a separate requirement of the managed publication gate. Keep the pinned
+working files as pinned until the three reviews and predictions are recorded:
+`manuscript-review` and `manuscript-prediction` refuse a differing file with
+`publication_artifact_changed`. `status` names such a file under `bundle_drift`
+while the measurement is incomplete. `exactory-research restore --bundle DIGEST`
+writes the pinned bytes back after it stores the current bytes as a backup
+artifact named in its output (write skill, WORKSPACE.md).
 
 For each substantive iteration:
 

@@ -1,6 +1,7 @@
 """Exact manuscript snapshots, unchanged rubric reviews and publication receipts."""
 
 import hashlib
+import json
 from pathlib import Path
 
 from .artifacts import ArtifactStore
@@ -102,6 +103,44 @@ def _claim_markers(claim):
         text(claim["superseded"]["reason"], "Supersession reason", code="publication_claims_missing")
 
 
+def validate_claim_evidence(claim_evidence, candidate):
+    """Require every ledger reference to match current candidate evidence by digest."""
+    if not isinstance(claim_evidence, list):
+        raise ResearchError("publication_claims_missing", "Map each claim to current candidate evidence")
+    allowed = {digest(reference) for reference in candidate["evidence"]}
+    mismatches = []
+    for link in claim_evidence:
+        fields(link, ("claim_id", "evidence"))
+        text(link["claim_id"], "Claim ID")
+        if not isinstance(link["evidence"], list) or not link["evidence"]:
+            raise ResearchError("publication_evidence_mismatch",
+                                "Claim " + link["claim_id"] + " needs a nonempty evidence array "
+                                "of current candidate references")
+        mismatches.extend({"claim_id": link["claim_id"], "evidence": reference}
+                          for reference in link["evidence"] if digest(reference) not in allowed)
+    if mismatches:
+        first = mismatches[0]
+        reference = json.dumps(first["evidence"], ensure_ascii=False, sort_keys=True)
+        raise ResearchError("publication_evidence_mismatch",
+                            "Claim " + first["claim_id"] + " links evidence outside the current candidate: "
+                            + reference, {"mismatches": mismatches})
+
+
+def check_claims(store, claim_evidence):
+    snapshot = store.snapshot()
+    records = snapshot["records"]
+    artifacts = Evaluation(records, ArtifactStore(store.root))
+    from .publication_scope import assess_manuscript_readiness, has_publication_scope
+    report = (assess_manuscript_readiness(records, artifacts) if has_publication_scope(records)
+              else author_readiness_state(records, artifacts))
+    if report["candidate"] is None:
+        raise ResearchError("candidate_checkpoint_missing",
+                            "Select a current assessed candidate to check claim evidence",
+                            {"obligations": report["obligations"]})
+    validate_claim_evidence(claim_evidence, report["candidate"])
+    return {"revision": snapshot["revision"], "mismatches": []}
+
+
 def prepare_publication(store, payload, *, expected_revision, request_id):
     """Pin {id, files:{pdf,abstract,bibliography,claims,sources}, claim_evidence, citation_accounting?}.
 
@@ -149,15 +188,13 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
             raise ResearchError("publication_claims_missing", "Claim IDs must be unique")
         if not isinstance(value["claim_evidence"], list):
             raise ResearchError("publication_claims_missing", "Map each claim to current candidate evidence")
-        allowed = {digest(e) for e in report["candidate"]["evidence"]}
         seen = set()
         for link in value["claim_evidence"]:
             fields(link, ("claim_id", "evidence"))
             if link["claim_id"] not in claim_ids or link["claim_id"] in seen:
                 raise ResearchError("publication_claims_missing", "Map each manuscript claim exactly once")
             seen.add(link["claim_id"])
-            if not isinstance(link["evidence"], list) or not link["evidence"] or any(digest(e) not in allowed for e in link["evidence"]):
-                raise ResearchError("publication_evidence_mismatch", "Every manuscript claim must link actual current candidate evidence")
+        validate_claim_evidence(value["claim_evidence"], report["candidate"])
         if seen != set(claim_ids):
             raise ResearchError("publication_claims_missing", "Map every manuscript claim to evidence")
         scoped = report.get("contract")

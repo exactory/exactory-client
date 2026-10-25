@@ -10,6 +10,7 @@ from pathlib import Path
 import uuid
 
 from .artifacts import ArtifactStore
+from .drafting import export_draft, prepare_draft
 from .errors import ResearchError
 from .evidence import digest
 from .gates import STAGES, gate_state, validate_transition
@@ -112,6 +113,8 @@ def export_workspace(store):
     for kind, state in snapshot["records"].get("workspace", {}).items():
         if kind in ("study", "draft", "deposit"):
             json_projection(store.root, ".exactory/" + kind + ".json", state)
+    if "draft" in snapshot["records"].get("workspace", {}):
+        export_draft(store)
     if snapshot["records"].get("workspace_decision"):
         write_projection(store.root, ".exactory/decisions.jsonl", _decisions(snapshot["records"], ArtifactStore(store.root)))
     return {"revision": snapshot["revision"], "projection_only": True}
@@ -208,7 +211,7 @@ def update_study(store, payload, *, expected_revision, request_id):
             raise ResearchError("invalid_state", "Loop budget must be nonnegative")
         validate_transition(records, artifacts, previous, proposed)
         proposed["updated"] = now()
-        return [("workspace", "study", proposed)], proposed
+        return [("workspace", "study", proposed)] + prepare_draft(records, store.root, proposed), proposed
     result = prepared_mutation(store, "workspace.state", payload, prepare,
                                expected_revision=expected_revision, request_id=request_id)
     export_workspace(store)

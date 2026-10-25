@@ -29,6 +29,7 @@ from .operations import normalized_text as _normalized
 from .principles import objective_changes
 from .probe_provenance import find_probe_artifact_origins
 from .reading import validate_read_evidence
+from .scientific_json import is_json_media_type
 from .source_links import captured_source, original_identity, read_locator, validate_link
 from .strategy import find_orchestration
 from .synthesis import synthesis_state
@@ -246,9 +247,11 @@ class _Context:
                 managed=True, recorded_inputs=inputs, kind="record"):
             self.require_reassessment(plan["id"], "authenticated recorded plan")
 
-    def verify_plan_dependencies(self, plan):
+    def verify_plan_dependencies(self, plan, *, format_only=False):
         self.verify_plan_digest(plan)
         current = self.project_dependencies(_plan_dependencies(self, plan["payload"]))
+        if format_only:
+            current = dict(current, strategy_failures=plan["dependencies"]["strategy_failures"])
         return self.accept_dependencies(plan["dependencies"], current)
 
     def verify_assessment_digest(self, recorded, identifier):
@@ -795,6 +798,9 @@ def _validate_reopening(context, value, account):
         if failure is None:
             raise ResearchError("reopening_mismatch", "Address an actual recorded observed failure signal")
         changed = evidence.many(item["evidence"], "Changed failure evidence")
+        # Conversions retain the original science despite different serialized bytes.
+        changed = [linked for linked in changed if linked["reference"]["kind"] != "result"
+                   or "format_only_of" not in context.records["execution"][linked["reference"]["execution_id"]]]
         historical = record["assessment"]["evidence"]
         def identity(linked):
             reference = linked["reference"]
@@ -895,6 +901,70 @@ def _command(artifacts, value):
             _text(value["seed_reason"], "Seed explanation")
 
 
+def _resolve_format_only_execution(records, artifacts, plan, admission):
+    if "format_only_of" not in admission:
+        return None
+    identifier = admission["format_only_of"]
+    _text(identifier, "Earlier format-only execution ID")
+    earlier = records.get("execution", {}).get(identifier)
+    if (earlier is None or earlier["payload"]["cycle_id"] != plan["id"]
+            or earlier["plan_digest"] != plan["digest"] or earlier["payload"]["status"] != "completed"
+            or earlier["payload"]["origin"]["kind"] != "managed" or not earlier["payload"]["outputs"]
+            or not any(record["payload"]["cycle_id"] == plan["id"]
+                       and identifier in record["payload"]["execution_ids"]
+                       for record in records.get("cycle_assessment", {}).values())):
+        raise ResearchError("format_only_reference_invalid",
+                            "Name a completed assessed managed execution of the same immutable plan")
+    _execution_artifacts(artifacts, earlier["payload"])
+    return earlier
+
+
+def _is_json_equal(left, right):
+    if isinstance(left, bool) or isinstance(right, bool):
+        return type(left) is type(right) and left == right
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(_is_json_equal(left[key], right[key]) for key in left)
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(_is_json_equal(a, b) for a, b in zip(left, right))
+    return left == right
+
+
+def _validate_format_only_outputs(artifacts, earlier, execution):
+    def parse_retained_output(output):
+        data = artifacts.read(output["artifact"])
+        is_json = is_json_media_type(output["artifact"]["media_type"])
+        return output, data, is_json, strict_json(data) if is_json else None
+
+    try:
+        originals = [parse_retained_output(output) for output in earlier["payload"]["outputs"]]
+        converted = [parse_retained_output(output) for output in execution["outputs"]]
+    except ResearchError as error:
+        if error.code != "invalid_json":
+            raise
+        raise ResearchError("format_only_output_mismatch",
+                            "Format-only JSON outputs must retain valid JSON values") from error
+    by_id = {output["id"]: output for output, _, _, _ in originals}
+    covered = set()
+    for output, data, is_json, value in converted:
+        matches = []
+        for original, old_data, old_json, old_value in originals:
+            if original["requirement_id"] != output["requirement_id"]:
+                continue
+            if output["id"] in by_id and original["id"] != output["id"]:
+                continue
+            if data == old_data or is_json and old_json and _is_json_equal(value, old_value):
+                matches.append(original["id"])
+        if not matches:
+            raise ResearchError("format_only_output_mismatch",
+                                "Every format-only output must equal an earlier output of the same requirement",
+                                {"execution_id": earlier["id"], "output_id": output["id"]})
+        covered.update(matches)
+    missing = sorted(set(by_id) - covered)
+    if missing:
+        raise ResearchError("format_only_output_mismatch", "Retain every earlier output in a checked equivalent format",
+                            {"execution_id": earlier["id"], "missing_output_ids": missing})
+
+
 def admit_execution(store, payload, *, expected_revision, request_id):
     """Reserve one run and its resources before launch; never an instruction to relaunch.
 
@@ -906,7 +976,7 @@ that run. An idempotent admission response retains its original reservation.
 
     def prepare(records, value):
         plan = _get(records, "cycle_plan", value.get("cycle_id"), "unknown_cycle")
-        _fields(value, ("id", "cycle_id", "plan_digest", "command", "reserved_units"))
+        _fields(value, ("id", "cycle_id", "plan_digest", "command", "reserved_units"), ("format_only_of",))
         _text(value["id"], "Run/admission ID")
         context = _Context(records, artifacts)
         context.require_ready()
@@ -916,8 +986,10 @@ that run. An idempotent admission response retains its original reservation.
             raise ResearchError("plan_digest_mismatch", "Admit the exact immutable plan the launcher will execute")
         account = records["strategy_account"][plan["strategy_key"]]
         require_accounted_usage(records, artifacts, plan["strategy_key"])
-        _validate_reopening(context, plan["payload"], account)
-        if not context.verify_plan_dependencies(plan):
+        earlier = _resolve_format_only_execution(records, artifacts, plan, value)
+        if earlier is None:
+            _validate_reopening(context, plan["payload"], account)
+        if not context.verify_plan_dependencies(plan, format_only=earlier is not None):
             raise ResearchError("plan_dependencies_stale", "Plan a current development before running after a source, scope or policy change")
         _command(artifacts, value["command"])
         _number(value["reserved_units"], "Reserved resource units", positive=True)
@@ -927,13 +999,14 @@ that run. An idempotent admission response retains its original reservation.
             if admission["strategy_key"] == plan["strategy_key"] and admission["id"] not in records.get("execution_outcome", {}):
                 raise ResearchError("execution_pending", "Reconcile the existing admitted run before launching another producer", {"admission_id": admission["id"]})
         cycle = records["cycle"][value["cycle_id"]]
-        if cycle["status"] in ("complete", "failed", "budget_paused"):
+        if earlier is None and cycle["status"] in ("complete", "failed", "budget_paused"):
             raise ResearchError("cycle_closed", "Use an explicit successor checkpoint and development question after assessing this branch")
         record = dict(value, strategy_key=plan["strategy_key"], admitted_revision=expected_revision + 1, request_id=request_id,
                       dependencies=plan["dependencies"])
         if strategic.get("decision") is not None:
             from .research_decisions import validate_cycle_decision
-            binding = validate_cycle_decision(records, artifacts, plan["payload"], strategic["decision"], reserved_units=value["reserved_units"])
+            binding = validate_cycle_decision(records, artifacts, plan["payload"], strategic["decision"],
+                                              reserved_units=value["reserved_units"], format_only=earlier is not None)
             record["research_decision"] = {"id": strategic["decision"]["id"], "digest": strategic["decision"]["digest"], "binding": binding}
         record["digest"] = digest(context.project_dependencies(record, "record"))
         account = dict(account, executions=account["executions"] + 1, charged_units=account["charged_units"] + value["reserved_units"])
@@ -971,8 +1044,10 @@ def validate_admitted_execution(records, artifacts, admission_id):
             raise ResearchError("research_decision_stale", "The admitted execution must retain its exact reviewed decision")
     account = records["strategy_account"][plan["strategy_key"]]
     require_accounted_usage(records, artifacts, plan["strategy_key"])
-    _validate_reopening(context, plan["payload"], account)
-    if not context.verify_plan_dependencies(plan):
+    earlier = _resolve_format_only_execution(records, artifacts, plan, admission)
+    if earlier is None:
+        _validate_reopening(context, plan["payload"], account)
+    if not context.verify_plan_dependencies(plan, format_only=earlier is not None):
         raise ResearchError("plan_dependencies_stale", "Plan a current development before launching after a source, scope or policy change")
     if (admission["plan_digest"] != plan["digest"]
             or admission["dependencies"] != plan["dependencies"]):
@@ -1063,6 +1138,9 @@ def record_execution(store, payload, *, expected_revision, request_id, _observat
         # Completed output recording must work after policy/literature changes:
         # it preserves actual history, which a fresh assessment may revalidate.
         _execution_artifacts(artifacts, value)
+        earlier = _resolve_format_only_execution(records, artifacts, plan, admission) if admission else None
+        if earlier is not None:
+            _validate_format_only_outputs(artifacts, earlier, value)
         probe_origins = find_probe_artifact_origins(records, [output["artifact"] for output in value["outputs"]], artifacts=artifacts)
         if probe_origins and admission:
             from .execution_evidence import validate_probe_execution_observation
@@ -1071,6 +1149,8 @@ def record_execution(store, payload, *, expected_revision, request_id, _observat
         record = {"id": value["id"], "payload": value, "plan_digest": plan["digest"],
                   "recorded_revision": expected_revision + 1, "request_id": request_id,
                   "admitted_revision": admission["admitted_revision"] if admission else None}
+        if earlier is not None:
+            record["format_only_of"] = {"execution_id": earlier["id"], "execution_digest": earlier["digest"]}
         if probe_origins:
             record["probe_origins"] = probe_origins
         record["digest"] = digest(record)
