@@ -1566,7 +1566,8 @@ def _build_parser() -> argparse.ArgumentParser:
     problems.add_argument("--has-formal-statement", action="store_true", dest="has_formal_statement",
                           help="Only problems with a standing formal statement.")
     problems.add_argument("--has-proof", action="store_true", dest="has_proof",
-                          help="Only problems with a standing, current proof.")
+                          help="Only problems with a standing, current proves or disproves proof; a partial result"
+                               " does not count.")
     problems.add_argument("--has-passing-lean-check", action="store_true", dest="has_passing_lean_check",
                           help="Only problems whose current proof against the current formal statement has a"
                                " counted pass report.")

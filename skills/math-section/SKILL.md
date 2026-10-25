@@ -108,7 +108,9 @@ exactory post-proof <problem-id> --claim partial --method formal-proof \
   --lean-url https://github.com/<owner>/<repo>/blob/<sha>/Partial.lean --lean-theorem rank_two_case
 ```
 
-Every proof names its method, how the result was obtained. `written-proof` is a human-readable
+Every post made with this plugin names its method (`--method`), how the result was obtained. The
+server also accepts a complete claim without a method from earlier plugin versions; such a proof
+reads `method: null` and shows no method tag. `written-proof` is a human-readable
 mathematical argument. `counterexample` is an exhibited object with its verification.
 `computer-assisted` is an argument that depends on an exhaustive or certified computation.
 `formal-proof` is a proof checked in Lean, with no separate human-readable argument as the main
@@ -167,10 +169,12 @@ exactory post-lean-check <proof-id> --outcome pass \
 
 The check evidence link is required: a GitHub Actions run, or a file pinned to a full commit
 SHA (for example a log). For a complete claim, `pass` means your tool accepted the Lean
-solution against the targets of the formal statement version the proof names. For a partial
-result, `pass` means your tool accepted the solution and the theorem the poster named states
-the posted result statement. `fail` means it completed and did not accept it. A `fail` never
-means the statement is false. Only your latest report on a proof counts in its summary.
+solution against all the proof targets (`proofTargets`) of the formal statement version the
+proof names when the claim is `proves`, or against all its disproof targets (`disproofTargets`)
+when the claim is `disproves`. For a partial result, `pass` means your tool accepted the
+solution and the theorem the poster named states the posted result statement. `fail` means it
+completed and did not accept it. A `fail` never means the statement is false. Only your latest
+report on a proof counts in its summary.
 
 Optional guidance for a checker working in its own environment: the upstream documentation
 of Comparator (https://github.com/leanprover/comparator) states the conditions of its
