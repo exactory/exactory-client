@@ -1,10 +1,12 @@
 import copy
+import json
 from functools import partial
 from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
+from research_harness.evidence import digest
 from research_harness.literature import import_bundle
 
 
@@ -1292,3 +1294,253 @@ class DevelopmentTests(DevelopmentCase):
         self.assert_error("objective_locked", lambda: principles.widen_objective(records, reused, lineage, "round-3"))
         # The unchanged root record is identical content, so only this guard stands between it and the loop.
         self.assert_error("objective_locked", lambda: principles.widen_objective(records, dict(self.objective), lineage, "round-3"))
+
+
+class FormatOnlyRerunTests(DevelopmentCase):
+    def assessed_run(self, *, max_executions=4):
+        self.prepared_study()
+        plan, execution = self.run_cycle(self.plan(max_executions=max_executions))
+        assessment = self.assessment(plan, execution)
+        assessment["failures"][0].update(status="observed", explanation="Retain the observed scientific failure.")
+        assessment.update(disposition="failed", objective_status="open",
+                          remaining_obligations=["Address the observed failure with changed evidence."])
+        self.mutate(self.development().assess_cycle, assessment)
+        return plan, execution, assessment
+
+    def format_payload(self, execution, **changes):
+        original = self.store.snapshot()["records"]["execution_admission"][execution["origin"]["admission_id"]]
+        payload = {key: copy.deepcopy(original[key]) for key in
+                   ("cycle_id", "plan_digest", "command", "reserved_units")}
+        return dict(payload, id="format-run", format_only_of=execution["id"], **changes)
+
+    def retained_format_admission(self, execution):
+        # Seed the additive record through real storage so recording and launch checks
+        # fail on their own missing rules, independently of admission's new field.
+        records = self.store.snapshot()["records"]
+        plan = records["cycle_plan"][execution["cycle_id"]]
+        account = records["strategy_account"][plan["strategy_key"]]
+        admission = dict(self.format_payload(execution), strategy_key=plan["strategy_key"],
+                         admitted_revision=self.store.revision + 1, request_id="retained-format-admission",
+                         dependencies=plan["dependencies"])
+        admission["digest"] = digest(admission)
+
+        def seed(transaction):
+            transaction.put("execution_admission", admission["id"], admission)
+            transaction.put("strategy_account", account["key"], dict(account, executions=account["executions"] + 1,
+                            charged_units=account["charged_units"] + admission["reserved_units"]))
+            cycle = records["cycle"][plan["id"]]
+            transaction.put("cycle", cycle["id"], dict(cycle, status="running"))
+
+        self.store.mutate("test.format-admission", {}, seed, expected_revision=self.store.revision,
+                          request_id=admission["request_id"])
+        return admission
+
+    def assert_conversion_refused(self, execution):
+        before = self.store.snapshot()
+        self.assert_error("format_only_output_mismatch",
+                          lambda: self.mutate(self.development().record_execution, execution))
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertNotIn("format-run", before["records"]["execution_outcome"])
+
+    def test_format_only_admission_preserves_failed_assessment_budget_and_legacy_replay(self):
+        api = self.development()
+        plan, execution, assessment = self.assessed_run()
+        checkpoint = self.save_checkpoint(select=False)
+        before = self.store.snapshot()["records"]
+        original = before["execution_admission"]["run-1"]
+        try:
+            admission = self.mutate(api.admit_execution, self.format_payload(execution))["result"]
+        except ResearchError as error:
+            self.fail("An assessed failure must allow a declared checked format-only run: " + error.code)
+        after = self.store.snapshot()["records"]
+        self.assertEqual(admission["format_only_of"], execution["id"])
+        self.assertEqual(after["cycle_plan"][plan["id"]], before["cycle_plan"][plan["id"]])
+        self.assertEqual(after["execution"][execution["id"]], before["execution"][execution["id"]])
+        self.assertEqual(after["cycle_assessment"][assessment["id"]], before["cycle_assessment"][assessment["id"]])
+        self.assertEqual(after["checkpoint"][checkpoint["id"]], checkpoint)
+        account = after["strategy_account"][admission["strategy_key"]]
+        self.assertEqual((account["executions"], account["charged_units"]), (2, 2))
+        self.assertEqual(account["failures"], [{"assessment_id": assessment["id"], "signal_id": "counterexample"}])
+        self.assertEqual(account["limits"], plan["resource_limits"])
+        old_payload = {key: original[key] for key in ("id", "cycle_id", "plan_digest", "command", "reserved_units")}
+        replay = api.admit_execution(self.store, old_payload, expected_revision=0, request_id=original["request_id"])
+        self.assertEqual(replay["result"], original)
+
+    def test_format_only_recording_accepts_json_serialization_and_renamed_identical_outputs(self):
+        api = self.development()
+        _, original, assessment = self.assessed_run()
+        baseline = self.store.snapshot()["records"]["execution"][original["id"]]
+        admission = self.retained_format_admission(original)
+        execution = self.execution(admission)
+        value = json.loads(self.artifacts.read(original["outputs"][0]["artifact"]))
+        formatted = self.artifacts.put(json.dumps(value, indent=2, sort_keys=True).encode(), "application/json")
+        for output in execution["outputs"]:
+            output["artifact"] = formatted
+        copied = self.artifacts.put(self.artifacts.read(original["outputs"][0]["artifact"]), "text/plain")
+        execution["outputs"].append(dict(original["outputs"][0], id="renamed-result", artifact=copied))
+        receipt = self.mutate(api.record_execution, execution)
+        self.assertEqual(receipt["result"].get("format_only_of"),
+                         {"execution_id": original["id"], "execution_digest": baseline["digest"]})
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["execution"][original["id"]], baseline)
+        self.assertEqual(records["cycle_assessment"][assessment["id"]]["payload"], assessment)
+        self.assertEqual(records["strategy_account"][admission["strategy_key"]]["failures"],
+                         [{"assessment_id": assessment["id"], "signal_id": "counterexample"}])
+        self.assert_error("branch_reopening_required", lambda: self.admit(identifier="ordinary-retry"))
+        snapshot = self.store.snapshot()
+        replay = api.record_execution(self.store, execution, expected_revision=0, request_id=receipt["request_id"])
+        self.assertEqual(replay, receipt)
+        self.assertEqual(self.store.snapshot(), snapshot)
+
+    def test_format_only_launch_validation_accepts_the_assessed_failure(self):
+        _, execution, _ = self.assessed_run()
+        admission = self.retained_format_admission(execution)
+        before = self.store.snapshot()
+        try:
+            checked = self.development().validate_admitted_execution(before["records"], self.artifacts, admission["id"])
+        except ResearchError as error:
+            self.fail("Prelaunch validation must apply the same format-only exemption: " + error.code)
+        self.assertEqual(checked, admission)
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_format_only_launch_validation_still_refuses_changed_plan_dependencies(self):
+        _, execution, _ = self.assessed_run()
+        admission = self.retained_format_admission(execution)
+        self.refresh_synthesis("after-format-admission")
+        self.assert_error("plan_dependencies_stale", lambda: self.development().validate_admitted_execution(
+            self.store.snapshot()["records"], self.artifacts, admission["id"]))
+
+    def test_format_only_admission_requires_a_completed_assessed_run_of_the_same_plan(self):
+        api = self.development()
+        self.prepared_study()
+        _, unassessed = self.run_cycle()
+        payload = self.format_payload(unassessed)
+        self.assert_error("format_only_reference_invalid", lambda: self.mutate(api.admit_execution, payload))
+        assessed = self.assessment(self.plan(), unassessed)
+        self.mutate(api.assess_cycle, assessed)
+        payload["format_only_of"] = "missing-execution"
+        self.assert_error("format_only_reference_invalid", lambda: self.mutate(api.admit_execution, payload))
+        other = self.plan("other-cycle")
+        other["distinguishing_test"] = "A separate comparison with a distinct prospective plan."
+        self.mutate(api.plan_cycle, other)
+        payload.update(cycle_id=other["id"], format_only_of=unassessed["id"],
+                       plan_digest=self.store.snapshot()["records"]["cycle_plan"][other["id"]]["digest"])
+        self.assert_error("format_only_reference_invalid", lambda: self.mutate(api.admit_execution, payload))
+
+    def test_format_only_admission_keeps_the_original_strategy_budget(self):
+        _, execution, _ = self.assessed_run(max_executions=1)
+        before = self.store.snapshot()
+        self.assert_error("strategy_budget_exhausted",
+                          lambda: self.mutate(self.development().admit_execution, self.format_payload(execution)))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_format_only_admission_cannot_replace_an_unreconciled_run(self):
+        _, execution, _ = self.assessed_run()
+        self.retained_format_admission(execution)
+        payload = self.format_payload(execution)
+        payload["id"] = "second-format-run"
+        before = self.store.snapshot()
+        self.assert_error("execution_pending", lambda: self.mutate(self.development().admit_execution, payload))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_format_only_admission_keeps_the_reviewed_tranche_after_a_scientific_failure(self):
+        from managed_strategy_fixtures import bind_plan
+
+        api = self.development()
+        self.prepared_study()
+        self.mutate(self.api("integration").initialize_workspace, {
+            "kind": "study", "state": {"name": "format-fixture", "stage": "experiment",
+                                        "status": "pending", "waiting": None}})
+        plan, original = self.run_cycle(bind_plan(self, self.plan()))
+        assessed = self.assessment(plan, original)
+        assessed["failures"][0]["status"] = "observed"
+        assessed.update(disposition="failed", objective_status="open", remaining_obligations=["Retain the failure."])
+        self.mutate(api.assess_cycle, assessed)
+        before = self.store.snapshot()["records"]
+        try:
+            admission = self.mutate(api.admit_execution, self.format_payload(original))["result"]
+        except ResearchError as error:
+            self.fail("A checked conversion must retain the reviewed tranche without repeating its science: "
+                      + error.code)
+        self.assertEqual(admission["research_decision"]["id"], plan["decision_id"])
+        recorded = self.mutate(api.record_execution, self.execution(admission))["result"]
+        self.assertEqual(recorded["format_only_of"]["execution_id"], original["id"])
+        after = self.store.snapshot()["records"]
+        self.assertEqual(after["research_decision"], before["research_decision"])
+        self.assertEqual(after["cycle_assessment"][assessed["id"]], before["cycle_assessment"][assessed["id"]])
+        self.assertEqual(after["strategy_account"][admission["strategy_key"]]["charged_units"], 2)
+
+    def test_format_only_recording_refuses_changed_json_values(self):
+        _, original, _ = self.assessed_run()
+        execution = self.execution(self.retained_format_admission(original))
+        value = json.loads(self.artifacts.read(execution["outputs"][0]["artifact"]))
+        value["result"]["bound"] = 10
+        execution["outputs"][0]["artifact"] = self.artifacts.put(json.dumps(value).encode(), "application/json")
+        self.assert_conversion_refused(execution)
+
+    def test_format_only_recording_distinguishes_json_booleans_from_numbers(self):
+        _, original, _ = self.assessed_run()
+        execution = self.execution(self.retained_format_admission(original))
+        value = json.loads(self.artifacts.read(execution["outputs"][0]["artifact"]))
+        value["result"]["values"][1] = True
+        execution["outputs"][0]["artifact"] = self.artifacts.put(json.dumps(value).encode(), "application/json")
+        self.assert_conversion_refused(execution)
+
+    def test_format_only_recording_refuses_dropped_json_outputs(self):
+        _, original, _ = self.assessed_run()
+        execution = self.execution(self.retained_format_admission(original))
+        execution["outputs"] = execution["outputs"][:1]
+        self.assert_conversion_refused(execution)
+
+    def test_format_only_recording_refuses_requirement_relabelling(self):
+        _, original, _ = self.assessed_run()
+        execution = self.execution(self.retained_format_admission(original))
+        execution["outputs"][0]["requirement_id"] = "checks"
+        execution["outputs"][1]["requirement_id"] = "measurements"
+        self.assert_conversion_refused(execution)
+
+    def test_format_only_recording_refuses_json_disguised_as_new_text(self):
+        _, original, _ = self.assessed_run()
+        execution = self.execution(self.retained_format_admission(original))
+        changed = b'{"result":{"values":[0,1,4,9],"bound":10},"validation":{"passed":true}}'
+        execution["outputs"].append({"id": "new-text", "requirement_id": "measurements",
+                                     "artifact": self.artifacts.put(changed, "text/plain")})
+        self.assert_conversion_refused(execution)
+
+    def test_format_only_recording_refuses_unverified_svg_conversion(self):
+        _, original, _ = self.assessed_run()
+        execution = self.execution(self.retained_format_admission(original))
+        artifact = self.artifacts.put(b'<svg><text>same result</text></svg>', "image/svg+xml")
+        execution["outputs"].append({"id": "svg", "requirement_id": "measurements", "artifact": artifact})
+        self.assert_conversion_refused(execution)
+
+    def test_format_only_recording_refuses_invalid_json_even_when_python_would_parse_it(self):
+        _, original, _ = self.assessed_run()
+        execution = self.execution(self.retained_format_admission(original))
+        execution["outputs"][0]["artifact"] = self.artifacts.put(b'{"bound":9,"bound":10}', "application/json")
+        self.assert_conversion_refused(execution)
+
+    def test_format_only_results_cannot_supply_changed_reopening_evidence(self):
+        api = self.development()
+        plan, original, assessed = self.assessed_run()
+        converted = self.execution(self.retained_format_admission(original))
+        value = json.loads(self.artifacts.read(original["outputs"][0]["artifact"]))
+        formatted = self.artifacts.put(json.dumps(value, indent=2).encode(), "application/json")
+        for output in converted["outputs"]:
+            output["artifact"] = formatted
+        self.mutate(api.record_execution, converted)
+        checkpoint = self.save_checkpoint(select=False)
+        successor = self.plan("reopening-with-converted-bytes")
+        successor.update(predecessor=checkpoint["id"], question="Does changed evidence address the original failure?")
+        successor["inheritance"] = [{"checkpoint_id": checkpoint["id"], "assessment_id": assessed["id"],
+            "use": "failure", "evidence": [self.result_evidence(original)], "assumptions": plan["scope"]["assumptions"],
+            "deduction": "Retain the earlier failure while checking whether any scientific evidence changed."}]
+        successor["reopening"] = [{"assessment_id": assessed["id"], "signal_id": "counterexample",
+            "reason": "The converted output has different bytes but retains the original scientific value.",
+            "evidence": [self.result_evidence(converted)]}]
+        before = self.store.snapshot()
+        self.assert_error("reopening_evidence_unchanged", lambda: self.mutate(api.plan_cycle, successor))
+        self.assertEqual(self.store.snapshot(), before)
+        changed_source = self.read_source(7)
+        successor["reopening"][0]["evidence"].append({"kind": "source", "link": changed_source})
+        self.mutate(api.plan_cycle, successor)
