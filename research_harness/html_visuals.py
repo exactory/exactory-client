@@ -119,12 +119,15 @@ def resource_inventory(content, source_url, anchor):
     parser.close()
     start, end = anchor["start"], anchor["end"]
     containers = [n for n in parser.nodes if (n["tag"] in ("figure", "table", "picture", "svg", "math")
-        or set((dict(n["attrs"]).get("class") or "").lower().split()) & {"ltx_figure", "figure", "ltx_table", "ltx_equation"})
+        or set((dict(n["attrs"]).get("class") or "").lower().split()) & {
+            "ltx_figure", "figure", "fig", "ltx_table", "ltx_equation"})
         and n["start"] < end and start < n["end"]]
     # Enclosing figures take precedence over their internal picture/SVG nodes.
     enclosing = [n for n in containers if n["start"] <= start and end <= n["end"]]
     if enclosing:
-        figures = [n for n in enclosing if n["tag"] == "figure" or "figure" in (dict(n["attrs"]).get("class") or "")]
+        figures = [n for n in enclosing if n["tag"] == "figure"
+            or "figure" in (dict(n["attrs"]).get("class") or "")
+            or "fig" in (dict(n["attrs"]).get("class") or "").lower().split()]
         selected = min(figures or enclosing, key=lambda n: n["end"] - n["start"])
         start, end = selected["start"], selected["end"]
     selected_nodes = [n for n in parser.nodes if start <= n["start"] < end]
