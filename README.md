@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.61.0](docs/releases/0.61.0.md) reads PDFs served as `binary/octet-stream` and the article body of a
+PubMed Central page. Review delivery and its projection agree on media-type spellings while earlier reviews still
+authenticate. A session started for one assignment can stop inside an autopilot study without changing its counter.
+The full-text reference states how redirects and retries count against the request budget.
+
 Version [0.60.1](docs/releases/0.60.1.md) repairs the threshold checks of a posted statement's self-assessment and
 result reviews graded before the admission item A7, direction after a refutation. Their below-threshold shortfalls
 are listed again, and a current focused adjudication can release the shortfall of a review. The behavior for a
