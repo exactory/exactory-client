@@ -202,6 +202,17 @@ again and measure that bundle. Preserve the original review and prediction
 files. A group made ambiguous by records from before this rule stays an invalid
 measurement in the measurement history.
 
+`manuscript-review` and `manuscript-prediction` also read the pinned working
+files and refuse with `publication_artifact_changed` when the PDF, the
+abstract, the bibliography, the claims file or the sources differ from the
+pinned bytes. Before you record a review or a prediction, read
+`exactory-research status`: `bundle_drift` names each differing file while
+the measurement is incomplete. If it names one, run
+`exactory-research restore --bundle DIGEST` with the reported `bundle_digest`.
+The command keeps the current bytes of each differing file as a backup
+artifact before it writes the pinned bytes, and changes no record (the write
+skill's WORKSPACE.md, "The measurement").
+
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch
 two independent assignments on a verified route with no shared context beyond the

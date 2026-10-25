@@ -989,6 +989,24 @@ exactory-research manuscript-review --file manuscript-review-b.json --expected-r
 exactory-research gate publication
 ```
 
+The working files of the pinned bundle stay as pinned until its measurement is
+complete, that is, until the three measurement reviews and their predictions
+are recorded (next section). `manuscript-review` and `manuscript-prediction`
+read the PDF, the abstract, the bibliography, the claims file and the sources
+at their paths and refuse with `publication_artifact_changed` when one differs
+from its pinned bytes. Do not recompile the PDF or change those files while a
+review or a prediction of the bundle is still to be recorded. `status` names
+each differing file under `bundle_drift`, with the bundle's `bundle_digest`,
+while the measurement is incomplete. `exactory-research restore --bundle DIGEST`
+writes the pinned bytes back. It first stores the current bytes of each
+differing file as a backup artifact and reports it under `restored` as
+`backup`, `{sha256, path, size, media_type}`, with the bytes at that `path`
+under `research/sources/objects/`. It records nothing, so keep its output: no
+record names a backup. Once the measurement is complete, read the backup back
+to continue the displaced edit in the next revision. The same command restores
+the files of any recorded bundle, for example the measured bundle before its
+deposit.
+
 Managed publication uses the current exact bundle, two applicable accepting
 reviews, current decision requirements and existing citation/remote receipt checks.
 Changes invalidate affected current findings and require reassessment.

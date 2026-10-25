@@ -205,6 +205,23 @@ for each listed work, and for no other work:
   link to the preprint that you read;
 - `{"work_id": ..., "reason": ...}` when the paper does not cite the work,
   saying why the work does not bear on the paper.
+
+After the pin, the pinned working files (the PDF, the abstract, the
+bibliography, the claims file and the sources when pinned) stay as pinned until
+the bundle's measurement is complete: three assessors with a review and a
+prediction each (WORKSPACE.md, "The measurement"). `manuscript-review` and
+`manuscript-prediction` read those files and refuse with
+`publication_artifact_changed` when one differs. So do not recompile the PDF,
+and do not change the other files, until the last review and prediction of the
+bundle are recorded. If `exactory-research status` lists a file under
+`bundle_drift`, run `exactory-research restore --bundle DIGEST` with the
+`bundle_digest` it reports, the `digest` that the pin returned. The command
+stores the current bytes of each differing file as a backup artifact, then
+writes the pinned bytes, and lists each file under `restored` with its
+`backup` reference. Keep that output: no record names a backup, and its `path`
+under `research/sources/objects/` is where you read the displaced edit back
+after the measurement, for the next revision.
+
 Stage report: present the compiled draft, evidence scope and limitations, citation
 findings, and where refreshed searches changed the text. Include a citation map:
 for each of the five purposes, the keys cited; for each named law, model,

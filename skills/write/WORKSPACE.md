@@ -197,6 +197,24 @@ measurement. In a managed study, record the contribution analysis of the measure
 bundle next (the evaluate skill, section 2b); the next bundle cannot be pinned
 before it.
 
+The working files of the pinned bundle stay as pinned until its measurement is
+complete. `manuscript-review` and `manuscript-prediction` read the PDF, the
+abstract, the bibliography, the claims file and the sources at their paths and
+refuse with `publication_artifact_changed` when one differs from its pinned
+bytes, so a PDF recompiled for the next revision blocks the reviews that are
+still to be recorded. `exactory-research status` names each such file under
+`bundle_drift`, `{bundle_id, bundle_digest, files: [{path, code}]}`, while the
+measurement is incomplete, and `status --summary` carries the same list with
+long names cut. `exactory-research restore --bundle DIGEST`, with that
+`bundle_digest`, writes the pinned bytes back. It first stores the current
+bytes of each differing file as an `application/octet-stream` artifact, then
+writes the pinned bytes, and returns `{revision, bundle_id, bundle_digest,
+restored: [{path, artifact, backup}], unchanged: [path, ...]}`. `backup` is
+`{sha256, path, size, media_type}` of the stored copy, or null for a file that
+was missing. The bytes are at that `path`, under `research/sources/objects/`.
+The command records nothing, so no record names a backup. Keep the output, or
+the `sha256`, to read the displaced edit back once the measurement is complete.
+
 ## Commits and reverts (the improvement loop)
 
 The loop runs inside a git repository. In an ai-science study `exactory-lab
@@ -215,6 +233,11 @@ all managed history, observations, costs, failures, checkpoints, reviews, and us
 files. On interruption, inspect unfinished changes and reconcile actual work from
 current status and records. Unmeasured changes are preserved until understood;
 they are not automatically reset. Respect a user's local-only artifact policy.
+`exactory-research restore --bundle DIGEST` is a file operation, not a commit or
+a revert: it writes a recorded bundle's pinned files back to their paths, keeps
+the replaced bytes as backup artifacts, and changes no record, selection or
+review. An edit that a restore displaced is read back from the backup's `path`
+in the restore output, `research/sources/objects/<sha256>`.
 
 For publication, pin the exact current manuscript bundle and export its actual
 bytes for two independent blind assessors through the verified assignment

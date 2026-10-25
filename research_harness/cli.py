@@ -278,9 +278,13 @@ def build_parser():
     route.add_argument("--workspace", default=".")
     route.add_argument("--route-id", required=True)
     restore = commands.add_parser("restore", allow_abbrev=False,
-                                  help="Restore pinned bundle files after preserving differing working bytes.")
+                                  help="Write the pinned files of a recorded manuscript bundle back to their paths. "
+                                       "The command first stores each differing working file as a backup artifact. "
+                                       "The revision does not change.")
     restore.add_argument("--workspace", default=".")
-    restore.add_argument("--bundle", required=True, help="Exact recorded manuscript bundle SHA-256.")
+    restore.add_argument("--bundle", required=True,
+                         help="The digest of a recorded manuscript bundle as the pin returned it: 64 lowercase "
+                              "hexadecimal digits. It names any recorded bundle, not only the selected one.")
     return parser
 
 
