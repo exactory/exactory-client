@@ -117,7 +117,7 @@ OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
 
 from .execution import bind_execution, reconcile_execution, record_imported_execution
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
-from .publication import list_publication_receipts, prepare_publication, record_manuscript_review
+from .publication import check_claims, list_publication_receipts, prepare_publication, record_manuscript_review
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
@@ -209,7 +209,8 @@ def build_parser():
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
         add_identity(item)
-    for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export", "recover"):
+    for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
+                    "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
             help={"status": "Read current obligations and source paths.", "next": "Read actionable current preparation obligations.",
                   "obligations": "Read one revision-bound page of the obligations that carry a code.",
@@ -217,8 +218,11 @@ def build_parser():
                   "population-query": "Rank the enumerated population's stored abstracts by query terms without changing the store.",
                   "policy-report": "Describe the preparation set under the recorded or a hypothetical policy, without changing the store.",
                   "gate": "Validate a current gate without mutation.", "export": "Rebuild disposable projections or deliver exact reviewer bytes.",
+                  "check-claims": "Check manuscript claim references against current candidate evidence.",
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
         item.add_argument("--workspace", default=".")
+        if command == "check-claims":
+            item.add_argument("--file", required=True)
         if command in ("status", "next"):
             item.add_argument("--summary", action="store_true",
                               help="Return a bounded advisory view; the same current evaluation still runs.")
@@ -475,6 +479,11 @@ def run(args):
         return report
     if args.command == "obligations":
         return obligations_page(status_report(store), args.code, limit=args.limit, cursor=args.cursor)
+    if args.command == "check-claims":
+        payload = strict_json(Path(args.file).read_bytes())
+        check_command_bounds(payload)
+        ledger = payload.get("claim_evidence") if isinstance(payload, dict) else payload
+        return check_claims(store, ledger)
     if args.command == "batches":
         from .batches import export_batches
         if args.candidates and not args.loop:
