@@ -26,15 +26,18 @@ runs used the earlier lane baselines identified below.
    autopilot study without reading or changing its counter. An unmarked session
    still continues the study under the existing conditions and cap.
 5. As an author, I want the full-text reference to explain the request budget
-   for redirects and retries, the retained pending capture and the retry request.
+   for redirects and retries, the retained pending capture and the retry
+   request.
 
 ## RED and GREEN evidence
 
 RED identifies a failure before a repair. GREEN identifies a pass after it.
 Failure counts include failing subtests. Test modules run from the worktree
 root with `EXACTORY_API_KEY=` and `PYTHONPATH=tests:.`. The branch checks use
-`/opt/homebrew/bin/python3.12` and `/usr/bin/python3`. The branch column records
-OK on both interpreters at `675ef4e` with the release-file updates.
+`/opt/homebrew/bin/python3.12` and `/usr/bin/python3`. Outside the media-type
+section, the branch columns retain the earlier checks at `675ef4e` with the
+release-file updates. The media-type section records the final lane and
+supervisor checks.
 
 ### PDFs served as generic binary (v13 task T0)
 
@@ -68,28 +71,106 @@ and `pdf_signature_from_generic_binary`. The reported media type is
 
 ### Review delivery and media-type spellings
 
-The 11 methods below failed against `f514cb3` in
-`logs/lane-f/review-2-red.log`, with 63 failures and no errors. All 11 passed
-in `logs/lane-f/review-2-green.log`. The baseline is recorded in
-`logs/lane-f/review-2-state.json`.
+Commit `06bb6f2` contains lane F's changes from `f514cb3` to `b6fb398`,
+including rounds 2 and 3. Review construction keeps its 0.60.1 decisions for
+every reported spelling apart from the new `binary/octet-stream` alias. The
+projection calls `review_transport.is_binary_evidence` and
+`fulltext.detect_media_type` with the same type and bytes as construction.
+Parsing, extraction and byte validation use `fulltext.base_media_type` for
+media-type comparisons.
 
-These methods use the same six modules as the generic binary tests. They
-exercise type case and parameters, exact artifact descriptors, construction
-and projection, stored page maps and visual inputs.
+Round 2 ran 11 methods against `f514cb3` in
+`logs/lane-f/review-2-red.log`: 63 failures and no errors. All 11 passed in
+`logs/lane-f/review-2-green.log`. The baseline is recorded in
+`logs/lane-f/review-2-state.json`. Five methods retain those assertions in
+`06bb6f2`:
 
-| Test | RED commit | Branch |
+| Module | Test | RED commit | GREEN |
+| --- | --- | --- | --- |
+| `test_research_fulltext` | `test_generic_binary_media_spellings_extract_pdfs_and_keep_non_pdf_reports` | `f514cb3` | Round 2: OK |
+| `test_research_fulltext` | `test_declared_pdf_media_spellings_extract_without_rewriting_the_reported_type` | `f514cb3` | Round 2: OK |
+| `test_research_binary_pdf` | `test_stored_pdf_media_spellings_use_the_same_captured_page_map` | `f514cb3` | Round 2: OK |
+| `test_review_frozen_pdf_capture` | `test_generic_binary_media_spellings_do_not_invent_a_frozen_pdf_page_map` | `f514cb3` | Round 2: OK |
+| `test_research_public_source_delivery` | `test_pdf_media_spellings_deliver_source_components_without_relabeling_captures` | `f514cb3` | Round 2: OK |
+
+Round 3 ran the final assertions against unchanged `a301d88` production code
+in `logs/lane-f/review-3-red.log`. The 54-test run recorded 65 failures and
+16 errors across the 19 methods below. All 54 tests passed in
+`logs/lane-f/review-3-green.log` on Python 3.12.
+
+| Module | Test | RED commit | GREEN |
+| --- | --- | --- | --- |
+| `test_research_fulltext` | `test_generic_binary_media_detection_keeps_nonexact_reported_types` | `a301d88` | Round 3: OK |
+| `test_research_fulltext` | `test_html_media_spellings_extract_without_rewriting_the_reported_type` | `a301d88` | Round 3: OK |
+| `test_review_generic_binary_pdf` | `test_generic_binary_media_spellings_agree_from_construction_through_projection` | `a301d88` | Round 3: OK |
+| `test_review_generic_binary_pdf` | `test_declared_pdf_media_spellings_agree_from_construction_through_projection` | `a301d88` | Round 3: OK |
+| `test_review_generic_binary_pdf` | `test_image_media_spellings_agree_from_construction_through_projection` | `a301d88` | Round 3: OK |
+| `test_review_input_projection` | `test_native_attachments_match_the_exact_media_type_chosen_by_construction` | `a301d88` | Round 3: OK |
+| `test_review_input_projection` | `test_visual_png_media_spellings_keep_the_exact_legacy_contract` | `a301d88` | Round 3: OK |
+| `test_review_input_projection` | `test_binary_octet_stream_text_requires_matching_descriptor_and_non_pdf_bytes` | `a301d88` | Round 3: OK |
+| `test_research_adjudicator_current_sources` | `test_recorded_text_units_follow_the_original_construction_decision` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_recorded_text_uses_the_reported_type_and_actual_bytes` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_responses_rebuild_keeps_the_recorded_image_data_url_type` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_attachment_type_must_equal_the_recorded_construction_type` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_complete_text_readers_use_the_construction_decision` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_openness_actual_input_does_not_promote_binary_bytes_declared_as_text` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_visual_validation_accepts_base_type_spellings_and_checks_the_container` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_html_locator_accepts_base_type_spellings_without_relabeling` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_bar_source_html_inventory_accepts_base_type_spellings` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_json_mapping_dispatch_accepts_base_type_spellings` | `a301d88` | Round 3: OK |
+| `test_review_media_compatibility` | `test_import_admission_and_capture_keep_the_reported_media_type` | `a301d88` | Round 3: OK |
+
+Three methods replace earlier names and assertions:
+
+| Module | Round-2 name | Final name |
 | --- | --- | --- |
-| `test_generic_binary_media_spellings_detect_only_pdf_signatures` | `f514cb3` | OK |
-| `test_generic_binary_media_spellings_extract_pdfs_and_keep_non_pdf_reports` | `f514cb3` | OK |
-| `test_declared_pdf_media_spellings_extract_without_rewriting_the_reported_type` | `f514cb3` | OK |
-| `test_generic_binary_media_spellings_agree_from_construction_through_projection` | `f514cb3` | OK |
-| `test_declared_pdf_media_spellings_agree_from_construction_through_projection` | `f514cb3` | OK |
-| `test_image_media_spellings_agree_from_construction_through_projection` | `f514cb3` | OK |
-| `test_native_attachment_media_spellings_match_without_relabeling_the_descriptor` | `f514cb3` | OK |
-| `test_visual_png_media_spellings_preserve_exact_images_and_descriptors` | `f514cb3` | OK |
-| `test_stored_pdf_media_spellings_use_the_same_captured_page_map` | `f514cb3` | OK |
-| `test_generic_binary_media_spellings_do_not_invent_a_frozen_pdf_page_map` | `f514cb3` | OK |
-| `test_pdf_media_spellings_deliver_source_components_without_relabeling_captures` | `f514cb3` | OK |
+| `test_research_fulltext` | `test_generic_binary_media_spellings_detect_only_pdf_signatures` | `test_generic_binary_media_detection_keeps_nonexact_reported_types` |
+| `test_review_input_projection` | `test_native_attachment_media_spellings_match_without_relabeling_the_descriptor` | `test_native_attachments_match_the_exact_media_type_chosen_by_construction` |
+| `test_review_input_projection` | `test_visual_png_media_spellings_preserve_exact_images_and_descriptors` | `test_visual_png_media_spellings_keep_the_exact_legacy_contract` |
+
+The generic-binary and declared-PDF construction tests preserve text delivery
+for UTF-8 PDF bytes under spellings such as `Binary/Octet-Stream` and
+`Application/PDF`. PDF bytes that are not valid UTF-8 retain the
+`review_evidence_unreadable` refusal under those spellings. The image
+construction test keeps data URL spellings with the literal `image/` prefix.
+The visual PNG tests keep the exact `image/png` contract.
+
+The existing generic-binary text projection test now distinguishes the literal
+`binary/octet-stream` type from its other spellings for a PDF body. The new
+adjudicator test checks the same construction decision for recorded text units.
+The compatibility module also checks complete-source and openness readers,
+HTML locators, visual containers, source-asset inventories, and JSON import
+parsing and capture. Imported responses retain their declared media type.
+
+The openness-input test also gained an empty alternate-main omission marker.
+Before the marker repair, its two affected subtests failed against the
+uncommitted round-3 implementation based on `a301d88` in
+`logs/lane-f/review-3-marker-red.log`. The method passed after the repair in
+`logs/lane-f/review-3-marker-green.log`.
+
+`logs/lane-f/review-3-fingerprints.log` is empty: none of the 11 fingerprinted
+modules differs from `8f98d2a`. `logs/lane-f/review-3-runtimes.log` records
+equal runtimes for all five adapters on both Pythons. The PDF renderer and
+exact-text cost profiles also equal their 0.60.1 values on both Pythons.
+
+The related selection contains 113 modules. The partial runs and their
+summaries are `logs/lane-f/review-3-related-3.12.log`,
+`logs/lane-f/review-3-related-3.12-summary.json`,
+`logs/lane-f/review-3-related-3.9.log` and
+`logs/lane-f/review-3-related-3.9-summary.json`. The summaries record 66
+completed modules and 1,065 tests on Python 3.12, and 64 completed modules
+and 1,026 tests on Python 3.9. They record no failed module. Section T3 of
+the implementation record states that the lane session ended at model
+capacity. The runs stopped before the selection was complete.
+
+The supervisor reran nine directly affected modules on both Pythons, with
+136 tests passing on each. `logs/lane-f/supervisor-review-3/summary-3.12.txt`
+and `logs/lane-f/supervisor-review-3/summary-3.9.txt` record each module's
+count and exit status. The modules are `test_review_input_projection`,
+`test_review_generic_binary_pdf`, `test_review_media_compatibility`,
+`test_review_source_complete`, `test_research_visual_formats`,
+`test_visual_contract_integration`, `test_research_source_contracts`,
+`test_research_adjudicator_current_sources` and `test_research_fulltext`.
 
 ### The article body of a PubMed Central page (v13 task T1)
 
