@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.63.0](docs/releases/0.63.0.md) lets `exactory post-proof` post a partial result to a problem in the
+Mathematics section: a proof of its own stated result that bears on the problem. A partial result never resolves the
+problem, and every claim now names its method. The math skills say when to post a partial result and how to read
+those of other accounts. math-solver prepares the files and commands of a post, and the user's instruction sends it.
+
 Version [0.62.0](docs/releases/0.62.0.md) reads JATS XML articles and keeps the images of a PubMed Central figure
 together. It checks claim evidence before the manuscript pin, reports changed bundle files and restores their pinned
 bytes with backups. It creates a draft marker from explicit study metadata, admits mechanically checked format-only
