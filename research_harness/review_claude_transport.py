@@ -245,10 +245,11 @@ def strip_fence(text):
 
 
 def verify_context(route, request, response):
+    """The evidence must come from the adapter runtime the route pins, not from whatever is installed now."""
     evidence = response.get('context_evidence', {})
     return (evidence.get('inspected') is True and evidence.get('input_verified') is True
             and evidence.get('request_digest') == digest(request)
             and evidence.get('route_digest') == digest(route)
             and evidence.get('input_contract') == INPUT_CONTRACT and bool(evidence.get('event_digest'))
             and evidence.get('session_id') == response.get('id')
-            and evidence.get('runtime') == runtime())
+            and evidence.get('runtime') == route['runtime'])

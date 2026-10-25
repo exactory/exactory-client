@@ -1563,7 +1563,14 @@ def record_route(store, payload, *, expected_revision, request_id):
     return prepared_mutation(store, 'review.route', payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
+def _require_route_runtime(route):
+    if transport.runtime(route) != route['runtime']:
+        raise ResearchError('review_route_runtime_stale',
+                            'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
+
+
 def _observed(artifacts, route, request, credential):
+    _require_route_runtime(route)
     observed = transport.observe(route, request, credential)
     record = {key: value for key, value in observed.items() if key not in ('request', 'response', 'output')}
     record['request'] = _put_json(artifacts, request)
@@ -1608,6 +1615,7 @@ def probe_route(store, payload, *, expected_revision, request_id, credential=Non
     def start(records, value):
         fields(value, ('id', 'route_id'))
         route = _get(records, 'review_route', value['route_id'])
+        _require_route_runtime(route)
         controls = {source: uuid.uuid4().hex for source in transport.EXCLUDED_SOURCES}
         packet = {'allowed_control': uuid.uuid4().hex, 'evidence_control': uuid.uuid4().hex,
                   'evidence': 'Both control strings are permitted primary evidence.'}
@@ -1652,7 +1660,7 @@ def _route_state(records, artifacts, route_id):
     status, proof = 'unverified', None
     if route:
         for saved in sorted(records.get('review_route_probe', {}).values(), key=lambda p: p['recorded_revision']):
-            if saved['route_id'] != route_id or saved.get('route_digest') != digest(route) or saved.get('runtime') != transport.runtime(route):
+            if saved['route_id'] != route_id or saved.get('route_digest') != digest(route) or saved.get('runtime') != route['runtime']:
                 continue
             status, proof = 'unverified', None
             try:
@@ -2171,6 +2179,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         route = _get(records, 'review_route', assignment['route_id'])
         if digest(route) != assignment['route_digest']:
             raise ResearchError('review_route_changed', 'Reassign after a route change')
+        _require_route_runtime(route)
         if not _prompt_matches(assignment):
             raise ResearchError('review_prompt_mismatch', 'Invoke the recorded canonical reviewer prompt')
         packet = _read_json(artifacts, assignment['packet'])
@@ -2220,7 +2229,7 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
         output = _read_json(artifacts, attempt['output'])
         response = _read_json(artifacts, attempt['response'])
         return (attempt.get('origin') == 'instrumented' and request is not None
-                and attempt.get('runtime') == transport.runtime(route)
+                and attempt.get('runtime') == route['runtime']
                 and attempt.get('route_digest') == digest(route)
                 and any(request == built for built in transport.list_built_requests(
                     route, assignment['prompt']['text'], packet, assignment.get('history', ())))

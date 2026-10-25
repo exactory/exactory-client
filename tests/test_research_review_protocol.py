@@ -229,6 +229,77 @@ class ReviewProtocolTests(LiteratureCase):
         self.assertEqual(attempt['usage']['input_tokens'],37)
         self.assertIsNone(attempt['usage']['cost_usd'])
 
+    def test_attempt_authenticates_against_pinned_runtime_after_installed_runtime_changes(self):
+        p = self.protocol()
+        self.route(); self.run_probe(); self.assign(); self.invoke({'verdict': 'sound'})
+        records = self.records()
+        assignment = records['review_assignment']['assignment']
+        attempt = records['review_attempt']['attempt']
+        pinned_runtime = records['review_route']['route']['runtime']
+        self.assertEqual(attempt['runtime'], pinned_runtime)
+        self.assertTrue(p.authenticate_attempt(records, self.artifacts, assignment, attempt))
+
+        installed_runtime = dict(pinned_runtime, implementation_sha256='0' * 64)
+        with patch('research_harness.review_transport.runtime', return_value=installed_runtime):
+            self.assertTrue(p.authenticate_provenance(records, self.artifacts, assignment, attempt))
+            self.assertTrue(p.authenticate_attempt(records, self.artifacts, assignment, attempt))
+            state = p.assignment_state(records, self.artifacts, 'assignment')
+            self.assertTrue(state['ready'], state['obligations'])
+
+    def test_probed_route_stays_verified_after_installed_runtime_changes(self):
+        p = self.protocol()
+        self.route(); self.run_probe()
+        records = self.records()
+        state = p.route_state(records, self.artifacts, 'route')
+        self.assertEqual(state['context_status'], 'verified_for_route')
+        installed_runtime = dict(records['review_route']['route']['runtime'], implementation_sha256='0' * 64)
+
+        with patch('research_harness.review_transport.runtime', return_value=installed_runtime):
+            self.assertEqual(p.route_state(records, self.artifacts, 'route'), state)
+
+    def test_run_refuses_stale_runtime_before_call_or_attempt_record(self):
+        p = self.protocol()
+        self.route(); self.run_probe(); self.assign()
+        before = self.store.snapshot()
+        installed_runtime = dict(before['records']['review_route']['route']['runtime'],
+                                 implementation_sha256='0' * 64)
+
+        with patch('research_harness.review_transport.runtime', return_value=installed_runtime), \
+                patch('research_harness.review_transport.send_request',
+                      return_value=self.response({'verdict': 'sound'})) as provider:
+            with self.assertRaises(ResearchError) as raised:
+                self.mutate(p.invoke_assignment, {'id': 'attempt', 'assignment_id': 'assignment'},
+                            credential='test-only')
+
+        self.assertEqual(raised.exception.code, 'review_route_runtime_stale')
+        self.assertEqual(raised.exception.message,
+                         'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
+        provider.assert_not_called()
+        self.assertNotIn('attempt', self.records().get('review_attempt', {}))
+        self.assertNotIn('attempt', self.records().get('review_invocation', {}))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_probe_refuses_stale_runtime_before_call_or_probe_record(self):
+        p = self.protocol()
+        self.route()
+        before = self.store.snapshot()
+        installed_runtime = dict(before['records']['review_route']['route']['runtime'],
+                                 implementation_sha256='0' * 64)
+
+        with patch('research_harness.review_transport.runtime', return_value=installed_runtime), \
+                patch('research_harness.review_transport.send_request',
+                      return_value=self.response({})) as provider:
+            with self.assertRaises(ResearchError) as raised:
+                self.mutate(p.probe_route, {'id': 'probe', 'route_id': 'route'}, credential='test-only')
+
+        self.assertEqual(raised.exception.code, 'review_route_runtime_stale')
+        self.assertEqual(raised.exception.message,
+                         'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
+        provider.assert_not_called()
+        self.assertNotIn('probe', self.records().get('review_route_probe', {}))
+        self.assertNotIn('probe', self.records().get('review_probe_invocation', {}))
+        self.assertEqual(self.store.snapshot(), before)
+
     def test_later_contamination_invalidates_current_independence_without_deleting_output(self):
         p = self.protocol(); self.route(); self.run_probe(); self.assign(); self.invoke({'verdict':'sound'})
         evidence = self.artifacts.put(b'Observed exposure to earlier study scores in a tool response.','text/plain')

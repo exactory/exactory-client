@@ -22,6 +22,11 @@ def module():
     return review_claude_transport
 
 
+def pinned_route():
+    """A recorded route carries the runtime of the adapter it was recorded with (record_route adds it)."""
+    return dict(ROUTE, runtime=module().runtime())
+
+
 def request_for(text='{"id":"allowed"}'):
     return {'model': ROUTE['model'], 'instructions': 'Review the supplied packet.',
             'input': [{'role': 'user', 'content': text}], 'tools': [], 'store': False,
@@ -206,9 +211,12 @@ class ClaudeInvocationTests(unittest.TestCase):
                           'system_prompt': (Path(directory) / 'system-prompt.txt').read_text()})
             return completed(events, returncode)
 
+        # A recorded route carries its pinned runtime; the evidence binds the route digest, so the same
+        # pinned route is used for the call and for the verification.
+        self.route = pinned_route()
         with patch.object(module(), '_run_owned', side_effect=run), \
                 patch.object(module(), '_cli', return_value=('/usr/local/bin/claude', '2.1.306 (Claude Code)')):
-            response = module().send_request(ROUTE, request)
+            response = module().send_request(self.route, request)
         return response, calls[0]
 
     def test_the_command_isolates_the_reviewer_and_sends_one_replayed_message(self):
@@ -234,7 +242,7 @@ class ClaudeInvocationTests(unittest.TestCase):
         self.assertEqual(response['usage']['input_tokens'], 1540)
         self.assertEqual(response['usage']['output_tokens'], 900)
         self.assertEqual(response['context_evidence']['cli_version'], '2.1.306 (Claude Code)')
-        self.assertTrue(module().verify_context(ROUTE, request, response))
+        self.assertTrue(module().verify_context(self.route, request, response))
 
     def test_an_invocation_with_ui_invalidation_verifies_and_preserves_the_notice(self):
         request = request_for()
@@ -242,13 +250,26 @@ class ClaudeInvocationTests(unittest.TestCase):
         events.insert(3, dict(UI_INVALIDATE))
         response, _ = self.invoke(events, request=request)
         self.assertEqual(response['status'], 'completed')
-        self.assertTrue(module().verify_context(ROUTE, request, response))
+        self.assertTrue(module().verify_context(self.route, request, response))
         self.assertEqual(response['context_evidence']['notices'], [{'event_index': 3, 'event': UI_INVALIDATE}])
         for field, value in (('tools', []), ('message', {'content': 'Injected input'})):
             with self.subTest(field=field):
                 events[3] = dict(UI_INVALIDATE, **{field: value})
                 response, _ = self.invoke(events, request=request)
-                self.assertFalse(module().verify_context(ROUTE, request, response))
+                self.assertFalse(module().verify_context(self.route, request, response))
+
+    def test_context_verification_uses_the_route_pin_and_not_the_installed_runtime(self):
+        request = request_for()
+        response, _ = self.invoke(clean_stream(request), request=request)
+        route = self.route
+        self.assertTrue(module().verify_context(route, request, response))
+        changed = dict(module().runtime(), implementation_sha256='0' * 64)
+        with patch.object(module(), 'runtime', return_value=changed):
+            # The adapter module changed after the review ran: the evidence still matches the route's pin.
+            self.assertTrue(module().verify_context(route, request, response))
+        # Evidence recorded by another adapter implementation than the one the route pins does not verify.
+        response['context_evidence']['runtime'] = changed
+        self.assertFalse(module().verify_context(route, request, response))
 
     def test_a_failed_or_unbounded_turn_is_incomplete(self):
         request = request_for()
@@ -278,7 +299,7 @@ class ClaudeInvocationTests(unittest.TestCase):
         events = clean_stream(request)
         events[0]['tools'] = ['Bash']
         response, _ = self.invoke(events, request=request)
-        self.assertFalse(module().verify_context(ROUTE, request, response))
+        self.assertFalse(module().verify_context(self.route, request, response))
 
     def test_an_input_above_the_route_limit_is_refused_before_the_cli_runs(self):
         request = request_for('x' * (module().INPUT_LIMIT_CHARACTERS + 1))
