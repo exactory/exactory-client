@@ -118,6 +118,7 @@ OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
 from .execution import bind_execution, reconcile_execution, record_imported_execution
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
 from .publication import check_claims, list_publication_receipts, prepare_publication, record_manuscript_review
+from .publication_files import bundle_drift, restore_bundle
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
@@ -275,6 +276,10 @@ def build_parser():
                                 help="Read the context-isolation evidence for one exact runtime route.")
     route.add_argument("--workspace", default=".")
     route.add_argument("--route-id", required=True)
+    restore = commands.add_parser("restore", allow_abbrev=False,
+                                  help="Restore pinned bundle files after preserving differing working bytes.")
+    restore.add_argument("--workspace", default=".")
+    restore.add_argument("--bundle", required=True, help="Exact recorded manuscript bundle SHA-256.")
     return parser
 
 
@@ -372,6 +377,7 @@ def status_report(store, *, counters=False):
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
     tool_status = {}
+    tool_status["bundle_drift"] = bundle_drift(records, evaluation) if profile == "research" else None
     if records.get("probe_intent") or records.get("probe"):
         tool_status["probes"] = summarize_probes(records)
     provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
@@ -479,6 +485,8 @@ def run(args):
         if args.summary:
             return (next_summary if args.command == "next" else status_summary)(report)
         return report
+    if args.command == "restore":
+        return restore_bundle(store, args.bundle)
     if args.command == "obligations":
         return obligations_page(status_report(store), args.code, limit=args.limit, cursor=args.cursor)
     if args.command == "check-claims":

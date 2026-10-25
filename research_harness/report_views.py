@@ -108,6 +108,15 @@ def _summarize_grand_challenge(challenge):
             "omitted_criterion_ids": max(0, len(criterion_ids) - _SUMMARY_CRITERION_IDS)}
 
 
+def _summarize_bundle_drift(drift):
+    if drift is None:
+        return None
+    return {"bundle_id": _short(drift["bundle_id"], 64), "bundle_digest": drift["bundle_digest"],
+            "bundle_id_truncated": len(drift["bundle_id"]) > 64,
+            "files": [{"path": _short(item["path"], 128), "path_truncated": len(item["path"]) > 128,
+                       "code": item["code"]} for item in drift["files"]]}
+
+
 def status_summary(report):
     """Summarize obligations without embedding evidence or author notes."""
     result = next_summary(report)
@@ -125,6 +134,7 @@ def status_summary(report):
                    "counts": report.get("counts"), "resources": report.get("resources", {}),
                    "limits": limits,
                    "round": report.get("round"), "evaluation": report.get("evaluation"),
+                   "bundle_drift": _summarize_bundle_drift(report.get("bundle_drift")),
                    "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
     if report.get("orchestration") == "problem_creation":
         result.update(candidates=report["candidates"], slate_id=_short(report["slate_id"], 64))
@@ -136,10 +146,28 @@ def status_summary(report):
         result["provisional_searches"] = {"count": len(report["provisional_searches"])}
     # Keep depth amounts and counts visible when they take room previously available to optional criterion previews.
     challenge = result["grand_challenge"]
-    while ((limits or {}).get("depth") or "probes" in report or "provisional_searches" in report) and (challenge and challenge["criterion_ids"]
+    while ((limits or {}).get("depth") or "probes" in report or "provisional_searches" in report
+           or result["bundle_drift"]) and (challenge and challenge["criterion_ids"]
            and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 16 * 1024):
         challenge["criterion_ids"].pop()
         challenge["omitted_criterion_ids"] += 1
+    drift = result["bundle_drift"]
+    if drift:
+        while len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 16 * 1024:
+            longest = max(drift["files"], key=lambda item: len(item["path"]))
+            if len(longest["path"]) <= 32:
+                break
+            longest["path"] = longest["path"][:-16]
+            longest["path_truncated"] = True
+        hint = result.get("next_hint") or {}
+        displays = [(result, "waiting", 32), (hint, "explanation", 32)]
+        displays.extend((hint, key, 16) for key in ("version_id", "work_id", "collection_id", "unit_id"))
+        for container, key, minimum in displays:
+            while (isinstance(container.get(key), str) and len(container[key]) > minimum
+                   and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 16 * 1024):
+                container[key] = container[key][:max(minimum, len(container[key]) - 16)]
+                if container is hint and key not in hint["truncated_fields"]:
+                    hint["truncated_fields"].append(key)
     return result
 
 
