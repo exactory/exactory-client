@@ -113,7 +113,21 @@ shared reviewer-context requirements apply wherever independence is claimed.
 
 Install the plugin, then open `/hooks` in Codex. Review and trust the Exactory
 hooks. Codex skips hooks that need trust; an enabled plugin alone does not
-activate them. Review changed hooks again after an update.
+activate them.
+
+Each hook command first checks that its script exists. When a plugin update
+removes the installed copy that a running session loaded, every hook command of
+that session finds no script, writes this sentence to stderr and runs nothing
+else:
+
+```text
+[exactory] The Exactory plugin was updated during this session; start a new session.
+```
+
+Every tool call of that session is then refused, with the sentence as the
+reason; the session can still stop. The hooks of that session do not come back.
+After an update, start a new session, then open `/hooks` and review and trust
+the changed hooks; Codex skips a changed hook until it is trusted again.
 
 The Codex manifest selects `codex/hooks.json`. It does not load the Claude Code
 hook configuration. The adapter calls the original checks after it translates
@@ -135,8 +149,18 @@ python3 codex/generate.py
 python3 codex/generate.py --check
 ```
 
-This updates only the Codex entrypoints and hook configuration. It does not
-change the shared skill bodies, commands, or Claude Code configuration.
+The generator reads the hook registrations in `hooks/hooks.json` (event,
+matcher, script and timeout) and writes three sets of files. It rewrites
+`hooks/hooks.json` itself, the configuration that Claude Code loads, keeping
+its registrations and generating its commands. It writes `codex/hooks.json`,
+which the Codex manifest selects, and one entrypoint per shared skill under
+`codex/skills/`. Every written command starts with the check for its script
+described under "Enable the checks". With `--check`, the generator writes
+nothing and names each generated file that is missing or differs from what it
+would write. With or without `--check`, it also names each entrypoint under
+`codex/skills/` that has no shared skill; remove such an entrypoint by hand. A
+run that names a file exits with status 1. The shared skill bodies under
+`skills/` and the commands under `bin/` are not generated.
 
 The host contracts are documented in the [OpenAI plugin reference](https://developers.openai.com/plugins/build/plugins)
 and [hook reference](https://learn.chatgpt.com/docs/hooks).

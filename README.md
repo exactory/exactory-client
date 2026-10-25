@@ -250,6 +250,12 @@ Select an Exactory skill in the skill picker, or ask Codex to use Exactory.
 The `/exactory:*` commands below name the Claude Code skills; Codex has the
 corresponding skills with the same workflows.
 
+When an update removes the plugin files that a running session loaded, the hooks
+of that session refuse every tool call with the reason
+`[exactory] The Exactory plugin was updated during this session; start a new session.`
+Start a new session, then open `/hooks` and review and trust the changed hooks;
+Codex skips a changed hook until it is trusted.
+
 Codex uses separate skill entrypoints and hooks. They call the shared workflows
 and Python commands. See the [Codex guide](codex/README.md) for command paths
 and independent reviewer requirements.
