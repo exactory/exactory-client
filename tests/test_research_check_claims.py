@@ -31,18 +31,18 @@ class ResearchCheckClaimsTests(DevelopmentCase):
                                "--workspace", str(self.root), "--file", str(path), *arguments],
                               cwd=self.root, capture_output=True, text=True)
 
-    def stored_files(self):
+    def read_stored_files(self):
         return {str(path.relative_to(self.root)): path.read_bytes()
                 for path in (self.root / ".exactory").rglob("*") if path.is_file()}
 
-    def mismatched_ledger(self):
+    def build_mismatched_ledger(self):
         source = {"kind": "source", "link": copy.deepcopy(self.links[-1])}
         changed_locator = copy.deepcopy(self.current)
         changed_locator["locator"]["pointer"] = "/result/values"
         return [{"claim_id": "z-first", "evidence": [self.current, source, changed_locator]},
                 {"claim_id": "a-second", "evidence": [changed_locator, self.current]}]
 
-    def manuscript_payload(self, ledger):
+    def build_manuscript_payload(self, ledger):
         (self.root / "draft").mkdir()
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n% Claim evidence fixture.\n%%EOF")
         (self.root / "draft/abstract.txt").write_text("The maximum of the finite enumeration is nine.")
@@ -54,11 +54,11 @@ class ResearchCheckClaimsTests(DevelopmentCase):
                 "claim_evidence": ledger, "citation_accounting": account_fixture_citations(self)}
 
     def test_check_lists_every_outside_reference_with_its_claim_without_changing_store(self):
-        ledger = self.mismatched_ledger()
-        before, files = self.store.snapshot(), self.stored_files()
+        ledger = self.build_mismatched_ledger()
+        before, files = self.store.snapshot(), self.read_stored_files()
         result = self.run_cli("check-claims", ledger)
         self.assertEqual(self.store.snapshot(), before)
-        self.assertEqual(self.stored_files(), files)
+        self.assertEqual(self.read_stored_files(), files)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertEqual(result.stdout, "")
         error = json.loads(result.stderr)["error"]
@@ -71,28 +71,28 @@ class ResearchCheckClaimsTests(DevelopmentCase):
     def test_check_accepts_candidate_references_before_review_without_changing_store(self):
         self.assertFalse(self.store.snapshot()["records"].get("readiness_review"))
         ledger = [{"claim_id": "bound", "evidence": [dict(reversed(list(self.current.items())))]}]
-        before, files = self.store.snapshot(), self.stored_files()
+        before, files = self.store.snapshot(), self.read_stored_files()
         result = self.run_cli("check-claims", ledger)
         self.assertEqual(self.store.snapshot(), before)
-        self.assertEqual(self.stored_files(), files)
+        self.assertEqual(self.read_stored_files(), files)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stderr, "")
         self.assertEqual(json.loads(result.stdout), {"revision": before["revision"], "mismatches": []})
 
     def test_check_reads_the_same_manuscript_input_file(self):
-        payload = self.manuscript_payload([{"claim_id": "bound", "evidence": [self.current]}])
-        before, files = self.store.snapshot(), self.stored_files()
+        payload = self.build_manuscript_payload([{"claim_id": "bound", "evidence": [self.current]}])
+        before, files = self.store.snapshot(), self.read_stored_files()
         result = self.run_cli("check-claims", payload)
         self.assertEqual(self.store.snapshot(), before)
-        self.assertEqual(self.stored_files(), files)
+        self.assertEqual(self.read_stored_files(), files)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), {"revision": before["revision"], "mismatches": []})
 
     def test_manuscript_refusal_names_the_first_outside_claim_and_reference(self):
         self.mutate(self.development().record_readiness_review, self.review(self.execution_payload))
         result_decision(self)
-        ledger = self.mismatched_ledger()
-        payload = self.manuscript_payload(ledger)
+        ledger = self.build_mismatched_ledger()
+        payload = self.build_manuscript_payload(ledger)
         before = self.store.snapshot()
         result = self.run_cli("manuscript", payload, "--expected-revision", str(before["revision"]),
                               "--request-id", "outside-claim-evidence")

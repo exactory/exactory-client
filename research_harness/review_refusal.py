@@ -7,7 +7,7 @@ from functools import wraps
 from .artifacts import ArtifactStore, validate_reference
 from .errors import ResearchError
 from .evidence import digest
-from .fulltext import GENERIC_BINARY_MEDIA_TYPES, base_media_type
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
 from .operations import immutable_record, prepared_mutation
 
 PROTOCOL = 'exactory-review-output-refusal-v1'
@@ -26,7 +26,7 @@ def contract_check(name):
 
 def _frozen_pdf_capture(link, packets):
     """Find a PDF page map only where a frozen source delivery binds it to the original."""
-    if base_media_type(link['artifact']['media_type']) in GENERIC_BINARY_MEDIA_TYPES:
+    if parse_base_media_type(link['artifact']['media_type']) in GENERIC_BINARY_MEDIA_TYPES:
         # Native format-inference qualification is not present in this projection.
         return None
     for packet in packets:
@@ -40,7 +40,7 @@ def _frozen_pdf_capture(link, packets):
                 # Acquisition stores an extraction as text/plain with its charset parameter.
                 texts = [artifact for artifact in delivery['evidence']
                          if artifact['sha256'] in provenance['delivered_sha256']
-                         and base_media_type(artifact['media_type']) == 'text/plain']
+                         and parse_base_media_type(artifact['media_type']) == 'text/plain']
                 if len(texts) == 1:
                     return {'original': link['artifact'], 'text': texts[0]}
     return None
@@ -63,7 +63,7 @@ def validate_evidence_contract(records, artifacts, values, *, required=True, pac
         if reference.get('kind') != 'source':
             continue
         link = reference['link']
-        media = base_media_type(link['artifact']['media_type'])
+        media = parse_base_media_type(link['artifact']['media_type'])
         # Missing bytes are evidence-availability failures, before any locator check.
         try:
             artifacts.read(link['artifact'])

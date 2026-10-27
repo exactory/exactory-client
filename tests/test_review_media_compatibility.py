@@ -31,7 +31,7 @@ class MediaCompatibilityTests(unittest.TestCase):
         self.root = Path(directory.name)
         self.artifacts = ArtifactStore(self.root)
 
-    def packet(self, entry):
+    def build_packet(self, entry):
         return {'protocol': 'exactory-problem-review-v2', 'role': 'result', 'reviewer_id': 'first',
                 'dossier_id': None, 'subject': {'kind': 'problem', 'statement_id': 'statement-1'},
                 'digest': '1' * 64, 'evidence': [entry]}
@@ -41,7 +41,7 @@ class MediaCompatibilityTests(unittest.TestCase):
                       'APPLICATION/OCTET-STREAM', 'Application/PDF'):
             reference = self.artifacts.put(PDF, media)
             entry = {'artifact': reference, 'encoding': 'utf-8', 'content': PDF.decode()}
-            packet = self.packet(entry)
+            packet = self.build_packet(entry)
             request = {'input': [{'role': 'user',
                                  'content': review_transport.PACKET_LABEL + json.dumps(packet)}]}
             before = copy.deepcopy(request)
@@ -57,7 +57,7 @@ class MediaCompatibilityTests(unittest.TestCase):
         route = {'adapter': 'openai_responses_v1', 'model': 'fixture-model',
                  'endpoint': 'https://api.example.test/v1/responses',
                  'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 600}}
-        request = review_transport.request_body(route, 'Review.', self.packet(entry))
+        request = review_transport.request_body(route, 'Review.', self.build_packet(entry))
         parts = request['input'][-1]['content']
         self.assertEqual(parts[1]['image_url'], 'data:image/PNG;base64,' + entry['content'])
         projected, = packets_from_request(request, native_attachments=True)
@@ -69,7 +69,7 @@ class MediaCompatibilityTests(unittest.TestCase):
         entry = {'artifact': reference, 'encoding': 'base64', 'delivery': 'attached-exact-bytes'}
         for media in ('image/png', ' Image/PNG ', 'image/PNG; profile=fixture'):
             request = {'input': [{'role': 'user', 'content': [
-                {'type': 'input_text', 'text': review_transport.PACKET_LABEL + json.dumps(self.packet(entry))},
+                {'type': 'input_text', 'text': review_transport.PACKET_LABEL + json.dumps(self.build_packet(entry))},
                 {'type': 'input_image', 'image_url': 'data:' + media + ';base64,'
                  + base64.b64encode(PNG).decode('ascii')}]}]}
             with self.subTest(media=media):

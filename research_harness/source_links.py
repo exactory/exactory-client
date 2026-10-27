@@ -21,7 +21,7 @@ import copy
 import hashlib
 
 from .errors import ResearchError
-from .fulltext import GENERIC_BINARY_MEDIA_TYPES, base_media_type
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
 from .identities import normalize_identifier, version_of
 from .imports import _pointer
 from .operations import fields, is_finite_number, text
@@ -121,11 +121,11 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
         return value
     if kind == "pdf":
         fields(locator, ("kind", "page_index", "printed_page", "region"), code="invalid_locator")
-        media = base_media_type(artifact["media_type"])
+        media = parse_base_media_type(artifact["media_type"])
         inferred_pdf = (media in GENERIC_BINARY_MEDIA_TYPES and capture is not None
                         and capture.get("availability") == "available"
                         and capture.get("extraction_status") == "extracted"
-                        and base_media_type(capture.get("extraction", {}).get("media_type")) == "application/pdf"
+                        and parse_base_media_type(capture.get("extraction", {}).get("media_type")) == "application/pdf"
                         and capture.get("extraction", {}).get("format_detection") == "pdf_signature_from_generic_binary")
         if ((media != "application/pdf" and not inferred_pdf) or not data.startswith(b"%PDF-")
                 or capture is None or capture.get("original") != artifact or capture.get("text") is None):
@@ -145,7 +145,7 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
         return None
     if kind == "html":
         fields(locator, ("kind", "anchor"), ("assets",), code="invalid_locator")
-        if (base_media_type(artifact["media_type"]) not in ("text/html", "application/xhtml+xml")
+        if (parse_base_media_type(artifact["media_type"]) not in ("text/html", "application/xhtml+xml")
                 or not isinstance(locator["anchor"], dict) or locator["anchor"].get("kind") not in TEXT_KINDS):
             raise ResearchError("invalid_locator", "HTML visual inspections require an anchor in the original HTML")
         return read_locator(artifacts, artifact, locator["anchor"])

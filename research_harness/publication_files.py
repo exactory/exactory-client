@@ -7,7 +7,7 @@ from .publication import find_selected_bundle
 from .workspace import read_file, write_projection
 
 
-def _working_file(root, path):
+def _read_working_file(root, path):
     try:
         return read_file(root, path)
     except ResearchError as error:
@@ -16,7 +16,7 @@ def _working_file(root, path):
         return None
 
 
-def bundle_drift(records, artifacts):
+def find_bundle_drift(records, artifacts):
     """Identify every differing path of the selected bundle until its measurement is complete."""
     bundle = find_selected_bundle(records)
     if bundle is None or select_measurement_reviews(records, bundle) is not None:
@@ -38,7 +38,7 @@ def bundle_drift(records, artifacts):
     return {"bundle_id": bundle["id"], "bundle_digest": bundle["digest"], "files": differing} if differing else None
 
 
-def _restore_path(path):
+def _validate_restore_path(path):
     parts = [part.casefold() for part in _relative_parts(path)]
     if parts[0] in (".exactory", ".git") or parts[:3] == ["research", "sources", "objects"]:
         raise ResearchError("unsafe_path",
@@ -64,7 +64,7 @@ def restore_bundle(store, bundle_digest):
             if item is None:
                 continue
             path = item["path"]
-            _restore_path(path)
+            _validate_restore_path(path)
             pinned = artifacts.read(item["artifact"])
             if path in paths:
                 if paths[path] != pinned:
@@ -73,7 +73,7 @@ def restore_bundle(store, bundle_digest):
                                         {"path": path})
                 continue
             paths[path] = pinned
-            current = _working_file(store.root, path)
+            current = _read_working_file(store.root, path)
             if current == pinned:
                 unchanged.append(path)
             else:
@@ -83,7 +83,7 @@ def restore_bundle(store, bundle_digest):
                    for _, _, current in planned]
         restored = []
         for (item, pinned, current), backup in zip(planned, backups):
-            if _working_file(store.root, item["path"]) != current:
+            if _read_working_file(store.root, item["path"]) != current:
                 raise ResearchError("publication_artifact_changed", "The working file changed while the restore ran",
                                     {"path": item["path"], "restored": restored})
             write_projection(store.root, item["path"], pinned)

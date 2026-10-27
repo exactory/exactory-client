@@ -10,7 +10,7 @@ import time
 from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions,
                 principles, reading, resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
-from .drafting import draft_obligations
+from .drafting import find_draft_obligations
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -119,7 +119,7 @@ OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
 from .execution import bind_execution, reconcile_execution, record_imported_execution
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
 from .publication import check_claims, list_publication_receipts, prepare_publication, record_manuscript_review
-from .publication_files import bundle_drift, restore_bundle
+from .publication_files import find_bundle_drift, restore_bundle
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
@@ -375,7 +375,7 @@ def status_report(store, *, counters=False):
         milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
         if milestone is not None:
             report = gate_state(records, evaluation, milestone, profile=profile)
-    draft_pending = draft_obligations(records, store.root)
+    draft_pending = find_draft_obligations(records, store.root)
     if draft_pending:
         obligations = report["obligations"] + draft_pending
         report = dict(report, ready=False, obligations=obligations,
@@ -387,7 +387,7 @@ def status_report(store, *, counters=False):
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
     tool_status = {}
-    tool_status["bundle_drift"] = bundle_drift(records, evaluation) if profile == "research" else None
+    tool_status["bundle_drift"] = find_bundle_drift(records, evaluation) if profile == "research" else None
     if records.get("probe_intent") or records.get("probe"):
         tool_status["probes"] = summarize_probes(records)
     provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]

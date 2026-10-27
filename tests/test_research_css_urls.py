@@ -15,20 +15,20 @@ SVG_DATA = "data:image/svg+xml,%3Csvg%3E%3Cg id='c' fill='url(%23c)'/%3E%3C/svg%
 
 
 class CssUrlTests(unittest.TestCase):
-    def inventory(self, content):
+    def find_resources(self, content):
         start = content.index(CAPTION)
         return resource_inventory(content, PAGE, {"start": start, "end": start + len(CAPTION)})
 
-    def figure(self, style=""):
+    def build_figure(self, style=""):
         return ('<figure style="' + escape(style, quote=True) + '"><figcaption>' + CAPTION
                 + '</figcaption></figure>')
 
     def assert_urls(self, style, urls):
-        result = self.inventory(self.figure(style))
+        result = self.find_resources(self.build_figure(style))
         self.assertEqual([r["url"] for r in result["resources"]], urls)
         self.assertEqual(result["pending"], [])
 
-    def svg(self, style):
+    def build_svg(self, style):
         return ('<svg xmlns="http://www.w3.org/2000/svg"><path style="' + escape(style, quote=True)
                 + '"/></svg>').encode()
 
@@ -63,7 +63,7 @@ class CssUrlTests(unittest.TestCase):
 
     def test_pmc_document_data_uri_does_not_invent_a_page_relative_image(self):
         content = (Path(__file__).parent / 'fixtures/research/pmc-quoted-svg-style.html').read_text(encoding='utf-8')
-        result = self.inventory(content)
+        result = self.find_resources(content)
         self.assertEqual([r['url'] for r in result['resources']], ['https://images.example.org/figure.jpg'])
         self.assertEqual([p['code'] for p in result['pending']], ['visual_document_style_unsupported'] * 4)
 
@@ -72,15 +72,15 @@ class CssUrlTests(unittest.TestCase):
 
     def test_ancestor_inline_data_uri_has_no_external_dependency(self):
         content = ('<section style="' + escape('background:url("' + SVG_DATA + '")', quote=True) + '">'
-                   + self.figure() + '</section>')
-        result = self.inventory(content)
+                   + self.build_figure() + '</section>')
+        result = self.find_resources(content)
         self.assertEqual(result['resources'], [])
         self.assertEqual(result['pending'], [])
 
     def test_inline_svg_presentation_data_uri_has_no_external_dependency(self):
         content = ('<figure><svg><path fill="' + escape('url("' + SVG_DATA + '")', quote=True)
                    + '"/></svg><figcaption>' + CAPTION + '</figcaption></figure>')
-        result = self.inventory(content)
+        result = self.find_resources(content)
         self.assertEqual(result['resources'], [])
         self.assertEqual(result['pending'], [])
 
@@ -89,25 +89,25 @@ class CssUrlTests(unittest.TestCase):
                       'fill:url(\'https://assets.example.org/a"url(#c)\')'):
             with self.subTest(style=style):
                 with self.assertRaises(ResearchError) as raised:
-                    validate_visual(self.svg(style), 'image/svg+xml')
+                    validate_visual(self.build_svg(style), 'image/svg+xml')
                 self.assertEqual(raised.exception.code, 'visual_asset_dependencies_unsupported')
 
     def test_standalone_svg_keeps_internal_references_and_existing_style_guards(self):
         for style in ('fill:url(#c)', 'fill:url("#c")', "fill:url( '#c' )",
                       'fill:url(#c);stroke:url("#d");filter:url(\'#e\')'):
             with self.subTest(style=style):
-                validate_visual(self.svg(style), 'image/svg+xml')
+                validate_visual(self.build_svg(style), 'image/svg+xml')
         for style in ('fill:url(/external.svg)', 'fill:url("https://assets.example.org/external.svg")',
                       'fill:u\\72l(#c)', 'fill:paint(url(#c))', '@import "/style.css"'):
             with self.subTest(style=style):
                 with self.assertRaises(ResearchError) as raised:
-                    validate_visual(self.svg(style), 'image/svg+xml')
+                    validate_visual(self.build_svg(style), 'image/svg+xml')
                 self.assertEqual(raised.exception.code, 'visual_asset_dependencies_unsupported')
 
     def test_document_style_keeps_ordinary_urls_and_its_pending_code(self):
         content = ('<style>.plot{background:url(/alpha.png),url("/beta.png"),url(\'/gamma.png\')}</style>'
-                   + self.figure())
-        result = self.inventory(content)
+                   + self.build_figure())
+        result = self.find_resources(content)
         self.assertEqual([r['url'] for r in result['resources']],
                          [ORIGIN + 'alpha.png', ORIGIN + 'beta.png', ORIGIN + 'gamma.png'])
         self.assertEqual([r['references'][0]['value'] for r in result['resources']],

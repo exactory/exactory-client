@@ -73,7 +73,7 @@ class StoredBundleFilesTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
-    def status(self, summary=True):
+    def read_status(self, summary=True):
         result = run_cli(self.root, "status", *(("--summary",) if summary else ()))
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
@@ -239,7 +239,7 @@ class StoredBundleFilesTests(unittest.TestCase):
         objects = set((self.root / "research/sources/objects").iterdir())
         for summary in (True, False):
             with self.subTest(summary=summary):
-                drift = self.status(summary)["bundle_drift"]
+                drift = self.read_status(summary)["bundle_drift"]
                 self.assertEqual(drift["bundle_id"], "legacy-paper")
                 self.assertEqual(drift["bundle_digest"], self.bundle["digest"])
                 self.assertEqual({item["path"] for item in drift["files"]},
@@ -247,7 +247,7 @@ class StoredBundleFilesTests(unittest.TestCase):
         self.assertEqual(self.store.snapshot(), before)
         self.assertEqual(set((self.root / "research/sources/objects").iterdir()), objects)
         self.restore()
-        self.assertIsNone(self.status()["bundle_drift"])
+        self.assertIsNone(self.read_status()["bundle_drift"])
 
     def test_status_retains_drift_until_all_three_reviews_and_predictions_are_paired(self):
         (self.root / "draft/paper.pdf").write_bytes(b"later PDF")
@@ -256,10 +256,10 @@ class StoredBundleFilesTests(unittest.TestCase):
             self.save_records([("manuscript_review", assessor, {
                 "bundle_digest": self.bundle["digest"], "assessor": {"id": assessor},
                 "reviewed_revision": self.store.revision, "core": {"overall": 7, "decision": "accept"}})])
-            self.assertIsNotNone(self.status()["bundle_drift"])
+            self.assertIsNotNone(self.read_status()["bundle_drift"])
             self.save_records([("manuscript_prediction", assessor, {
                 "bundle_digest": self.bundle["digest"], "payload": {"assessor": {"id": assessor}}})])
-        self.assertIsNone(self.status()["bundle_drift"])
+        self.assertIsNone(self.read_status()["bundle_drift"])
 
     def test_status_ignores_drift_in_a_superseded_incomplete_bundle(self):
         later = copy.deepcopy(self.bundle)
@@ -268,14 +268,14 @@ class StoredBundleFilesTests(unittest.TestCase):
         later["digest"] = digest({key: value for key, value in later.items() if key != "digest"})
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4 later")
         self.save_bundle(later)
-        self.assertIsNone(self.status()["bundle_drift"])
+        self.assertIsNone(self.read_status()["bundle_drift"])
 
     def test_status_names_unsafe_files_without_following_symlinks(self):
         target = self.root.parent / "outside.pdf"
         target.write_bytes(b"outside author file")
         (self.root / "draft/paper.pdf").unlink()
         (self.root / "draft/paper.pdf").symlink_to(target)
-        drift = self.status()["bundle_drift"]
+        drift = self.read_status()["bundle_drift"]
         self.assertEqual(drift["files"][0]["path"], "draft/paper.pdf")
         self.assertEqual(drift["files"][0]["code"], "unsafe_path")
         self.assertEqual(target.read_bytes(), b"outside author file")

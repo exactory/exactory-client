@@ -16,7 +16,7 @@ from .artifacts import describe_artifact, validate_reference
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .fulltext import GENERIC_BINARY_MEDIA_TYPES, base_media_type
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
 from .operations import fields, text
 from .source_links import read_locator, captured_source, complete_original
 from .scientific_json import parse_scientific_json
@@ -317,9 +317,10 @@ class ScientificDelivery:
             if original_pdf:
                 if not complete_original({"source": source, "capture": capture}):
                     raise ResearchError(_PRIVATE, "Source components require a complete verified HTTP original")
-                media = base_media_type(ref["media_type"])
+                media = parse_base_media_type(ref["media_type"])
                 inferred = (media in GENERIC_BINARY_MEDIA_TYPES
-                            and base_media_type(capture.get("extraction", {}).get("media_type")) == "application/pdf"
+                            and parse_base_media_type(capture.get("extraction", {}).get("media_type"))
+                            == "application/pdf"
                             and capture.get("extraction", {}).get("format_detection") == "pdf_signature_from_generic_binary")
                 if media != "application/pdf" and not inferred:
                     raise ResearchError(_CODE, "A JPEG source component requires an original PDF")
@@ -394,7 +395,7 @@ class ScientificDelivery:
             source = self.artifacts.read(source_ref)
             self._check_bytes(source)
             self._check_bytes(data)
-            if (base_media_type(ref["media_type"]) != "image/jpeg" or not source.startswith(b"%PDF-")
+            if (parse_base_media_type(ref["media_type"]) != "image/jpeg" or not source.startswith(b"%PDF-")
                     or projection["end"] > len(source) or source[projection["start"]:projection["end"]] != data):
                 raise ResearchError(_CODE, "The JPEG must equal the exact declared byte span of its original PDF")
             from .html_visuals import validate_visual
@@ -501,7 +502,7 @@ class ScientificDelivery:
                 if is_json:
                     self._check_public_nested(structured)
                     self.walk(structured)
-                mime = base_media_type(ref["media_type"])
+                mime = parse_base_media_type(ref["media_type"])
                 compressed = data.startswith((b"\x1f\x8b", b"BZh", b"\xfd7zXZ\x00"))
                 if not empty_capture and (zipfile.is_zipfile(io.BytesIO(data)) or compressed or tarfile.is_tarfile(io.BytesIO(data))
                         or mime in ("application/x-tar", "application/zip", "application/gzip",

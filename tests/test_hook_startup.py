@@ -41,7 +41,7 @@ class TestHookStartup(unittest.TestCase):
         self.launchers.mkdir()
         (self.launchers / "python3").symlink_to(sys.executable)
 
-    def handlers(self):
+    def find_handlers(self):
         for host, config_path in CONFIGS.items():
             config = json.loads((ROOT / config_path).read_text())
             for event, groups in config["hooks"].items():
@@ -71,7 +71,7 @@ class TestHookStartup(unittest.TestCase):
         self.assertEqual(process.stdout, "")
 
     def assert_missing_event(self, event, code):
-        handlers = [(host, handler) for host, name, handler in self.handlers() if name == event]
+        handlers = [(host, handler) for host, name, handler in self.find_handlers() if name == event]
         self.assertEqual({host for host, _ in handlers}, {"claude", "codex"})
         for host, handler in handlers:
             with self.subTest(host=host, event=event, command=handler["command"]):
@@ -90,20 +90,20 @@ class TestHookStartup(unittest.TestCase):
         self.assert_missing_event("SessionStart", 1)
 
     def test_missing_version_reports_update_for_every_entrypoint(self):
-        for host, event, handler in self.handlers():
+        for host, event, handler in self.find_handlers():
             with self.subTest(host=host, event=event, command=handler["command"]):
                 self.assert_update_diagnostic(self.invoke(handler), MISSING_EXIT[event])
 
     def test_missing_entrypoint_in_existing_root_reports_update(self):
         (self.version / "hooks").mkdir(parents=True)
         (self.version / "codex").mkdir()
-        for host, event, handler in self.handlers():
+        for host, event, handler in self.find_handlers():
             with self.subTest(host=host, event=event, command=handler["command"]):
                 self.assert_update_diagnostic(self.invoke(handler), MISSING_EXIT[event])
 
     def test_entrypoints_preserve_script_execution(self):
         payload = {"hook_event_name": "PreToolUse", "tool_input": {"command": "echo 'sample'"}}
-        for host, event, handler in self.handlers():
+        for host, event, handler in self.find_handlers():
             with self.subTest(host=host, event=event, command=handler["command"]):
                 relative = SCRIPT_PATH.search(handler["command"]).group(1)
                 script = self.version / relative
@@ -122,7 +122,7 @@ class TestHookStartup(unittest.TestCase):
                 })
 
     def test_script_errors_are_not_reported_as_plugin_updates(self):
-        for host, event, handler in self.handlers():
+        for host, event, handler in self.find_handlers():
             relative = SCRIPT_PATH.search(handler["command"]).group(1)
             script = self.version / relative
             script.parent.mkdir(parents=True, exist_ok=True)
@@ -141,7 +141,7 @@ class TestHookStartup(unittest.TestCase):
         attack.mkdir(parents=True)
         (attack / "problem.json").write_text('{"claim": "sample"}')
         (attack / "journal.jsonl").write_text("")
-        for host, event, handler in self.handlers():
+        for host, event, handler in self.find_handlers():
             if event != "PreToolUse" or "guard_attack_files.py" not in handler["command"]:
                 continue
             for filename, denied in (("notes.md", False), ("attack/sample/tasks.json", True)):
