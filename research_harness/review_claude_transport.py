@@ -10,6 +10,7 @@ uses the reviewer's self-report. A positive-control probe is still required by r
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -203,7 +204,8 @@ def send_request(route, request, credential=None):
     complete = (result.returncode == 0 and not malformed and len(results) == 1 and final.get('subtype') == 'success'
                 and final.get('is_error') is False and output_tokens is not None
                 and output_tokens <= config['max_output_tokens'])
-    answer, fenced = strip_fence(final.get('result') if isinstance(final.get('result'), str) else '')
+    answer, fenced, correction_evidence = parse_result_text(
+        final.get('result') if isinstance(final.get('result'), str) else '')
     return {'id': evidence['session_id'] or 'failed-' + uuid.uuid4().hex, 'model': route['model'],
             'status': 'completed' if complete else 'incomplete',
             'output': [{'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': answer}]}],
@@ -214,7 +216,8 @@ def send_request(route, request, credential=None):
                           'stdout_digest': hashlib.sha256(result.stdout.encode()).hexdigest(),
                           'stderr_digest': hashlib.sha256((result.stderr or '').encode()).hexdigest(),
                           'malformed_line_digests': malformed, 'event_count': len(events),
-                          'event_types': [event.get('type') for event in events], 'fence_removed': fenced}}
+                          'event_types': [event.get('type') for event in events], 'fence_removed': fenced,
+                          **correction_evidence}}
 
 
 def strip_fence(text):
@@ -229,6 +232,36 @@ def strip_fence(text):
     if newline != -1 and body[:newline].strip().isalnum():
         body = body[newline + 1:]
     return body.strip(), True
+
+
+def parse_result_text(text):
+    """Select the last of several objects for the ordinary output-contract checks, retaining the complete answer.
+    Decode disjoint spans and stop at the first syntax error, so malformed prefixes are never retried as nested JSON.
+    A single object or a refused scan keeps the existing fence handling and response shape."""
+    answer, fenced = strip_fence(text)
+    decoder = json.JSONDecoder()
+    opening_pattern = re.compile(r'[\[{\"]')
+    offset, object_count, last_start, last_end = 0, 0, 0, 0
+    while True:
+        opening_match = opening_pattern.search(text, offset)
+        if opening_match is None:
+            break
+        start = opening_match.start()
+        try:
+            output, end = decoder.raw_decode(text, start)
+        except ValueError:
+            return answer, fenced, {}
+        if isinstance(output, str):
+            offset = end
+            continue
+        if not isinstance(output, dict):
+            return answer, fenced, {}
+        object_count += 1
+        last_start, last_end, offset = start, end, end
+    if object_count < 2 or text[last_end:].strip() not in ('', '```'):
+        return answer, fenced, {}
+    return text[last_start:last_end], fenced, {'self_corrected': True, 'result_text': text,
+                                             'result_text_digest': digest(text)}
 
 
 def verify_context(route, request, response):
