@@ -37,7 +37,8 @@ FLAGS = ('-p', '--safe-mode', '--tools', '', '--strict-mcp-config', '--mcp-confi
 ENVIRONMENT = ('PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR', 'CLAUDE_CONFIG_DIR')
 SYSTEM_PROMPT_FILE = 'system-prompt.txt'
 OUTPUT_CONTENT_TYPES = ('text', 'thinking', 'redacted_thinking')
-RESULT_FENCE_PATTERN = re.compile(r'[ \t]*```([^\r\n]*)(?:\r\n?|\n)?')
+RESULT_RETRACTION_LINE = 'RETRACTED'
+RESULT_FENCE_PATTERN = re.compile(r'[ \t]*(`{3,}|~{3,})([^\r\n]*)(?:\r\n?|\n)?')
 RESULT_VALUE_PATTERN = re.compile(r'[ \t]*([\[{])')
 RESULT_END_PATTERN = re.compile(r'[ \t]*(?:\r\n?|\n|\Z)')
 
@@ -238,13 +239,14 @@ def strip_fence(text):
 
 
 def parse_result_text(text):
-    """Select the last of several objects for the ordinary output-contract checks, retaining the complete answer.
-    Walk lines once, consuming arrays and ignoring code fences. Ambiguous containers, fences or suffixes keep
-    existing handling, as do candidate syntax or recursion errors and answers without several object candidates."""
+    """Select a corrected object only when every earlier candidate is explicitly retracted, retaining the full answer.
+    Walk lines once, consuming arrays and ignoring code blocks. Track each fence's character and length. Ambiguous
+    containers, fences or suffixes, syntax/recursion errors and single candidates keep existing handling."""
     answer, fenced = strip_fence(text)
     decoder = json.JSONDecoder(parse_int=str, parse_float=str, parse_constant=str)
     offset, decoded_end, object_count, last_start, last_end = 0, 0, 0, 0, 0
-    fence_tag, valid_suffix = None, False
+    fence_marker, fence_length, fence_tag = None, 0, None
+    valid_suffix, retracted = False, False
     for line in text.splitlines(keepends=True):
         line_start = offset
         offset += len(line)
@@ -252,19 +254,23 @@ def parse_result_text(text):
             continue
         fence_match = RESULT_FENCE_PATTERN.fullmatch(line)
         if fence_match is not None:
-            tag = fence_match.group(1).strip().lower()
+            marker, tag = fence_match.group(1), fence_match.group(2).strip(' \t').lower()
             if fence_tag is None:
-                fence_tag, valid_suffix = tag, False
-            elif not tag:
+                if marker[0] != '`' or '`' not in tag:
+                    fence_marker, fence_length, fence_tag = marker[0], len(marker), tag
+                    valid_suffix = False
+                    continue
+            elif marker[0] == fence_marker and len(marker) >= fence_length and not tag:
                 if fence_tag not in ('', 'json'):
                     valid_suffix = False
                 fence_tag = None
-            elif fence_tag in ('', 'json'):
-                return answer, fenced, {}
-            continue
+                continue
         if fence_tag not in (None, '', 'json') or not line.strip():
             continue
         valid_suffix = False
+        if line.rstrip('\r\n').strip(' \t') == RESULT_RETRACTION_LINE:
+            retracted = object_count > 0
+            continue
         opening_match = RESULT_VALUE_PATTERN.match(line)
         if opening_match is None:
             continue
@@ -276,12 +282,15 @@ def parse_result_text(text):
         decoded_end = end
         if opening_match.group(1) == '[' or RESULT_END_PATTERN.match(text, end) is None:
             continue
+        if object_count and not retracted:
+            return answer, fenced, {}
         object_count += 1
         last_start, last_end = start, end
-        valid_suffix = True
+        valid_suffix, retracted = True, False
     if fence_tag is not None or object_count < 2 or not valid_suffix:
         return answer, fenced, {}
-    return text[last_start:last_end], fenced, {'self_corrected': True, 'result_text': text,
+    return text[last_start:last_end], fenced, {'self_corrected': True, 'retracted_object_count': object_count - 1,
+                                             'result_text': text,
                                              'result_text_digest': digest(text)}
 
 
