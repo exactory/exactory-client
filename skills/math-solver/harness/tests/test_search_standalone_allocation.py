@@ -1,15 +1,16 @@
 """Public side allocations preserve the existing account and execution gates."""
 
+import hashlib
 import json
 import unittest
 
 from search_controller.errors import SearchError
 from search_controller.strategy_refresh import assessment_status, context
 from tests.search_execution_support import admit_workspace, begin_spec, invoke
-from tests.search_fixtures import proposal, provenance
+from tests.search_fixtures import digest, proposal, provenance
 from tests.strategy_refresh_support import reassess_fixture
 from tests.support import OPENING, WorkspaceTest, make_move
-from tests.test_search_proof import event
+from tests.test_search_proof import checkpoint_record, event
 from tests.test_search_standalone_proof import admit_standalone, standalone_proposal
 
 
@@ -133,6 +134,43 @@ class AllocationServiceTests(WorkspaceTest):
         with self.assertRaisesRegex(SearchError, "remaining allowance"):
             invoke(self.controller, "side-interval", oversized)
         self.assertEqual(self.controller.status(), state)
+
+    def test_begin_standalone_move_while_root_finalization_awaits_review(self):
+        from tests.test_search_evidence import EvidenceTests
+        self.prepare()
+        state = self.controller.status()
+        claim = state["contract"]["original_claim"]
+        proof = self.attack_root / "root-proof.md"
+        proof.write_text("The synthetic root claim True holds by True.intro; it has no additional assumptions.\n")
+        proof_digest = hashlib.sha256(proof.read_bytes()).hexdigest()
+        manifest = {"schema_version": 1, "kind": "analytical", "claim_digest": digest(claim),
+            "conclusion": {"outcome": "proof", "dependency_ids": [], "route_bindings": []},
+            "artifacts": [{"path": "root-proof.md", "digest": proof_digest, "role": "proof"}],
+            "dependencies": [], "external_dependencies": [], "verification": None}
+        (self.attack_root / "root-manifest.json").write_text(json.dumps(manifest))
+        checkpoint = checkpoint_record(state, "obligation-000001")
+        del checkpoint["verification_status"]
+        checkpoint["origin"].update(source_digest=proof_digest, study_digest=proof_digest)
+        checkpoint["evidence_digests"] = [digest(manifest)]
+        invoke(self.controller, "checkpoint", {"checkpoint": checkpoint, "inputs": [
+            {"path": "root-proof.md", "kind": "artifact", "digest": proof_digest},
+            {"path": "root-manifest.json", "kind": "blob", "digest": digest(manifest)}]}, None)
+        checkpoint = self.controller.status()["checkpoints"]["checkpoint-000001"]
+        invoke(self.controller, "accept", {"obligation_id": "obligation-000001", "outcome": "proof",
+            "dependency_ids": [], "route_bindings": [], "inputs": [],
+            "review": EvidenceTests.result_review(self, checkpoint, claim)}, checkpoint["id"])
+        self.assertEqual(self.controller.command("next", {}, None, None)["kind"], "finalize_root")
+        invoke(self.controller, "side-interval", allocation())
+        reassess_fixture(self.controller, {("node-000001", OPENING)})
+        before = self.controller.status()
+        invoke(self.controller, "begin", begin_spec())
+        state = self.controller.status()
+        self.assertEqual(state["totals"]["reserved_moves"], 1)
+        self.assertEqual(state["control"]["pending_moves"], ["move-node-000001-1"])
+        self.assertEqual(state["acceptances"], before["acceptances"])
+        self.assertIsNone(state["control"]["closure"])
+        self.assertEqual(state["openness"]["status"], "pending")
+        self.assertEqual(state["proof_status"], "open")
 
     def test_allocation_does_not_resume_paused_execution(self):
         self.prepare()
