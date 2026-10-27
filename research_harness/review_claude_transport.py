@@ -38,8 +38,7 @@ ENVIRONMENT = ('PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR', 'CLAUDE_CONF
 SYSTEM_PROMPT_FILE = 'system-prompt.txt'
 OUTPUT_CONTENT_TYPES = ('text', 'thinking', 'redacted_thinking')
 RESULT_RETRACTION_LINE = 'RETRACTED'
-RESULT_FENCE_PATTERN = re.compile(r'[ \t]*(`{3,}|~{3,})([^\r\n]*)(?:\r\n?|\n)?')
-RESULT_VALUE_PATTERN = re.compile(r'[ \t]*([\[{])')
+RESULT_FENCE_LINES = ('```', '```json')
 RESULT_END_PATTERN = re.compile(r'[ \t]*(?:\r\n?|\n|\Z)')
 
 
@@ -239,57 +238,55 @@ def strip_fence(text):
 
 
 def parse_result_text(text):
-    """Select a corrected object only when every earlier candidate is explicitly retracted, retaining the full answer.
-    Walk lines once, consuming arrays and ignoring code blocks. Track each fence's character and length. Ambiguous
-    containers, fences or suffixes, syntax/recursion errors and single candidates keep existing handling."""
+    """Read complete object blocks separated by exact retractions, allowing prose only after a retraction.
+    A fenced block holds one column-zero object between exact triple-backtick lines. Match the whole answer
+    in one pass; syntax/recursion errors, incomplete grammar and single blocks keep existing handling."""
     answer, fenced = strip_fence(text)
     decoder = json.JSONDecoder(parse_int=str, parse_float=str, parse_constant=str)
-    offset, decoded_end, object_count, last_start, last_end = 0, 0, 0, 0, 0
-    fence_marker, fence_length, fence_tag = None, 0, None
-    valid_suffix, retracted = False, False
+    offset, decoded_end, retraction_count, last_start, last_end = 0, 0, 0, 0, 0
+    state = 'block'
     for line in text.splitlines(keepends=True):
         line_start = offset
         offset += len(line)
         if line_start < decoded_end:
             continue
-        fence_match = RESULT_FENCE_PATTERN.fullmatch(line)
-        if fence_match is not None:
-            marker, tag = fence_match.group(1), fence_match.group(2).strip(' \t').lower()
-            if fence_tag is None:
-                if marker[0] != '`' or '`' not in tag:
-                    fence_marker, fence_length, fence_tag = marker[0], len(marker), tag
-                    valid_suffix = False
-                    continue
-            elif marker[0] == fence_marker and len(marker) >= fence_length and not tag:
-                if fence_tag not in ('', 'json'):
-                    valid_suffix = False
-                fence_tag = None
+        line_text = line.rstrip('\r\n')
+        if not line_text.strip(' \t'):
+            continue
+        if state == 'closing_fence':
+            if line_text != '```':
+                return answer, fenced, {}
+            state = 'retraction'
+            continue
+        if state == 'retraction':
+            if line_text != RESULT_RETRACTION_LINE:
+                return answer, fenced, {}
+            retraction_count += 1
+            state = 'prose'
+            continue
+        if state == 'prose':
+            if line_text == RESULT_RETRACTION_LINE:
+                retraction_count += 1
                 continue
-        if fence_tag not in (None, '', 'json') or not line.strip():
+            if not line_text.startswith('{') and line_text.lower() not in RESULT_FENCE_LINES:
+                continue
+        if state != 'fenced_object' and line_text.lower() in RESULT_FENCE_LINES:
+            state = 'fenced_object'
             continue
-        valid_suffix = False
-        if line.rstrip('\r\n').strip(' \t') == RESULT_RETRACTION_LINE:
-            retracted = object_count > 0
-            continue
-        opening_match = RESULT_VALUE_PATTERN.match(line)
-        if opening_match is None:
-            continue
-        start = line_start + opening_match.start(1)
+        if not line_text.startswith('{'):
+            return answer, fenced, {}
         try:
-            _, end = decoder.raw_decode(text, start)
+            _, end = decoder.raw_decode(text, line_start)
         except (ValueError, RecursionError):
             return answer, fenced, {}
-        decoded_end = end
-        if opening_match.group(1) == '[' or RESULT_END_PATTERN.match(text, end) is None:
-            continue
-        if object_count and not retracted:
+        if RESULT_END_PATTERN.match(text, end) is None:
             return answer, fenced, {}
-        object_count += 1
-        last_start, last_end = start, end
-        valid_suffix, retracted = True, False
-    if fence_tag is not None or object_count < 2 or not valid_suffix:
+        decoded_end = end
+        last_start, last_end = line_start, end
+        state = 'closing_fence' if state == 'fenced_object' else 'retraction'
+    if state != 'retraction' or not retraction_count:
         return answer, fenced, {}
-    return text[last_start:last_end], fenced, {'self_corrected': True, 'retracted_object_count': object_count - 1,
+    return text[last_start:last_end], fenced, {'self_corrected': True, 'retracted_object_count': retraction_count,
                                              'result_text': text,
                                              'result_text_digest': digest(text)}
 
