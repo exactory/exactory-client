@@ -266,6 +266,7 @@ class Controller:
                     operation_locks.enter_context(journal_ownership(self, node_id))
                 reconcile_journals(self, state, content, emit)
                 reconcile_native_intents(self, state, content, emit)
+                effects.extend(self._build_workspace_recovery(state, content))
         elif name == "adopt":
             from .adoption import build_import, record_import, record_import_version, record_allowance
             s.closed(spec, "mappings inputs")
@@ -488,8 +489,9 @@ class Controller:
             prospective = copy.deepcopy(state)
             for operation in operations:
                 EVENT_HANDLERS[operation["kind"]](prospective, operation["payload"])
+            initializing_slugs = {effect["slug"] for effect in effects if effect["kind"] == "initialize_workspace"}
             for node in prospective["nodes"].values():
-                if node["proposal_id"] is not None:
+                if node["proposal_id"] is not None and node["attack_slug"] not in initializing_slugs:
                     emit("node_facts_recorded", {"facts": observe_node(self, prospective, node, content)})
         paths = {"SEARCH_TREE.md"} | {n["attack_slug"] + "/LINEAGE.md" for n in state["nodes"].values()}
         if name == "admit":
@@ -507,6 +509,22 @@ class Controller:
             effects.append({"kind": "preserve_manual_views", "slug": ".",
                             "snapshot_digest": content.put_blob({"directories": [], "files": files})})
         return dict(identity, operations=operations, effects=effects)
+
+    def _build_workspace_recovery(self, state, content):
+        initialized_slugs = {effect["slug"] for effect in state["service"]["effects"]
+                             if effect["kind"] == "initialize_workspace"}
+        effects = []
+        for node in state["nodes"].values():
+            if node["proposal_id"] is None or node["attack_slug"] in initialized_slugs:
+                continue
+            journal_path = safe_path(self.root, node["attack_slug"] + "/journal.jsonl")
+            if journal_path.exists():
+                continue
+            s.require(not any(move["node_id"] == node["id"] for move in state["service"]["moves"].values()),
+                      "Missing journal has recorded moves; restore it before reconciliation", "recovery_conflict")
+            proposal = reference(state["proposals"], node["proposal_id"], "admitted proposal")["record"]
+            effects.append(self._workspace_effect(state, proposal, content))
+        return effects
 
     def _workspace_effect(self, state, proposal, content):
         import attack
@@ -526,11 +544,11 @@ class Controller:
             s.require(not journal.exists() or not journal.read_bytes().strip(), "Existing research requires explicit adoption", "adoption_required")
             actual_parent = attack.read_parent(workspace)
             s.require(actual_parent == link, "Native parent differs from proposal")
-            return None
         files = {"problem.json": canonical_bytes(attack.build_problem_skeleton()),
                  "novelty.md": b"", "journal.jsonl": b""}
         if link is not None:
             files["parent.json"] = canonical_bytes(link)
+        files = {key: value for key, value in files.items() if not safe_path(workspace, key).exists()}
         snapshot = {"directories": ["deterministic", "units", "study"],
                     "files": [{"path": key, "digest": content.put_artifact(value)} for key, value in files.items()]}
         return {"kind": "initialize_workspace", "slug": slug, "snapshot_digest": content.put_blob(snapshot)}
