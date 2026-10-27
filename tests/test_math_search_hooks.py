@@ -205,11 +205,15 @@ class MathSearchHookTests(unittest.TestCase):
 
     def test_managed_shell_activity_records_relative_target_without_raw_arguments(self):
         self.hook("record_attack_activity.py", "PostToolUse", tool_name="exec_command",
+            tool_input={"cmd": "exactory-math --attack-root " + repr(str(self.root)) + " status attempt"},
+            tool_response={"exit_code": 0})
+        self.hook("record_attack_activity.py", "PostToolUse", tool_name="exec_command",
             tool_input={"cmd": "cat study/problem.md --fixture-secret=do-not-record", "workdir": str(self.root / "attempt")},
             tool_response={"exit_code": 0})
         rows = (self.root / "attempt/activity.jsonl").read_text().splitlines()
-        self.assertEqual(json.loads(rows[0])["target"], "study/problem.md")
-        self.assertNotIn("do-not-record", rows[0])
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(json.loads(rows[-1])["target"], "study/problem.md")
+        self.assertNotIn("do-not-record", rows[-1])
 
     def test_owned_controller_snapshots_and_views_are_protected(self):
         for relative in [".search/tree.json", ".search/blobs/owned.json", ".search/artifacts/owned",
