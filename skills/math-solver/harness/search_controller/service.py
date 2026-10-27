@@ -39,8 +39,10 @@ class Controller:
                 invalidate_evidence(state, {"acceptance_ids": sorted(failures), "reason": "Evidence audit failed",
                                             "provenance": self.provenance("audit")})
         state["strategy_assessment"] = assessment_status(state)
-        from .proof import assess_openness
+        from .proof import assess_openness, find_closure_blocking_nodes
         state["openness"] = assess_openness(state)
+        state["closure_blocking_node_ids"] = (find_closure_blocking_nodes(state)
+                                              if state["execution_status"] != "resolved" else [])
         return state
 
     @staticmethod
@@ -76,7 +78,12 @@ class Controller:
             if name == "status":
                 return state
             from .strategy_refresh_io import describe_context, effective_next_action
-            return describe_context(self, state) if name == "strategy-context" else effective_next_action(self, state)
+            if name == "strategy-context":
+                return describe_context(self, state)
+            action = effective_next_action(self, state)
+            if state["closure_blocking_node_ids"]:
+                action["closure_blocking_node_ids"] = state["closure_blocking_node_ids"]
+            return action
         s.integer(expected_revision)
         s.text(request_id)
         if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "side-interval", "amend-computation", "amend-foundation", "interpret"}:
@@ -429,6 +436,13 @@ class Controller:
             emit("result_accepted", {"acceptance": value, "digest": content.put_blob(value)})
         elif name == "complete":
             s.closed(spec, "subject review inputs")
+            from .proof import find_closure_blocking_nodes
+            node_ids = find_closure_blocking_nodes(state)
+            if node_ids:
+                raise SearchError("standalone_closure_pending",
+                                  "Finish or retreat admitted standalone nodes before root closure: " +
+                                  ", ".join(node_ids),
+                                  {"node_ids": node_ids})
             load_inputs(spec["inputs"])
             s.require(not audit_state(self.root, state, content, fresh=True), "Accepted proof audit failed", "audit_failed")
             subject = spec["subject"]

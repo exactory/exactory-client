@@ -459,6 +459,12 @@ def checkpoint_milestone(state, checkpoint_id):
     return False
 
 
+def find_closure_blocking_nodes(state):
+    return sorted(nid for nid, node in state["nodes"].items()
+                  if node["category"] == "standalone" and node["proposal_id"] is not None
+                  and node["status"] not in {"finished", "retreated"})
+
+
 def complete_objective(state, payload):
     s.closed(payload, "closure digest")
     closure = payload["closure"]
