@@ -246,6 +246,44 @@ class ReviewProtocolTests(LiteratureCase):
             state = p.assignment_state(records, self.artifacts, 'assignment')
             self.assertTrue(state['ready'], state['obligations'])
 
+    def test_legacy_ui_attempt_verifies_without_promoting_a_failed_legacy_probe(self):
+        from claude_review_fixtures import RECORDED_CONTEXTS, build_recorded_response, build_recorded_runtime
+        from research_harness import review_claude_transport as claude, review_transport
+        from test_research_claude_transport import ROUTE
+        p = self.protocol()
+        recorded_runtime = build_recorded_runtime(RECORDED_CONTEXTS[0][1])
+
+        def respond(route, request, credential):
+            is_probe = request['instructions'].startswith('Return JSON with allowed_control')
+            output = {'verdict': 'sound'}
+            if is_probe:
+                packet = json.loads(request['input'][0]['content'][len(review_transport.PACKET_LABEL):])
+                output = {'allowed_control': packet['allowed_control'], 'evidence_control': packet['evidence_control'],
+                          'excluded_controls': []}
+            context = RECORDED_CONTEXTS[0] if is_probe else RECORDED_CONTEXTS[-1]
+            return build_recorded_response(route, request, output, context)
+
+        with patch.object(claude, 'runtime', return_value=recorded_runtime), \
+                patch.object(review_transport, 'send_request', side_effect=respond):
+            self.mutate(p.record_route, dict(ROUTE, id='route'))
+            self.mutate(p.probe_route, {'id': 'probe', 'route_id': 'route'})
+            self.assign()
+            self.mutate(p.invoke_assignment, {'id': 'attempt', 'assignment_id': 'assignment'})
+        records = self.records()
+        assignment = records['review_assignment']['assignment']
+        attempt = records['review_attempt']['attempt']
+        self.assertTrue(p.authenticate_attempt(records, self.artifacts, assignment, attempt))
+
+        def failed_probe(route, request, credential):
+            response = respond(route, request, credential)
+            response['context_evidence'].update(input_verified=False, issues=['system_event_ui_invalidate'])
+            return response
+
+        with patch.object(claude, 'runtime', return_value=recorded_runtime), \
+                patch.object(review_transport, 'send_request', side_effect=failed_probe):
+            self.mutate(p.probe_route, {'id': 'failed-probe', 'route_id': 'route'})
+        self.assertEqual(p.route_state(self.records(), self.artifacts, 'route')['context_status'], 'unverified')
+
     def test_probed_route_stays_verified_after_installed_runtime_changes(self):
         p = self.protocol()
         self.route(); self.run_probe()

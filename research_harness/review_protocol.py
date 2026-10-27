@@ -2243,12 +2243,14 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
 def authenticate_attempt(records, artifacts, assignment, attempt):
     """Authenticate one exact observation independently of effective attempt selection: its provenance and the
     verified context of its route."""
+    from .review_claude_transport import verify_legacy_context
     try:
         route = records['review_route'][assignment['route_id']]
         request = _read_json(artifacts, attempt['request']) if attempt.get('request') else None
         response = _read_json(artifacts, attempt['response'])
         return (authenticate_provenance(records, artifacts, assignment, attempt)
-                and transport.context_verified(route, request, response))
+                and (transport.context_verified(route, request, response)
+                     or route['adapter'] == 'claude_cli_v1' and verify_legacy_context(route, request, response)))
     except (ResearchError, ValueError, TypeError, KeyError):
         return False
 
