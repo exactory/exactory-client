@@ -35,6 +35,12 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.64.0](docs/releases/0.64.0.md) repairs Claude review delivery and preserves standalone proposal
+reviews after an unrelated node finishes. Allocated side work runs before root finalization, and closure waits
+for admitted standalone nodes to finish or retreat. Admission fills missing attack files. Activity logs track
+harness sessions, and hooks name the runtime that wrote an unreadable record. The release note records the
+upgrade steps, provisional choices, remaining text gaps and work for later releases.
+
 Version [0.63.0](docs/releases/0.63.0.md) lets `exactory post-proof` post a partial result to a problem in the
 Mathematics section: a proof of its own stated result that bears on the problem. A partial result never resolves the
 problem, and every claim now names its method. The math skills say when to post a partial result and how to read
