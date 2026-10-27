@@ -15,12 +15,16 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 CONTROLLER_TIMEOUT = 20
 # The longest file name, in bytes, that the supported hosts' file systems (APFS, ext4) accept.
 NAME_MAX = 255
 LAUNCHER = Path(__file__).resolve().parents[1] / "bin/exactory-math"
+sys.path.insert(0, str(LAUNCHER.parent.parent / "skills/math-solver/harness"))
+from search_controller.runtime import WRITER_RUNTIME_FILENAME, is_runtime_identity, read_runtime_identity
+
 _SHELL_NAMES = {"Bash", "exec_command", "functions.exec_command"}
 _FILE_NAMES = {"Write", "Edit", "Delete", "Read"}
 SHELL_SEPARATORS = {";", "&&", "||", "|", "&"}
@@ -28,6 +32,10 @@ SHELL_SEPARATORS = {";", "&&", "||", "|", "&"}
 
 class ManagedError(ValueError):
     """A recognized managed operation needs explicit recovery or a direct call."""
+
+
+class ControllerReadError(ManagedError):
+    """The installed runtime cannot read a record of unknown or different origin."""
 
 
 def _unique(pairs):
@@ -265,7 +273,48 @@ def workspace_for(path):
     return None
 
 
+def read_writer_runtime(root):
+    try:
+        if (root / ".search").is_symlink():
+            return None
+        runtime = read_json(root / ".search" / WRITER_RUNTIME_FILENAME)
+    except (OSError, ValueError, RecursionError):
+        return None
+    return runtime if is_runtime_identity(runtime) else None
+
+
+def describe_runtime(runtime):
+    return ("Exactory " + runtime["plugin_version"] + " (controller sha256 " + runtime["controller_digest"]
+            + ", launcher " + runtime["launcher"] + ")")
+
+
+def raise_controller_error(root, diagnostic):
+    installed = read_runtime_identity(LAUNCHER)
+    recorded = read_writer_runtime(root)
+    if recorded is None:
+        raise ControllerReadError("The installed controller " + describe_runtime(installed)
+                                  + " cannot read this record: " + diagnostic
+                                  + ". No writer runtime identity is recorded; use the runtime that wrote the record.")
+    if any(recorded[field] != installed[field] for field in ("plugin_version", "controller_digest")):
+        command = shlex.join([sys.executable, recorded["launcher"], "--attack-root", str(root), "search"])
+        raise ControllerReadError("The installed controller " + describe_runtime(installed)
+                                  + " cannot read a record written by " + describe_runtime(recorded) + ": " + diagnostic
+                                  + ". Run the search command under the recorded runtime: " + command + " <command>.")
+    raise ManagedError("Controller recovery required: " + diagnostic)
+
+
 def controller_call(root, command, spec=None, session=None, focus=None, identity=None):
+    deadline = time.monotonic() + CONTROLLER_TIMEOUT
+
+    def invoke_controller(command_argv):
+        try:
+            remaining_timeout = deadline - time.monotonic()
+            if remaining_timeout <= 0:
+                raise subprocess.TimeoutExpired(command_argv, CONTROLLER_TIMEOUT)
+            return subprocess.run(command_argv, capture_output=True, text=True, timeout=remaining_timeout)
+        except subprocess.SubprocessError as error:
+            raise ManagedError("Controller recovery required after bounded invocation failed: " + str(error)) from error
+
     argv = [sys.executable, str(LAUNCHER), "--attack-root", str(root), "search", command, "--json"]
     with tempfile.TemporaryDirectory(prefix="math-hook-") as temporary:
         if spec is not None:
@@ -278,23 +327,16 @@ def controller_call(root, command, spec=None, session=None, focus=None, identity
             argv += ["--focus-request-id", focus]
         if identity is not None:
             argv += ["--objective-id", identity["objective_id"], "--contract-digest", identity["contract_digest"]]
-        try:
-            process = subprocess.run(argv, capture_output=True, text=True, timeout=CONTROLLER_TIMEOUT)
-        except subprocess.SubprocessError as error:
-            raise ManagedError("Controller recovery required after bounded invocation failed: " + str(error)) from error
+        process = invoke_controller(argv)
     if process.returncode:
         diagnostic = process.stderr.strip() or "no diagnostic"
-        try:
-            code = json.loads(diagnostic)["error"]["code"]
-        except (ValueError, TypeError, KeyError):
-            code = None
-        if code == "invalid_record":
-            # The log holds no version of the controller that wrote it, so a record of a newer or local controller and
-            # a damaged record fail alike.
-            raise ManagedError("The installed controller " + str(LAUNCHER) + " could not replay this record: " + diagnostic
-                               + ". A record that another exactory-math wrote, such as a newer release or a local "
-                               "runtime, needs a release that reads it; a damaged record needs recovery.")
-        raise ManagedError("Controller recovery required: " + diagnostic)
+        if command != "status" or any(value is not None for value in (spec, session, focus, identity)):
+            status_argv = [sys.executable, str(LAUNCHER), "--attack-root", str(root), "search", "status", "--json"]
+            status_process = invoke_controller(status_argv)
+            if not status_process.returncode:
+                raise ManagedError("Controller recovery required: " + diagnostic)
+            diagnostic = status_process.stderr.strip() or "no diagnostic"
+        raise_controller_error(root, diagnostic)
     result = json.loads(process.stdout, object_pairs_hook=_unique)
     if not isinstance(result, dict):
         raise ManagedError("Controller returned an unsupported JSON response; recover the controller")
@@ -344,6 +386,8 @@ def lifecycle(payload, stop=False):
         if decision["kind"] == "summary_then_stop":
             return {"decision": "block", "reason": "[math-solver] Objective continuation safety cap reached. Summarize progress once, then stop. Explicit operator search resume is required."}
         return None
+    except ControllerReadError as error:
+        return context(event, str(error))
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         return context(event, "Recovery or explicit focus is required: " + str(error))
 

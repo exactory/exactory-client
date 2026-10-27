@@ -257,21 +257,30 @@ class MathSearchHookTests(unittest.TestCase):
 
     def test_a_record_that_the_installed_controller_cannot_replay_names_that_controller(self):
         tree = json.loads(self.controller.store.tree_path.read_text())
+        (self.controller.store.root / "writer-runtime.json").unlink(missing_ok=True)
         proposal = next(event for event in tree["events"] if "proposal" in json.dumps(event) and '"main"' in json.dumps(event))
         text = json.dumps(proposal).replace('"main"', '"a-category-of-a-newer-controller"', 1)
         tree["events"][tree["events"].index(proposal)] = json.loads(text)
         self.controller.store.tree_path.write_text(json.dumps(tree))
         reason = self.denied(self.hook("guard_attack_files.py", "PreToolUse", tool_name="Write",
             tool_input={"file_path": str(self.root / "attempt/notes.md")}))
-        self.assertIn("could not replay this record", reason)
+        self.assertIn("cannot read this record", reason)
         self.assertIn(str(ROOT / "bin/exactory-math"), reason)
         self.assertIn("Unknown enum value", reason)
+        self.assertNotIn("recover", reason.lower())
 
     def test_controller_timeout_is_a_managed_recovery_error(self):
         module = runpy.run_path(str(ROOT / "hooks/math_search.py"))
         with patch.object(module["subprocess"], "run", side_effect=subprocess.TimeoutExpired("controller", 20)):
             with self.assertRaises(module["ManagedError"]):
                 module["controller_call"](self.root, "status")
+        failed = subprocess.CompletedProcess("controller", 1, "", '{"error":{"code":"focus_required"}}')
+        responses = [failed, subprocess.TimeoutExpired("controller", 20)]
+        with patch.object(module["subprocess"], "run", side_effect=responses) as invocation:
+            with self.assertRaises(module["ManagedError"]):
+                module["controller_call"](self.root, "next", session="codex:session")
+        self.assertEqual(invocation.call_count, 2)
+        self.assertLess(invocation.call_args_list[1].kwargs["timeout"], invocation.call_args_list[0].kwargs["timeout"])
 
     def test_read_only_research_tool_is_allowed_inside_managed_root(self):
         self.assertIsNone(self.hook("guard_attack_files.py", "PreToolUse", tool_name="WebSearch",
@@ -285,15 +294,18 @@ class MathSearchHookTests(unittest.TestCase):
         self.assertIsNone(self.hook("guard_attack_files.py", "PreToolUse", tool_name="Write",
             tool_input={"file_path": str(self.root / "attempt/notes.md"), "content": "The result.json reference and exactory-math text are explanatory prose."}))
 
-    def test_malformed_managed_state_denies_edits_and_reports_stop_recovery(self):
+    def test_malformed_managed_state_without_runtime_denies_edits_and_reports_unreadable_record(self):
+        (self.controller.store.root / "writer-runtime.json").unlink(missing_ok=True)
         self.controller.store.tree_path.write_text("{invalid")
         output = self.hook("guard_attack_files.py", "PreToolUse", tool_name="Write",
             tool_input={"file_path": str(self.root / "attempt/notes.md")})
-        self.assertIn("recover", self.denied(output).lower())
+        self.assertIn("cannot read this record", self.denied(output))
+        self.assertNotIn("recover", json.dumps(output).lower())
         output = self.hook("continue_attack.py")
         self.assertIsNotNone(output)
         self.assertNotEqual(output.get("decision"), "block")
-        self.assertIn("recover", json.dumps(output).lower())
+        self.assertIn("cannot read this record", json.dumps(output))
+        self.assertNotIn("recover", json.dumps(output).lower())
 
     def test_codex_custom_root_preserves_combined_unit_draft_sequencing(self):
         path = self.root / "attempt/units/1"

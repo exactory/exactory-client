@@ -33,7 +33,7 @@ import re
 import shlex
 import sys
 from pathlib import Path
-from math_search import guard, normalize, workspace_for
+from math_search import ControllerReadError, guard, normalize, workspace_for
 
 # Each pair holds a compiled pattern of a path within the workspace and the
 # instruction that the denial of a write to that path gives: the harness
@@ -113,6 +113,8 @@ def main() -> None:
     payload = normalize(json.load(sys.stdin))
     try:
         reason = guard(payload)
+    except ControllerReadError as error:
+        _deny("[math-solver] " + str(error))
     except (OSError, ValueError, KeyError, TypeError) as error:
         _deny("[math-solver] Recovery required before this managed operation: " + str(error))
     if reason is not None:
