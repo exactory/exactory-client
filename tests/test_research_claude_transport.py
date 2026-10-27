@@ -318,6 +318,28 @@ class ClaudeInvocationTests(unittest.TestCase):
         self.assertEqual(response['status'], 'incomplete')
         self.assertFalse(module().verify_context(self.route, request, response))
 
+    def test_api_retry_binds_the_recovered_answer_to_its_single_result(self):
+        request = request_for()
+        answer = '{"ok": true}'
+        for corrected in (answer, '```json\n' + answer + '\n```'):
+            with self.subTest(corrected=corrected):
+                text = '{"ok": false}\nRETRACTED\n' + corrected
+                events = clean_stream(request, output=text)
+                events.insert(2, dict(API_RETRY))
+                response, _ = self.invoke(events, request=request)
+                self.assertEqual(response['status'], 'completed')
+                self.assertEqual(response['output'][0]['content'][0]['text'], answer)
+                self.assertEqual(response['context_evidence']['result_evidence']['output_digest'], digest(answer))
+                self.assertEqual(response['execution']['result_text'], text)
+                self.assertEqual(response['execution']['result_text_digest'], digest(text))
+                self.assertTrue(response['execution']['self_corrected'])
+                self.assertTrue(module().verify_context(self.route, request, response))
+                classified = module().inspect_retained_system_events(response)
+                self.assertEqual(classified['issues'], [])
+                self.assertEqual(classified['notices'], [{'event_index': 2, 'event': API_RETRY}])
+                response['output'][0]['content'][0]['text'] = text
+                self.assertFalse(module().verify_context(self.route, request, response))
+
     def test_every_system_event_is_retained_byte_exact_in_the_response_artifact(self):
         from research_harness.artifacts import ArtifactStore
         import tempfile

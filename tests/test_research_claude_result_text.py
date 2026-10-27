@@ -18,13 +18,14 @@ from research_harness.evidence import digest
 from research_harness.operations import immutable_record, prepared_mutation
 from research_harness.review_refusal import classify_observed_output
 from research_harness.storage import Store
-from test_research_claude_transport import ROUTE, clean_stream, completed
+from test_research_claude_transport import ROUTE, clean_stream, completed, pinned_route
 
 
 class ClaudeResultTextTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
+        self.route = pinned_route()
         self.root = Path(temporary.name) / 'review'
         self.store = Store(self.root, create=True)
         self.artifacts = ArtifactStore(self.root)
@@ -33,11 +34,11 @@ class ClaudeResultTextTests(unittest.TestCase):
         packet = {'protocol': protocol.PROTOCOL, 'role': 'native_math', 'native': self.native}
         packet['digest'] = digest(packet)
         prompt = protocol.canonical_prompt('native_math')
-        self.assignment = {'id': 'assignment', 'role': 'native_math', 'route_id': ROUTE['id'],
-                           'route_digest': digest(ROUTE), 'packet': protocol._put_json(self.artifacts, packet),
+        self.assignment = {'id': 'assignment', 'role': 'native_math', 'route_id': self.route['id'],
+                           'route_digest': digest(self.route), 'packet': protocol._put_json(self.artifacts, packet),
                            'packet_digest': packet['digest'], 'prompt': prompt,
                            'prompt_hash': prompt['rendered_prompt_hash']}
-        self.request = transport.request_body(ROUTE, prompt['text'], packet)
+        self.request = transport.request_body(self.route, prompt['text'], packet)
 
     def build_output(self):
         return {'subject_digest': self.native['subject_digest'], 'claim_digest': self.native['claim_digest'],
@@ -51,12 +52,12 @@ class ClaudeResultTextTests(unittest.TestCase):
         events = clean_stream(self.request, output=text)
         with patch.object(claude, '_cli', return_value=('/usr/local/bin/claude', 'fixture-version')), \
                 patch.object(claude, '_run_owned', return_value=completed(events)):
-            observation = protocol._observed(self.artifacts, ROUTE, self.request, None)
+            observation = protocol._observed(self.artifacts, self.route, self.request, None)
         return dict(observation, id='attempt', assignment_id=self.assignment['id'], origin='instrumented',
                     packet_digest=self.assignment['packet_digest'], prompt_hash=self.assignment['prompt_hash'])
 
     def classify_attempt(self, attempt):
-        records = {'review_route': {ROUTE['id']: ROUTE},
+        records = {'review_route': {self.route['id']: self.route},
                    'review_assignment': {self.assignment['id']: self.assignment},
                    'review_attempt': {attempt['id']: attempt}}
         return classify_observed_output(records, self.artifacts, attempt['id'])
@@ -70,7 +71,7 @@ class ClaudeResultTextTests(unittest.TestCase):
         self.assertEqual(response['execution'].get('retracted_object_count'), retracted_object_count)
         self.assertEqual(response['execution']['result_text'], text)
         self.assertEqual(response['execution']['result_text_digest'], digest(text))
-        self.assertTrue(transport.context_verified(ROUTE, self.request, response))
+        self.assertTrue(transport.context_verified(self.route, self.request, response))
         self.assertEqual(transport.response_output(response), expected)
         return attempt
 
@@ -549,7 +550,7 @@ class ClaudeResultTextTests(unittest.TestCase):
             with self.assertRaises(RecursionError):
                 json.JSONDecoder().raw_decode(text, len(prefix))
             try:
-                response = claude.send_request(ROUTE, self.request)
+                response = claude.send_request(self.route, self.request)
             except RecursionError:
                 self.fail('Candidate recursion escaped before the response could be retained')
         self.assertEqual(response['output'][0]['content'][0]['text'], text)
@@ -558,7 +559,8 @@ class ClaudeResultTextTests(unittest.TestCase):
         payload = {'id': 'deep-attempt', 'assignment_id': self.assignment['id']}
 
         def build_invocation(records, value):
-            invocation = dict(value, route_id=ROUTE['id'], request=protocol._put_json(self.artifacts, self.request))
+            invocation = dict(value, route_id=self.route['id'],
+                              request=protocol._put_json(self.artifacts, self.request))
             return [immutable_record(records, 'review_invocation', value['id'], invocation)], invocation
 
         def record_observation(records, value, invocation, observation, revision):
@@ -630,7 +632,7 @@ class ClaudeResultTextTests(unittest.TestCase):
             response = copy.deepcopy(legacy_response)
             response['output'][0]['content'][0]['text'] = text
             with patch.object(claude, 'send_request', return_value=response):
-                observation = protocol._observed(self.artifacts, ROUTE, self.request, None)
+                observation = protocol._observed(self.artifacts, self.route, self.request, None)
             self.assertEqual(observation['status'], status)
             observations.append(observation)
         retained_text = '{}\nRETRACTED\nCorrection:\n' + plain
@@ -640,7 +642,7 @@ class ClaudeResultTextTests(unittest.TestCase):
         retained_response['execution'] = {'self_corrected': True, 'retracted_object_count': 1,
                                           'result_text': retained_text, 'result_text_digest': digest(retained_text)}
         with patch.object(claude, 'send_request', return_value=retained_response):
-            observation = protocol._observed(self.artifacts, ROUTE, self.request, None)
+            observation = protocol._observed(self.artifacts, self.route, self.request, None)
         self.assertEqual(observation['status'], 'completed')
         observations.append(observation)
         observations.append(self.assert_correction('{}\nRETRACTED\n' + plain, output))

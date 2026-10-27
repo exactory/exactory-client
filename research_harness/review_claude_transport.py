@@ -137,19 +137,21 @@ def _read_result_usage(result):
             'cost_usd_estimate': result.get('total_cost_usd')}
 
 
-def _build_result_evidence(events, outputs):
+def _build_result_evidence(events, outputs, answer=None):
     results = [(index, event) for index, event in enumerate(events) if event.get('type') == 'result']
     if len(results) != 1:
         return {'single_generation': False}
     index, result = results[0]
     usage = _read_result_usage(result)
     text = result.get('result')
+    if isinstance(text, str) and answer is None:
+        answer = parse_result_text(text)[0]
     verified = (index == len(events) - 1 and result.get('subtype') == 'success'
                 and result.get('is_error') is False and result.get('num_turns') == 1
                 and isinstance(text, str) and ''.join(outputs) == text
                 and usage['input_tokens'] is not None and usage['output_tokens'] is not None)
     return {'single_generation': verified, 'event_index': index, 'event_digest': digest(result),
-            'output_digest': digest(strip_fence(text)[0]) if isinstance(text, str) else None, 'usage': usage}
+            'output_digest': digest(answer) if isinstance(text, str) else None, 'usage': usage}
 
 
 def _verify_result_evidence(response):
@@ -161,7 +163,7 @@ def _verify_result_evidence(response):
             and evidence.get('output_digest') == digest(output) and evidence.get('usage') == response.get('usage'))
 
 
-def inspect_stream(events, request, route, control):
+def inspect_stream(events, request, route, control, *, answer=None):
     """Inspect the observed stream of one invocation; never the reviewer's self-report."""
     expected = packet_text(request)
     issues, outputs, replays, sessions = [], [], [], set()
@@ -214,7 +216,7 @@ def inspect_stream(events, request, route, control):
         issues.append('provider_output_mismatch')
     if len(sessions) != 1:
         issues.append('session_identity')
-    result_evidence = _build_result_evidence(events, outputs)
+    result_evidence = _build_result_evidence(events, outputs, answer)
     for index, event in system_events:
         classification = _classify_system_event(event, result_evidence['single_generation'])
         if classification == 'notice':
@@ -353,8 +355,6 @@ def send_request(route, request, credential=None):
         result = _run_owned(command, packet=message, directory=directory, environment=environment,
                             timeout=config['timeout_seconds'])
     events, malformed, retention = _parse_stream(result.stdout)
-    evidence = inspect_stream(events, request, route, control)
-    evidence.update(runtime=runtime(), route_digest=digest(route), cli_version=version, inspected=True)
     results = [event for event in events if event.get('type') == 'result']
     final = results[-1] if results else {}
     usage = _read_result_usage(final)
@@ -364,6 +364,8 @@ def send_request(route, request, credential=None):
                 and output_tokens <= config['max_output_tokens'])
     answer, fenced, correction_evidence = parse_result_text(
         final.get('result') if isinstance(final.get('result'), str) else '')
+    evidence = inspect_stream(events, request, route, control, answer=answer)
+    evidence.update(runtime=runtime(), route_digest=digest(route), cli_version=version, inspected=True)
     return {'id': evidence['session_id'] or 'failed-' + uuid.uuid4().hex, 'model': route['model'],
             'status': 'completed' if complete else 'incomplete',
             'output': [{'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': answer}]}],
