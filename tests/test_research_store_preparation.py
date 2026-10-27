@@ -14,6 +14,7 @@ import tempfile
 import time
 import unittest
 from unittest import mock
+import weakref
 
 from research_harness import cli, integration, operations, probe_provenance, storage
 from research_harness.artifacts import ArtifactStore, describe_artifact
@@ -130,6 +131,46 @@ class ResearchStorePreparationTests(unittest.TestCase):
                 mock.patch.object(integration, "immutable_record", side_effect=prepare_record):
             self.invoke_cli(revision=1)
         self.assertEqual(len(observed), 1)
+
+    def test_release_preparation_records_and_pass_only_an_immutable_proof_to_mutate(self):
+        views, operations_seen = [], []
+        original_read = Store._read_preparation
+        original_mutate = Store.mutate
+
+        def read_preparation(store):
+            snapshot = original_read(store)
+            views.append(weakref.ref(snapshot.records))
+            return snapshot
+
+        def mutate(store, operation, *args, **kwargs):
+            if operation != "fixture.probe":
+                proof = kwargs.get("_preparation")
+                self.assertFalse(hasattr(proof, "records"), "Store.mutate received a preparation record view")
+                self.assertIsInstance(proof, storage._PreparationProof)
+                self.assertEqual(proof._fields, ("identity", "revision", "fingerprint"))
+                self.assertIsInstance(proof.identity, tuple)
+                self.assertIsInstance(proof.revision, int)
+                self.assertIsInstance(proof.fingerprint, bytes)
+                for field in proof._fields:
+                    with self.assertRaises(AttributeError):
+                        setattr(proof, field, None)
+                self.assertTrue(all(reference() is None for reference in views),
+                                "Preparation records survived into independent write validation")
+                operations_seen.append(operation)
+            return original_mutate(store, operation, *args, **kwargs)
+
+        with mock.patch.object(Store, "_read_preparation", new=read_preparation), \
+                mock.patch.object(Store, "mutate", new=mutate):
+            receipt = self.invoke_cli()
+            self.assertEqual(self.invoke_cli(), receipt)
+            self.root = self.directory / "probe-study"
+            self.store = Store(self.root, create=True)
+            payload = self.save_probe_launch()
+            receipt = self.invoke_cli(payload, revision=1)
+            self.assertEqual(probe_provenance.pin_probe_local_artifact(
+                self.store, payload, expected_revision=1, request_id="pin"), receipt)
+        self.assertEqual(operations_seen, ["workspace.artifact", "workspace.artifact",
+            "workspace.probe_artifact_intent", "workspace.artifact", "workspace.artifact"])
 
     def test_refuse_dict_mutators_on_the_owned_record_view(self):
         self.seed_store()
@@ -361,7 +402,7 @@ class ResearchStorePreparationTests(unittest.TestCase):
 
     def test_reject_another_workspace_proof_without_running_the_callback(self):
         other = Store(self.directory / "other-workspace", create=True)
-        preparation = self.read_preparation(other)
+        preparation = self.read_preparation(other).release_proof()
         error = self.assert_refusal("stale_revision", lambda: self.store.mutate(
             "workspace.artifact", self.payload, lambda _: self.fail("Ran foreign preparation"),
             expected_revision=0, request_id="pin", _preparation=preparation))
@@ -371,7 +412,7 @@ class ResearchStorePreparationTests(unittest.TestCase):
     def test_resolve_original_request_and_conflict_before_checking_a_foreign_proof(self):
         receipt = self.invoke_cli()
         other = Store(self.directory / "other-workspace", create=True)
-        preparation = self.read_preparation(other)
+        preparation = self.read_preparation(other).release_proof()
         self.seed_store(revision=1)
         def replay(operation, payload):
             return self.store.mutate(operation, payload, lambda _: self.fail("Ran replay callback"),

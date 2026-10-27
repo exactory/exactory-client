@@ -87,7 +87,7 @@ def timestamp(value):
 
 def _read_preparation(store, snapshot=None):
     """Reuse only an internally owned read from this Store; authenticate all other inputs afresh."""
-    if isinstance(snapshot, _PreparedSnapshot) and snapshot._store is store:
+    if isinstance(snapshot, _PreparedSnapshot) and snapshot._store is store and snapshot.records is not None:
         return snapshot
     return store._read_preparation()
 
@@ -103,7 +103,8 @@ def prepared_mutation(store, operation, payload, prepare, *, expected_revision, 
         # The Store checks the original operation and payload before invoking a
         # callback, including when the caller supplies the historical revision.
         return store.mutate(operation, payload, lambda tx: None,
-                            expected_revision=expected_revision, request_id=request_id, _preparation=snapshot)
+                            expected_revision=expected_revision, request_id=request_id,
+                            _preparation=snapshot.release_proof())
     if type(expected_revision) is not int or expected_revision < 0:
         raise ResearchError("invalid_input", "Expected revision must be a nonnegative integer")
     if snapshot.revision != expected_revision:
@@ -119,7 +120,7 @@ def prepared_mutation(store, operation, payload, prepare, *, expected_revision, 
         return result
 
     return store.mutate(operation, payload, apply, expected_revision=expected_revision, request_id=request_id,
-                        _preparation=snapshot)
+                        _preparation=snapshot.release_proof())
 
 
 def immutable_record(records, kind, key, value):

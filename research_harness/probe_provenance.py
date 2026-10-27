@@ -125,7 +125,8 @@ def pin_probe_local_artifact(store, payload, *, expected_revision, request_id, _
     snapshot = _read_preparation(store, _snapshot)
     if snapshot.has_request(request_id):
         return store.mutate("workspace.artifact", payload, lambda transaction: None,
-                            expected_revision=expected_revision, request_id=request_id, _preparation=snapshot)
+                            expected_revision=expected_revision, request_id=request_id,
+                            _preparation=snapshot.release_proof())
     artifacts = ArtifactStore(store.root)
     frozen = {}
 

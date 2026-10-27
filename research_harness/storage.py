@@ -25,7 +25,7 @@ import weakref
 import zlib
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import NamedTuple, Optional
 
 from .artifacts import _Workspace, _filesystem_error, _regular_file
 from .errors import ResearchError
@@ -511,6 +511,18 @@ class _PreparationRecords(Mapping):
         return dict(self)
 
 
+class _PreparationProof(NamedTuple):
+    """Immutable commit proof with no decoded records or Store reference."""
+
+    identity: tuple
+    revision: int
+    fingerprint: bytes
+
+    def matches_snapshot(self, identity, revision, fingerprint):
+        return (self.identity == identity and self.revision == revision
+                and self.fingerprint == fingerprint.digest())
+
+
 class _PreparedSnapshot:
     """Own one freshly authenticated read and its nonpersistent content proof."""
 
@@ -540,9 +552,11 @@ class _PreparedSnapshot:
     def has_request(self, request_id):
         return isinstance(request_id, str) and request_id in self._requests
 
-    def matches_snapshot(self, identity, revision, fingerprint):
-        return (self._identity == identity and self.revision == revision
-                and self._fingerprint == fingerprint.digest())
+    def release_proof(self):
+        """Detach the decoded view from every holder before independent commit validation."""
+        proof = _PreparationProof(self._identity, self.revision, self._fingerprint)
+        self._records = None
+        return proof
 
 
 def _refuse_snapshot_identity(expected_revision, revision):
@@ -851,7 +865,7 @@ class Store:
             if revision != expected_revision:
                 raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
                                     {"expected_revision": expected_revision, "revision": revision})
-            if _preparation is not None and (not isinstance(_preparation, _PreparedSnapshot)
+            if _preparation is not None and (not isinstance(_preparation, _PreparationProof)
                     or identity != self._read_database_identity()
                     or not _preparation.matches_snapshot(identity, revision, fingerprint)):
                 raise _refuse_snapshot_identity(expected_revision, revision)
