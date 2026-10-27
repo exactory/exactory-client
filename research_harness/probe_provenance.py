@@ -9,7 +9,7 @@ import stat
 
 from .artifacts import ArtifactStore, describe_artifact, is_sealed_artifact
 from .errors import ResearchError
-from .operations import fields, immutable_record, prepared_mutation, text
+from .operations import _read_preparation, fields, immutable_record, prepared_mutation, text
 from .storage import Store
 from .workspace import checked_parent, read_file, strict_json
 
@@ -120,12 +120,12 @@ def read_probe_pin_source(root, relative):
         raise ResearchError(code, "Probe pin source could not be read", {"errno": error.errno}) from error
 
 
-def pin_probe_local_artifact(store, payload, *, expected_revision, request_id):
+def pin_probe_local_artifact(store, payload, *, expected_revision, request_id, _snapshot=None):
     """Publish one frozen local pin after its provenance, and recover its receipt."""
-    original = store.committed_request(request_id)
-    if original is not None:
+    snapshot = _read_preparation(store, _snapshot)
+    if snapshot.has_request(request_id):
         return store.mutate("workspace.artifact", payload, lambda transaction: None,
-                            expected_revision=expected_revision, request_id=request_id)
+                            expected_revision=expected_revision, request_id=request_id, _preparation=snapshot)
     artifacts = ArtifactStore(store.root)
     frozen = {}
 
@@ -161,7 +161,7 @@ def pin_probe_local_artifact(store, payload, *, expected_revision, request_id):
         return changes, intent
 
     intent = prepared_mutation(store, "workspace.probe_artifact_intent", payload, prepare_intent,
-        expected_revision=expected_revision, request_id=request_id + ":probe-origin")["result"]
+        expected_revision=expected_revision, request_id=request_id + ":probe-origin", _snapshot=snapshot)["result"]
     if "data" in frozen:
         data = frozen["data"]
     else:

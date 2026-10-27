@@ -12,7 +12,7 @@ import math
 
 from .errors import ResearchError
 from .provenance import runtime_provenance
-from .storage import _canonical, _text
+from .storage import _canonical, _PreparedSnapshot, _text
 
 
 def fields(value, required, optional=(), *, code="invalid_input", path=None):
@@ -85,25 +85,31 @@ def timestamp(value):
         raise ResearchError("invalid_input", "Expected a timestamp with an explicit timezone") from error
 
 
-def prepared_mutation(store, operation, payload, prepare, *, expected_revision, request_id):
+def _read_preparation(store, snapshot=None):
+    """Reuse only an internally owned read from this Store; authenticate all other inputs afresh."""
+    if isinstance(snapshot, _PreparedSnapshot) and snapshot._store is store:
+        return snapshot
+    return store._read_preparation()
+
+
+def prepared_mutation(store, operation, payload, prepare, *, expected_revision, request_id, _snapshot=None):
     """prepare(records, payload) returns ([(kind, key, value), ...], result)."""
     text(request_id, "Request ID")
     if not isinstance(payload, dict):
         raise ResearchError("invalid_input", "A domain mutation requires a JSON object")
     payload = json.loads(_canonical(payload))
-    snapshot = store.snapshot()
-    receipt = snapshot["records"].get("literature_operation", {}).get(request_id)
-    if receipt is not None:
+    snapshot = _read_preparation(store, _snapshot)
+    if snapshot.has_request(request_id):
         # The Store checks the original operation and payload before invoking a
         # callback, including when the caller supplies the historical revision.
         return store.mutate(operation, payload, lambda tx: None,
-                            expected_revision=expected_revision, request_id=request_id)
+                            expected_revision=expected_revision, request_id=request_id, _preparation=snapshot)
     if type(expected_revision) is not int or expected_revision < 0:
         raise ResearchError("invalid_input", "Expected revision must be a nonnegative integer")
-    if snapshot["revision"] != expected_revision:
+    if snapshot.revision != expected_revision:
         raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
-                            {"expected_revision": expected_revision, "revision": snapshot["revision"]})
-    changes, result = prepare(snapshot["records"], payload)
+                            {"expected_revision": expected_revision, "revision": snapshot.revision})
+    changes, result = prepare(snapshot.records, payload)
     runtime = runtime_provenance()
 
     def apply(transaction):
@@ -112,7 +118,8 @@ def prepared_mutation(store, operation, payload, prepare, *, expected_revision, 
         transaction.put("literature_operation", request_id, {"operation": operation, "runtime": runtime})
         return result
 
-    return store.mutate(operation, payload, apply, expected_revision=expected_revision, request_id=request_id)
+    return store.mutate(operation, payload, apply, expected_revision=expected_revision, request_id=request_id,
+                        _preparation=snapshot)
 
 
 def immutable_record(records, kind, key, value):

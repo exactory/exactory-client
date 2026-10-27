@@ -14,7 +14,7 @@ from .drafting import export_draft, prepare_draft
 from .errors import ResearchError
 from .evidence import digest
 from .gates import STAGES, gate_state, validate_transition
-from .operations import fields, immutable_record, prepared_mutation, strings, text
+from .operations import _read_preparation, fields, immutable_record, prepared_mutation, strings, text
 from .principles import prepare_initialization
 from .storage import Store
 from .workspace import json_projection, read_file, strict_json, write_projection
@@ -39,8 +39,10 @@ def current_store(root):
 def pin_artifact(store, payload, *, expected_revision, request_id):
     """Save authored program, review or provenance bytes without result credit."""
     from .probe_provenance import find_probe_path_bindings, pin_probe_local_artifact, should_stage_probe_artifact_pin
-    if should_stage_probe_artifact_pin(store.snapshot()["records"], payload, request_id):
-        return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id)
+    snapshot = _read_preparation(store)
+    if not snapshot.has_request(request_id) and should_stage_probe_artifact_pin(snapshot.records, payload, request_id):
+        return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id,
+                                        _snapshot=snapshot)
     artifacts = ArtifactStore(store.root)
     def prepare(records, value):
         fields(value, ("id", "path", "media_type"))
@@ -52,11 +54,12 @@ def pin_artifact(store, payload, *, expected_revision, request_id):
         return [immutable_record(records, "local_artifact", value["id"], record)], record
     try:
         return prepared_mutation(store, "workspace.artifact", payload, prepare,
-                                 expected_revision=expected_revision, request_id=request_id)
+                                 expected_revision=expected_revision, request_id=request_id, _snapshot=snapshot)
     except ResearchError as error:
         if error.code != "probe_artifact_pin_required":
             raise
-        return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id)
+        return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id,
+                                        _snapshot=snapshot)
 
 
 def initialization_payload(store, kind, state, request_id, *, preparation_policy=None):

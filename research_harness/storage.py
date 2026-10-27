@@ -195,7 +195,7 @@ def _request_row(connection: sqlite3.Connection, request_id: str):
 
 
 def _validate(connection: sqlite3.Connection, *, replay: bool = True,
-              records: Optional[dict] = None, history=None) -> int:
+              records: Optional[dict] = None, history=None, fingerprint=None, requests=None) -> int:
     """Check the store's structure, and with replay, its complete history.
 
 Construction checks the structure so unsupported, corrupt or hot stores fail
@@ -223,6 +223,8 @@ the caller must discard it if any validation fails.
         return revision
     if [row[0] for row in connection.execute("PRAGMA quick_check")] != ["ok"]:
         raise ResearchError("corrupt_state", "Research SQLite integrity check failed")
+    if fingerprint is not None:
+        _fingerprint_entry(fingerprint, ("metadata", version, revision))
 
     projections = {}
     event_count = 0
@@ -253,6 +255,10 @@ the caller must discard it if any validation fails.
                 or receipt["response"] != _canonical(expected_response, "corrupt_state")
                 or _digest(receipt["response"]) != receipt["digest"]):
             raise ResearchError("corrupt_state", "Research request receipt does not match its original event")
+        if fingerprint is not None:
+            _fingerprint_entry(fingerprint, ("event", row["revision"], row["digest"], receipt["digest"]))
+        if requests is not None:
+            requests.add(row["request_id"])
     if event_count != revision or connection.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] != revision:
         raise ResearchError("corrupt_state", "Research revision, events, and receipts disagree")
     record_count = 0
@@ -261,11 +267,18 @@ the caller must discard it if any validation fails.
         value = _load(row["value"], dict)
         if projections.get((row["kind"], row["key"])) != (row["value"], row["digest"]):
             raise ResearchError("corrupt_state", "Research record differs from its committed history")
+        if fingerprint is not None:
+            _fingerprint_entry(fingerprint, ("record", row["kind"], row["key"], row["digest"]))
         if records is not None:
             records.setdefault(row["kind"], {})[row["key"]] = value
     if record_count != len(projections):
         raise ResearchError("corrupt_state", "Research records are missing committed values")
     return revision
+
+
+def _fingerprint_entry(fingerprint, entry):
+    """Hash checked metadata only, without traversing expanded JSON values again."""
+    fingerprint.update((_canonical(entry) + "\n").encode("utf-8"))
 
 
 class _RecordHistory:
@@ -432,7 +445,7 @@ class _RecordedSnapshot(dict):
         return _HistoricalSnapshot(self._history, self._revision).verify_record_version(kind, key, revision, identity)
 
 
-def _read_snapshot(connection: sqlite3.Connection) -> dict:
+def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests=None) -> dict:
     from .claim_dependencies import uses_claim_dependencies
     # This untrusted precheck controls allocation only. _validate authenticates
     # every event and current record before any history or snapshot is returned.
@@ -445,9 +458,97 @@ def _read_snapshot(connection: sqlite3.Connection) -> dict:
         markers[row["kind"]] = {row["key"]: {}}
     records = {}
     history = _RecordHistory() if uses_claim_dependencies(markers) else None
-    revision = _validate(connection, records=records, history=history)
+    revision = _validate(connection, records=records, history=history, fingerprint=fingerprint, requests=requests)
     return {"revision": revision, "records": records if history is None else
             _RecordedSnapshot(records, history=history, revision=revision)}
+
+
+class _PreparationKind(Mapping):
+    def __init__(self, records):
+        self._records = records
+
+    def __getitem__(self, key):
+        return copy.deepcopy(self._records[key])
+
+    def __contains__(self, key):
+        return key in self._records
+
+    def __iter__(self):
+        return iter(self._records)
+
+    def __len__(self):
+        return len(self._records)
+
+
+class _PreparationRecords(Mapping):
+    """Read-only kinds with defensive record reads, retaining checked history."""
+
+    def __init__(self, records):
+        self._records = records
+
+    def __getitem__(self, kind):
+        return _PreparationKind(self._records[kind])
+
+    def __contains__(self, kind):
+        return kind in self._records
+
+    def __iter__(self):
+        return iter(self._records)
+
+    def __len__(self):
+        return len(self._records)
+
+    def __getattr__(self, name):
+        if name in ("read_revision", "read_record", "read_snapshot", "verify_record_version",
+                    "_history", "_current_source", "_cache"):
+            return getattr(self._records, name)
+        raise AttributeError(name)
+
+    def copy(self):
+        if isinstance(self._records, _RecordedSnapshot):
+            return _RecordedSnapshot(self, history=self._records._history, revision=self._records.read_revision(),
+                                     current_source=self._records)
+        return dict(self)
+
+
+class _PreparedSnapshot:
+    """Own one freshly authenticated read and its nonpersistent content proof."""
+
+    def __init__(self, store):
+        self._store = store
+        fingerprint, requests = hashlib.sha256(), set()
+        with store._connection() as connection:
+            identity = store._read_database_identity()
+            snapshot = _read_snapshot(connection, fingerprint=fingerprint, requests=requests)
+            if identity != store._read_database_identity():
+                raise _refuse_snapshot_identity(snapshot["revision"], snapshot["revision"])
+        self._identity = identity
+        self._fingerprint = fingerprint.digest()
+        self._revision = snapshot["revision"]
+        self._records = _PreparationRecords(snapshot["records"])
+        self._requests = frozenset(requests)
+
+    def read_revision(self):
+        return self._revision
+
+    def read_records(self):
+        return self._records
+
+    revision = property(read_revision)
+    records = property(read_records)
+
+    def has_request(self, request_id):
+        return isinstance(request_id, str) and request_id in self._requests
+
+    def matches_snapshot(self, identity, revision, fingerprint):
+        return (self._identity == identity and self.revision == revision
+                and self._fingerprint == fingerprint.digest())
+
+
+def _refuse_snapshot_identity(expected_revision, revision):
+    return ResearchError("stale_revision", "Research snapshot identity changed; prepare the mutation again",
+                         {"expected_revision": expected_revision, "revision": revision,
+                          "reason": "snapshot_identity_mismatch"})
 
 
 class _GuardedSnapshot:
@@ -697,6 +798,16 @@ class Store:
         with self._connection() as connection:
             return _read_snapshot(connection)
 
+    def _read_database_identity(self):
+        identities = []
+        for path in (self.root, self._path.parent, self._path):
+            info = os.stat(path, follow_symlinks=False)
+            identities.append((info.st_dev, info.st_ino))
+        return (str(self.root), *identities)
+
+    def _read_preparation(self):
+        return _PreparedSnapshot(self)
+
     @contextmanager
     def guarded_snapshot(self):
         """Prevent common commits until the consumer releases this snapshot."""
@@ -718,7 +829,8 @@ class Store:
             return {"operation": original["operation"], "payload": _load(original["payload"], dict),
                     "response": _load(original["response"], dict)}
 
-    def mutate(self, operation: str, payload: dict, apply, *, expected_revision: int, request_id: str) -> dict:
+    def mutate(self, operation: str, payload: dict, apply, *, expected_revision: int, request_id: str,
+               _preparation=None) -> dict:
         _text(operation, "Operation")
         _text(request_id, "Request ID")
         if not isinstance(payload, dict) or not callable(apply):
@@ -727,7 +839,9 @@ class Store:
             raise ResearchError("invalid_input", "Expected revision must be a nonnegative SQLite integer")
         encoded_payload = _canonical(payload)
         with self._connection(writable=True) as connection:
-            revision = _validate(connection)
+            fingerprint = hashlib.sha256() if _preparation is not None else None
+            identity = self._read_database_identity() if _preparation is not None else None
+            revision = _validate(connection, fingerprint=fingerprint)
             original = _request_row(connection, request_id)
             if original is not None:
                 if original["operation"] != operation or original["payload"] != encoded_payload:
@@ -737,6 +851,10 @@ class Store:
             if revision != expected_revision:
                 raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
                                     {"expected_revision": expected_revision, "revision": revision})
+            if _preparation is not None and (not isinstance(_preparation, _PreparedSnapshot)
+                    or identity != self._read_database_identity()
+                    or not _preparation.matches_snapshot(identity, revision, fingerprint)):
+                raise _refuse_snapshot_identity(expected_revision, revision)
             # A committed request returns above without this check, so a retry of a request that an earlier
             # release stored beyond the bounds still gets its original receipt.
             _check_stored_bounds(payload)
