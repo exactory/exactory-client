@@ -340,7 +340,7 @@ def packet_context_drift(supplied, expected, state):
     live statuses. Every other packet field, including the full evidence closure,
     must still match. A local finish is not proof acceptance or a new finding.
     """
-    if supplied == expected:
+    if canonical_bytes(supplied) == canonical_bytes(expected):
         return []
     subject = expected["subject"]
     independent = (expected["kind"] == "proposal" and subject["category"] == "standalone"
@@ -370,7 +370,7 @@ def packet_context_drift(supplied, expected, state):
             drift.append({"path": "/scientific_context/current/strategies",
                           "from": previous_strategies, "to": context["current"]["strategies"]})
             context["current"]["strategies"] = previous_strategies
-    s.require(supplied == comparable,
+    s.require(canonical_bytes(supplied) == canonical_bytes(comparable),
               "The reviewer packet omits or changes required native scientific evidence", "review_packet_mismatch")
     return sorted(drift, key=lambda row: row["path"])
 
@@ -506,7 +506,7 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
         if new_review:
             prepare_subject(controller, state, content, subject)
         checked = require_review(controller.root, state, content, value, subject=subject,
-                                 new=new_review or command in {"accept", "complete"}, common_guard=guard)
+                                 new=new_review or command in {"review", "accept", "complete"}, common_guard=guard)
         if command == "review" and checked.get("context_drift"):
             for operation in candidate["operations"]:
                 if operation["kind"] == "review_recorded" and operation["payload"]["review"] == value:
