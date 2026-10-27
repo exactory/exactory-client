@@ -802,6 +802,8 @@ def find_budget_defects(move, budget):
 def read_journal(workspace):
     path = workspace / "journal.jsonl"
     if not path.exists():
+        if (workspace.parent / ".search/tree.json").exists():
+            raise ValidationError(["journal.jsonl: missing; admission skeleton is incomplete; run search reconcile"])
         raise ValidationError(["journal.jsonl: missing"])
     return [json.loads(line) for line in path.read_text().splitlines()]
 
