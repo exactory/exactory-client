@@ -236,28 +236,29 @@ def strip_fence(text):
 
 def parse_result_text(text):
     """Select the last of several objects for the ordinary output-contract checks, retaining the complete answer.
-    Decode disjoint spans and stop at the first syntax error, so malformed prefixes are never retried as nested JSON.
-    A single object or a refused scan keeps the existing fence handling and response shape."""
+    Objects start and end on their own lines; prose punctuation is not a candidate. Decode disjoint spans and
+    stop at the first candidate syntax or recursion error. A single object or a refused scan keeps existing handling."""
     answer, fenced = strip_fence(text)
-    decoder = json.JSONDecoder()
-    opening_pattern = re.compile(r'[\[{\"]')
+    decoder = json.JSONDecoder(parse_int=str, parse_float=str, parse_constant=str)
+    opening_pattern = re.compile(r'^[ \t]*(\{)', re.MULTILINE)
+    ending_pattern = re.compile(r'[ \t]*(?:\r?\n|\Z)')
     offset, object_count, last_start, last_end = 0, 0, 0, 0
     while True:
         opening_match = opening_pattern.search(text, offset)
         if opening_match is None:
             break
-        start = opening_match.start()
+        start = opening_match.start(1)
         try:
             output, end = decoder.raw_decode(text, start)
-        except ValueError:
+        except (ValueError, RecursionError):
             return answer, fenced, {}
-        if isinstance(output, str):
-            offset = end
+        offset = end
+        if ending_pattern.match(text, end) is None:
             continue
         if not isinstance(output, dict):
             return answer, fenced, {}
         object_count += 1
-        last_start, last_end, offset = start, end, end
+        last_start, last_end = start, end
     if object_count < 2 or text[last_end:].strip() not in ('', '```'):
         return answer, fenced, {}
     return text[last_start:last_end], fenced, {'self_corrected': True, 'result_text': text,

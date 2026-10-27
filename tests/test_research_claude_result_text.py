@@ -2,7 +2,10 @@
 
 import copy
 import json
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -143,10 +146,10 @@ class ClaudeResultTextTests(unittest.TestCase):
         for text in ('{"dependencies": }\nCorrection:\n' + last,
                      '{"unfinished": {"nested": {}}\nCorrection:\n' + last,
                      '[{}]\nCorrection:\n' + last,
-                     '{}\nCorrection:\n[' + last + ']',
-                     '{}\nCorrection:\n[' + last + ']\nCorrection:\n' + last):
+                     '{}\nCorrection:\n[' + last + ']'):
             with self.subTest(text=text):
                 self.assertEqual(self.observe_text(text)['status'], 'failed')
+        self.assert_correction('{}\nCorrection:\n[' + last + ']\nCorrection:\n' + last, output)
 
     def test_nested_braces_and_long_prose_are_decoded_in_disjoint_spans(self):
         output = self.build_output()
@@ -170,6 +173,119 @@ class ClaudeResultTextTests(unittest.TestCase):
         self.assertTrue(all(left[1] <= right[0] for left, right in zip(decoded_spans, decoded_spans[1:])))
         self.assertLessEqual(sum(end - start for start, end in decoded_spans), len(text))
         self.assertEqual(decoded_spans[-1][1], len(text))
+
+    def test_embedded_code_examples_are_not_answer_candidates(self):
+        first = '{"decision":"reject","reason":"The proof fails."}'
+        for example in ('{"decision":"revise","reason":"Illustrative only."}', json.dumps(self.build_output())):
+            text = first + '\nQuoted packet example, not my assessment:\n```python\nexample = ' + example + '\n```'
+            with self.subTest(example=example):
+                attempt = self.observe_text(text)
+                self.assertEqual(attempt['status'], 'failed')
+                self.assertIsNone(attempt['output'])
+                response = self.read_json(attempt['response'])
+                self.assertEqual(response['output'][0]['content'][0]['text'], text)
+                self.assertNotIn('self_corrected', response['execution'])
+
+    def test_prose_punctuation_does_not_stop_candidate_discovery(self):
+        output = {'decision': 'reject', 'reason': 'A gap remains.'}
+        for prose in ('Correction: remove [typo] from the explanation.',
+                      'Correction: replace {policy} in the explanation.',
+                      'Correction: an unmatched "quotation begins here.',
+                      'Correction: "the quoted explanation\ncontinues on this line".',
+                      '[typo]\nThe {policy} field and an unmatched "quotation need correction.',
+                      '[{"example": {}}]\nCorrection: the array above is an example.'):
+            with self.subTest(prose=prose):
+                self.assert_correction('{}\n' + prose + '\n' + json.dumps(output), output)
+
+    def test_only_line_delimited_objects_count_as_candidates(self):
+        last = json.dumps(self.build_output())
+        for prose in ('example = {}', '{}; explanation', '{} {}', '  {} inline text', '\t{}\t inline text'):
+            with self.subTest(prose=prose):
+                attempt = self.observe_text(prose + '\n' + last)
+                self.assertEqual(attempt['status'], 'failed')
+                self.assertIsNone(attempt['output'])
+        for text in (' \t{}\t\r\n```json\r\n\t' + last + ' \t\r\n```\r\n',
+                     '{}\n```python\nexample = {}\n```\n' + last):
+            with self.subTest(text=text):
+                self.assert_correction(text, self.build_output())
+
+    def test_recursive_candidate_returns_response_and_records_failed_attempt(self):
+        text = '{}\n' + '{"x":' * 2000 + '0' + '}' * 2000
+        events = clean_stream(self.request, output=text)
+        with patch.object(json.scanner, 'make_scanner', json.scanner.py_make_scanner), \
+                patch.object(claude, '_cli', return_value=('/usr/local/bin/claude', 'fixture-version')), \
+                patch.object(claude, '_run_owned', return_value=completed(events)):
+            with self.assertRaises(RecursionError):
+                json.JSONDecoder().raw_decode(text, 3)
+            try:
+                response = claude.send_request(ROUTE, self.request)
+            except RecursionError:
+                self.fail('Candidate recursion escaped before the response could be retained')
+        self.assertEqual(response['output'][0]['content'][0]['text'], text)
+        self.assertNotIn('self_corrected', response['execution'])
+        protocol.record_route(self.store, ROUTE, expected_revision=self.store.revision, request_id='deep-route')
+        payload = {'id': 'deep-attempt', 'assignment_id': self.assignment['id']}
+
+        def build_invocation(records, value):
+            invocation = dict(value, route_id=ROUTE['id'], request=protocol._put_json(self.artifacts, self.request))
+            return [immutable_record(records, 'review_invocation', value['id'], invocation)], invocation
+
+        def record_observation(records, value, invocation, observation, revision):
+            attempt = dict(observation, **value, origin='instrumented', recorded_revision=revision)
+            return [immutable_record(records, 'review_attempt', value['id'], attempt)], attempt
+
+        with patch.object(json.scanner, 'make_scanner', json.scanner.py_make_scanner), \
+                patch.object(claude, '_cli', return_value=('/usr/local/bin/claude', 'fixture-version')), \
+                patch.object(claude, '_run_owned', return_value=completed(events)):
+            receipt = protocol._invoke_once(self.store, payload, 'review.invoke', build_invocation,
+                record_observation, expected_revision=self.store.revision, request_id='deep-run', credential=None)
+        attempt = receipt['result']
+        self.assertEqual(attempt['status'], 'failed')
+        self.assertEqual(attempt['error'], {'code': 'review_transport_failure', 'kind': 'JSONDecodeError'})
+        self.assertIsNone(attempt['output'])
+        self.assertEqual(self.read_json(attempt['response'])['output'][0]['content'][0]['text'], text)
+        records = self.store.snapshot()['records']
+        self.assertIn(payload['id'], records['review_invocation'])
+        self.assertEqual(records['review_attempt'][payload['id']], attempt)
+        with patch.object(transport, 'observe', side_effect=AssertionError('A failed attempt must replay')):
+            replayed = protocol._invoke_once(self.store, payload, 'review.invoke', build_invocation,
+                record_observation, expected_revision=0, request_id='deep-run', credential=None)
+        self.assertEqual(replayed, receipt)
+
+    def test_discarded_large_numbers_do_not_delay_candidate_discovery(self):
+        script = textwrap.dedent('''\
+            import math
+            from time import monotonic
+            from research_harness import review_claude_transport as claude, review_transport as transport
+            from test_research_claude_result_text import ClaudeResultTextTests
+            case = ClaudeResultTextTests()
+            case.setUp()
+            started = monotonic()
+            try:
+                text = '{}\\n{"n":' + '9' * 500_000 + '}\\n{"decision":"reject","reason":"Gap."}'
+                attempt = case.assert_correction(text, {'decision': 'reject', 'reason': 'Gap.'})
+                assert case.classify_attempt(attempt) is None
+                text = ('{"integer":123,"fraction":1e9999,"constant":NaN,"positive":Infinity,"negative":-Infinity}'
+                        '\\n{"integer":7,"fraction":1.25,"constant":NaN}')
+                answer, _, _ = claude.parse_result_text(text)
+                response = {'id': 'numbers', 'status': 'completed', 'output': [{'type': 'message', 'content': [
+                    {'type': 'output_text', 'text': answer}]}]}
+                output = transport.response_output(response)
+                case.assertIs(type(output['integer']), int)
+                case.assertEqual(output['integer'], 7)
+                case.assertIs(type(output['fraction']), float)
+                case.assertEqual(output['fraction'], 1.25)
+                case.assertTrue(math.isnan(output['constant']))
+                print('500000-digit discovery seconds=' + str(monotonic() - started))
+            finally:
+                case.doCleanups()
+        ''')
+        try:
+            process = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=10)
+        except subprocess.TimeoutExpired:
+            self.fail('Discovery of a discarded 500000-digit integer exceeded 10 seconds')
+        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+        print(process.stdout.strip())
 
     def test_recorded_attempts_replay_the_saved_results_without_parsing_again(self):
         output = self.build_output()
