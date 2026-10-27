@@ -587,6 +587,8 @@ class ClaudeResultTextTests(unittest.TestCase):
 
     def test_discarded_large_numbers_do_not_delay_candidate_discovery(self):
         script = textwrap.dedent('''\
+            import sys
+            sys.path[:0] = sys.argv[1:3]
             import math
             from time import monotonic
             from research_harness import review_claude_transport as claude, review_transport as transport
@@ -614,8 +616,11 @@ class ClaudeResultTextTests(unittest.TestCase):
             finally:
                 case.doCleanups()
         ''')
+        tests_directory = Path(__file__).resolve().parent
         try:
-            process = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=10)
+            process = subprocess.run([sys.executable, '-c', script,
+                                      str(tests_directory), str(tests_directory.parent)],
+                                     cwd=self.root, capture_output=True, text=True, timeout=10)
         except subprocess.TimeoutExpired:
             self.fail('Discovery of a discarded 500000-digit integer exceeded 10 seconds')
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
