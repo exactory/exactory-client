@@ -13,6 +13,7 @@ import time
 from typing import Any, Callable, Dict, Iterator, Optional
 
 from .errors import SearchError
+from .runtime import WRITER_RUNTIME_FILENAME, read_runtime_identity
 
 try:
     import fcntl
@@ -235,6 +236,7 @@ class Store:
                     "controller root is already initialized with different data",
                 )
             self._atomic_replace(self.tree_path, canonical_bytes(candidate))
+            self._write_runtime_identity()
         return self._read_document()
 
     def append_operation(self, identity, expected_revision, request_id, build, validate=None, before_commit=None):
@@ -285,6 +287,7 @@ class Store:
             if before_commit is not None:
                 before_commit()
             self._atomic_replace(self.tree_path, canonical_bytes(candidate))
+            self._write_runtime_identity()
             return event
 
     def read(self) -> Dict[str, Any]:
@@ -359,7 +362,13 @@ class Store:
             }
             _validate_document(new_document)
             self._atomic_replace(self.tree_path, canonical_bytes(new_document))
+            self._write_runtime_identity()
             return candidate
+
+    def _write_runtime_identity(self):
+        # Called under the writer lock after the event commit. A crash before this rename leaves the previous writer;
+        # an idempotent retry does not refresh that stale identity because it commits no new event.
+        self._atomic_replace(self.root / WRITER_RUNTIME_FILENAME, canonical_bytes(read_runtime_identity()))
 
     def put_blob(self, value: Any) -> str:
         data = canonical_bytes(value)
