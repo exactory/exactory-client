@@ -74,7 +74,8 @@ reference evidence with their own obligations, not inspected reading units.
 def bibliography_digest(bundle, records):
     """Reference evidence identity: completeness, its unit, and every located entry."""
     return digest({"complete": bundle["bibliography"]["complete"], "unit_id": bundle["bibliography"]["unit_id"],
-                   "entries": [{"target": e["target"], "kind": e["kind"], "link": link_identity(e["link"], records)}
+                   "entries": [{"target": e["target"], "kind": e["kind"], "link": link_identity(e["link"], records),
+                                **({"target_family": e["target_family"]} if "target_family" in e else {})}
                                for e in bundle["bibliography"]["entries"]]})
 
 

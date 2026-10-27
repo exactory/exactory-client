@@ -80,7 +80,7 @@ from .errors import ResearchError
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_media_type, extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
-from .identities import family_id, normalize_identifier, version_of
+from .identities import family_id, find_doi_family_conflicts, normalize_identifier, version_of
 from .imports import parse_mapped
 from .providers import Arxiv, Crossref, OpenAlex
 from .provenance import runtime_provenance
@@ -666,7 +666,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                     "work_id": identifier, "capture": capture, "attempts_used": budget.used}, apply=commit)
 
 
-def import_response(store, provider, response, *, source_url, captured_at, request_id, expected_revision, media_type=None, mappings=None):
+def _import_page(provider, response, source_url, captured_at, media_type, mappings):
     source_url = safe_url(source_url)
     if not isinstance(response, bytes):
         raise ResearchError("invalid_import", "Import response must be original bytes")
@@ -690,6 +690,33 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
         adapter = _provider(provider)
         media_type = media_type or ("application/atom+xml" if provider == "arxiv" else "application/json")
         page = adapter.parse(response)
+    return source_url, media_type, page
+
+
+def _import_pending(page):
+    pending = list(page.failures)
+    for work in page.works:
+        if work["abstract_status"] != "available":
+            code = "partial_abstract" if work["abstract_status"] == "partial" else "missing_abstract"
+            pending.append({"code": code, "work_id": work["work_id"]})
+        if work["id"].startswith("arxiv:") and work["version"] is None:
+            pending.append({"code": "missing_version", "work_id": work["work_id"]})
+    return pending
+
+
+def preview_import_response(store, provider, response, *, source_url, captured_at, media_type=None, mappings=None):
+    """Parse local response bytes and report new DOI-family conflicts without writing evidence."""
+    _, _, page = _import_page(provider, response, source_url, captured_at, media_type, mappings)
+    snapshot = store.snapshot()
+    return {"status": "preview", "scope": "metadata_import", "revision": snapshot["revision"],
+            "work_ids": [work["id"] for work in page.works], "pending": _import_pending(page),
+            "warnings": list(page.warnings),
+            "identity_conflicts": find_doi_family_conflicts(snapshot["records"], page.works)}
+
+
+def import_response(store, provider, response, *, source_url, captured_at, request_id, expected_revision,
+                    media_type=None, mappings=None):
+    source_url, media_type, page = _import_page(provider, response, source_url, captured_at, media_type, mappings)
     payload = {"provider": provider, "source_url": source_url, "captured_at": captured_at,
                "response_sha256": digest_bytes(response), "media_type": media_type, "mappings": mappings}
     replay = _begin(store, "response.import", payload, request_id, expected_revision, target=source_url)
@@ -707,12 +734,8 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
     sources[0].update({"capture_method": "external_import", "content_scope": "tool_response" if provider in ("web", "mcp") else "provider_response",
                        "origin_verified": False})
     prepared = [prepare_work(artifacts, work, sources[0]["id"]) for work in page.works]
-    pending = list(page.failures)
-    for work in page.works:
-        if work["abstract_status"] != "available":
-            pending.append({"code": "partial_abstract" if work["abstract_status"] == "partial" else "missing_abstract", "work_id": work["work_id"]})
-        if work["id"].startswith("arxiv:") and work["version"] is None:
-            pending.append({"code": "missing_version", "work_id": work["work_id"]})
+    pending = _import_pending(page)
+    identity_conflicts = find_doi_family_conflicts(snapshot["records"], page.works)
 
     def commit(transaction):
         put_sources(transaction, sources)
@@ -723,7 +746,8 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
 
     return _finish(store, request_id, snapshot["revision"],
                    {"status": "pending" if pending else "complete", "scope": "metadata_import", "pending": pending,
-                    "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources]}, apply=commit)
+                    "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources],
+                    "identity_conflicts": identity_conflicts}, apply=commit)
 
 
 def digest_bytes(data):
