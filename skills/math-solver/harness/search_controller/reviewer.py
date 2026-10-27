@@ -333,8 +333,8 @@ def export_packet(controller, spec):
                 "subject_digest": value["subject_digest"], "claim_digest": value["claim_digest"]}
 
 
-def packet_context_drift(supplied, expected, state):
-    """Allow only unrelated local completion during an independent standalone review.
+def validate_packet_context(supplied, expected, state):
+    """Validate the packet and return permitted unrelated local completion drift.
 
     Reconstruct the earlier inventory from unchanged admissions and the supplied
     live statuses. Every other packet field, including the full evidence closure,
@@ -348,7 +348,8 @@ def packet_context_drift(supplied, expected, state):
                    and subject["native_parent"] is None and subject["logical_predecessor"] is None
                    and not subject["equivalent_node_ids"] and not subject["inherited_evidence"]
                    and not subject["inherited_assumption_ids"] and not subject["claim"]["assumption_ids"]
-                   and subject["budget"]["mode"] == "new")
+                   and subject["budget"]["mode"] == "new"
+                   and (subject.get("computation") is None or not subject["computation"]["basis"]["dependencies"]))
     comparable = copy.deepcopy(expected)
     drift = []
     old_nodes = supplied["scientific_context"].get("nodes")
@@ -417,7 +418,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             minimum = value.get("findings", {}).get("openness", {}).get("minimum")
             expected = packet(root, state, content, subject, kind(value), value.get("claim_digest"), value["reviewer"], artifacts,
                               openness=minimum, common_records=records)
-            drift = packet_context_drift(supplied, expected, state)
+            drift = validate_packet_context(supplied, expected, state)
             if drift:
                 current = dict(current, context_drift=drift)
         for entry in supplied["evidence"]:
@@ -506,7 +507,8 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
         if new_review:
             prepare_subject(controller, state, content, subject)
         checked = require_review(controller.root, state, content, value, subject=subject,
-                                 new=new_review or command in {"review", "accept", "complete"}, common_guard=guard)
+                                 new=new_review or command in {"review", "reassess", "accept", "complete"},
+                                 common_guard=guard)
         if command == "review" and checked.get("context_drift"):
             for operation in candidate["operations"]:
                 if operation["kind"] == "review_recorded" and operation["payload"]["review"] == value:

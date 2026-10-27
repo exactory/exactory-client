@@ -8,12 +8,12 @@ from research_harness.artifacts import ArtifactStore
 from research_harness.storage import Store
 from search_controller.errors import SearchError
 from search_controller.model import replay
-from search_controller.reviewer import packet, packet_context_drift, require_review
+from search_controller.reviewer import packet, validate_packet_context, require_review
 from search_controller.schema import digest
 from search_controller.service import Controller
 from search_controller.storage import canonical_bytes
 from tests.native_reviewer_support import observe_review
-from tests.search_execution_support import admit_workspace, begin_spec, invoke
+from tests.search_execution_support import admit_workspace, begin_spec, computation_contract, invoke
 from tests.search_fixtures import provenance, review
 from tests.support import WorkspaceTest, make_move
 from tests.test_search_cli import SearchCLIWorkspace
@@ -82,7 +82,7 @@ class ProposalReviewContextTests(WorkspaceTest):
                 earlier = copy.deepcopy(supplied)
                 earlier["scientific_context"]["nodes"][0]["status"] = status
                 before_comparison = canonical_bytes([earlier, expected, state])
-                receipt = packet_context_drift(earlier, expected, state)
+                receipt = validate_packet_context(earlier, expected, state)
                 self.assertEqual(receipt[-1], {"path": "/scientific_context/nodes/0/status",
                                               "from": status, "to": "finished"})
                 self.assertEqual(canonical_bytes([earlier, expected, state]), before_comparison)
@@ -275,7 +275,7 @@ class ProposalReviewContextTests(WorkspaceTest):
         expected = packet(self.root, state, self.controller.store, subject, "proposal",
                           digest(subject["claim"]), supplied["reviewer"], ArtifactStore(self.root),
                           common_records=Store(self.root).snapshot()["records"])
-        self.assertTrue(packet_context_drift(supplied, expected, state))
+        self.assertTrue(validate_packet_context(supplied, expected, state))
         alterations = {
             "relationship": lambda p: p.update(relationship="alternative"),
             "predecessor": lambda p: p.update(logical_predecessor="node-000001"),
@@ -296,7 +296,7 @@ class ProposalReviewContextTests(WorkspaceTest):
                 candidate["subject_digest"] = digest(candidate["subject"])
                 candidate["claim_digest"] = digest(candidate["subject"]["claim"])
             with self.subTest(dependency=name), self.assertRaises(SearchError) as caught:
-                packet_context_drift(old, current, state)
+                validate_packet_context(old, current, state)
             self.assertEqual(caught.exception.code, "review_packet_mismatch")
 
     def test_equivalent_claim_completion_is_not_unrelated_context(self):
@@ -306,6 +306,82 @@ class ProposalReviewContextTests(WorkspaceTest):
         value = self.observed()
         self.finish_unrelated_node()
         self.assert_refused(value)
+
+    def test_computation_dependency_completion_requires_a_fresh_proposal_review(self):
+        from tests.test_search_evidence import EvidenceTests
+        from tests.test_search_standalone_proof import local_checkpoint
+        state = self.controller.status()
+        proof_input = EvidenceTests.artifact(self, "dependency-proof.md", "The fixture True holds by its constructor.")
+        proof_manifest = {"schema_version": 1, "kind": "analytical",
+                          "claim_digest": digest(state["nodes"]["node-000001"]["claim"]),
+                          "conclusion": {"outcome": "proof", "dependency_ids": [], "route_bindings": []},
+                          "artifacts": [{"path": proof_input["path"], "digest": proof_input["digest"],
+                                         "role": "proof"}],
+                          "dependencies": [], "external_dependencies": [], "verification": None}
+        (self.root / "dependency-manifest.json").write_text(json.dumps(proof_manifest))
+        checkpoint = local_checkpoint(state)
+        del checkpoint["verification_status"]
+        checkpoint["origin"]["journal_prefix_digest"] = (
+            state["service"]["journal_receipts"]["node-000001:1"]["journal_prefix_digest"])
+        checkpoint["evidence_digests"] = [digest(proof_manifest)]
+        self.command("checkpoint", {"checkpoint": checkpoint, "inputs": [proof_input,
+                     {"path": "dependency-manifest.json", "kind": "blob", "digest": digest(proof_manifest)}]},
+                     "node-000001")
+        checkpoint = self.controller.status()["checkpoints"]["checkpoint-000001"]
+        invoke(self.controller, "accept", {"obligation_id": "obligation-000001", "outcome": "proof",
+               "dependency_ids": [], "route_bindings": [], "inputs": [],
+               "review": EvidenceTests.result_review(self, checkpoint, checkpoint["claim"])}, checkpoint["id"])
+        acceptance = self.controller.status()["acceptances"]["acceptance-000001"]
+        self.proposal.update(attack_slug="finite-dependent", computation=computation_contract(proof_input["digest"]))
+        self.proposal["task"]["kind"] = "finite_proof"
+        self.proposal["computation"]["domain"] = copy.deepcopy(self.proposal["claim"]["scope"])
+        self.proposal["computation"]["basis"].update(kind="standalone", dependencies=[{
+            "acceptance_id": acceptance["id"], "acceptance_digest": digest(acceptance),
+            "claim_digest": digest(checkpoint["claim"])}])
+        self.proposal["contribution"]["necessity"] = {
+            "obligation_id": None, "omission_consequence": "The standalone finite theorem remains unproved",
+            "domain_justification": "The claim states the entire finite interval",
+            "outcomes": [{"outcome": "verified", "next_action": "Review the finite proof"},
+                         {"outcome": "rejected", "next_action": "Reconsider the proposed proof"}],
+            "stopping_condition": "Stop after checking every declared integer"}
+        self.command("propose", {"proposal": self.proposal, "inputs": []})
+        self.proposal_id = "proposal-000003"
+        first_review, pending_review = self.observed(), self.observed("reviewer-two")
+        self.submit(first_review)
+        self.finish_unrelated_node()
+        self.assert_refused(pending_review)
+        state = self.controller.status()
+        self.assertEqual(state["acceptances"][acceptance["id"]], acceptance)
+        self.assertEqual(state["reviews"]["review-000002"]["record"], first_review)
+        self.assertNotIn("context_drift", state["reviews"]["review-000002"])
+        self.submit(self.observed("fresh-reviewer"))
+        self.command("admit", {}, self.proposal_id)
+        self.assertEqual(self.controller.status()["nodes"]["node-000002"]["category"], "standalone")
+
+    def test_rebinding_strategy_review_cannot_restore_an_earlier_assessment(self):
+        from tests.strategy_refresh_support import reassess_fixture
+        first_spec = reassess_fixture(self.controller, None)
+        first_event = self.controller.store.read()["events"][-1]
+        self.assertTrue(first_spec["assessment"]["strategy_order"])
+        second_spec = reassess_fixture(self.controller, set())
+        self.assertEqual(first_spec["assessment"]["context_digest"], second_spec["assessment"]["context_digest"])
+        self.assertEqual(second_spec["assessment"]["strategy_order"], [])
+        self.controller = Controller(self.root)
+        before_bytes = self.controller.store.tree_path.read_bytes()
+        require_review(self.root, self.controller.status(), self.controller.store, first_spec["review"],
+                       subject=first_spec["assessment"])
+        retry_response = self.controller.command("reassess", first_spec, first_event["sequence"] - 1,
+                                                 first_event["request_id"])
+        self.assertEqual(retry_response["revision"], first_event["sequence"])
+        self.assertEqual(self.controller.store.tree_path.read_bytes(), before_bytes)
+        with self.assertRaises(SearchError) as caught:
+            self.controller.command("reassess", first_spec, self.controller.status()["revision"], "rebind-a")
+        self.assertEqual(caught.exception.code, "review_packet_mismatch")
+        self.assertEqual(self.controller.store.tree_path.read_bytes(), before_bytes)
+        assessments = Controller(self.root).status()["control"]["strategy_refresh"]["assessments"]
+        self.assertEqual(len(assessments), 2)
+        self.assertEqual(assessments[-1]["assessment"], second_spec["assessment"])
+        self.assertEqual(assessments[0]["review"], first_spec["review"])
 
     def test_new_strategy_assessment_still_invalidates_proposal_packet(self):
         from tests.strategy_refresh_support import reassess_fixture
