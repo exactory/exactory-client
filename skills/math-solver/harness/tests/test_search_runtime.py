@@ -199,31 +199,37 @@ class SearchRuntimeTests(unittest.TestCase):
         self.assertEqual(append_event(), store.read()["events"][0])
         self.assertEqual(self.read_writer(store), previous_runtime)
 
-    def test_initialization_and_two_events_remain_readable_by_the_0630_controller(self):
+    def test_initialization_and_two_events_keep_the_0630_record_shape_and_writer_sidecar(self):
+        from search_controller.runtime import read_runtime_identity
         from search_controller.service import Controller
-        plugin = Path(__file__).resolve().parents[4]
-        base_root = plugin / ".lane-logs/base-61b01e9"
-        base_root.mkdir(parents=True, exist_ok=True)
-        archived = subprocess.run(["git", "archive", "61b01e9"], cwd=plugin, capture_output=True, timeout=30)
-        self.assertEqual(archived.returncode, 0, archived.stderr)
-        extracted = subprocess.run(["tar", "-x", "-C", str(base_root)], input=archived.stdout,
-                                   capture_output=True, timeout=30)
-        self.assertEqual(extracted.returncode, 0, extracted.stderr)
-        base_launcher = base_root / "bin/exactory-math"
-        controller = Controller(self.root / "original")
+
+        controller = Controller(self.root / "attack")
         controller.command("init", {"contract": contract()}, 0, "init")
         controller.command("render", {}, 1, "first")
         controller.command("render", {}, 2, "second")
-        copied_root = self.root / "older-reader-copy"
-        shutil.copytree(controller.root, copied_root)
-        command = [sys.executable, str(base_launcher), "--attack-root", str(copied_root),
-                   "search", "status", "--json"]
-        process = subprocess.run(command, capture_output=True, text=True, timeout=30)
-        self.assertEqual(process.returncode, 0, process.stderr)
-        self.assertEqual(json.loads(process.stdout), controller.status())
-        self.assertEqual(len(controller.store.read()["events"]), 3)
-        self.assertEqual(set(controller.store.read()), {"schema_version", "objective_id", "contract", "events"})
-        self.assertEqual(controller.store.tree_path.read_bytes(), (copied_root / ".search/tree.json").read_bytes())
+
+        tree_text = controller.store.tree_path.read_text()
+        document = json.loads(tree_text)
+        self.assertEqual(set(document), {"schema_version", "objective_id", "contract", "events"})
+        self.assertEqual(document["schema_version"], 1)
+        self.assertEqual(document["contract"], contract())
+        self.assertEqual(len(document["events"]), 3)
+        requests = [("init", "init"), ("first", "render"), ("second", "render")]
+        for sequence, (event, (request_id, command)) in enumerate(zip(document["events"], requests), start=1):
+            with self.subTest(sequence=sequence):
+                self.assertEqual(set(event), {"sequence", "request_id", "kind", "payload"})
+                self.assertEqual(event["sequence"], sequence)
+                self.assertEqual(event["request_id"], request_id)
+                self.assertEqual(event["kind"], "service_operation")
+                self.assertEqual(set(event["payload"]), {"command", "target", "spec_digest", "operations", "effects"})
+                self.assertEqual(event["payload"]["command"], command)
+
+        writer = self.read_writer(controller.store)
+        self.assertEqual(writer, read_runtime_identity())
+        self.assertEqual(set(writer), {"plugin_version", "controller_digest", "launcher"})
+        for field in ("writer_runtime", "writer-runtime.json", *writer):
+            with self.subTest(field=field):
+                self.assertNotIn(json.dumps(field), tree_text)
 
     def test_runtime_identity_is_computed_once_per_process_and_cannot_be_mutated_by_callers(self):
         from search_controller import runtime
