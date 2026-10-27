@@ -84,6 +84,31 @@ class ClaudeResultTextTests(unittest.TestCase):
         self.assertNotIn('self_corrected', response['execution'])
         self.assertNotIn('retracted_object_count', response['execution'])
 
+    def test_retracted_examples_and_container_openers_refuse_recovery(self):
+        texts = (
+            '{"decision":"reject","reason":"Earlier assessment."}\nRETRACTED\n'
+            'I withdraw that assessment and have no replacement yet.\n'
+            'The following is only an example from the packet:\n```json\n'
+            '{"decision":"revise","reason":"Illustrative only."}\n```',
+            '{}\nRETRACTED\n```python\n{"decision":"revise","reason":"Example only."}',
+            '{}\nRETRACTED\n[\n{"decision":"revise","reason":"Example only."}',
+        )
+        for text in texts:
+            with self.subTest(text=text):
+                self.assert_refusal(text)
+
+    def test_only_blank_lines_may_separate_retractions_and_blocks(self):
+        output = {'decision': 'reject', 'reason': 'Gap.'}
+        last = '{"decision":"reject","reason":"Gap."}'
+        for text in ('\n{}\nRETRACTED\n' + last + '\n \t\n',
+                     '\n{}\n \t\nRETRACTED\n\t\n' + last + '\n\n',
+                     '```JSON\n\n{}\n\t\n```\n\nRETRACTED\n \t\n```json\n\n' + last + '\n\n```\n\t'):
+            with self.subTest(text=text):
+                self.assert_correction(text, output)
+        for separator in ('\nCorrection follows.\nRETRACTED\n', '\nRETRACTED\nCorrection follows.\n'):
+            with self.subTest(separator=separator):
+                self.assert_refusal('{}' + separator + last)
+
     def test_retractions_inside_answer_fences_do_not_withdraw_objects(self):
         first = '{"decision":"reject","reason":"The proof fails."}'
         last = '{"decision":"revise","reason":"Illustrative only."}'
@@ -116,7 +141,8 @@ class ClaudeResultTextTests(unittest.TestCase):
             with self.subTest(prose=prose):
                 self.assert_refusal('{}\n' + prose + '\nRETRACTED\n' + last)
         text = '{}\nRETRACTED\nThe complete correction follows.\n\n```json\n' + last + '\n```'
-        self.assert_correction(text, self.build_output())
+        self.assert_refusal(text)
+        self.assert_correction('{}\n\nRETRACTED\n\n```json\n' + last + '\n```', self.build_output())
 
     def test_retraction_lines_must_start_at_column_zero(self):
         last = json.dumps(self.build_output())
@@ -143,7 +169,7 @@ class ClaudeResultTextTests(unittest.TestCase):
             with self.subTest(opening=opening, closing=closing):
                 self.assert_refusal('{}\nRETRACTED\n' + opening + '\n' + last + '\n' + closing)
         for tag in ('', 'json', 'JSON', 'jSoN'):
-            text = ' \t\n```' + tag + '\n\t\n{}\n \n```\n\nRETRACTED\nExplanation.\n'
+            text = ' \t\n```' + tag + '\n\t\n{}\n \n```\n\nRETRACTED\n\n'
             text += '```' + tag + '\n\n' + last + '\n\t\n```\n \t'
             with self.subTest(tag=tag):
                 self.assert_correction(text, self.build_output())
@@ -154,13 +180,14 @@ class ClaudeResultTextTests(unittest.TestCase):
             with self.subTest(prefix=prefix):
                 self.assert_refusal(prefix + '{}\nRETRACTED\n' + last)
 
-    def test_retraction_evidence_counts_marker_lines(self):
+    def test_retraction_evidence_counts_withdrawn_blocks(self):
         last = json.dumps(self.build_output())
         for text in ('{}\nRETRACTED\nRETRACTED\n' + last,
-                     '{}\nRETRACTED\nAn explanation.\nRETRACTED\n' + last,
-                     '{}\nRETRACTED\n{"decision":"approve"}\nRETRACTED\n' + last):
+                     '{}\nRETRACTED\nAn explanation.\nRETRACTED\n' + last):
             with self.subTest(text=text):
-                self.assert_correction(text, self.build_output(), retracted_object_count=2)
+                self.assert_refusal(text)
+        text = '{}\nRETRACTED\n{"decision":"approve"}\nRETRACTED\n' + last
+        self.assert_correction(text, self.build_output(), retracted_object_count=2)
 
     def test_unmarked_answer_examples_keep_the_original_response(self):
         first = '{"decision":"reject","reason":"The proof fails."}'
@@ -170,7 +197,7 @@ class ClaudeResultTextTests(unittest.TestCase):
                 with self.subTest(tag=tag, example=example):
                     self.assert_refusal(first + '\n' + prose + '\n```' + tag + '\n' + example + '\n```')
 
-    def test_marked_answer_examples_select_the_last_object(self):
+    def test_marked_quoted_examples_refuse_recovery(self):
         first = '{"decision":"reject","reason":"The proof fails."}'
         prose = 'My answer above is final. The following is a quoted example, not my assessment:'
         output = {'decision': 'revise', 'reason': 'Illustrative only.'}
@@ -179,17 +206,20 @@ class ClaudeResultTextTests(unittest.TestCase):
             with self.subTest(tag=tag):
                 self.assert_refusal(text)
                 text = first + '\nRETRACTED\n' + prose + '\n```' + tag + '\n' + json.dumps(output) + '\n```'
+                self.assert_refusal(text)
+                text = first + '\nRETRACTED\n```' + tag + '\n' + json.dumps(output) + '\n```'
                 attempt = self.assert_correction(text, output)
                 self.assertIsNone(self.classify_attempt(attempt))
         self.assertEqual(getattr(claude, 'RESULT_RETRACTION_LINE', None), 'RETRACTED')
 
     def test_each_earlier_candidate_must_be_retracted(self):
         first, middle, last = '{}', '{"decision":"approve"}', json.dumps(self.build_output())
-        for marker, count in (('\nRETRACTED\n', 2), ('\rRETRACTED\r', 2), ('\nRETRACTED\nRETRACTED\n', 4)):
+        for marker in ('\nRETRACTED\n', '\rRETRACTED\r'):
             with self.subTest(marker=marker):
                 self.assert_correction(first + marker + middle + marker + last,
-                                       self.build_output(), retracted_object_count=count)
-        for text in (first + '\n \tRETRACTED\t \r\n' + middle + '\n \tRETRACTED\t \r\n' + last,
+                                       self.build_output(), retracted_object_count=2)
+        for text in (first + '\nRETRACTED\nRETRACTED\n' + middle + '\nRETRACTED\nRETRACTED\n' + last,
+                     first + '\n \tRETRACTED\t \r\n' + middle + '\n \tRETRACTED\t \r\n' + last,
                      first + '\n' + middle + '\nRETRACTED\n' + last,
                      first + '\nRETRACTED\n' + middle + '\n' + last,
                      'RETRACTED\n' + first + '\n' + last,
@@ -216,7 +246,7 @@ class ClaudeResultTextTests(unittest.TestCase):
         text = json.dumps(malformed) + '\n' + prose + '\n```json\n' + json.dumps(output) + '\n```'
         self.assert_refusal(text)
 
-    def test_non_block_fence_lines_are_prose_only_after_retraction(self):
+    def test_non_grammar_fence_lines_refuse_recovery(self):
         first = '{"decision":"reject","reason":"The proof fails."}'
         last = '{"decision":"revise","reason":"Quoted example only."}'
         for marker in ('\n', '\nRETRACTED\n'):
@@ -224,21 +254,15 @@ class ClaudeResultTextTests(unittest.TestCase):
                                      ('~~~~text', '````'), ('````json', '````json')):
                 with self.subTest(marker=marker, opening=opening, closing=closing):
                     text = first + marker + opening + '\n' + closing + '\n' + last
-                    if marker == '\n' or closing == '```':
-                        self.assert_refusal(text)
-                    else:
-                        self.assert_correction(text, {'decision': 'revise', 'reason': 'Quoted example only.'})
+                    self.assert_refusal(text)
 
-    def test_non_block_tilde_lines_are_prose_only_after_retraction(self):
+    def test_tilde_fence_lines_refuse_recovery(self):
         first = '{"decision":"reject","reason":"The proof fails."}'
         last = '{"decision":"revise","reason":"Quoted example only."}'
         for marker in ('\n', '\nRETRACTED\n'):
             with self.subTest(marker=marker):
                 text = first + marker + '~~~text\n' + last
-                if marker == '\n':
-                    self.assert_refusal(text)
-                else:
-                    self.assert_correction(text, {'decision': 'revise', 'reason': 'Quoted example only.'})
+                self.assert_refusal(text)
 
     def test_only_grammar_fences_allow_marked_corrections(self):
         output = self.build_output()
@@ -251,12 +275,12 @@ class ClaudeResultTextTests(unittest.TestCase):
         self.assert_refusal(text)
         self.assert_correction('{}\nRETRACTED\n```json\n' + json.dumps(output) + '\n```', output)
 
-    def test_backticks_in_the_tag_do_not_open_a_fence(self):
+    def test_backticks_in_fence_tags_refuse_recovery(self):
         output = self.build_output()
         for tag in ('json`example', ' `json', 'json ``quoted``'):
             text = '{}\nRETRACTED\n```' + tag + '\n' + json.dumps(output)
             with self.subTest(tag=tag):
-                self.assert_correction(text, output)
+                self.assert_refusal(text)
 
     def test_a_contract_malformed_first_object_is_retained_with_the_valid_correction(self):
         output = self.build_output()
@@ -269,6 +293,8 @@ class ClaudeResultTextTests(unittest.TestCase):
         self.assert_refusal(text)
         text = json.dumps(malformed) + '\nRETRACTED\nCorrection: the complete assessment follows.\n'
         text += json.dumps(output)
+        self.assert_refusal(text)
+        text = json.dumps(malformed) + '\nRETRACTED\n' + json.dumps(output)
         attempt = self.assert_correction(text, output)
         self.assertIsNone(self.classify_attempt(attempt))
         native_review.validate_output(self.native, self.read_json(attempt['output']))
@@ -293,6 +319,12 @@ class ClaudeResultTextTests(unittest.TestCase):
                      '```\n' + first + '\n```\nRETRACTED\nCorrection:\n' + last + '\n',
                      first + '\nRETRACTED\nCorrection:\n```JSON\n' + last + '\n```'):
             with self.subTest(text=text):
+                self.assert_refusal(text)
+        for text in ('```json\n' + first + '\n```\nRETRACTED\n```json\n' + last + '\n```',
+                     ' \n```json\n' + first + '\n```\nRETRACTED\n' + last + '\n ',
+                     '```\n' + first + '\n```\nRETRACTED\n' + last + '\n',
+                     first + '\nRETRACTED\n```JSON\n' + last + '\n```'):
+            with self.subTest(text=text):
                 self.assert_correction(text, output)
 
     def test_an_invalid_last_object_is_refused_by_the_native_contract_without_falling_back(self):
@@ -300,6 +332,8 @@ class ClaudeResultTextTests(unittest.TestCase):
         invalid = copy.deepcopy(output)
         invalid['findings']['policy'] = ''
         text = json.dumps(output) + '\nRETRACTED\nCorrection:\n' + json.dumps(invalid)
+        self.assert_refusal(text)
+        text = json.dumps(output) + '\nRETRACTED\n' + json.dumps(invalid)
         attempt = self.assert_correction(text, invalid)
         self.assertEqual(self.classify_attempt(attempt),
                          {'code': 'invalid_native_review', 'check': 'native.output', 'details': None})
@@ -309,6 +343,8 @@ class ClaudeResultTextTests(unittest.TestCase):
     def test_any_non_fence_trailer_refuses_the_answer(self):
         output = self.build_output()
         text = '{}\nRETRACTED\nCorrection:\n' + json.dumps(output)
+        self.assert_refusal(text)
+        text = '{}\nRETRACTED\n' + json.dumps(output)
         self.assert_correction(text, output)
         for trailer in ('\nDo not use this assessment.', '\n```\nExtra text.', '\n```json',
                         '\n```\n```', '\n[]', '\nnull', '\n{"unfinished":'):
@@ -343,22 +379,24 @@ class ClaudeResultTextTests(unittest.TestCase):
         output = self.build_output()
         last = json.dumps(output)
         self.assert_correction('{}\nRETRACTED\n' + last, output)
-        for text in ('{"dependencies": }\nRETRACTED\nCorrection:\n' + last,
-                     '{"unfinished": {"nested": {}}\nRETRACTED\nCorrection:\n' + last,
-                     '[{}]\nRETRACTED\nCorrection:\n' + last,
-                     '{}\nRETRACTED\nCorrection:\n[' + last + ']'):
+        for text in ('{"dependencies": }\nRETRACTED\n' + last,
+                     '{"unfinished": {"nested": {}}\nRETRACTED\n' + last,
+                     '[{}]\nRETRACTED\n' + last,
+                     '{}\nRETRACTED\n[' + last + ']'):
             with self.subTest(text=text):
                 self.assertEqual(self.observe_text(text)['status'], 'failed')
         self.assert_refusal('{}\nCorrection:\n[' + last + ']\nCorrection:\nRETRACTED\n' + last)
-        self.assert_correction('{}\nRETRACTED\nCorrection:\n[' + last + ']\nCorrection:\n' + last, output)
+        self.assert_refusal('{}\nRETRACTED\nCorrection:\n[' + last + ']\nCorrection:\n' + last)
 
-    def test_nested_braces_and_long_prose_are_decoded_in_disjoint_spans(self):
+    def test_nested_objects_and_long_strings_are_decoded_in_disjoint_spans(self):
         output = self.build_output()
         output['findings']['dependencies'] = 'Quoted braces: {"nested": {"value": "}"}} and an escaped \\".'
         first = json.dumps({'nested': {'object': {'deeper': []}}, 'text': '{' * 20000})
         middle = json.dumps({'another': {'nested': {}}})
         text = first + '\nRETRACTED\n' + 'Correction. ' * 20000 + '\n' + middle
         text += '\nRETRACTED\nFinal correction:\n' + json.dumps(output)
+        self.assert_refusal(text)
+        text = first + '\nRETRACTED\n' + middle + '\nRETRACTED\n' + json.dumps(output)
         decoded_spans = []
         decode = json.JSONDecoder.raw_decode
 
@@ -389,7 +427,7 @@ class ClaudeResultTextTests(unittest.TestCase):
                 self.assertEqual(response['output'][0]['content'][0]['text'], text)
                 self.assertNotIn('self_corrected', response['execution'])
 
-    def test_prose_punctuation_does_not_stop_candidate_discovery(self):
+    def test_prose_punctuation_refuses_recovery(self):
         output = {'decision': 'reject', 'reason': 'A gap remains.'}
         for prose in ('Correction: remove [typo] from the explanation.',
                       'Correction: replace {policy} in the explanation.',
@@ -399,13 +437,13 @@ class ClaudeResultTextTests(unittest.TestCase):
                       '[{"example": {}}]\nCorrection: the array above is an example.'):
             with self.subTest(prose=prose):
                 self.assert_refusal('{}\n' + prose + '\nRETRACTED\n' + json.dumps(output))
-                self.assert_correction('{}\nRETRACTED\n' + prose + '\n' + json.dumps(output), output)
+                self.assert_refusal('{}\nRETRACTED\n' + prose + '\n' + json.dumps(output))
         text = '{}\n[typo]\nThe {policy} field and an unmatched "quotation need correction.\nRETRACTED\n'
         text += json.dumps(output)
         attempt = self.observe_text(text)
         self.assertEqual(attempt['status'], 'failed')
         self.assertIsNone(attempt['output'])
-        self.assert_correction('{}\nRETRACTED\n[typo]\n' + json.dumps(output), output)
+        self.assert_refusal('{}\nRETRACTED\n[typo]\n' + json.dumps(output))
 
     def test_only_line_delimited_objects_count_as_candidates(self):
         last = json.dumps(self.build_output())
@@ -421,7 +459,7 @@ class ClaudeResultTextTests(unittest.TestCase):
         text = '{}\t\r\nRETRACTED\r\n```json\r\n' + last + ' \t\r\n```\r\n'
         self.assert_correction(text, self.build_output())
 
-    def test_array_lines_follow_the_prose_grammar(self):
+    def test_array_lines_refuse_recovery(self):
         output = {'decision': 'reject', 'reason': 'A gap remains.'}
         last = json.dumps(output)
         for text in ('[\n  {}\n]\n' + last,
@@ -434,9 +472,8 @@ class ClaudeResultTextTests(unittest.TestCase):
                 self.assertIsNone(attempt['output'])
                 self.assertNotIn('self_corrected', self.read_json(attempt['response'])['execution'])
         self.assert_refusal('{}\n[\n  {"example": [\n    {}\n  ]}\n]\nRETRACTED\n' + last)
-        self.assert_correction('{}\nRETRACTED\n[\n{"decision":"revise","reason":"An array element."}',
-                               {'decision': 'revise', 'reason': 'An array element.'})
-        self.assert_correction('{}\nRETRACTED\n[\n  {"example": [\n    {}\n  ]}\n]\n' + last, output)
+        self.assert_refusal('{}\nRETRACTED\n[\n{"decision":"revise","reason":"An array element."}')
+        self.assert_refusal('{}\nRETRACTED\n[\n  {"example": [\n    {}\n  ]}\n]\n' + last)
 
     def test_non_json_fences_do_not_supply_answer_candidates(self):
         first = '{"decision":"reject","reason":"The proof fails."}'
@@ -461,6 +498,8 @@ class ClaudeResultTextTests(unittest.TestCase):
             with self.subTest(tag=tag):
                 self.assert_refusal(text)
                 text = '{}\nRETRACTED\nCorrection:\n```' + tag + '\n' + json.dumps(output) + '\n```\n'
+                self.assert_refusal(text)
+                text = '{}\nRETRACTED\n```' + tag + '\n' + json.dumps(output) + '\n```\n'
                 attempt = self.assert_correction(text, output)
                 self.assertIsNone(self.classify_attempt(attempt))
 
@@ -474,7 +513,7 @@ class ClaudeResultTextTests(unittest.TestCase):
                 attempt = self.observe_text(text)
                 self.assertEqual(attempt['status'], 'failed')
                 self.assertIsNone(attempt['output'])
-        self.assert_correction('{}\nRETRACTED\n```python\n' + last, self.build_output())
+        self.assert_refusal('{}\nRETRACTED\n```python\n' + last)
 
     def test_brace_prefixed_prose_keeps_the_existing_refusal(self):
         text = '{}\n{policy} is the field corrected below.\n{"decision":"reject","reason":"A gap remains."}'
@@ -594,7 +633,17 @@ class ClaudeResultTextTests(unittest.TestCase):
                 observation = protocol._observed(self.artifacts, ROUTE, self.request, None)
             self.assertEqual(observation['status'], status)
             observations.append(observation)
-        observations.append(self.assert_correction('{}\nRETRACTED\nCorrection:\n' + plain, output))
+        retained_text = '{}\nRETRACTED\nCorrection:\n' + plain
+        self.assert_refusal(retained_text)
+        retained_response = copy.deepcopy(legacy_response)
+        retained_response['output'][0]['content'][0]['text'] = plain
+        retained_response['execution'] = {'self_corrected': True, 'retracted_object_count': 1,
+                                          'result_text': retained_text, 'result_text_digest': digest(retained_text)}
+        with patch.object(claude, 'send_request', return_value=retained_response):
+            observation = protocol._observed(self.artifacts, ROUTE, self.request, None)
+        self.assertEqual(observation['status'], 'completed')
+        observations.append(observation)
+        observations.append(self.assert_correction('{}\nRETRACTED\n' + plain, output))
         receipts = []
         for index, observation in enumerate(observations):
             payload = {'id': 'saved-' + str(index), 'assignment_id': self.assignment['id']}
@@ -618,6 +667,7 @@ class ClaudeResultTextTests(unittest.TestCase):
                 self.assertEqual(replayed, receipt)
         self.assertEqual(Store(self.root).snapshot(), snapshot)
         self.assertEqual(self.read_json(observations[0]['response']), legacy_response)
+        self.assertEqual(self.read_json(observations[2]['response']), retained_response)
 
 
 if __name__ == '__main__':

@@ -238,7 +238,7 @@ def strip_fence(text):
 
 
 def parse_result_text(text):
-    """Read complete object blocks separated by exact retractions, allowing prose only after a retraction.
+    """Read complete object blocks separated only by exact retractions and blank lines.
     A fenced block holds one column-zero object between exact triple-backtick lines. Match the whole answer
     in one pass; syntax/recursion errors, incomplete grammar and single blocks keep existing handling."""
     answer, fenced = strip_fence(text)
@@ -262,14 +262,8 @@ def parse_result_text(text):
             if line_text != RESULT_RETRACTION_LINE:
                 return answer, fenced, {}
             retraction_count += 1
-            state = 'prose'
+            state = 'block'
             continue
-        if state == 'prose':
-            if line_text == RESULT_RETRACTION_LINE:
-                retraction_count += 1
-                continue
-            if not line_text.startswith('{') and line_text.lower() not in RESULT_FENCE_LINES:
-                continue
         if state != 'fenced_object' and line_text.lower() in RESULT_FENCE_LINES:
             state = 'fenced_object'
             continue
