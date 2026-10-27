@@ -23,6 +23,7 @@ NAME_MAX = 255
 LAUNCHER = Path(__file__).resolve().parents[1] / "bin/exactory-math"
 _SHELL_NAMES = {"Bash", "exec_command", "functions.exec_command"}
 _FILE_NAMES = {"Write", "Edit", "Delete", "Read"}
+SHELL_SEPARATORS = {";", "&&", "||", "|", "&"}
 
 
 class ManagedError(ValueError):
@@ -70,6 +71,13 @@ def session_id(payload):
             if isinstance(identity, str) and identity.strip() else None)
 
 
+def build_shell_lexer(command):
+    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
+    lexer.whitespace_split = True
+    lexer.commenters = ""
+    return lexer
+
+
 def shell_tokens(command):
     if not isinstance(command, str):
         raise ManagedError("Unsupported shell payload; use a direct exec_command with cmd and workdir")
@@ -81,10 +89,49 @@ def shell_tokens(command):
         command = command[bootstrap.end():]
     if any(character in command for character in ("\n", "\r", "$", "`")):
         raise ManagedError("Shell expansion and multiline programs are unsupported; use a direct command and a spec file")
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>")
-    lexer.whitespace_split = True
-    lexer.commenters = ""
+    lexer = build_shell_lexer(command)
     return list(lexer)
+
+
+def iter_simple_commands(tokens, separator_positions):
+    start = 0
+    while start < len(tokens):
+        end = next((i for i in range(start, len(tokens)) if i in separator_positions), len(tokens))
+        command = start
+        data_position = None
+        while command < end and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[command]):
+            command += 1
+        if command < end and Path(tokens[command]).name == "env":
+            command += 1
+            while command < end and (tokens[command].startswith("-")
+                                     or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[command])):
+                if tokens[command] in {"-u", "--unset", "-C", "--chdir"}:
+                    command += 1
+                command += 1
+        if command < end:
+            executable = Path(tokens[command]).name
+            is_python = re.fullmatch(r"python(?:[0-9]+(?:\.[0-9]+)*)?", executable) is not None
+            flags = ({"-c", "-m"} if is_python else
+                     {"-c"} if executable in {"sh", "bash", "zsh", "dash", "ksh"} else
+                     {"-e", "--eval", "-p", "--print"} if executable in {"node", "nodejs"} else set())
+            for position in range(command + 1, end):
+                if tokens[position] in flags and position + 1 < end:
+                    data_position = position + 1
+                    break
+                if not tokens[position].startswith("-"):
+                    break
+            if is_python:
+                command += 1
+                while command < end and tokens[command].startswith("-"):
+                    if tokens[command] in {"-c", "-m", "--", "-h", "--help", "-V", "--version"}:
+                        break
+                    if tokens[command] in {"-W", "-X", "--check-hash-based-pycs"}:
+                        command += 1
+                    command += 1
+                if command < end and tokens[command] == "--":
+                    command += 1
+        yield start, command, end, data_position
+        start = end + 1
 
 
 def argument_data(tokens):
@@ -94,32 +141,15 @@ def argument_data(tokens):
     Other explicit paths and the actual working directory remain discoverable.
     Managed arbitrary code is still rejected by guard's supported-command check.
     """
-    data, start = set(), 0
-    separators = {";", "&&", "||", "|", "&"}
-    while start < len(tokens):
-        end = next((i for i in range(start, len(tokens)) if tokens[i] in separators), len(tokens))
-        command = start
-        while command < end and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[command]):
-            command += 1
-        if command < end and Path(tokens[command]).name == "env":
-            command += 1
-            while command < end and (tokens[command].startswith("-") or re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[command])):
-                if tokens[command] in {"-u", "--unset", "-C", "--chdir"}:
-                    command += 1
-                command += 1
-        if command < end:
-            executable = Path(tokens[command]).name
-            flags = ({"-c", "-m"} if re.fullmatch(r"python(?:[0-9]+(?:\.[0-9]+)*)?", executable) else
-                     {"-c"} if executable in {"sh", "bash", "zsh", "dash", "ksh"} else
-                     {"-e", "--eval", "-p", "--print"} if executable in {"node", "nodejs"} else set())
-            for position in range(command + 1, end):
-                if tokens[position] in flags and position + 1 < end:
-                    data.add(position + 1)
-                    break
-                if not tokens[position].startswith("-"):
-                    break
-        start = end + 1
-    return data
+    separator_positions = {index for index, token in enumerate(tokens) if token in SHELL_SEPARATORS}
+    return {data_position for _, _, _, data_position in iter_simple_commands(tokens, separator_positions)
+            if data_position is not None}
+
+
+def is_path_candidate(candidate):
+    # A token with a component longer than any file name names no file; free text with a slash is one.
+    return ("\n" not in candidate and "\x00" not in candidate
+            and all(len(os.fsencode(part)) <= NAME_MAX for part in candidate.split("/")))
 
 
 def operation_paths(payload):
@@ -141,9 +171,7 @@ def operation_paths(payload):
             if not token or token.startswith("-") or token in {";", "&&", "|", ">", ">>", "<"}:
                 continue
             candidate = token.split("=", 1)[-1] if token.startswith(("of=", "if=")) else token
-            # A token with a component longer than any file name names no file; free text with a slash is one.
-            if ("\n" not in candidate and "\x00" not in candidate
-                    and all(len(os.fsencode(part)) <= NAME_MAX for part in candidate.split("/"))):
+            if is_path_candidate(candidate):
                 paths.append(resolve(candidate, cwd))
         return paths
     return []
