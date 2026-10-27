@@ -192,10 +192,14 @@ class ClaudeResultTextTests(unittest.TestCase):
                       'Correction: replace {policy} in the explanation.',
                       'Correction: an unmatched "quotation begins here.',
                       'Correction: "the quoted explanation\ncontinues on this line".',
-                      '[typo]\nThe {policy} field and an unmatched "quotation need correction.',
+                      'The [typo] and {policy} fields and an unmatched "quotation need correction.',
                       '[{"example": {}}]\nCorrection: the array above is an example.'):
             with self.subTest(prose=prose):
                 self.assert_correction('{}\n' + prose + '\n' + json.dumps(output), output)
+        text = '{}\n[typo]\nThe {policy} field and an unmatched "quotation need correction.\n' + json.dumps(output)
+        attempt = self.observe_text(text)
+        self.assertEqual(attempt['status'], 'failed')
+        self.assertIsNone(attempt['output'])
 
     def test_only_line_delimited_objects_count_as_candidates(self):
         last = json.dumps(self.build_output())
@@ -208,6 +212,77 @@ class ClaudeResultTextTests(unittest.TestCase):
                      '{}\n```python\nexample = {}\n```\n' + last):
             with self.subTest(text=text):
                 self.assert_correction(text, self.build_output())
+
+    def test_array_spans_do_not_supply_answer_candidates(self):
+        output = {'decision': 'reject', 'reason': 'A gap remains.'}
+        last = json.dumps(output)
+        for text in ('[\n  {}\n]\n' + last,
+                     '{}\n[\n{"decision":"revise","reason":"An array element."}',
+                     '{}\n[\n  {"nested": [\n    ' + last + '\n  ]}\n'):
+            with self.subTest(text=text):
+                attempt = self.observe_text(text)
+                self.assertEqual(attempt['status'], 'failed')
+                self.assertIsNone(attempt['output'])
+                self.assertNotIn('self_corrected', self.read_json(attempt['response'])['execution'])
+        self.assert_correction('{}\n[\n  {"example": [\n    {}\n  ]}\n]\n' + last, output)
+
+    def test_non_json_fences_do_not_supply_answer_candidates(self):
+        first = '{"decision":"reject","reason":"The proof fails."}'
+        examples = ('{"decision":"revise","reason":"Illustrative only."}', json.dumps(self.build_output()))
+        for tag, prefix in (('javascript', 'const example =\n'), ('python', '')):
+            for example in examples:
+                text = first + '\nQuoted packet example, not my assessment:\n```' + tag + '\n'
+                text += prefix + example + '\n```'
+                with self.subTest(tag=tag, example=example):
+                    attempt = self.observe_text(text)
+                    self.assertEqual(attempt['status'], 'failed')
+                    self.assertIsNone(attempt['output'])
+                    self.assertNotIn('self_corrected', self.read_json(attempt['response'])['execution'])
+        output = {'decision': 'reject', 'reason': 'The gap remains.'}
+        text = '{}\n```python\n[unterminated\n{not_json}\n```\n' + json.dumps(output)
+        self.assert_correction(text, output)
+
+    def test_unlabelled_and_json_fences_keep_the_corrected_answer(self):
+        output = self.build_output()
+        for tag in ('', 'JSON', 'jSoN'):
+            text = '{}\nCorrection:\n```' + tag + '\n' + json.dumps(output) + '\n```\n'
+            with self.subTest(tag=tag):
+                attempt = self.assert_correction(text, output)
+                self.assertIsNone(self.classify_attempt(attempt))
+
+    def test_unclosed_fences_refuse_recovery(self):
+        last = json.dumps(self.build_output())
+        for text in ('{}\n```json\n' + last,
+                     '{}\n```\n' + last,
+                     '{}\n```python\n' + last,
+                     '```json\n{}\n' + last,
+                     '```python\nAn example without a closing fence.\n{}\n' + last):
+            with self.subTest(text=text):
+                attempt = self.observe_text(text)
+                self.assertEqual(attempt['status'], 'failed')
+                self.assertIsNone(attempt['output'])
+
+    def test_brace_prefixed_prose_keeps_the_existing_refusal(self):
+        text = '{}\n{policy} is the field corrected below.\n{"decision":"reject","reason":"A gap remains."}'
+        attempt = self.observe_text(text)
+        self.assertEqual(attempt['status'], 'failed')
+        self.assertEqual(attempt['error'], {'code': 'review_transport_failure', 'kind': 'JSONDecodeError'})
+        self.assertIsNone(attempt['output'])
+        response = self.read_json(attempt['response'])
+        self.assertEqual(response['output'][0]['content'][0]['text'], text)
+        self.assertNotIn('self_corrected', response['execution'])
+
+    def test_last_candidate_accepts_only_its_own_closing_fence(self):
+        last = json.dumps(self.build_output())
+        for text in ('{}\n' + last + '\n```',
+                     '```json\n{}\n```\n' + last + '\n```',
+                     '{}\n```json\n' + last + '\n```\n```',
+                     '{}\n```json\n' + last + '\n```\nA later qualification.'):
+            with self.subTest(text=text):
+                attempt = self.observe_text(text)
+                self.assertEqual(attempt['status'], 'failed')
+                self.assertIsNone(attempt['output'])
+        self.assert_correction('{}\n```json\n' + last + '\n```\n \t', self.build_output())
 
     def test_recursive_candidate_returns_response_and_records_failed_attempt(self):
         text = '{}\n' + '{"x":' * 2000 + '0' + '}' * 2000

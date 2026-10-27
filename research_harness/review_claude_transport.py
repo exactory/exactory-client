@@ -37,6 +37,9 @@ FLAGS = ('-p', '--safe-mode', '--tools', '', '--strict-mcp-config', '--mcp-confi
 ENVIRONMENT = ('PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR', 'CLAUDE_CONFIG_DIR')
 SYSTEM_PROMPT_FILE = 'system-prompt.txt'
 OUTPUT_CONTENT_TYPES = ('text', 'thinking', 'redacted_thinking')
+RESULT_FENCE_PATTERN = re.compile(r'[ \t]*```([^\r\n]*)(?:\r\n?|\n)?')
+RESULT_VALUE_PATTERN = re.compile(r'[ \t]*([\[{])')
+RESULT_END_PATTERN = re.compile(r'[ \t]*(?:\r\n?|\n|\Z)')
 
 
 def clean_environment(environment):
@@ -236,30 +239,47 @@ def strip_fence(text):
 
 def parse_result_text(text):
     """Select the last of several objects for the ordinary output-contract checks, retaining the complete answer.
-    Objects start and end on their own lines; prose punctuation is not a candidate. Decode disjoint spans and
-    stop at the first candidate syntax or recursion error. A single object or a refused scan keeps existing handling."""
+    Walk lines once, consuming arrays and ignoring code fences. Ambiguous containers, fences or suffixes keep
+    existing handling, as do candidate syntax or recursion errors and answers without several object candidates."""
     answer, fenced = strip_fence(text)
     decoder = json.JSONDecoder(parse_int=str, parse_float=str, parse_constant=str)
-    opening_pattern = re.compile(r'^[ \t]*(\{)', re.MULTILINE)
-    ending_pattern = re.compile(r'[ \t]*(?:\r?\n|\Z)')
-    offset, object_count, last_start, last_end = 0, 0, 0, 0
-    while True:
-        opening_match = opening_pattern.search(text, offset)
+    offset, decoded_end, object_count, last_start, last_end = 0, 0, 0, 0, 0
+    fence_tag, valid_suffix = None, False
+    for line in text.splitlines(keepends=True):
+        line_start = offset
+        offset += len(line)
+        if line_start < decoded_end:
+            continue
+        fence_match = RESULT_FENCE_PATTERN.fullmatch(line)
+        if fence_match is not None:
+            tag = fence_match.group(1).strip().lower()
+            if fence_tag is None:
+                fence_tag, valid_suffix = tag, False
+            elif not tag:
+                if fence_tag not in ('', 'json'):
+                    valid_suffix = False
+                fence_tag = None
+            elif fence_tag in ('', 'json'):
+                return answer, fenced, {}
+            continue
+        if fence_tag not in (None, '', 'json') or not line.strip():
+            continue
+        valid_suffix = False
+        opening_match = RESULT_VALUE_PATTERN.match(line)
         if opening_match is None:
-            break
-        start = opening_match.start(1)
+            continue
+        start = line_start + opening_match.start(1)
         try:
-            output, end = decoder.raw_decode(text, start)
+            _, end = decoder.raw_decode(text, start)
         except (ValueError, RecursionError):
             return answer, fenced, {}
-        offset = end
-        if ending_pattern.match(text, end) is None:
+        decoded_end = end
+        if opening_match.group(1) == '[' or RESULT_END_PATTERN.match(text, end) is None:
             continue
-        if not isinstance(output, dict):
-            return answer, fenced, {}
         object_count += 1
         last_start, last_end = start, end
-    if object_count < 2 or text[last_end:].strip() not in ('', '```'):
+        valid_suffix = True
+    if fence_tag is not None or object_count < 2 or not valid_suffix:
         return answer, fenced, {}
     return text[last_start:last_end], fenced, {'self_corrected': True, 'result_text': text,
                                              'result_text_digest': digest(text)}
