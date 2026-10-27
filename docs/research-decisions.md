@@ -526,6 +526,11 @@ never into a payload or artifact. A replay of the same request returns its saved
 observation. An interrupted uncertain invocation remains pending and does not
 silently run again.
 
+A route pins the adapter runtime it was recorded with. Verification of probes
+and attempts uses that pinned runtime. Execution requires the installed adapter
+runtime to match the route's pinned runtime; otherwise, record and probe a new
+route.
+
 The subscription-backed route uses this shape:
 
 ```json

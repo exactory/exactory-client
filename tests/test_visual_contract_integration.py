@@ -70,6 +70,7 @@ class VisualContractIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = SimpleNamespace(root=Path(directory))
             route = {'id': 'route', 'adapter': adapter}
+            route['runtime'] = transport.runtime(route)
             records = {'review_route': {'route': route}}
             def start_only(store, payload, operation, start, finish, **options):
                 return start(records, payload)

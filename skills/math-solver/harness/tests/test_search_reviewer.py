@@ -37,6 +37,89 @@ class NativeReviewerTests(SearchCLIWorkspace, unittest.TestCase):
         return observe_review(self.controller, review(self.proposed["proposal"]),
                               self.proposed["proposal"], **options)
 
+    def observe_claude_review(self, value, context=None):
+        from claude_review_fixtures import build_recorded_response, build_recorded_runtime
+        from research_harness import review_claude_transport as claude, review_protocol, review_transport
+        from research_harness.storage import Store
+        from test_research_claude_transport import UI_INVALIDATE, clean_stream, completed
+        identifier = 'claude-' + value['reviewer']['actor_id']
+        value = copy.deepcopy(value)
+        value['reviewer'].update(source='host', attestation_id='review-assignment:' + identifier)
+        exported = self.controller.command('review-packet', {'kind': 'proposal',
+            'subject': self.proposed['proposal'], 'claim_digest': value['claim_digest'],
+            'reviewer': value['reviewer'], 'inputs': []}, None, None)
+        store = Store(exported['workspace'])
+        pinned_runtime = claude.runtime() if context is None else build_recorded_runtime(context[1])
+
+        def respond(route, request, credential):
+            is_probe = request['instructions'].startswith('Return JSON with allowed_control')
+            output = value
+            if is_probe:
+                packet = json.loads(request['input'][0]['content'][len(review_transport.PACKET_LABEL):])
+                output = {'allowed_control': packet['allowed_control'], 'evidence_control': packet['evidence_control'],
+                          'excluded_controls': []}
+            if context is not None:
+                probe_context = (context[0], context[1], True, [], None)
+                return build_recorded_response(route, request, output, probe_context if is_probe else context)
+            events = clean_stream(request, json.dumps(output), model=route['model'])
+            events.insert(2, dict(UI_INVALIDATE))
+            with patch.object(claude, '_cli', return_value=('/fixture/claude', '2.1.310 (Claude Code)')), \
+                    patch.object(claude, '_run_owned', return_value=completed(events)):
+                return claude.send_request(route, request)
+
+        with patch.object(claude, 'runtime', return_value=pinned_runtime), \
+                patch.object(review_transport, 'send_request', side_effect=respond):
+            mutate(store, review_protocol.record_route, {'id': identifier, 'adapter': 'claude_cli_v1',
+                'model': 'claude-opus-5-5', 'endpoint': 'claude://local',
+                'configuration': {'effort': 'max', 'max_output_tokens': 20000, 'timeout_seconds': 1800}})
+            mutate(store, review_protocol.probe_route, {'id': identifier + '-probe', 'route_id': identifier})
+            mutate(store, review_protocol.record_assignment, {'id': identifier, 'route_id': identifier,
+                'dossier_id': None, 'role': 'native_math', 'reviewer_id': value['reviewer']['actor_id'],
+                'author_id': 'author', 'context': {'native_packet': exported['native_packet']}})
+            mutate(store, review_protocol.invoke_assignment,
+                   {'id': identifier + '-attempt', 'assignment_id': identifier})
+        return value
+
+    def test_standalone_admits_with_recorded_old_and_current_claude_reviews(self):
+        from claude_review_fixtures import RECORDED_CONTEXTS
+        from research_harness import review_protocol
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.storage import Store
+        from search_controller.reviewer import node_reviews
+        from tests.search_fixtures import proposal
+        original_root = self.root
+        for context in RECORDED_CONTEXTS:
+            with self.subTest(context=context[0]):
+                self.root = original_root / context[0]
+                self.root.mkdir()
+                self.controller = Controller(self.root)
+                self.controller.command('init', {'contract': contract()}, 0, 'initialize')
+                self.proposed = self.prepared_proposal()
+                candidate = proposal('standalone')
+                candidate.update(schema_version=3, computation=None, foundation=None,
+                                 studies=self.proposed['proposal']['studies'])
+                candidate['contribution']['standalone']['primary_sources'] = [candidate['studies']['problem']]
+                self.proposed['proposal'] = candidate
+                self.controller.command('propose', self.proposed, 1, 'propose')
+                for index, old_context in enumerate((context, None)):
+                    value = self.observe_claude_review(
+                        review(candidate, reviewer='reviewer-' + str(index)), old_context)
+                    self.controller.command('review', {'proposal_id': 'proposal-000001', 'review': value, 'inputs': []},
+                                            2 + index, 'bind-' + str(index))
+                self.controller.command('admit', {}, 4, 'mixed-admission', 'proposal-000001')
+                state = self.controller.status()
+                node = state['nodes']['node-000001']
+                self.assertEqual(node['status'], 'admitted')
+                self.assertEqual(len(node['admission']['review_ids']), 2)
+                node_reviews(self.root, state, self.controller.store, node)
+                store = Store(self.root)
+                records = store.snapshot()['records']
+                attempt = copy.deepcopy(records['review_attempt']['claude-reviewer-0-attempt'])
+                assignment = records['review_assignment'][attempt['assignment_id']]
+                attempt['runtime']['implementation_sha256'] = '0' * 64
+                self.assertFalse(review_protocol.authenticate_attempt(records, ArtifactStore(self.root),
+                                                                      assignment, attempt))
+
     def submit(self, value):
         return self.controller.command("review", {"proposal_id": "proposal-000001",
             "review": value, "inputs": []}, 2, "observed-review")
