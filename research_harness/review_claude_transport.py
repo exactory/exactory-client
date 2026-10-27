@@ -12,6 +12,7 @@ import binascii
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -52,6 +53,9 @@ SYSTEM_EVENT_COUNT_LIMIT = 4096
 SYSTEM_EVENT_BYTE_LIMIT = 4 * 1024 * 1024
 # SHA-256 of this file at every release tag from exactory--v0.60.0 through exactory--v0.63.0.
 LEGACY_UI_IMPLEMENTATIONS = frozenset(('7b8facd0f6f679dee371b9f0b46ca0d6b2ad799ea0dfec9efe215d95402a4800',))
+RESULT_RETRACTION_LINE = 'RETRACTED'
+RESULT_FENCE_LINES = ('```', '```json')
+RESULT_END_PATTERN = re.compile(r'[ \t]*(?:\r\n?|\n|\Z)')
 
 
 def clean_environment(environment):
@@ -358,7 +362,8 @@ def send_request(route, request, credential=None):
     complete = (result.returncode == 0 and not malformed and len(results) == 1 and final.get('subtype') == 'success'
                 and final.get('is_error') is False and output_tokens is not None
                 and output_tokens <= config['max_output_tokens'])
-    answer, fenced = strip_fence(final.get('result') if isinstance(final.get('result'), str) else '')
+    answer, fenced, correction_evidence = parse_result_text(
+        final.get('result') if isinstance(final.get('result'), str) else '')
     return {'id': evidence['session_id'] or 'failed-' + uuid.uuid4().hex, 'model': route['model'],
             'status': 'completed' if complete else 'incomplete',
             'output': [{'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': answer}]}],
@@ -370,7 +375,7 @@ def send_request(route, request, credential=None):
                               (result.stderr or '').encode('utf-8', 'surrogateescape')).hexdigest(),
                           'malformed_line_digests': malformed, 'event_count': len(events),
                           'event_types': [event.get('type') for event in events], 'fence_removed': fenced,
-                          'system_events': retention}}
+                          'system_events': retention, **correction_evidence}}
 
 
 def strip_fence(text):
@@ -385,6 +390,54 @@ def strip_fence(text):
     if newline != -1 and body[:newline].strip().isalnum():
         body = body[newline + 1:]
     return body.strip(), True
+
+
+def parse_result_text(text):
+    """Read complete object blocks separated only by exact retractions and blank lines.
+    A fenced block holds one column-zero object between exact triple-backtick lines. Match the whole answer
+    in one pass; syntax/recursion errors, incomplete grammar and single blocks keep existing handling."""
+    answer, fenced = strip_fence(text)
+    decoder = json.JSONDecoder(parse_int=str, parse_float=str, parse_constant=str)
+    offset, decoded_end, retraction_count, last_start, last_end = 0, 0, 0, 0, 0
+    state = 'block'
+    for line in text.splitlines(keepends=True):
+        line_start = offset
+        offset += len(line)
+        if line_start < decoded_end:
+            continue
+        line_text = line.rstrip('\r\n')
+        if not line_text.strip(' \t'):
+            continue
+        if state == 'closing_fence':
+            if line_text != '```':
+                return answer, fenced, {}
+            state = 'retraction'
+            continue
+        if state == 'retraction':
+            if line_text != RESULT_RETRACTION_LINE:
+                return answer, fenced, {}
+            retraction_count += 1
+            state = 'block'
+            continue
+        if state != 'fenced_object' and line_text.lower() in RESULT_FENCE_LINES:
+            state = 'fenced_object'
+            continue
+        if not line_text.startswith('{'):
+            return answer, fenced, {}
+        try:
+            _, end = decoder.raw_decode(text, line_start)
+        except (ValueError, RecursionError):
+            return answer, fenced, {}
+        if RESULT_END_PATTERN.match(text, end) is None:
+            return answer, fenced, {}
+        decoded_end = end
+        last_start, last_end = line_start, end
+        state = 'closing_fence' if state == 'fenced_object' else 'retraction'
+    if state != 'retraction' or not retraction_count:
+        return answer, fenced, {}
+    return text[last_start:last_end], fenced, {'self_corrected': True, 'retracted_object_count': retraction_count,
+                                             'result_text': text,
+                                             'result_text_digest': digest(text)}
 
 
 def _verify_context_bindings(route, request, response):
