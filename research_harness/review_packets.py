@@ -24,7 +24,7 @@ from .contribution import find_analysis
 from .evidence import digest
 from .predictions import measurement_summary
 from .principles import objective_changes
-from .publication import latest_reviews
+from .publication import latest_reviews, read_bundle_input
 from .resources import account_report
 from .rounds import admissions, assessment_for, closing_round_assessments
 from .source_deferrals import build_source_gap_disclosure
@@ -76,8 +76,10 @@ def _source_closure(records, version_ids):
     return {"work": works, "reading": readings, "source_bundle": bundles, "source": sources}
 
 
-def manuscript_packet(records, bundle):
+def manuscript_packet(records, bundle, artifacts=None):
     """The exact manuscript, its claim evidence closure, observed executions and field standards."""
+    inputs = read_bundle_input(bundle, artifacts, "review_inputs")
+    observations = read_bundle_input(bundle, artifacts, "execution_observations")
     versions, executions = set(), set()
     for claim in bundle["claim_evidence"]:
         for item in claim["evidence"]:
@@ -89,9 +91,9 @@ def manuscript_packet(records, bundle):
     for identifier in sorted(executions):
         execution = records.get("execution", {}).get(identifier)
         results[identifier] = {"execution": execution["payload"] if execution else None,
-                               "observation": bundle["execution_observations"].get(identifier)}
-    standards = bundle["review_inputs"]["synthesis"]["sections"].get("standards", {}).get("payload")
-    foundation = bundle["review_inputs"]["synthesis"]["foundation"]
+                               "observation": observations.get(identifier)}
+    standards = inputs["synthesis"]["sections"].get("standards", {}).get("payload")
+    foundation = inputs["synthesis"]["foundation"]
     packet = {"kind": "manuscript", "bundle_digest": bundle["digest"], "files": bundle["files"],
               "claim_evidence": bundle["claim_evidence"], "evidence": _source_closure(records, versions),
               "results": results, "standards": standards,
@@ -103,7 +105,7 @@ def manuscript_packet(records, bundle):
     return scrub(packet)
 
 
-def round_packet(records, bundle, decision):
+def round_packet(records, bundle, decision, artifacts=None):
     """The paper, its reviews and predictions, the decision under review, and the program's history."""
     reviews = [{"id": saved["id"], "kind": saved["assessor"]["kind"], "core": saved["core"]}
                for saved in latest_reviews(records, bundle["digest"]).values()]
@@ -133,7 +135,8 @@ def round_packet(records, bundle, decision):
     # The analysis named its criteria against the record that was current then; deliver it when another record replaced it.
     analyzed_against = (analysis or {}).get("grand_challenge")
     replaced = analyzed_against is not None and current_challenge is not None and analyzed_against["id"] != current_challenge["id"]
-    manifest = {"kind": "round", "manuscript": manuscript_packet(records, bundle), "reviews": reviews, "predictions": predictions,
+    manifest = {"kind": "round", "manuscript": manuscript_packet(records, bundle, artifacts),
+                "reviews": reviews, "predictions": predictions,
                 "measurement": measurement_summary(records, bundle),
                 "decision": {"payload": decision["payload"], "digest": decision["digest"], "closes": decision["closes"]},
                 "rounds": history, "development": development, "synthesis": synthesis, "searches": searches,

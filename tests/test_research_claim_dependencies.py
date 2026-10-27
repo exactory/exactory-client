@@ -620,7 +620,12 @@ class RevisionMemoTests(SourceLimitedCase):
         self.assertGreater(len(counts["_synthesis_state"]), 1)
         self.assertEqual(set(counts["_synthesis_state"]), set(counts["_build_candidate"]))
         altered = copy.deepcopy(bundle)
-        altered["review_inputs"]["candidate"]["source_records_digest"] = "unrecorded-input"
+        if "review_inputs_artifact" in altered:
+            inputs = json.loads(self.artifacts.read(altered["review_inputs_artifact"]))
+            inputs["candidate"]["source_records_digest"] = "unrecorded-input"
+            altered["review_inputs_artifact"] = self.artifacts.put(json.dumps(inputs).encode(), "application/json")
+        else:
+            altered["review_inputs"]["candidate"]["source_records_digest"] = "unrecorded-input"
         with self.assertRaises(ResearchError) as raised:
             publication.rebuild_pinned_readiness(root.records, root, altered)
         self.assertEqual(raised.exception.code, "claim_reassessment_required")

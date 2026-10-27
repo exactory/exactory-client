@@ -1471,7 +1471,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 bundle, derived = _project_current_claims(bundle, artifacts)
             else:
                 derived = {}
-            packet['paper'] = manuscript_packet(records, bundle)
+            packet['paper'] = manuscript_packet(records, bundle, artifacts)
             if bundle.get('publication_scope') is not None:
                 from .publication_scope import find_publication_scope
                 from .scientific_delivery import project_delivery
