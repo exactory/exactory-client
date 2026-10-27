@@ -406,9 +406,15 @@ def _parse_stage(value: str) -> str:
 def _run_probe(args: argparse.Namespace) -> None:
     try:
         from research_harness.probe import launch_probe
+        context = None
+        if args.cycle_id or args.program_path or args.read_output:
+            if not args.cycle_id or not args.program_path:
+                raise ResearchError("invalid_input", "Program-run probes need both --cycle-id and --program-path")
+            context = {"cycle_id": args.cycle_id, "program_path": args.program_path,
+                       "read_outputs": args.read_output}
         receipt = launch_probe(current_store(_find_research_workspace()), identifier=args.id, question=args.question,
                                script=args.script, inputs=args.input, output_dir=args.output_dir,
-                               timeout=args.timeout, observation=args.observation)
+                               timeout=args.timeout, observation=args.observation, program_run=context)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
     except OSError as error:
@@ -502,6 +508,10 @@ def _build_parser() -> argparse.ArgumentParser:
     probe.add_argument("--output-dir", default=".", help="Output directory relative to the fresh working directory. Default: .")
     probe.add_argument("--timeout", type=float, required=True, help="Wall time limit in seconds.")
     probe.add_argument("--observation", help="Author observation; default: factual exit-status summary.")
+    probe.add_argument("--cycle-id", help="Future plan's cycle ID for a program-run disclosure.")
+    probe.add_argument("--program-path", help="Stable workspace-relative program path across versions.")
+    probe.add_argument("--read-output", action="append", default=[],
+                       help="Run-relative path declared read: work/FILE, stdout or stderr.")
     probe.set_defaults(handler=_run_probe)
 
     colab_status = commands.add_parser("colab-status", allow_abbrev=False,

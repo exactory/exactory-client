@@ -16,6 +16,7 @@ from .artifacts import describe_artifact
 from .errors import ResearchError
 from .probe_provenance import pin_probe_artifact, record_probe_artifact_origin
 from .probe_supervision import find_probe_process_identity, read_probe_clock
+from .program_probes import build_program_run, utc_now
 from .workspace import checked_parent, json_projection, read_file, strict_json
 
 
@@ -54,6 +55,7 @@ def find_probe_stream_origins(root, launch):
 def run_probe_process(root, config, owner, worker_identity, config_sha256):
     directory = root / config["directory"]
     started = read_probe_clock()
+    started_at = utc_now()
     exit_status = "failed"
     with (directory / "stdout").open("xb") as stdout, (directory / "stderr").open("xb") as stderr:
         env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
@@ -114,7 +116,10 @@ def run_probe_process(root, config, owner, worker_identity, config_sha256):
             process.wait()
         if max(os.fstat(stdout.fileno()).st_size, os.fstat(stderr.fileno()).st_size) > STREAM_LIMIT:
             exit_status = "output_bound"
-    return {"exit_status": exit_status, "elapsed_seconds": read_probe_clock() - started}
+    terminal = {"exit_status": exit_status, "elapsed_seconds": read_probe_clock() - started}
+    if "program_run" in config:
+        terminal.update(started_at=started_at, ended_at=utc_now())
+    return terminal
 
 
 def read_probe_process_exit(root, config, config_sha256, fallback):
@@ -131,6 +136,7 @@ def read_probe_process_exit(root, config, config_sha256, fallback):
 
 
 def capture_probe_outcome(root, launch, terminal):
+    sealed = "program_run" in launch and not launch["program_run"]["read_outputs"]
     for origin in find_probe_stream_origins(root, launch):
         for role in origin["roles"]:
             record_probe_artifact_origin(root, launch["id"], origin["sha256"], role)
@@ -142,11 +148,12 @@ def capture_probe_outcome(root, launch, terminal):
             data, exceeded = read_probe_log(root, launch["directory"] + "/" + name)
         except FileNotFoundError:
             data, exceeded = b"", False
-        logs[name] = pin_probe_artifact(root, launch["id"], data, "text/plain", name)
+        logs[name] = pin_probe_artifact(root, launch["id"], data, "text/plain", name, sealed=sealed)
         if exceeded:
             status = "output_bound"
             observation = "Probe output exceeded 32 MiB; the raw file and a bounded artifact prefix are retained."
     outputs = []
+    named_outputs = []
     relative = launch["directory"] + "/work"
     suffix = "" if launch["output_dir"] == "." else "/" + launch["output_dir"]
     try:
@@ -163,12 +170,16 @@ def capture_probe_outcome(root, launch, terminal):
             artifact = describe_artifact(data, media_type)
             initial = launch["initial"].get(name)
             if initial is None or (path.stat().st_mtime_ns, artifact["sha256"]) != (initial["mtime_ns"], initial["sha256"]):
-                outputs.append(pin_probe_artifact(root, launch["id"], data, media_type, "outputs"))
+                outputs.append(pin_probe_artifact(root, launch["id"], data, media_type, "outputs", sealed=sealed))
+                named_outputs.append({"path": "work/" + name, "sha256": artifact["sha256"]})
     except (ResearchError, OSError) as error:
         status = "failed" if status != "output_bound" else status
         observation = "Probe output capture failed: " + (error.code if isinstance(error, ResearchError) else str(error))
-    return {"id": launch["id"], "command": launch["command"], "outputs": outputs, **logs,
-            "exit_status": status, "elapsed_seconds": terminal["elapsed_seconds"], "observation": observation}
+    outcome = {"id": launch["id"], "command": launch["command"], "outputs": outputs, **logs,
+               "exit_status": status, "elapsed_seconds": terminal["elapsed_seconds"], "observation": observation}
+    if "program_run" in launch:
+        outcome["program_run"] = build_program_run(launch, terminal, named_outputs, logs)
+    return outcome
 
 
 def run_probe_worker(root, directory, config_sha256, owner):

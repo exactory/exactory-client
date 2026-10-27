@@ -15,34 +15,40 @@ import time
 import uuid
 
 from . import resources
-from .artifacts import ArtifactStore
+from .artifacts import ArtifactStore, is_sealed_artifact
 from .errors import ResearchError
 from .operations import fields, immutable_record, is_finite_number, prepared_mutation, text
 from .probe_worker import capture_probe_outcome, find_probe_stream_origins
 from .probe_provenance import pin_probe_artifact
 from .probe_supervision import find_probe_group_members, find_probe_process_identity, read_probe_clock
+from .program_probes import build_program_run, utc_now, validate_program_run, validate_program_run_context
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
 
 
-def validate_probe_descriptor(artifacts, value):
+def validate_probe_descriptor(artifacts, value, *, sealed=False):
     fields(value, ("path", "sha256", "size", "media_type"))
-    artifacts.read(value)
+    if sealed and is_sealed_artifact(value):
+        artifacts.verify_sealed(value)
+    else:
+        artifacts.read(value)
 
 
-def validate_probe_descriptors(artifacts, values):
+def validate_probe_descriptors(artifacts, values, *, sealed=False):
     if not isinstance(values, list):
         raise ResearchError("invalid_input", "Probe artifacts must be an array of descriptors")
     for value in values:
-        validate_probe_descriptor(artifacts, value)
+        validate_probe_descriptor(artifacts, value, sealed=sealed)
 
 
 def validate_probe_outcome(artifacts, value):
-    fields(value, ("id", "command", "outputs", "stdout", "stderr", "exit_status", "elapsed_seconds", "observation"))
+    fields(value, ("id", "command", "outputs", "stdout", "stderr", "exit_status", "elapsed_seconds", "observation"),
+           ("program_run",))
     for key in ("id", "command", "observation"):
         text(value[key], "Probe " + key)
-    validate_probe_descriptors(artifacts, value["outputs"])
+    sealed = isinstance(value.get("program_run"), dict) and value["program_run"].get("outputs_unread") is True
+    validate_probe_descriptors(artifacts, value["outputs"], sealed=sealed)
     for key in ("stdout", "stderr"):
-        validate_probe_descriptor(artifacts, value[key])
+        validate_probe_descriptor(artifacts, value[key], sealed=sealed)
     if not is_probe_exit_status(value["exit_status"]):
         raise ResearchError("invalid_input", "Probe exit_status must be an integer, timed_out, failed, output_bound or interrupted")
     if not is_finite_number(value["elapsed_seconds"]) or value["elapsed_seconds"] < 0:
@@ -57,7 +63,7 @@ def record_probe_intent(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        fields(value, ("id", "question", "interpreter", "program", "inputs", "timeout_seconds"))
+        fields(value, ("id", "question", "interpreter", "program", "inputs", "timeout_seconds"), ("program_run",))
         for key in ("id", "question", "interpreter"):
             text(value[key], "Probe " + key)
         if records.get("configuration", {}).get("research") is None:
@@ -67,8 +73,10 @@ def record_probe_intent(store, payload, *, expected_revision, request_id):
         if not is_finite_number(value["timeout_seconds"]) or value["timeout_seconds"] <= 0:
             raise ResearchError("invalid_input", "Probe timeout_seconds must be a finite positive number")
         existing = records.get("probe_intent", {}).get(value["id"])
+        if "program_run" in value:
+            validate_program_run_context(records, value["program_run"], new=existing is None)
         if existing is not None:
-            if {key: existing[key] for key in value} != value:
+            if {key: existing.get(key) for key in value} != value:
                 raise ResearchError("record_conflict", "Probe intent ID already identifies different arguments")
             return [], existing
         # The immutable intent itself holds this allowance until its outcome exists.
@@ -83,12 +91,14 @@ def record_probe(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        fields(value, ("id", "command", "outputs", "stdout", "stderr", "exit_status", "elapsed_seconds", "observation"))
+        fields(value, ("id", "command", "outputs", "stdout", "stderr", "exit_status", "elapsed_seconds", "observation"),
+               ("program_run",))
         for key in ("id", "command", "observation"):
             text(value[key], "Probe " + key)
         if value["id"] not in records.get("probe_intent", {}):
             raise ResearchError("probe_intent_missing", "Record the pinned, reserved probe intent before its outcome")
         validate_probe_outcome(artifacts, value)
+        validate_program_run(records["probe_intent"][value["id"]], value)
         existing = records.get("probe", {}).get(value["id"])
         if existing is not None:
             if {key: existing[key] for key in value} != value:
@@ -259,8 +269,14 @@ def reconcile_probe(store, intent, launch):
             partial = capture_probe_outcome(store.root, launch, {"exit_status": "interrupted", "elapsed_seconds": elapsed})
             outcome.update({key: partial[key] for key in ("outputs", "stdout", "stderr")})
         else:
-            outcome.update({role: pin_probe_artifact(store.root, intent["id"], b"", "text/plain", role)
+            sealed = "program_run" in intent and not intent["program_run"]["read_outputs"]
+            outcome.update({role: pin_probe_artifact(store.root, intent["id"], b"", "text/plain", role, sealed=sealed)
                             for role in ("stdout", "stderr")})
+        if "program_run" in intent:
+            if launch:
+                outcome["program_run"] = partial["program_run"]
+            else:
+                outcome["program_run"] = build_program_run(intent, {}, [], outcome)
         recovery = {"id": intent["id"], "usage_incomplete": True, "owner_lost": True}
         commit_probe_mutation(store, record_probe_recovery, recovery, "probe-recovery:" + intent["id"])
     if launch:
@@ -337,7 +353,8 @@ def finish_probe_timeout(store, intent, launch, supervision, elapsed):
     return reconcile_probe(store, intent, launch)
 
 
-def launch_probe(store, *, identifier, question, script, inputs=(), output_dir=".", timeout, observation=None):
+def launch_probe(store, *, identifier, question, script, inputs=(), output_dir=".", timeout, observation=None,
+                 program_run=None):
     """Pin and reserve once; retries observe the original owner or reconcile its evidence."""
     text(identifier, "Probe ID")
     text(question, "Probe question")
@@ -356,10 +373,12 @@ def launch_probe(store, *, identifier, question, script, inputs=(), output_dir="
     with hold_probe_lock(store.root, identifier, "recovery.lock") as recovery:
         if recovery is None:
             return {"id": identifier, "status": "pending", "state": "running"}
-        return launch_owned_probe(store, identifier, question, script, inputs, relative_output, timeout, observation)
+        return launch_owned_probe(store, identifier, question, script, inputs, relative_output, timeout, observation,
+                                  program_run)
 
 
-def launch_owned_probe(store, identifier, question, script, inputs, relative_output, timeout, observation):
+def launch_owned_probe(store, identifier, question, script, inputs, relative_output, timeout, observation,
+                       program_run=None):
     with hold_probe_owner(store.root, identifier) as owner:
         previous = find_probe_receipt(store, identifier)
         if previous is not None:
@@ -377,7 +396,9 @@ def launch_owned_probe(store, identifier, question, script, inputs, relative_out
         pinned = [artifacts.put(data, media_type) for _, data, media_type in files]
         intent = {"id": identifier, "question": question, "interpreter": sys.executable,
                   "program": pinned[0], "inputs": pinned[1:], "timeout_seconds": timeout}
-        commit_probe_mutation(store, record_probe_intent, intent, "probe-intent:" + identifier)
+        if program_run is not None:
+            intent["program_run"] = program_run
+        intent = commit_probe_mutation(store, record_probe_intent, intent, "probe-intent:" + identifier)["result"]
         directory = build_probe_directory(identifier) + "/run-" + uuid.uuid4().hex
         initial = {}
         for (name, data, _), artifact in zip(files, pinned):
@@ -388,6 +409,8 @@ def launch_owned_probe(store, identifier, question, script, inputs, relative_out
         argv = [sys.executable] + [name for name, _, _ in files]
         config = {"id": identifier, "directory": directory, "argv": argv, "command": shlex.join(argv), "output_dir": relative_output.as_posix(),
                   "timeout_seconds": timeout, "observation": observation, "initial": initial, "owner": {"pid": os.getpid(), "token": uuid.uuid4().hex}}
+        if "program_run" in intent:
+            config.update(program_run=intent["program_run"], started_at=utc_now())
         config_artifact = artifacts.put((json.dumps(config, sort_keys=True) + "\n").encode(), "application/json")
         launch = dict(config, config_artifact=config_artifact)
         write_projection(store.root, directory + "/config.json", artifacts.read(config_artifact))

@@ -28,6 +28,7 @@ from .operations import fields, immutable_record, is_finite_number, prepared_mut
 from .operations import normalized_text as _normalized
 from .principles import objective_changes
 from .probe_provenance import find_probe_artifact_origins
+from .program_probes import program_probe_inventory, validate_prior_knowledge, validate_prior_program
 from .reading import validate_read_evidence
 from .scientific_json import is_json_media_type
 from .source_links import captured_source, original_identity, validate_link
@@ -821,9 +822,10 @@ def plan_cycle(store, payload, *, expected_revision, request_id):
         strategic = require_decision(records, artifacts, "cycle", decision_id=value.get("decision_id"))
         _fields(value, ("id", "author", "objective", "scope", "hypothesis", "question", "strategy", "predecessor", "inheritance",
                         "reopening", "distinguishing_test", "expected_outcomes", "failure_signals", "evidence_requirements", "literature", "resource_limits"),
-                ("decision_id", "candidate_id"))
+                ("decision_id", "candidate_id", "prior_knowledge"))
         for key in ("id", "author", "hypothesis", "question", "distinguishing_test"):
             _text(value[key], "Plan " + key)
+        validate_prior_knowledge(records, artifacts, value)
         if value["objective"] != context.objective:
             raise ResearchError("objective_mismatch", "Every branch must retain the complete fixed objective")
         _scope(value["scope"], context.objective)
@@ -1013,6 +1015,7 @@ that run. An idempotent admission response retains its original reservation.
         if not context.verify_plan_dependencies(plan, format_only=earlier is not None):
             raise ResearchError("plan_dependencies_stale", "Plan a current development before running after a source, scope or policy change")
         _command(artifacts, value["command"])
+        validate_prior_program(records, plan, value["command"]["program"])
         _number(value["reserved_units"], "Reserved resource units", positive=True)
         if _exhausted(account) or account["charged_units"] + value["reserved_units"] > account["limits"]["max_units"]:
             raise ResearchError("strategy_budget_exhausted", "Keep the incomplete work and its original strategy budget; no new execution is admitted")
@@ -1076,6 +1079,7 @@ def validate_admitted_execution(records, artifacts, admission_id):
             or admission["dependencies"] != plan["dependencies"]):
         raise ResearchError("plan_digest_mismatch", "Admission does not bind the current immutable plan")
     _command(artifacts, admission["command"])
+    validate_prior_program(records, plan, admission["command"]["program"])
     if admission_id in records.get("execution_outcome", {}):
         raise ResearchError("execution_already_recorded", "A recorded admission cannot launch again")
     return admission
@@ -1560,6 +1564,9 @@ def _branch_inputs(context):
             "executions": executions, "assessment": context.assess_record(cycle["assessment_id"]) if cycle["assessment_id"] is not None else None,
             "admissions": {i: a for i, a in context.records.get("execution_admission", {}).items() if a["cycle_id"] == identifier},
             "checkpoints": {i: c for i, c in context.records.get("checkpoint", {}).items() if c["cycle_id"] == identifier}}
+        probes = program_probe_inventory(context.records, context.artifacts, plan, branches[identifier]["admissions"])
+        if probes:
+            branches[identifier]["program_probes"] = probes
         if branches[identifier]["assessment"] is not None:
             branches[identifier]["assessment"] = {k: v for k, v in branches[identifier]["assessment"].items()
                                                   if k != "prerequisites"}

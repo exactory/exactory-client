@@ -8,7 +8,7 @@ evidence without labels."""
 import json
 from pathlib import Path
 
-from .artifacts import ArtifactStore, describe_artifact
+from .artifacts import ArtifactStore, describe_artifact, is_sealed_artifact
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -23,7 +23,7 @@ def references(value):
     found = {}
     def visit(item):
         if isinstance(item, dict):
-            if {"path", "sha256", "size", "media_type"} <= item.keys():
+            if {"path", "sha256", "size", "media_type"} <= item.keys() and not is_sealed_artifact(item):
                 found[item["path"]] = item
             for child in item.values():
                 visit(child)
