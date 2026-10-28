@@ -47,7 +47,7 @@ class DraftBootstrapTests(unittest.TestCase):
         return self.store.mutate("fixture.historical", {}, apply, expected_revision=self.store.revision,
                                  request_id=request_id or "history-" + str(self.sequence))
 
-    def objective(self, metadata=METADATA):
+    def set_objective(self, metadata=METADATA):
         # Seed a future-format objective so transition tests isolate marker creation from schema validation.
         target = dict(OBJECTIVE, **metadata)
         config = self.store.snapshot()["records"]["configuration"]["research"]
@@ -55,18 +55,18 @@ class DraftBootstrapTests(unittest.TestCase):
                    ("research_objective", target["id"], target)])
         return target
 
-    def writing(self):
+    def enter_writing(self):
         state = dict(self.store.snapshot()["records"]["workspace"]["study"], stage="write")
         self.seed([("workspace", "study", state)])
         export_workspace(self.store)
 
-    def source(self, path="draft/paper.tex", content=b"\\section{Results}\nA finite bound.\n"):
+    def write_source(self, path="draft/paper.tex", content=b"\\section{Results}\nA finite bound.\n"):
         source = self.root / path
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_bytes(content)
         return source
 
-    def hook(self, path):
+    def run_hook(self, path):
         payload = {"hook_event_name": "PostToolUse", "tool_name": "Write", "cwd": str(self.root),
                    "tool_input": {"file_path": str(path)}}
         command = [sys.executable, str(PLUGIN / "hooks/record_paper_authorship.py")]
@@ -75,7 +75,7 @@ class DraftBootstrapTests(unittest.TestCase):
                                    env=dict(os.environ, EXACTORY_API_KEY="", PYTHONDONTWRITEBYTECODE="1"))
         self.assertEqual((completed.returncode, completed.stdout, completed.stderr), (0, "", ""))
 
-    def draft(self, **metadata):
+    def initialize_draft(self, **metadata):
         return self.mutate(initialize_workspace, {"kind": "draft", "state": dict(METADATA, **metadata)})
 
     def test_objective_accepts_explicit_draft_metadata_without_requiring_it_for_older_targets(self):
@@ -104,7 +104,7 @@ class DraftBootstrapTests(unittest.TestCase):
                     self.assertEqual(caught.exception.code, "invalid_target")
 
     def test_entering_write_atomically_creates_draft_from_exact_objective_metadata(self):
-        self.objective()
+        self.set_objective()
         before = self.store.snapshot()
         result = self.mutate(update_study, {"stage": "write"})
         snapshot = self.store.snapshot()
@@ -126,8 +126,8 @@ class DraftBootstrapTests(unittest.TestCase):
     def test_same_stage_repair_and_replay_restore_marker_without_rewriting_historical_results(self):
         revision = self.store.revision
         original = self.mutate(update_study, {"status": "in_progress"})
-        self.objective()
-        self.writing()
+        self.set_objective()
+        self.enter_writing()
         self.mutate(update_study, {"status": "in_progress"})
         marker = self.root / ".exactory/draft.json"
         self.assertTrue(marker.is_file(), "a same-stage write mutation must repair a missing draft record")
@@ -140,8 +140,8 @@ class DraftBootstrapTests(unittest.TestCase):
         self.assertEqual(json.loads(marker.read_text()), before["records"]["workspace"]["draft"])
 
     def test_missing_metadata_leaves_no_draft_and_summary_names_each_missing_field(self):
-        self.objective({})
-        self.writing()
+        self.set_objective({})
+        self.enter_writing()
         before = self.store.snapshot()
         completed = subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "status", "--summary"],
                                    cwd=self.root, text=True, capture_output=True)
@@ -164,7 +164,7 @@ class DraftBootstrapTests(unittest.TestCase):
     def test_each_individual_missing_metadata_field_prevents_creation_and_is_named(self):
         for missing in ("title", "category"):
             with self.subTest(missing=missing):
-                self.objective({key: value for key, value in METADATA.items() if key != missing})
+                self.set_objective({key: value for key, value in METADATA.items() if key != missing})
                 self.mutate(update_study, {"stage": "write"})
                 try:
                     report = status_report(self.store)
@@ -177,9 +177,9 @@ class DraftBootstrapTests(unittest.TestCase):
                 self.assertNotIn("draft", self.store.snapshot()["records"]["workspace"])
 
     def test_missing_projection_is_reported_until_export_and_existing_metadata_is_preserved(self):
-        self.objective({})
-        self.writing()
-        self.draft(title="Existing manuscript", corpus="openalex")
+        self.set_objective({})
+        self.enter_writing()
+        self.initialize_draft(title="Existing manuscript", corpus="openalex")
         marker = self.root / ".exactory/draft.json"
         marker.unlink()
         before = self.store.snapshot()
@@ -191,8 +191,8 @@ class DraftBootstrapTests(unittest.TestCase):
         self.assertEqual(json.loads(marker.read_text())["title"], "Existing manuscript")
 
     def test_unadopted_legacy_marker_is_preserved_and_reported_instead_of_replaced(self):
-        self.objective({})
-        self.writing()
+        self.set_objective({})
+        self.enter_writing()
         marker = self.root / ".exactory/draft.json"
         legacy = '{"version": 1, "title": "Legacy title", "category": "cs.LG"}\n'
         marker.write_text(legacy)
@@ -200,13 +200,13 @@ class DraftBootstrapTests(unittest.TestCase):
         obligations = [item for item in report["obligations"] if item["code"] == "draft_marker_missing"]
         self.assertEqual(len(obligations), 1, "unadopted legacy metadata needs an explicit adoption obligation")
         self.assertIn("adopt", obligations[0]["explanation"].lower())
-        self.objective()
+        self.set_objective()
         self.mutate(update_study, {"status": "in_progress"})
         self.assertEqual(marker.read_text(), legacy)
         self.assertNotIn("draft", self.store.snapshot()["records"]["workspace"])
 
     def test_failed_transition_creates_no_draft_and_successful_return_to_write_still_bootstraps(self):
-        self.objective()
+        self.set_objective()
         before = self.store.snapshot()
         with self.assertRaises(ResearchError) as caught:
             self.mutate(update_study, {"stage": "complete"})
@@ -217,25 +217,25 @@ class DraftBootstrapTests(unittest.TestCase):
         self.assertIn("draft", self.store.snapshot()["records"]["workspace"])
 
     def test_write_after_writing_entry_records_authorship_through_the_host_hook(self):
-        self.objective()
+        self.set_objective()
         self.mutate(update_study, {"stage": "write"})
-        source = self.source()
+        source = self.write_source()
         before = self.store.snapshot()
-        self.hook(source)
+        self.run_hook(source)
         authorship = self.root / ".exactory/authorship.json"
         self.assertTrue(authorship.is_file(), "writing entry must supply the marker needed by the host's Write hook")
         self.assertEqual(json.loads(authorship.read_text()), {"written_by_exactory": True})
         self.assertEqual(self.store.snapshot(), before, "the authorship hook must not mutate the study store")
 
     def test_pre_marker_write_and_export_do_not_claim_authorship(self):
-        self.writing()
-        source = self.source()
+        self.enter_writing()
+        source = self.write_source()
         before = self.store.snapshot()
-        self.hook(source)
+        self.run_hook(source)
         self.assertEqual(self.store.snapshot(), before, "a pre-marker Write must not mutate the study store")
         authorship = self.root / ".exactory/authorship.json"
         self.assertFalse(authorship.exists())
-        self.objective()
+        self.set_objective()
         self.mutate(update_study, {"status": "in_progress"})
         self.assertTrue((self.root / ".exactory/draft.json").is_file())
         export_workspace(self.store)
@@ -264,7 +264,7 @@ class DraftBootstrapTests(unittest.TestCase):
         self.assertEqual(json.loads((root / ".exactory/draft.json").read_text())["title"], "A finite bound")
 
     def test_deposit_from_bootstrapped_study_reaches_token_preflight_without_explicit_draft_init(self):
-        self.objective()
+        self.set_objective()
         self.mutate(update_study, {"stage": "write"})
         (self.root / "draft").mkdir(exist_ok=True)
         (self.root / "draft/paper.pdf").write_bytes(b"%PDF-1.4\n%%EOF")

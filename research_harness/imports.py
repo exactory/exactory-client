@@ -20,7 +20,7 @@ import re
 from datetime import date, datetime
 
 from .errors import ResearchError
-from .fulltext import base_media_type
+from .fulltext import parse_base_media_type
 from .identities import normalize_identifier
 from .providers import Page, _json, _reference, _references, _work
 
@@ -44,7 +44,7 @@ def _pointer(document, pointer):
 
 
 def parse_mapped(data, media_type, mappings):
-    media_type = base_media_type(media_type)
+    media_type = parse_base_media_type(media_type)
     if not isinstance(mappings, list):
         raise ResearchError("invalid_import", "Web/MCP imports require explicit record mappings")
     try:

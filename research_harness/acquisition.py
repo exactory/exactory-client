@@ -78,7 +78,7 @@ from datetime import date, datetime, timedelta, timezone
 from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
-from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, base_media_type, extract, extraction_measures
+from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_media_type, extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, normalize_identifier, version_of
 from .imports import parse_mapped
@@ -677,7 +677,7 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
     except (TypeError, ValueError, AttributeError) as error:
         raise ResearchError("invalid_import", "Import capture time must contain an explicit timezone") from error
     if provider in ("web", "mcp"):
-        if base_media_type(media_type) not in ("application/json", "text/plain", "text/html"):
+        if parse_base_media_type(media_type) not in ("application/json", "text/plain", "text/html"):
             raise ResearchError("invalid_import", "Web/MCP import must declare JSON, text or HTML media type")
         try:
             describe_artifact(response, media_type)

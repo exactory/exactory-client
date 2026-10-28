@@ -10,7 +10,7 @@ import time
 from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions,
                 principles, reading, resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
-from .drafting import draft_obligations
+from .drafting import find_draft_obligations
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -119,7 +119,7 @@ OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
 from .execution import bind_execution, reconcile_execution, record_imported_execution
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
 from .publication import check_claims, list_publication_receipts, prepare_publication, record_manuscript_review
-from .publication_files import bundle_drift, restore_bundle
+from .publication_files import find_bundle_drift, restore_bundle
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
@@ -228,6 +228,7 @@ def build_parser():
             item.add_argument("--file", required=True, help="The claim_evidence array of a manuscript payload, "
                               "or the whole payload, as UTF-8 JSON without duplicate keys or nonfinite numbers.")
         if command in ("status", "next"):
+            item.add_argument("--counters", action="store_true", help=argparse.SUPPRESS)
             item.add_argument("--summary", action="store_true",
                               help="Return a bounded advisory view; the same current evaluation still runs.")
         if command == "obligations":
@@ -375,19 +376,20 @@ def status_report(store, *, counters=False):
         milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
         if milestone is not None:
             report = gate_state(records, evaluation, milestone, profile=profile)
-    draft_pending = draft_obligations(records, store.root)
+    draft_pending = find_draft_obligations(records, store.root)
     if draft_pending:
         obligations = report["obligations"] + draft_pending
         report = dict(report, ready=False, obligations=obligations,
                       counts=dict(report["counts"], obligations=len(obligations)))
-    diagnostics = {"evaluation": dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     # The cohort inventory names the next unread abstract; every other stage
     # takes the highest-priority current obligation in preparation order.
     upcoming = preparation.get("next") if not managed and study and study["stage"] == "cohort" else None
     obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
     tool_status = {}
-    tool_status["bundle_drift"] = bundle_drift(records, evaluation) if profile == "research" else None
+    tool_status["bundle_drift"] = find_bundle_drift(records, evaluation) if profile == "research" else None
+    diagnostics = {"evaluation": dict(evaluation.counters,
+                                     elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     if records.get("probe_intent") or records.get("probe"):
         tool_status["probes"] = summarize_probes(records)
     provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
@@ -492,9 +494,9 @@ def run(args):
         return review_protocol.build_packet(snapshot["records"], artifacts, args.dossier_id, args.role,
                                             args.reviewer_id, **context)
     if args.command in ("status", "next"):
-        report = status_report(store, counters=args.summary)
+        report = status_report(store, counters=args.summary or args.counters)
         if args.summary:
-            return (next_summary if args.command == "next" else status_summary)(report)
+            return next_summary(report, counters=args.counters) if args.command == "next" else status_summary(report)
         return report
     if args.command == "restore":
         return restore_bundle(store, args.bundle)

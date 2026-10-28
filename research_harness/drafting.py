@@ -9,7 +9,7 @@ _MARKER = ".exactory/draft.json"
 _METADATA = ("title", "category")
 
 
-def _metadata(records):
+def _resolve_draft_metadata(records):
     target = records.get("configuration", {}).get("research", {}).get("target") or {}
     return {key: target[key] for key in _METADATA
             if isinstance(target.get(key), str) and target[key].strip()}
@@ -22,7 +22,7 @@ def prepare_draft(records, root, study):
     # Legacy marker bytes require explicit adoption, never implicit replacement.
     if marker.exists() or marker.is_symlink():
         return []
-    metadata = _metadata(records)
+    metadata = _resolve_draft_metadata(records)
     if len(metadata) != len(_METADATA):
         return []
     state = dict(metadata, version=2, created=study["updated"],
@@ -30,7 +30,7 @@ def prepare_draft(records, root, study):
     return [("workspace", "draft", state)]
 
 
-def draft_obligations(records, root):
+def find_draft_obligations(records, root):
     workspace = records.get("workspace", {})
     if workspace.get("study", {}).get("stage") != "write":
         return []
@@ -48,7 +48,7 @@ def draft_obligations(records, root):
         message = "Explicitly adopt the existing draft marker before using it as the study's draft."
         missing = []
     else:
-        missing = [key for key in _METADATA if key not in _metadata(records)]
+        missing = [key for key in _METADATA if key not in _resolve_draft_metadata(records)]
         message = ("Supply the missing objective " + " and ".join(missing) + " with exactory-draft init." if missing
                    else "Create the draft marker with exactory-lab state set --stage write.")
     return [obligation("draft_marker_missing", message, stage="write", path=_MARKER, missing_fields=missing)]

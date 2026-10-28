@@ -7,8 +7,8 @@ format_detection names how it was decided: 'reported_media_type', or
 'pdf_signature_from_generic_binary' for an application/octet-stream or
 binary/octet-stream body whose bytes start with the PDF signature.
 detect_media_type(data, media_type) keeps reported spellings for review delivery;
-extraction recognizes their normalized base types. PDF extractor injection accepts bytes and returns {status, text}; its
-successful status is 'extracted'.
+extraction recognizes their normalized base types. PDF extractor injection
+accepts bytes and returns {status, text}; its successful status is 'extracted'.
 extraction_measures(text, original_size) describes an extraction (bytes, pages,
 longest line, whitespace fraction, expansion) so a coordinator sees layout
 padding before a reader does; a high value is a signal to inspect, never a
@@ -199,6 +199,12 @@ class _Article(HTMLParser):
                 self.body_text.append(data)
 
 
+JATS_MAX_ELEMENTS = 200000
+JATS_MAX_DEPTH = 256
+JATS_MAX_TEXT_CHARACTERS = 32 * 1024 * 1024
+JATS_TIMEOUT_SECONDS = 10
+
+
 class _JatsArticle:
     """Read article text and figure names without resolving XML dependencies."""
 
@@ -214,9 +220,57 @@ class _JatsArticle:
         self.body_text = []
         self.abstract_text = []
         self.visual_asset_names = []
+        self.visual_asset_set = set()
         self.declaration = None
+        self.deadline = None
+        self.element_count = 0
+        self.text_characters = 0
+        self.token_depth = 0
+        self.in_cdata = False
+        self.in_attribute_declaration = False
 
-    def start(self, name, attrs):
+    def require_time(self):
+        if time.monotonic() > self.deadline:
+            raise ResearchError("xml_timeout", "JATS XML extraction exceeded its time limit")
+
+    def require_resolved_entities(self, token):
+        for entity in re.findall(r"&([^;\s]+);", token):
+            if not entity.startswith("#") and entity not in ("amp", "lt", "gt", "quot", "apos"):
+                self.refuse_external_entity()
+
+    def validate_token(self, token):
+        self.require_time()
+        self.text_characters += len(token)
+        if self.text_characters > JATS_MAX_TEXT_CHARACTERS:
+            raise ResearchError("xml_text_limit", "JATS XML exceeds the text size limit")
+        if token == "<![CDATA[":
+            self.in_cdata = True
+        elif token == "]]>":
+            self.in_cdata = False
+        elif not self.in_cdata and token == "<!ATTLIST":
+            self.in_attribute_declaration = True
+        elif self.in_attribute_declaration:
+            self.require_resolved_entities(token)
+            if token == ">":
+                self.in_attribute_declaration = False
+        elif not self.in_cdata and token.startswith("<") and not token.startswith(("<!", "<?")):
+            if token.startswith("</"):
+                self.token_depth -= 1
+            else:
+                self.element_count += 1
+                depth = self.token_depth + 1
+                if self.element_count > JATS_MAX_ELEMENTS:
+                    raise ResearchError("xml_element_limit", "JATS XML exceeds the element count limit")
+                if depth > JATS_MAX_DEPTH:
+                    raise ResearchError("xml_depth_limit", "JATS XML exceeds the nesting depth limit")
+                if not token.endswith("/>"):
+                    self.token_depth = depth
+                self.require_resolved_entities(token)
+        if not self.in_cdata:
+            self.handle_default(token)
+
+    def handle_start(self, name, attrs):
+        self.require_time()
         tag = name.rsplit("}", 1)[-1]
         if self.root is None:
             self.root = tag
@@ -236,15 +290,18 @@ class _JatsArticle:
             for attribute, value in attrs.items():
                 if attribute.rsplit("}", 1)[-1] == "href" and value.strip():
                     asset = value.strip()
-                    if asset not in self.visual_asset_names:
+                    if asset not in self.visual_asset_set:
+                        self.visual_asset_set.add(asset)
                         self.visual_asset_names.append(asset)
 
-    def end(self, name):
+    def handle_end(self, name):
+        self.require_time()
         self.stack.pop()
         if name.rsplit("}", 1)[-1] in self.blocks:
             self.text.append("\n")
 
-    def characters(self, data):
+    def handle_characters(self, data):
+        self.require_time()
         if not self.stack:
             return
         state = self.stack[-1]
@@ -255,7 +312,9 @@ class _JatsArticle:
                 state[key] for key in ("abstract", "heading", "metadata")):
             self.body_text.append(data)
 
-    def default(self, token):
+    def handle_default(self, token):
+        if token.startswith("%") and token.endswith(";"):
+            self.refuse_external_entity()
         # DefaultHandler also sees declarations that EntityDeclHandler omits.
         if token == "<!ENTITY":
             self.declaration = []
@@ -269,26 +328,44 @@ class _JatsArticle:
                 raise ResearchError("xml_internal_entity",
                                     "JATS XML with an internal entity declaration is not extracted")
 
-    def external_entity(self, *args):
+    def refuse_external_entity(self, *args):
         raise ResearchError("xml_external_entity", "JATS XML requiring an external entity is not extracted")
 
     def parse(self, data):
+        self.deadline = time.monotonic() + JATS_TIMEOUT_SECONDS
+        # Without a start handler Expat supplies decoded, unexpanded start tokens,
+        # including attribute references it otherwise silently drops after an unread DTD.
+        # Validate namespace declaration references before Expat binds their URIs.
+        tokens = expat.ParserCreate()
+        tokens.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+        tokens.DefaultHandler = self.validate_token
+        tokens.ExternalEntityRefHandler = self.refuse_external_entity
+        tokens.SkippedEntityHandler = self.refuse_external_entity
+        self.parse_chunks(tokens, data)
         parser = expat.ParserCreate(namespace_separator="}")
         parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
-        parser.StartElementHandler = self.start
-        parser.EndElementHandler = self.end
-        parser.CharacterDataHandler = self.characters
-        parser.DefaultHandler = self.default
-        parser.ExternalEntityRefHandler = self.external_entity
-        parser.SkippedEntityHandler = self.external_entity
-        parser.Parse(data, True)
+        parser.StartElementHandler = self.handle_start
+        parser.EndElementHandler = self.handle_end
+        parser.CharacterDataHandler = self.handle_characters
+        parser.DefaultHandler = self.handle_default
+        parser.ExternalEntityRefHandler = self.refuse_external_entity
+        parser.SkippedEntityHandler = self.refuse_external_entity
+        self.parse_chunks(parser, data)
+
+    def parse_chunks(self, parser, data):
+        for start in range(0, len(data), 65536):
+            self.require_time()
+            parser.Parse(data[start:start + 65536], False)
+        self.require_time()
+        parser.Parse(b"", True)
+        self.require_time()
 
 
 GENERIC_BINARY_MEDIA_TYPES = frozenset({"application/octet-stream", "binary/octet-stream"})
 XML_MEDIA_TYPES = frozenset({"application/xml", "text/xml"})
 
 
-def base_media_type(media_type):
+def parse_base_media_type(media_type):
     """Normalize a type for comparisons without changing the reported descriptor or capture."""
     return media_type.split(";", 1)[0].strip().lower() if isinstance(media_type, str) else ""
 
@@ -303,13 +380,13 @@ def detect_media_type(data, media_type):
 
 def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
     # Extraction may recognize base types; review construction keeps the exact reported spelling.
-    detected_type, format_detection = detect_media_type(data, base_media_type(media_type))
+    detected_type, format_detection = detect_media_type(data, parse_base_media_type(media_type))
     if format_detection != "reported_media_type":
         media_type = detected_type
     result = {"status": "unsupported_fulltext", "text": None, "includes_abstract": None, "visual_inspection_required": True,
               "extractor": None, "version": None, "options": {},
               "media_type": media_type, "format_detection": format_detection}
-    if base_media_type(media_type) == "application/pdf":
+    if parse_base_media_type(media_type) == "application/pdf":
         if extractor is None and ocr:
             from .ocr import OcrPdfExtractor
             extractor = OcrPdfExtractor()
@@ -325,14 +402,19 @@ def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
         if result["status"] == "extracted" and (not isinstance(result["text"], str) or not result["text"].strip()):
             result["status"], result["text"] = "empty_text", None
         return result
-    if base_media_type(media_type) in XML_MEDIA_TYPES:
+    if parse_base_media_type(media_type) in XML_MEDIA_TYPES:
         result["extractor"] = "jats"
         article = _JatsArticle()
         try:
             article.parse(data)
         except ResearchError as error:
             result["status"] = error.code
-        except (expat.ExpatError, LookupError, ValueError):
+        except expat.ExpatError as error:
+            entity_errors = (expat.errors.XML_ERROR_UNDEFINED_ENTITY,
+                             expat.errors.XML_ERROR_ATTRIBUTE_EXTERNAL_ENTITY_REF)
+            result["status"] = ("xml_external_entity" if error.code in
+                                {expat.errors.codes[name] for name in entity_errors} else "malformed_xml")
+        except (LookupError, ValueError):
             result["status"] = "malformed_xml"
         else:
             if article.root == "article":
@@ -343,7 +425,7 @@ def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
                                    "includes_abstract": bool("".join(article.abstract_text).strip()),
                                    "visual_asset_names": article.visual_asset_names})
         return result
-    if base_media_type(media_type) not in ("text/html", "application/xhtml+xml"):
+    if parse_base_media_type(media_type) not in ("text/html", "application/xhtml+xml"):
         return result
     try:
         text = data.decode("utf-8-sig")

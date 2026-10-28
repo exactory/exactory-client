@@ -15,7 +15,7 @@ from html.parser import HTMLParser
 from urllib.parse import unquote_to_bytes, urldefrag, urljoin
 
 from .errors import ResearchError
-from .fulltext import base_media_type
+from .fulltext import parse_base_media_type
 from .http import safe_url
 from .jpeg import validate_jpeg
 from .raster_containers import validate_gif, validate_png, validate_webp
@@ -33,14 +33,14 @@ def _unsupported_style(value):
             for function in re.findall(r"([A-Za-z_-]+)\s*\(", value)))
 
 
-def _style_urls(value):
+def _parse_style_urls(value):
     for match in _URL.finditer(value):
         yield next(part for part in match.groups() if part is not None)
 
 
 def validate_visual(data, media_type):
     """Validate a supported byte container; this does not prove its meaning."""
-    media_type = base_media_type(media_type)
+    media_type = parse_base_media_type(media_type)
     valid = False
     if media_type == "image/png":
         validate_png(data)
@@ -72,7 +72,7 @@ def validate_visual(data, media_type):
                     if key.rsplit("}", 1)[-1] in ("href", "src") and not value.startswith("#"):
                         raise ResearchError("visual_asset_dependencies_unsupported", "External SVG resources are not self-contained visual bytes")
                 style = " ".join(node.attrib.values())
-                if _unsupported_style(style) or any(not v.strip().startswith("#") for v in _style_urls(style)):
+                if _unsupported_style(style) or any(not v.strip().startswith("#") for v in _parse_style_urls(style)):
                     raise ResearchError("visual_asset_dependencies_unsupported", "External SVG style resources remain unsupported")
         except (ET.ParseError, ValueError) as error:
             raise ResearchError("malformed_visual_asset", "The saved SVG is malformed") from error
@@ -183,7 +183,7 @@ def resource_inventory(content, source_url, anchor):
                 item["href"] = attrs.get("href")
             pending.append(item)
             if node["tag"] == "style" and node["start"] not in selected_starts:
-                for raw in _style_urls(content[node["start"]:node["end"]]):
+                for raw in _parse_style_urls(content[node["start"]:node["end"]]):
                     resource(raw.strip(), node, "style")
     for node in selected_nodes + ancestors:
         attrs, tag = dict(node["attrs"]), node["tag"]
@@ -223,7 +223,7 @@ def resource_inventory(content, source_url, anchor):
         style += " " + presentation
         if _unsupported_style(style) or any(k.rsplit(":", 1)[-1] == "base" for k in attrs):
             pending.append({"code": "visual_style_unsupported"})
-        for raw in _style_urls(style):
+        for raw in _parse_style_urls(style):
             resource(raw.strip(), node, "style")
     return {"start": start, "end": end, "resources": [{"url": url, "references": references} for url, references in sorted(resources.items())],
             "pending": pending}

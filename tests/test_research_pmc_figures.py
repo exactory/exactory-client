@@ -23,13 +23,13 @@ CAPTION = "Authored PMC figure caption."
 
 
 class PmcResourceInventoryTests(unittest.TestCase):
-    def inventory(self, content, quote):
+    def find_resources(self, content, quote):
         start = content.index(quote)
         return resource_inventory(content, PMC_URL, {"start": start, "end": start + len(quote)})
 
     def test_caption_selects_whole_fig_class_and_only_its_image(self):
         content = (FIXTURES / "pmc-figure-resources.html").read_text(encoding="utf-8")
-        inventory = self.inventory(content, CAPTION)
+        inventory = self.find_resources(content, CAPTION)
         self.assertEqual([r["url"] for r in inventory["resources"]], [PMC_URL + "images/figure-1.jpg"])
         self.assertEqual(inventory["start"], content.index('<div class="fig iconblock"'))
         self.assertEqual(inventory["pending"], [])
@@ -41,7 +41,7 @@ class PmcResourceInventoryTests(unittest.TestCase):
             with self.subTest(opening=opening):
                 content = (opening + '<picture>' + image + '</picture><img src="panel-two.jpg">'
                            '<div class="caption">Two authored panels.</div>' + closing)
-                inventory = self.inventory(content, image)
+                inventory = self.find_resources(content, image)
                 self.assertEqual([r["url"] for r in inventory["resources"]],
                                  [PMC_URL + "panel-one.jpg", PMC_URL + "panel-two.jpg"])
                 self.assertEqual((inventory["start"], inventory["end"]), (0, len(content)))
@@ -49,7 +49,7 @@ class PmcResourceInventoryTests(unittest.TestCase):
 
 
 class PmcFigureReadingTests(LiteratureCase):
-    def figure(self, page_url=PMC_URL, *, identifier="doi:10.1234/authored-pmc", legacy=False):
+    def build_figure_bundle(self, page_url=PMC_URL, *, identifier="doi:10.1234/authored-pmc", legacy=False):
         self.sequence += 1
         import_response(self.store, "mcp", json.dumps({"id": identifier, "title": "Authored PMC article"}).encode(),
                         source_url="https://example.org/metadata", media_type="application/json",
@@ -81,7 +81,7 @@ class PmcFigureReadingTests(LiteratureCase):
         return result, wire, revision
 
     def assert_reading(self, page_url):
-        bundle, link = self.figure(page_url)
+        bundle, link = self.build_figure_bundle(page_url)
         image_url = page_url + "images/figure-1.jpg"
         self.mutate(import_bundle, bundle)
         pending = self.mutate(record_reading, self.full_note(bundle, "caption-only"))["result"]
@@ -113,7 +113,7 @@ class PmcFigureReadingTests(LiteratureCase):
         self.assert_reading(EUROPE_PMC_URL)
 
     def test_pmc_scope_refuses_unrelated_and_archive_urls_and_retains_failed_attempts(self):
-        bundle, link = self.figure()
+        bundle, link = self.build_figure_bundle()
         image_url = PMC_URL + "images/figure-1.jpg"
         visual = validate_link(self.store.snapshot()["records"], self.artifacts, link)["visual"]
         self.assertEqual([r["url"] for r in visual["resources"]], [image_url])
@@ -146,7 +146,7 @@ class PmcFigureReadingTests(LiteratureCase):
         self.assertEqual(self.store.snapshot(), before)
 
     def test_existing_figure_records_and_reading_survive_new_pmc_acquisition(self):
-        legacy_bundle, legacy_link = self.figure(identifier="doi:10.1234/authored-legacy", legacy=True)
+        legacy_bundle, legacy_link = self.build_figure_bundle(identifier="doi:10.1234/authored-legacy", legacy=True)
         legacy_url = PMC_URL + "images/figure-1.jpg"
         original_link = copy.deepcopy(legacy_link)
         legacy_asset, _, revision = self.acquire(legacy_link, legacy_url)
@@ -155,7 +155,7 @@ class PmcFigureReadingTests(LiteratureCase):
         legacy_reading = self.mutate(record_reading, self.full_note(legacy_bundle, "legacy-reading"))
         self.assertEqual(legacy_reading["result"]["status"], "complete")
         legacy_records = self.store.snapshot()["records"]
-        _, link = self.figure()
+        _, link = self.build_figure_bundle()
         visual = validate_link(self.store.snapshot()["records"], self.artifacts, link)["visual"]
         self.assertEqual([r["url"] for r in visual["resources"]], [legacy_url])
         acquired, _, _ = self.acquire(link, legacy_url)

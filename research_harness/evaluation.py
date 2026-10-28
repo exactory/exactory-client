@@ -33,7 +33,8 @@ class Evaluation:
         self._bytes, self._text = ({}, {}) if _owner is None else (_owner._bytes, _owner._text)
         self._memo = {}
         self.counters = {"reads": 0, "artifacts_verified": 0, "bytes_verified": 0, "computed": 0,
-                         "readings_assessed": 0, "links_validated": 0, "graph_builds": 0, "cohort_reports": 0}
+                         "readings_assessed": 0, "links_validated": 0, "graph_builds": 0, "cohort_reports": 0,
+                         "working_bytes_hashed": 0}
 
     @classmethod
     def reuse_evaluation(cls, records, artifacts):

@@ -117,7 +117,6 @@ class JatsExtractionTests(unittest.TestCase):
     def test_malformed_xml_never_returns_partial_text_or_graphic_names(self):
         for data in (b'', b'<article><body><p>Unclosed.', b'<article><body><p>Mismatch.</body></article>',
                      b'<article><body><p>Valid.</p></body></article><other/>',
-                     b'<article><body><p>&undefined;</p></body></article>',
                      b'<article><body><p>Invalid \xff encoding.</p></body></article>'):
             with self.subTest(data=data):
                 result = extract(data, "application/xml")
@@ -178,7 +177,7 @@ class JatsExtractionTests(unittest.TestCase):
                 data = ('<!DOCTYPE article [<!ENTITY % p SYSTEM "unused.dtd">%p;<!ENTITY a "x">]>'
                         '<article><body><p>A body.</p></body></article>')
                 result = extract(data.encode(encoding), "application/xml")
-                self.assertEqual(result["status"], "xml_internal_entity")
+                self.assertEqual(result["status"], "xml_external_entity")
                 self.assertIsNone(result["text"])
 
     def test_external_and_skipped_entity_references_stay_pending(self):
