@@ -50,7 +50,7 @@ def _check_items(value, name):
 
 def record_grand_challenge(store, payload, *, expected_revision, request_id):
     """Record the challenges ahead of the study; the new record becomes the current one."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         # development imports synthesis, which reads this module for the preparation obligation.

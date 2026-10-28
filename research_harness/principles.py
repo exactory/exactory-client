@@ -122,7 +122,7 @@ def prepare_initialization(records, artifacts, value):
 
 def initialize_research(store, payload, *, expected_revision, request_id):
     """Initialize once with {profile, target}; null research targets are pending."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         return prepare_initialization(records, artifacts, value)
@@ -149,7 +149,7 @@ predecessor of the new one. Verification repinning is explicit and leaves
 mismatching literature scope pending until set_roots selects the same target.
 It preserves earlier events.
 """
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("target", "reason"), ("authorization", "decision_id", "source_impact"))
@@ -249,7 +249,7 @@ def revalidate_constitution(store, payload, *, expected_revision, request_id):
 Every active synthesis/development decision must separately be reassessed under
 the current contract. Re-recording an assessment preserves its predecessor.
 """
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("previous_sha256", "reason"))
@@ -340,4 +340,4 @@ def _configuration_state(evaluation, profile):
 
 def configuration_report(store, profile):
     records = store.snapshot()["records"]
-    return configuration_state(records, Evaluation(records, ArtifactStore(store.root)), profile)
+    return configuration_state(records, Evaluation(records, store.build_artifact_store()), profile)

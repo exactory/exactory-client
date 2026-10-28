@@ -23,6 +23,7 @@ def _reading_rows(packet):
 
 
 def _validate_manifest(evaluation, manifest):
+    evaluation.require_external_effect()
     _require(isinstance(manifest, dict) and manifest.get('protocol') == PROTOCOL
              and manifest.get('render_profile') == review_pdf_pages.profile(), 'Use the exact native PDF render profile')
     sources, pages = manifest['sources'], manifest['pages']
@@ -70,6 +71,7 @@ def validate_manifest(evaluation, manifest):
 def prepare_packet(records, artifacts, packet, history=()):
     """Attach native pages and explicitly reattach visual pages carried in visible history."""
     evaluation = Evaluation.of(records, artifacts)
+    evaluation.require_external_effect()
     sources, pages, readings = [], [], []
     for row in _reading_rows(packet):
         reading = records.get('reading', {}).get(row['id'])

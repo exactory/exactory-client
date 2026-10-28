@@ -158,11 +158,13 @@ def _authenticate_observation(records, artifacts, invocation, observation):
             or invocation['prompt_hash'] != digest(PROMPT) or invocation['diagnostic'] != packet['diagnostic']
             or invocation['route_digest'] != digest(route) or request != expected
             or observation['request_digest'] != digest(request) or observation['route_digest'] != digest(route)
-            or observation['runtime'] != transport.runtime(route) or observation['status'] != 'completed'
+            or observation['runtime'] != protocol.read_route_runtime(artifacts, route)
+            or observation['status'] != 'completed'
             or observation.get('observed_model') != route['model']
             or response.get('model') != route['model']
             or protocol._read_json(artifacts, observation['request']) != request
-            or transport.response_output(response) != output or not transport.context_verified(route, request, response)):
+            or transport.response_output(response) != output
+            or not protocol.verify_route_context(artifacts, route, request, response)):
         raise ResearchError('review_correction_unverified', 'The exact same-reviewer correction invocation must authenticate.')
     if route['adapter'] == 'codex_cli_v1':
         events = protocol._read_json(artifacts, observation['native_rollout'])
@@ -176,7 +178,7 @@ def _authenticate_observation(records, artifacts, invocation, observation):
 
 def invoke_correction(store, payload, *, expected_revision, request_id, credential=None):
     from . import review_protocol as protocol
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def start(records, value):
         fields(value, ('id', 'assignment_id', 'route_id'))

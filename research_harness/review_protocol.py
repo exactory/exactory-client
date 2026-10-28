@@ -16,7 +16,7 @@ from .artifacts import ArtifactStore, describe_artifact, validate_reference
 from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
-from .operations import fields, immutable_record, normalized_text, prepared_mutation, text
+from .operations import _read_preparation, fields, immutable_record, normalized_text, prepared_mutation, text
 from . import review_transport as transport
 from . import bar_sources
 from . import openness_reading
@@ -1611,14 +1611,27 @@ def drop_repeated_bundle(payload):
 
 
 def record_route(store, payload, *, expected_revision, request_id):
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, ('id', 'adapter', 'model', 'endpoint', 'configuration'))
         for key in ('id', 'adapter', 'model', 'endpoint'):
             text(value[key], key)
         transport.validate_route(value)
-        record = dict(value, runtime=transport.runtime(value), recorded_revision=expected_revision + 1)
+        record = dict(value, runtime=read_route_runtime(artifacts, value), recorded_revision=expected_revision + 1)
         return [immutable_record(records, 'review_route', value['id'], record)], record
     return prepared_mutation(store, 'review.route', payload, prepare, expected_revision=expected_revision, request_id=request_id)
+
+
+def read_route_runtime(artifacts, route):
+    if route['adapter'] in transport.LOCAL_ADAPTERS:
+        artifacts.require_external_effect()
+    return transport.runtime(route)
+
+
+def verify_route_context(artifacts, route, request, response):
+    if route['adapter'] in transport.LOCAL_ADAPTERS:
+        artifacts.require_external_effect()
+    return transport.context_verified(route, request, response)
 
 
 def _require_route_runtime(route):
@@ -1639,19 +1652,20 @@ def _observed(artifacts, route, request, credential):
 
 def _invoke_once(store, payload, operation, start, finish, *, expected_revision, request_id, credential):
     """Reserve before I/O; retries replay saved observations and never repeat uncertain calls."""
-    records = store.snapshot()['records']
-    if request_id in records.get('literature_operation', {}):
+    snapshot = _read_preparation(store)
+    if snapshot.has_request(request_id):
         return prepared_mutation(store, operation, payload, lambda r, v: None,
-                                 expected_revision=expected_revision, request_id=request_id)
+                                 expected_revision=expected_revision, request_id=request_id, _snapshot=snapshot)
     beginning = request_id + ':start'
-    if beginning in records.get('literature_operation', {}):
+    if snapshot.has_request(beginning):
         # Validate request replay/conflict through Store, then retain the unknown result.
         prepared_mutation(store, operation + '_start', payload, lambda r, v: None,
-                          expected_revision=expected_revision, request_id=beginning)
+                          expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot)
         raise ResearchError('review_invocation_pending', 'The prior invocation is pending; reconcile it before any explicit retry')
     invocation = prepared_mutation(store, operation + '_start', payload, start,
-                                  expected_revision=expected_revision, request_id=beginning)['result']
-    artifacts = ArtifactStore(store.root)
+                                   expected_revision=expected_revision, request_id=beginning,
+                                   _snapshot=snapshot)['result']
+    artifacts = store.build_artifact_store()
     route = _get(store.snapshot()['records'], 'review_route', invocation['route_id'])
     request = _read_json(artifacts, invocation['request'])
     observation = _observed(artifacts, route, request, credential)
@@ -1669,7 +1683,7 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
 
 
 def probe_route(store, payload, *, expected_revision, request_id, credential=None):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def start(records, value):
         fields(value, ('id', 'route_id'))
         route = _get(records, 'review_route', value['route_id'])
@@ -1735,7 +1749,7 @@ def _route_state(records, artifacts, route_id):
                 if (saved['status'] == 'completed' and saved['request_digest'] == digest(request) and no_excluded
                         and complete_sources and positives and bounded and output.get('excluded_controls') == []
                         and transport.response_output(_read_json(artifacts, saved['response'])) == output
-                        and transport.context_verified(route, request, _read_json(artifacts, saved['response']))):
+                        and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']))):
                     status, proof = 'verified_for_route', saved['id']
             except (ResearchError, ValueError, TypeError, KeyError):
                 continue
@@ -2039,7 +2053,7 @@ def _initial_slot(records, artifacts, value):
 
 
 def record_assignment(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, ('id', 'route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id', 'context'))
         for key in ('id', 'route_id', 'reviewer_id', 'author_id'):
@@ -2234,7 +2248,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
 
 def record_attempt(store, payload, *, expected_revision, request_id):
     """Imported attempts retain provenance but cannot masquerade as observed transport."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'))
         _get(records, 'review_assignment', value['assignment_id'])
@@ -2265,7 +2279,7 @@ def _context_observed(artifacts, attempt):
 
 
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def start(records, value):
         fields(value, ('id', 'assignment_id'))
         assignment = _get(records, 'review_assignment', value['assignment_id'])
@@ -2362,7 +2376,7 @@ def authenticate_attempt(records, artifacts, assignment, attempt):
         request = _read_json(artifacts, attempt['request']) if attempt.get('request') else None
         response = _read_json(artifacts, attempt['response'])
         return (authenticate_provenance(records, artifacts, assignment, attempt)
-                and (transport.context_verified(route, request, response)
+                and (verify_route_context(artifacts, route, request, response)
                      or route['adapter'] == 'claude_cli_v1' and verify_legacy_context(route, request, response)))
     except (ResearchError, ValueError, TypeError, KeyError):
         return False
@@ -2487,7 +2501,7 @@ def retired_routes(records):
 
 
 def record_context_event(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, ('id', 'assignment_id', 'kind', 'source', 'reason', 'evidence'))
         _get(records, 'review_assignment', value['assignment_id'])
@@ -2538,7 +2552,7 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
 
 @record_refusal_on_error
 def record_adjudication(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, ('id', 'assignment_id', 'objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'))
         state = assignment_state(records, artifacts, value['assignment_id'])

@@ -146,7 +146,7 @@ def defer_source(store, payload, *, expected_revision, request_id):
         existing = records.get("source_deferral", {}).get(value["id"])
         if existing is not None:
             raise ResearchError("record_conflict", "A source decision ID cannot be reused; replay its original request receipt")
-        evaluation = Evaluation(records, ArtifactStore(store.root))
+        evaluation = Evaluation(records, store.build_artifact_store())
         _check_artifact(evaluation, value["authorization"])
         if not isinstance(value["acquisition_evidence"], list) or not value["acquisition_evidence"]:
             raise ResearchError("invalid_source_deferral", "Retain the actual acquisition evidence artifacts")

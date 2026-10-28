@@ -138,7 +138,7 @@ def validate_attempt(records, artifacts, value):
 
 
 def record_attempt(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         require_problem(records)

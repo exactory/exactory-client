@@ -111,9 +111,11 @@ def acquire_visual_asset(store, link, url, *, request_id, expected_revision, htt
     url, budget = safe_url(url), RequestBudget(max_requests)
     payload = {"link": copy.deepcopy(link), "url": url, "max_requests": max_requests}
     link = payload["link"]
-    snapshot = store.snapshot()
-    if request_id in snapshot["records"].get("acquisition_operation", {}):
+    from .operations import _read_preparation
+    preparation = _read_preparation(store)
+    if preparation.has_request(request_id):
         return _begin(store, "visual_asset.acquire", payload, request_id, expected_revision)
+    snapshot = {"revision": preparation.revision, "records": preparation.records}
     artifacts = ArtifactStore(store.root)
     context = validate_link(snapshot["records"], artifacts, link)
     if not complete_original(context) or link["locator"]["kind"] != "html":

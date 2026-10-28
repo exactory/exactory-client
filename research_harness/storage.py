@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import NamedTuple, Optional
 
-from .artifacts import _Workspace, _filesystem_error, _regular_file
+from .artifacts import ArtifactStore, _Workspace, _filesystem_error, _regular_file
 from .errors import ResearchError
 
 
@@ -192,6 +192,33 @@ def _request_row(connection: sqlite3.Connection, request_id: str):
         "SELECT events.operation, events.payload, receipts.response FROM receipts "
         "JOIN events ON events.revision = receipts.revision WHERE receipts.request_id = ?",
         (request_id,)).fetchone()
+
+
+def _read_original_response(original, operation, encoded_payload, request_id):
+    if original is None:
+        return None
+    if original["operation"] != operation or original["payload"] != encoded_payload:
+        raise ResearchError("request_id_conflict", "Request ID was already committed with different inputs",
+                            {"request_id": request_id})
+    return _load(original["response"], dict)
+
+
+def _encode_mutation_input(operation, payload, apply, expected_revision, request_id):
+    _text(operation, "Operation")
+    _text(request_id, "Request ID")
+    if not isinstance(payload, dict) or not callable(apply):
+        raise ResearchError("invalid_input", "Mutation needs a JSON payload object and a callable transaction")
+    if type(expected_revision) is not int or not 0 <= expected_revision < _MAX_REVISION:
+        raise ResearchError("invalid_input", "Expected revision must be a nonnegative SQLite integer")
+    return _canonical(payload)
+
+
+def _encode_record_change(key, value):
+    _text(key, "Record key")
+    if not isinstance(value, dict):
+        raise ResearchError("invalid_input", "Record value must be a JSON object")
+    _check_stored_bounds(value)
+    return _canonical(value)
 
 
 def _validate(connection: sqlite3.Connection, *, replay: bool = True,
@@ -526,12 +553,13 @@ class _PreparationProof(NamedTuple):
 class _PreparedSnapshot:
     """Own one freshly authenticated read and its nonpersistent content proof."""
 
-    def __init__(self, store):
+    def __init__(self, store, request_id=None):
         self._store = store
         fingerprint, requests = hashlib.sha256(), set()
         with store._connection() as connection:
             identity = store._read_database_identity()
             snapshot = _read_snapshot(connection, fingerprint=fingerprint, requests=requests)
+            self._original_request = _request_row(connection, request_id) if request_id is not None else None
             if identity != store._read_database_identity():
                 raise _refuse_snapshot_identity(snapshot["revision"], snapshot["revision"])
         self._identity = identity
@@ -577,6 +605,9 @@ class _GuardedSnapshot:
             raise ResearchError("invalid_snapshot_guard", "The guarded research read has finished")
         return copy.deepcopy(self._value)
 
+    def build_artifact_store(self):
+        return ArtifactStore(self.root)
+
 
 class Transaction:
     """A callback's isolated record view, usable only during Store.mutate."""
@@ -605,11 +636,7 @@ class Transaction:
 
     def put(self, kind: str, key: str, value: dict) -> None:
         self._check(kind)
-        _text(key, "Record key")
-        if not isinstance(value, dict):
-            raise ResearchError("invalid_input", "Record value must be a JSON object")
-        _check_stored_bounds(value)
-        encoded = _canonical(value)
+        encoded = _encode_record_change(key, value)
         self._connection.execute("INSERT OR REPLACE INTO records (kind, key, value, digest) VALUES (?, ?, ?, ?)",
                                  (kind, key, encoded, _digest(encoded)))
         self._changes.append({"kind": kind, "key": key, "value": json.loads(encoded)})
@@ -819,8 +846,11 @@ class Store:
             identities.append((info.st_dev, info.st_ino))
         return (str(self.root), *identities)
 
-    def _read_preparation(self):
-        return _PreparedSnapshot(self)
+    def _read_preparation(self, request_id=None):
+        return _PreparedSnapshot(self, request_id)
+
+    def build_artifact_store(self):
+        return ArtifactStore(self.root)
 
     @contextmanager
     def guarded_snapshot(self):
@@ -845,23 +875,15 @@ class Store:
 
     def mutate(self, operation: str, payload: dict, apply, *, expected_revision: int, request_id: str,
                _preparation=None) -> dict:
-        _text(operation, "Operation")
-        _text(request_id, "Request ID")
-        if not isinstance(payload, dict) or not callable(apply):
-            raise ResearchError("invalid_input", "Mutation needs a JSON payload object and a callable transaction")
-        if type(expected_revision) is not int or not 0 <= expected_revision < _MAX_REVISION:
-            raise ResearchError("invalid_input", "Expected revision must be a nonnegative SQLite integer")
-        encoded_payload = _canonical(payload)
+        encoded_payload = _encode_mutation_input(operation, payload, apply, expected_revision, request_id)
         with self._connection(writable=True) as connection:
             fingerprint = hashlib.sha256() if _preparation is not None else None
             identity = self._read_database_identity() if _preparation is not None else None
             revision = _validate(connection, fingerprint=fingerprint)
-            original = _request_row(connection, request_id)
+            original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload,
+                                               request_id)
             if original is not None:
-                if original["operation"] != operation or original["payload"] != encoded_payload:
-                    raise ResearchError("request_id_conflict", "Request ID was already committed with different inputs",
-                                        {"request_id": request_id})
-                return _load(original["response"], dict)
+                return original
             if revision != expected_revision:
                 raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
                                     {"expected_revision": expected_revision, "revision": revision})

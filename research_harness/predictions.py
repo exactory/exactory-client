@@ -42,7 +42,7 @@ def _prediction(records, value):
 
 def record_prediction(store, payload, *, expected_revision, request_id):
     """One blind assessor's cohort prediction for the exact current bundle."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         evaluation = Evaluation(records, artifacts)

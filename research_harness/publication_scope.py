@@ -304,7 +304,7 @@ def collect_scientific_authors(records, contract):
 
 def record_publication_scope(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        context = _Context(records, ArtifactStore(store.root))
+        context = _Context(records, store.build_artifact_store())
         context.require_objective()
         candidate, _ = context.build_candidate()
         _validate_payload(context, value, candidate)
@@ -442,7 +442,7 @@ def prepare_combined_scoped_support(records, artifacts, payload, *, revision, re
 
 def record_scoped_readiness_review(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        changes, _ = prepare_combined_scoped_support(records, ArtifactStore(store.root), value,
+        changes, _ = prepare_combined_scoped_support(records, store.build_artifact_store(), value,
                                                     revision=expected_revision + 1, request_id=request_id)
         return changes, changes[0][2]
     return prepared_mutation(store, "publication.scoped_review", payload, prepare,
@@ -510,7 +510,8 @@ def _assess_manuscript_readiness(records, artifacts, *, restore_inputs=None):
 
 def build_manuscript_readiness_report(store):
     snapshot = store.snapshot()
-    return dict(assess_manuscript_readiness(snapshot["records"], ArtifactStore(store.root)), revision=snapshot["revision"])
+    return dict(assess_manuscript_readiness(snapshot["records"], store.build_artifact_store()),
+                revision=snapshot["revision"])
 
 
 def validate_manuscript_claims(contract, claims, claim_evidence):
@@ -547,7 +548,7 @@ def validate_expected_scope(store, contract_id, target_digest):
         raise ResearchError("publication_scope_missing", "Strict scoped publication requires its selected contract")
     if contract["id"] != contract_id or contract["scientific_target_digest"] != target_digest:
         raise ResearchError("publication_scope_mismatch", "The selected scientific contract differs from the caller's explicit publication target")
-    report = assess_manuscript_readiness(records, ArtifactStore(store.root))
+    report = assess_manuscript_readiness(records, store.build_artifact_store())
     if not report["manuscript_ready"]:
         raise ResearchError("manuscript_readiness_required", "The scoped scientific target is not currently ready",
                             {"obligations": report["manuscript_obligations"]})

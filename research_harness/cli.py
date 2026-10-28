@@ -10,6 +10,7 @@ import time
 from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions,
                 principles, reading, resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
+from .check_mode import check_mutation
 from .drafting import find_draft_obligations
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -116,7 +117,7 @@ def _review_output_correction(store, payload, **identity):
 OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
                    "review-output-correction": _review_output_correction})
 
-from .execution import bind_execution, reconcile_execution, record_imported_execution
+from .execution import bind_execution, reconcile_execution, record_imported_execution, record_reconciliation
 OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
 from .publication import check_claims, list_publication_receipts, prepare_publication, record_manuscript_review
 from .publication_files import find_bundle_drift, restore_bundle
@@ -210,6 +211,7 @@ def build_parser():
             description="Use --file with the typed JSON shape in docs/research-cli.md. Saved assertions and downloads are not successful readings.")
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
+        item.add_argument("--check", action="store_true")
         add_identity(item, required=command != "import-response")
         if command == "import-response":
             item.add_argument("--preview", action="store_true",
@@ -227,6 +229,8 @@ def build_parser():
                                    "without changing the store."),
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
         item.add_argument("--workspace", default=".")
+        if command in ("batches", "export", "recover"):
+            item.add_argument("--check", action="store_true")
         if command == "check-claims":
             item.add_argument("--file", required=True, help="The claim_evidence array of a manuscript payload, "
                               "or the whole payload, as UTF-8 JSON without duplicate keys or nonfinite numbers.")
@@ -286,6 +290,7 @@ def build_parser():
                                        "The command first stores each differing working file as a backup artifact. "
                                        "The revision does not change.")
     restore.add_argument("--workspace", default=".")
+    restore.add_argument("--check", action="store_true")
     restore.add_argument("--bundle", required=True,
                          help="The digest of a recorded manuscript bundle as the pin returned it: 64 lowercase "
                               "hexadecimal digits. It names any recorded bundle, not only the selected one.")
@@ -444,6 +449,9 @@ def run(args):
     if args.command == "example":
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
+    if getattr(args, "check", False) and args.command in ("batches", "export", "recover", "restore"):
+        raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
+                            {"command": args.command})
     preview = args.command == "import-response" and args.preview
     if (args.command == "import-response" and not preview
             and (args.expected_revision is None or args.request_id is None)):
@@ -451,10 +459,26 @@ def run(args):
     root = Path(args.workspace).absolute()
     if args.command in OPERATIONS or args.command in ACQUISITION:
         payload = strict_json(Path(args.file).read_bytes())
+        bounded_payload = (review_protocol.drop_repeated_bundle(payload)
+                           if args.command == "review-assignment" else payload)
+        if getattr(args, "check", False):
+            operation, replay = OPERATIONS.get(args.command), None
+            if args.command in ACQUISITION:
+                def replay_acquisition(store, value, **identity):
+                    return acquisition_command(store, args.command, value, identity)
+                replay = replay_acquisition
+            elif args.command in ("review-probe", "review-run", "review-output-correction"):
+                replay = operation
+            elif args.command == "reconcile-run":
+                def replay_reconciliation(store, value, **identity):
+                    return record_reconciliation(store, value, None, **identity)
+                replay = replay_reconciliation
+            return check_mutation(Store(find_workspace(root)), operation, payload,
+                                  expected_revision=args.expected_revision, request_id=args.request_id,
+                                  bounded_payload=bounded_payload, replay=replay)
         try:
             # A paper review assignment repeats a stored bundle, which the store bounds already hold.
-            check_command_bounds(review_protocol.drop_repeated_bundle(payload) if args.command == "review-assignment"
-                                 else payload)
+            check_command_bounds(bounded_payload)
         except ResearchError:
             if preview:
                 raise

@@ -362,7 +362,7 @@ def _unique(obligations):
 
 def _record(store, kind, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        artifacts = Evaluation(records, ArtifactStore(store.root))
+        artifacts = Evaluation(records, store.build_artifact_store())
         profile = profile_name(value.get("profile"))
         configuration = configuration_state(records, artifacts, profile)
         for item in configuration["obligations"]:
@@ -458,4 +458,4 @@ def _synthesis_state(evaluation, profile):
 
 def synthesis_report(store, profile):
     records = store.snapshot()["records"]
-    return synthesis_state(records, Evaluation(records, ArtifactStore(store.root)), profile)
+    return synthesis_state(records, Evaluation(records, store.build_artifact_store()), profile)

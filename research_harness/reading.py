@@ -216,7 +216,7 @@ def _assess(records, artifacts, value):
 def record_reading(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ("id", "version_id", "depth", "inspections", "notes"), ("bundle_id",), code="invalid_reading")
-        assessment = _assess(records, ArtifactStore(store.root), value)
+        assessment = _assess(records, store.build_artifact_store(), value)
         value = dict(value, assessment=assessment)
         return [immutable_record(records, "reading", value["id"], value)], dict(id=value["id"], **assessment)
 
@@ -375,7 +375,7 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
         depth = resolve_depth_values(records, overrides, keys=keys)
         sampled_tool = ((records.get("configuration", {}).get("research") or {}).get("profile") == "research"
                         and (overrides is not None or find_current_depth_plan(records) is not None))
-        evaluation = Evaluation(records, ArtifactStore(store.root))
+        evaluation = Evaluation(records, store.build_artifact_store())
         seen, changes, results, failures = set(), [], [], []
         for index, item in enumerate(items):
             try:
@@ -608,7 +608,7 @@ def record_availability(store, payload, *, expected_revision, request_id):
         else:
             raise ResearchError("invalid_availability", "The policy must require captured terminal origin failures, or registry abstract absence at abstract depth for a non-arXiv work")
         for source in sources:
-            ArtifactStore(store.root).read(source["response"])
+            store.build_artifact_store().read(source["response"])
         return [immutable_record(records, "availability", value["id"], value)], dict(value, qualification="noncritical_only")
 
     return prepared_mutation(store, "literature.availability", payload, prepare,

@@ -13,7 +13,7 @@ from research_harness import review_codex_transport as codex
 from research_harness import review_input_projection as projection
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import research_decisions as decisions
-from research_harness.artifacts import describe_artifact
+from research_harness.artifacts import ArtifactStore, describe_artifact
 from research_harness.errors import ResearchError
 from test_research_codex_visual_transport import png
 
@@ -72,7 +72,7 @@ class VisualContractIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(codex.shutil, 'which', return_value='/fixture/codex'), \
                 patch.object(codex, '_run_owned', return_value=version):
-            store = SimpleNamespace(root=Path(directory))
+            store = SimpleNamespace(root=Path(directory), build_artifact_store=lambda: ArtifactStore(Path(directory)))
             route = {'id': 'route', 'adapter': adapter}
             route['runtime'] = transport.runtime(route)
             records = {'review_route': {'route': route}}

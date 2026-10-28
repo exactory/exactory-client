@@ -96,7 +96,7 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         fields(value, ("id", "version_id", "source_id", "scope", "completeness", "units", "inventory", "bibliography", "resolutions"), code="invalid_bundle")
         text(value["id"], "Bundle ID", code="invalid_bundle")
         work = exact_work(records, value["version_id"])
-        artifacts = Evaluation(records, ArtifactStore(store.root))
+        artifacts = Evaluation(records, store.build_artifact_store())
         source = captured_source(records, artifacts, value["source_id"])
         capture = fulltext_capture(work, source["id"])
         if value["scope"] not in ("article", "passage") or value["completeness"] not in ("complete", "partial"):
@@ -512,7 +512,7 @@ def record_search(store, payload, *, expected_revision, request_id):
         if not isinstance(value["responses"], list) or not value["responses"]:
             raise ResearchError("invalid_search", "An empty user list without original captured responses is not a search")
         found, pending, pages, captures, by_query = set(), [], [], [], {}
-        evaluation = Evaluation(records, ArtifactStore(store.root))
+        evaluation = Evaluation(records, store.build_artifact_store())
         from .depth import resolve_depth_values
         from .lineage import LINEAGE
         from .sampling import SAMPLED
@@ -625,7 +625,7 @@ reference resolutions, consequential requirements and purpose-specific searches.
 """
     profile_name(profile)
     records = store.snapshot()["records"]
-    return foundation_state(records, Evaluation(records, ArtifactStore(store.root)), profile)
+    return foundation_state(records, Evaluation(records, store.build_artifact_store()), profile)
 
 
 def foundation_state(records, artifacts, profile):

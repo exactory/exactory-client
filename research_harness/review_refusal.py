@@ -4,7 +4,7 @@ import json
 from contextlib import contextmanager
 from functools import wraps
 
-from .artifacts import ArtifactStore, validate_reference
+from .artifacts import ArtifactStore, _CheckEffectRequired, validate_reference
 from .errors import ResearchError
 from .evidence import digest
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
@@ -152,7 +152,7 @@ def record_refusal_on_error(record_function):
         except ResearchError:
             try:
                 _record_refusal(store, payload, expected_revision=expected_revision, request_id=request_id + ':refusal')
-            except (ResearchError, ValueError, TypeError, KeyError):
+            except (_CheckEffectRequired, ResearchError, ValueError, TypeError, KeyError):
                 # A stale revision or unavailable provenance cannot change the original refusal.
                 pass
             raise
@@ -172,7 +172,7 @@ def record_native_refusal(store, assignment_id, *, request_id):
 
 def _record_refusal(store, payload, *, expected_revision, request_id):
     from .review_protocol import assignment_state
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     snapshot = store.snapshot()
     records = snapshot['records']
     assignment_id = payload.get('assignment_id') if isinstance(payload, dict) else None

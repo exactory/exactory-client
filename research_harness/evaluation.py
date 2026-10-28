@@ -78,6 +78,9 @@ class Evaluation:
     def put(self, data, media_type):
         return self.store.put(data, media_type)
 
+    def require_external_effect(self):
+        self.store.require_external_effect()
+
     def once(self, key, compute):
         if key not in self._memo:
             self.counters["computed"] += 1
