@@ -590,12 +590,14 @@ def _project_scoped_result(records, artifacts, packet, report):
 
 
 def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestration=None, repair_prompt=None,
-                     adjudicator_prompt=None, excerpts=False, reading_stage=None):
+                     adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
+                     reading_protocol=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
     with; a later version uses the current suffix; repair_prompt names a suffix explicitly. excerpts adds the excerpt
     rules of a bar, slate or result session to the current template under its unchanged id; an earlier version only
-    replays records made before those rules. reading_stage names the reading or final turn of a native openness
-    reading chain."""
+    replays records made before those rules. excerpt_rules names the protocol of those rules, by default the current
+    one. reading_stage names the reading or final turn of a native openness reading chain, and reading_protocol the
+    protocol of its prompts, by default the current one."""
     if repair_prompt is None:
         repair_prompt = context_repair.PROMPT if version != 1 else context_repair.PROMPT_0560
     repair_suffix = repair_prompt
@@ -608,9 +610,10 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
         if role != 'native_math' or reading_stage not in openness_reading.STAGES:
             raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
         from .native_review import PROMPT
-        prompt = _COMMON + (openness_reading.READING_PROMPT if reading_stage == 'reading'
-                            else PROMPT + openness_reading.FINAL_PROMPT)
-        return {'template_id': openness_reading.PROTOCOL + '/' + reading_stage, 'template_hash': digest(prompt),
+        reading_protocol = reading_protocol or openness_reading.PROTOCOL
+        texts = openness_reading.PROMPTS[reading_protocol]
+        prompt = _COMMON + (texts['reading'] if reading_stage == 'reading' else PROMPT + texts['final'])
+        return {'template_id': reading_protocol + '/' + reading_stage, 'template_hash': digest(prompt),
                 'rendered_prompt_hash': digest(prompt), 'parameters': {'role': role, 'reading_stage': reading_stage},
                 'text': prompt}
     if orchestration == 'problem_creation' and role == 'adjudicator':
@@ -647,8 +650,9 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
             # A new contract avoids native CLI trimming while exact v3 replay stays unchanged.
             prompt = prompt.rstrip(' ')
         if excerpts:
-            prompt += review_excerpts.PHASE_PROMPT
-            parameters['reviewer_excerpts'] = review_excerpts.PROTOCOL
+            excerpt_rules = excerpt_rules or review_excerpts.PROTOCOL
+            prompt += review_excerpts.PHASE_PROMPTS[excerpt_rules]
+            parameters['reviewer_excerpts'] = excerpt_rules
         template = ((_PROBLEM_RESULT_PROTOCOL_V3 if version == 3 else
                      _PROBLEM_RESULT_PROTOCOL_V4 if version == 4 else PROBLEM_RESULT_PROTOCOL)
                     if current_result else _PROBLEM_PROTOCOL_V1 if version == 1 else
@@ -684,8 +688,9 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
         parameters['context_repair'] = True
         suffix = '/context-repair'
     if excerpts:
-        prompt += review_excerpts.PHASE_PROMPT
-        parameters['reviewer_excerpts'] = review_excerpts.PROTOCOL
+        excerpt_rules = excerpt_rules or review_excerpts.PROTOCOL
+        prompt += review_excerpts.PHASE_PROMPTS[excerpt_rules]
+        parameters['reviewer_excerpts'] = excerpt_rules
     if role in bar_sources.ROLES and version != 1:
         template_version = _Q1_PROTOCOL + ('/legacy' if legacy else '')
     return {'template_id': template_version + '/' + role + suffix, 'template_hash': digest(prompt),
@@ -1300,19 +1305,31 @@ def source_delivery_packet(records, artifacts, assignment):
     return packet
 
 
-def _find_session_fulltexts(records, artifacts, prior):
-    """The versions whose stored full text a turn of this session under the excerpt rules delivered complete in its
-    actual recorded request, each with the latest such turn. The session runs back from prior through the history of
-    each turn."""
-    delivered, current = {}, prior
+def _find_session_bodies(records, artifacts, prior):
+    """The full-text bodies that turns of this session under the excerpt rules delivered complete in their actual
+    recorded requests: each SHA-256 with the latest such turn, its order (0 for the latest turn) and whether a
+    delivery of status delivered carried it. The session runs back from prior through the history of each turn."""
+    delivered, current, order = {}, prior, 0
     while current is not None:
         if review_excerpts.KEY in _read_json(artifacts, current['packet']):
             state = assignment_state(records, artifacts, current['id'])
             attempt = records.get('review_attempt', {}).get(state['attempt_id'])
             if attempt is not None and attempt.get('request'):
                 sent = review_excerpts.read_sent_packet(_read_json(artifacts, attempt['request'])) or {}
-                for version in review_excerpts.find_delivered_fulltexts(records, sent):
-                    delivered.setdefault(version, {'assignment_id': current['id'], 'attempt_id': attempt['id']})
+                complete = review_excerpts.find_complete_bodies(sent)
+                for delivery in sent.get('source_deliveries', []):
+                    request = delivery.get('request') or {}
+                    if (request.get('kind') != 'source' or request.get('depth') != 'fulltext'
+                            or delivery.get('status') not in ('delivered', 'partial')):
+                        continue
+                    for reference in delivery.get('evidence', []):
+                        if reference['sha256'] in complete:
+                            body = delivered.setdefault(reference['sha256'], {
+                                'assignment_id': current['id'], 'attempt_id': attempt['id'], 'order': order,
+                                'is_complete_delivery': False})
+                            if delivery['status'] == 'delivered':
+                                body['is_complete_delivery'] = True
+            order += 1
         current = records.get('review_assignment', {}).get(current.get('history_assignment_id'))
     return delivered
 
@@ -1341,7 +1358,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             prior, state = _source_parent(records, artifacts, context['prior_assignment_id'], dossier_id, reviewer_id, role)
             previous = source_delivery_packet(records, artifacts, prior)
             packet.update(bar_sources.continuation(records, artifacts, previous, state['output'],
-                                                   _find_session_fulltexts(records, artifacts, prior)))
+                                                   _find_session_bodies(records, artifacts, prior)))
             packet['continuation'] = {'assignment_id': prior['id'], 'packet_digest': prior['packet_digest'],
                                       'scientific_context': 'The exact prior scientific packet and output remain in this session history.'}
             # These fixed bindings are consumed by final native support recording.
@@ -1818,13 +1835,16 @@ def _prompt_matches(assignment):
     repair = assignment.get('reassessment_required') is True
     stage = assignment['prompt'].get('parameters', {}).get('reading_stage')
     if assignment['role'] == 'native_math' and stage in openness_reading.STAGES:
-        return assignment['prompt'] == canonical_prompt('native_math', reading_stage=stage)
+        return any(assignment['prompt'] == canonical_prompt('native_math', reading_stage=stage, reading_protocol=rules)
+                   for rules in openness_reading.PROMPTS)
     context = assignment.get('context', {})
     problem = assignment.get('subject', {}).get('kind') == 'problem'
     # A continuation or repair recorded since the excerpt rules carries them; an earlier one keeps its prompt.
     if (assignment['role'] in bar_sources.ROLES and ('prior_assignment_id' in context or 'context_repair' in context)
-            and assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, excerpts=True,
-                                                         orchestration='problem_creation' if problem else None)):
+            and any(assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, excerpts=True,
+                                                             orchestration='problem_creation' if problem else None,
+                                                             excerpt_rules=rules)
+                    for rules in review_excerpts.PHASE_PROMPTS)):
         return True
     if assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] in _PROBLEM_PROMPTS:
         return (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, orchestration='problem_creation')
@@ -1902,9 +1922,34 @@ def _repair_packet(records, artifacts, value, repair):
     return packet
 
 
+def has_ended_without_output(records, assignment_id):
+    """Whether an assignment ran and every recorded attempt ended without a completed output, with no invocation still
+    pending: such a turn, for example one stopped at the route timeout, does not hold its session."""
+    attempts = [attempt for attempt in records.get('review_attempt', {}).values()
+                if attempt['assignment_id'] == assignment_id]
+    attempt_ids = records.get('review_attempt', {})
+    pending = any(invocation['assignment_id'] == assignment_id and invocation['id'] not in attempt_ids
+                  for invocation in records.get('review_invocation', {}).values())
+    return bool(attempts) and not pending and all(attempt['status'] != 'completed' for attempt in attempts)
+
+
+def find_replacement(records, assignment):
+    """The later continuation of the same parent that replaced a turn which ended without output, or None."""
+    parent = assignment.get('context', {}).get('prior_assignment_id')
+    if parent is None:
+        return None
+    return next((other for other in records.get('review_assignment', {}).values()
+                 if other['id'] != assignment['id'] and other['role'] == assignment['role']
+                 and other.get('context', {}).get('prior_assignment_id') == parent
+                 and other['recorded_revision'] > assignment['recorded_revision']), None)
+
+
 def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role):
     text(identifier, 'Prior assignment ID', code='invalid_review_context')
     prior = _get(records, 'review_assignment', identifier)
+    if find_replacement(records, prior) is not None:
+        raise ResearchError('review_assignment_replaced', 'This turn ended without output and a later '
+                            'continuation replaced it; continue the replacement')
     if (prior['role'] != role or prior['role'] not in bar_sources.ROLES or prior['dossier_id'] != dossier_id
             or normalized_text(prior['reviewer_id']) != normalized_text(reviewer_id)):
         raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same phase, reviewer and dossier')
@@ -2035,7 +2080,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same route and author boundary')
             if normalized_text(parent['author_id']) != normalized_text(value['author_id']):
                 raise ResearchError('review_source_continuation_mismatch', 'Continue the exact same route and author boundary')
+            # A continuation whose attempts all ended without output does not hold the session: this one replaces it.
             if any(prior.get('context', {}).get('prior_assignment_id') == parent['id']
+                   and not has_ended_without_output(records, prior['id'])
                    for prior in records.get('review_assignment', {}).values()):
                 raise ResearchError('review_source_continuation_fork', 'Continue the latest source turn without forking the reviewer session')
             if parent.get('context', {}).get('source_delivery') and 'source_delivery' not in value['context']:
@@ -2224,6 +2271,9 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         if assignment['route_id'] in retired_routes(records):
             raise ResearchError('review_route_retired', 'The route of this assignment was retired; continue its slot through a context repair on another route')
+        if find_replacement(records, assignment) is not None:
+            raise ResearchError('review_assignment_replaced', 'This turn ended without output and a later '
+                                'continuation replaced it; run the replacement')
         completed = [a for a in records.get('review_attempt', {}).values()
                      if a['assignment_id'] == value['assignment_id'] and a['status'] == 'completed'
                      and _context_observed(artifacts, a)]

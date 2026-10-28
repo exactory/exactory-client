@@ -40,6 +40,13 @@ def lineage_packets(records, artifacts, assignment_ids):
     return result
 
 
+def list_delivered_parts(packet):
+    """The part deliveries of a packet that reached their reviewer: each maps one part of a stored extracted text to its
+    span, so a citation within the part counts as delivered. A part that a capacity deferral withheld does not."""
+    return [delivery for delivery in packet.get('source_deliveries', [])
+            if 'part' in delivery and delivery.get('status') in ('delivered', 'partial')]
+
+
 def list_delivered_objections(packet):
     """The objections that a packet delivers with their evidence: its material objections and the objections of its
     historical reviews. A first slate or result packet wraps each historical review with its independence."""
@@ -97,6 +104,7 @@ def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
         delivered = (packet.get('prior_context', []) + packet.get('version_source_mappings', [])
                      + packet.get('supplied_source_mappings', [])) + [mapping for objection in list_delivered_objections(packet)
                                                        for mapping in objection.get('version_source_mappings', [])]
+        delivered += list_delivered_parts(packet)
         for entry in delivered:
             if 'origin' not in entry or 'excerpt' not in entry:
                 continue

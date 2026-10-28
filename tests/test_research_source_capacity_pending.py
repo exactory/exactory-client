@@ -4,7 +4,7 @@ import json
 from unittest.mock import patch
 
 from research_harness import research_decisions, review_protocol, review_transport
-from research_harness import review_supplied_evidence
+from research_harness import review_excerpts, review_supplied_evidence
 from research_harness.review_codex_transport import packet_text
 from strategy_fixtures import StrategyCase
 import test_research_bar_sources as sources
@@ -46,6 +46,11 @@ class SourceCapacityPendingTests(StrategyCase):
         self.limit = patch.object(review_transport, 'CODEX_INPUT_LIMIT_CHARS', 105000)
         self.limit.start()
         self.addCleanup(self.limit.stop)
+        # These tests exercise the batching by the input limit. A turn's reading budget of new full text would otherwise
+        # defer the second and third source before the input limit applies.
+        budget = patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 10 ** 6)
+        budget.start()
+        self.addCleanup(budget.stop)
         self.assign()
         self.requests = [{'id': 'source-%d' % index, 'kind': 'source', 'version_id': version, 'depth': 'fulltext'}
                          for index, version in enumerate(self.versions)]
