@@ -11,12 +11,12 @@ from research_harness.ocr import OcrPdfExtractor
 
 
 class OcrTests(unittest.TestCase):
-    def create_extractor(self, *, pages=2, render_code=None, ocr_code=None, **kwargs):
+    def create_extractor(self, *, pages=2, info_code=None, render_code=None, ocr_code=None, **kwargs):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         root = Path(directory.name)
         codes = {
-            "pdfinfo": "print('Pages: %d')\n" % pages,
+            "pdfinfo": info_code or "print('Pages: %d')\n" % pages,
             "pdftoppm": render_code or "import sys\nsys.stdout.buffer.write(b'P5\\n1 1\\n255\\n\\xff')\n",
             "tesseract": ocr_code or "import pathlib, sys\nassert pathlib.Path(sys.argv[1]).read_bytes().startswith(b'P5')\nprint('Recognized page text.')\n",
         }
@@ -52,6 +52,15 @@ class OcrTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 result = extractor(b"PDF")
                 self.assertEqual(result["status"], expected)
+                self.assertIsNone(result["text"])
+
+    def test_ambiguous_pdfinfo_page_count_remains_malformed(self):
+        for injected_count in (1, 2):
+            with self.subTest(injected_count=injected_count):
+                extractor = self.create_extractor(
+                    info_code="print('Title: Authored title\\nPages: %d\\nPages: 2')\n" % injected_count)
+                result = extractor(b"%PDF-1.4\n%%EOF")
+                self.assertEqual(result["status"], "malformed_pdf")
                 self.assertIsNone(result["text"])
 
     def test_unbounded_or_invalid_ocr_configuration_is_rejected(self):

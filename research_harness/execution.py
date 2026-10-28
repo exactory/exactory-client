@@ -142,13 +142,15 @@ def bind_execution(store, payload, *, expected_revision, request_id):
             output_ids.add(output["id"])
             output_paths.add(output["path"])
             artifacts.put(b"", output["media_type"])
-            # An assessment cites result and validation evidence through a locator into the output's text or JSON.
+            # Whole-artifact locators admit result outputs of any media type; validation still needs text or JSON.
             # The rule applies to a new binding only: a recorded one is immutable, and the same payload returns it.
-            if (recorded_binding is None and requirement_kinds[output["requirement_id"]] in ("result", "validation")
+            if (recorded_binding is None and requirement_kinds[output["requirement_id"]] == "validation"
                     and not (output["media_type"].lower().startswith("text/") or is_json_media_type(output["media_type"]))):
-                raise ResearchError("invalid_execution", "Result and validation evidence needs a text or JSON output, but output "
-                                    + output["id"] + " is " + output["media_type"] + "; bind figures and other binary files to a log requirement",
-                                    {"output_id": output["id"], "requirement_id": output["requirement_id"], "media_type": output["media_type"]})
+                raise ResearchError("invalid_execution", "Validation evidence needs a text or JSON output, but output "
+                                    + output["id"] + " is " + output["media_type"]
+                                    + "; bind figures and other binary files to a result or log requirement",
+                                    {"output_id": output["id"], "requirement_id": output["requirement_id"],
+                                     "media_type": output["media_type"]})
         if value["usage_unit"] not in ("execution", "wall_seconds") or plan["resource_limits"]["unit"] != value["usage_unit"]:
             raise ResearchError("unsupported_usage", "Actual lab accounting supports planned execution or wall_seconds units")
         record = dict(value, admission_digest=admission["digest"], runtime=runtime)

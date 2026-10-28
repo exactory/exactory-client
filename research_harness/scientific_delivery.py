@@ -71,6 +71,10 @@ def _validate_projection_shape(value, depth=0):
         kinds = {"json"} if value["kind"] == "json_locators" else {"text", "span"}
         if any(not isinstance(locator, dict) or locator.get("kind") not in kinds for locator in value["locators"]):
             raise ResearchError(_CODE, "Use the declared projection's locator type")
+    elif value["kind"] == "result_output":
+        fields(value, ("kind", "context"), code=_CODE)
+        if depth:
+            raise ResearchError(_CODE, "Result output delivery requires an exact recorded result reference")
     elif value["kind"] == "npy_array":
         if set(value) != {"kind", "context"}:
             raise ResearchError(_CODE, "A numerical projection retains the complete array")
@@ -197,6 +201,8 @@ class ScientificDelivery:
         self.derived, self.mapped, self.visiting = dict(derived or {}), {}, set()
         self._parsed_locator_mappings = {}
         self.required, self.private, self.generated = {}, {}, {}
+        self.result_outputs = set()
+        self.result_aliases = {}
         self.output_bytes, self.output_hashes, self.numerical_elements = 0, set(), 0
         self.exact_files = {ref["sha256"] for ref in manuscript_files}
         self.round_responses = {digest(ref) for ref in find_round_investigation_responses(records, manifest)}
@@ -345,6 +351,16 @@ class ScientificDelivery:
         if isinstance(value, dict):
             if isinstance(value.get("artifact"), dict) and isinstance(value.get("locator"), dict):
                 ref = value["artifact"]
+                if value.get("kind") == "result":
+                    from .execution_evidence import validate_result_reference
+                    execution, _ = validate_result_reference(self.records, self.artifacts, value)
+                    self.result_outputs.add(digest(ref))
+                    admission = execution["payload"]["origin"].get("admission_id")
+                    observation = self.records.get("execution_observation", {}).get(admission, {})
+                    for entry in observation.get("files", []):
+                        captured = entry["artifact"]
+                        if all(captured[key] == ref[key] for key in ("path", "sha256", "size")):
+                            self.result_aliases[digest(captured)] = ref
                 self.required.setdefault(ref["sha256"], {})[digest(value["locator"])] = value["locator"]
             for child in value.values():
                 self._inventory(child)
@@ -462,6 +478,24 @@ class ScientificDelivery:
             raise ResearchError(_PRIVATE, "A required scientific reference has an internal private role", {"sha256": identifier})
         if descriptor_digest in self.mapped:
             return self.mapped[descriptor_digest]
+        declaration = self.declarations.get(identifier)
+        result_output = (declaration is not None and declaration["disposition"] == "project"
+                         and declaration["projection"]["kind"] == "result_output")
+        recorded_output = result_output and descriptor_digest in self.result_outputs
+        if result_output and not recorded_output:
+            # Verify the descriptor's stored size and hash before resolving its observation alias.
+            self.artifacts.read(ref)
+            recorded = self.result_aliases.get(descriptor_digest)
+            public_reference = any(entry[0] == ref for entry in self.public.get(identifier, []))
+            if recorded is not None and not public_reference:
+                # Observations capture files as generic binary; use the bound output's actual media type.
+                mapped = self.map_reference(recorded)
+                self.mapped[descriptor_digest] = mapped
+                return mapped
+            if (identifier not in self.public and identifier not in self.exact_files
+                    and descriptor_digest not in self.round_responses):
+                raise ResearchError("result_evidence_mismatch",
+                                    "Result output delivery requires an exact recorded result reference")
         if identifier in self.visiting:
             raise ResearchError(_CODE, "Scientific artifact references must not form a recursive byte closure")
         self.visiting.add(identifier)
@@ -470,18 +504,19 @@ class ScientificDelivery:
             if identifier in self.generated:
                 mapped = self._emit({"derivative": True, "original_sha256": identifier,
                                      "projection_kind": "service_record", "value": self.generated[identifier]})
-            elif not data and descriptor_digest not in self.round_responses:
+            elif not data and descriptor_digest not in self.round_responses and not result_output:
                 mapped = self._emit({"derivative": True, "original_sha256": identifier,
                                      "projection_kind": "empty_observation", "value": ""})
-            elif identifier in self.public or identifier in self.exact_files or descriptor_digest in self.round_responses:
-                # Exact manuscript/source bytes retain their identity. JSON or
-                # archives cannot smuggle nested internal references through it.
+            elif (identifier in self.public or identifier in self.exact_files
+                    or descriptor_digest in self.round_responses or result_output):
+                # Exact manuscript, source and declared result bytes retain their identity.
+                # JSON or archives cannot smuggle nested internal references through it.
                 self._check_bytes(data)
-                if identifier in self.public:
+                if identifier in self.public and not recorded_output:
                     self._check_public_reference(ref)
-                if descriptor_digest in self.round_responses:
-                    # Program captures keep their exact identity without becoming
-                    # public sources. Descriptor extensions retain all checks.
+                if descriptor_digest in self.round_responses or result_output:
+                    # Captures and declared outputs retain identity without becoming public sources.
+                    # Descriptor extensions retain all checks.
                     extensions = {key: value for key, value in ref.items() if key not in _REF_KEYS}
                     self._check_public_nested(extensions)
                     self.walk(extensions)
@@ -497,7 +532,7 @@ class ScientificDelivery:
                         # another encoding that json.detect_encoding recognizes
                         # is checked as UTF-8 too, past the raw byte bound.
                         self._check_bytes(decoded.encode(), artifact=False)
-                empty_capture = not data and descriptor_digest in self.round_responses
+                empty_capture = not data and (descriptor_digest in self.round_responses or result_output)
                 is_json, structured = (False, None) if empty_capture else parse_scientific_json(data, ref["media_type"])
                 if is_json:
                     self._check_public_nested(structured)
@@ -511,7 +546,6 @@ class ScientificDelivery:
                 mapped = ref
                 self._count_output(ref, data)
             else:
-                declaration = self.declarations.get(identifier)
                 if declaration is None or declaration["disposition"] != "project":
                     raise ResearchError(_PRIVATE, "A required authored artifact needs a checked typed scientific projection", {"sha256": identifier})
                 mapped, _ = self._project(ref, declaration["projection"])
@@ -554,7 +588,7 @@ class ScientificDelivery:
                                   if item["original_locator"].get("locator_digest") == wanted), None)
                     if found is None:
                         raise ResearchError("scientific_projection_incomplete", "A required scientific locator has no derivative mapping")
-                    exact_value = read_locator(self.artifacts, original, locator)
+                    exact_value = read_locator(self.artifacts, original, locator, result=value.get("kind") == "result")
                     result.update(original_sha256=original["sha256"], original_locator=locator, derivative=True,
                                   locator={"kind": "json", "pointer": found["derived_pointer"], "value": exact_value})
                 return result

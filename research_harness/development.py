@@ -30,7 +30,7 @@ from .principles import objective_changes
 from .probe_provenance import find_probe_artifact_origins
 from .reading import validate_read_evidence
 from .scientific_json import is_json_media_type
-from .source_links import captured_source, original_identity, read_locator, validate_link
+from .source_links import captured_source, original_identity, validate_link
 from .strategy import find_orchestration
 from .synthesis import synthesis_state
 from .workspace import strict_json
@@ -522,13 +522,9 @@ class _Evidence:
                     "metadata": digest(sources), "aliases": digest(aliases),
                     "original_sha256": original_identity(context.records, value["link"])}
         elif isinstance(value, dict) and value.get("kind") == "result":
-            _fields(value, ("kind", "execution_id", "output_id", "artifact", "locator"))
-            execution = _get(context.records, "execution", value["execution_id"], "unknown_execution")
+            from .execution_evidence import validate_result_reference
+            execution, output = validate_result_reference(context.records, context.artifacts, value)
             payload = execution["payload"]
-            output = next((o for o in payload["outputs"] if o["id"] == value["output_id"]), None)
-            if output is None or output["artifact"] != value["artifact"]:
-                raise ResearchError("result_evidence_mismatch", "The result locator must identify an actual output of this exact execution")
-            read_locator(context.artifacts, value["artifact"], value["locator"])
             _execution_artifacts(context.artifacts, payload)
             plan = _get(context.records, "cycle_plan", payload["cycle_id"], "unknown_cycle")
             requirement = next(r for r in plan["payload"]["evidence_requirements"] if r["id"] == output["requirement_id"])

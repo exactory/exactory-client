@@ -11,7 +11,21 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .execution_outputs import log_bytes, output_metric, output_path, read_sealed_outputs, validate_observed_outputs
 from .graph import obligation
+from .source_links import read_locator
 from .workspace import read_file, strict_json
+
+
+def validate_result_reference(records, artifacts, reference):
+    """Bind a result locator to the exact output descriptor retained by its execution."""
+    from .development import _fields, _get
+    _fields(reference, ("kind", "execution_id", "output_id", "artifact", "locator"))
+    execution = _get(records, "execution", reference["execution_id"], "unknown_execution")
+    output = next((o for o in execution["payload"]["outputs"] if o["id"] == reference["output_id"]), None)
+    if output is None or output["artifact"] != reference["artifact"]:
+        raise ResearchError("result_evidence_mismatch",
+                            "The result locator must identify an actual output of this exact execution")
+    read_locator(artifacts, reference["artifact"], reference["locator"], result=True)
+    return execution, output
 
 
 def validate_observed_execution(records, artifacts, identifier):
