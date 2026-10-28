@@ -9,17 +9,18 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from research_harness import review_codex_transport as codex
 from research_harness import review_input_projection as projection
 from research_harness import review_protocol as protocol, review_transport as transport
-from research_harness import review_visual_inputs as visual
 from research_harness import research_decisions as decisions
 from research_harness.artifacts import describe_artifact
 from research_harness.errors import ResearchError
+from test_research_codex_visual_transport import png
 
 
 class VisualContractIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.data = visual.control_image('native page control')
+        self.data = png(90)
         self.image = describe_artifact(self.data, 'image/png')
         self.pdf = describe_artifact(b'%PDF-1.4\nAn untransmitted original.\n', 'application/pdf')
         self.packet = {'protocol': 'exactory-problem-review-v2', 'role': 'result', 'reviewer_id': 'first',
@@ -67,9 +68,13 @@ class VisualContractIntegrationTests(unittest.TestCase):
             self.project(request)
 
     def probe_prompt(self, adapter):
-        with tempfile.TemporaryDirectory() as directory:
+        version = SimpleNamespace(returncode=0, stdout='codex-cli fixture-version')
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(codex.shutil, 'which', return_value='/fixture/codex'), \
+                patch.object(codex, '_run_owned', return_value=version):
             store = SimpleNamespace(root=Path(directory))
             route = {'id': 'route', 'adapter': adapter}
+            route['runtime'] = transport.runtime(route)
             records = {'review_route': {'route': route}}
             def start_only(store, payload, operation, start, finish, **options):
                 return start(records, payload)

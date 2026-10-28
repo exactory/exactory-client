@@ -1,0 +1,337 @@
+{
+  "schema_version": 1,
+  "objective_id": "objective-000001",
+  "contract": {
+    "schema_version": 1,
+    "original_claim": {
+      "statement": "For every integer n from 5 to 15, P(n)",
+      "quantifiers": "For every integer n with 5 <= n <= 15",
+      "assumption_ids": [],
+      "proof_policy": "reviewed",
+      "scope": {
+        "kind": "integer_interval",
+        "lower": 5,
+        "upper": 15,
+        "lower_inclusive": true,
+        "upper_inclusive": true
+      }
+    },
+    "assumption_ids": [],
+    "root_obligation": "obligation-000001",
+    "root_attack_slug": "root",
+    "requested_outcome": "proof",
+    "proof_policy": "reviewed",
+    "required_deliverables": [
+      "Conventional proof with all dimension cases"
+    ],
+    "resource_policy": {
+      "max_total_moves": null,
+      "max_total_runs": null,
+      "max_workers": 1
+    }
+  },
+  "events": [
+    {
+      "sequence": 1,
+      "request_id": "recorded-1",
+      "kind": "proposal_recorded",
+      "payload": {
+        "proposal": {
+          "schema_version": 1,
+          "author": {
+            "source": "host",
+            "actor_id": "author",
+            "attestation_id": "host-author"
+          },
+          "category": "standalone",
+          "relationship": "standalone",
+          "attack_slug": "attempt",
+          "role": "research",
+          "claim": {
+            "statement": "For every integer n from 5 to 15, n + n = 2*n",
+            "quantifiers": "For every integer n with 5 <= n <= 15",
+            "assumption_ids": [],
+            "proof_policy": "reviewed",
+            "scope": {
+              "kind": "integer_interval",
+              "lower": 5,
+              "upper": 15,
+              "lower_inclusive": true,
+              "upper_inclusive": true
+            }
+          },
+          "target_obligation": null,
+          "logical_predecessor": null,
+          "native_parent": null,
+          "anchor": {
+            "kind": "objective",
+            "digest": "556f8a7b03058a703169e6b8857faa0e12e368788e69f13502f6a7c6ead0703b"
+          },
+          "inherited_evidence": [],
+          "inherited_assumption_ids": [],
+          "hypothesis": "Induction with an exact recurrence closes every dimension",
+          "method": "induction",
+          "applicability": "The recurrence is valid for n >= 5",
+          "success_criterion": "Prove base case and recurrence for the full interval",
+          "failure_criterion": "A recurrence coefficient can be negative",
+          "parent_effect": "Discharges the original quantified proposition",
+          "studies": {
+            "problem": "1111111111111111111111111111111111111111111111111111111111111111",
+            "novelty": "2222222222222222222222222222222222222222222222222222222222222222",
+            "strategies": [
+              {
+                "method": "induction",
+                "digest": "3333333333333333333333333333333333333333333333333333333333333333"
+              }
+            ]
+          },
+          "contribution": {
+            "route": null,
+            "deduction": "Exact original claim",
+            "necessity": null,
+            "coverage": null,
+            "standalone": {
+              "prospective_theorem": "A sharp recurrence bound",
+              "primary_sources": [
+                "4444444444444444444444444444444444444444444444444444444444444444"
+              ],
+              "strongest_known_result": "The known bound loses a factor n",
+              "mathematical_contribution": "Remove that factor for every n",
+              "significance": "A sharp uniform bound changes the asymptotic order"
+            }
+          },
+          "task": {
+            "kind": "proof",
+            "purpose": "Prove the original assertion",
+            "input_domain": "Integers 5 through 15"
+          },
+          "limits": {
+            "max_moves": 24,
+            "max_runs": 24,
+            "timeout_seconds": 300,
+            "workers": 1
+          },
+          "budget": {
+            "mode": "new",
+            "account_id": null,
+            "basis_checkpoint_id": null,
+            "basis_checkpoint_digest": null,
+            "justification": "First investigation of the root obligation"
+          },
+          "equivalent_node_ids": [],
+          "checkpoint_criteria": [
+            {
+              "kind": "accepted_standalone_claim",
+              "criterion_id": "own-proof",
+              "explanation": "Accept the exact standalone theorem"
+            }
+          ],
+          "retreat_criteria": [
+            {
+              "kind": "move_limit",
+              "threshold": 24
+            }
+          ],
+          "decomposition": {
+            "obligations": [],
+            "routes": []
+          }
+        },
+        "digest": "84c01376e197e046ba7126cfe5772295aa0d4e7bf218aae970a002e4cef53812"
+      }
+    },
+    {
+      "sequence": 2,
+      "request_id": "recorded-2",
+      "kind": "review_recorded",
+      "payload": {
+        "proposal_id": "proposal-000001",
+        "review": {
+          "schema_version": 1,
+          "subject_digest": "84c01376e197e046ba7126cfe5772295aa0d4e7bf218aae970a002e4cef53812",
+          "claim_digest": "b2bb294de8b1eee4fa260027f5b45fe15ce510d282ea4720819419e2abccebf2",
+          "reviewer": {
+            "source": "host",
+            "actor_id": "reviewer-one",
+            "attestation_id": "host-reviewer-one"
+          },
+          "decision": "approve",
+          "findings": {
+            "root_connection": "The exact claim matches the full root domain",
+            "mathematical_substance": "The recurrence would establish the required uniform statement",
+            "assumptions": "The proposal introduces no unstated assumptions",
+            "scope": "Both interval endpoints and every intermediate integer are included",
+            "equivalence": "No earlier equivalent attempt has been omitted",
+            "necessity": "The stated finite domain covers the necessary decision completely",
+            "novelty": "Primary-source comparison identifies the missing sharp factor",
+            "significance": "The proposed uniform improvement is mathematically substantial",
+            "renewal_basis": "The verified reduction addresses the earlier coefficient obstruction"
+          },
+          "unresolved_objections": []
+        },
+        "digest": "9c5cbd983c1d8027c437b3db28b2e3edaceb9bfb44aee8c1b2ea9f4f774119e2"
+      }
+    },
+    {
+      "sequence": 3,
+      "request_id": "recorded-3",
+      "kind": "review_recorded",
+      "payload": {
+        "proposal_id": "proposal-000001",
+        "review": {
+          "schema_version": 1,
+          "subject_digest": "84c01376e197e046ba7126cfe5772295aa0d4e7bf218aae970a002e4cef53812",
+          "claim_digest": "b2bb294de8b1eee4fa260027f5b45fe15ce510d282ea4720819419e2abccebf2",
+          "reviewer": {
+            "source": "host",
+            "actor_id": "reviewer-two",
+            "attestation_id": "host-reviewer-two"
+          },
+          "decision": "approve",
+          "findings": {
+            "root_connection": "The exact claim matches the full root domain",
+            "mathematical_substance": "The recurrence would establish the required uniform statement",
+            "assumptions": "The proposal introduces no unstated assumptions",
+            "scope": "Both interval endpoints and every intermediate integer are included",
+            "equivalence": "No earlier equivalent attempt has been omitted",
+            "necessity": "The stated finite domain covers the necessary decision completely",
+            "novelty": "Primary-source comparison identifies the missing sharp factor",
+            "significance": "The proposed uniform improvement is mathematically substantial",
+            "renewal_basis": "The verified reduction addresses the earlier coefficient obstruction"
+          },
+          "unresolved_objections": []
+        },
+        "digest": "273c19a57e6866f6eb4d7067c3ab7a493095a1a1e7d0935a6c64b2acd3e3adb5"
+      }
+    },
+    {
+      "sequence": 4,
+      "request_id": "recorded-4",
+      "kind": "proposal_admitted",
+      "payload": {
+        "proposal_id": "proposal-000001"
+      }
+    },
+    {
+      "sequence": 5,
+      "request_id": "recorded-5",
+      "kind": "checkpoint_recorded",
+      "payload": {
+        "checkpoint": {
+          "schema_version": 1,
+          "kind": "proof",
+          "claim": {
+            "statement": "For every integer n from 5 to 15, P(n)",
+            "quantifiers": "For every integer n with 5 <= n <= 15",
+            "assumption_ids": [],
+            "proof_policy": "reviewed",
+            "scope": {
+              "kind": "integer_interval",
+              "lower": 5,
+              "upper": 15,
+              "lower_inclusive": true,
+              "upper_inclusive": true
+            }
+          },
+          "origin": {
+            "kind": "external_result",
+            "source": "Pinned source for obligation-000001",
+            "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "statement": "For every integer n from 5 to 15, P(n)",
+            "statement_digest": "05c36b9d68773d2df4c995f080897b6953e717acab0e179dd658c4ce98f79e50",
+            "study_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "evidence_digests": [
+            "05c36b9d68773d2df4c995f080897b6953e717acab0e179dd658c4ce98f79e50"
+          ],
+          "verification_status": "pending",
+          "what_changed": "An exact proof is now available",
+          "remaining_obligation_ids": [],
+          "next_hypothesis": "Use the proved result in its admitted route",
+          "milestone_id": null
+        },
+        "digest": "05914a05239893800412b5265178c00d310054584395d58baf945c2cf8d177f9"
+      }
+    },
+    {
+      "sequence": 6,
+      "request_id": "recorded-6",
+      "kind": "result_accepted",
+      "payload": {
+        "acceptance": {
+          "schema_version": 1,
+          "checkpoint_id": "checkpoint-000001",
+          "checkpoint_digest": "f9f172302179ad08f3c4505c959d062e3e0c0abbbd01331e2d23b99bf7b10b21",
+          "obligation_id": "obligation-000001",
+          "outcome": "proof",
+          "classification": "analytical",
+          "standard": "reviewed",
+          "dependency_ids": [],
+          "route_bindings": [],
+          "review": {
+            "subject_digest": "f9f172302179ad08f3c4505c959d062e3e0c0abbbd01331e2d23b99bf7b10b21",
+            "claim_digest": "05c36b9d68773d2df4c995f080897b6953e717acab0e179dd658c4ce98f79e50",
+            "reviewer": {
+              "source": "host",
+              "actor_id": "result-reviewer",
+              "attestation_id": "host-result-reviewer"
+            },
+            "decision": "approve",
+            "findings": {
+              "statement": "Exact checked statement",
+              "assumptions": "Exact checked statement",
+              "scope": "Exact checked statement",
+              "dependencies": "Exact checked statement",
+              "policy": "Exact checked statement"
+            }
+          },
+          "audit": {
+            "subject_digest": "f9f172302179ad08f3c4505c959d062e3e0c0abbbd01331e2d23b99bf7b10b21",
+            "dependency_ids": [],
+            "evidence_digests": [
+              "05c36b9d68773d2df4c995f080897b6953e717acab0e179dd658c4ce98f79e50"
+            ],
+            "provenance": {
+              "source": "host",
+              "actor_id": "audit-service",
+              "attestation_id": "host-audit-service"
+            }
+          }
+        },
+        "digest": "2404e60d7bc055538d089f491c509db557a3a699c63cc88205d9258b5c459821"
+      }
+    },
+    {
+      "sequence": 7,
+      "request_id": "recorded-begin",
+      "kind": "service_operation",
+      "payload": {
+        "command": "begin",
+        "target": "node-000001",
+        "spec_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "operations": [
+          {
+            "kind": "move_reserved",
+            "payload": {
+              "reservation": {
+                "id": "move-node-000001-1",
+                "node_id": "node-000001",
+                "account_id": "account-000001",
+                "move": 1,
+                "pass": 1,
+                "strategy": "induction",
+                "entry": "induction.md",
+                "walk": "fixture",
+                "trigger_features": [],
+                "step_cites": [],
+                "problem_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "journal_prefix_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+              }
+            }
+          }
+        ],
+        "effects": []
+      }
+    }
+  ]
+}

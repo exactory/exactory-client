@@ -178,7 +178,7 @@ def record_proposal(state, payload):
 
 
 def record_review(state, payload):
-    s.closed(payload, "proposal_id review digest")
+    s.closed(payload, "proposal_id review digest" + (" context_drift" if "context_drift" in payload else ""))
     proposal = reference(state["proposals"], payload["proposal_id"], "proposal")
     s.require(proposal["status"] == "proposed", "Admission reviews are immutable after admission")
     review = payload["review"]
@@ -194,9 +194,21 @@ def record_review(state, payload):
             previous = old["record"]["reviewer"]
             s.require(previous["actor_id"] != reviewer["actor_id"] and
                       previous["attestation_id"] != reviewer["attestation_id"], "Duplicate reviewer provenance", "review_not_independent")
+    if "context_drift" in payload:
+        drift = s.records(payload["context_drift"])
+        paths = []
+        for row in drift:
+            s.closed(row, "path from to")
+            s.text(row["path"])
+            s.require(row["path"].startswith("/scientific_context/") and row["from"] != row["to"],
+                      "Review context drift must describe changed scientific context")
+            paths.append(row["path"])
+        s.require(drift and len(set(paths)) == len(paths), "Review context drift needs distinct changed paths")
     identity = allocate(state, "review")
     state["reviews"][identity] = {"id": identity, "schema_version": 1, "proposal_id": payload["proposal_id"],
                                   "record": review, "digest": payload["digest"]}
+    if "context_drift" in payload:
+        state["reviews"][identity]["context_drift"] = copy.deepcopy(drift)
 
 
 def approving_reviews(state, proposal_id, proposal):

@@ -1642,6 +1642,9 @@ rearm later pauses. Side intervals stay within the admitted node's current accou
 and remaining move allowance, and are measured from its cumulative used moves.
 Main work keeps priority even during a side interval. Standalone nodes can also
 run when admitted main work is externally blocked; they confer no root coverage.
+An allocated side interval also runs its standalone node while root finalization
+awaits the final review; root finalization keeps priority over unallocated
+standalone work.
 
 The public `search side-interval NODE --spec FILE` command requires exactly
 `max_moves`, `message_id`, `instruction`, and `provenance` in its spec. Use the

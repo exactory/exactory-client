@@ -802,6 +802,8 @@ def find_budget_defects(move, budget):
 def read_journal(workspace):
     path = workspace / "journal.jsonl"
     if not path.exists():
+        if (workspace.parent / ".search/tree.json").exists():
+            raise ValidationError(["journal.jsonl: missing; admission skeleton is incomplete; run search reconcile"])
         raise ValidationError(["journal.jsonl: missing"])
     return [json.loads(line) for line in path.read_text().splitlines()]
 
@@ -1297,6 +1299,11 @@ def read_activity(workspace):
 
 
 def describe_activity(entries):
+    session_identity = next((entry.get("session_id") for entry in reversed(entries)
+                             if entry.get("harness_command") is True
+                             and isinstance(entry.get("session_id"), str) and entry["session_id"].strip()), None)
+    if session_identity is not None:
+        entries = [entry for entry in entries if entry.get("session_id") == session_identity]
     if not entries:
         return ["activity: none recorded"]
     shown = entries[-ACTIVITY_SHOWN:]
