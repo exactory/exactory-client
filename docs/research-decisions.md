@@ -365,6 +365,28 @@ assets are delivered with their verified source bindings. A captured article
 without a native unit inventory is identified as not inventoried; receipt of its
 bytes does not certify complete article scope or grant full reading credit.
 
+A reviewer that needs more full text than one input holds reads it in parts and
+keeps its own verbatim excerpts. On 2026-10-27 two reviews of one problem record
+could not finish. A blind bar session requested seven full texts of 1,331,003
+characters together. Each continuation delivered some of them, the route fitting
+left out the earlier bodies, and the reviewer requested them again for ten
+rounds. A problem openness review carried eight full readings of 1,598,318
+characters. The route withheld five bodies by text priority, the reviewer did not
+accept reading records in place of complete reading, and a `native_math` review
+had no later turn in which the texts could arrive. Both totals exceed the route
+limits of 1,048,576 and 1,300,000 characters. The repair keeps four conditions.
+The reviewer compresses the sources, not the author, so an author's summary does
+not replace reading. The compressed form is verbatim excerpts with their
+locations, not summaries. A turn that delivers a full text tells the reviewer
+that the text will not come back. The harness checks every excerpt against the
+stored source text, and only checked excerpts reach later turns as source text.
+The final assessment rests on the reviewer's notes and checked excerpts, and a
+bounded passage request reads a missing part again. The
+[CLI reference](research-cli.md#scientific-contribution-decisions) gives the
+excerpt rules of source-request sessions, and its
+[problem creation section](research-cli.md#problem-creation) gives the reading
+chains of openness reviews.
+
 External-paper verification uses the `verification` role with `dossier_id: null`
 and `context: {"verification_task_id": "<bound task digest>"}`. It requires the
 same verified actual context but no author strategy or research-decision gates.

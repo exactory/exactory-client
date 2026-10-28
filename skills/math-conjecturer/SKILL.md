@@ -313,16 +313,34 @@ result and its source; start no solver work to reproduce an established result.
 5. Put the exported packet in the `context` of a `review-assignment` with that assignment id and
    reviewer id, `role: "native_math"`, `dossier_id: null`, a verified route and an author from
    the record. Run it with `review-run`.
-6. Record the observed finding with `exactory-research problem-openness` and
-   `{assignment_id}`.
-7. On `unresolved`, fill the recorded gap and obtain a new finding.
-8. On `already_solved`, redirect to the settling result, or record a new statement.
-9. When a neighbour is added, a new material search is not bound, a bound search or reading
+6. When the receipt of that assignment shows `reading_chain`, one input of the route cannot hold
+   the full texts of the readings, and the reviewer reads them in a chain of turns. Each turn is a
+   fresh input; the reviewer keeps notes and verbatim excerpts, and the harness checks every
+   excerpt against the stored text. Run the chain to its end:
+   - Assign the next turn with the same reviewer, route, author and packet and
+     `context: {native_packet, prior_assignment_id}`, where `prior_assignment_id` names the turn
+     that just ran. Run it with `review-run`. Repeat while the new assignment is a reading turn
+     (prompt template `exactory-openness-reading-v1/reading`).
+   - The assignment after the last reading turn is the final turn (prompt template
+     `exactory-openness-reading-v1/final`). It repeats the full texts that one input can hold, with
+     the reading record of the earlier turns. When it returns a reading answer with passage
+     requests, assign one more final turn in the same way.
+   - When `review-assignment` refuses the final turn with `review_input_too_large`, export the
+     packet again with `minimum.text_priority` (step 3) and start a new chain at step 5.
+7. Record the observed finding with `exactory-research problem-openness` and
+   `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
+   native result. For a chain, the record adds `reading_turns`, and every full text of the readings
+   must have reached a reading turn complete (`openness_reading_incomplete` names the missing ones).
+8. On `unresolved`, fill the recorded gap and obtain a new finding.
+9. On `already_solved`, redirect to the settling result, or record a new statement.
+10. When a neighbour is added, a new material search is not bound, a bound search or reading
    changes, or the finding no longer covers the current formulation, refresh the finding
-   (`problem_openness_stale`). A supplied native review also becomes stale when its current
-   solver attempt, native snapshot, observed review or proof bytes change. Its required proof
-   bytes must have reached both the original reviewer and the openness reviewer in their actual
-   authenticated requests. An omitted body or artifact descriptor alone supplies no proof bytes.
+   (`problem_openness_stale`). A finding from a reading chain also becomes stale when a turn of its
+   chain is no longer ready or its observed attempt changes. A supplied native review also becomes
+   stale when its current solver attempt, native snapshot, observed review or proof bytes change.
+   Its required proof bytes must have reached both the original reviewer and the openness
+   reviewer in their actual authenticated requests. An omitted body or artifact descriptor alone
+   supplies no proof bytes.
    Screening evidence also becomes stale when its source record, original response, selected
    bytes or authenticated reviewer delivery changes. Both the original acquisition record and
    the selected text must remain delivered, even under route input limits.
