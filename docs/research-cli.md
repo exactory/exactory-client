@@ -142,12 +142,30 @@ for a recorded bar, slate or result review. Under the excerpt rules:
   `no_stored_text`, `too_short`, `too_long` or `not_found`, and keeps the
   reviewer's text, marked as not checked. `reviewer_excerpts` lists the checked
   excerpts of all earlier turns in order, with the allowances used.
+- One turn delivers at most 120,000 characters of new full text. Full-text
+  requests are answered in request order. A source whose text bodies fit what
+  is left of the turn arrives whole. A source that would fit a fresh turn waits
+  with status `deferred_reading_budget` and a reason, and so does every later
+  full-text request of the turn that needs new text. The extracted text of a
+  longer source arrives in consecutive parts of at most 120,000 characters, one
+  turn after another. Each part is a delivery of its own text artifact with
+  `part: {version_id, part, parts, start, end, characters}`, where `start` and
+  `end` are character offsets in the stored text; the original file and the
+  other bodies of that source are not delivered with its parts. A part also maps
+  its span of the stored text, so a citation inside one part counts as
+  delivered. A request stays pending until its source, or its last part, has
+  arrived. Excerpts, passages and abstracts do not count against the budget.
+- A part ends after the last blank line in the last quarter of its
+  120,000-character window, else after the last newline there, else exactly at
+  120,000 characters. The parts cover the whole text in order, and the same
+  text always gives the same parts. Excerpts and passages are checked against
+  the whole stored text.
 - A `source` request at depth `fulltext` is answered with status
-  `already_delivered` when a turn of this session under the excerpt rules
-  delivered the complete stored text of that version. The actual recorded
-  request of that turn decides, and the answer names the turn. A turn under the
-  earlier rules does not count, so a session that began before these rules
-  receives each text once more.
+  `already_delivered` when turns of this session under the excerpt rules
+  delivered the complete stored text of that version, whole or in all of its
+  parts. The actual recorded requests of those turns decide, and the answer names
+  the latest of them. A turn under the earlier rules does not count, so a
+  session that began before these rules receives each text once more.
 - A `passage` request `{id, kind: "passage", version_id, anchor, characters}`
   names a verbatim anchor of at least 20 normalized characters and a whole number
   of characters from 1 to 20,000. The next turn answers it with the original text
@@ -158,6 +176,19 @@ for a recorded bar, slate or result review. Under the excerpt rules:
 
 A final phase assessment still needs every pending request settled.
 `already_delivered` answers and passage answers are settled and never pending.
+
+A continuation whose recorded attempts all ended without a completed output,
+for example because the run was stopped at the route timeout, does not hold the
+session. Assign a new continuation of the same parent, with the same reviewer,
+route and author: it replaces the failed one, which stays in the record and can
+no longer be run or continued (`review_assignment_replaced`). A continuation
+with a completed output, or one that never ran, still blocks a second
+continuation of its parent (`review_source_continuation_fork`).
+
+The excerpt rules of 0.64.2 to 0.65.1 (`exactory-review-excerpts-v1`) had no
+reading budget. Assignments recorded under them keep their prompt and stay
+authenticated, and their sessions continue under the current rules
+(`exactory-review-excerpts-v2`) from the next continuation.
 
 A text route fits an oversized request, other than a `complete-visible-v1`
 continuation, by applying these reductions in order, one at a time, until the
@@ -1699,19 +1730,24 @@ packet, the statement record, the formulations (the statement and its
 neighbours), `reading_plan` (`turn`, `delivered_now`, `delivered_before` and
 `remaining`) and `reading_record`, which carries the earlier turns: their notes,
 checked excerpts, passage answers and the allowances used. Its evidence is only
-the extracted full texts of `delivered_now`; the search and reading records wait
-for the final turn. The texts follow `text_delivery_priority` and then the
-version id, and a turn takes the next texts while its actual fitted request
-delivers each of them complete within the limit. A text that does not fit alone
-fails the assignment with `review_input_too_large`, which names the version and
-its size. The reviewer is told that a text delivered in a turn is not delivered
-in a later reading turn, and that the final turn repeats a full text only when
-its input has room for it, so it cannot count on seeing the text again. It
-answers with `{schema_version: 1, stage: "reading", subject_digest,
-claim_digest, reviewer, excerpts, notes, passage_requests}`: `notes` (at most
-20,000 characters) says what each delivered work proves and leaves open and how
-it bears on each formulation, `excerpts` are verbatim copies, and each passage
-request is `{id, version_id, anchor, characters}`. Excerpts and passages follow
+the units of `delivered_now`; the search and reading records wait for the final
+turn. A unit is a whole extracted full text of at most 120,000 characters, or a
+part of a longer one, cut by the rule of the excerpt rules above and saved as
+its own text artifact. Each plan entry names its unit with `{version_id, part,
+parts, start, end, characters}`. The units follow `text_delivery_priority` and
+then the version id. A turn takes the longest run of the next units, at least
+one, whose characters together are at most 120,000 and whose actual fitted
+request delivers each of them complete within the input limit. A unit that does
+not fit the input limit alone fails the assignment with
+`review_input_too_large`, which names the version and its size. The reviewer is
+told that a text or part delivered in a turn is not delivered in a later
+reading turn, and that the final turn repeats a full text only when its input
+has room for it, so it cannot count on seeing the text again. It answers with
+`{schema_version: 1, stage: "reading", subject_digest, claim_digest, reviewer,
+excerpts, notes, passage_requests}`: `notes` (at most 20,000 characters) says
+what each delivered work or part proves and leaves open and how it bears on each
+formulation, `excerpts` are verbatim copies, and each passage request is
+`{id, version_id, anchor, characters}`. Excerpts and passages follow
 the checks and limits of the excerpt rules of bar, slate and result sessions in
 [Scientific contribution decisions](#scientific-contribution-decisions). A
 malformed answer is refused with `invalid_reading_response` (check
@@ -1726,7 +1762,12 @@ Run a reading chain turn by turn:
    `context: {native_packet, prior_assignment_id}` naming the previous turn. The
    previous turn must be ready and its answer a valid reading answer. The harness
    checks its excerpts, answers its passages and builds the next reading turn
-   while texts remain. Run each turn with `review-run`.
+   while units remain. Run each turn with `review-run`. When a turn's attempts
+   all ended without a completed output, for example at the route timeout,
+   assign the next turn again with the same `prior_assignment_id`: the new
+   assignment replaces the failed turn, which can no longer be run or continued
+   (`review_assignment_replaced`). A failed first turn has no parent; export the
+   packet again under a new assignment id and start a new chain.
 3. After the last reading turn the next assignment is the final turn: the native
    packet with `reading_record`, built and fitted as a single turn, on its own
    prompt. `text_delivery_priority` decides which full texts it can repeat. When
@@ -1741,13 +1782,20 @@ Run a reading chain turn by turn:
 
 `problem-openness` on a final turn keeps every check and also checks the chain:
 each earlier turn is ready, the reading record names their observed attempts,
-and every extracted full text of the readings reached a reading turn complete in
-that turn's actual recorded request. The record adds `reading_turns:
-[{assignment_id, attempt_id, delivered}]`, and the openness assessment checks
-them again. When a turn is no longer ready or its observed attempt changes, the
+and every extracted full text of the readings reached reading turns complete,
+whole or in all of its parts, in their actual recorded requests. The record adds
+`reading_turns: [{assignment_id, attempt_id, delivered, delivered_parts?}]`:
+`delivered` lists the versions whose whole text a turn delivered, and
+`delivered_parts` the parts `{version_id, part, parts}` when it delivered any.
+The openness assessment checks them again. When a turn is no longer ready or its observed attempt changes, the
 finding becomes `problem_openness_stale` with the cause `review_context_unverified`
 or `openness_reading_incomplete`. A finding without reading turns behaves as
 before.
+
+A chain that 0.64.2 to 0.65.1 started (prompts `exactory-openness-reading-v1`,
+whole texts without a reading budget) keeps its recorded turns, which stay
+authenticated. Its next turn divides the remaining texts into units and
+continues under the current prompts (`exactory-openness-reading-v2`).
 
 Refusal codes of a reading chain:
 
@@ -1761,7 +1809,9 @@ Refusal codes of a reading chain:
 - `review_source_continuation_mismatch`: the next turn names another packet,
   reviewer, route or author, or a turn that is not part of a reading chain.
 - `review_source_continuation_fork`: another turn already continues the named
-  turn.
+  turn, and that turn has a completed output or has not run.
+- `review_assignment_replaced`: the named turn ended without output and a later
+  turn of the same parent replaced it; it can be neither run nor continued.
 - `review_source_continuation_unverified`: the named turn has no observed,
   authenticated output in a verified context.
 - `review_resampling_forbidden`: the named final turn returned the native result,

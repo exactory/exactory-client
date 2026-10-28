@@ -315,14 +315,20 @@ result and its source; start no solver work to reproduce an established result.
    the record. Run it with `review-run`.
 6. When the receipt of that assignment shows `reading_chain`, one input of the route cannot hold
    the full texts of the readings, and the reviewer reads them in a chain of turns. Each turn is a
-   fresh input; the reviewer keeps notes and verbatim excerpts, and the harness checks every
+   fresh input with at most 120,000 characters of new full text: whole texts, or consecutive parts
+   of a longer text. The reviewer keeps notes and verbatim excerpts, and the harness checks every
    excerpt against the stored text. Run the chain to its end:
    - Assign the next turn with the same reviewer, route, author and packet and
      `context: {native_packet, prior_assignment_id}`, where `prior_assignment_id` names the turn
      that just ran. Run it with `review-run`. Repeat while the new assignment is a reading turn
-     (prompt template `exactory-openness-reading-v1/reading`).
+     (prompt template `exactory-openness-reading-v2/reading`). A text of 300,000 characters takes
+     three reading turns, so a chain over several long texts has many turns.
+   - When a turn's run ends without output, for example at the route timeout, assign the next
+     turn again with the same `prior_assignment_id`. The new assignment replaces the failed turn,
+     which can no longer be run or continued (`review_assignment_replaced`). When the first turn
+     fails, export the packet again under a new assignment id and start a new chain.
    - The assignment after the last reading turn is the final turn (prompt template
-     `exactory-openness-reading-v1/final`). It repeats the full texts that one input can hold, with
+     `exactory-openness-reading-v2/final`). It repeats the full texts that one input can hold, with
      the reading record of the earlier turns. When it returns a reading answer with passage
      requests, assign one more final turn in the same way.
    - When `review-assignment` refuses the final turn with `review_input_too_large`, export the
@@ -517,7 +523,11 @@ states the exact rule.
    refreshed when its candidates or bars change, and a bar or a slate review is refreshed to
    repair `review_evidence_undelivered`.
 4. Answer a reviewer's source request with a continuation assignment of the same role, route and
-   reviewer.
+   reviewer. One continuation delivers at most 120,000 characters of new full text, so long
+   requested texts arrive in parts and the other requests wait (`deferred_reading_budget`); keep
+   assigning continuations while requests stay pending. When a continuation's run ends without
+   output, for example at the route timeout, assign a new continuation of the same parent: it
+   replaces the failed one.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
    repaired with evidence changes the evidence digest, and the result reviews are refreshed for
    the same reviewers.

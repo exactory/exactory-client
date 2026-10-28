@@ -387,6 +387,14 @@ excerpt rules of source-request sessions, and its
 [problem creation section](research-cli.md#problem-creation) gives the reading
 chains of openness reviews.
 
+One turn delivers at most 120,000 characters of new full text, and a longer
+text arrives in parts over consecutive turns. On 2026-10-28 a reading turn with
+956,141 characters of new full text and a bar continuation with about 600,000
+were stopped at the route's 600-second limit before the reviewer had read them
+and written its excerpts. The input limit was not the constraint; the work of
+one turn was. A turn that ended without output can therefore be replaced by a
+new continuation of the same parent.
+
 External-paper verification uses the `verification` role with `dossier_id: null`
 and `context: {"verification_task_id": "<bound task digest>"}`. It requires the
 same verified actual context but no author strategy or research-decision gates.
