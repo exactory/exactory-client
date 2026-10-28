@@ -7,9 +7,9 @@ import os
 import re
 import stat
 
-from .artifacts import ArtifactStore, describe_artifact
+from .artifacts import ArtifactStore, describe_artifact, is_sealed_artifact
 from .errors import ResearchError
-from .operations import fields, immutable_record, prepared_mutation, text
+from .operations import _read_preparation, fields, immutable_record, prepared_mutation, text
 from .storage import Store
 from .workspace import checked_parent, read_file, strict_json
 
@@ -65,11 +65,12 @@ def record_probe_artifact_origin(root, probe_id, sha256, role):
                 raise
 
 
-def pin_probe_artifact(root, probe_id, data, media_type, role):
+def pin_probe_artifact(root, probe_id, data, media_type, role, *, sealed=False):
     """Register provenance durably before publishing a content-addressed capture."""
     descriptor = describe_artifact(data, media_type)
     record_probe_artifact_origin(root, probe_id, descriptor["sha256"], role)
-    return ArtifactStore(root).put(data, media_type)
+    artifacts = ArtifactStore(root)
+    return (artifacts.put_sealed if sealed else artifacts.put)(data, media_type)
 
 
 def find_probe_path_bindings(records, path):
@@ -97,7 +98,8 @@ def find_probe_path_bindings(records, path):
 def should_stage_probe_artifact_pin(records, payload, request_id):
     """Resume a reserved pin or freeze a path belonging to an existing launch."""
     return (isinstance(request_id, str) and request_id in records.get("probe_artifact_pin", {})
-            or isinstance(payload, dict) and bool(find_probe_path_bindings(records, payload.get("path"))))
+            or isinstance(payload, dict) and (is_sealed_artifact(payload)
+                or bool(find_probe_path_bindings(records, payload.get("path")))))
 
 
 def read_probe_pin_source(root, relative):
@@ -118,18 +120,21 @@ def read_probe_pin_source(root, relative):
         raise ResearchError(code, "Probe pin source could not be read", {"errno": error.errno}) from error
 
 
-def pin_probe_local_artifact(store, payload, *, expected_revision, request_id):
+def pin_probe_local_artifact(store, payload, *, expected_revision, request_id, _snapshot=None):
     """Publish one frozen local pin after its provenance, and recover its receipt."""
-    original = store.committed_request(request_id)
-    if original is not None:
+    snapshot = _read_preparation(store, _snapshot)
+    if snapshot.has_request(request_id):
         return store.mutate("workspace.artifact", payload, lambda transaction: None,
-                            expected_revision=expected_revision, request_id=request_id)
+                            expected_revision=expected_revision, request_id=request_id,
+                            _preparation=snapshot.release_proof())
     artifacts = ArtifactStore(store.root)
     frozen = {}
 
     def prepare_intent(records, value):
         fields(value, ("id", "path", "media_type"))
         text(value["id"], "Local artifact ID")
+        if is_sealed_artifact(value):
+            raise ResearchError("artifact_sealed", "Completion-check outputs are sealed unread")
         data, source_mtime_ns = read_probe_pin_source(store.root, value["path"])
         artifact = describe_artifact(data, value["media_type"])
         # Validate the eventual record before reserving this request identity.
@@ -140,6 +145,9 @@ def pin_probe_local_artifact(store, payload, *, expected_revision, request_id):
                     or binding["original_mtime_ns"] is not None and binding["original_mtime_ns"] != source_mtime_ns):
                 if binding["probe_id"] not in records.get("probe_intent", {}):
                     raise ResearchError("probe_intent_missing", "Retain the probe intent before pinning its captured files")
+                context = records["probe_intent"][binding["probe_id"]].get("program_run")
+                if context is not None and not context["read_outputs"]:
+                    raise ResearchError("artifact_sealed", "Completion-check outputs are sealed unread")
                 origins.setdefault(binding["probe_id"], set()).add(binding["role"])
         origins = [{"probe_id": identifier, "sha256": artifact["sha256"], "roles": sorted(roles)}
                    for identifier, roles in sorted(origins.items())]
@@ -154,7 +162,7 @@ def pin_probe_local_artifact(store, payload, *, expected_revision, request_id):
         return changes, intent
 
     intent = prepared_mutation(store, "workspace.probe_artifact_intent", payload, prepare_intent,
-        expected_revision=expected_revision, request_id=request_id + ":probe-origin")["result"]
+        expected_revision=expected_revision, request_id=request_id + ":probe-origin", _snapshot=snapshot)["result"]
     if "data" in frozen:
         data = frozen["data"]
     else:

@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.65.0](docs/releases/0.65.0.md) accepts run outputs of any media type as result evidence, seals
+completion-check outputs that the author did not read and discloses program runs before a plan, stores new
+manuscript review inputs by reference, packages the code, inputs and outputs of cited runs for a deposit, reports
+DOI family conflicts at import, and makes a small write on a large study store about a third faster and lighter.
+
 Version [0.64.2](docs/releases/0.64.2.md) lets a review read more full text than one route input can hold.
 The reviewer keeps verbatim excerpts that the harness checks against the stored source text, a repeated request
 for a delivered text is answered as already delivered, and a problem openness review whose texts do not fit one

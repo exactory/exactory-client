@@ -19,6 +19,7 @@ from .errors import ResearchError
 
 
 _OBJECT_DIRECTORY = "research/sources/objects"
+_SEALED_DIRECTORY = "research/sources/sealed"
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 _TOKEN = r"[-!#$%&'*+.^_`|~0-9A-Za-z]+"
 _MEDIA_TYPE = re.compile(_TOKEN + "/" + _TOKEN + r"(?:;[\x20-\x7e]+)?\Z")
@@ -120,7 +121,12 @@ def describe_artifact(data: bytes, media_type: str) -> dict:
             "size": len(data), "media_type": media_type}
 
 
-def validate_reference(ref: dict):
+def is_sealed_artifact(ref):
+    return isinstance(ref, dict) and isinstance(ref.get("path"), str) and ref["path"].startswith(
+        _SEALED_DIRECTORY + "/")
+
+
+def validate_reference(ref: dict, *, sealed=False):
     """Check the complete descriptor before filesystem access or a cache hit."""
     if not isinstance(ref, dict) or not {"sha256", "path", "size", "media_type"} <= ref.keys():
         raise ResearchError("invalid_input", "Artifact reference is missing required fields")
@@ -130,7 +136,10 @@ def validate_reference(ref: dict):
         raise ResearchError("invalid_input", "Artifact size must be a nonnegative integer")
     _media_type(ref["media_type"])
     _relative_parts(ref["path"])
-    if ref["path"] != _OBJECT_DIRECTORY + "/" + ref["sha256"]:
+    directory = _SEALED_DIRECTORY if sealed else _OBJECT_DIRECTORY
+    if not sealed and is_sealed_artifact(ref):
+        raise ResearchError("artifact_sealed", "Completion-check outputs are sealed unread")
+    if ref["path"] != directory + "/" + ref["sha256"]:
         raise ResearchError("unsafe_path", "Artifact path must identify its content-addressed object")
 
 
@@ -153,8 +162,16 @@ class ArtifactStore:
 
     def put(self, data: bytes, media_type: str) -> dict:
         reference = describe_artifact(data, media_type)
+        return self._put(data, reference, _OBJECT_DIRECTORY)
+
+    def put_sealed(self, data: bytes, media_type: str) -> dict:
+        reference = describe_artifact(data, media_type)
+        reference["path"] = _SEALED_DIRECTORY + "/" + reference["sha256"]
+        return self._put(data, reference, _SEALED_DIRECTORY)
+
+    def _put(self, data, reference, relative):
         digest = reference["sha256"]
-        with _artifact_operation(), self._workspace.directory(_OBJECT_DIRECTORY, create=True) as directory:
+        with _artifact_operation(), self._workspace.directory(relative, create=True) as directory:
             try:
                 _verify_object(directory, reference)
                 os.fsync(directory)
@@ -179,6 +196,18 @@ class ArtifactStore:
                 os.unlink(temporary, dir_fd=directory)
             os.fsync(directory)
         return reference
+
+    def verify_sealed(self, ref):
+        """Verify retained unread bytes without returning their contents to a reader."""
+        validate_reference(ref, sealed=True)
+        try:
+            with self._workspace.directory(_SEALED_DIRECTORY) as directory:
+                _verify_object(directory, ref)
+        except FileNotFoundError as error:
+            raise ResearchError("artifact_missing", "Sealed artifact has not been stored",
+                                {"path": ref["path"]}) from error
+        except OSError as error:
+            raise _filesystem_error(error) from error
 
     def read(self, ref: dict) -> bytes:
         validate_reference(ref)

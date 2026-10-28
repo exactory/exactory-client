@@ -11,7 +11,9 @@ and normalized page coordinates. HTML visuals use {kind: html, anchor: TEXT,
 assets?: [{url, source_id, artifact}]}. Assets are acquired original image bytes,
 bound to actual resources of the selected saved HTML visual.
 
-PDF bounds use the acquired extraction's form-feed page map, not printed page
+Result evidence also admits {kind: artifact} for a whole verified run output of
+any media type. Result PDF page bounds come from pdfinfo on the output bytes.
+Source PDF bounds use the acquired extraction's form-feed page map, not printed page
 numbers. No extraction/page map means no mechanically admitted PDF inspection.
 Printed pagination is a retained assertion. Neither valid coordinates nor a
 quoted passage prove comprehension or scientific truth.
@@ -19,11 +21,16 @@ quoted passage prove comprehension or scientific truth.
 
 import copy
 import hashlib
+import shutil
+import tempfile
+import time
+from pathlib import Path
 
 from .errors import ResearchError
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
 from .identities import normalize_identifier, version_of
 from .imports import _pointer
+from .ocr import read_pdfinfo_page_count, run_bounded
 from .operations import fields, is_finite_number, text
 from .providers import _json
 from .storage import _canonical
@@ -80,11 +87,30 @@ def _read_json_value(artifacts, artifact, data, pointer):
     return _pointer(_json(data, require_object=False), pointer)
 
 
-def read_locator(artifacts, artifact, locator, *, capture=None):
+def _read_output_pdf_page_count(data):
+    executable = shutil.which("pdfinfo")
+    try:
+        if executable:
+            with tempfile.TemporaryDirectory(prefix="exactory-result-pdf-") as directory:
+                original = Path(directory) / "output.pdf"
+                original.write_bytes(data)
+                info = run_bounded([executable, str(original)], 65536, time.monotonic() + 30)
+            page_count = read_pdfinfo_page_count(info)
+            if page_count is not None:
+                return page_count
+    except (OSError, ResearchError, ValueError) as error:
+        raise ResearchError("invalid_locator", "The output PDF page count could not be established") from error
+    raise ResearchError("invalid_locator", "The output PDF page count requires successful pdfinfo output")
+
+
+def read_locator(artifacts, artifact, locator, *, capture=None, result=False):
     data = artifacts.read(artifact)
     if not isinstance(locator, dict):
         raise ResearchError("invalid_locator", "A source locator is required")
     kind = locator.get("kind")
+    if kind == "artifact" and result:
+        fields(locator, ("kind",), code="invalid_locator")
+        return None
     if kind in ("text", "span", "json"):
         try:
             content = data.decode("utf-8")
@@ -127,14 +153,21 @@ def read_locator(artifacts, artifact, locator, *, capture=None):
                         and capture.get("extraction_status") == "extracted"
                         and parse_base_media_type(capture.get("extraction", {}).get("media_type")) == "application/pdf"
                         and capture.get("extraction", {}).get("format_detection") == "pdf_signature_from_generic_binary")
-        if ((media != "application/pdf" and not inferred_pdf) or not data.startswith(b"%PDF-")
-                or capture is None or capture.get("original") != artifact or capture.get("text") is None):
-            raise ResearchError("invalid_locator", "PDF visual locators require the original and an acquired page map")
-        pages = artifacts.read(capture["text"]).decode("utf-8").split("\f")
-        if not pages[-1].strip():
-            pages.pop()
+        if result:
+            if media != "application/pdf" or not data.startswith(b"%PDF-"):
+                raise ResearchError("invalid_locator", "PDF result locators require a PDF output")
+            page_count = _read_output_pdf_page_count(data)
+        else:
+            if ((media != "application/pdf" and not inferred_pdf) or not data.startswith(b"%PDF-")
+                    or capture is None or capture.get("original") != artifact or capture.get("text") is None):
+                raise ResearchError("invalid_locator",
+                                    "PDF visual locators require the original and an acquired page map")
+            pages = artifacts.read(capture["text"]).decode("utf-8").split("\f")
+            if not pages[-1].strip():
+                pages.pop()
+            page_count = len(pages)
         region = locator["region"]
-        if (type(locator["page_index"]) is not int or not 0 <= locator["page_index"] < len(pages)
+        if (type(locator["page_index"]) is not int or not 0 <= locator["page_index"] < page_count
                 or not isinstance(region, list) or len(region) != 4
                 or not all(is_finite_number(n) for n in region)
                 or not 0 <= region[0] < region[0] + region[2] <= 1

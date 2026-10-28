@@ -27,6 +27,16 @@ def measure_nesting(value):
     return 1 + max(map(measure_nesting, value), default=0) if isinstance(value, list) else 0
 
 
+def inline_bundle_inputs(bundle, artifacts):
+    """Expand the pinned objects when checking the depth of the complete historical input shape."""
+    expanded = dict(bundle)
+    for key in ("review_inputs", "execution_observations"):
+        if key + "_artifact" in bundle:
+            expanded[key] = json.loads(artifacts.read(bundle[key + "_artifact"]))
+            expanded.pop(key + "_artifact")
+    return expanded
+
+
 def run_export(root, kind):
     """Run exactory-research export --kind KIND on the workspace at root into a new directory."""
     return subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "export", "--kind", kind,
@@ -737,7 +747,8 @@ class FulltextComponentDepthTests(SourceLimitedCase):
         bundle = self.scoped_manuscript()
         # review_inputs.synthesis.foundation.source_deferrals[0].dependencies.work.fulltexts[K].component.spec holds the
         # payload's component 10 levels deeper than the payload does.
-        self.assertEqual(measure_nesting(bundle), 42)
+        self.assertEqual(measure_nesting(inline_bundle_inputs(bundle, self.artifacts)), 42)
+        self.assertLessEqual(measure_nesting(bundle), 100)
 
     def test_a_fulltext_component_at_the_command_depth_bound_reaches_the_paper_review_assignment(self):
         # A paper review assignment repeats the stored bundle at context.bundle, and its record holds the component 12
@@ -768,7 +779,9 @@ class FulltextComponentDepthTests(SourceLimitedCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         saved = self.store.snapshot()["records"]["review_assignment"]["paper-assignment"]
         self.assertEqual(saved["context"]["bundle"], bundle)
-        self.assertEqual(measure_nesting(saved), 44)
+        expanded = dict(saved, context=dict(saved["context"], bundle=inline_bundle_inputs(bundle, self.artifacts)))
+        self.assertEqual(measure_nesting(expanded), 44)
+        self.assertLessEqual(measure_nesting(saved), 100)
 
 
 class ScopedAssessmentDepthTests(SourceLimitedCase):

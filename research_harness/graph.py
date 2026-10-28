@@ -32,7 +32,7 @@ of its unambiguous family without claiming their contents are interchangeable.
 from .errors import ResearchError
 from .components import is_component
 from .evidence import digest
-from .identities import family_versions, normalize_identifier
+from .identities import family_versions, normalize_identifier, select_family
 from .operations import fields, iso_date, prepared_mutation, profile_name, strings
 from .source_links import exact_work, fulltext_capture
 
@@ -209,10 +209,19 @@ def citation_graph(records, profile):
                 elif target is not None:
                     try:
                         identifier = normalize_identifier(target)
-                        candidates = [identifier] if identifier in records.get("work", {}) else family_versions(records, identifier)
-                        # Resolve aliases even for an existing exact ID to expose
-                        # conflicting registry identity assertions.
-                        family_versions(records, identifier)
+                        selection = resolution or occurrence
+                        if "target_family" in selection:
+                            chosen = select_family(records, identifier, selection["target_family"])
+                            candidates = records["work_family"][chosen]["version_ids"]
+                            exact = records.get("work", {}).get(identifier)
+                            if (exact is not None and exact["work_id"] == chosen
+                                    and (not identifier.startswith("arxiv:") or exact["version"] is not None)):
+                                candidates = [identifier]
+                        else:
+                            candidates = ([identifier] if identifier in records.get("work", {})
+                                          else family_versions(records, identifier))
+                            # Ordinary references still expose conflicting registry identity assertions.
+                            family_versions(records, identifier)
                         candidates = [v for v in candidates if not v.startswith("arxiv:") or records["work"][v]["version"] is not None]
                         if not candidates:
                             raise ResearchError("missing_version", "Reference has no captured exact version")

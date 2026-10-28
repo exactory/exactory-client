@@ -13,6 +13,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .graph import find_active_requirements, obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
+from .storage import _canonical, _check_stored_bounds
 from .workspace import read_file, strict_json
 
 
@@ -22,6 +23,16 @@ FILE_TYPES = {"pdf": "application/pdf", "abstract": "text/plain", "bibliography"
 SCORE_SCALES = (("soundness", 4), ("presentation", 4), ("contribution", 4), ("overall", 10))
 # The axes whose score below its maximum names the changes that would reach it (design 7.2).
 CHANGE_AXES = ("soundness", "presentation", "contribution")
+_BUNDLE_INPUTS = ("review_inputs", "execution_observations")
+
+
+def read_bundle_input(bundle, artifacts, name):
+    """Resolve a pinned input object or retain the original inline value of a historical bundle."""
+    if name + "_artifact" not in bundle:
+        return bundle.get(name)
+    if artifacts is None:
+        raise ResearchError("invalid_input", "Reading a pinned input artifact requires its artifact store")
+    return strict_json(artifacts.read(bundle[name + "_artifact"]))
 
 
 def _ready(records, artifacts, *, check_decision=True):
@@ -57,7 +68,7 @@ def _rebuild_pinned_readiness(records, artifacts, bundle):
     identifier = bundle["id"]
     evaluation = context.read_snapshot(bundle.get("prepared_revision"), identifier)
     snapshot = evaluation.records
-    inputs = bundle.get("review_inputs")
+    inputs = read_bundle_input(bundle, artifacts, "review_inputs")
     context.require_recorded_fields(inputs, ("candidate", "synthesis", "branches"), identifier)
     if not inputs or not inputs.get("synthesis") or not inputs.get("candidate"):
         context.require_reassessment(identifier, "recorded manuscript readiness inputs")
@@ -208,12 +219,14 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
             readiness_review = records["readiness_review"][records["development_selection"]["review"]["review_id"]]
         accounting = account_citations(records, artifacts.read(saved["bibliography"]["artifact"]),
                                        value.get("citation_accounting"))
+        # Keep the original bundle's cross-interpreter bounds when moving its inputs to immutable objects.
+        _check_stored_bounds({key: report[key] for key in _BUNDLE_INPUTS})
+        inputs = {key + "_artifact": artifacts.put(_canonical(report[key]).encode("utf-8"), "application/json")
+                  for key in _BUNDLE_INPUTS}
         bundle = dict(value, files=saved, citation_accounting=accounting, candidate=candidate,
                       readiness_digest=digest(report), readiness_review=readiness_review,
                       readiness_binding=_scientific_readiness(report, records),
-                      review_inputs=report["review_inputs"], prepared_revision=expected_revision,
-                      execution_observations=report["execution_observations"],
-                      mechanical_only=True)
+                      prepared_revision=expected_revision, mechanical_only=True, **inputs)
         if scoped is not None:
             bundle["publication_scope"] = {"mode": scoped["payload"]["policy"], "contract_id": scoped["id"],
                                            "scientific_target_digest": scoped["scientific_target_digest"],
@@ -259,6 +272,9 @@ def _bundle(records, artifacts):
             unchanged = digest(dict(report, review=original_review)) == bundle["readiness_digest"]
     if not unchanged:
         raise ResearchError("publication_readiness_stale", "Prepare and review the manuscript against current whole-candidate readiness")
+    for key in _BUNDLE_INPUTS:
+        if key + "_artifact" in bundle:
+            artifacts.read(bundle[key + "_artifact"])
     for item in bundle["files"].values():
         if item is not None and read_file(artifacts.root, item["path"]) != artifacts.read(item["artifact"]):
             raise ResearchError("publication_artifact_changed", "The manuscript or its supporting files changed after preparation",
@@ -288,7 +304,10 @@ def latest_reviews(records, bundle_digest):
 
 def validate_assessor(artifacts, assessor, authors):
     """An identified human or agent assessor with pinned provenance who is not an author."""
-    fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"))
+    fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"),
+           ("author_memory_notes_present",))
+    if "author_memory_notes_present" in assessor and type(assessor["author_memory_notes_present"]) is not bool:
+        raise ResearchError("invalid_input", "Author memory notes present must be a boolean")
     for key in ("id", "relationship", "independence_basis"):
         text(assessor[key], "Independent assessor " + key)
     if assessor["kind"] not in ("human", "agent"):

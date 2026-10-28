@@ -8,7 +8,7 @@ evidence without labels."""
 import json
 from pathlib import Path
 
-from .artifacts import ArtifactStore, describe_artifact
+from .artifacts import ArtifactStore, describe_artifact, is_sealed_artifact
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -23,7 +23,7 @@ def references(value):
     found = {}
     def visit(item):
         if isinstance(item, dict):
-            if {"path", "sha256", "size", "media_type"} <= item.keys():
+            if {"path", "sha256", "size", "media_type"} <= item.keys() and not is_sealed_artifact(item):
                 found[item["path"]] = item
             for child in item.values():
                 visit(child)
@@ -112,11 +112,12 @@ def _project_current_claims(bundle, artifacts):
 
 def deliver_manuscript(store, destination):
     snapshot = store.snapshot()
-    report = publication_state(snapshot["records"], Evaluation(snapshot["records"], ArtifactStore(store.root)), "manuscript")
+    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    report = publication_state(snapshot["records"], artifacts, "manuscript")
     if not report["ready"]:
         raise ResearchError("readiness_required", "Prepare a current manuscript bundle before independent delivery", {"obligations": report["obligations"]})
-    bundle, derived = _project_current_claims(report["bundle"], ArtifactStore(store.root))
-    packet = manuscript_packet(snapshot["records"], bundle)
+    bundle, derived = _project_current_claims(report["bundle"], artifacts)
+    packet = manuscript_packet(snapshot["records"], bundle, artifacts)
     if bundle.get("publication_scope") is not None:
         from .scientific_delivery import project_delivery
         from .publication_scope import find_publication_scope
@@ -131,11 +132,12 @@ def deliver_manuscript(store, destination):
 def deliver_round(store, destination):
     """The latest round decision on the exact current bundle, delivered to the independent round assessor."""
     records = store.snapshot()["records"]
-    bundle = _bundle(records, Evaluation(records, ArtifactStore(store.root)))
+    artifacts = Evaluation(records, ArtifactStore(store.root))
+    bundle = _bundle(records, artifacts)
     decisions = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"]]
     if not decisions:
         raise ResearchError("round_decision_missing", "Record the round decision before delivering it for review")
-    packet = round_packet(records, bundle, max(decisions, key=lambda d: d["decided_revision"]))
+    packet = round_packet(records, bundle, max(decisions, key=lambda d: d["decided_revision"]), artifacts)
     if bundle.get("publication_scope") is not None:
         from .scientific_delivery import project_delivery
         from .publication_scope import find_publication_scope

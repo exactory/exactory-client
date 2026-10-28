@@ -189,6 +189,12 @@ def _exit_with_error(message: str, code: int = 1) -> None:
     sys.exit(code)
 
 
+def _run_package(args: argparse.Namespace) -> None:
+    from research_harness.deposit_package import build_package
+    result = build_package(Store(find_workspace()), args.output, bundle=args.bundle, includes=args.include)
+    print(json.dumps(result, indent=2))
+
+
 def _run_init(args: argparse.Namespace) -> None:
     workspace_dir = Path(args.dir)
     state_path = workspace_dir / _DRAFT_STATE_PATH
@@ -1654,6 +1660,14 @@ def _build_parser() -> argparse.ArgumentParser:
                       help="Corpus the cohort is stated against (default: arxiv).")
     init.set_defaults(handler=_run_init)
     add_identity(init, required=False)
+
+    package = commands.add_parser("package", allow_abbrev=False,
+                                  help="Build an offline archive of a pinned manuscript's code, data and records.")
+    package.add_argument("--output", required=True, help="New ZIP path for the deposit's sources archive.")
+    package.add_argument("--bundle", help="Pinned bundle ID or digest (default: the selected bundle).")
+    package.add_argument("--include", action="append", default=[],
+                         help="Include a supplementary workspace path, keeping its relative name.")
+    package.set_defaults(handler=_run_package)
 
     deposit = commands.add_parser("deposit", allow_abbrev=False,
                                   help="Deposit the built PDF to Zenodo.")

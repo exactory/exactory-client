@@ -13,6 +13,15 @@ from pathlib import Path
 from .errors import ResearchError
 
 
+def read_pdfinfo_page_count(info):
+    """Read one positive Pages field; multiline metadata must not supply another one."""
+    counts = re.findall(rb"(?m)^Pages:([^\r\n]*)", info)
+    if len(counts) != 1 or re.fullmatch(rb"[ \t]*[0-9]+[ \t]*", counts[0]) is None:
+        return None
+    count = int(counts[0])
+    return count if count > 0 else None
+
+
 def run_bounded(argv, limit, deadline, *, include_stderr=False):
     """Collect bounded output and always terminate a timed-out child."""
     process = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -89,10 +98,9 @@ class OcrPdfExtractor:
                 original, image = Path(directory) / "source.pdf", Path(directory) / "page.pgm"
                 original.write_bytes(data)
                 info = run_bounded([self.executables["pdfinfo"], str(original)], 65536, deadline)
-                match = re.search(rb"(?m)^Pages:\s*(\d+)\s*$", info)
-                if not match or int(match.group(1)) < 1:
+                page_count = read_pdfinfo_page_count(info)
+                if page_count is None:
                     raise ResearchError("malformed_pdf", "PDF page count could not be established")
-                page_count = int(match.group(1))
                 if page_count > self.max_pages:
                     raise ResearchError("extraction_too_large", "PDF exceeds the OCR page limit")
                 pages, size = [], 0

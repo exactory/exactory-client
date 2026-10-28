@@ -210,7 +210,10 @@ def build_parser():
             description="Use --file with the typed JSON shape in docs/research-cli.md. Saved assertions and downloads are not successful readings.")
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
-        add_identity(item)
+        add_identity(item, required=command != "import-response")
+        if command == "import-response":
+            item.add_argument("--preview", action="store_true",
+                              help="Report new DOI-family conflicts without writing the import.")
     for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
                     "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
@@ -289,7 +292,7 @@ def build_parser():
     return parser
 
 
-def acquisition_command(store, command, payload, identity):
+def acquisition_command(store, command, payload, identity, *, preview=False):
     if command == "collect":
         fields(payload, ("definition",), ("max_requests", "page_size"))
         return acquisition.collect_cohort(store, **payload, **identity)
@@ -313,6 +316,8 @@ def acquisition_command(store, command, payload, identity):
     fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
     values = dict(payload)
     values["response"] = Path(values.pop("response_file")).read_bytes()
+    if preview:
+        return acquisition.preview_import_response(store, **values)
     return acquisition.import_response(store, **values, **identity)
 
 
@@ -439,6 +444,10 @@ def run(args):
     if args.command == "example":
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
+    preview = args.command == "import-response" and args.preview
+    if (args.command == "import-response" and not preview
+            and (args.expected_revision is None or args.request_id is None)):
+        raise ResearchError("invalid_input", "An import requires --expected-revision and --request-id")
     root = Path(args.workspace).absolute()
     if args.command in OPERATIONS or args.command in ACQUISITION:
         payload = strict_json(Path(args.file).read_bytes())
@@ -447,6 +456,8 @@ def run(args):
             check_command_bounds(review_protocol.drop_repeated_bundle(payload) if args.command == "review-assignment"
                                  else payload)
         except ResearchError:
+            if preview:
+                raise
             # The store returns a committed request's receipt before it checks the payload, so a retry of a request
             # that an earlier release committed beyond this bound still gets its original receipt. Only an existing
             # store holds such a request, and init, adopt and acquisition create a store only after this check.
@@ -466,7 +477,7 @@ def run(args):
         if args.expected_revision is not None and args.expected_revision != revision:
             raise ResearchError("stale_revision", "Recovered revision differs from the expected committed revision", {"revision": revision})
         return {"revision": revision, "recovered": True, "scientific_validation": False, "schema_migrated": False}
-    elif args.command == "import-oai-cohort":
+    elif args.command == "import-oai-cohort" or preview:
         root = find_workspace(root)
         store = Store(root)
     elif args.command in ACQUISITION:
@@ -479,7 +490,7 @@ def run(args):
         identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
         if args.command in OPERATIONS:
             return OPERATIONS[args.command](store, payload, **identity)
-        return acquisition_command(store, args.command, payload, identity)
+        return acquisition_command(store, args.command, payload, identity, preview=preview)
     if args.command in ("research-decision-assess", "strategy-packet", "review-route-assess"):
         snapshot = store.snapshot()
         artifacts = Evaluation(snapshot["records"], ArtifactStore(root))

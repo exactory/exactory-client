@@ -48,6 +48,7 @@ from .evidence import digest
 from .graph import (citation_graph, find_active_requirements, find_bound_requirements, format_search_requirement_id, obligation,
                     selected_bundle, validate_target)
 from .http import safe_url
+from .identities import select_family
 from .imports import _pointer
 from .operations import fields, immutable_record, iso_date, prepared_mutation, profile_name, strings, text, timestamp
 from .principles import preparation_policy
@@ -68,7 +69,7 @@ UNIT_KINDS = ("text", "abstract", "figure", "table", "equation", "supplement", "
 
 
 def _reference(value, records, artifacts, version_id, bibliography_unit):
-    fields(value, ("target", "kind", "link", "reason"), ("reference_id",), code="invalid_bibliography")
+    fields(value, ("target", "kind", "link", "reason"), ("reference_id", "target_family"), code="invalid_bibliography")
     if value["kind"] not in ("paper", "nonpaper", "unknown"):
         raise ResearchError("invalid_bibliography", "Classify the reference as paper, nonpaper or unknown")
     text(value["reason"], "Reference classification", code="invalid_bibliography")
@@ -84,6 +85,10 @@ def _reference(value, records, artifacts, version_id, bibliography_unit):
                                 {"target": value["target"], "canonical": canonical})
     if value["kind"] == "paper" and value["target"] is None:
         raise ResearchError("invalid_bibliography", "An identified paper reference needs its exact identifier or family")
+    if "target_family" in value:
+        if value["kind"] != "paper":
+            raise ResearchError("invalid_bibliography", "Only an identified paper reference can select a target family")
+        select_family(records, value["target"], value["target_family"])
 
 
 def import_bundle(store, payload, *, expected_revision, request_id):
@@ -167,6 +172,8 @@ def import_bundle(store, payload, *, expected_revision, request_id):
             occurrence = {"id": identifier, "source_id": entry["link"]["source_id"], "source_work_id": work["id"],
                           "work_id": work["work_id"], "ordinal": index, "target": entry["target"], "kind": entry["kind"],
                           "raw": entry["link"]["locator"], "bundle_id": value["id"], "evidence": entry}
+            if "target_family" in entry:
+                occurrence["target_family"] = entry["target_family"]
             changes.append(immutable_record(records, "reference_occurrence", identifier, occurrence))
             occurrence_ids.append(identifier)
         resolved = set()
