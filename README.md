@@ -35,6 +35,9 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.65.1](docs/releases/0.65.1.md) repairs a test of 0.65.0 that still called two renamed test helpers by
+their old names. The harness code is unchanged.
+
 Version [0.65.0](docs/releases/0.65.0.md) accepts run outputs of any media type as result evidence, seals
 completion-check outputs that the author did not read and discloses program runs before a plan, stores new
 manuscript review inputs by reference, packages the code, inputs and outputs of cited runs for a deposit, reports

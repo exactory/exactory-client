@@ -290,9 +290,9 @@ class HistoricalBundleInputTests(DevelopmentCase):
         bundle = binding_fixtures.ManagedPublicationCurrencyTests.prepare_managed_bundle(self)
         records = self.store.snapshot()["records"]
         report = publication._ready(records, self.artifacts)
-        inline = PublicationRecordTests.inline_view(self, bundle, report)
+        inline = PublicationRecordTests.build_inline_view(self, bundle, report)
         expected = publication.rebuild_pinned_readiness(records, self.artifacts, inline)
-        bundle = PublicationRecordTests.reference_view(self, bundle, report)
+        bundle = PublicationRecordTests.build_reference_view(self, bundle, report)
         self.assertEqual(publication.rebuild_pinned_readiness(records, self.artifacts, bundle), expected)
         altered = copy.deepcopy(bundle)
         inputs = json.loads(self.artifacts.read(altered["review_inputs_artifact"]))
