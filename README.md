@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.64.1](docs/releases/0.64.1.md) repairs nine defects that a review of the 0.62.0 code found: the
+manuscript drift report no longer reads pinned objects or fails `status`, `restore` keeps every edit and refuses
+path aliases, JATS extraction refuses unresolved entities and has resource bounds, and format-only reruns leave
+closed cycles closed. It also renames the functions of 0.61.0 and 0.62.0 that had no verb.
+
 Version [0.64.0](docs/releases/0.64.0.md) repairs Claude review delivery and preserves standalone proposal
 reviews after an unrelated node finishes. Allocated side work runs before root finalization, and closure waits
 for admitted standalone nodes to finish or retreat. Admission fills missing attack files. Activity logs track
