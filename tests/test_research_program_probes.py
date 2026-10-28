@@ -25,13 +25,13 @@ OLD_PROGRAM = b"print('earlier construction')\n"
 
 
 class ProgramProbeCase:
-    def run_context(self, cycle_id="cycle-1", read=()):
+    def build_run_context(self, cycle_id="cycle-1", read=()):
         return {"cycle_id": cycle_id, "program_path": "experiment/code/cycle.py", "read_outputs": list(read)}
 
     def record_program_probe(self, identifier="check-1", *, program=OLD_PROGRAM, read=(), cycle_id="cycle-1"):
         intent = build_probe_intent(self.artifacts, identifier)
         intent.update(program=self.artifacts.put(program, "text/x-python"),
-                      program_run=self.run_context(cycle_id, read))
+                      program_run=self.build_run_context(cycle_id, read))
         try:
             self.mutate(probe.record_probe_intent, intent)
         except ResearchError as error:
@@ -104,7 +104,7 @@ class ProgramProbeRecordingTests(ProgramProbeCase, LiteratureCase):
         self.mutate(probe.record_probe_intent, intent)
         before = self.store.snapshot()
         self.assert_error("record_conflict", lambda: self.mutate(probe.record_probe_intent,
-            dict(intent, program_run=self.run_context(read=("stdout",)))))
+            dict(intent, program_run=self.build_run_context(read=("stdout",)))))
         self.assertEqual(self.store.snapshot(), before)
 
     def test_invalid_observed_output_hashes_paths_and_times_do_not_commit(self):
@@ -132,7 +132,7 @@ class ProgramProbeRecordingTests(ProgramProbeCase, LiteratureCase):
         self.assertTrue(json.loads((destination / "inputs.json").read_text())["probe"]["program_run"]["outputs_unread"])
 
     def test_recovery_without_a_launch_retains_unknown_times_and_the_unread_policy(self):
-        intent = dict(build_probe_intent(self.artifacts), program_run=self.run_context())
+        intent = dict(build_probe_intent(self.artifacts), program_run=self.build_run_context())
         try:
             saved = self.mutate(probe.record_probe_intent, intent)["result"]
         except ResearchError as error:
@@ -151,7 +151,7 @@ class ProgramProbeRecordingTests(ProgramProbeCase, LiteratureCase):
         script = self.root / "program.py"
         script.write_text("from pathlib import Path\nPath('value.txt').write_text('not read')\nprint('not read')\n")
         arguments = dict(identifier="managed", question="Does this program complete?", script=script,
-                         timeout=10, program_run=self.run_context())
+                         timeout=10, program_run=self.build_run_context())
         receipt = probe.launch_probe(self.store, **arguments)
         outcome = receipt["result"]
         self.assertTrue(outcome["program_run"]["outputs_unread"])
@@ -169,7 +169,7 @@ class ProgramProbeRecordingTests(ProgramProbeCase, LiteratureCase):
         script.write_text("from pathlib import Path\nPath('stdout').write_text('file output')\n"
                           "Path('stderr').write_text('file error')\nprint('stream output')\n")
         receipt = probe.launch_probe(self.store, identifier="stream-names", question="Which outputs were read?",
-            script=script, timeout=10, program_run=self.run_context(read=("stdout", "work/stdout")))
+            script=script, timeout=10, program_run=self.build_run_context(read=("stdout", "work/stdout")))
         run = receipt["result"]["program_run"]
         self.assertEqual({item["path"] for item in run["outputs"]},
                          {"stdout", "stderr", "work/stdout", "work/stderr"})
@@ -182,7 +182,7 @@ class ProgramProbeRecordingTests(ProgramProbeCase, LiteratureCase):
         self.assertIn("program_run", inspect.signature(probe.launch_probe).parameters)
         script = self.root / "frozen.py"
         script.write_text("print('unread output')\n")
-        context = self.run_context()
+        context = self.build_run_context()
         commit = probe.commit_probe_mutation
         def change_caller_context(store, operation, payload, request_id):
             receipt = commit(store, operation, payload, request_id)
@@ -247,7 +247,7 @@ class ProgramProbePlanTests(ProgramProbeCase, DevelopmentCase):
         self.assert_error("preplan_probe_missing", self.admit)
 
     def test_plan_cannot_freeze_while_a_declared_program_probe_is_pending(self):
-        intent = dict(build_probe_intent(self.artifacts), program_run=self.run_context(read=("stdout",)))
+        intent = dict(build_probe_intent(self.artifacts), program_run=self.build_run_context(read=("stdout",)))
         try:
             self.mutate(probe.record_probe_intent, intent)
         except ResearchError as error:
@@ -262,7 +262,7 @@ class ProgramProbePlanTests(ProgramProbeCase, DevelopmentCase):
         script = self.root / "check.py"
         script.write_text(body)
         receipt = probe.launch_probe(self.store, identifier="sealed-check", question="Does the program complete?",
-                                     script=script, timeout=10, program_run=self.run_context())
+                                     script=script, timeout=10, program_run=self.build_run_context())
         sealed = receipt["result"]["stdout"]
         admission = admit_lab(self, body=body, timeout=10,
                               plan=self.disclose(self.plan(), ["sealed-check"], body.encode()))
@@ -309,7 +309,7 @@ class ProgramProbePlanTests(ProgramProbeCase, DevelopmentCase):
 
     def test_a_frozen_plan_cannot_gain_undeclared_program_runs(self):
         self.mutate(self.development().plan_cycle, self.plan())
-        intent = dict(build_probe_intent(self.artifacts), program_run=self.run_context())
+        intent = dict(build_probe_intent(self.artifacts), program_run=self.build_run_context())
         self.assert_error("preplan_cycle_frozen", lambda: self.mutate(probe.record_probe_intent, intent))
 
     def test_native_export_keeps_unread_metadata_without_delivering_the_output_objects(self):

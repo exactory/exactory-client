@@ -16,7 +16,7 @@ from .artifacts import describe_artifact
 from .errors import ResearchError
 from .probe_provenance import pin_probe_artifact, record_probe_artifact_origin
 from .probe_supervision import find_probe_process_identity, read_probe_clock
-from .program_probes import build_program_run, utc_now
+from .program_probes import build_program_run, format_utc_now
 from .workspace import checked_parent, json_projection, read_file, strict_json
 
 
@@ -55,7 +55,7 @@ def find_probe_stream_origins(root, launch):
 def run_probe_process(root, config, owner, worker_identity, config_sha256):
     directory = root / config["directory"]
     started = read_probe_clock()
-    started_at = utc_now()
+    started_at = format_utc_now()
     exit_status = "failed"
     with (directory / "stdout").open("xb") as stdout, (directory / "stderr").open("xb") as stderr:
         env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1]))
@@ -118,7 +118,7 @@ def run_probe_process(root, config, owner, worker_identity, config_sha256):
             exit_status = "output_bound"
     terminal = {"exit_status": exit_status, "elapsed_seconds": read_probe_clock() - started}
     if "program_run" in config:
-        terminal.update(started_at=started_at, ended_at=utc_now())
+        terminal.update(started_at=started_at, ended_at=format_utc_now())
     return terminal
 
 

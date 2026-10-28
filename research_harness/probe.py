@@ -21,7 +21,7 @@ from .operations import fields, immutable_record, is_finite_number, prepared_mut
 from .probe_worker import capture_probe_outcome, find_probe_stream_origins
 from .probe_provenance import pin_probe_artifact
 from .probe_supervision import find_probe_group_members, find_probe_process_identity, read_probe_clock
-from .program_probes import build_program_run, utc_now, validate_program_run, validate_program_run_context
+from .program_probes import build_program_run, format_utc_now, validate_program_run, validate_program_run_context
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
 
 
@@ -410,7 +410,7 @@ def launch_owned_probe(store, identifier, question, script, inputs, relative_out
         config = {"id": identifier, "directory": directory, "argv": argv, "command": shlex.join(argv), "output_dir": relative_output.as_posix(),
                   "timeout_seconds": timeout, "observation": observation, "initial": initial, "owner": {"pid": os.getpid(), "token": uuid.uuid4().hex}}
         if "program_run" in intent:
-            config.update(program_run=intent["program_run"], started_at=utc_now())
+            config.update(program_run=intent["program_run"], started_at=format_utc_now())
         config_artifact = artifacts.put((json.dumps(config, sort_keys=True) + "\n").encode(), "application/json")
         launch = dict(config, config_artifact=config_artifact)
         write_projection(store.root, directory + "/config.json", artifacts.read(config_artifact))

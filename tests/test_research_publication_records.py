@@ -30,7 +30,7 @@ class PublicationRecordTests(DevelopmentCase):
         (self.root / "draft/references.bib").write_text("@article{bounded,title={Authored bound}}\n")
         (self.root / "draft/claims.json").write_text(json.dumps([{"id": "bound", "claim": "The maximum is nine."}]))
 
-    def payload(self, identifier="paper-1"):
+    def build_payload(self, identifier="paper-1"):
         return {"id": identifier,
                 "files": {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
                           "bibliography": "draft/references.bib", "claims": "draft/claims.json", "sources": None},
@@ -38,9 +38,9 @@ class PublicationRecordTests(DevelopmentCase):
                 "citation_accounting": account_fixture_citations(self)}
 
     def pin(self, identifier="paper-1"):
-        return self.mutate(publication.prepare_publication, self.payload(identifier))["result"]
+        return self.mutate(publication.prepare_publication, self.build_payload(identifier))["result"]
 
-    def readiness(self):
+    def read_readiness(self):
         return publication._ready(self.store.snapshot()["records"], self.artifacts)
 
     def export(self, destination):
@@ -50,14 +50,14 @@ class PublicationRecordTests(DevelopmentCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads((self.root / destination / "inputs.json").read_text())
 
-    def inline_view(self, bundle, report):
+    def build_inline_view(self, bundle, report):
         result = copy.deepcopy(bundle)
         for key in INPUTS:
             result.pop(key + "_artifact", None)
             result[key] = copy.deepcopy(report[key])
         return result
 
-    def reference_view(self, bundle, report):
+    def build_reference_view(self, bundle, report):
         """Build the reference shape independently so reader tests do not depend on the new writer."""
         result = copy.deepcopy(bundle)
         for key in INPUTS:
@@ -68,8 +68,8 @@ class PublicationRecordTests(DevelopmentCase):
         return result
 
     def pin_reference_fixture(self):
-        report = self.readiness()
-        bundle = self.reference_view(self.pin(), report)
+        report = self.read_readiness()
+        bundle = self.build_reference_view(self.pin(), report)
         self.store.mutate("fixture.reference-pin", {}, lambda tx: tx.put("publication_bundle", bundle["id"], bundle),
                           expected_revision=self.store.revision, request_id="reference-pin")
         return report, bundle
@@ -77,7 +77,7 @@ class PublicationRecordTests(DevelopmentCase):
     def pin_legacy(self):
         """Write the pre-0.62.0 inline shape, including its original event and replay result."""
         records = self.store.snapshot()["records"]
-        report, payload = self.readiness(), self.payload("legacy-paper")
+        report, payload = self.read_readiness(), self.build_payload("legacy-paper")
         files = {key: None if path is None else {
             "path": path, "artifact": self.artifacts.put((self.root / path).read_bytes(), publication.FILE_TYPES[key])}
             for key, path in payload["files"].items()}
@@ -156,7 +156,7 @@ class PublicationRecordTests(DevelopmentCase):
 
     def test_repeated_pins_store_canonical_exports_once_by_digest(self):
         # Repeating an export inline, pretty-printing its bytes, or using a non-content address grows the store.
-        report = self.readiness()
+        report = self.read_readiness()
         report["review_inputs"]["fixture_note"] = {"z": "The bound is ≤ nine.", "a": "A UTF-8 export."}
         with patch.object(publication, "_ready", return_value=report):
             first = self.pin()
@@ -176,7 +176,7 @@ class PublicationRecordTests(DevelopmentCase):
 
     def test_pin_size_does_not_grow_with_the_review_input_or_observation_exports(self):
         # Merely adding digests while keeping either inline value would retain the original size problem.
-        report = self.readiness()
+        report = self.read_readiness()
         with patch.object(publication, "_ready", return_value=report):
             small = self.pin()
         expanded = copy.deepcopy(report)
@@ -195,7 +195,7 @@ class PublicationRecordTests(DevelopmentCase):
 
     def test_changing_one_export_only_stores_the_changed_object(self):
         # Reusing the prior digest loses changed inputs; storing both again loses deduplication.
-        report = self.readiness()
+        report = self.read_readiness()
         with patch.object(publication, "_ready", return_value=report):
             previous = self.pin()
         self.assertTrue("review_inputs_artifact" in previous, "The pin must reference its review inputs")
@@ -218,7 +218,8 @@ class PublicationRecordTests(DevelopmentCase):
     def test_manuscript_export_resolves_pinned_objects_without_delivering_author_context(self):
         # Export must resolve the pinned standards and observations while keeping private context out of the packet.
         report, bundle = self.pin_reference_fixture()
-        expected = review_packets.manuscript_packet(self.store.snapshot()["records"], self.inline_view(bundle, report))
+        expected = review_packets.manuscript_packet(self.store.snapshot()["records"],
+                                                    self.build_inline_view(bundle, report))
         before = self.store.snapshot()
         packet = self.export("reference-export")
         self.assertEqual(packet, expected)
@@ -273,7 +274,7 @@ class PublicationRecordTests(DevelopmentCase):
                         path.write_bytes(b"{}")
                     try:
                         records = self.store.snapshot()["records"]
-                        records["publication_bundle"][bundle["id"]][key] = self.readiness()[key]
+                        records["publication_bundle"][bundle["id"]][key] = self.read_readiness()[key]
                         self.assert_error(code, lambda: publication._bundle(records, self.artifacts))
                     finally:
                         if path.exists():

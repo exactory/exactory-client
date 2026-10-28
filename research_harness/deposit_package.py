@@ -28,11 +28,11 @@ _SUFFIXES = {"application/json": ".json", "image/svg+xml": ".svg", "image/png": 
              "application/pdf": ".pdf", "text/plain": ".txt"}
 
 
-def _json_bytes(value):
+def _encode_json_bytes(value):
     return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
 
 
-def _references(value):
+def _iter_stored_references(value):
     if isinstance(value, dict):
         if {"path", "sha256", "size", "media_type"} <= value.keys():
             # Scientific JSON can describe ordinary files without referring to stored objects.
@@ -43,13 +43,13 @@ def _references(value):
             else:
                 yield value
         for child in value.values():
-            yield from _references(child)
+            yield from _iter_stored_references(child)
     elif isinstance(value, list):
         for child in value:
-            yield from _references(child)
+            yield from _iter_stored_references(child)
 
 
-def _component(value):
+def _quote_component(value):
     return quote(value, safe="")
 
 
@@ -63,7 +63,7 @@ class _Archive:
         self.pending = []
         self.followed = set()
 
-    def parents(self, name):
+    def reserve_parents(self, name):
         parts = _relative_parts(name)
         parents = {"/".join(parts[:index]) for index in range(1, len(parts))}
         if parents.intersection(self.members):
@@ -71,7 +71,7 @@ class _Archive:
         self.directories.update(parents)
 
     def write(self, name, data, *, supplement=False):
-        self.parents(name)
+        self.reserve_parents(name)
         if name in self.directories:
             raise ResearchError("package_member_conflict", "Archive files must not replace directories", {"path": name})
         content_digest = hashlib.sha256(data).hexdigest()
@@ -87,8 +87,8 @@ class _Archive:
         self.archive.writestr(info, data)
         self.members[name] = content_digest
 
-    def directory(self, name):
-        self.parents(name)
+    def write_directory(self, name):
+        self.reserve_parents(name)
         if name in self.members:
             raise ResearchError("package_member_conflict", "Archive files must not replace directories", {"path": name})
         if name + "/" in self.members:
@@ -100,7 +100,7 @@ class _Archive:
         self.archive.writestr(info, b"")
         self.members[name + "/"] = hashlib.sha256(b"").hexdigest()
 
-    def artifact(self, ref, name=None):
+    def write_artifact(self, ref, name=None):
         data = self.artifacts.read(ref)
         if ref["path"] not in self.index:
             self.index[ref["path"]] = name or "data/objects/" + ref["sha256"]
@@ -113,9 +113,9 @@ class _Archive:
             self.pending.append((ref, data))
         return data
 
-    def references(self, value):
-        for ref in _references(value):
-            self.artifact(ref)
+    def write_references(self, value):
+        for ref in _iter_stored_references(value):
+            self.write_artifact(ref)
 
     def follow(self):
         # Packet representations belong to their producer; only the common artifact boundary is used here.
@@ -130,7 +130,7 @@ class _Archive:
                     raise
                 # Historical outputs retain their bytes even when their declared JSON is not strict JSON.
                 continue
-            self.references(structured)
+            self.write_references(structured)
 
 
 def _select_bundle(records, selector):
@@ -147,7 +147,7 @@ def _select_bundle(records, selector):
     return bundle
 
 
-def _cited_executions(records, links):
+def _find_cited_executions(records, links):
     selected = {}
     for link in links:
         for evidence in link["evidence"]:
@@ -165,7 +165,7 @@ def _cited_executions(records, links):
     return [selected[key] for key in sorted(selected)]
 
 
-def _frozen_run(records, execution):
+def _read_frozen_run(records, execution):
     identifier = execution["origin"]["admission_id"]
     admission = records.get("execution_admission", {}).get(identifier)
     binding = records.get("execution_binding", {}).get(identifier)
@@ -191,28 +191,29 @@ def _write_run(archive, root, records, execution):
     run = {"execution_id": execution["id"], "cycle_id": execution["cycle_id"], "origin": origin,
            "command": execution["command"], "admission_id": None, "directory": None, "argv": None, "outputs": []}
     if origin["kind"] == "managed":
-        admission, binding, pairs = _frozen_run(records, execution)
-        directory = "runs/run-" + _component(admission["id"])
+        admission, binding, pairs = _read_frozen_run(records, execution)
+        directory = "runs/run-" + _quote_component(admission["id"])
         replacements = {str(root / "experiment" / path): path for path, _ in pairs}
         argv = [replacements.get(argument, argument) for argument in admission["command"]["argv"]]
         argv[0], argv[1] = binding["runtime"]["path"], binding["script"]
         run.update(admission_id=admission["id"], directory=directory, argv=argv, runtime=binding["runtime"],
                    script=binding["script"], inputs=binding["inputs"], declared_outputs=binding["outputs"])
         for path, ref in pairs:
-            archive.write(directory + "/" + path, archive.artifact(ref))
+            archive.write(directory + "/" + path, archive.write_artifact(ref))
         for name in ("logs", "results", "plots"):
-            archive.directory(directory + "/" + name)
+            archive.write_directory(directory + "/" + name)
     for output in sorted(execution["outputs"], key=lambda item: item["id"]):
         ref = output["artifact"]
         media_type = ref["media_type"].split(";", 1)[0].strip().lower()
         suffix = _SUFFIXES.get(media_type, ".bin")
-        name = "data/execution-" + _component(execution["id"]) + "/output-" + _component(output["id"]) + suffix
-        archive.artifact(ref, name)
+        name = ("data/execution-" + _quote_component(execution["id"]) + "/output-" + _quote_component(output["id"])
+                + suffix)
+        archive.write_artifact(ref, name)
         run["outputs"].append(dict(output, archive=name))
     return run
 
 
-def _supplement_files(root, relative):
+def _iter_supplement_files(root, relative):
     parts = _relative_parts(relative)
     with checked_parent(root, relative) as (directory, name):
         info = os.stat(name, dir_fd=directory, follow_symlinks=False)
@@ -223,7 +224,7 @@ def _supplement_files(root, relative):
         with _Workspace(root).directory("/".join(parts)) as directory:
             names = sorted(os.listdir(directory))
         for name in names:
-            yield from _supplement_files(root, relative + "/" + name)
+            yield from _iter_supplement_files(root, relative + "/" + name)
     else:
         raise ResearchError("unsafe_path", "Supplementary paths must contain only regular files and directories")
 
@@ -238,20 +239,20 @@ def _write_package(stream, root, snapshot, bundle, supplements):
             raise ResearchError("publication_claims_missing", "Package the pinned claim registry and its evidence map")
         archive.write("README.txt", b"Read package.json for frozen runs and records, "
                       b"and data/INDEX.json for object names.\n")
-        archive.write("claims.json", archive.artifact(claims["artifact"]))
-        archive.write("claim-evidence.json", _json_bytes(links))
+        archive.write("claims.json", archive.write_artifact(claims["artifact"]))
+        archive.write("claim-evidence.json", _encode_json_bytes(links))
         manifest = {"schema": 1, "revision": snapshot["revision"],
                     "bundle": {"id": bundle["id"], "digest": bundle["digest"]},
                     "runs": [_write_run(archive, root, records, execution)
-                             for execution in _cited_executions(records, links)],
+                             for execution in _find_cited_executions(records, links)],
                     "records": {}, "supplements": []}
-        archive.references(links)
+        archive.write_references(links)
         for kind in RECORD_KINDS:
             group = {}
             for key, value in sorted(records.get(kind, {}).items()):
-                name = "managed-record/" + kind + "/" + _component(key) + ".json"
-                archive.write(name, _json_bytes(value))
-                archive.references(value)
+                name = "managed-record/" + kind + "/" + _quote_component(key) + ".json"
+                archive.write(name, _encode_json_bytes(value))
+                archive.write_references(value)
                 group[key] = name
             if group:
                 manifest["records"][kind] = group
@@ -263,8 +264,8 @@ def _write_package(stream, root, snapshot, bundle, supplements):
             archive.write(path, data, supplement=True)
             manifest["supplements"].append({"path": path, "sha256": hashlib.sha256(data).hexdigest(),
                                             "size": len(data)})
-        archive.write("data/INDEX.json", _json_bytes(archive.index))
-        archive.write("package.json", _json_bytes(manifest))
+        archive.write("data/INDEX.json", _encode_json_bytes(archive.index))
+        archive.write("package.json", _encode_json_bytes(manifest))
         return {"revision": snapshot["revision"], "bundle_digest": bundle["digest"], "runs": len(manifest["runs"]),
                 "artifacts": len(archive.index), "members": len(archive.members), "mechanical_only": True}
 
@@ -276,7 +277,7 @@ def build_package(store, destination, *, bundle=None, includes=()):
     destination = Path(destination).absolute()
     destination = destination.parent.resolve() / destination.name
     try:
-        supplements = [item for path in includes for item in _supplement_files(store.root, path)]
+        supplements = [item for path in includes for item in _iter_supplement_files(store.root, path)]
         with checked_parent(destination.parent, destination.name) as (directory, name):
             try:
                 os.stat(name, dir_fd=directory, follow_symlinks=False)

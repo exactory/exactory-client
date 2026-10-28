@@ -8,7 +8,7 @@ from .errors import ResearchError
 from .operations import fields, strings, text, timestamp
 
 
-def utc_now():
+def format_utc_now():
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
@@ -110,14 +110,14 @@ def validate_prior_program(records, plan, program):
                                 {"probe_ids": missing})
 
 
-def _inventory_artifact(reference):
+def _describe_inventory_artifact(reference):
     if not is_sealed_artifact(reference):
         return reference
     return dict({key: value for key, value in reference.items() if key != "path"},
                 sealed_path=reference["path"])
 
 
-def program_probe_inventory(records, artifacts, plan, admissions):
+def build_program_probe_inventory(records, artifacts, plan, admissions):
     prior = plan["payload"].get("prior_knowledge")
     inventory = {}
     for identifier in sorted(prior["probe_ids"] if prior else []):
@@ -141,8 +141,9 @@ def program_probe_inventory(records, artifacts, plan, admissions):
         inventory[identifier] = {"id": identifier, "program": intent["program"], "inputs": intent["inputs"],
             "interpreter": intent["interpreter"], "context": intent["program_run"],
             "program_run": outcome["program_run"],
-            "outputs": [_inventory_artifact(ref) for ref in outcome["outputs"]],
-            "stdout": _inventory_artifact(outcome["stdout"]), "stderr": _inventory_artifact(outcome["stderr"]),
+            "outputs": [_describe_inventory_artifact(ref) for ref in outcome["outputs"]],
+            "stdout": _describe_inventory_artifact(outcome["stdout"]),
+            "stderr": _describe_inventory_artifact(outcome["stderr"]),
             "exit_status": outcome["exit_status"], "elapsed_seconds": outcome["elapsed_seconds"],
             "statement": "The outputs were not read." if outcome["program_run"]["outputs_unread"]
                          else "The listed outputs were read before the plan.",

@@ -83,7 +83,7 @@ def version_of(identifier):
     return None
 
 
-def family_candidates(records, identifier):
+def find_family_candidates(records, identifier):
     """Return asserted families, including a registered identifier's own family."""
     canonical = normalize_identifier(identifier)
     own = family_id(canonical)
@@ -95,7 +95,7 @@ def family_candidates(records, identifier):
 
 def resolve_family(records, identifier):
     canonical = normalize_identifier(identifier)
-    candidates = family_candidates(records, canonical)
+    candidates = find_family_candidates(records, canonical)
     if not candidates:
         raise ResearchError("unknown_work", "No acquired work resolves this identifier", {"identifier": canonical})
     if len(candidates) != 1:
@@ -111,7 +111,7 @@ def select_family(records, identifier, target_family):
     except ResearchError:
         canonical = None
     if (canonical is None or canonical != target_family or target_family not in records.get("work_family", {})
-            or target_family not in family_candidates(records, identifier)):
+            or target_family not in find_family_candidates(records, identifier)):
         raise ResearchError("invalid_family_selection", "Select a canonical acquired family asserted for this target")
     return target_family
 
@@ -125,7 +125,7 @@ def find_doi_family_conflicts(records, works):
                 incoming.setdefault(identifier, set()).add(work["work_id"])
     conflicts = []
     for identifier, families in sorted(incoming.items()):
-        existing = family_candidates(records, identifier)
+        existing = find_family_candidates(records, identifier)
         candidates = existing | families
         if families - existing and len(candidates) > 1:
             conflicts.append({"identifier": identifier, "existing_families": sorted(existing),

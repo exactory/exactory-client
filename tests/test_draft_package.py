@@ -39,11 +39,12 @@ class DraftPackageTests(unittest.TestCase):
         self.store = Store(self.root, create=True)
         self.artifacts = ArtifactStore(self.root)
         self.records = {}
-        self.first = self.run_records("run-1", 1)
-        self.second = self.run_records("run-2", 2)
-        self.run_records("uncited", 99)
+        self.first = self.record_cited_run("run-1", 1)
+        self.second = self.record_cited_run("run-2", 2)
+        self.record_cited_run("uncited", 99)
         self.claims = [{"id": "claim", "claim": "The two historical versions give 11 and 12."}]
-        self.links = [{"claim_id": "claim", "evidence": [self.result_ref(self.first), self.result_ref(self.second)]}]
+        self.links = [{"claim_id": "claim",
+                       "evidence": [self.build_result_ref(self.first), self.build_result_ref(self.second)]}]
         claim_ref = self.put(json.dumps(self.claims).encode(), "application/json")
         self.bundle = {"id": "paper-1", "files": {"claims": {"path": "evidence/claims.json", "artifact": claim_ref}},
                        "claim_evidence": self.links, "review_inputs": {"historical": True},
@@ -61,7 +62,7 @@ class DraftPackageTests(unittest.TestCase):
     def put(self, data, media_type="application/octet-stream"):
         return self.artifacts.put(data, media_type)
 
-    def run_records(self, identifier, offset):
+    def record_cited_run(self, identifier, offset):
         program = self.put(PROGRAM + ("# Recorded program version %d.\n" % offset).encode(), "text/x-python")
         module = self.put(("OFFSET = %d\n" % offset).encode(), "text/x-python")
         data = self.put(b'{"value": 10}', "application/json")
@@ -90,7 +91,7 @@ class DraftPackageTests(unittest.TestCase):
             self.records.setdefault(kind, {})[key] = value
         return execution
 
-    def result_ref(self, execution):
+    def build_result_ref(self, execution):
         output = execution["outputs"][0]
         value = json.loads(self.artifacts.read(output["artifact"]))["value"]
         return {"kind": "result", "execution_id": execution["id"], "output_id": output["id"],
@@ -114,7 +115,7 @@ class DraftPackageTests(unittest.TestCase):
         self.assertTrue(path.is_file(), "Package must create the requested ZIP.")
         return path
 
-    def manifest(self, archive):
+    def read_manifest(self, archive):
         return json.loads(archive.read("package.json"))
 
     def test_cited_runs_replay_with_their_own_program_and_all_input_versions(self):
@@ -123,7 +124,7 @@ class DraftPackageTests(unittest.TestCase):
         (current / "main.py").write_text("raise RuntimeError('working copy must not be archived as a run')")
         (current / "helper.py").write_text("OFFSET = 999")
         with zipfile.ZipFile(self.package()) as archive:
-            manifest = self.manifest(archive)
+            manifest = self.read_manifest(archive)
             self.assertEqual({run["execution_id"] for run in manifest["runs"]},
                              {self.first["id"], self.second["id"]})
             target = self.root / "unpacked"
@@ -154,7 +155,7 @@ class DraftPackageTests(unittest.TestCase):
     def test_records_keep_superseded_results_and_distinct_record_names(self):
         before = self.store.snapshot()
         with zipfile.ZipFile(self.package()) as archive:
-            records = self.manifest(archive)["records"]
+            records = self.read_manifest(archive)["records"]
             for kind in ("cycle_plan", "execution_admission", "execution_binding", "execution", "cycle_assessment",
                          "checkpoint", "readiness_review", "manuscript_review", "manuscript_prediction",
                          "contribution_analysis", "round_decision", "round_review", "publication_bundle"):
@@ -175,7 +176,7 @@ class DraftPackageTests(unittest.TestCase):
             index = json.loads(archive.read("data/INDEX.json"))
             for ref in (packet, nested):
                 self.assertEqual(archive.read(index[ref["path"]]), self.artifacts.read(ref))
-            saved = self.manifest(archive)["records"]["publication_bundle"][self.bundle["id"]]
+            saved = self.read_manifest(archive)["records"]["publication_bundle"][self.bundle["id"]]
             self.assertEqual(json.loads(archive.read(saved)), self.bundle)
 
     def test_json_file_descriptions_are_data_without_becoming_store_references(self):
@@ -190,7 +191,7 @@ class DraftPackageTests(unittest.TestCase):
         binding["admission_digest"] = admission["digest"]
         self.save()
         with zipfile.ZipFile(self.package()) as archive:
-            run = next(item for item in self.manifest(archive)["runs"] if item["admission_id"] == "run-1")
+            run = next(item for item in self.read_manifest(archive)["runs"] if item["admission_id"] == "run-1")
             self.assertEqual(archive.read(run["directory"] + "/data/input.json"), data)
             index = json.loads(archive.read("data/INDEX.json"))
             self.assertIn(ref["path"], index)
@@ -206,7 +207,7 @@ class DraftPackageTests(unittest.TestCase):
         binding["admission_digest"] = admission["digest"]
         self.save()
         with zipfile.ZipFile(self.package()) as archive:
-            manifest = self.manifest(archive)
+            manifest = self.read_manifest(archive)
             self.assertEqual(len(manifest["runs"]), 2)
             run = next(item for item in manifest["runs"] if item["admission_id"] == "run-2")
             self.assertEqual(archive.read(run["directory"] + "/data/input.json"), self.artifacts.read(ref))
@@ -215,10 +216,10 @@ class DraftPackageTests(unittest.TestCase):
         imported = copy.deepcopy(self.first)
         imported.update(id="imported-history", origin={"kind": "imported", "attribution": "Earlier recorded work."})
         self.records["execution"][imported["id"]] = {"payload": imported, "digest": digest(imported)}
-        self.bundle["claim_evidence"] = [{"claim_id": "claim", "evidence": [self.result_ref(imported)]}]
+        self.bundle["claim_evidence"] = [{"claim_id": "claim", "evidence": [self.build_result_ref(imported)]}]
         self.save()
         with zipfile.ZipFile(self.package()) as archive:
-            run, = self.manifest(archive)["runs"]
+            run, = self.read_manifest(archive)["runs"]
             self.assertEqual(run["execution_id"], imported["id"])
             self.assertIsNone(run["directory"])
             self.assertEqual(run["origin"], imported["origin"])
@@ -234,7 +235,7 @@ class DraftPackageTests(unittest.TestCase):
             with self.subTest(selector=selector):
                 name = "bundle-" + selector + ".zip"
                 with zipfile.ZipFile(self.package(name, "--bundle", selector)) as archive:
-                    self.assertEqual(self.manifest(archive)["bundle"]["id"], "paper-1")
+                    self.assertEqual(self.read_manifest(archive)["bundle"]["id"], "paper-1")
                     self.assertEqual(json.loads(archive.read("claim-evidence.json")), self.links)
 
     def test_repeated_packages_are_identical_and_work_from_a_study_subdirectory(self):
@@ -252,7 +253,7 @@ class DraftPackageTests(unittest.TestCase):
         (self.root / "disclosures/earlier.json").write_text('{"outputs_read": true}')
         with zipfile.ZipFile(self.package("sources.zip", "--include", "tools", "--include", "disclosures")) as archive:
             self.assertEqual(archive.read("tools/calibrate.py"), b"# An unadmitted calibration helper.\n")
-            supplements = self.manifest(archive)["supplements"]
+            supplements = self.read_manifest(archive)["supplements"]
             self.assertEqual({item["path"] for item in supplements},
                              {"tools/calibrate.py", "disclosures/earlier.json"})
 

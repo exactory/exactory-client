@@ -28,7 +28,7 @@ from .operations import fields, immutable_record, is_finite_number, prepared_mut
 from .operations import normalized_text as _normalized
 from .principles import objective_changes
 from .probe_provenance import find_probe_artifact_origins
-from .program_probes import program_probe_inventory, validate_prior_knowledge, validate_prior_program
+from .program_probes import build_program_probe_inventory, validate_prior_knowledge, validate_prior_program
 from .reading import validate_read_evidence
 from .scientific_json import is_json_media_type
 from .source_links import captured_source, original_identity, validate_link
@@ -1564,7 +1564,8 @@ def _branch_inputs(context):
             "executions": executions, "assessment": context.assess_record(cycle["assessment_id"]) if cycle["assessment_id"] is not None else None,
             "admissions": {i: a for i, a in context.records.get("execution_admission", {}).items() if a["cycle_id"] == identifier},
             "checkpoints": {i: c for i, c in context.records.get("checkpoint", {}).items() if c["cycle_id"] == identifier}}
-        probes = program_probe_inventory(context.records, context.artifacts, plan, branches[identifier]["admissions"])
+        probes = build_program_probe_inventory(context.records, context.artifacts, plan,
+                                               branches[identifier]["admissions"])
         if probes:
             branches[identifier]["program_probes"] = probes
         if branches[identifier]["assessment"] is not None:
