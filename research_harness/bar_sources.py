@@ -38,6 +38,13 @@ PROMPT = (
     'that field. Existing prior_context can be empty; request the sources needed for this phase.')
 ALREADY_DELIVERED_NOTE = ('A turn of this session under the excerpt rules delivered the complete text of this version, '
                           'so it is not delivered again. Use your checked excerpts, or request a bounded passage.')
+PART_NOTE = ('This delivery carries one part of the extracted text of this version, at the stated character offsets in '
+             'its stored text. The request stays pending until its last part has arrived. The original file and the '
+             'other bodies of this source are not delivered with its parts.')
+DEFERRED_NOTE = ('This turn has delivered its budget of new full text, so this request waits for a later turn. It '
+                 'stays pending; you need not repeat it.')
+PARTS_DELIVERED_NOTE = ('The extracted text of this version was delivered in earlier turns of this session. The source '
+                        'still has pending required units, so the request stays pending.')
 
 
 def descriptor(reference):
@@ -426,11 +433,87 @@ def validate_inventory(artifacts, inventory_value):
         raise ResearchError('review_inventory_mismatch', 'The complete inventory descriptor and saved rows must remain readable and exact') from error
 
 
-def continuation(records, artifacts, previous_packet, output, delivered_fulltexts=None):
-    """Answer the pending requests of a session turn under the excerpt rules. A full-text request for a version in
-    delivered_fulltexts, which maps it to the earlier turn of this session that delivered its complete text, is
-    answered as already delivered; a passage request is answered at once. Neither stays pending."""
-    delivered_fulltexts = delivered_fulltexts or {}
+def _count_text_characters(artifacts, references):
+    """The characters of the UTF-8 text bodies among references; original binary files do not count."""
+    from .review_transport import is_binary_evidence
+    total = 0
+    for reference in references:
+        data = artifacts.read(reference)
+        if not is_binary_evidence(data, reference['media_type']):
+            total += len(data.decode('utf-8'))
+    return total
+
+
+def _describe_already_delivered(request, body):
+    return {'request': request, 'status': 'already_delivered', 'reading_credit': False,
+            'reason': ALREADY_DELIVERED_NOTE, 'turn': {key: body[key] for key in ('assignment_id', 'attempt_id')}}
+
+
+def _describe_part(artifacts, request, capture, content, status, part, spans):
+    """A delivery of one part of a version's stored extracted text. It also maps the part to its span of the stored
+    text, so that a citation within the part counts as delivered."""
+    start, end = spans[part - 1]
+    reference = review_excerpts.save_part(artifacts, content, capture['text'], start, end)
+    locator = {'kind': 'span', 'start': start, 'end': end,
+               'sha256': hashlib.sha256(content[start:end].encode('utf-8')).hexdigest()}
+    return {'request': request, 'status': status, 'version_id': request['version_id'],
+            'part': {'version_id': request['version_id'], 'part': part, 'parts': len(spans), 'start': start,
+                     'end': end, 'characters': end - start},
+            'evidence': [reference], 'excerpt': reference,
+            'origin': {'source_id': capture['source_id'], 'artifact_descriptor': descriptor(capture['text']),
+                       'locator': locator},
+            'reading_credit': False, 'scientific_truth_certified': False, 'reason': PART_NOTE}
+
+
+def _answer_fulltext(records, artifacts, request, original_rows, delivered_bodies, characters_left):
+    """The deliveries that answer a full-text request within the characters of new full text left in this turn: the
+    whole source, its next parts, an already_delivered answer or a deferral. Returns the deliveries, the characters of
+    new full text they deliver, whether the request stays pending and whether it waits for the reading budget."""
+    delivery = _source(records, artifacts, request, original_rows)
+    capture = review_excerpts.find_fulltext_capture(records, request['version_id'])
+    if capture is None or delivery['status'] not in ('delivered', 'partial'):
+        return [delivery], 0, delivery['status'] != 'delivered', False
+    complete = delivery['status'] == 'delivered'
+    content = artifacts.read(capture['text']).decode('utf-8')
+    spans = review_excerpts.compute_part_spans(content)
+    earlier = [delivered_bodies.get(sha256) for sha256 in review_excerpts.compute_part_digests(content)]
+    # A whole text first delivered while its source was partial is delivered again once the source is complete.
+    if all(earlier) and not (complete and len(spans) == 1 and not earlier[0]['is_complete_delivery']):
+        if complete:
+            return [_describe_already_delivered(request, min(earlier, key=lambda body: body['order']))], 0, False, False
+        return [{'request': request, 'status': 'partial', 'reason': PARTS_DELIVERED_NOTE, 'reading_credit': False,
+                 'source_scope_pending': delivery['source_scope_pending']}], 0, True, False
+    characters = _count_text_characters(artifacts, delivery['evidence'])
+    if characters <= characters_left:
+        return [delivery], characters, not complete, False
+    deferral = {'request': request, 'status': 'deferred_reading_budget', 'reason': DEFERRED_NOTE,
+                'reading_credit': False}
+    if characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS:
+        return [deferral], 0, True, True
+    # The source is longer than one turn can read: its extracted text arrives in consecutive parts.
+    deliveries, used = [], 0
+    for part, body in enumerate(earlier, 1):
+        start, end = spans[part - 1]
+        if body is not None:
+            continue
+        if used + end - start > characters_left:
+            break
+        deliveries.append(_describe_part(artifacts, request, capture, content, delivery['status'], part, spans))
+        used += end - start
+    if not deliveries:
+        return [deferral], 0, True, True
+    remaining = len(spans) - sum(body is not None for body in earlier) - len(deliveries)
+    return deliveries, used, remaining > 0 or not complete, remaining > 0
+
+
+def continuation(records, artifacts, previous_packet, output, delivered_bodies=None):
+    """Answer the pending requests of a session turn under the excerpt rules. Full-text requests are answered in
+    request order within one turn's budget of new full text: a source arrives whole, or its extracted text in
+    consecutive parts, or it waits with status deferred_reading_budget. delivered_bodies maps the SHA-256 of each body
+    that an earlier turn of this session delivered complete to that turn; a version whose whole text or every part is
+    among them is answered as already delivered. A passage request is answered at once. A request stays pending until
+    its source or last part has arrived; already delivered and passage answers never stay pending."""
+    delivered_bodies = delivered_bodies or {}
     inventory_value = previous_packet['source_inventory']
     rows = validate_inventory(artifacts, inventory_value)
     deliveries, outstanding = [], []
@@ -440,21 +523,30 @@ def continuation(records, artifacts, previous_packet, output, delivered_fulltext
     answers, session['allowances'] = review_excerpts.answer_passages(
         records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'])
     answered = {answer['request']['id']: answer for answer in answers}
+    characters_left, fulltexts = review_excerpts.TURN_FULLTEXT_CHARACTERS, {}
     for request in requested:
         if request['kind'] == 'passage':
             deliveries.append(answered[request['id']])
             continue
-        turn = delivered_fulltexts.get(request['version_id']) if request.get('depth') == 'fulltext' else None
-        if turn is not None:
-            delivery = {'request': request, 'status': 'already_delivered', 'turn': turn, 'reading_credit': False,
-                        'reason': ALREADY_DELIVERED_NOTE}
-        elif request['kind'] == 'source':
+        if request['kind'] == 'source' and request['depth'] == 'fulltext':
+            # A second request for the same version in this turn shares the first one's answer.
+            if request['version_id'] not in fulltexts:
+                found, characters, is_pending, is_waiting = _answer_fulltext(
+                    records, artifacts, request, original_rows, delivered_bodies, characters_left)
+                characters_left = 0 if is_waiting else characters_left - characters
+                fulltexts[request['version_id']] = (found, is_pending)
+            found, is_pending = fulltexts[request['version_id']]
+            deliveries.extend(dict(delivery, request=request) for delivery in found)
+            if is_pending:
+                outstanding.append(request)
+            continue
+        if request['kind'] == 'source':
             delivery = _source(records, artifacts, request, original_rows)
         else:
             delivery = {'request': request, 'status': 'delivered', 'page': _page(rows, inventory_value['digest'],
                 request['page'], request.get('query'), page_size=inventory_value['page_size']), 'reading_credit': False}
         deliveries.append(delivery)
-        if delivery['status'] not in ('delivered', 'already_delivered'):
+        if delivery['status'] != 'delivered':
             outstanding.append(request)
     return {'source_inventory': inventory_value, 'prior_context': [], 'source_deliveries': deliveries,
             'pending_source_requests': outstanding, review_excerpts.KEY: session}

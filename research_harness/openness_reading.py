@@ -1,10 +1,11 @@
 """Problem openness reviews that read their full texts over several turns.
 
 When one input of a text route cannot hold every extracted full text of a problem openness packet, the native_math
-assignment becomes a reading chain. Each reading turn delivers a group of the full texts with the statement and its
-formulations; the reviewer returns notes and verbatim excerpts, which the harness checks against the stored texts. The
-final turn is the native result review of the whole packet, with the reading record of the earlier turns. Every turn
-is a fresh input; the reading record carries the continuity.
+assignment becomes a reading chain. Each reading turn delivers at most review_excerpts.TURN_FULLTEXT_CHARACTERS of new
+full text: whole texts, or consecutive parts of a longer text, with the statement and its formulations. The reviewer
+returns notes and verbatim excerpts, which the harness checks against the stored texts. The final turn is the native
+result review of the whole packet, with the reading record of the earlier turns. Every turn is a fresh input; the
+reading record carries the continuity.
 """
 
 import json
@@ -16,7 +17,8 @@ from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, normalized_text, text
 
-PROTOCOL = 'exactory-openness-reading-v1'
+PROTOCOL_V1 = 'exactory-openness-reading-v1'
+PROTOCOL = 'exactory-openness-reading-v2'
 TURN_KEY = 'reading_turn'
 RECORD_KEY = 'reading_record'
 STAGES = ('reading', 'final')
@@ -24,7 +26,8 @@ NOTES_CHARACTERS = 20000
 INVALID_RESPONSE = 'invalid_reading_response'
 RESPONSE_FIELDS = ('schema_version', 'stage', 'subject_digest', 'claim_digest', 'reviewer', 'excerpts', 'notes',
                    'passage_requests')
-READING_PROMPT = (
+# The prompts of 0.64.2 to 0.65.1, kept for the assignments recorded with them.
+READING_PROMPT_V1 = (
     'This is one reading turn of an openness review of the exact problem statement in reading_turn.statement. The '
     'full texts that the review must read are longer together than one input of this route can hold, so they reach you '
     'in parts, one group in each turn. reading_turn.reading_plan names the texts delivered now, whose bodies are in '
@@ -52,7 +55,7 @@ READING_PROMPT = (
     'characters, or status "not_found". Delivered passages have a total of 100,000 characters in the review, and a '
     'passage beyond that total has status "over_allowance". reading_turn.reading_record.allowances shows what is used '
     'of both totals. Do not judge openness in this turn; the final turn does that.')
-FINAL_PROMPT = (
+FINAL_PROMPT_V1 = (
     ' This is the final turn of an openness review that read its full texts in earlier reading turns. reading_record '
     'holds those turns: your notes of each turn, your excerpts with their check status, the passages that you '
     'requested and the allowances. A verified excerpt or a delivered passage is the exact text of its source at the '
@@ -66,6 +69,42 @@ FINAL_PROMPT = (
     'anchor is a verbatim phrase of at least 20 characters and characters is an integer from 1 to 20,000. A further '
     'final turn then delivers those passages. When reading_record.allowances.passages has no characters left, return '
     'the native result review.')
+READING_PROMPT = (
+    'This is one reading turn of an openness review of the exact problem statement in reading_turn.statement. The '
+    'full texts that the review must read are longer together than one input of this route can hold, and a turn has '
+    'a limited time, so they reach you in parts. One reading turn delivers at most 120,000 characters of new full '
+    'text: a text within that size arrives whole, and a longer text arrives in consecutive parts of at most 120,000 '
+    'characters, one after another in later turns. reading_turn.reading_plan names what is delivered now, whose '
+    'bodies are in evidence, what was delivered in earlier turns and what remains; each entry has '
+    '{version_id,part,parts,start,end,characters}, where start and end are character offsets in the stored text of '
+    'the version. A text or part delivered in this turn is not delivered in a later reading turn, and the final turn '
+    'repeats a full text only when its input has room for it, so do not count on seeing it again. Each turn is a '
+    'fresh input without the earlier turns: reading_turn.reading_record holds your notes, checked excerpts and '
+    'passages from them, and the final turn rests on that record. Read everything delivered now completely. Copy '
+    'verbatim what the openness judgment needs: definitions, normalizations, every relevant theorem, lemma or '
+    'proposition with all of its hypotheses, and every statement that a question is open or has been solved. Return '
+    'exactly {schema_version:1,stage:"reading",subject_digest,claim_digest,reviewer,excerpts,notes,passage_requests}, '
+    'with subject_digest, claim_digest and reviewer copied from reading_turn. notes is a nonempty string of at most '
+    '20,000 characters: what each delivered work or part proves, what it leaves open, and how it bears on the '
+    'statement and on each neighbouring formulation in reading_turn.formulations. excerpts is a list of '
+    '{version_id,text,purpose}: text is copied character for character from a delivered text or part of version_id '
+    'and has at least 20 and at most 6,000 characters; purpose says in a few words why you keep it. The harness looks '
+    'for each excerpt in the whole stored text of that version after it changes each character to its NFKC form and '
+    'each run of white space to one space. A verified excerpt reaches the later turns as the exact source characters '
+    'with their location. An excerpt that is not found, is too short or too long, or names a version without a stored '
+    'text is kept with status "unmatched" and a reason; its text is your own copy and was not checked. Verified '
+    'excerpts have a total of 200,000 characters in the review, and an excerpt beyond that total has status '
+    '"over_allowance". passage_requests is a list, possibly empty, of {id,version_id,anchor,characters}: anchor is a '
+    'verbatim phrase of at least 20 characters from a delivered text, and characters is an integer from 1 to 20,000. '
+    'The next turn gives the source text that starts at the first occurrence of the anchor, with at most that many '
+    'characters, or status "not_found". Delivered passages have a total of 100,000 characters in the review, and a '
+    'passage beyond that total has status "over_allowance". reading_turn.reading_record.allowances shows what is used '
+    'of both totals. Do not judge openness in this turn; the final turn does that.')
+FINAL_PROMPT = FINAL_PROMPT_V1.replace(
+    'Each full text of the readings was delivered complete in a reading turn.',
+    'Each full text of the readings was delivered complete in reading turns, whole or in all of its parts.')
+PROMPTS = {PROTOCOL_V1: {'reading': READING_PROMPT_V1, 'final': FINAL_PROMPT_V1},
+           PROTOCOL: {'reading': READING_PROMPT, 'final': FINAL_PROMPT}}
 
 
 def is_openness_packet(native):
@@ -104,6 +143,34 @@ def list_reading_texts(records, native):
     return sorted(texts, key=lambda row: (find_rank(row['version_id']), row['version_id']))
 
 
+def list_reading_units(artifacts, texts):
+    """The reading units of texts, in order: each text whole when it fits one turn's budget of new full text, otherwise
+    its consecutive parts, each saved as its own text artifact. A unit is {version_id, part, parts, start, end,
+    characters, artifact_descriptor}, with start and end as character offsets in the stored text."""
+    units = []
+    for row in texts:
+        content = artifacts.read(row['artifact']).decode('utf-8')
+        spans = review_excerpts.compute_part_spans(content)
+        for part, (start, end) in enumerate(spans, 1):
+            reference = review_excerpts.save_part(artifacts, content, row['artifact'], start, end)
+            units.append({'version_id': row['version_id'], 'part': part, 'parts': len(spans), 'start': start,
+                          'end': end, 'characters': end - start, 'artifact_descriptor': descriptor(reference)})
+    return units
+
+
+def _list_remaining_units(artifacts, remaining):
+    """The units of a plan's remaining entries. A chain that 0.64.2 to 0.65.1 started lists whole texts without part
+    fields; each of them is divided into units here."""
+    units = []
+    for row in remaining:
+        if 'part' in row:
+            units.append(row)
+        else:
+            units.extend(list_reading_units(artifacts, [{'version_id': row['version_id'],
+                                                         'artifact': _reference(row['artifact_descriptor'])}]))
+    return units
+
+
 def _measure(route, request):
     """The number of input characters of a request as the route's adapter measures them."""
     return len(transport._local_adapter(route).packet_text(request))
@@ -120,13 +187,13 @@ def _fits(route, prompt, packet, artifacts_now):
 
 
 def _assemble_reading_turn(artifacts, packet, record, delivered, now, remaining, turn):
-    """A reading turn packet whose only evidence is the full texts delivered now."""
+    """A reading turn packet whose only evidence is the full texts and parts delivered now."""
     from .review_protocol import _evidence
     native = packet['native']
     minimum = native['scientific_context']['openness_minimum']
     plan = {'turn': turn, 'delivered_before': delivered, 'remaining': remaining,
-            'delivered_now': [{'version_id': row['version_id'], 'characters': row['characters'],
-                               'artifact': _reference(row['artifact_descriptor'])} for row in now]}
+            'delivered_now': [dict({key: item for key, item in row.items() if key != 'artifact_descriptor'},
+                                   artifact=_reference(row['artifact_descriptor'])) for row in now]}
     value = {key: packet[key] for key in ('protocol', 'role', 'reviewer_id', 'dossier_id')}
     value[TURN_KEY] = dict({key: native[key] for key in ('subject_digest', 'claim_digest', 'reviewer')},
                            protocol=PROTOCOL, statement=native['subject'], reading_plan=plan, reading_record=record,
@@ -137,12 +204,15 @@ def _assemble_reading_turn(artifacts, packet, record, delivered, now, remaining,
 
 
 def _build_reading_turn(artifacts, route, packet, record, delivered, candidates, turn):
-    """The next reading turn: the longest prefix of the remaining texts whose actual fitted request fits the route
-    and delivers each of them complete."""
+    """The next reading turn: the longest prefix of the remaining units, at least one, whose characters fit one turn's
+    budget of new full text and whose actual fitted request fits the route and delivers each of them complete."""
     from .review_protocol import canonical_prompt
     prompt = canonical_prompt('native_math', reading_stage='reading')['text']
     chosen = None
     for count in range(1, len(candidates) + 1):
+        characters = sum(row['characters'] for row in candidates[:count])
+        if count > 1 and characters > review_excerpts.TURN_FULLTEXT_CHARACTERS:
+            break
         trial = _assemble_reading_turn(artifacts, packet, record, delivered, candidates[:count], candidates[count:],
                                        turn)
         if not _fits(route, prompt, trial, [_reference(row['artifact_descriptor']) for row in candidates[:count]]):
@@ -180,10 +250,13 @@ def _build_final_turn(route, packet, record):
 
 def _read_prior(records, artifacts, value, prior_id):
     """The earlier turn that a chain turn continues, with its packet and its observed reading response."""
-    from .review_protocol import assignment_state
+    from .review_protocol import assignment_state, find_replacement, has_ended_without_output
     prior = records.get('review_assignment', {}).get(prior_id)
     if prior is None:
         raise ResearchError('review_record_missing', 'Missing review_assignment: ' + str(prior_id))
+    if find_replacement(records, prior) is not None:
+        raise ResearchError('review_assignment_replaced',
+                            'This turn ended without output and a later turn replaced it; continue the replacement')
     if (prior['role'] != 'native_math' or 'reading_chain' not in prior
             or prior['context']['native_packet'] != value['context']['native_packet']
             or prior['route_id'] != value['route_id']
@@ -192,7 +265,9 @@ def _read_prior(records, artifacts, value, prior_id):
         raise ResearchError('review_source_continuation_mismatch',
                             'Continue a reading chain of the same native packet with the same reviewer, route and '
                             'author')
+    # A turn whose attempts all ended without output does not hold the chain: this assignment replaces it.
     if any(saved['role'] == 'native_math' and saved['context'].get('prior_assignment_id') == prior_id
+           and not has_ended_without_output(records, saved['id'])
            for saved in records.get('review_assignment', {}).values()):
         raise ResearchError('review_source_continuation_fork', 'Continue the latest turn of the reading chain')
     state = assignment_state(records, artifacts, prior_id)
@@ -215,10 +290,12 @@ def _extend_record(records, artifacts, prior, prior_packet, state):
     output = state['output']
     excerpts, allowances = review_excerpts.check_excerpts(records, artifacts, output['excerpts'], earlier['allowances'])
     passages, allowances = review_excerpts.answer_passages(records, artifacts, output['passage_requests'], allowances)
-    delivered = ([row['version_id'] for row in prior_packet[TURN_KEY]['reading_plan']['delivered_now']]
-                 if reading else [])
-    turn = {'assignment_id': prior['id'], 'attempt_id': state['attempt_id'], 'delivered': delivered,
-            'notes': output['notes']}
+    units = prior_packet[TURN_KEY]['reading_plan']['delivered_now'] if reading else []
+    turn = {'assignment_id': prior['id'], 'attempt_id': state['attempt_id'],
+            'delivered': [row['version_id'] for row in units if row.get('parts', 1) == 1], 'notes': output['notes']}
+    parts = [{key: row[key] for key in ('version_id', 'part', 'parts')} for row in units if row.get('parts', 1) > 1]
+    if parts:
+        turn['delivered_parts'] = parts
     return {'protocol': PROTOCOL, 'turns': earlier['turns'] + [turn], 'excerpts': earlier['excerpts'] + excerpts,
             'passages': earlier['passages'] + passages, 'allowances': allowances}
 
@@ -238,9 +315,7 @@ def prepare_packet(records, artifacts, value, route, packet):
         if not texts or _fits(route, canonical_prompt('native_math')['text'], packet,
                               [row['artifact'] for row in texts]):
             return packet, None
-        candidates = [{'version_id': row['version_id'],
-                       'characters': len(artifacts.read(row['artifact']).decode('utf-8')),
-                       'artifact_descriptor': descriptor(row['artifact'])} for row in texts]
+        candidates = list_reading_units(artifacts, texts)
         record = {'protocol': PROTOCOL, 'turns': [], 'excerpts': [], 'passages': [],
                   'allowances': review_excerpts.create_allowances()}
         chain = {'first_assignment_id': value['id'], 'turn': 1}
@@ -250,10 +325,11 @@ def prepare_packet(records, artifacts, value, route, packet):
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
     if find_stage(prior_packet) == 'reading' and prior_packet[TURN_KEY]['reading_plan']['remaining']:
         plan = prior_packet[TURN_KEY]['reading_plan']
-        delivered = plan['delivered_before'] + [{'version_id': row['version_id'], 'characters': row['characters'],
-                                                 'artifact_descriptor': descriptor(row['artifact'])}
-                                                for row in plan['delivered_now']]
-        return _build_reading_turn(artifacts, route, packet, record, delivered, plan['remaining'], chain['turn']), chain
+        delivered = plan['delivered_before'] + [
+            dict({key: item for key, item in row.items() if key != 'artifact'},
+                 artifact_descriptor=descriptor(row['artifact'])) for row in plan['delivered_now']]
+        candidates = _list_remaining_units(artifacts, plan['remaining'])
+        return _build_reading_turn(artifacts, route, packet, record, delivered, candidates, chain['turn']), chain
     return _build_final_turn(route, packet, record), chain
 
 
@@ -301,9 +377,10 @@ def validate_turn_output(packet, output):
 
 
 def verify_chain(records, artifacts, assignment):
-    """The earlier turns of a final turn's reading chain, each with the versions whose full text its actual recorded
-    request delivered complete. Every turn must be ready, the final turn's reading record must name their observed
-    attempts, and every full text of the readings must have reached a reading turn complete."""
+    """The earlier turns of a final turn's reading chain, each with the versions whose whole full text its actual
+    recorded request delivered complete and, when it delivered parts, the parts it delivered complete. Every turn must
+    be ready, the final turn's reading record must name their observed attempts, and every full text of the readings
+    must have reached reading turns complete, whole or in all of its parts."""
     from .native_review import load_packet
     from .review_protocol import assignment_state
     native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
@@ -313,6 +390,10 @@ def verify_chain(records, artifacts, assignment):
         chain.insert(0, current)
         current = records['review_assignment'].get(current['context'].get('prior_assignment_id'))
     texts = list_reading_texts(records, native)
+    part_digests = {}
+    for row in texts:
+        digests = review_excerpts.compute_part_digests(artifacts.read(row['artifact']).decode('utf-8'))
+        part_digests[row['version_id']] = digests if len(digests) > 1 else []
     turns, read = [], set()
     for turn in chain:
         state = assignment_state(records, artifacts, turn['id'])
@@ -324,14 +405,23 @@ def verify_chain(records, artifacts, assignment):
         sent = review_excerpts.read_sent_packet(json.loads(artifacts.read(attempt['request']))) or {}
         complete = review_excerpts.find_complete_bodies(sent)
         delivered = [row['version_id'] for row in texts if row['artifact']['sha256'] in complete]
+        parts = [{'version_id': row['version_id'], 'part': part, 'parts': len(part_digests[row['version_id']])}
+                 for row in texts for part, sha256 in enumerate(part_digests[row['version_id']], 1)
+                 if sha256 in complete]
         if find_stage(json.loads(artifacts.read(turn['packet']))) == 'reading':
             read.update(delivered)
-        turns.append({'assignment_id': turn['id'], 'attempt_id': attempt['id'], 'delivered': delivered})
+            read.update((row['version_id'], row['part']) for row in parts)
+        entry = {'assignment_id': turn['id'], 'attempt_id': attempt['id'], 'delivered': delivered}
+        if parts:
+            entry['delivered_parts'] = parts
+        turns.append(entry)
     if ([[row['assignment_id'], row['attempt_id']] for row in packet[RECORD_KEY]['turns']]
             != [[row['assignment_id'], row['attempt_id']] for row in turns]):
         raise ResearchError('openness_reading_incomplete',
                             'The reading record of the final turn no longer names the observed turns of its chain')
-    missing = [row['version_id'] for row in texts if row['version_id'] not in read]
+    missing = [row['version_id'] for row in texts if row['version_id'] not in read
+               and not (part_digests[row['version_id']] and all(
+                   (row['version_id'], part) in read for part in range(1, len(part_digests[row['version_id']]) + 1)))]
     if missing:
         raise ResearchError('openness_reading_incomplete',
                             'Every full text of the readings must reach a reading turn of the chain complete',

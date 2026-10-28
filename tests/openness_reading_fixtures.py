@@ -23,16 +23,33 @@ def build_body(number):
             + ('Supporting argument %d continues here. ' % number) * 220 + 'References: none.')
 
 
+def build_sized_body(number, characters):
+    """A full text of exactly the given length, in paragraphs separated by blank lines."""
+    head = 'Paper %d opening line.\n' % number + build_theorem(number) + '\n\n'
+    tail = 'References: none.'
+    paragraph = ('Supporting argument %d continues here. ' % number) * 25 + '\n\n'
+    filler = characters - len(head) - len(tail)
+    return head + (paragraph * (filler // len(paragraph) + 1))[:filler] + tail
+
+
 class OpennessReadingCase(ProblemCase):
+    text_sizes = None
+
+    def build_text(self, number):
+        """The full text of work `number`: the short default body, or a body of the case's own size."""
+        if self.text_sizes is None:
+            return build_body(number)
+        return build_sized_body(number, self.text_sizes[number - 1])
+
     def setUp(self):
         super().setUp()
         self.initialize_problem()
         self.put_selecting_slate()
         self.selected = self.select_statement(candidate_id='candidate-1')
         self.versions, self.texts = [], {}
-        for number in (1, 2, 3):
+        for number in range(1, 1 + (3 if self.text_sizes is None else len(self.text_sizes))):
             version = self.metadata(number)
-            capture = self.capture(version, pdf_text=build_body(number))
+            capture = self.capture(version, pdf_text=self.build_text(number))
             bundle = self.bundle(version, capture=capture, bundle_id='bundle-%d' % number)
             # Span locators keep each reading record small next to its full text, as in a real record.
             for unit in bundle['units']:
@@ -106,13 +123,15 @@ class OpennessReadingCase(ProblemCase):
                 'findings': dict({key: 'Assessed the exact supplied subject.' for key in RESULT_FINDINGS},
                                  openness=openness)}
 
-    def run_reading_turns(self, native_packet, first='turn-1'):
-        """Assign and observe reading turns until the chain reaches its final turn; return the turn ids."""
+    def run_reading_turns(self, native_packet, first='turn-1', turn_count=None):
+        """Assign and observe reading turns until the chain reaches its final turn; return the turn ids. The chain
+        must end within turn_count turns, by default one more than the number of texts."""
+        turn_count = turn_count or len(self.versions) + 1
         identifiers = [first]
         self.assign(first, native_packet)
         while 'reading_turn' in self.read_packet(identifiers[-1]):
             self.invoke(identifiers[-1], self.build_reading_response(self.read_packet(identifiers[-1])))
             identifiers.append('turn-%d' % (len(identifiers) + 1))
             self.assign(identifiers[-1], native_packet, prior=identifiers[-2])
-            self.assertLessEqual(len(identifiers), len(self.versions) + 1, 'The chain must end within the text count')
+            self.assertLessEqual(len(identifiers), turn_count, 'The chain must end within its bounded number of turns')
         return identifiers

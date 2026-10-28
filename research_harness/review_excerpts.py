@@ -2,8 +2,9 @@
 
 A reviewer that reads its sources over several turns keeps its own verbatim excerpts. The harness finds each excerpt
 in the stored text of its exact version and delivers the original characters at their exact span, never the
-reviewer's copy. A passage request returns a bounded part of a stored text that starts at a verbatim anchor. The
-same stored records always give the same result.
+reviewer's copy. A passage request returns a bounded part of a stored text that starts at a verbatim anchor. One turn
+reads at most TURN_FULLTEXT_CHARACTERS of new full text, so a longer text is read in consecutive parts. The same
+stored records always give the same result.
 """
 
 import hashlib
@@ -14,7 +15,11 @@ from .errors import ResearchError
 from .operations import fields, text
 
 KEY = 'reviewer_excerpts'
-PROTOCOL = 'exactory-review-excerpts-v1'
+PROTOCOL_V1 = 'exactory-review-excerpts-v1'
+PROTOCOL = 'exactory-review-excerpts-v2'
+# The characters of new full text that one turn delivers at most, so that a reviewer can read it and record excerpts
+# within the route's time limit. A longer text arrives in parts of at most this size.
+TURN_FULLTEXT_CHARACTERS = 120000
 MINIMUM_PHRASE_CHARACTERS = 20
 EXCERPT_CHARACTERS = 6000
 SESSION_EXCERPT_CHARACTERS = 200000
@@ -26,7 +31,8 @@ EXCERPT_OVER_ALLOWANCE_NOTE = ('This excerpt was found, but the verified excerpt
                                'session total of characters, so its text is not delivered.')
 PASSAGE_OVER_ALLOWANCE_NOTE = ('The anchor of this passage was found, but the delivered passages of this session '
                                'already use the session total of characters, so its text is not delivered.')
-PHASE_PROMPT = (
+# The excerpt rules of 0.64.2 to 0.65.1, kept for the assignments recorded with them.
+PHASE_PROMPT_V1 = (
     ' Excerpt rules of this session. The full texts that you request can be longer together than one input of this '
     'route can hold, so they reach you in parts over several turns. A full text that a turn of this session delivers '
     'to you complete is not delivered again: a later request for it is answered with status "already_delivered", '
@@ -49,6 +55,36 @@ PHASE_PROMPT = (
     '"over_allowance". A passage request never stays pending, and a passage is delivered once, so keep what you need '
     'from it as an excerpt. Your final assessment rests on your own earlier responses, your checked excerpts and '
     'passages, and the full texts that the final input can hold.')
+PHASE_PROMPT = (
+    ' Excerpt rules of this session. The full texts that you request can be longer together than one input of this '
+    'route can hold, and a turn has a limited time, so they reach you in parts over several turns. One turn delivers '
+    'at most 120,000 characters of new full text. A requested text that fits what is left of this turn arrives whole. '
+    'A longer text arrives in consecutive parts of at most 120,000 characters, one after another in later turns; a '
+    'part delivery names its part in part: {version_id,part,parts,start,end,characters}, where start and end are '
+    'character offsets in the stored text. A request beyond what is left of this turn has status '
+    '"deferred_reading_budget" and a reason. A full-text request stays pending until the whole text or its last part '
+    'has arrived; you need not repeat it. A full text that a turn of this session delivers to you complete, whole or '
+    'in all its parts, is not delivered again: a later request for it is answered with status "already_delivered", '
+    'which names that turn, and the replay of the earlier turns can leave out its body. While you read a delivered '
+    'text or part, copy what your assessment needs from it verbatim: definitions, normalizations, every relevant '
+    'theorem, lemma or proposition with all of its hypotheses, and every statement that a question is open. Return '
+    'these copies in the optional top-level field excerpts: [{version_id,text,purpose}]. text is copied character for '
+    'character from a delivered text or part of version_id and has at least 20 and at most 6,000 characters; purpose '
+    'says in a few words why you keep it. The harness looks for each excerpt in the whole stored text of that version '
+    'after it changes each character to its NFKC form and each run of white space to one space. A verified excerpt '
+    'comes back in reviewer_excerpts.excerpts of every later turn as the exact source characters with their '
+    'location. An excerpt that is not found, is too short or too long, or names a version without a stored text '
+    'comes back with status "unmatched" and a reason; its text is your own copy and was not checked. Verified '
+    'excerpts have a total of 200,000 characters in this session, and an excerpt beyond that total has status '
+    '"over_allowance". When you need part of a text again, request a bounded passage in source_requests: '
+    '{id,kind:"passage",version_id,anchor,characters}. anchor is a verbatim phrase of at least 20 characters from '
+    'that text, and characters is an integer from 1 to 20,000. The next turn delivers the source text that starts at '
+    'the first occurrence of the anchor, with at most that many characters, or status "not_found". Delivered '
+    'passages have a total of 100,000 characters in this session, and a passage beyond that total has status '
+    '"over_allowance". A passage request never stays pending, and a passage is delivered once, so keep what you need '
+    'from it as an excerpt. Your final assessment rests on your own earlier responses, your checked excerpts and '
+    'passages, and the full texts that the final input can hold.')
+PHASE_PROMPTS = {PROTOCOL_V1: PHASE_PROMPT_V1, PROTOCOL: PHASE_PROMPT}
 
 
 def create_allowances():
@@ -76,14 +112,50 @@ def normalize_with_offsets(value):
     return ''.join(characters), offsets
 
 
-def find_fulltext(records, version_id):
-    """The reference of the stored extracted text of the exact version's main full-text capture, or None."""
+def find_fulltext_capture(records, version_id):
+    """The exact version's main full-text capture with an extracted text, or None."""
     from .graph import main_captures
     work = records.get('work', {}).get(version_id)
     if work is None or not work.get('fulltexts'):
         return None
-    return next((capture['text'] for capture in main_captures(records, work)
+    return next((capture for capture in main_captures(records, work)
                  if capture.get('extraction_status') == 'extracted' and capture.get('text') is not None), None)
+
+
+def find_fulltext(records, version_id):
+    """The reference of the stored extracted text of the exact version's main full-text capture, or None."""
+    capture = find_fulltext_capture(records, version_id)
+    return None if capture is None else capture['text']
+
+
+def compute_part_spans(value):
+    """The consecutive parts [start, end) in which a turn reads a text: the whole text when it fits one turn's budget;
+    otherwise parts of at most the budget, each ending after the last blank line in the last quarter of its window,
+    else after the last newline there, else exactly at the budget."""
+    spans, start = [], 0
+    while len(value) - start > TURN_FULLTEXT_CHARACTERS:
+        window_end = start + TURN_FULLTEXT_CHARACTERS
+        floor = window_end - TURN_FULLTEXT_CHARACTERS // 4
+        blank_line = value.rfind('\n\n', floor, window_end)
+        newline = value.rfind('\n', floor, window_end)
+        end = blank_line + 2 if blank_line >= 0 else newline + 1 if newline >= 0 else window_end
+        spans.append((start, end))
+        start = end
+    spans.append((start, len(value)))
+    return spans
+
+
+def compute_part_digests(value):
+    """The SHA-256 of the exact UTF-8 bytes of each part of a text, in order."""
+    return [hashlib.sha256(value[start:end].encode('utf-8')).hexdigest() for start, end in compute_part_spans(value)]
+
+
+def save_part(artifacts, value, reference, start, end):
+    """The text artifact of one part: the stored text itself when the part is the whole text, otherwise the exact
+    UTF-8 bytes of the part, saved with the stored text's media type."""
+    if (start, end) == (0, len(value)):
+        return reference
+    return artifacts.put(value[start:end].encode('utf-8'), reference['media_type'])
 
 
 def find_source_text(records, version_id):

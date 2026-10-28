@@ -27,7 +27,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         assignment = self.assign('turn-1', self.export())
         self.assertEqual(assignment['reading_chain'], {'first_assignment_id': 'turn-1', 'turn': 1})
         self.assertEqual((assignment['history'], assignment['session_id']), ([], 'turn-1'))
-        self.assertEqual(assignment['prompt']['template_id'], 'exactory-openness-reading-v1/reading')
+        self.assertEqual(assignment['prompt']['template_id'], openness_reading.PROTOCOL + '/reading')
         self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', reading_stage='reading'))
         packet = self.read_packet('turn-1')
         self.assertNotIn('native', packet)
@@ -102,7 +102,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.assertEqual([row['version_id'] for row in second['reading_plan']['delivered_now']], self.versions[2:])
         assignment = self.store.snapshot()['records']['review_assignment']['turn-3']
         self.assertEqual(assignment['reading_chain'], {'first_assignment_id': 'turn-1', 'turn': 3})
-        self.assertEqual(assignment['prompt']['template_id'], 'exactory-openness-reading-v1/final')
+        self.assertEqual(assignment['prompt']['template_id'], openness_reading.PROTOCOL + '/final')
         self.assertTrue(assignment['prompt']['text'].startswith(protocol.canonical_prompt('native_math')['text']))
         packet = self.read_packet('turn-3')
         native = json.loads(self.artifacts.read(native_packet))
@@ -133,7 +133,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.assertNotIn('attempt-' + final, records.get('review_output_refusal', {}))
         further = self.assign('turn-4', native_packet, prior=final)
         self.assertEqual(further['reading_chain'], {'first_assignment_id': 'turn-1', 'turn': 4})
-        self.assertEqual(further['prompt']['template_id'], 'exactory-openness-reading-v1/final')
+        self.assertEqual(further['prompt']['template_id'], openness_reading.PROTOCOL + '/final')
         record = self.read_packet('turn-4')['reading_record']
         [answer] = record['passages']
         body = self.artifacts.read(self.texts[self.versions[1]]).decode()
