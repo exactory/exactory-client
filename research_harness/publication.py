@@ -194,9 +194,9 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
             if link["claim_id"] not in claim_ids or link["claim_id"] in seen:
                 raise ResearchError("publication_claims_missing", "Map each manuscript claim exactly once")
             seen.add(link["claim_id"])
-        validate_claim_evidence(value["claim_evidence"], report["candidate"])
         if seen != set(claim_ids):
             raise ResearchError("publication_claims_missing", "Map every manuscript claim to evidence")
+        validate_claim_evidence(value["claim_evidence"], report["candidate"])
         scoped = report.get("contract")
         if scoped is not None:
             from .publication_scope import validate_manuscript_claims, collect_scientific_authors

@@ -78,7 +78,7 @@ def _obligations(values):
             "by_code": [{"code": _short(code, 48), "count": count, "code_truncated": len(code) > 48} for code, count in selected]}
 
 
-def next_summary(report):
+def next_summary(report, *, counters=False):
     """Return a navigation hint, never a stage-transition authorization."""
     preparation = report.get("preparation") or {}
     result = {"schema": "research-next-summary-v1", "revision": report["revision"], "ready": report["ready"],
@@ -94,6 +94,17 @@ def next_summary(report):
                        "objective_obligations": _obligations(report["objective_obligations"]),
                        "scope_contract_id": _short(report.get("scope_contract_id"), 64),
                        "scientific_target_digest": report["scientific_target_digest"]})
+    if counters:
+        result["evaluation"] = report.get("evaluation")
+        hint = result.get("next_hint")
+        while hint and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 4096:
+            fields = [key for key, value in hint.items() if isinstance(value, str) and value]
+            if not fields:
+                break
+            key = max(fields, key=lambda item: len(hint[item]))
+            hint[key] = hint[key][:-16]
+            if key not in hint["truncated_fields"]:
+                hint["truncated_fields"].append(key)
     return result
 
 

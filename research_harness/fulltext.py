@@ -199,6 +199,12 @@ class _Article(HTMLParser):
                 self.body_text.append(data)
 
 
+JATS_MAX_ELEMENTS = 200000
+JATS_MAX_DEPTH = 256
+JATS_MAX_TEXT_CHARACTERS = 32 * 1024 * 1024
+JATS_TIMEOUT_SECONDS = 10
+
+
 class _JatsArticle:
     """Read article text and figure names without resolving XML dependencies."""
 
@@ -214,9 +220,57 @@ class _JatsArticle:
         self.body_text = []
         self.abstract_text = []
         self.visual_asset_names = []
+        self.visual_asset_set = set()
         self.declaration = None
+        self.deadline = None
+        self.element_count = 0
+        self.text_characters = 0
+        self.token_depth = 0
+        self.in_cdata = False
+        self.in_attribute_declaration = False
+
+    def require_time(self):
+        if time.monotonic() > self.deadline:
+            raise ResearchError("xml_timeout", "JATS XML extraction exceeded its time limit")
+
+    def require_resolved_entities(self, token):
+        for entity in re.findall(r"&([^;\s]+);", token):
+            if not entity.startswith("#") and entity not in ("amp", "lt", "gt", "quot", "apos"):
+                self.refuse_external_entity()
+
+    def validate_token(self, token):
+        self.require_time()
+        self.text_characters += len(token)
+        if self.text_characters > JATS_MAX_TEXT_CHARACTERS:
+            raise ResearchError("xml_text_limit", "JATS XML exceeds the text size limit")
+        if token == "<![CDATA[":
+            self.in_cdata = True
+        elif token == "]]>":
+            self.in_cdata = False
+        elif not self.in_cdata and token == "<!ATTLIST":
+            self.in_attribute_declaration = True
+        elif self.in_attribute_declaration:
+            self.require_resolved_entities(token)
+            if token == ">":
+                self.in_attribute_declaration = False
+        elif not self.in_cdata and token.startswith("<") and not token.startswith(("<!", "<?")):
+            if token.startswith("</"):
+                self.token_depth -= 1
+            else:
+                self.element_count += 1
+                depth = self.token_depth + 1
+                if self.element_count > JATS_MAX_ELEMENTS:
+                    raise ResearchError("xml_element_limit", "JATS XML exceeds the element count limit")
+                if depth > JATS_MAX_DEPTH:
+                    raise ResearchError("xml_depth_limit", "JATS XML exceeds the nesting depth limit")
+                if not token.endswith("/>"):
+                    self.token_depth = depth
+                self.require_resolved_entities(token)
+        if not self.in_cdata:
+            self.handle_default(token)
 
     def handle_start(self, name, attrs):
+        self.require_time()
         tag = name.rsplit("}", 1)[-1]
         if self.root is None:
             self.root = tag
@@ -236,15 +290,18 @@ class _JatsArticle:
             for attribute, value in attrs.items():
                 if attribute.rsplit("}", 1)[-1] == "href" and value.strip():
                     asset = value.strip()
-                    if asset not in self.visual_asset_names:
+                    if asset not in self.visual_asset_set:
+                        self.visual_asset_set.add(asset)
                         self.visual_asset_names.append(asset)
 
     def handle_end(self, name):
+        self.require_time()
         self.stack.pop()
         if name.rsplit("}", 1)[-1] in self.blocks:
             self.text.append("\n")
 
     def handle_characters(self, data):
+        self.require_time()
         if not self.stack:
             return
         state = self.stack[-1]
@@ -256,6 +313,8 @@ class _JatsArticle:
             self.body_text.append(data)
 
     def handle_default(self, token):
+        if token.startswith("%") and token.endswith(";"):
+            self.refuse_external_entity()
         # DefaultHandler also sees declarations that EntityDeclHandler omits.
         if token == "<!ENTITY":
             self.declaration = []
@@ -273,6 +332,16 @@ class _JatsArticle:
         raise ResearchError("xml_external_entity", "JATS XML requiring an external entity is not extracted")
 
     def parse(self, data):
+        self.deadline = time.monotonic() + JATS_TIMEOUT_SECONDS
+        # Without a start handler Expat supplies decoded, unexpanded start tokens,
+        # including attribute references it otherwise silently drops after an unread DTD.
+        # Validate namespace declaration references before Expat binds their URIs.
+        tokens = expat.ParserCreate()
+        tokens.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+        tokens.DefaultHandler = self.validate_token
+        tokens.ExternalEntityRefHandler = self.refuse_external_entity
+        tokens.SkippedEntityHandler = self.refuse_external_entity
+        self.parse_chunks(tokens, data)
         parser = expat.ParserCreate(namespace_separator="}")
         parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
         parser.StartElementHandler = self.handle_start
@@ -281,7 +350,15 @@ class _JatsArticle:
         parser.DefaultHandler = self.handle_default
         parser.ExternalEntityRefHandler = self.refuse_external_entity
         parser.SkippedEntityHandler = self.refuse_external_entity
-        parser.Parse(data, True)
+        self.parse_chunks(parser, data)
+
+    def parse_chunks(self, parser, data):
+        for start in range(0, len(data), 65536):
+            self.require_time()
+            parser.Parse(data[start:start + 65536], False)
+        self.require_time()
+        parser.Parse(b"", True)
+        self.require_time()
 
 
 GENERIC_BINARY_MEDIA_TYPES = frozenset({"application/octet-stream", "binary/octet-stream"})
@@ -332,7 +409,12 @@ def extract(data, media_type, *, extractor=None, layout=True, ocr=False):
             article.parse(data)
         except ResearchError as error:
             result["status"] = error.code
-        except (expat.ExpatError, LookupError, ValueError):
+        except expat.ExpatError as error:
+            entity_errors = (expat.errors.XML_ERROR_UNDEFINED_ENTITY,
+                             expat.errors.XML_ERROR_ATTRIBUTE_EXTERNAL_ENTITY_REF)
+            result["status"] = ("xml_external_entity" if error.code in
+                                {expat.errors.codes[name] for name in entity_errors} else "malformed_xml")
+        except (LookupError, ValueError):
             result["status"] = "malformed_xml"
         else:
             if article.root == "article":

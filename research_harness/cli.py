@@ -228,6 +228,7 @@ def build_parser():
             item.add_argument("--file", required=True, help="The claim_evidence array of a manuscript payload, "
                               "or the whole payload, as UTF-8 JSON without duplicate keys or nonfinite numbers.")
         if command in ("status", "next"):
+            item.add_argument("--counters", action="store_true", help=argparse.SUPPRESS)
             item.add_argument("--summary", action="store_true",
                               help="Return a bounded advisory view; the same current evaluation still runs.")
         if command == "obligations":
@@ -380,7 +381,6 @@ def status_report(store, *, counters=False):
         obligations = report["obligations"] + draft_pending
         report = dict(report, ready=False, obligations=obligations,
                       counts=dict(report["counts"], obligations=len(obligations)))
-    diagnostics = {"evaluation": dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     # The cohort inventory names the next unread abstract; every other stage
     # takes the highest-priority current obligation in preparation order.
     upcoming = preparation.get("next") if not managed and study and study["stage"] == "cohort" else None
@@ -388,6 +388,8 @@ def status_report(store, *, counters=False):
     current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
     tool_status = {}
     tool_status["bundle_drift"] = find_bundle_drift(records, evaluation) if profile == "research" else None
+    diagnostics = {"evaluation": dict(evaluation.counters,
+                                     elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
     if records.get("probe_intent") or records.get("probe"):
         tool_status["probes"] = summarize_probes(records)
     provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
@@ -492,9 +494,9 @@ def run(args):
         return review_protocol.build_packet(snapshot["records"], artifacts, args.dossier_id, args.role,
                                             args.reviewer_id, **context)
     if args.command in ("status", "next"):
-        report = status_report(store, counters=args.summary)
+        report = status_report(store, counters=args.summary or args.counters)
         if args.summary:
-            return (next_summary if args.command == "next" else status_summary)(report)
+            return next_summary(report, counters=args.counters) if args.command == "next" else status_summary(report)
         return report
     if args.command == "restore":
         return restore_bundle(store, args.bundle)

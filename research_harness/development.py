@@ -930,31 +930,56 @@ def _is_json_equal(left, right):
 
 
 def _validate_format_only_outputs(artifacts, earlier, execution):
-    def parse_retained_output(output):
+    def read_retained_output(output):
         data = artifacts.read(output["artifact"])
         is_json = is_json_media_type(output["artifact"]["media_type"])
-        return output, data, is_json, strict_json(data) if is_json else None
+        return output, data, is_json
 
-    try:
-        originals = [parse_retained_output(output) for output in earlier["payload"]["outputs"]]
-        converted = [parse_retained_output(output) for output in execution["outputs"]]
-    except ResearchError as error:
-        if error.code != "invalid_json":
-            raise
-        raise ResearchError("format_only_output_mismatch",
-                            "Format-only JSON outputs must retain valid JSON values") from error
-    by_id = {output["id"]: output for output, _, _, _ in originals}
+    originals = [read_retained_output(output) for output in earlier["payload"]["outputs"]]
+    converted = [read_retained_output(output) for output in execution["outputs"]]
+    by_id = {output["id"]: output for output, _, _ in originals}
     covered = set()
-    for output, data, is_json, value in converted:
-        matches = []
-        for original, old_data, old_json, old_value in originals:
-            if original["requirement_id"] != output["requirement_id"]:
-                continue
-            if output["id"] in by_id and original["id"] != output["id"]:
-                continue
-            if data == old_data or is_json and old_json and _is_json_equal(value, old_value):
-                matches.append(original["id"])
+    pending = []
+    parsed = {}
+
+    def parse_output(data):
+        if data not in parsed:
+            try:
+                parsed[data] = strict_json(data)
+            except ResearchError as error:
+                parsed[data] = error
+        if isinstance(parsed[data], ResearchError):
+            raise parsed[data]
+        return parsed[data]
+
+    for output, data, is_json in converted:
+        candidates = [(original, old_data, old_json) for original, old_data, old_json in originals
+                      if original["requirement_id"] == output["requirement_id"]
+                      and (output["id"] not in by_id or original["id"] == output["id"])]
+        matches = [original["id"] for original, old_data, _ in candidates if data == old_data]
+        covered.update(matches)
+        pending.append((output, data, is_json, candidates, matches))
+    for output, data, is_json, candidates, matches in pending:
+        invalid_json = False
+        needs_match = not matches
+        if is_json:
+            for original, old_data, old_json in candidates:
+                if not old_json or data == old_data or not needs_match and original["id"] in covered:
+                    continue
+                try:
+                    equal = _is_json_equal(parse_output(data), parse_output(old_data))
+                except ResearchError as error:
+                    if error.code != "invalid_json":
+                        raise
+                    invalid_json = True
+                    continue
+                if equal:
+                    matches.append(original["id"])
+                    covered.add(original["id"])
         if not matches:
+            if invalid_json:
+                raise ResearchError("format_only_output_mismatch",
+                                    "Format-only JSON outputs must retain valid JSON values")
             raise ResearchError("format_only_output_mismatch",
                                 "Every format-only output must equal an earlier output of the same requirement",
                                 {"execution_id": earlier["id"], "output_id": output["id"]})
@@ -1011,7 +1036,9 @@ that run. An idempotent admission response retains its original reservation.
         record["digest"] = digest(context.project_dependencies(record, "record"))
         account = dict(account, executions=account["executions"] + 1, charged_units=account["charged_units"] + value["reserved_units"])
         changes = [immutable_record(records, "execution_admission", value["id"], record),
-                   ("strategy_account", plan["strategy_key"], account), ("cycle", cycle["id"], dict(cycle, status="running"))]
+                   ("strategy_account", plan["strategy_key"], account)]
+        if earlier is None:
+            changes.append(("cycle", cycle["id"], dict(cycle, status="running")))
         return changes, record
 
     return prepared_mutation(store, "development.admit", payload, prepare, expected_revision=expected_revision, request_id=request_id)
@@ -1162,9 +1189,11 @@ def record_execution(store, payload, *, expected_revision, request_id, _observat
             account = dict(account, charged_units=account["charged_units"] + overrun)
             changes.extend([("strategy_account", plan["strategy_key"], account),
                             ("execution_outcome", admission["id"], {"execution_id": value["id"]})])
-        paused = admission is not None and _exhausted(account) and value["status"] != "completed"
-        cycle = dict(cycle, execution_ids=cycle["execution_ids"] + [value["id"]], status="budget_paused" if paused else "executed")
-        changes.append(("cycle", cycle["id"], cycle))
+        paused = earlier is None and admission is not None and _exhausted(account) and value["status"] != "completed"
+        if earlier is None:
+            cycle = dict(cycle, execution_ids=cycle["execution_ids"] + [value["id"]],
+                         status="budget_paused" if paused else "executed")
+            changes.append(("cycle", cycle["id"], cycle))
         if paused:
             projected = dict(records, execution=dict(records.get("execution", {}), **{value["id"]: record}))
             # This is a historical incomplete checkpoint. Its bound admission
