@@ -35,6 +35,10 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.65.2](docs/releases/0.65.2.md) bounds the reading of one review turn: a turn delivers at most 120,000
+characters of new full text, a longer text arrives in parts over consecutive turns, and a turn whose run ended
+without output can be replaced by a new continuation of the same parent.
+
 Version [0.65.1](docs/releases/0.65.1.md) repairs a test of 0.65.0 that still called two renamed test helpers by
 their old names. The harness code is unchanged.
 
