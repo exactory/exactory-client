@@ -246,6 +246,36 @@ class ReviewProtocolTests(LiteratureCase):
             state = p.assignment_state(records, self.artifacts, 'assignment')
             self.assertTrue(state['ready'], state['obligations'])
 
+    def test_codex_attempt_and_probe_keep_their_route_pin_after_adapter_controls_change(self):
+        from codex_route_fixtures import invoke_codex, record_codex_route
+        from research_harness import review_codex_transport as codex, review_transport
+        protocol = self.protocol()
+        record_codex_route(self)
+        self.assign()
+        invoke_codex(self, 'assignment', {'verdict': 'sound'}, 'attempt')
+        records = self.records()
+        assignment = records['review_assignment']['assignment']
+        attempt = records['review_attempt']['attempt']
+        pinned = records['review_route']['route']['runtime']
+        self.assertTrue(protocol.authenticate_attempt(records, self.artifacts, assignment, attempt))
+        installed = dict(pinned, implementation_sha256='2' * 64, controls=['features.code_mode_host=false'])
+        with patch.object(codex, 'runtime', return_value=installed):
+            self.assertTrue(protocol.authenticate_provenance(records, self.artifacts, assignment, attempt))
+            self.assertTrue(protocol.authenticate_attempt(records, self.artifacts, assignment, attempt))
+            state = protocol.route_state(records, self.artifacts, 'route')
+            self.assertEqual(state['context_status'], 'verified_for_route')
+            self.assertTrue(protocol.assignment_state(records, self.artifacts, 'assignment')['ready'])
+            self.assign(identifier='next-assignment', reviewer='next-reviewer')
+            revision = self.store.revision
+            with patch.object(review_transport, 'send_request', side_effect=AssertionError('Must not dispatch')):
+                for operation, payload in [
+                        (protocol.probe_route, {'id': 'new-probe', 'route_id': 'route'}),
+                        (protocol.invoke_assignment, {'id': 'new-attempt', 'assignment_id': 'next-assignment'})]:
+                    with self.subTest(operation=operation.__name__), self.assertRaises(ResearchError) as failure:
+                        operation(self.store, payload, expected_revision=revision, request_id=payload['id'])
+                    self.assertEqual(failure.exception.code, 'review_route_runtime_stale')
+                    self.assertEqual(self.store.revision, revision)
+
     def test_legacy_ui_attempt_verifies_without_promoting_a_failed_legacy_probe(self):
         from claude_review_fixtures import RECORDED_CONTEXTS, build_recorded_response, build_recorded_runtime
         from research_harness import review_claude_transport as claude, review_transport

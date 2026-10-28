@@ -134,7 +134,7 @@ class VisualTransportTests(unittest.TestCase):
         request['input'][0]['content'] = 'x' * (1048576 - 100)
         with self.assertRaises(ResearchError) as failure:
             self.adapter.native_user_parts(request, self.directory)
-        self.assertEqual(failure.exception.code, 'review_input_limit')
+        self.assertEqual(failure.exception.code, 'review_input_too_large')
 
     def test_corrupt_png_with_matching_descriptor_is_rejected(self):
         request = copy.deepcopy(self.request)
@@ -148,6 +148,7 @@ class VisualTransportTests(unittest.TestCase):
 
     def test_context_verification_binds_model_images_and_runtime(self):
         runtime = {'adapter': 'codex_cli_visual_v1', 'version': 'test fixture runtime'}
+        self.route['runtime'] = runtime
         evidence = self.adapter.inspect_rollout(self.events, self.request, 'thread-test', self.directory,
             ['EXCLUDED_CONTROL'], excluded_images=[png(150)])
         evidence.update(inspected=True, route_digest=digest(self.route), event_digest='observed-events', runtime=runtime)
