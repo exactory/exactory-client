@@ -133,7 +133,8 @@ def requests_for_lineage(records, artifacts, prior, output):
             if row.get('kind') == 'source' and row.get('depth') == 'fulltext':
                 _require(row['id'] not in requests or requests[row['id']] == row, 'Source request identifiers cannot change meaning')
                 requests[row['id']] = row
-    for row in bar_sources.requests(output):
+    from .review_excerpts import KEY
+    for row in bar_sources.requests(output, passages=KEY in _json(artifacts, prior['packet'])):
         if row.get('kind') == 'source' and row.get('depth') == 'fulltext':
             _require(row['id'] not in requests or requests[row['id']] == row, 'Source request identifiers cannot change meaning')
             requests[row['id']] = row
@@ -183,7 +184,9 @@ def prepare(records, artifacts, prior, state, packet):
     deliveries = [bar_sources._source(records, artifacts, request, originals) for request in requested]
     deliveries.extend(row for row in packet['source_deliveries'] if row['request'] not in requested)
     packet['source_deliveries'] = deliveries
-    packet['pending_source_requests'] = [row['request'] for row in deliveries if row['status'] != 'delivered']
+    # A passage answer never stays pending.
+    packet['pending_source_requests'] = [row['request'] for row in deliveries
+                                         if row['status'] != 'delivered' and row['request']['kind'] != 'passage']
     history = _history(records, artifacts, prior, state)
     historical_sources = _historical_sources(records, artifacts, prior)
     restored, searches, existing = _restoration(records, history, deliveries, historical_sources)

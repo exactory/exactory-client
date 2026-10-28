@@ -20,6 +20,7 @@ from .operations import fields, immutable_record, normalized_text, prepared_muta
 from . import review_transport as transport
 from . import bar_sources
 from . import openness_reading
+from . import review_excerpts
 from . import review_context_repair as context_repair
 from . import review_supplied_evidence as supplied_evidence
 from . import problem_rubric
@@ -589,15 +590,20 @@ def _project_scoped_result(records, artifacts, packet, report):
 
 
 def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestration=None, repair_prompt=None,
-                     adjudicator_prompt=None, reading_stage=None):
+                     adjudicator_prompt=None, excerpts=False, reading_stage=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
-    with; a later version uses the current suffix; repair_prompt names a suffix explicitly. reading_stage names the
-    reading or final turn of a native openness reading chain."""
+    with; a later version uses the current suffix; repair_prompt names a suffix explicitly. excerpts adds the excerpt
+    rules of a bar, slate or result session to the current template under its unchanged id; an earlier version only
+    replays records made before those rules. reading_stage names the reading or final turn of a native openness
+    reading chain."""
     if repair_prompt is None:
         repair_prompt = context_repair.PROMPT if version != 1 else context_repair.PROMPT_0560
     repair_suffix = repair_prompt
     if role not in ROLES:
         raise ResearchError('invalid_review_role', 'Unknown reviewer role')
+    if excerpts and role not in bar_sources.ROLES:
+        raise ResearchError('invalid_review_context', 'Reviewer excerpts belong to bar, slate and result sessions')
+    excerpts = excerpts and version == 6
     if reading_stage is not None:
         if role != 'native_math' or reading_stage not in openness_reading.STAGES:
             raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
@@ -640,6 +646,9 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
         if current_result and version != 3:
             # A new contract avoids native CLI trimming while exact v3 replay stays unchanged.
             prompt = prompt.rstrip(' ')
+        if excerpts:
+            prompt += review_excerpts.PHASE_PROMPT
+            parameters['reviewer_excerpts'] = review_excerpts.PROTOCOL
         template = ((_PROBLEM_RESULT_PROTOCOL_V3 if version == 3 else
                      _PROBLEM_RESULT_PROTOCOL_V4 if version == 4 else PROBLEM_RESULT_PROTOCOL)
                     if current_result else _PROBLEM_PROTOCOL_V1 if version == 1 else
@@ -674,6 +683,9 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
         prompt += repair_suffix + ' Source-request turns need no final reassessment; final output must include it. For a final bar reassessment, objection_findings must cover every inherited material objection despite the ordinary empty-bar default.'
         parameters['context_repair'] = True
         suffix = '/context-repair'
+    if excerpts:
+        prompt += review_excerpts.PHASE_PROMPT
+        parameters['reviewer_excerpts'] = review_excerpts.PROTOCOL
     if role in bar_sources.ROLES and version != 1:
         template_version = _Q1_PROTOCOL + ('/legacy' if legacy else '')
     return {'template_id': template_version + '/' + role + suffix, 'template_hash': digest(prompt),
@@ -1288,6 +1300,23 @@ def source_delivery_packet(records, artifacts, assignment):
     return packet
 
 
+def _find_session_fulltexts(records, artifacts, prior):
+    """The versions whose stored full text a turn of this session under the excerpt rules delivered complete in its
+    actual recorded request, each with the latest such turn. The session runs back from prior through the history of
+    each turn."""
+    delivered, current = {}, prior
+    while current is not None:
+        if review_excerpts.KEY in _read_json(artifacts, current['packet']):
+            state = assignment_state(records, artifacts, current['id'])
+            attempt = records.get('review_attempt', {}).get(state['attempt_id'])
+            if attempt is not None and attempt.get('request'):
+                sent = review_excerpts.read_sent_packet(_read_json(artifacts, attempt['request'])) or {}
+                for version in review_excerpts.find_delivered_fulltexts(records, sent):
+                    delivered.setdefault(version, {'assignment_id': current['id'], 'attempt_id': attempt['id']})
+        current = records.get('review_assignment', {}).get(current.get('history_assignment_id'))
+    return delivered
+
+
 def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     """Build the role allowlist; caller-authored prompts and narrative substitutes are rejected."""
     canonical_prompt(role)
@@ -1311,7 +1340,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             fields(context, ('prior_assignment_id',), ('source_delivery',), code='invalid_review_context')
             prior, state = _source_parent(records, artifacts, context['prior_assignment_id'], dossier_id, reviewer_id, role)
             previous = source_delivery_packet(records, artifacts, prior)
-            packet.update(bar_sources.continuation(records, artifacts, previous, state['output']))
+            packet.update(bar_sources.continuation(records, artifacts, previous, state['output'],
+                                                   _find_session_fulltexts(records, artifacts, prior)))
             packet['continuation'] = {'assignment_id': prior['id'], 'packet_digest': prior['packet_digest'],
                                       'scientific_context': 'The exact prior scientific packet and output remain in this session history.'}
             # These fixed bindings are consumed by final native support recording.
@@ -1347,7 +1377,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                         'review_ids': [review['id'] for review in historical]}
                     if is_previous_prompt(prior):
                         current_prompt = canonical_prompt('result', repair=prior.get('reassessment_required') is True,
-                                                          orchestration='problem_creation')
+                                                          orchestration='problem_creation', excerpts=True)
                         packet['problem_refresh'].update(reason='prompt_contract_changed',
                             previous_template_id=prior['prompt']['template_id'],
                             previous_prompt_hash=prior['prompt']['rendered_prompt_hash'],
@@ -1789,6 +1819,13 @@ def _prompt_matches(assignment):
     stage = assignment['prompt'].get('parameters', {}).get('reading_stage')
     if assignment['role'] == 'native_math' and stage in openness_reading.STAGES:
         return assignment['prompt'] == canonical_prompt('native_math', reading_stage=stage)
+    context = assignment.get('context', {})
+    problem = assignment.get('subject', {}).get('kind') == 'problem'
+    # A continuation or repair recorded since the excerpt rules carries them; an earlier one keeps its prompt.
+    if (assignment['role'] in bar_sources.ROLES and ('prior_assignment_id' in context or 'context_repair' in context)
+            and assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, excerpts=True,
+                                                         orchestration='problem_creation' if problem else None)):
+        return True
     if assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] in _PROBLEM_PROMPTS:
         return (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, orchestration='problem_creation')
                 or (assignment['role'] in ('bar', 'slate') and assignment['prompt'] == canonical_prompt(
@@ -1820,8 +1857,14 @@ def _repair_packet(records, artifacts, value, repair):
     if 'prior_context' in packet:
         packet['prior_context'] = [supplied_evidence.deliver_passage(records, artifacts, mapping)
                                    for mapping in packet['prior_context']]
-    packet['pending_source_requests'] = bar_sources.pending(
-        repair['packet'], repair['scientific_history'][-1]['observed_output'])
+    output = repair['scientific_history'][-1]['observed_output']
+    requested = bar_sources.pending(repair['packet'], output)
+    session = review_excerpts.carry_session(records, artifacts, repair['packet'], output)
+    answers, session['allowances'] = review_excerpts.answer_passages(
+        records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'])
+    packet['source_deliveries'] = packet.get('source_deliveries', []) + answers
+    packet['pending_source_requests'] = [request for request in requested if request['kind'] != 'passage']
+    packet[review_excerpts.KEY] = session
     packet['context_repair'] = {'assignment_id': repair['predecessor']['id'], 'slot_id': repair['slot_id'],
         'event_ids': repair['event_ids'], 'probe_id': repair['probe_id'], 'cause': repair['cause'],
         'historical_review_ids': [review['id'] for review in repair['historical_reviews']]}
@@ -2097,6 +2140,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         reassessment_required = 'context_repair' in packet
         prompt = canonical_prompt(value['role'], repair=reassessment_required,
                                   orchestration='problem_creation' if problem else None,
+                                  excerpts=review_excerpts.KEY in packet,
                                   reading_stage=openness_reading.find_stage(packet))
         history = []
         session_id = value['id']
@@ -2367,7 +2411,7 @@ def _assignment_state(records, artifacts, assignment_id):
         if state['output'] is not None:
             try:
                 packet = source_delivery_packet(records, artifacts, assignment)
-                state['source_requests'] = bar_sources.requests(state['output'])
+                state['source_requests'] = bar_sources.requests(state['output'], passages=review_excerpts.KEY in packet)
                 state['pending_source_requests'] = bar_sources.pending(packet, state['output'])
                 state['source_request_status'] = 'pending' if state['pending_source_requests'] else 'settled'
             except (ResearchError, ValueError, TypeError, KeyError) as error:
