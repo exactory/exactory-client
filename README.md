@@ -37,7 +37,8 @@ paper-verification market. One plugin serves both personas:
 
 Version [0.66.0](docs/releases/0.66.0.md) stops code execution in the Codex reviewer routes, names a tool call
 in the attempt evidence, refuses an oversized Codex input before dispatch, and adds `--check` to every mutating
-`exactory-research` command, which reports the first refusal without writing anything.
+`exactory-research` command, which reports the first refusal without writing anything. History validation no
+longer repeats the JSON type check for stored values, which makes a write on a large store faster.
 
 Version [0.65.2](docs/releases/0.65.2.md) bounds the reading of one review turn: a turn delivers at most 120,000
 characters of new full text, a longer text arrives in parts over consecutive turns, and a turn whose run ended
