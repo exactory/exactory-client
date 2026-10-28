@@ -193,18 +193,18 @@ def _visual_supplied_context(records, artifacts, packets):
 
 def validate_review_contract(records, artifacts, assignment, output):
     """Pure review checks against this assignment's frozen contract and delivered lineage."""
-    from . import bar_sources, review_context_repair, review_supplied_evidence
+    from . import bar_sources, review_context_repair, review_excerpts, review_supplied_evidence
     from .review_protocol import has_problem_result_rubric, is_previous_prompt, collect_carried_records
     with contract_check("review.shape"):
         fields(output, ("stage", "support", "value", "objections", "limitations"),
-               ("source_requests", "reassessment"), code="invalid_value_review")
+               ("source_requests", "reassessment", "excerpts"), code="invalid_value_review")
         strategy.choice(output["stage"], ("bar", "slate", "result"), "Review phase", "invalid_value_review")
     route = records['review_route'][assignment['route_id']]
     visual = route['adapter'] == 'codex_cli_visual_v1'
+    frozen = json.loads(artifacts.read(assignment['packet']))
     if visual:
         from . import review_transport
         from .review_input_projection import packets_from_visual_request
-        frozen = json.loads(artifacts.read(assignment['packet']))
         request = review_transport.request_body(route, assignment['prompt']['text'], frozen, assignment.get('history', ()))
         # Attempt authentication independently requires these exact request bytes.
         # Avoid assignment_state here: its refusal classifier invokes this validator.
@@ -212,6 +212,11 @@ def validate_review_contract(records, artifacts, assignment, output):
     else:
         packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
     packet = packets[0]
+    if "excerpts" in output:
+        with contract_check("review.shape"):
+            if review_excerpts.KEY not in frozen:
+                raise ResearchError("invalid_value_review", "Only a turn under the excerpt rules returns excerpts")
+            review_excerpts.validate_excerpts(output["excerpts"], "invalid_value_review")
     contract_evidence = partial(validate_evidence_contract, packets=packets)
     with contract_check("review.source_requests"):
         pending = bar_sources.pending(packet, output)
@@ -309,7 +314,8 @@ def record_value_review(store, payload, *, expected_revision, request_id):
     artifacts = ArtifactStore(store.root)
 
     def prepare(records, value):
-        fields(value, ("id", "dossier_id", "assignment_id", "stage", "support", "value", "objections", "limitations"), ("source_requests", "reassessment"), code="invalid_value_review")
+        fields(value, ("id", "dossier_id", "assignment_id", "stage", "support", "value", "objections", "limitations"),
+               ("source_requests", "reassessment", "excerpts"), code="invalid_value_review")
         old = strategy.existing_record(records, "value_review", value)
         if old is not None:
             return [], old

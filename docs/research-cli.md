@@ -95,7 +95,8 @@ not establish source delivery or reading. Replace every placeholder in
 `example review-assignment` with an actual saved source and locator.
 
 A `bar`, `slate` or `result` response can include `source_requests` for an `inventory_page`, an
-`inventory_query`, or an exact `source`. The [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement)
+`inventory_query`, an exact `source`, or, under the excerpt rules below, a `passage`. The
+[reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement)
 gives the request fields and unresolved-source rules. Read and retain the observed
 output artifact returned by `review-run`, then continue its pending request with
 a new assignment with the same role, dossier, route and reviewer:
@@ -117,6 +118,46 @@ native evidence and preserves that assessor's own history. Keep all ancestor
 source gaps and charge the continuation to the same allowance. A request response
 remains unresolved and cannot be recorded with `value-review`; a final phase
 assessment cannot use this interface to obtain a replacement answer.
+
+The requested full texts of a session can be longer together than one input of
+the route. A continuation (`prior_assignment_id`) or a context repair therefore
+carries the excerpt rules: its prompt adds them under the same template id, and
+its packet carries `reviewer_excerpts`. An initial assignment has no excerpt
+rules. An assignment recorded before these rules keeps its prompt and stays
+authenticated, and the rules create no refresh, calibration or regrade obligation
+for a recorded bar, slate or result review. Under the excerpt rules:
+
+- A response can carry `excerpts: [{version_id, text, purpose}]`. Each `text` is
+  a verbatim copy from a delivered text, and `purpose` says why the reviewer keeps
+  it. The next continuation checks each excerpt against the stored extracted text
+  of its exact version: the main full-text capture, or the abstract capture when
+  no full text is held. In both texts each character becomes its NFKC form and
+  each run of white space becomes one space, and the first occurrence counts. A
+  match of at least 20 normalized characters and at most 6,000 original
+  characters is `verified`: the packet delivers the original characters, not the
+  reviewer's copy, with a locator `{kind: "span", start, end, sha256}` and the
+  descriptor of the stored text. Verified excerpts have a total of 200,000
+  characters in a session, counted in output order; an excerpt beyond it is
+  `over_allowance`. Any other excerpt is `unmatched` with the reason
+  `no_stored_text`, `too_short`, `too_long` or `not_found`, and keeps the
+  reviewer's text, marked as not checked. `reviewer_excerpts` lists the checked
+  excerpts of all earlier turns in order, with the allowances used.
+- A `source` request at depth `fulltext` is answered with status
+  `already_delivered` when a turn of this session under the excerpt rules
+  delivered the complete stored text of that version. The actual recorded
+  request of that turn decides, and the answer names the turn. A turn under the
+  earlier rules does not count, so a session that began before these rules
+  receives each text once more.
+- A `passage` request `{id, kind: "passage", version_id, anchor, characters}`
+  names a verbatim anchor of at least 20 normalized characters and a whole number
+  of characters from 1 to 20,000. The next turn answers it with the original text
+  that starts at the first occurrence of the anchor and has at most that many
+  characters (`delivered`), with `not_found`, or with `over_allowance` beyond
+  100,000 delivered passage characters in the session. A passage request is
+  valid only in a turn under the excerpt rules.
+
+A final phase assessment still needs every pending request settled.
+`already_delivered` answers and passage answers are settled and never pending.
 
 A text route fits an oversized request, other than a `complete-visible-v1`
 continuation, by applying these reductions in order, one at a time, until the
@@ -1642,6 +1683,95 @@ export estimates the packet and returns a `review_input_too_large` warning that
 names each registered text route whose limit the estimate exceeds; the estimate
 counts the packet and its UTF-8 evidence as JSON strings, so a delivery
 projection or a framed route can send less.
+
+A reviewer reads every full text itself. When one input of a text route cannot
+hold them all, the openness review reads them in a reading chain of several
+turns. `review-assignment` starts the chain when the single-turn request, as the
+route fits it, would leave out the body of an extracted full text of the packet's
+readings or would still exceed the route limit. The assignment then records
+`reading_chain: {first_assignment_id, turn}` and becomes reading turn 1; in every
+other case nothing changes. Native result reviews of math-solver objectives keep
+their single turn.
+
+A reading turn is a fresh input without the earlier turns. Its packet holds
+`reading_turn`: the subject digest, claim digest and reviewer of the native
+packet, the statement record, the formulations (the statement and its
+neighbours), `reading_plan` (`turn`, `delivered_now`, `delivered_before` and
+`remaining`) and `reading_record`, which carries the earlier turns: their notes,
+checked excerpts, passage answers and the allowances used. Its evidence is only
+the extracted full texts of `delivered_now`; the search and reading records wait
+for the final turn. The texts follow `text_delivery_priority` and then the
+version id, and a turn takes the next texts while its actual fitted request
+delivers each of them complete within the limit. A text that does not fit alone
+fails the assignment with `review_input_too_large`, which names the version and
+its size. The reviewer is told that a text delivered in a turn is not delivered
+in a later reading turn, and that the final turn repeats a full text only when
+its input has room for it, so it cannot count on seeing the text again. It
+answers with `{schema_version: 1, stage: "reading", subject_digest,
+claim_digest, reviewer, excerpts, notes, passage_requests}`: `notes` (at most
+20,000 characters) says what each delivered work proves and leaves open and how
+it bears on each formulation, `excerpts` are verbatim copies, and each passage
+request is `{id, version_id, anchor, characters}`. Excerpts and passages follow
+the checks and limits of the excerpt rules of bar, slate and result sessions in
+[Scientific contribution decisions](#scientific-contribution-decisions). A
+malformed answer is refused with `invalid_reading_response` (check
+`native.output`), and the ordinary retry rules apply.
+
+Run a reading chain turn by turn:
+
+1. Export the packet and assign it as usual, with `context: {native_packet}`.
+   When the receipt shows `reading_chain`, the assignment is reading turn 1. Run
+   it with `review-run`.
+2. Assign the next turn with the same reviewer, route, author and packet, and
+   `context: {native_packet, prior_assignment_id}` naming the previous turn. The
+   previous turn must be ready and its answer a valid reading answer. The harness
+   checks its excerpts, answers its passages and builds the next reading turn
+   while texts remain. Run each turn with `review-run`.
+3. After the last reading turn the next assignment is the final turn: the native
+   packet with `reading_record`, built and fitted as a single turn, on its own
+   prompt. `text_delivery_priority` decides which full texts it can repeat. When
+   its request does not fit, `review-assignment` refuses with
+   `review_input_too_large`; export again with `minimum.text_priority` and start
+   a new chain.
+4. The final turn returns the native result review, or a reading answer with at
+   least one passage request while the passage allowance has characters left. A
+   further final turn, assigned as in step 2, then delivers the passages.
+5. Record the final turn that returned the native result with
+   `problem-openness` and its `assignment_id`.
+
+`problem-openness` on a final turn keeps every check and also checks the chain:
+each earlier turn is ready, the reading record names their observed attempts,
+and every extracted full text of the readings reached a reading turn complete in
+that turn's actual recorded request. The record adds `reading_turns:
+[{assignment_id, attempt_id, delivered}]`, and the openness assessment checks
+them again. When a turn is no longer ready or its observed attempt changes, the
+finding becomes `problem_openness_stale` with the cause `review_context_unverified`
+or `openness_reading_incomplete`. A finding without reading turns behaves as
+before.
+
+Refusal codes of a reading chain:
+
+- `review_input_too_large`: a full text does not fit one reading turn alone, or
+  the final turn does not fit. The message names the version and its size, or
+  `minimum.text_priority`.
+- `invalid_reading_response`: a malformed reading answer, a reading answer in a
+  final turn without a passage request, or one after the passage allowance is
+  used up. `review-run` records it as an output refusal, and `review-assignment`
+  refuses to continue from it.
+- `review_source_continuation_mismatch`: the next turn names another packet,
+  reviewer, route or author, or a turn that is not part of a reading chain.
+- `review_source_continuation_fork`: another turn already continues the named
+  turn.
+- `review_source_continuation_unverified`: the named turn has no observed,
+  authenticated output in a verified context.
+- `review_resampling_forbidden`: the named final turn returned the native result,
+  which ends the chain.
+- `review_context_unverified`: `problem-openness` finds a turn of the chain
+  without an observed, authenticated output in a verified context.
+- `openness_reading_incomplete`: `problem-openness` names a turn without a native
+  result, a full text of the readings did not reach a reading turn complete
+  (`version_ids` names them), or the reading record no longer names the observed
+  turns.
 
 When a local supporting proof is material, the spec also accepts optional
 `native_reviews: [{attempt_id, assignment_id}]`. Each entry names the current

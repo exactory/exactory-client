@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 
+from . import review_excerpts
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -35,6 +36,8 @@ PROMPT = (
     'a requested source has been acquired, inspected, or supports a claim from inventory or delivery alone. '
     'Return a final phase assessment only after necessary requested evidence is supplied; use source_requests=[] or omit '
     'that field. Existing prior_context can be empty; request the sources needed for this phase.')
+ALREADY_DELIVERED_NOTE = ('A turn of this session under the excerpt rules delivered the complete text of this version, '
+                          'so it is not delivered again. Use your checked excerpts, or request a bounded passage.')
 
 
 def descriptor(reference):
@@ -151,19 +154,34 @@ def prior_context(records, artifacts, links):
     return result
 
 
-def requests(output):
+def require_exact_version(version_id, code='invalid_review_source_request'):
+    """A requested version is the canonical native identifier of one exact version."""
+    text(version_id, 'Exact held version ID', code=code)
+    from .identities import normalize_identifier, version_of
+    try:
+        canonical = normalize_identifier(version_id)
+    except ResearchError as error:
+        raise ResearchError(code, 'Request a canonical native source identifier') from error
+    if canonical != version_id or canonical.startswith('arxiv:') and version_of(canonical) is None:
+        raise ResearchError(code, 'Request the canonical exact version, including the arXiv version suffix')
+
+
+def requests(output, *, passages=False):
+    """The validated source requests of an output. Passage requests belong to a turn under the excerpt rules."""
     values = output.get('source_requests', []) if isinstance(output, dict) else []
     if not isinstance(values, list):
         raise ResearchError('invalid_review_source_request', 'source_requests must be an array')
+    shapes = {'inventory_page': ('id', 'kind', 'page'), 'inventory_query': ('id', 'kind', 'query', 'page'),
+              'source': ('id', 'kind', 'version_id', 'depth')}
+    if passages:
+        shapes['passage'] = ('id', 'kind', 'version_id', 'anchor', 'characters')
     seen = set()
     for request in values:
         if not isinstance(request, dict):
             raise ResearchError('invalid_review_source_request', 'Each source request is an object')
         kind = request.get('kind')
         text(kind, 'Source request kind', code='invalid_review_source_request')
-        required = {'inventory_page': ('id', 'kind', 'page'),
-                    'inventory_query': ('id', 'kind', 'query', 'page'),
-                    'source': ('id', 'kind', 'version_id', 'depth')}.get(kind)
+        required = shapes.get(kind)
         if required is None:
             raise ResearchError('invalid_review_source_request', 'Use a native inventory or exact source request')
         fields(request, required, code='invalid_review_source_request')
@@ -172,16 +190,11 @@ def requests(output):
             raise ResearchError('invalid_review_source_request', 'Source request IDs must be unique')
         seen.add(request['id'])
         if kind == 'source':
-            text(request['version_id'], 'Exact held version ID', code='invalid_review_source_request')
-            from .identities import normalize_identifier, version_of
-            try:
-                canonical = normalize_identifier(request['version_id'])
-            except ResearchError as error:
-                raise ResearchError('invalid_review_source_request', 'Request a canonical native source identifier') from error
-            if canonical != request['version_id'] or canonical.startswith('arxiv:') and version_of(canonical) is None:
-                raise ResearchError('invalid_review_source_request', 'Request the canonical exact version, including the arXiv version suffix')
+            require_exact_version(request['version_id'])
             if request['depth'] not in ('abstract', 'fulltext'):
                 raise ResearchError('invalid_review_source_request', 'Source depth is abstract or fulltext')
+        elif kind == 'passage':
+            review_excerpts.validate_passage_request(request, 'invalid_review_source_request')
         else:
             if type(request['page']) is not int or request['page'] < 0:
                 raise ResearchError('invalid_review_source_request', 'Inventory pages are nonnegative integers')
@@ -201,7 +214,7 @@ def requests(output):
 
 def pending(packet, output):
     combined = {request['id']: request for request in packet.get('pending_source_requests', [])}
-    for request in requests(output):
+    for request in requests(output, passages=review_excerpts.KEY in packet):
         if request['id'] in combined and combined[request['id']] != request:
             raise ResearchError('invalid_review_source_request', 'A pending request ID cannot name different source evidence')
         combined[request['id']] = request
@@ -413,20 +426,35 @@ def validate_inventory(artifacts, inventory_value):
         raise ResearchError('review_inventory_mismatch', 'The complete inventory descriptor and saved rows must remain readable and exact') from error
 
 
-def continuation(records, artifacts, previous_packet, output):
+def continuation(records, artifacts, previous_packet, output, delivered_fulltexts=None):
+    """Answer the pending requests of a session turn under the excerpt rules. A full-text request for a version in
+    delivered_fulltexts, which maps it to the earlier turn of this session that delivered its complete text, is
+    answered as already delivered; a passage request is answered at once. Neither stays pending."""
+    delivered_fulltexts = delivered_fulltexts or {}
     inventory_value = previous_packet['source_inventory']
     rows = validate_inventory(artifacts, inventory_value)
     deliveries, outstanding = [], []
     original_rows = {row['id']: row for row in rows}
     requested = pending(previous_packet, output)
+    session = review_excerpts.carry_session(records, artifacts, previous_packet, output)
+    answers, session['allowances'] = review_excerpts.answer_passages(
+        records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'])
+    answered = {answer['request']['id']: answer for answer in answers}
     for request in requested:
-        if request['kind'] == 'source':
+        if request['kind'] == 'passage':
+            deliveries.append(answered[request['id']])
+            continue
+        turn = delivered_fulltexts.get(request['version_id']) if request.get('depth') == 'fulltext' else None
+        if turn is not None:
+            delivery = {'request': request, 'status': 'already_delivered', 'turn': turn, 'reading_credit': False,
+                        'reason': ALREADY_DELIVERED_NOTE}
+        elif request['kind'] == 'source':
             delivery = _source(records, artifacts, request, original_rows)
         else:
             delivery = {'request': request, 'status': 'delivered', 'page': _page(rows, inventory_value['digest'],
                 request['page'], request.get('query'), page_size=inventory_value['page_size']), 'reading_credit': False}
         deliveries.append(delivery)
-        if delivery['status'] != 'delivered':
+        if delivery['status'] not in ('delivered', 'already_delivered'):
             outstanding.append(request)
     return {'source_inventory': inventory_value, 'prior_context': [], 'source_deliveries': deliveries,
-            'pending_source_requests': outstanding}
+            'pending_source_requests': outstanding, review_excerpts.KEY: session}

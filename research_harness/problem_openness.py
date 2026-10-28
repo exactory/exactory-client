@@ -38,6 +38,11 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("review_context_unverified", "Obtain the observed native_math openness result", {"obligations": state["obligations"]})
     packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
     output = state["output"]
+    from .openness_reading import find_stage, verify_chain
+    stage = find_stage(json.loads(artifacts.read(assignment["packet"])))
+    if stage == "reading" or (stage == "final" and output.get("stage") == "reading"):
+        raise ResearchError("openness_reading_incomplete", "This turn of the reading chain returned no native result; "
+                            "continue the chain to a final turn that returns it", {"assignment_id": assignment["id"]})
     fields(output, ("schema_version", "subject_digest", "claim_digest", "reviewer", "decision", "findings"), code="invalid_record")
     fields(output["findings"], ("statement", "assumptions", "scope", "dependencies", "policy", "openness"), code="invalid_record")
     for key in ("statement", "assumptions", "scope", "dependencies", "policy"):
@@ -89,6 +94,8 @@ def prepare_openness(records, artifacts, value, revision):
                                 {"artifact_digests": sorted(required_artifacts - delivered)})
     record = dict(finding, id=value["assignment_id"], assignment_id=value["assignment_id"],
                   statement_id=statement["id"], review=output, recorded_revision=revision)
+    if stage == "final":
+        record["reading_turns"] = verify_chain(records, artifacts, assignment)
     from .problem_openness_reviews import validate_native_reviews
     native_reviews = validate_native_reviews(records, artifacts, packet, state)
     if native_reviews is not None:
@@ -111,10 +118,10 @@ def assess_openness(records, artifacts):
     affected = {"openness_id": finding["id"], "statement_id": None if statement is None else statement["id"]}
     if statement is None or finding["statement_digest"] != compute_statement_digest(statement):
         return [obligation("problem_openness_stale", "Reassess openness of the current exact claim.", **affected)]
-    if "native_reviews" in finding or "source_evidence" in finding:
+    if "native_reviews" in finding or "source_evidence" in finding or "reading_turns" in finding:
         from .problem_openness_reviews import observed_review, validate_native_reviews
         try:
-            _, state, packet = observed_review(records, artifacts, finding["assignment_id"])
+            assignment, state, packet = observed_review(records, artifacts, finding["assignment_id"])
             current = validate_native_reviews(records, artifacts, packet, state)
             if current != finding.get("native_reviews") or state["output"] != finding["review"]:
                 raise ResearchError("openness_native_review_mismatch", "The recorded native review binding changed")
@@ -124,6 +131,10 @@ def assess_openness(records, artifacts):
             from .problem_openness_screening import validate_source_evidence
             if validate_source_evidence(records, artifacts, packet, state) != finding.get("source_evidence"):
                 raise ResearchError("openness_screening_evidence_mismatch", "The recorded screening source evidence changed")
+            if "reading_turns" in finding:
+                from .openness_reading import verify_chain
+                if verify_chain(records, artifacts, assignment) != finding["reading_turns"]:
+                    raise ResearchError("openness_reading_incomplete", "The recorded reading turns changed")
         except ResearchError as error:
             return [obligation("problem_openness_stale", "Reassess changed or unavailable observed openness evidence.",
                                cause=error.code, **affected)]
