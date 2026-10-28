@@ -151,6 +151,18 @@ def prior_context(records, artifacts, links):
     return result
 
 
+def require_exact_version(version_id, code='invalid_review_source_request'):
+    """A requested version is the canonical native identifier of one exact version."""
+    text(version_id, 'Exact held version ID', code=code)
+    from .identities import normalize_identifier, version_of
+    try:
+        canonical = normalize_identifier(version_id)
+    except ResearchError as error:
+        raise ResearchError(code, 'Request a canonical native source identifier') from error
+    if canonical != version_id or canonical.startswith('arxiv:') and version_of(canonical) is None:
+        raise ResearchError(code, 'Request the canonical exact version, including the arXiv version suffix')
+
+
 def requests(output):
     values = output.get('source_requests', []) if isinstance(output, dict) else []
     if not isinstance(values, list):
@@ -172,14 +184,7 @@ def requests(output):
             raise ResearchError('invalid_review_source_request', 'Source request IDs must be unique')
         seen.add(request['id'])
         if kind == 'source':
-            text(request['version_id'], 'Exact held version ID', code='invalid_review_source_request')
-            from .identities import normalize_identifier, version_of
-            try:
-                canonical = normalize_identifier(request['version_id'])
-            except ResearchError as error:
-                raise ResearchError('invalid_review_source_request', 'Request a canonical native source identifier') from error
-            if canonical != request['version_id'] or canonical.startswith('arxiv:') and version_of(canonical) is None:
-                raise ResearchError('invalid_review_source_request', 'Request the canonical exact version, including the arXiv version suffix')
+            require_exact_version(request['version_id'])
             if request['depth'] not in ('abstract', 'fulltext'):
                 raise ResearchError('invalid_review_source_request', 'Source depth is abstract or fulltext')
         else:

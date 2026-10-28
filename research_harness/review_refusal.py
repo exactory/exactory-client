@@ -115,8 +115,13 @@ def classify_observed_output(records, artifacts, attempt_id):
             validate_adjudication_contract(records, artifacts, assignment, packet, output)
         elif assignment['role'] == 'native_math':
             from .native_review import validate_output
+            from .openness_reading import find_stage, validate_turn_output
             with contract_check('native.output'):
-                validate_output(json.loads(artifacts.read(assignment['packet']))['native'], output)
+                packet = json.loads(artifacts.read(assignment['packet']))
+                if find_stage(packet) is None:
+                    validate_output(packet['native'], output)
+                else:
+                    validate_turn_output(packet, output)
     except ResearchError as error:
         check = getattr(error, 'contract_check', None)
         if check is not None:

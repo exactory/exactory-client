@@ -19,6 +19,7 @@ from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, text
 from . import review_transport as transport
 from . import bar_sources
+from . import openness_reading
 from . import review_context_repair as context_repair
 from . import review_supplied_evidence as supplied_evidence
 from . import problem_rubric
@@ -588,14 +589,24 @@ def _project_scoped_result(records, artifacts, packet, report):
 
 
 def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestration=None, repair_prompt=None,
-                     adjudicator_prompt=None):
+                     adjudicator_prompt=None, reading_stage=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
-    with; a later version uses the current suffix; repair_prompt names a suffix explicitly."""
+    with; a later version uses the current suffix; repair_prompt names a suffix explicitly. reading_stage names the
+    reading or final turn of a native openness reading chain."""
     if repair_prompt is None:
         repair_prompt = context_repair.PROMPT if version != 1 else context_repair.PROMPT_0560
     repair_suffix = repair_prompt
     if role not in ROLES:
         raise ResearchError('invalid_review_role', 'Unknown reviewer role')
+    if reading_stage is not None:
+        if role != 'native_math' or reading_stage not in openness_reading.STAGES:
+            raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
+        from .native_review import PROMPT
+        prompt = _COMMON + (openness_reading.READING_PROMPT if reading_stage == 'reading'
+                            else PROMPT + openness_reading.FINAL_PROMPT)
+        return {'template_id': openness_reading.PROTOCOL + '/' + reading_stage, 'template_hash': digest(prompt),
+                'rendered_prompt_hash': digest(prompt), 'parameters': {'role': role, 'reading_stage': reading_stage},
+                'text': prompt}
     if orchestration == 'problem_creation' and role == 'adjudicator':
         if repair:
             raise ResearchError('invalid_review_context', 'Context reassessment uses a current strategic review phase')
@@ -1406,7 +1417,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 add_problem_objections(records, artifacts, packet, bars)
                 packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
     elif role == 'native_math':
-        fields(context, ('native_packet',))
+        fields(context, ('native_packet',), ('prior_assignment_id',))
         if dossier_id is not None:
             raise ResearchError('invalid_review_context', 'Native mathematics has no strategic dossier prerequisite')
         from .native_review import load_packet
@@ -1775,6 +1786,9 @@ def has_problem_result_rubric(assignment):
 
 def _prompt_matches(assignment):
     repair = assignment.get('reassessment_required') is True
+    stage = assignment['prompt'].get('parameters', {}).get('reading_stage')
+    if assignment['role'] == 'native_math' and stage in openness_reading.STAGES:
+        return assignment['prompt'] == canonical_prompt('native_math', reading_stage=stage)
     if assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] in _PROBLEM_PROMPTS:
         return (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, orchestration='problem_creation')
                 or (assignment['role'] in ('bar', 'slate') and assignment['prompt'] == canonical_prompt(
@@ -2009,9 +2023,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             if visual_repair:
                 from .review_visual_context_repair import prepare as prepare_visual_repair
                 prepare_visual_repair(records, artifacts, value, repair, packet)
+            if value['role'] == 'native_math':
+                packet, reading_chain = openness_reading.prepare_packet(records, artifacts, value, route, packet)
+                if reading_chain is not None:
+                    value = dict(value, reading_chain=reading_chain)
         if value['role'] == 'native_math':
             from .native_review import require_assignment_identity
-            require_assignment_identity(packet['native'], value)
+            require_assignment_identity(openness_reading.find_binding(packet), value)
         focused_parent = None
         if value['role'] == 'adjudicator':
             previous_assignments = [previous for previous in records.get('review_assignment', {}).values()
@@ -2078,7 +2096,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     raise ResearchError('review_adjudicator_fixed', 'Retain the selected adjudicator; replacement needs a recorded error or failed invocation')
         reassessment_required = 'context_repair' in packet
         prompt = canonical_prompt(value['role'], repair=reassessment_required,
-                                  orchestration='problem_creation' if problem else None)
+                                  orchestration='problem_creation' if problem else None,
+                                  reading_stage=openness_reading.find_stage(packet))
         history = []
         session_id = value['id']
         history_assignment_id = None
