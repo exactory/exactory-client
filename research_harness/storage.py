@@ -147,8 +147,16 @@ def check_command_bounds(value, input_name="A command input"):
 def _canonical(value, code: str = "invalid_input") -> str:
     try:
         _json_types(value)
-        encoded = json.dumps(value, sort_keys=True, ensure_ascii=False,
-                             allow_nan=False, separators=(",", ":"))
+    except (TypeError, ValueError, UnicodeError, RecursionError) as error:
+        raise ResearchError(code, "Expected finite JSON data with string object keys") from error
+    return _encode_json(value, code)
+
+
+def _encode_json(value, code: str) -> str:
+    # Stored values are decoded JSON plus checked SQL scalars; caller values first pass _json_types in _canonical.
+    try:
+        encoded = json.JSONEncoder(sort_keys=True, ensure_ascii=False,
+                                   allow_nan=False, separators=(",", ":")).encode(value)
         encoded.encode("utf-8")
         return encoded
     except (TypeError, ValueError, UnicodeError, RecursionError) as error:
@@ -164,7 +172,8 @@ def _load(encoded, expected_type=None):
         value = json.loads(encoded)
     except (TypeError, ValueError, RecursionError) as error:
         raise ResearchError("corrupt_state", "Stored JSON is malformed") from error
-    if (expected_type is not None and not isinstance(value, expected_type)) or _canonical(value, "corrupt_state") != encoded:
+    if (expected_type is not None and not isinstance(value, expected_type)
+            or _encode_json(value, "corrupt_state") != encoded):
         raise ResearchError("corrupt_state", "Stored JSON is not canonical or has the wrong type")
     return value
 
@@ -262,14 +271,14 @@ the caller must discard it if any validation fails.
         _text(row["request_id"], "Stored request ID", "corrupt_state")
         _text(row["operation"], "Stored operation", "corrupt_state")
         event = _event_value(row)
-        if _digest(_canonical(event, "corrupt_state")) != row["digest"]:
+        if _digest(_encode_json(event, "corrupt_state")) != row["digest"]:
             raise ResearchError("corrupt_state", "Research event digest does not match its original values")
         for change in event["changes"]:
             if not isinstance(change, dict) or set(change) != {"kind", "key", "value"} or not isinstance(change["value"], dict):
                 raise ResearchError("corrupt_state", "Research event change is malformed")
             _text(change["kind"], "Stored record kind", "corrupt_state")
             _text(change["key"], "Stored record key", "corrupt_state")
-            encoded = _canonical(change["value"], "corrupt_state")
+            encoded = _encode_json(change["value"], "corrupt_state")
             identity = _digest(encoded)
             projections[(change["kind"], change["key"])] = (encoded, identity)
             if history is not None:
@@ -279,7 +288,7 @@ the caller must discard it if any validation fails.
         expected_response = {"revision": row["revision"], "request_id": row["request_id"],
                              "result": event["result"]}
         if (receipt is None or receipt["revision"] != row["revision"]
-                or receipt["response"] != _canonical(expected_response, "corrupt_state")
+                or receipt["response"] != _encode_json(expected_response, "corrupt_state")
                 or _digest(receipt["response"]) != receipt["digest"]):
             raise ResearchError("corrupt_state", "Research request receipt does not match its original event")
         if fingerprint is not None:
