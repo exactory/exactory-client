@@ -35,6 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.64.2](docs/releases/0.64.2.md) lets a review read more full text than one route input can hold.
+The reviewer keeps verbatim excerpts that the harness checks against the stored source text, a repeated request
+for a delivered text is answered as already delivered, and a problem openness review whose texts do not fit one
+input reads them in a chain of turns.
+
 Version [0.64.1](docs/releases/0.64.1.md) repairs nine defects that a review of the 0.62.0 code found: the
 manuscript drift report no longer reads pinned objects or fails `status`, `restore` keeps every edit and refuses
 path aliases, JATS extraction refuses unresolved entities and has resource bounds, and format-only reruns leave
