@@ -1704,8 +1704,10 @@ for the final turn. The texts follow `text_delivery_priority` and then the
 version id, and a turn takes the next texts while its actual fitted request
 delivers each of them complete within the limit. A text that does not fit alone
 fails the assignment with `review_input_too_large`, which names the version and
-its size. The reviewer is told that a text delivered in a turn does not come
-back. It answers with `{schema_version: 1, stage: "reading", subject_digest,
+its size. The reviewer is told that a text delivered in a turn is not delivered
+in a later reading turn, and that the final turn repeats a full text only when
+its input has room for it, so it cannot count on seeing the text again. It
+answers with `{schema_version: 1, stage: "reading", subject_digest,
 claim_digest, reviewer, excerpts, notes, passage_requests}`: `notes` (at most
 20,000 characters) says what each delivered work proves and leaves open and how
 it bears on each formulation, `excerpts` are verbatim copies, and each passage
