@@ -62,6 +62,7 @@ _MAX_STORED_DEPTH = 100
 # review_inputs.synthesis.foundation.source_deferrals[i].dependencies.work.fulltexts[k].component.spec. So an input of
 # 32 levels reaches 44 of the store's 100 levels in a record.
 _MAX_INPUT_DEPTH = 32
+_UTF8_CHUNK_CHARACTERS = 65536
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")
 _WORKSPACE_LOCKS = weakref.WeakValueDictionary()
 _LOCK_REGISTRY_GUARD = threading.Lock()
@@ -157,14 +158,19 @@ def _encode_json(value, code: str) -> str:
     try:
         encoded = json.JSONEncoder(sort_keys=True, ensure_ascii=False,
                                    allow_nan=False, separators=(",", ":")).encode(value)
-        encoded.encode("utf-8")
+        # Bound UTF-8 scratch buffers independently of the stored value's size.
+        for offset in range(0, len(encoded), _UTF8_CHUNK_CHARACTERS):
+            encoded[offset:offset + _UTF8_CHUNK_CHARACTERS].encode("utf-8")
         return encoded
     except (TypeError, ValueError, UnicodeError, RecursionError) as error:
         raise ResearchError(code, "Expected finite JSON data with string object keys") from error
 
 
 def _digest(encoded: str) -> str:
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    hasher = hashlib.sha256()
+    for offset in range(0, len(encoded), _UTF8_CHUNK_CHARACTERS):
+        hasher.update(encoded[offset:offset + _UTF8_CHUNK_CHARACTERS].encode("utf-8"))
+    return hasher.hexdigest()
 
 
 def _load(encoded, expected_type=None):
@@ -283,6 +289,7 @@ the caller must discard it if any validation fails.
             projections[(change["kind"], change["key"])] = (encoded, identity)
             if history is not None:
                 history.record_version(change["kind"], change["key"], event_count, encoded, identity)
+            del change
         receipt = connection.execute("SELECT * FROM receipts WHERE request_id = ?",
                                      (row["request_id"],)).fetchone()
         expected_response = {"revision": row["revision"], "request_id": row["request_id"],
@@ -295,6 +302,8 @@ the caller must discard it if any validation fails.
             _fingerprint_entry(fingerprint, ("event", row["revision"], row["digest"], receipt["digest"]))
         if requests is not None:
             requests.add(row["request_id"])
+        # Release the completed event before decoding another event or the current records.
+        del event, expected_response, receipt, row
     if event_count != revision or connection.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] != revision:
         raise ResearchError("corrupt_state", "Research revision, events, and receipts disagree")
     record_count = 0
