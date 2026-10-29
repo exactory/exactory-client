@@ -1741,14 +1741,19 @@ reading records by record id, and the statement record. The full texts are the
 extracted texts of the main full-text captures of each bound reading's version
 that the exported packet carries as evidence, one unit per version and text
 digest; a capture or reading recorded after the export does not enlarge the
-chain. A record arrives as the exact JSON text of
+chain. When the packet binds an `openness_delivery` record (an export with
+`native_reviews`), the alternate main bodies that the record omits
+(`scientific_context.openness_delivery.alternate_body_digests`) are not units;
+the selected representation of each version is read. A record arrives as the
+exact JSON text of
 the artifact that the packet carries, so the unit is the same bytes that the
 final turn and `problem-openness` see. The `search_response` kind is accepted
 by the splitter, the checks and the chain verification, for chains that
 deliver captured responses; a problem-openness chain delivers none. A unit of
 at most 120,000 characters is delivered whole. A longer unit is cut into parts
 by the rule of the excerpt rules above, and each part is saved as its own text
-artifact; a part of a record is saved as plain text.
+artifact; a part of a record or of a captured response is saved as plain text
+(`text/plain; charset=utf-8`), because a fragment of a JSON body is not JSON.
 
 A reading turn is a fresh input without the earlier turns. Its packet holds
 `reading_turn`: the subject digest, claim digest and reviewer of the native
@@ -1785,9 +1790,11 @@ text with the escapes inside its strings, under the checks and limits of the
 excerpt rules of bar, slate and result sessions in
 [Scientific contribution decisions](#scientific-contribution-decisions). A
 `text_sha256` that differs from the bound body, or an identity that names no
-bound unit, gives `unmatched` or `not_found` as there. A malformed answer is
-refused with `invalid_reading_response` (check `native.output`), and the
-ordinary retry rules apply.
+bound unit, gives `unmatched` or `not_found` with the reason `no_stored_text`,
+as there; an identity without `text_sha256` that names more than one bound
+body gives the same statuses with the reason `ambiguous_identity`. A malformed
+answer is refused with `invalid_reading_response` (check `native.output`), and
+the ordinary retry rules apply.
 
 The reading record is compact. It holds `protocol`, `turns`, `sources`,
 `excerpts`, `passages` and `allowances`. `turns` lists the earlier turns with
