@@ -141,7 +141,8 @@ def native_user_parts(request, directory):
                       {'type': 'input_text', 'text': '</image>'}])
     parts.append({'type': 'input_text', 'text': packet_text(request)})
     if sum(len(part['text']) for part in parts if part['type'] == 'input_text') > MAX_USER_TEXT:
-        raise ResearchError('review_input_limit', 'Complete native user text and image wrappers exceed the route limit')
+        raise ResearchError('review_input_too_large',
+                            'Complete native user text and image wrappers exceed the route limit')
     return parts
 
 
@@ -172,6 +173,9 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls, ex
             issues.append('excluded_control_exposed')
         if any(value in serialized for value in excluded_image_values):
             issues.append('excluded_image_exposed')
+        if item.get('type') == 'custom_tool_call':
+            issues.append('tool_call:' + str(item.get('name') or 'unknown'))
+            continue
         if item.get('type') not in ('message', 'reasoning'):
             issues.append('unknown_or_tool_input')
             continue
@@ -233,14 +237,14 @@ def send_request(route, request, credential=None):
     images = validated_images(request)
     packet = packet_text(request)
     environment = text_route.clean_environment(os.environ)
-    actual_runtime = runtime()
-    control = 'EXCLUDED_PROJECT_' + uuid.uuid4().hex
-    image_control = uuid.uuid4().hex
-    excluded_image = review_visual_inputs.control_image(image_control)
     with tempfile.TemporaryDirectory(prefix='review-visual-', dir=environment.get('TMPDIR')) as directory:
         root = Path(directory).resolve()
         directory = str(root)
         native_user_parts(request, directory)
+        actual_runtime = runtime()
+        control = 'EXCLUDED_PROJECT_' + uuid.uuid4().hex
+        image_control = uuid.uuid4().hex
+        excluded_image = review_visual_inputs.control_image(image_control)
         (root / 'AGENTS.md').write_text('This excluded project instruction contains ' + control + '.\n')
         (root / 'excluded-image.png').write_bytes(excluded_image)
         instructions = root / 'review-instructions.txt'
@@ -294,6 +298,7 @@ def send_request(route, request, credential=None):
                 'usage': usage, 'context_evidence': evidence,
                 'execution': {'returncode': result.returncode, 'timeout': result.returncode is None,
                     'stdout_digest': hashlib.sha256(result.stdout.encode()).hexdigest(),
+                    'stderr_tail': text_route._read_stderr_tail(result.stderr) if result.returncode != 0 else '',
                     'malformed_line_digests': malformed, 'event_count': len(event_log),
                     'event_types': [event.get('type') for event in event_log]}}
 
@@ -309,4 +314,4 @@ def verify_context(route, request, response):
             and len(evidence.get('excluded_image_digests', [])) == 1
             and evidence['excluded_image_digests'][0] not in evidence.get('image_digests', [])
             and bool(evidence.get('rollout_digest')) and bool(evidence.get('event_digest'))
-            and evidence.get('thread_id') == response.get('id') and evidence.get('runtime') == runtime())
+            and evidence.get('thread_id') == response.get('id') and evidence.get('runtime') == route['runtime'])

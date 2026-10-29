@@ -99,7 +99,7 @@ def _managed(records):
 
 def _canonical_adapter(store, payload, name, *, expected_revision, request_id):
     """Legacy command names acknowledge the current scientific decision without a second vote."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         from .decision_integration import require_decision
         _fields(value, ('id', 'research_decision_id', 'reason'))
@@ -125,7 +125,7 @@ def _canonical_adapter(store, payload, name, *, expected_revision, request_id):
 
 def _canonical_factual_assessment(store, payload, *, expected_revision, request_id):
     """Record observed tranche outcomes even when the old approval can no longer admit work."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         from . import strategy
         _fields(value, ('id', 'research_decision_id', 'reason', 'outcome', 'cycle_ids', 'evidence'))
@@ -465,7 +465,7 @@ def record_round(store, payload, *, expected_revision, request_id):
     """Close the current round on the exact bundle and decide: continue with a goal, or stop."""
     if _managed(store.snapshot()['records']):
         return _canonical_adapter(store, payload, 'decide', expected_revision=expected_revision, request_id=request_id)
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         context, bundle = _prepare_context(records, artifacts)
@@ -516,7 +516,7 @@ def record_round_review(store, payload, *, expected_revision, request_id):
     """An independent assessor's judgment of one round decision."""
     if _managed(store.snapshot()['records']):
         return _canonical_adapter(store, payload, 'review', expected_revision=expected_revision, request_id=request_id)
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         context, bundle = _prepare_context(records, artifacts)
@@ -587,7 +587,7 @@ def admit_round(store, payload, *, expected_revision, request_id):
     """Open the approved next round: charge the development budget, widen the objective, record the opening state."""
     if _managed(store.snapshot()['records']):
         return _canonical_adapter(store, payload, 'admit', expected_revision=expected_revision, request_id=request_id)
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         _fields(value, ("id", "round_id", "review_id", "reason"))
@@ -695,7 +695,7 @@ def assess_round(store, payload, *, expected_revision, request_id):
     """Judge the current round against its goal on the exact current bundle, and derive what the round did."""
     if _managed(store.snapshot()['records']):
         return _canonical_factual_assessment(store, payload, expected_revision=expected_revision, request_id=request_id)
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         context, bundle = _prepare_context(records, artifacts)

@@ -43,7 +43,7 @@ def pin_artifact(store, payload, *, expected_revision, request_id):
     if not snapshot.has_request(request_id) and should_stage_probe_artifact_pin(snapshot.records, payload, request_id):
         return pin_probe_local_artifact(store, payload, expected_revision=expected_revision, request_id=request_id,
                                         _snapshot=snapshot)
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, ("id", "path", "media_type"))
         text(value["id"], "Local artifact ID")
@@ -82,7 +82,7 @@ def initialization_payload(store, kind, state, request_id, *, preparation_policy
 
 def initialize_workspace(store, payload, *, expected_revision, request_id):
     """{kind: study|draft, state: initial marker}; attach the current contract."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         if "problem" in records.get("workspace", {}):
             raise ResearchError("orchestration_conflict", "A problem record cannot become a study or draft")
@@ -119,7 +119,8 @@ def export_workspace(store):
     if "draft" in snapshot["records"].get("workspace", {}):
         export_draft(store)
     if snapshot["records"].get("workspace_decision"):
-        write_projection(store.root, ".exactory/decisions.jsonl", _decisions(snapshot["records"], ArtifactStore(store.root)))
+        write_projection(store.root, ".exactory/decisions.jsonl",
+                         _decisions(snapshot["records"], store.build_artifact_store()))
     return {"revision": snapshot["revision"], "projection_only": True}
 
 
@@ -150,7 +151,7 @@ def _decisions(records, artifacts):
 
 def record_decision(store, payload, *, expected_revision, request_id):
     """Append an operational decision with CAS, retaining any legacy log bytes."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, ("stage", "decision", "why", "evidence"))
         if value["stage"] not in STAGES:
@@ -193,7 +194,7 @@ def study_state(store, *, verify_projection=True):
 
 
 def update_study(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, (), ("stage", "status", "autopilot", "waiting", "loop"))
         previous = records.get("workspace", {}).get("study")
@@ -223,7 +224,7 @@ def update_study(store, payload, *, expected_revision, request_id):
 
 def adopt_workspace(store, payload, *, expected_revision, request_id):
     """Archive selected legacy bytes without converting assertions into readings."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         if "problem" in records.get("workspace", {}):
             raise ResearchError("orchestration_conflict", "A problem record cannot adopt a study or draft")

@@ -180,7 +180,7 @@ def _work_links(records, value, reviews, steps):
 
 def record_contribution_analysis(store, payload, *, expected_revision, request_id):
     """Record the author's analysis of the selected, measured bundle against the study's Grand Challenge record."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         # rounds imports this module for the round gate, so its vocabulary and evidence validator are imported here.

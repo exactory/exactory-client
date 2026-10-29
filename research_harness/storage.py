@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import NamedTuple, Optional
 
-from .artifacts import _Workspace, _filesystem_error, _regular_file
+from .artifacts import ArtifactStore, _Workspace, _filesystem_error, _regular_file
 from .errors import ResearchError
 
 
@@ -147,8 +147,16 @@ def check_command_bounds(value, input_name="A command input"):
 def _canonical(value, code: str = "invalid_input") -> str:
     try:
         _json_types(value)
-        encoded = json.dumps(value, sort_keys=True, ensure_ascii=False,
-                             allow_nan=False, separators=(",", ":"))
+    except (TypeError, ValueError, UnicodeError, RecursionError) as error:
+        raise ResearchError(code, "Expected finite JSON data with string object keys") from error
+    return _encode_json(value, code)
+
+
+def _encode_json(value, code: str) -> str:
+    # Stored values are decoded JSON plus checked SQL scalars; caller values first pass _json_types in _canonical.
+    try:
+        encoded = json.JSONEncoder(sort_keys=True, ensure_ascii=False,
+                                   allow_nan=False, separators=(",", ":")).encode(value)
         encoded.encode("utf-8")
         return encoded
     except (TypeError, ValueError, UnicodeError, RecursionError) as error:
@@ -164,7 +172,8 @@ def _load(encoded, expected_type=None):
         value = json.loads(encoded)
     except (TypeError, ValueError, RecursionError) as error:
         raise ResearchError("corrupt_state", "Stored JSON is malformed") from error
-    if (expected_type is not None and not isinstance(value, expected_type)) or _canonical(value, "corrupt_state") != encoded:
+    if (expected_type is not None and not isinstance(value, expected_type)
+            or _encode_json(value, "corrupt_state") != encoded):
         raise ResearchError("corrupt_state", "Stored JSON is not canonical or has the wrong type")
     return value
 
@@ -192,6 +201,33 @@ def _request_row(connection: sqlite3.Connection, request_id: str):
         "SELECT events.operation, events.payload, receipts.response FROM receipts "
         "JOIN events ON events.revision = receipts.revision WHERE receipts.request_id = ?",
         (request_id,)).fetchone()
+
+
+def _read_original_response(original, operation, encoded_payload, request_id):
+    if original is None:
+        return None
+    if original["operation"] != operation or original["payload"] != encoded_payload:
+        raise ResearchError("request_id_conflict", "Request ID was already committed with different inputs",
+                            {"request_id": request_id})
+    return _load(original["response"], dict)
+
+
+def _encode_mutation_input(operation, payload, apply, expected_revision, request_id):
+    _text(operation, "Operation")
+    _text(request_id, "Request ID")
+    if not isinstance(payload, dict) or not callable(apply):
+        raise ResearchError("invalid_input", "Mutation needs a JSON payload object and a callable transaction")
+    if type(expected_revision) is not int or not 0 <= expected_revision < _MAX_REVISION:
+        raise ResearchError("invalid_input", "Expected revision must be a nonnegative SQLite integer")
+    return _canonical(payload)
+
+
+def _encode_record_change(key, value):
+    _text(key, "Record key")
+    if not isinstance(value, dict):
+        raise ResearchError("invalid_input", "Record value must be a JSON object")
+    _check_stored_bounds(value)
+    return _canonical(value)
 
 
 def _validate(connection: sqlite3.Connection, *, replay: bool = True,
@@ -235,14 +271,14 @@ the caller must discard it if any validation fails.
         _text(row["request_id"], "Stored request ID", "corrupt_state")
         _text(row["operation"], "Stored operation", "corrupt_state")
         event = _event_value(row)
-        if _digest(_canonical(event, "corrupt_state")) != row["digest"]:
+        if _digest(_encode_json(event, "corrupt_state")) != row["digest"]:
             raise ResearchError("corrupt_state", "Research event digest does not match its original values")
         for change in event["changes"]:
             if not isinstance(change, dict) or set(change) != {"kind", "key", "value"} or not isinstance(change["value"], dict):
                 raise ResearchError("corrupt_state", "Research event change is malformed")
             _text(change["kind"], "Stored record kind", "corrupt_state")
             _text(change["key"], "Stored record key", "corrupt_state")
-            encoded = _canonical(change["value"], "corrupt_state")
+            encoded = _encode_json(change["value"], "corrupt_state")
             identity = _digest(encoded)
             projections[(change["kind"], change["key"])] = (encoded, identity)
             if history is not None:
@@ -252,7 +288,7 @@ the caller must discard it if any validation fails.
         expected_response = {"revision": row["revision"], "request_id": row["request_id"],
                              "result": event["result"]}
         if (receipt is None or receipt["revision"] != row["revision"]
-                or receipt["response"] != _canonical(expected_response, "corrupt_state")
+                or receipt["response"] != _encode_json(expected_response, "corrupt_state")
                 or _digest(receipt["response"]) != receipt["digest"]):
             raise ResearchError("corrupt_state", "Research request receipt does not match its original event")
         if fingerprint is not None:
@@ -526,12 +562,13 @@ class _PreparationProof(NamedTuple):
 class _PreparedSnapshot:
     """Own one freshly authenticated read and its nonpersistent content proof."""
 
-    def __init__(self, store):
+    def __init__(self, store, request_id=None):
         self._store = store
         fingerprint, requests = hashlib.sha256(), set()
         with store._connection() as connection:
             identity = store._read_database_identity()
             snapshot = _read_snapshot(connection, fingerprint=fingerprint, requests=requests)
+            self._original_request = _request_row(connection, request_id) if request_id is not None else None
             if identity != store._read_database_identity():
                 raise _refuse_snapshot_identity(snapshot["revision"], snapshot["revision"])
         self._identity = identity
@@ -577,6 +614,9 @@ class _GuardedSnapshot:
             raise ResearchError("invalid_snapshot_guard", "The guarded research read has finished")
         return copy.deepcopy(self._value)
 
+    def build_artifact_store(self):
+        return ArtifactStore(self.root)
+
 
 class Transaction:
     """A callback's isolated record view, usable only during Store.mutate."""
@@ -605,11 +645,7 @@ class Transaction:
 
     def put(self, kind: str, key: str, value: dict) -> None:
         self._check(kind)
-        _text(key, "Record key")
-        if not isinstance(value, dict):
-            raise ResearchError("invalid_input", "Record value must be a JSON object")
-        _check_stored_bounds(value)
-        encoded = _canonical(value)
+        encoded = _encode_record_change(key, value)
         self._connection.execute("INSERT OR REPLACE INTO records (kind, key, value, digest) VALUES (?, ?, ?, ?)",
                                  (kind, key, encoded, _digest(encoded)))
         self._changes.append({"kind": kind, "key": key, "value": json.loads(encoded)})
@@ -819,8 +855,11 @@ class Store:
             identities.append((info.st_dev, info.st_ino))
         return (str(self.root), *identities)
 
-    def _read_preparation(self):
-        return _PreparedSnapshot(self)
+    def _read_preparation(self, request_id=None):
+        return _PreparedSnapshot(self, request_id)
+
+    def build_artifact_store(self):
+        return ArtifactStore(self.root)
 
     @contextmanager
     def guarded_snapshot(self):
@@ -845,23 +884,15 @@ class Store:
 
     def mutate(self, operation: str, payload: dict, apply, *, expected_revision: int, request_id: str,
                _preparation=None) -> dict:
-        _text(operation, "Operation")
-        _text(request_id, "Request ID")
-        if not isinstance(payload, dict) or not callable(apply):
-            raise ResearchError("invalid_input", "Mutation needs a JSON payload object and a callable transaction")
-        if type(expected_revision) is not int or not 0 <= expected_revision < _MAX_REVISION:
-            raise ResearchError("invalid_input", "Expected revision must be a nonnegative SQLite integer")
-        encoded_payload = _canonical(payload)
+        encoded_payload = _encode_mutation_input(operation, payload, apply, expected_revision, request_id)
         with self._connection(writable=True) as connection:
             fingerprint = hashlib.sha256() if _preparation is not None else None
             identity = self._read_database_identity() if _preparation is not None else None
             revision = _validate(connection, fingerprint=fingerprint)
-            original = _request_row(connection, request_id)
+            original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload,
+                                               request_id)
             if original is not None:
-                if original["operation"] != operation or original["payload"] != encoded_payload:
-                    raise ResearchError("request_id_conflict", "Request ID was already committed with different inputs",
-                                        {"request_id": request_id})
-                return _load(original["response"], dict)
+                return original
             if revision != expected_revision:
                 raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
                                     {"expected_revision": expected_revision, "revision": revision})

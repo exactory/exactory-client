@@ -156,6 +156,7 @@ def read_locator(artifacts, artifact, locator, *, capture=None, result=False):
         if result:
             if media != "application/pdf" or not data.startswith(b"%PDF-"):
                 raise ResearchError("invalid_locator", "PDF result locators require a PDF output")
+            artifacts.require_external_effect()
             page_count = _read_output_pdf_page_count(data)
         else:
             if ((media != "application/pdf" and not inferred_pdf) or not data.startswith(b"%PDF-")

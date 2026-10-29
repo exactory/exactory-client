@@ -813,7 +813,7 @@ def _validate_reopening(context, value, account):
 
 def plan_cycle(store, payload, *, expected_revision, request_id):
     """Freeze a claim-specific plan, source comparison, lineage and resource limits."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         context = _Context(records, artifacts)
@@ -995,7 +995,7 @@ Task 6 must durably claim the run identity once before the side effect and use
 the admitted program/input bytes and argv. Unknown outcomes require recovery of
 that run. An idempotent admission response retains its original reservation.
 """
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         plan = _get(records, "cycle_plan", value.get("cycle_id"), "unknown_cycle")
@@ -1108,9 +1108,9 @@ def _checkpoint_record(records, artifacts, dependencies, identifier, cycle, asse
                 digest=digest(project_claim_dependencies(content, managed=uses_claim_dependencies(records), kind="record")))
 
 
-def record_execution(store, payload, *, expected_revision, request_id, _observation=None):
+def record_execution(store, payload, *, expected_revision, request_id, _observation=None, _snapshot=None):
     """Retain the actual outcome of one admitted run, or explicitly imported history."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         plan = _get(records, "cycle_plan", value.get("cycle_id"), "unknown_cycle")
@@ -1204,7 +1204,8 @@ def record_execution(store, payload, *, expected_revision, request_id, _observat
             changes.append(immutable_record(records, "checkpoint", checkpoint["id"], checkpoint))
         return changes, record
 
-    return prepared_mutation(store, "development.execution", payload, prepare, expected_revision=expected_revision, request_id=request_id)
+    return prepared_mutation(store, "development.execution", payload, prepare, expected_revision=expected_revision,
+                             request_id=request_id, _snapshot=_snapshot)
 
 
 def _assessed_checks(evidence, values, expected, identity, target_claim=None):
@@ -1492,7 +1493,7 @@ def _assess(context, value, *, historical=False):
 
 def assess_cycle(store, payload, *, expected_revision, request_id):
     """Retain the result's validity, exact scope, failures and next development."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         context = _Context(records, artifacts)
@@ -1525,7 +1526,7 @@ def assess_cycle(store, payload, *, expected_revision, request_id):
 
 def checkpoint(store, payload, *, expected_revision, request_id):
     """Archive an immutable development checkpoint; optionally select the candidate."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         _fields(value, ("id", "cycle_id", "assessment_id", "reason", "next_hypothesis", "select_for_readiness"))
@@ -1726,7 +1727,7 @@ def prepare_combined_support(records, artifacts, payload, *, revision, request_i
 
 def record_readiness_review(store, payload, *, expected_revision, request_id):
     """Archive an identified independent assessment of the exact candidate snapshot."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         return prepare_combined_support(records, artifacts, value,
@@ -1789,5 +1790,5 @@ readiness_state = assess_readiness
 
 def readiness_report(store):
     snapshot = store.snapshot()
-    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    evaluation = Evaluation(snapshot["records"], store.build_artifact_store())
     return dict(readiness_state(snapshot["records"], evaluation), revision=snapshot["revision"])

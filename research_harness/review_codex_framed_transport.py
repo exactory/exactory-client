@@ -48,11 +48,15 @@ CONTROLS = (
     'features.memories=false', 'features.external_agent_memory_import=false',
     'features.plugins=false', 'features.apps=false', 'features.hooks=false',
     'features.shell_tool=false', 'features.multi_agent=false',
+    'features.code_mode=false', 'features.code_mode_host=false', 'features.code_mode_only=false',
+    'features.js_repl=false', 'features.js_repl_tools_only=false',
     'features.browser_use=false', 'features.computer_use=false',
     'features.skip_host_skill_discovery=true', 'features.skill_search=false',
     'web_search="disabled"', 'mcp_servers={}', 'model_reasoning_effort="high"',
 )
 TERMINATION_GRACE_SECONDS = 1.0
+STDERR_TAIL_LINES = 20
+STDERR_TAIL_BYTES = 4096
 
 
 def _signal_group(process, requested_signal):
@@ -103,6 +107,11 @@ def clean_environment(environment):
     """Keep authentication at its real home, without inheriting paid API access."""
     allowed = {'PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'TMPDIR', 'CODEX_HOME'}
     return {key: value for key, value in environment.items() if key in allowed}
+
+
+def _read_stderr_tail(stderr):
+    tail_text = '\n'.join((stderr or '').splitlines()[-STDERR_TAIL_LINES:])
+    return tail_text.encode('utf-8')[-STDERR_TAIL_BYTES:].decode('utf-8', errors='ignore')
 
 
 def runtime():
@@ -180,6 +189,9 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls):
             continue
         if any(control in json.dumps(item) for control in excluded_controls):
             issues.append('excluded_control_exposed')
+        if item.get('type') == 'custom_tool_call':
+            issues.append('tool_call:' + str(item.get('name') or 'unknown'))
+            continue
         if item.get('type') not in ('message', 'reasoning'):
             issues.append('unknown_or_tool_input')
             continue
@@ -235,8 +247,12 @@ def _rollout(thread_id, environment):
 
 
 def send_request(route, request, credential=None):
+    from .review_transport import CODEX_INPUT_LIMIT_CHARS
     validate_route(route)
     packet = packet_text(request)
+    if len(packet) > CODEX_INPUT_LIMIT_CHARS:
+        raise ResearchError('review_input_too_large', 'The reviewer input exceeds the Codex route limit of '
+                            + str(CODEX_INPUT_LIMIT_CHARS) + ' characters')
     environment = clean_environment(os.environ)
     actual_runtime = runtime()
     # A synthetic project instruction is deliberately reachable in this working
@@ -293,6 +309,7 @@ def send_request(route, request, credential=None):
                 'usage': usage, 'context_evidence': evidence,
                 'execution': {'returncode': returncode, 'timeout': returncode is None,
                               'stdout_digest': hashlib.sha256(raw.encode()).hexdigest(),
+                              'stderr_tail': _read_stderr_tail(result.stderr) if returncode != 0 else '',
                               'malformed_line_digests': malformed,
                               'event_count': len(event_log), 'event_types': [event.get('type') for event in event_log]}}
 
@@ -305,4 +322,4 @@ def verify_context(route, request, response):
             and evidence.get('input_contract') == 'observed-exec-rollout-framed-v1'
             and bool(evidence.get('rollout_digest')) and bool(evidence.get('event_digest'))
             and evidence.get('thread_id') == response.get('id')
-            and evidence.get('runtime') == runtime())
+            and evidence.get('runtime') == route['runtime'])

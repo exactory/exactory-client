@@ -31,7 +31,7 @@ def find_current_candidates(records):
 
 
 def record_candidate(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         require_problem(records)
@@ -197,7 +197,7 @@ def _verify_reviews(records, artifacts, review_ids, bar_review_ids, candidate_id
 
 
 def record_slate(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         require_problem(records)

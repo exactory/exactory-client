@@ -61,7 +61,7 @@ def _selection_values(records, value):
 def select_cohort_abstract(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         collection, original, selected = _selection_values(records, value)
-        artifacts = ArtifactStore(store.root)
+        artifacts = store.build_artifact_store()
         for assertion in (original, selected):
             captured_source(records, artifacts, assertion["source_id"])
             if assertion["abstract"] is not None:
@@ -204,4 +204,4 @@ def cohort_reading_report(store, collection_ids):
     records = store.snapshot()["records"]
     configured = records.get("configuration", {}).get("research", {})
     target = configured.get("target") if configured.get("profile") == "verification" else None
-    return cohort_report(records, Evaluation(records, ArtifactStore(store.root)), collection_ids, target=target)
+    return cohort_report(records, Evaluation(records, store.build_artifact_store()), collection_ids, target=target)

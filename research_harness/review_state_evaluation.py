@@ -9,13 +9,14 @@ from . import review_transport as transport
 from .review_exact_text_cost_v1 import profile
 
 
-def _runtime_fingerprint(records):
+def _runtime_fingerprint(records, artifacts):
     """Observe current adapters and emitter; an unavailable observation disables reuse."""
     try:
         representatives = {}
         for route in records.get('review_route', {}).values():
             representatives.setdefault(route['adapter'], route)
-        return digest({'adapters': {adapter: transport.runtime(representatives[adapter])
+        from .review_protocol import read_route_runtime
+        return digest({'adapters': {adapter: read_route_runtime(artifacts, representatives[adapter])
                                    for adapter in sorted(representatives)},
                        'exact_text_cost': profile()})
     except Exception:
@@ -33,12 +34,12 @@ def evaluate_state(records, artifacts, kind, identifier, compute):
         raise ResearchError('review_context_repair_mismatch', 'Reviewer lineage must be acyclic')
     scope['active'].add(identity)
     try:
-        before = _runtime_fingerprint(evaluation.records)
+        before = _runtime_fingerprint(evaluation.records, evaluation)
         key = (kind, identifier, before)
         if before is not None and key in scope['values']:
             return copy.deepcopy(scope['values'][key])
         result = compute(evaluation.records, evaluation, identifier)
-        if before is not None and _runtime_fingerprint(evaluation.records) == before:
+        if before is not None and _runtime_fingerprint(evaluation.records, evaluation) == before:
             scope['values'][key] = copy.deepcopy(result)
         return copy.deepcopy(result)
     finally:

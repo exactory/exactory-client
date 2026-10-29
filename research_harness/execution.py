@@ -21,7 +21,7 @@ from .development import record_execution, validate_admitted_execution
 from .errors import ResearchError
 from .evidence import digest
 from .execution_outputs import log_bytes, output_metric, output_path, read_sealed_outputs, seal_outputs
-from .operations import fields, immutable_record, is_finite_number, prepared_mutation, text
+from .operations import _read_preparation, fields, immutable_record, is_finite_number, prepared_mutation, text
 from .scientific_json import is_json_media_type
 from .storage import _canonical
 from .workspace import checked_parent, json_projection, read_file, strict_json, write_projection
@@ -33,10 +33,15 @@ def _directory(admission_id):
 
 def record_imported_execution(store, payload, *, expected_revision, request_id):
     """The public result command imports history; managed results are observed."""
-    origin = payload.get("origin") if isinstance(payload, dict) else None
-    if not isinstance(origin, dict) or origin.get("kind") != "imported":
-        raise ResearchError("managed_result_requires_reconciliation", "Use exactory-lab run or exactory-research reconcile-run for a managed outcome; result imports explicitly attributed execution history")
-    return record_execution(store, payload, expected_revision=expected_revision, request_id=request_id)
+    snapshot = _read_preparation(store)
+    if not snapshot.has_request(request_id):
+        origin = payload.get("origin") if isinstance(payload, dict) else None
+        if not isinstance(origin, dict) or origin.get("kind") != "imported":
+            raise ResearchError("managed_result_requires_reconciliation", "Use exactory-lab run or exactory-research "
+                                "reconcile-run for a managed outcome; result imports explicitly attributed "
+                                "execution history")
+    return record_execution(store, payload, expected_revision=expected_revision, request_id=request_id,
+                            _snapshot=snapshot)
 
 
 @contextmanager
@@ -89,7 +94,7 @@ def _build_earlier_runtime(runtime):
 
 
 def _files(store, admission, binding, *, current=True):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     pairs = [(binding["script"], admission["command"]["program"])] + [(v["path"], v["artifact"]) for v in binding["inputs"]]
     for path, artifact in pairs:
         data = artifacts.read(artifact)
@@ -100,7 +105,7 @@ def _files(store, admission, binding, *, current=True):
 
 def bind_execution(store, payload, *, expected_revision, request_id):
     """Bind admitted bytes to backend, paths, timeout and observed output names."""
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         fields(value, ("admission_id", "script", "backend", "timeout_seconds", "inputs", "outputs", "usage_unit"))
         admission = validate_admitted_execution(records, artifacts, value["admission_id"])
@@ -175,7 +180,7 @@ def _materialize(store, admission, binding, plan):
     pairs = _files(store, admission, binding)
     for relative, artifact in pairs:
         path = directory + "/work/" + relative
-        write_projection(store.root, path, ArtifactStore(store.root).read(artifact))
+        write_projection(store.root, path, store.build_artifact_store().read(artifact))
         (store.root / path).chmod(0o444)
     for name in ("logs", "results", "plots"):
         with checked_parent(store.root, directory + "/work/" + name + "/.keep", create=True):
@@ -200,7 +205,7 @@ def _materialize(store, admission, binding, plan):
 
 
 def _claim(store, admission_id, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         if admission_id in records.get("execution_claim", {}):
             raise ResearchError("execution_recovery_required", "This admitted run was already claimed; reconcile it instead of relaunching")
@@ -220,7 +225,7 @@ def _claim(store, admission_id, expected_revision, request_id):
 
 
 def _prelaunch(store, admission_id, claim):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     def prepare(records, value):
         admission = validate_admitted_execution(records, artifacts, admission_id)
         binding = _binding(records, admission_id)
@@ -305,15 +310,21 @@ def launch_execution(store, admission_id, *, expected_revision, request_id):
                                    request_id="reconcile-" + request_id, owned=True)
 
 
+def record_reconciliation(store, payload, summary, *, expected_revision, request_id):
+    return store.mutate("execution.reconcile", payload, lambda tx: summary,
+                        expected_revision=expected_revision, request_id=request_id)
+
+
 def _finish_reconciliation(store, payload, observation, expected_revision, request_id):
-    receipt = store.mutate("execution.reconcile", payload, lambda tx: observation["summary"],
-                           expected_revision=expected_revision, request_id=request_id)
+    receipt = record_reconciliation(store, payload, observation["summary"],
+                                    expected_revision=expected_revision, request_id=request_id)
     summary = observation["summary"]
     directory = _directory(payload["admission_id"])
     json_projection(store.root, directory + "/summary.json", summary)
     json_projection(store.root, "experiment/results/" + summary["node"] + ".json", summary)
     if observation.get("log") is not None:
-        write_projection(store.root, "experiment/logs/" + summary["node"] + ".log", ArtifactStore(store.root).read(observation["log"]))
+        write_projection(store.root, "experiment/logs/" + summary["node"] + ".log",
+                         store.build_artifact_store().read(observation["log"]))
     return receipt["result"]
 
 
@@ -352,7 +363,7 @@ def _reconcile(store, payload, expected_revision, request_id):
             observed = strict_json(read_file(store.root, directory + "/terminal.json"))
         if observed.get("binding_digest") != binding["digest"] or observed.get("config_sha256") != claim["config_artifact"]["sha256"]:
             raise ResearchError("execution_identity_mismatch", "The observed worker output belongs to a different frozen run")
-        artifacts = ArtifactStore(store.root)
+        artifacts = store.build_artifact_store()
         files = read_sealed_outputs(store.root, directory, claim["config"], observed)
         if terminal.exists() and observed["output_seal"]["origin"] != "worker":
             raise ResearchError("execution_output_seal_required", "A producer terminal requires its original worker output seal")

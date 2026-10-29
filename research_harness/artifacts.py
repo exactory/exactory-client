@@ -25,6 +25,10 @@ _TOKEN = r"[-!#$%&'*+.^_`|~0-9A-Za-z]+"
 _MEDIA_TYPE = re.compile(_TOKEN + "/" + _TOKEN + r"(?:;[\x20-\x7e]+)?\Z")
 
 
+class _CheckEffectRequired(BaseException):
+    pass
+
+
 def _filesystem_error(error: OSError) -> ResearchError:
     if error.errno in (errno.ELOOP, errno.ENOTDIR):
         return ResearchError("unsafe_path", "Research paths must not contain symlinks or non-directories")
@@ -147,6 +151,10 @@ def _verify_object(directory: int, reference: dict) -> bytes:
     descriptor = _regular_file(directory, reference["sha256"])
     with os.fdopen(descriptor, "rb") as source:
         data = source.read()
+    return _verify_content(data, reference)
+
+
+def _verify_content(data, reference):
     if len(data) != reference["size"] or hashlib.sha256(data).hexdigest() != reference["sha256"]:
         raise ResearchError("artifact_corrupt", "Stored artifact does not match its size and SHA-256",
                             {"path": reference["path"]})
@@ -163,6 +171,9 @@ class ArtifactStore:
     def put(self, data: bytes, media_type: str) -> dict:
         reference = describe_artifact(data, media_type)
         return self._put(data, reference, _OBJECT_DIRECTORY)
+
+    def require_external_effect(self):
+        pass
 
     def put_sealed(self, data: bytes, media_type: str) -> dict:
         reference = describe_artifact(data, media_type)
@@ -219,3 +230,46 @@ class ArtifactStore:
                                 {"path": ref["path"]}) from error
         except OSError as error:
             raise _filesystem_error(error) from error
+
+
+class _StagedArtifacts(ArtifactStore):
+    """Check publication paths and retain prepared bytes only in this operation."""
+
+    def __init__(self, root):
+        super().__init__(root)
+        self._staged = {}
+        self._observed = set()
+
+    def _put(self, data, reference, relative):
+        with _artifact_operation():
+            try:
+                with self._workspace.directory(relative) as directory:
+                    _verify_object(directory, reference)
+            except FileNotFoundError:
+                pass
+        self._staged[reference["path"]] = data
+        self._observed.add(reference["sha256"])
+        return reference
+
+    def read(self, ref):
+        validate_reference(ref)
+        if ref["path"] in self._staged:
+            data = _verify_content(self._staged[ref["path"]], ref)
+        else:
+            data = super().read(ref)
+        self._observed.add(ref["sha256"])
+        return data
+
+    def verify_sealed(self, ref):
+        validate_reference(ref, sealed=True)
+        if ref["path"] in self._staged:
+            _verify_content(self._staged[ref["path"]], ref)
+        else:
+            super().verify_sealed(ref)
+        self._observed.add(ref["sha256"])
+
+    def read_digests(self):
+        return sorted(self._observed)
+
+    def require_external_effect(self):
+        raise _CheckEffectRequired()

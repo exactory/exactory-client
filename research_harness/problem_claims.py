@@ -42,7 +42,7 @@ def validate_area(area):
 
 
 def initialize_problem(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("slug", "area", "field", "authors"))
@@ -114,7 +114,7 @@ def find_assessment(records):
 
 def record_assessment(store, payload, *, expected_revision, request_id):
     from .problem_evidence import resolve_assessment_record
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         require_problem(records)
@@ -168,7 +168,7 @@ def assess_assessment(records, artifacts):
 
 
 def record_value(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         require_problem(records)
@@ -188,7 +188,7 @@ def record_value(store, payload, *, expected_revision, request_id):
 
 def record_formal_check(store, payload, *, expected_revision, request_id):
     from .problem_evidence import bind_formal_check
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         require_problem(records)
@@ -217,7 +217,7 @@ def compute_problem_evidence_digest(records, artifacts):
 
 def record_openness(store, payload, *, expected_revision, request_id):
     from .problem_openness import prepare_openness
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     return prepared_mutation(store, "problem.openness", payload,
         lambda records, value: prepare_openness(records, artifacts, value, expected_revision + 1),
         expected_revision=expected_revision, request_id=request_id)
@@ -225,7 +225,7 @@ def record_openness(store, payload, *, expected_revision, request_id):
 
 def record_decision(store, payload, *, expected_revision, request_id):
     from .problem_delivery import prepare_decision
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     return prepared_mutation(store, "problem.decision", payload,
         lambda records, value: prepare_decision(records, artifacts, value, expected_revision + 1),
         expected_revision=expected_revision, request_id=request_id)
@@ -233,7 +233,7 @@ def record_decision(store, payload, *, expected_revision, request_id):
 
 def record_posted(store, payload, *, expected_revision, request_id):
     from .problem_delivery import prepare_posted
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
     return prepared_mutation(store, "problem.posted", payload,
         lambda records, value: prepare_posted(records, artifacts, value),
         expected_revision=expected_revision, request_id=request_id)

@@ -60,7 +60,7 @@ def is_probe_exit_status(value):
 
 
 def record_probe_intent(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("id", "question", "interpreter", "program", "inputs", "timeout_seconds"), ("program_run",))
@@ -88,7 +88,7 @@ def record_probe_intent(store, payload, *, expected_revision, request_id):
 
 
 def record_probe(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("id", "command", "outputs", "stdout", "stderr", "exit_status", "elapsed_seconds", "observation"),
@@ -191,7 +191,7 @@ def read_probe_outcome(store, launch):
     if not isinstance(outcome, dict):
         return None
     try:
-        validate_probe_outcome(ArtifactStore(store.root), outcome)
+        validate_probe_outcome(store.build_artifact_store(), outcome)
     except ResearchError:
         return None
     if outcome["id"] != launch["id"] or outcome["command"] != launch["command"]:
@@ -389,7 +389,7 @@ def launch_owned_probe(store, identifier, question, script, inputs, relative_out
             return recover_expired_probe(store, existing, records.get("probe_launch", {}).get(identifier), owner)
         if owner is None:
             return {"id": identifier, "status": "pending", "state": "running"}
-        artifacts = ArtifactStore(store.root)
+        artifacts = store.build_artifact_store()
         files = [("program/" + Path(script).name, Path(script).read_bytes(), "text/x-python")]
         files.extend(("inputs/" + str(index) + "/" + Path(path).name, Path(path).read_bytes(),
                       mimetypes.guess_type(str(path))[0] or "application/octet-stream") for index, path in enumerate(inputs))

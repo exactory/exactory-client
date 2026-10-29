@@ -67,7 +67,7 @@ def _preparation(records, artifacts, task):
 def record_task(store, payload, *, expected_revision, request_id):
     """Capture a task-only response after acquiring its configured exact body."""
     def prepare(records, value):
-        artifacts = Evaluation(records, ArtifactStore(store.root))
+        artifacts = Evaluation(records, store.build_artifact_store())
         fields(value, ("task",))
         report, target, identity = _preparation(records, artifacts, value["task"])
         record = {"task": value["task"], "target": target, "identity": identity,
@@ -134,7 +134,7 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
     """Bind {id, task_digest, body:ArtifactRef, assessment} without changing the wire schema."""
     def prepare(records, value):
         from .sampling import SAMPLED, UNPLACED_WIDEN, prediction
-        artifacts = Evaluation(records, ArtifactStore(store.root))
+        artifacts = Evaluation(records, store.build_artifact_store())
         fields(value, ("id", "task_digest", "body", "assessment"))
         text(value["id"], "Verdict assessment ID")
         task = records.get("verification_task", {}).get(value["task_digest"])
@@ -210,7 +210,7 @@ def bind_verdict(store, payload, *, expected_revision, request_id):
 def validate_verdict(store, task, body):
     snapshot = store.snapshot()
     records = snapshot["records"]
-    artifacts = Evaluation(records, ArtifactStore(store.root))
+    artifacts = Evaluation(records, store.build_artifact_store())
     report, target, identity = _preparation(records, artifacts, task)
     selection = records.get("verification_selection", {}).get("verdict")
     if selection is None:

@@ -312,7 +312,7 @@ def validate_review_contract(records, artifacts, assignment, output):
 
 @record_refusal_on_error
 def record_value_review(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("id", "dossier_id", "assignment_id", "stage", "support", "value", "objections", "limitations"),
@@ -471,7 +471,7 @@ def validate_source_impact(records, artifacts, dossier, impact):
 
 
 def record_source_impact(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("id", "decision_id", "source_impact"), code="invalid_source_impact")
@@ -1253,7 +1253,7 @@ def _decision_obligations(records, artifacts, decision, boundary, *, source_impa
 
 
 def record_research_decision(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         old = strategy.existing_record(records, "research_decision", value)

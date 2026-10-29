@@ -140,7 +140,7 @@ def validate_claim_evidence(claim_evidence, candidate):
 def check_claims(store, claim_evidence):
     snapshot = store.snapshot()
     records = snapshot["records"]
-    artifacts = Evaluation(records, ArtifactStore(store.root))
+    artifacts = Evaluation(records, store.build_artifact_store())
     from .publication_scope import assess_manuscript_readiness, has_publication_scope
     report = (assess_manuscript_readiness(records, artifacts) if has_publication_scope(records)
               else author_readiness_state(records, artifacts))
@@ -158,7 +158,7 @@ def prepare_publication(store, payload, *, expected_revision, request_id):
     Every fully read or search-cited work is cited by the bibliography or accounted for
     (research_harness.citations); the bundle keeps the resulting accounting."""
     def prepare(records, value):
-        artifacts = Evaluation(records, ArtifactStore(store.root))
+        artifacts = Evaluation(records, store.build_artifact_store())
         fields(value, ("id", "files", "claim_evidence"), ("citation_accounting",))
         text(value["id"], "Publication bundle ID")
         fields(value["files"], tuple(FILE_TYPES))
@@ -381,7 +381,7 @@ def _check_changes_for_maximum(core):
 
 def record_manuscript_review(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
-        artifacts = Evaluation(records, ArtifactStore(store.root))
+        artifacts = Evaluation(records, store.build_artifact_store())
         bundle = _bundle(records, artifacts)
         core = _review(records, artifacts, value, bundle)
         if "changes_for_maximum" not in core:
@@ -473,13 +473,13 @@ def list_publication_receipts(records):
 
 def publication_report(store, action="publication"):
     snapshot = store.snapshot()
-    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    evaluation = Evaluation(snapshot["records"], store.build_artifact_store())
     return dict(publication_state(snapshot["records"], evaluation, action), revision=snapshot["revision"])
 
 
 def validate_upload(store, pdf, abstract, sources):
     snapshot = store.snapshot()
-    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    artifacts = Evaluation(snapshot["records"], store.build_artifact_store())
     report = publication_state(snapshot["records"], artifacts)
     if not report["ready"]:
         raise ResearchError("readiness_required", "Publication requires the exact manuscript and dual review gate", {"obligations": report["obligations"]})

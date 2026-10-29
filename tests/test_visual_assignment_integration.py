@@ -26,7 +26,7 @@ class VisualAssignmentIntegrationTests(unittest.TestCase):
         self.packet = copy.deepcopy(self.case.packet)
         self.packet['evidence'] = []
         self.packet['digest'] = digest(self.packet)
-        self.store = SimpleNamespace(root=self.case.fixture.root)
+        self.store = SimpleNamespace(root=self.case.fixture.root, build_artifact_store=lambda: self.case.artifacts)
         def prepare_only(store, operation, value, prepare, **options):
             return prepare(self.records, value)[1]
         for name, options in [

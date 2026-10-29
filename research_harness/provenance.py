@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from functools import lru_cache
@@ -22,8 +23,12 @@ def _git(root):
     if not (root / ".git").exists() or shutil.which("git") is None:
         return None, None
     try:
-        commit = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=5)
-        status = subprocess.run(["git", "-C", str(root), "status", "--porcelain"], capture_output=True, text=True, timeout=5)
+        environment = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+        command = ["git", "-c", "core.fsmonitor=false", "-C", str(root)]
+        commit = subprocess.run(command + ["rev-parse", "HEAD"], capture_output=True, text=True,
+                                timeout=5, env=environment)
+        status = subprocess.run(command + ["status", "--porcelain"], capture_output=True, text=True,
+                                timeout=5, env=environment)
     except (OSError, subprocess.SubprocessError):
         return None, None
     if commit.returncode or status.returncode:

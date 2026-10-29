@@ -189,7 +189,7 @@ def _resource_contract(records, artifacts, values):
 
 
 def record_intent(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         if find_orchestration(records) == "problem_creation":
@@ -491,7 +491,7 @@ def _continuity(records, artifacts, value, previous):
 
 
 def record_strategy(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("id", "previous", "intent_id", "phase", "objective", "candidates", "selected_candidate", "no_branch",
@@ -620,7 +620,7 @@ def record_strategy(store, payload, *, expected_revision, request_id):
 
 
 def record_work_item(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("id", "previous", "item_id", "intent_id", "requests", "classification", "execution_state", "claim_ids",
@@ -677,7 +677,7 @@ def record_work_item(store, payload, *, expected_revision, request_id):
 
 
 def record_lead(store, payload, *, expected_revision, request_id):
-    artifacts = ArtifactStore(store.root)
+    artifacts = store.build_artifact_store()
 
     def prepare(records, value):
         fields(value, ("id", "intent_id", "origin", "origin_id", "discrepancy", "contradicts", "verification_status", "input_knowledge",
