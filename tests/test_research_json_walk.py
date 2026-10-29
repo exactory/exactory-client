@@ -4,6 +4,7 @@ from collections import OrderedDict
 from contextlib import closing, contextmanager
 from decimal import Decimal
 from fractions import Fraction
+import gc
 import hashlib
 import json
 import math
@@ -12,6 +13,7 @@ import random
 import sqlite3
 import sys
 import tempfile
+import tracemalloc
 import unittest
 
 from research_harness import storage
@@ -208,6 +210,49 @@ class ResearchStoredJsonTests(unittest.TestCase):
                                    (encoded,))
                 if table != "records":
                     connection.execute(storage._SCHEMA[("trigger", table + "_no_update")])
+
+    def test_validation_bounds_utf8_buffers_for_large_nested_records(self):
+        for character in ("λ", "🔬", "e\u0301"):
+            for offset in (65535, 65536, 65537, 131071):
+                text_prefix = "a" * (offset - len('{"text":"'))
+                value = {"text": text_prefix + character * 4}
+                with self.subTest(character=character, offset=offset):
+                    encoded = encode_legacy_json(value)
+                    self.assertEqual(storage._canonical(value), encoded)
+                    self.assertEqual(storage._digest(encoded), hashlib.sha256(encoded.encode("utf-8")).hexdigest())
+                    for surrogate in ("\ud800", "\udfff"):
+                        invalid = {"text": text_prefix + surrogate}
+                        for code in ("invalid_input", "corrupt_state"):
+                            self.assertEqual(read_encoding_result(storage._canonical, invalid, code),
+                                             read_encoding_result(encode_legacy_json, invalid, code))
+        store = storage.Store(self.root / "memory", create=True)
+        text = "λ" * 1048576
+
+        def put_records(transaction):
+            for index in range(3):
+                transaction.put("bundle", str(index), {"sections": [{"text": text,
+                                "values": [0.0, 1, -1, None, True]}]})
+            for index in range(512):
+                transaction.put("reference", str(index), {"id": index, "evidence": {"values": [index / 8]}})
+            return {"bundles": 3, "references": 512}
+
+        store.mutate("seed", {}, put_records, expected_revision=0, request_id="seed")
+        gc.collect()
+        records = {}
+        history = storage._RecordHistory()
+        with store._connection() as connection:
+            tracemalloc.start()
+            try:
+                revision = storage._validate(connection, records=records, history=history)
+                _, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+        self.assertEqual(revision, 1)
+        self.assertEqual(len(records["reference"]), 512)
+        self.assertEqual(records["bundle"]["2"]["sections"][0]["text"], text)
+        self.assertEqual(history.read_record("bundle", "0", 1), records["bundle"]["0"])
+        # Three 1 Mi-character records plus 512 small records must authenticate within 26 MiB on both Pythons.
+        self.assertLess(peak, 26 * 1048576)
 
     def test_caller_refusals_match_legacy_and_stored_values_follow_json_codecs(self):
         for index, value in enumerate(build_value_corpus()):
