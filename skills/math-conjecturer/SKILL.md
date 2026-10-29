@@ -284,7 +284,9 @@ result and its source; start no solver work to reproduce an established result.
    that state a formulation open or hold the strongest partial result). While the packet exceeds
    the route's input limit, the route withholds the full-text bodies of the listed versions from
    the end of that list. It still delivers every reading record and every protected body (required
-   proof bytes, selected source texts and screening evidence). The export warns with
+   proof bytes, selected source texts and screening evidence). In a reading chain (step 6) the
+   list orders the full texts that the turns deliver, and the final turn withholds delivered full
+   texts from the end of the list first. The export warns with
    `review_input_too_large` when the list is missing and the estimated packet exceeds a registered
    text route's limit. When a local supporting proof is
    material, add `native_reviews: [{attempt_id, assignment_id}]`. Use the current exact-statement
@@ -314,29 +316,43 @@ result and its source; start no solver work to reproduce an established result.
    reviewer id, `role: "native_math"`, `dossier_id: null`, a verified route and an author from
    the record. Run it with `review-run`.
 6. When the receipt of that assignment shows `reading_chain`, one input of the route cannot hold
-   the full texts of the readings, and the reviewer reads them in a chain of turns. Each turn is a
-   fresh input with at most 120,000 characters of new full text: whole texts, or consecutive parts
-   of a longer text. The reviewer keeps notes and verbatim excerpts, and the harness checks every
-   excerpt against the stored text. Run the chain to its end:
+   every unit of the packet complete, or the units together exceed the 120,000 characters of one
+   turn, and the reviewer reads them in a chain of turns. The units are the full texts of the
+   readings and the packet's own records (the bound search records, the reading records and the
+   statement record). Each turn is a fresh input with at most 120,000 characters of new units:
+   whole full texts or consecutive parts of a longer text, and after the full texts the records
+   as exact JSON text. The reviewer keeps notes and verbatim excerpts, and the harness checks
+   every excerpt against the exact bytes of its unit. Run the chain to its end:
    - Assign the next turn with the same reviewer, route, author and packet and
      `context: {native_packet, prior_assignment_id}`, where `prior_assignment_id` names the turn
      that just ran. Run it with `review-run`. Repeat while the new assignment is a reading turn
-     (prompt template `exactory-openness-reading-v2/reading`). A text of 300,000 characters takes
-     three reading turns, so a chain over several long texts has many turns.
+     (prompt template `exactory-openness-reading-v3/reading`). A text of 300,000 characters takes
+     three reading turns, so a chain over several long texts and their records has many turns. A
+     chain that 0.64.2 to 0.66.2 started continues in the same way: its next turns read the
+     units that no reading turn delivered, full texts first and then the records.
    - When a turn's run ends without output, for example at the route timeout, assign the next
      turn again with the same `prior_assignment_id`. The new assignment replaces the failed turn,
      which can no longer be run or continued (`review_assignment_replaced`). When the first turn
      fails, export the packet again under a new assignment id and start a new chain.
    - The assignment after the last reading turn is the final turn (prompt template
-     `exactory-openness-reading-v2/final`). It repeats the full texts that one input can hold, with
-     the reading record of the earlier turns. When it returns a reading answer with passage
-     requests, assign one more final turn in the same way.
-   - When `review-assignment` refuses the final turn with `review_input_too_large`, export the
-     packet again with `minimum.text_priority` (step 3) and start a new chain at step 5.
+     `exactory-openness-reading-v3/final`): the native packet with the reading record of the
+     earlier turns. To fit the route's input limit it withholds, only as far as needed, the bodies
+     that reading turns delivered complete (full texts from the end of `text_priority`, then the
+     other full texts, the reading records and the search records, largest first within each
+     kind), each replaced by a note naming the turns that delivered it, and then the notes of the
+     earliest turns, oldest first. It never withholds an excerpt, a passage, the statement or the
+     formulations. When it returns a reading answer with passage requests, assign one more final
+     turn in the same way.
+   - When `review-assignment` refuses the final turn with `review_input_too_large`, the refusal
+     names the size of each part: the base packet, the notes, the excerpts and the passages. What
+     remains is protected evidence, the statement, and the excerpts and passages that the
+     allowances let the chain keep; a new export does not reduce it. Report the four sizes to the
+     owner and wait for the owner's decision.
 7. Record the observed finding with `exactory-research problem-openness` and
    `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
-   native result. For a chain, the record adds `reading_turns`, and every full text of the readings
-   must have reached a reading turn complete (`openness_reading_incomplete` names the missing ones).
+   native result. For a chain, the record adds `reading_turns`, and every unit of the packet, full
+   texts and records, must have reached a reading turn complete or arrived complete in the final
+   turn's request (`openness_reading_incomplete` names the missing ones by kind and identity).
 8. On `unresolved`, fill the recorded gap and obtain a new finding.
 9. On `already_solved`, redirect to the settling result, or record a new statement.
 10. When a neighbour is added, a new material search is not bound, a bound search or reading
