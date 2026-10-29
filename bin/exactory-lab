@@ -292,11 +292,16 @@ def _run_state_set(args: argparse.Namespace) -> None:
 
 
 def _run_decide(args: argparse.Namespace) -> None:
-    workspace_dir = _find_workspace()
-    stage = args.stage or _load_study_state(workspace_dir)["stage"]
-    store = current_store(workspace_dir)
-    entry = {"stage": stage, "decision": args.decision, "why": args.why, "evidence": args.evidence or ""}
-    result = record_decision(store, entry, **command_identity(store, args))
+    workspace_dir = _find_research_workspace()
+    try:
+        if args.stage is None and not (workspace_dir / _STUDY_STATE_PATH).is_file():
+            raise ResearchError("invalid_input", "Decisions outside a study need an explicit --stage.")
+        stage = args.stage or _load_study_state(workspace_dir)["stage"]
+        store = current_store(workspace_dir)
+        entry = {"stage": stage, "decision": args.decision, "why": args.why, "evidence": args.evidence or ""}
+        result = record_decision(store, entry, **command_identity(store, args))
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
     print(json.dumps(result["result"], indent=2))
 
 
@@ -364,7 +369,7 @@ _BACKENDS = ("local", "colab")
 
 
 def _run_run(args: argparse.Namespace) -> None:
-    workspace_dir = _find_workspace()
+    workspace_dir = _find_research_workspace()
     experiment_dir = (workspace_dir / "experiment").resolve()
     script_path = (experiment_dir / args.script).resolve()
     if not script_path.is_file() or experiment_dir not in script_path.parents:
