@@ -1,6 +1,7 @@
 """Reviewer excerpts and bounded passages are checked against the stored source text."""
 
 import hashlib
+import json
 
 from literature_fixtures import LiteratureCase
 from research_harness import review_excerpts
@@ -134,3 +135,133 @@ class ReviewExcerptTests(LiteratureCase):
             with self.subTest(values=values), self.assertRaises(ResearchError) as raised:
                 review_excerpts.validate_excerpts(values, 'invalid_value_review')
             self.assertEqual(raised.exception.code, 'invalid_value_review')
+
+
+RESPONSE_NOTE = 'The captured search response names no work that settles the bounded statement.'
+RECORD_NOTE = 'The reading note records that the second paper proves only the bounded case.'
+PURPOSE = 'The statement that the review uses.'
+
+
+class SourceIdentityTests(LiteratureCase):
+    """Excerpts and passages name a captured search response by source_id with an optional text hash, and a store
+    record by record_kind and record_id, and are checked against the bound bodies of a reading chain; the excerpt rules
+    of bar, slate and result sessions keep version_id."""
+
+    def setUp(self):
+        super().setUp()
+        from research_harness.acquisition import import_response
+        data = {'query': 'bounded sequences', 'note': RESPONSE_NOTE, 'results': []}
+        captured = import_response(self.store, 'mcp', json.dumps(data).encode(),
+                                   source_url='https://example.org/problem-search',
+                                   captured_at='2026-10-15T12:00:00Z', media_type='application/json', mappings=[],
+                                   expected_revision=self.store.revision, request_id='identity-response')
+        self.source_id = captured['source_ids'][0]
+        self.response = self.store.snapshot()['records']['source'][self.source_id]['response']
+        self.content = self.artifacts.read(self.response).decode('utf-8')
+        self.catalog = {('search_response', ('source_id', self.source_id)): {self.response['sha256']: self.response}}
+
+    def check(self, values, unit_sources=None):
+        return review_excerpts.check_excerpts(self.store.snapshot()['records'], self.artifacts, values,
+                                              review_excerpts.create_allowances(), unit_sources=unit_sources)
+
+    def answer(self, requests, unit_sources=None):
+        return review_excerpts.answer_passages(self.store.snapshot()['records'], self.artifacts, requests,
+                                               review_excerpts.create_allowances(), unit_sources=unit_sources)
+
+    def test_a_captured_search_response_is_named_by_source_id_with_an_optional_text_hash(self):
+        values = [{'source_id': self.source_id, 'text': RESPONSE_NOTE, 'purpose': PURPOSE},
+                  {'source_id': self.source_id, 'text_sha256': self.response['sha256'], 'text': RESPONSE_NOTE,
+                   'purpose': PURPOSE},
+                  {'source_id': self.source_id, 'text_sha256': '0' * 64, 'text': RESPONSE_NOTE, 'purpose': PURPOSE},
+                  {'source_id': 'source-missing', 'text': RESPONSE_NOTE, 'purpose': PURPOSE}]
+        review_excerpts.validate_excerpts(values, 'invalid_reading_response', kinds=review_excerpts.UNIT_KINDS)
+        entries, allowances = self.check(values, unit_sources=self.catalog)
+        self.assertEqual([(entry['status'], entry.get('reason')) for entry in entries],
+                         [('verified', None), ('verified', None), ('unmatched', 'no_stored_text'),
+                          ('unmatched', 'no_stored_text')])
+        start = self.content.index(RESPONSE_NOTE)
+        end = start + len(RESPONSE_NOTE)
+        self.assertEqual({key: entries[0][key] for key in ('source_id', 'text', 'locator')},
+                         {'source_id': self.source_id, 'text': RESPONSE_NOTE,
+                          'locator': {'kind': 'span', 'start': start, 'end': end,
+                                      'sha256': hashlib.sha256(RESPONSE_NOTE.encode('utf-8')).hexdigest()}})
+        self.assertNotIn('version_id', entries[0])
+        self.assertEqual(entries[0]['artifact_descriptor']['sha256'], self.response['sha256'])
+        self.assertEqual(entries[1]['text_sha256'], self.response['sha256'])
+        self.assertEqual(allowances['excerpts']['used'], 2 * len(RESPONSE_NOTE))
+        request = {'id': 'response-passage', 'source_id': self.source_id, 'anchor': RESPONSE_NOTE[:30],
+                   'characters': 40}
+        review_excerpts.validate_passage_request(request, 'invalid_reading_response', kinds=review_excerpts.UNIT_KINDS)
+        [answer], _ = self.answer([request], unit_sources=self.catalog)
+        self.assertEqual((answer['status'], answer['text']), ('delivered', self.content[start:start + 40]))
+        [unbound], _ = self.answer([request])
+        self.assertEqual((unbound['status'], unbound['reason']), ('not_found', 'no_stored_text'))
+
+    def test_a_record_is_checked_against_the_bytes_that_it_is_given(self):
+        data = json.dumps({'id': 'read-1', 'notes': RECORD_NOTE}, sort_keys=True).encode('utf-8')
+        reference = self.artifacts.put(data, 'application/json')
+        sources = {('record', ('record_kind', 'reading'), ('record_id', 'read-1')):
+                   {reference['sha256']: reference}}
+        excerpt = {'record_kind': 'reading', 'record_id': 'read-1', 'text': RECORD_NOTE.replace(' ', '\n '),
+                   'purpose': PURPOSE}
+        review_excerpts.validate_excerpts([excerpt], 'invalid_reading_response', kinds=review_excerpts.UNIT_KINDS)
+        [verified], _ = self.check([excerpt], unit_sources=sources)
+        start = data.decode('utf-8').index(RECORD_NOTE)
+        self.assertEqual((verified['status'], verified['record_kind'], verified['record_id'], verified['text']),
+                         ('verified', 'reading', 'read-1', RECORD_NOTE))
+        self.assertEqual((verified['locator']['start'], verified['locator']['end']), (start, start + len(RECORD_NOTE)))
+        self.assertEqual(verified['artifact_descriptor']['sha256'], reference['sha256'])
+        [unchecked], _ = self.check([excerpt])
+        self.assertEqual((unchecked['status'], unchecked['reason']), ('unmatched', 'no_stored_text'))
+        request = {'id': 'record-passage', 'record_kind': 'reading', 'record_id': 'read-1',
+                   'anchor': RECORD_NOTE[:30], 'characters': 25}
+        review_excerpts.validate_passage_request(request, 'invalid_reading_response', kinds=review_excerpts.UNIT_KINDS)
+        [answer], _ = self.answer([request], unit_sources=sources)
+        self.assertEqual((answer['status'], answer['text']), ('delivered', RECORD_NOTE[:25]))
+
+    def test_the_excerpt_rules_of_bar_sessions_keep_the_version_id_shape(self):
+        named = [{'source_id': self.source_id, 'text': RESPONSE_NOTE, 'purpose': PURPOSE},
+                 {'record_kind': 'reading', 'record_id': 'read-1', 'text': RECORD_NOTE, 'purpose': PURPOSE},
+                 {'version_id': 'arxiv:2601.00001v1', 'text_sha256': '0' * 64, 'text': RECORD_NOTE,
+                  'purpose': PURPOSE}]
+        for value in named:
+            with self.subTest(value=value):
+                review_excerpts.validate_excerpts([value], 'invalid_reading_response', kinds=review_excerpts.UNIT_KINDS)
+                with self.assertRaises(ResearchError) as raised:
+                    review_excerpts.validate_excerpts([value], 'invalid_value_review')
+                self.assertEqual(raised.exception.code, 'invalid_value_review')
+        for value in ({'version_id': 'arxiv:2601.00001v1', 'record_kind': 'reading', 'record_id': 'read-1',
+                       'text': RECORD_NOTE, 'purpose': PURPOSE},
+                      {'record_kind': 'reading', 'text': RECORD_NOTE, 'purpose': PURPOSE},
+                      {'source_id': '', 'text': RESPONSE_NOTE, 'purpose': PURPOSE}):
+            with self.subTest(value=value), self.assertRaises(ResearchError) as raised:
+                review_excerpts.validate_excerpts([value], 'invalid_reading_response', kinds=review_excerpts.UNIT_KINDS)
+            self.assertEqual(raised.exception.code, 'invalid_reading_response')
+        with self.assertRaises(ResearchError) as raised:
+            review_excerpts.validate_excerpts([named[1]], 'invalid_reading_response', kinds=('fulltext',))
+        self.assertEqual(raised.exception.code, 'invalid_reading_response')
+
+    def test_a_bound_catalog_rejects_ambiguous_and_mismatched_whole_hashes(self):
+        second = self.artifacts.put((RESPONSE_NOTE + ' A later capture.').encode(), 'text/plain')
+        key = ('search_response', ('source_id', self.source_id))
+        catalog = {key: {self.response['sha256']: self.response, second['sha256']: second}}
+        excerpt = {'source_id': self.source_id, 'text': RESPONSE_NOTE, 'purpose': PURPOSE}
+        entries, _ = self.check([excerpt, dict(excerpt, text_sha256=self.response['sha256']),
+                                 dict(excerpt, text_sha256='0' * 64)], unit_sources=catalog)
+        self.assertEqual([entry['status'] for entry in entries], ['unmatched', 'verified', 'unmatched'])
+        [entry], _ = self.check([excerpt], unit_sources={})
+        self.assertEqual(entry['reason'], 'no_stored_text')
+
+    def test_a_reading_response_refuses_a_passage_request_with_mixed_identity_fields(self):
+        from research_harness import openness_reading
+        binding = {'subject_digest': 'a' * 64, 'claim_digest': 'b' * 64, 'reviewer': {'actor_id': 'reviewer'}}
+        packet = {'reading_turn': dict(binding, protocol=openness_reading.PROTOCOL)}
+        request = {'id': 'mixed', 'version_id': 'arxiv:2601.00001v1', 'source_id': self.source_id,
+                   'anchor': RESPONSE_NOTE, 'characters': 30}
+        output = dict(binding, schema_version=1, stage='reading', excerpts=[], notes='Notes of the turn.',
+                      passage_requests=[request])
+        with self.assertRaises(ResearchError) as raised:
+            openness_reading.validate_turn_output(packet, output)
+        self.assertEqual(raised.exception.code, 'invalid_reading_response')
+        del request['version_id']
+        openness_reading.validate_turn_output(packet, output)

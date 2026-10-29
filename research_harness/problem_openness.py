@@ -173,6 +173,11 @@ def assess_openness(records, artifacts):
     return []
 
 
+def serialize_record(record):
+    """The exact JSON bytes exported as evidence for a bound store record."""
+    return json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+
+
 def export_openness(store, spec, destination):
     records = store.snapshot()["records"]
     marker = require_problem(records)
@@ -187,7 +192,7 @@ def export_openness(store, spec, destination):
     searches, required, evidence = [], set(), {}
 
     def include_record(record):
-        data = json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        data = serialize_record(record)
         artifact = artifacts.put(data, "application/json")
         evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "blob", "artifact": artifact}
 

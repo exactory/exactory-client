@@ -1,6 +1,7 @@
 """A problem record whose openness packet carries three full readings, reviewed on a Codex route."""
 
 import json
+from unittest.mock import patch
 
 from codex_route_fixtures import invoke_codex, limit_codex_input, read_sent_packet, record_codex_route
 from test_research_problem_claims import ProblemCase
@@ -60,15 +61,21 @@ class OpennessReadingCase(ProblemCase):
             self.mutate(record_reading, self.full_note(bundle, 'read-%d' % number))
             self.versions.append(version)
             self.texts[version] = capture['text']
-        self.search = ProblemOpennessMinimumTests.search(self, self.versions)
+        self.searches = self.record_searches()
+        self.search = self.searches[0]
         record_codex_route(self)
+
+    def record_searches(self):
+        """The searches that the openness minimum binds: one search that finds every read work."""
+        return [ProblemOpennessMinimumTests.search(self, self.versions)]
 
     def limit_input(self, characters=INPUT_LIMIT_CHARACTERS):
         limit_codex_input(self, characters)
 
     def export(self, priority=(), name='openness-packet', assignment_id='turn-1'):
         from research_harness.problem_openness import export_openness
-        minimum = {'searches': [{'formulation': self.selected['statement'], 'search_id': self.search['id']}],
+        minimum = {'searches': [{'formulation': self.selected['statement'], 'search_id': search['id']}
+                                for search in self.searches],
                    'settling_work_id': None, 'duplicate_resolutions': []}
         if priority:
             minimum['text_priority'] = list(priority)
@@ -93,6 +100,24 @@ class OpennessReadingCase(ProblemCase):
     def read_sent_packet(self, identifier):
         return read_sent_packet(self, 'attempt-' + identifier)
 
+    def unit_identity(self, version):
+        return {'kind': 'fulltext', 'version_id': version, 'text_sha256': self.texts[version]['sha256']}
+
+    def omit_final_body(self, sha256):
+        """Save a final request with an explicit stub, so only authenticated reading delivery can cover this body."""
+        from research_harness import openness_reading
+        real = openness_reading._build_final_turn
+
+        def omit(*args):
+            packet = real(*args)
+            for entry in packet['evidence']:
+                if entry['artifact']['sha256'] == sha256:
+                    entry.update(content='', delivery='body-missing-in-fixture')
+            packet.pop('digest')
+            packet['digest'] = protocol.digest(packet)
+            return packet
+        return patch.object(openness_reading, '_build_final_turn', side_effect=omit)
+
     def copy_theorem(self, version):
         """The theorem of a delivered text as a reviewer copies it, with its white space changed."""
         number = self.versions.index(version) + 1
@@ -103,7 +128,8 @@ class OpennessReadingCase(ProblemCase):
         binding = packet['reading_turn'] if 'reading_turn' in packet else packet['native']
         if excerpts is None:
             excerpts = [self.copy_theorem(row['version_id'])
-                        for row in packet.get('reading_turn', {}).get('reading_plan', {}).get('delivered_now', [])]
+                        for row in packet.get('reading_turn', {}).get('reading_plan', {}).get('delivered_now', [])
+                        if row.get('kind', 'fulltext') == 'fulltext']
         return {'schema_version': 1, 'stage': 'reading', 'subject_digest': binding['subject_digest'],
                 'claim_digest': binding['claim_digest'], 'reviewer': binding['reviewer'], 'excerpts': list(excerpts),
                 'notes': 'Each delivered paper proves a finite extremal example for its own type of sequence. '

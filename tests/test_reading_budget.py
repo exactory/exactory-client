@@ -64,7 +64,7 @@ class KmpSizedChainTests(OpennessReadingCase):
     def test_a_chain_with_the_kmp_text_sizes_reads_every_part_within_the_budget(self):
         from research_harness.problem_openness import assess_openness
         native_packet = self.export(priority=self.versions)
-        turns = self.run_reading_turns(native_packet, turn_count=20)
+        turns = self.run_reading_turns(native_packet, turn_count=25)
         seen = {}
         for identifier in turns[:-1]:
             plan = self.read_packet(identifier)['reading_turn']['reading_plan']
@@ -74,6 +74,8 @@ class KmpSizedChainTests(OpennessReadingCase):
             complete = review_excerpts.find_complete_bodies(sent)
             for row in plan['delivered_now']:
                 self.assertIn(row['artifact']['sha256'], complete)
+                if row['kind'] != 'fulltext':
+                    continue
                 body = self.artifacts.read(self.texts[row['version_id']]).decode()
                 self.assertEqual(self.artifacts.read(row['artifact']).decode(), body[row['start']:row['end']])
                 self.assertEqual(row['characters'], row['end'] - row['start'])
@@ -89,9 +91,9 @@ class KmpSizedChainTests(OpennessReadingCase):
         final = turns[-1]
         self.invoke(final, self.build_native_result(self.read_packet(final)))
         saved = self.mutate(self.load_problem_module().record_openness, {'assignment_id': final})['result']
-        self.assertEqual([row['assignment_id'] for row in saved['reading_turns']], turns[:-1])
+        self.assertEqual([row['assignment_id'] for row in saved['reading_turns']], turns)
         self.assertEqual(sorted({entry['version_id'] for row in saved['reading_turns']
-                                 for entry in row.get('delivered_parts', [])}),
+                                 for entry in row.get('delivered_parts', []) if entry['kind'] == 'fulltext'}),
                          sorted(version for version, size in zip(self.versions, KMP_SIZES) if size > BUDGET))
         self.assertEqual(assess_openness(self.store.snapshot()['records'], self.artifacts), [])
 
@@ -111,35 +113,40 @@ class ReadingBudgetChainTests(OpennessReadingCase):
         return self.mutate(self.load_problem_module().record_openness, {'assignment_id': identifier})['result']
 
     def test_a_long_text_arrives_in_parts_over_consecutive_turns(self):
-        turns = self.run_reading_turns(self.export(priority=self.versions), turn_count=8)
-        self.assertEqual(len(turns), 7)
+        turns = self.run_reading_turns(self.export(priority=self.versions), turn_count=12)
+        # The last part of the third text leaves room for the first record in the same turn.
         delivered = [[(row['version_id'], row['part'], row['parts'], row['start'], row['end'])
-                      for row in self.read_packet(identifier)['reading_turn']['reading_plan']['delivered_now']]
-                     for identifier in turns[:-1]]
+                      for row in self.read_packet(identifier)['reading_turn']['reading_plan']['delivered_now']
+                      if row['kind'] == 'fulltext'] for identifier in turns[:6]]
         self.assertEqual(delivered, [[(version, part, 2, start, end)] for version in self.versions
                                      for part, (start, end) in ((1, (0, 5000)), (2, (5000, 8476)))])
+        self.assertTrue(all(row['kind'] == 'record' for identifier in turns[6:-1]
+                            for row in self.read_packet(identifier)['reading_turn']['reading_plan']['delivered_now']))
+        parts = [[dict(self.unit_identity(version), part=part, parts=2, start=start, end=end, characters=end - start)]
+                 for version in self.versions for part, start, end in ((1, 0, 5000), (2, 5000, 8476))]
         record = self.read_packet(turns[-1])['reading_record']
-        self.assertEqual([(row['delivered'], row['delivered_parts']) for row in record['turns']],
-                         [([], [{'version_id': version, 'part': part, 'parts': 2}])
-                          for version in self.versions for part in (1, 2)])
+        self.assertEqual([row['delivered_parts'] for row in record['turns'][:6]], parts)
         self.invoke(turns[-1], self.build_native_result(self.read_packet(turns[-1])))
         saved = self.record_openness(turns[-1])
-        self.assertEqual([row['delivered_parts'] for row in saved['reading_turns']],
-                         [[{'version_id': version, 'part': part, 'parts': 2}]
-                          for version in self.versions for part in (1, 2)])
+        self.assertEqual([row['delivered_parts'] for row in saved['reading_turns'][:6]], parts)
 
     def test_a_text_counts_as_read_only_when_every_part_reached_a_reading_turn(self):
         real = openness_reading.list_reading_units
 
-        def drop_the_last_part(artifacts, texts):
-            return real(artifacts, texts)[:-1]
-        with patch.object(openness_reading, 'list_reading_units', side_effect=drop_the_last_part):
-            final = self.run_reading_turns(self.export(priority=self.versions), turn_count=8)[-1]
+        def drop_the_last_part(artifacts, rows):
+            """The units of the rows without the last part of the third text, which no turn then delivers."""
+            return [unit for unit in real(artifacts, rows)
+                    if not (unit.get('version_id') == self.versions[2] and unit['part'] == unit['parts'])]
+        with patch.object(openness_reading, 'list_reading_units', side_effect=drop_the_last_part), \
+                self.omit_final_body(self.texts[self.versions[2]]['sha256']):
+            final = self.run_reading_turns(self.export(priority=self.versions), turn_count=12)[-1]
         self.invoke(final, self.build_native_result(self.read_packet(final)))
         with self.assertRaises(Exception) as raised:
             self.record_openness(final)
         self.assertEqual((raised.exception.code, raised.exception.details['version_ids']),
                          ('openness_reading_incomplete', [self.versions[2]]))
+        self.assertEqual(raised.exception.details['units'],
+                         [dict(self.unit_identity(self.versions[2]), missing_parts=[2])])
 
     def test_a_failed_reading_turn_is_replaced_and_can_no_longer_run_or_continue(self):
         native_packet = self.export(priority=self.versions)
@@ -199,11 +206,12 @@ class ReadingBudgetChainTests(OpennessReadingCase):
             return value
 
         def list_0_64_2_units(artifacts, texts):
-            """0.64.2 delivered every text whole."""
+            """0.64.2 delivered every full text whole, and no record."""
             return [{'version_id': row['version_id'], 'part': 1, 'parts': 1, 'start': 0,
                      'end': len(artifacts.read(row['artifact']).decode('utf-8')),
                      'characters': len(artifacts.read(row['artifact']).decode('utf-8')),
-                     'artifact_descriptor': openness_reading.descriptor(row['artifact'])} for row in texts]
+                     'artifact_descriptor': openness_reading.descriptor(row['artifact'])}
+                    for row in texts if 'version_id' in row]
         large = patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 20000)
         with patch.object(protocol, 'canonical_prompt', side_effect=build_earlier_prompt), \
                 patch.object(openness_reading, '_assemble_reading_turn', side_effect=assemble_as_0_64_2), \
@@ -226,16 +234,20 @@ class ReadingBudgetChainTests(OpennessReadingCase):
                 break
             self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', reading_stage='reading'))
             self.invoke(turns[-1], self.build_reading_response(self.read_packet(turns[-1])))
-            self.assertLessEqual(len(turns), 5)
+            self.assertLessEqual(len(turns), 8)
         self.assertEqual([[(row['version_id'], row['part'], row['parts']) for row in
-                           self.read_packet(identifier)['reading_turn']['reading_plan']['delivered_now']]
-                          for identifier in turns[1:-1]], [[(self.versions[2], 1, 2)], [(self.versions[2], 2, 2)]])
+                           self.read_packet(identifier)['reading_turn']['reading_plan']['delivered_now']
+                           if row['kind'] == 'fulltext'] for identifier in turns[1:3]],
+                         [[(self.versions[2], 1, 2)], [(self.versions[2], 2, 2)]])
+        self.assertTrue(all(row['kind'] == 'record' for identifier in turns[3:-1]
+                            for row in self.read_packet(identifier)['reading_turn']['reading_plan']['delivered_now']))
         self.invoke(turns[-1], self.build_native_result(self.read_packet(turns[-1])))
         saved = self.record_openness(turns[-1])
-        self.assertEqual(saved['reading_turns'][0]['delivered'], self.versions[:2])
-        self.assertNotIn('delivered_parts', saved['reading_turns'][0])
-        self.assertEqual([row['delivered_parts'] for row in saved['reading_turns'][1:]],
-                         [[{'version_id': self.versions[2], 'part': part, 'parts': 2}] for part in (1, 2)])
+        self.assertEqual(saved['reading_turns'][0]['delivered_units'],
+                         [self.unit_identity(version) for version in self.versions[:2]])
+        self.assertEqual([row['delivered_parts'] for row in saved['reading_turns'][1:3]],
+                         [[dict(self.unit_identity(self.versions[2]), part=part, parts=2, start=start, end=end,
+                                characters=end - start)] for part, start, end in ((1, 0, 5000), (2, 5000, 8476))])
 
 
 class EarlierPromptTests(unittest.TestCase):
@@ -280,4 +292,5 @@ class EarlierPromptTests(unittest.TestCase):
         self.assertIn('deferred_reading_budget', review_excerpts.PHASE_PROMPT)
         self.assertNotIn('120,000', review_excerpts.PHASE_PROMPT_V1)
         self.assertEqual(json.dumps(sorted(openness_reading.PROMPTS)),
-                         json.dumps(sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL])))
+                         json.dumps(sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2,
+                                            openness_reading.PROTOCOL])))
