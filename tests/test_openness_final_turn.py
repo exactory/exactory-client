@@ -3,13 +3,13 @@ arrive as reading units after the full texts, excerpts and passages of a record 
 and the final turn withholds, only as far as its input needs, the bodies that reading turns delivered and then the
 notes of the earliest turns, never an excerpt or a passage."""
 
-import contextlib
 import hashlib
 import json
 from pathlib import Path
 import unittest
 from unittest.mock import patch
 
+from openness_legacy_fixtures import build_as_0_65_2
 from openness_reading_fixtures import OpennessReadingCase, build_theorem
 from research_harness import openness_reading, review_excerpts, review_protocol as protocol
 from research_harness import review_codex_transport as codex, review_transport as transport
@@ -41,21 +41,6 @@ def build_filler(characters, sentence='The recorded work proves a bounded case a
 
 def hash_text(value):
     return hashlib.sha256(value.encode('utf-8')).hexdigest()
-
-
-@contextlib.contextmanager
-def run_as_0_65_2(final=False):
-    """Run genuine legacy builders and prompts; no v3 helper builds the historical reading record."""
-    import openness_legacy_fixtures as legacy
-    real_prompt = protocol.canonical_prompt
-
-    def build_v2_prompt(role, **options):
-        if options.get('reading_stage') is not None:
-            options['reading_protocol'] = openness_reading.PROTOCOL_V2
-        return real_prompt(role, **options)
-    with patch.object(protocol, 'canonical_prompt', side_effect=build_v2_prompt), \
-            patch.object(openness_reading, 'prepare_packet', side_effect=legacy.prepare_packet):
-        yield
 
 
 class FinalTurnCase(OpennessReadingCase):
@@ -345,7 +330,7 @@ class ContinuedChainTests(FinalTurnCase):
         from research_harness.problem_openness import assess_openness
         self.limit_input()
         native_packet = self.export(priority=self.versions)
-        with run_as_0_65_2():
+        with build_as_0_65_2():
             turns = self.run_chain(native_packet, lambda packet, number: self.build_reading_response(packet),
                                    stop_before_final=True)
         self.assertEqual(turns, ['turn-1', 'turn-2'])
@@ -388,7 +373,7 @@ class ContinuedChainTests(FinalTurnCase):
         from research_harness.problem_openness import assess_openness
         self.limit_input()
         native_packet = self.export(priority=self.versions)
-        with run_as_0_65_2(final=True):
+        with build_as_0_65_2():
             turns = self.run_reading_turns(native_packet)
         self.assertEqual(turns, ['turn-1', 'turn-2', 'turn-3'])
         final = turns[-1]
@@ -484,7 +469,7 @@ class KmpShapedChainTests(FinalTurnCase):
         self.assertEqual(len(sizes), 17)
         self.assertTrue(8000 <= min(sizes) and max(sizes) <= 85000, sizes)
         self.assertAlmostEqual(sum(sizes), 431000, delta=8000)
-        with run_as_0_65_2():
+        with build_as_0_65_2():
             turns = self.run_chain(native_packet, self.respond, stop_before_final=True)
         self.assertEqual(len(turns), 17)
         for identifier in turns:

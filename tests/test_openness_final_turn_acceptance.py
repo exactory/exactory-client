@@ -11,13 +11,12 @@ tests/fixtures, so that no current builder takes part in its history.
 import contextlib
 import copy
 import hashlib
-import importlib.util
 import inspect
 import json
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
+from openness_legacy_fixtures import build_as_0_65_2, load_0_65_2_openness_reading
 from openness_reading_fixtures import OpennessReadingCase, build_theorem
 from research_harness import native_review, openness_reading, review_excerpts, review_protocol as protocol
 from research_harness import review_codex_transport as codex, review_transport as transport
@@ -41,13 +40,6 @@ EARLIER_PROMPT_HASHES = {
 # withholding rules.
 V3_PROMPT_PHRASES = ('version_id', 'source_id', 'record_kind', 'record_id', 'text_sha256', 'JSON', 'notes_withheld',
                      'earliest turns', 'never withholds an excerpt or a passage')
-# The modules of release 0.65.2 (448b6da) that built its reading chains. Each file holds the exact bytes of the module
-# at that commit, which 0.66.0 also kept, and has this SHA-256.
-RELEASE_0_65_2_MODULES = (
-    ('review_excerpts', 'fixtures/review_excerpts_0_65_2.py.txt',
-     '4070b149c027bb248bbc6912492417c6cd44c7f0486073da43ad7bf5f45b80b3'),
-    ('openness_reading', 'fixtures/openness_reading_0_65_2.py.txt',
-     '4dfe0e00d8f5819c870dcd3c910be6e90750f5d351e0a8bd353342c9f15e6bf8'))
 TURN_BUDGET_CHARACTERS = 120000
 CODEX_INPUT_LIMIT_CHARACTERS = 1048576
 UNLIMITED_INPUT_CHARACTERS = 10 ** 8
@@ -125,31 +117,6 @@ def build_row_filter(list_rows, sha256):
     def list_kept_rows(*args, **kwargs):
         return [row for row in list_rows(*args, **kwargs) if find_row_sha256(row) != sha256]
     return list_kept_rows
-
-
-def load_0_65_2_openness_reading():
-    """The openness reading module of 0.65.2 with the review_excerpts module of 0.65.2. Both run inside the
-    research_harness package, so their other imports resolve to the current modules."""
-    modules = {}
-    for name, path, sha256 in RELEASE_0_65_2_MODULES:
-        location = Path(__file__).resolve().parent / path
-        source = location.read_bytes()
-        if hashlib.sha256(source).hexdigest() != sha256:
-            raise AssertionError('The 0.65.2 source fixture changed: ' + path)
-        spec = importlib.util.spec_from_loader('research_harness.%s_0_65_2' % name, loader=None)
-        module = importlib.util.module_from_spec(spec)
-        exec(compile(source, str(location), 'exec'), module.__dict__)
-        modules[name] = module
-    modules['openness_reading'].review_excerpts = modules['review_excerpts']
-    return modules['openness_reading']
-
-
-@contextlib.contextmanager
-def build_as_0_65_2():
-    """Record native_math assignments with the reading chain of 0.65.2: its v2 prompts, plan entries without a kind, its
-    verbose reading record and no record units."""
-    with patch.object(protocol, 'openness_reading', load_0_65_2_openness_reading()):
-        yield
 
 
 class AcceptanceCase(OpennessReadingCase):
