@@ -248,9 +248,30 @@ class SourceIdentityTests(LiteratureCase):
         excerpt = {'source_id': self.source_id, 'text': RESPONSE_NOTE, 'purpose': PURPOSE}
         entries, _ = self.check([excerpt, dict(excerpt, text_sha256=self.response['sha256']),
                                  dict(excerpt, text_sha256='0' * 64)], unit_sources=catalog)
-        self.assertEqual([entry['status'] for entry in entries], ['unmatched', 'verified', 'unmatched'])
+        self.assertEqual([(entry['status'], entry.get('reason')) for entry in entries],
+                         [('unmatched', 'ambiguous_identity'), ('verified', None), ('unmatched', 'no_stored_text')])
+        request = {'id': 'ambiguous', 'source_id': self.source_id, 'anchor': RESPONSE_NOTE[:30], 'characters': 40}
+        [answer], _ = self.answer([request], unit_sources=catalog)
+        self.assertEqual((answer['status'], answer['reason']), ('not_found', 'ambiguous_identity'))
         [entry], _ = self.check([excerpt], unit_sources={})
         self.assertEqual(entry['reason'], 'no_stored_text')
+
+    def test_a_part_of_a_captured_response_is_saved_as_plain_text(self):
+        from research_harness import openness_reading
+        data = json.dumps({'results': [RESPONSE_NOTE] * 2000}).encode('utf-8')
+        whole = self.artifacts.put(data, 'application/json')
+        row = {'kind': 'search_response', 'source_id': self.source_id, 'text_sha256': whole['sha256'],
+               'artifact': whole}
+        units = openness_reading.list_reading_units(self.artifacts, [row])
+        self.assertGreater(len(units), 1)
+        for unit in units:
+            self.assertEqual((unit['kind'], unit['source_id'], unit['text_sha256']),
+                             ('search_response', self.source_id, whole['sha256']))
+            self.assertEqual(unit['artifact_descriptor']['media_type'], 'text/plain; charset=utf-8')
+        parts = [unit['artifact_descriptor'] for unit in units]
+        self.assertEqual(b''.join(self.artifacts.read({'path': part['location'], 'sha256': part['sha256'],
+                                                       'size': part['size'], 'media_type': part['media_type']})
+                                  for part in parts), data)
 
     def test_a_reading_response_refuses_a_passage_request_with_mixed_identity_fields(self):
         from research_harness import openness_reading

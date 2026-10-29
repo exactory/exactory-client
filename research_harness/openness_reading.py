@@ -35,8 +35,8 @@ NOTES_CHARACTERS = 20000
 INVALID_RESPONSE = 'invalid_reading_response'
 RESPONSE_FIELDS = ('schema_version', 'stage', 'subject_digest', 'claim_digest', 'reviewer', 'excerpts', 'notes',
                    'passage_requests')
-# A part of a record is a fragment of its JSON text, so it is saved as plain text.
-RECORD_PART_MEDIA_TYPE = 'text/plain; charset=utf-8'
+# A part of a record or of a captured response is a fragment of its body, so it is saved as plain text.
+PART_MEDIA_TYPE = 'text/plain; charset=utf-8'
 BODY_WITHHELD_DELIVERY = 'body-delivered-in-reading-turns'
 BODY_WITHHELD_NOTE = 'Delivered complete in reading turns {}; body withheld to fit the route input limit.'
 NOTES_WITHHELD_NOTE = 'The notes of turn {} are withheld from this input so that it fits the route input limit.'
@@ -247,11 +247,13 @@ def _describe_identity(value):
 def list_reading_texts(records, native):
     """The full-text rows of an openness packet: for each version that a bound reading read, the extracted text of each
     of its main captures that the packet carries as evidence, so that a capture recorded after the export does not
-    enlarge the chain. A row is {kind, version_id, text_sha256, artifact}; the rows follow the packet's
-    text_delivery_priority, then the version id and the text digest."""
+    enlarge the chain. An alternate main body that the packet's openness_delivery contract omits is not read; the
+    selected representation of its version is. A row is {kind, version_id, text_sha256, artifact}; the rows follow
+    the packet's text_delivery_priority, then the version id and the text digest."""
     from .graph import main_captures
     bound = set(native['scientific_context']['openness_minimum']['reading_digests'])
-    carried = {entry['artifact']['sha256'] for entry in native['evidence']}
+    omitted = set((native['scientific_context'].get('openness_delivery') or {}).get('alternate_body_digests', []))
+    carried = {entry['artifact']['sha256'] for entry in native['evidence']} - omitted
     priority = {sha256: index for index, sha256 in
                 enumerate(native['scientific_context'].get('text_delivery_priority', []))}
     ranks, rows = {}, {}
@@ -305,14 +307,14 @@ def list_reading_rows(records, artifacts, native):
 
 def list_reading_units(artifacts, rows):
     """The reading units of whole rows, in order: each body whole when it fits one turn's reading budget, otherwise its
-    consecutive parts, each saved as its own text artifact, a part of a record as plain text. A unit is the row's kind
-    and identity with {part, parts, start, end, characters, artifact_descriptor}, where start and end are character
-    offsets in the whole body."""
+    consecutive parts, each saved as its own text artifact, a part of a record or a captured response as plain text.
+    A unit is the row's kind and identity with {part, parts, start, end, characters, artifact_descriptor}, where start
+    and end are character offsets in the whole body."""
     units = []
     for row in rows:
         content = artifacts.read(row['artifact']).decode('utf-8')
         spans = review_excerpts.compute_part_spans(content)
-        media_type = RECORD_PART_MEDIA_TYPE if row['kind'] == 'record' else None
+        media_type = None if row['kind'] == 'fulltext' else PART_MEDIA_TYPE
         for part, (start, end) in enumerate(spans, 1):
             reference = review_excerpts.save_part(artifacts, content, row['artifact'], start, end, media_type)
             units.append(dict(_describe_identity(row), part=part, parts=len(spans), start=start, end=end,

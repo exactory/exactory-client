@@ -510,6 +510,59 @@ class KmpShapedChainTests(FinalTurnCase):
         self.assertEqual(assess_openness(self.store.snapshot()['records'], self.artifacts), [])
 
 
+class AlternateRepresentationTests(unittest.TestCase):
+    """An openness packet with native reviews selects one main representation of each read version. The alternate
+    that its openness_delivery contract omits is not a reading unit, so a small packet stays a single turn."""
+
+    def setUp(self):
+        import test_problem_openness_native_reviews as native_fixtures
+        import test_research_problem_openness_minimum as minimum_fixtures
+        from codex_route_fixtures import record_codex_route
+        from research_harness.literature import import_bundle
+        from research_harness.reading import record_reading
+        self.case = case = native_fixtures.NativeOpennessReviewTests()
+        self.addCleanup(case.doCleanups)
+        case.setUp()
+        self.work = case.metadata()
+        abstract = case.artifacts.read(case.store.snapshot()['records']['work'][self.work]['abstract']).decode()
+        self.pdf = case.capture(self.work, pdf_text=abstract + '\nComplete authored source l. ' * 24
+                                + '\nReferences: none.\f')
+        self.html = case.capture(self.work, body='Alternative complete authored source. ' * 35 + 'References: none.')
+        for name, capture in (('pdf', self.pdf), ('html', self.html)):
+            bundle = case.bundle(self.work, capture, bundle_id=name + '-bundle')
+            self.use_span_locators(bundle)
+            case.mutate(import_bundle, bundle)
+            case.mutate(record_reading, case.full_note(bundle, name + '-reading'))
+        case.search = minimum_fixtures.ProblemOpennessMinimumTests.search(case, [self.work])
+        record_codex_route(case, 'codex-route')
+
+    def use_span_locators(self, value):
+        """Locate the quotations of a bundle by span, so that each reading links the extracted text it read."""
+        if isinstance(value, dict):
+            if value.get('locator', {}).get('kind') == 'text':
+                value['locator'] = self.case.span(value['artifact'], value['locator']['quote'], 'span')
+            for item in value.values():
+                self.use_span_locators(item)
+        elif isinstance(value, list):
+            for item in value:
+                self.use_span_locators(item)
+
+    def test_an_omitted_alternate_representation_is_not_a_reading_unit(self):
+        case = self.case
+        native = case.export(assignment='openness-codex')
+        delivery = native['scientific_context']['openness_delivery']
+        self.assertEqual(delivery['sources'][0]['selected_text_sha256'], self.pdf['text']['sha256'])
+        self.assertIn(self.html['text']['sha256'], delivery['alternate_body_digests'])
+        records = case.store.snapshot()['records']
+        self.assertEqual([row['text_sha256'] for row in openness_reading.list_reading_texts(records, native)],
+                         [self.pdf['text']['sha256']])
+        assignment = case.mutate(protocol.record_assignment, {
+            'id': 'openness-codex', 'route_id': 'codex-route', 'dossier_id': None, 'role': 'native_math',
+            'reviewer_id': native['reviewer']['actor_id'], 'author_id': 'problem-author',
+            'context': {'native_packet': case.pin_json(native)}})['result']
+        self.assertNotIn('reading_chain', assignment)
+
+
 class ReadingPromptTests(unittest.TestCase):
     def test_the_v1_and_v2_prompts_keep_their_bytes_and_the_v3_prompts_state_the_new_rules(self):
         v1, v2 = openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2

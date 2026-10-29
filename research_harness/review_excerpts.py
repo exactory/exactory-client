@@ -217,6 +217,16 @@ def find_source_reference(records, identity, unit_sources=None):
     return next(iter(bodies.values())) if len(bodies) == 1 else None
 
 
+def _find_missing_reason(identity, unit_sources):
+    """Why an identity names no stored text: it names several bound bodies without text_sha256, or none."""
+    values = dict(identity[1:])
+    if unit_sources is not None and 'text_sha256' not in values:
+        required = IDENTITY_FIELDS[identity[0]][0]
+        if len(unit_sources.get((identity[0],) + tuple((key, values.get(key)) for key in required), {})) > 1:
+            return 'ambiguous_identity'
+    return 'no_stored_text'
+
+
 def _read_sources(records, artifacts, identities, unit_sources=None):
     """The stored text that each identity names, with its normalized form and offsets."""
     sources = {}
@@ -260,7 +270,7 @@ def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=Non
         phrase, _ = normalize_with_offsets(excerpt['text'])
         span = None
         if source is None:
-            reason = 'no_stored_text'
+            reason = _find_missing_reason(identity, unit_sources)
         elif len(phrase) < MINIMUM_PHRASE_CHARACTERS:
             reason = 'too_short'
         else:
@@ -291,8 +301,8 @@ def answer_passages(records, artifacts, requests, allowances, *, unit_sources=No
         source = sources.get(find_identity(request))
         span = None if source is None else _locate(source, normalize_with_offsets(request['anchor'])[0])
         if span is None:
-            answers.append(dict(answer, status='not_found',
-                                reason='no_stored_text' if source is None else 'anchor_not_found'))
+            answers.append(dict(answer, status='not_found', reason='anchor_not_found' if source is not None
+                                else _find_missing_reason(find_identity(request), unit_sources)))
             continue
         start = span[0]
         end = min(start + request['characters'], len(source['text']))
