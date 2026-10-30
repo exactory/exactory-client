@@ -340,7 +340,6 @@ def _finish_reconciliation(store, payload, observation, expected_revision, reque
 
 
 def _reconcile(store, payload, expected_revision, request_id):
-    fields(payload, ("admission_id",), ("resolution", "reason"))
     admission_id = payload["admission_id"]
     records = store.snapshot()["records"]
     claim = records.get("execution_claim", {}).get(admission_id)
@@ -426,6 +425,8 @@ def _reconcile(store, payload, expected_revision, request_id):
 
 
 def reconcile_execution(store, payload, *, expected_revision, request_id, owned=False):
+    fields(payload, ("admission_id",), ("resolution", "reason"))
+    text(payload["admission_id"], "Admission ID")
     if owned:
         return _reconcile(store, payload, expected_revision, request_id)
     with _owner(store.root, payload["admission_id"]):

@@ -329,6 +329,8 @@ def record_publication_scope(store, payload, *, expected_revision, request_id):
 def select_publication_scope(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ("id",), code=_CODE)
+        if value["id"] is not None:
+            text(value["id"], "Publication scope ID", code=_CODE)
         if value["id"] is not None and value["id"] not in records.get("publication_scope", {}):
             raise ResearchError("publication_scope_missing", "Select an existing immutable contract or null")
         return [("publication_scope_selection", "current", value)], value

@@ -18,7 +18,7 @@ from .evidence import digest
 from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .limits import describe_depth, limits_report
-from .operations import fields
+from .operations import fields, text
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
 from .storage import Store, check_command_bounds
@@ -319,6 +319,7 @@ def acquisition_command(store, command, payload, identity, *, preview=False):
         fields(payload, ("link", "url"), ("max_requests",))
         return visual_assets.acquire_visual_asset(store, **payload, **identity)
     fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
+    text(payload["response_file"], "Response file")
     values = dict(payload)
     values["response"] = Path(values.pop("response_file")).read_bytes()
     if preview:

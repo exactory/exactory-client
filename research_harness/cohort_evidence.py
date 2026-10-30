@@ -27,6 +27,8 @@ from .source_links import TEXT_KINDS, captured_source, contains, covers_text, ex
 def _selection_values(records, value):
     fields(value, ("collection_id", "work_id", "unresolved_assertion_id", "selected_assertion_id", "reason"), code="invalid_cohort_selection")
     text(value["reason"], "Current abstract selection reason", code="invalid_cohort_selection")
+    for key in ("collection_id", "work_id", "unresolved_assertion_id", "selected_assertion_id"):
+        text(value[key], key, code="invalid_cohort_selection")
     collection = records.get("collection", {}).get(value["collection_id"])
     member = next((m for m in records.get("cohort_member", {}).values()
                    if m["collection_id"] == value["collection_id"] and m["work_id"] == value["work_id"]), None)
