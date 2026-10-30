@@ -129,7 +129,7 @@ def classify_observed_output(records, artifacts, attempt_id):
             # Reading the bound bodies stays outside the contract check: an unavailable body is not an output failure.
             if not has_deliverable_passage(records, artifacts, packet, output):
                 with contract_check('native.output'):
-                    raise ResearchError(INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG)
+                    raise ResearchError(INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, {'path': '/passage_requests'})
     except ResearchError as error:
         check = getattr(error, 'contract_check', None)
         if check is not None:

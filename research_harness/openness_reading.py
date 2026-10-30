@@ -715,7 +715,8 @@ def _read_prior(records, artifacts, value, prior_id):
                             {'obligations': state['obligations']})
     prior_packet = json.loads(artifacts.read(prior['packet']))
     validate_turn_output(prior_packet, state['output'])
-    _require(has_deliverable_passage(records, artifacts, prior_packet, state['output']), PASSAGE_PROGRESS_ERR_MSG)
+    _require(has_deliverable_passage(records, artifacts, prior_packet, state['output']), PASSAGE_PROGRESS_ERR_MSG,
+             path='/passage_requests')
     if state['output'].get('stage') != 'reading':
         raise ResearchError('review_resampling_forbidden',
                             'A final turn that returned the native result ends the chain')
@@ -1134,7 +1135,8 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
             raise ResearchError('openness_reading_incomplete', 'A math reading chain ends at its first final turn that '
                                 'returns the native result', {'assignment_id': assignment['id']})
         if not last:
-            _require(has_deliverable_passage(records, artifacts, packet, output), PASSAGE_PROGRESS_ERR_MSG)
+            _require(has_deliverable_passage(records, artifacts, packet, output), PASSAGE_PROGRESS_ERR_MSG,
+                     path='/passage_requests')
             record = _extend_record(records, artifacts, packet, {'output': output}, rows, observations[:index + 1],
                                     MATH_PROTOCOL)
 

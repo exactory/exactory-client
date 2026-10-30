@@ -15,9 +15,10 @@ class ReadingProtocolPromptTests(unittest.TestCase):
     def test_the_v3_prompts_keep_their_0_66_3_hashes(self):
         for stage, template_hash in V3_PROMPT_HASHES.items():
             with self.subTest(stage=stage):
-                for prompt in (protocol.canonical_prompt('native_math', reading_stage=stage),
+                # The hashes pin the renderings of 0.66.3, which opened with the common text of version 1.
+                for prompt in (protocol.canonical_prompt('native_math', reading_stage=stage, common_version=1),
                                protocol.canonical_prompt('native_math', reading_stage=stage,
-                                                         reading_protocol=openness_reading.PROTOCOL)):
+                                                         reading_protocol=openness_reading.PROTOCOL, common_version=1)):
                     self.assertEqual((prompt['template_id'], prompt['template_hash'], prompt['rendered_prompt_hash']),
                                      (openness_reading.PROTOCOL + '/' + stage, template_hash, template_hash))
 
