@@ -260,6 +260,29 @@ class ParserCheckTests(CheckCommandMixin, unittest.TestCase):
             self.assertEqual(checked.returncode, written.returncode, checked.stdout)
             self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
 
+    def test_a_symlink_at_a_generated_view_refuses_check_and_write_before_any_event(self):
+        with read_command_parsers():
+            from search_controller.service import Controller
+            fixtures = runpy.run_path(str(PLUGIN / "skills/math-solver/harness/tests/search_fixtures.py"))
+            attack_root = self.root / "attack"
+            attack_root.mkdir()
+            controller = Controller(attack_root)
+            controller.command("init", {"contract": fixtures["contract"]()}, 0, "initialize")
+            view = attack_root / "SEARCH_TREE.md"
+            view.unlink()
+            view.symlink_to("missing-view.md")
+            arguments = ["--attack-root", str(attack_root), "search", "render", "--expected-revision", "1",
+                         "--request-id", "linked-view"]
+            before = self.read_workspace()
+            checked = self.invoke_program("exactory-math", [*arguments, "--check"])
+            self.assertEqual(self.read_workspace(), before)
+            written = self.invoke_program("exactory-math", arguments)
+            self.assertEqual(written.returncode, 1, written.stderr)
+            self.assertEqual(json.loads(written.stderr)["error"]["code"], "unsafe_path")
+            self.assertEqual(controller.status()["revision"], 1)
+            self.assertEqual(checked.returncode, written.returncode, checked.stdout)
+            self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
+
     def test_math_check_refuses_an_unsafe_writer_lock_without_changing_it(self):
         with read_command_parsers():
             from search_controller.service import Controller

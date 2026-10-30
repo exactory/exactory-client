@@ -527,6 +527,10 @@ class Controller:
         paths = {"SEARCH_TREE.md"} | {n["attack_slug"] + "/LINEAGE.md" for n in state["nodes"].values()}
         if name == "admit":
             paths.add(proposal["attack_slug"] + "/LINEAGE.md")
+        for relative in sorted(paths):
+            # Rendering refuses a symlink at a generated view, so the operation refuses it before anything is recorded.
+            s.require(not safe_path(self.root, relative).is_symlink(), "Generated views cannot be symlinks",
+                      "unsafe_path")
         preserved = set()
         for effect in state["service"]["effects"]:
             if effect["kind"] == "preserve_manual_views":
