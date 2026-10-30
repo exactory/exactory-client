@@ -1591,6 +1591,9 @@ def build_parser():
         verify_command.add_argument("slug")
         verify_command.add_argument("step_dir", metavar="step-dir")
         verify_command.set_defaults(run=run)
+        verify_command.add_argument("--check", action="store_true")
+    for item in (init, plan, rank, journal_add, fail, stall, check_unit, finish, task_add, task_done):
+        item.add_argument("--check", action="store_true")
     install_parser(commands, DEFAULT_STRATEGIES_DIR)
     return parser
 
@@ -1601,6 +1604,8 @@ def main(argv=None):
     context = None
     try:
         args = build_parser().parse_args(argv)
+        if getattr(args, "check", False) and args.command != "search":
+            raise SearchError("check_unsupported", "Check mode cannot prepare native filesystem or execution effects")
         from search_controller.integration import before_legacy, after_legacy, task_write_guard
         with task_write_guard(args):
             context = before_legacy(args)

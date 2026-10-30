@@ -906,7 +906,7 @@ class TestState(_InsideWorkspaceTestCase):
             "                              [--loop-budget LOOP_BUDGET]\n"
             "                              [--loop-notes LOOP_NOTES]\n"
             "                              [--expected-revision EXPECTED_REVISION]\n"
-            "                              [--request-id REQUEST_ID]\n"
+            "                              [--request-id REQUEST_ID] [--check]\n"
             "exactory-lab state set: error: argument --stage: invalid choice: 'escape' "
             "(choose from initiate, cohort, literature, ideate, experiment, write, evaluate, deposit, submit, complete)\n")
 

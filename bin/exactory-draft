@@ -1714,12 +1714,17 @@ def _build_parser() -> argparse.ArgumentParser:
              " It never publishes.")
     attach_problem.set_defaults(handler=_run_attach_problem)
 
+    for item in (init, package, deposit, reconcile, attach_problem):
+        item.add_argument("--check", action="store_true")
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
     try:
+        if getattr(args, "check", False):
+            raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
+                                {"command": args.command})
         args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))

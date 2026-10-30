@@ -284,6 +284,7 @@ def build_parser():
     packet = commands.add_parser("strategy-packet", allow_abbrev=False,
                                  help="Build a canonical reviewer packet without recording approval.")
     packet.add_argument("--workspace", default=".")
+    packet.add_argument("--check", action="store_true")
     packet.add_argument("--dossier-id")
     packet.add_argument("--role", choices=review_protocol.ROLES, required=True)
     packet.add_argument("--reviewer-id", required=True)
@@ -459,7 +460,7 @@ def run(args):
     if args.command == "example":
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
-    if getattr(args, "check", False) and args.command in ("batches", "export", "recover", "restore"):
+    if getattr(args, "check", False) and args.command in ("batches", "export", "recover", "restore", "strategy-packet"):
         raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
                             {"command": args.command})
     preview = args.command == "import-response" and args.preview

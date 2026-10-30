@@ -15,7 +15,7 @@ from literature_fixtures import LiteratureCase
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
-RESEARCH_RUNS = Path(os.environ.get("EXACTORY_TEST_RESEARCH_RUNS", "/Users/ryshiro/exactory/exactory-research"))
+RESEARCH_RUNS = Path(os.environ.get("EXACTORY_TEST_RESEARCH_RUNS", tempfile.gettempdir()))
 
 
 class ProvisionalStatusTests(LiteratureCase):

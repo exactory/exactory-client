@@ -27,6 +27,7 @@ from research_harness.storage import Store
 from research_harness.integration import (command_identity, current_store, initialization_payload, initialize_workspace,
                                            study_state, update_study, record_decision)
 from research_harness.cli import add_identity
+from research_harness.check_mode import check_mutation
 
 # The release version has one definition: the plugin manifest. Deriving the
 # User-Agent from it at boot keeps the two from drifting apart.
@@ -285,10 +286,10 @@ def _run_state_set(args: argparse.Namespace) -> None:
         changes.setdefault("loop", {})["notes"] = args.loop_notes
     try:
         store = current_store(workspace_dir)
-        result = update_study(store, changes, **command_identity(store, args))
+        result = _prepare_command(store, update_study, changes, args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
-    print(json.dumps(result["result"], indent=2))
+    print(json.dumps(result if getattr(args, "check", False) else result["result"], indent=2))
 
 
 def _run_decide(args: argparse.Namespace) -> None:
@@ -300,10 +301,17 @@ def _run_decide(args: argparse.Namespace) -> None:
         stage = args.stage or _load_study_state(workspace_dir)["stage"]
         store = current_store(workspace_dir)
         entry = {"stage": stage, "decision": args.decision, "why": args.why, "evidence": args.evidence or ""}
-        result = record_decision(store, entry, **command_identity(store, args))
+        result = _prepare_command(store, record_decision, entry, args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
-    print(json.dumps(result["result"], indent=2))
+    print(json.dumps(result if getattr(args, "check", False) else result["result"], indent=2))
+
+
+def _prepare_command(store, operation, payload, args):
+    identity = command_identity(store, args)
+    if getattr(args, "check", False):
+        return check_mutation(store, operation, payload, bounded_payload=payload, **identity)
+    return operation(store, payload, **identity)
 
 
 # Shared-folder compute uses the same admitted execution protocol as local runs.
@@ -540,12 +548,20 @@ def _build_parser() -> argparse.ArgumentParser:
                                   " EXACTORY_LAB_COLAB_POLL or 10.")
     colab_serve.set_defaults(handler=_run_colab_serve)
 
+    for item in (init, state_set, decide, run, probe, colab_serve):
+        item.add_argument("--check", action="store_true")
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
-    args.handler(args)
+    try:
+        if getattr(args, "check", False) and args.handler not in (_run_state_set, _run_decide):
+            raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
+                                {"command": args.command})
+        args.handler(args)
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
 
 
 if __name__ == "__main__":

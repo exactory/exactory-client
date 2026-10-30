@@ -20,7 +20,9 @@ def print_error(error):
 
 
 def run_search(args):
-    from .service import Controller
+    from .service import Controller, require_checkable_command
+    if getattr(args, "check", False):
+        require_checkable_command(args.search_command)
     controller = Controller(args.attack_root, args.strategies)
     spec = {}
     if getattr(args, "spec", None) is not None:
@@ -46,7 +48,8 @@ def run_search(args):
                                 revision,
                                 getattr(args, "request_id", None), getattr(args, "target", None),
                                 workspace_root=getattr(args, "workspace_root", None),
-                                hook_session=validation if internal else None)
+                                hook_session=validation if internal else None,
+                                check=getattr(args, "check", False))
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=None if args.json else 2))
 
 
@@ -82,4 +85,6 @@ def install_parser(commands, strategies_default):
             parser.add_argument("--expected-revision", type=int, required=name != "hook-stop")
             parser.add_argument("--request-id", required=True)
         parser.add_argument("--json", action="store_true")
+        if name not in {"status", "next", "strategy-context"}:
+            parser.add_argument("--check", action="store_true")
         parser.set_defaults(run=run_search)
