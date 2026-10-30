@@ -11,8 +11,14 @@ between the inner loop (which you can re-run) and the outer loop (which runs
 against something that no longer moves).
 
 Run every command from the workspace root, the directory that holds
-`.exactory/draft.json`. The tools are `exactory-draft` and `exactory-check`, on
-PATH while this plugin is enabled.
+`.exactory/draft.json`. A managed study holds that file after it entered
+`write` with an objective that carries `title` and `category` and with neither
+a draft record nor an entry at that path, or after the step that `status`
+names under `draft_marker_missing`. The deposit reads the paper's title from
+that file, so when `exactory-research status --summary` names
+`draft_marker_missing`, take the step that its message names before the
+deposit (the ai-science skill's STUDY.md lists every state). The tools are
+`exactory-draft` and `exactory-check`, on PATH while this plugin is enabled.
 
 ## Before anything else
 
@@ -65,8 +71,12 @@ PATH while this plugin is enabled.
    names exactory.ai as the paper's writer when the PDF comes from this
    workspace's `draft/` tree and `.exactory/authorship.json` reads
    `written_by_exactory` true, which the plugin writes when an agent writes a
-   LaTeX source under `draft/`, and otherwise it states only that the paper was
-   prepared with AI assistance and deposited through exactory.ai. The PDF is
+   whole `.tex` file under `draft/` with the Write tool while
+   `.exactory/draft.json` is a file (the hook does not compare that file with
+   the draft record), and otherwise it states only that the paper was prepared
+   with AI assistance and deposited through exactory.ai. A later creation,
+   export, adoption or move of the marker records nothing for a source written
+   before it, so an older study can carry the second disclosure. The PDF is
    uploaded as `paper.pdf` and listed first; the sources archive follows it.
    State the command in the report beside its result: the record DOI and the
    concept DOI. The concept DOI names the paper across all its versions;

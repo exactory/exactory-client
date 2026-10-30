@@ -96,8 +96,14 @@ standard or `unspecified`, deliverables, publication instructions, resources and
 branch relationship. Do not invent a resource cap or ask again about existing
 authority. The prospective `strategy` uses a proposed-content binding before a
 native target exists. The independently assessed bar and slate decision precede
-exact target commitment. Cycle planning and admission require configuration and
-the current cycle decision; the complete synthesis report remains advisory.
+exact target commitment. Commit the objective with its optional `title` (the
+working title of the paper) and `category` (its arXiv category) beside the
+statement: entering `write` records the draft workspace from them when no draft
+record and no `.exactory/draft.json` entry exist (STUDY.md gives every state).
+`target` treats the two fields added to a committed objective as a change of
+the objective and refuses them with `objective_locked`. Cycle planning and
+admission require configuration and the current cycle decision; the complete
+synthesis report remains advisory.
 
 Inspect the observed output artifact from each `bar`, `slate` or `result`
 `review-run` for `source_requests` before recording a final `value-review` or
@@ -134,8 +140,19 @@ Use the combined support/value assessment and current
 Develop the supported consequence or honor a justified `deliver_requested`
 decision covered by the user's instruction. If the promised consequence shrinks,
 reconsider it against the original slate and later leads without credit for sunk
-effort. Preserve critical gaps and the original unmet aim. A branch may close
+effort. Preserve critical gaps and the original unmet aim. A branch can close
 with a result/failure report before any manuscript exists.
+
+Enter writing with `exactory-lab state set --stage write`. When the objective
+carries `title` and `category` and the workspace holds neither a draft record
+nor a `.exactory/draft.json` entry, that transition records the draft
+workspace, and the export writes `.exactory/draft.json` (the marker) and
+creates `draft/`. While no draft record exists, or the marker is not a regular
+file that holds the record's JSON, `status` and `next` select
+`draft_marker_missing` as `next` (the full list appends it after the other
+obligations), and STUDY.md names the step for the state. Take that step before
+the first LaTeX source: the authorship hook records a `.tex` file written with
+Write under `draft/` only while `.exactory/draft.json` is a file.
 
 After manuscript measurement, carry critical findings and every reviewer-demand
 disposition into the same canonical `research-decision`. Old `round`,

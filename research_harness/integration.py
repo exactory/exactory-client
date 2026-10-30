@@ -17,7 +17,7 @@ from .gates import STAGES, gate_state, validate_transition
 from .operations import _read_preparation, fields, immutable_record, prepared_mutation, strings, text
 from .principles import prepare_initialization
 from .storage import Store
-from .workspace import json_projection, read_file, strict_json, write_projection
+from .workspace import json_projection, parse_workspace_marker, read_file, strict_json, write_projection
 
 
 def now():
@@ -245,10 +245,7 @@ def adopt_workspace(store, payload, *, expected_revision, request_id):
             snapshots.append({"path": path, "artifact": artifacts.put(raw, "application/octet-stream")})
             for kind in ("study", "draft", "deposit"):
                 if path == ".exactory/" + kind + ".json" and kind not in records.get("workspace", {}):
-                    marker = strict_json(raw)
-                    if not isinstance(marker, dict) or marker.get("version", 1) not in (1, 2):
-                        raise ResearchError("migration_required", "Unsupported legacy workspace marker")
-                    changes.append(("workspace", kind, marker))
+                    changes.append(("workspace", kind, parse_workspace_marker(raw)))
         adoption = dict(value, snapshots=snapshots, imported_at=now(), scientific_validation=False,
                         obligations=[{"code": "legacy_evidence_pending", "message": "Historical notes do not establish source reading, prospective execution or current readiness."}])
         changes.append(immutable_record(records, "workspace_adoption", value["id"], adoption))

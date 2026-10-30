@@ -9,7 +9,13 @@ current action in the [decision protocol](../../docs/research-decisions.md).
 The manuscript reviews
 described here evaluate the exact paper separately.
 
-`exactory-draft init` creates this layout. Every path below is relative to the
+`exactory-draft init` creates this layout from its own `--title` and
+`--category`. In a managed study, entering stage `write` records the draft
+workspace instead when the objective carries `title` and `category` and the
+workspace holds neither a draft record nor a `.exactory/draft.json` entry. The
+export then writes `.exactory/draft.json` and creates `draft/`. An entry that
+already exists at that path blocks this, and the ai-science skill's STUDY.md
+names the recovery for each kind of entry. Every path below is relative to the
 workspace root. In a full Exactory AI Science study the workspace also carries
 the study layer (context, cohort, idea, experiment); that fuller layout is in
 the ai-science skill's STUDY.md. The measurement protocol and iteration cadence
@@ -32,6 +38,12 @@ below are what the ai-science loop (LOOP.md) refers to.
 `.exactory/draft.json` projects the managed draft fields, including its common
 research Store reference. The CLI writes it. Read `exactory-research status --summary`
 and `next --summary` for authoritative obligations rather than editing the projection.
+The draft record in the store is the authority. In a managed study at stage
+`write`, `status` lists `draft_marker_missing` while the file is missing, is not
+a regular file, or holds JSON that differs from the record (compared as parsed
+JSON, not as bytes), and also while a file, a link or another entry exists at
+that path with no draft record. The ai-science skill's STUDY.md names the step
+for each state.
 
 ## research/literature.md: the survey log
 

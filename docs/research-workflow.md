@@ -56,7 +56,7 @@ store so existing studies continue from their recorded state.
 | `literature` | Commit the direction. Completing this stage and entering `ideate` require `gate direction`. |
 | `ideate` | Plan the investigation. Entering `experiment` requires `gate execution` with a valid pending admission. |
 | `experiment` | Assess actual results and checkpoint them. Entering writing requires the current result decision and applicable readiness gate. |
-| `write` | Pin the exact evidence-grounded manuscript with citation accounting. |
+| `write` | Pin the exact evidence-grounded manuscript with citation accounting. Entering it records the draft workspace from the objective's `title` and `category` when both exist and the workspace holds neither a draft record nor a `.exactory/draft.json` entry. `status` lists `draft_marker_missing` while no draft record exists or the marker disagrees with its record, and the [CLI reference](research-cli.md#status-projections-and-recovery) names the step for each state. |
 | `evaluate` | Measure that bundle blindly and decide the next action. |
 | `deposit`, `submit`, `complete` | Satisfy publication gates and preserve confirmed endpoint receipts. |
 
@@ -313,7 +313,13 @@ the same statement is refused.
 ## Initiate and resume
 
 Create an author study once. Keep the initial target pending while literature
-informs the prospective comparison of the objective and first approach.
+informs the prospective comparison of the objective and first approach. When
+the direction milestone commits the objective, give it `title` and `category`
+beside the statement: entering `write` records the draft workspace from them,
+and `target` refuses the two fields added to a committed objective
+(`objective_locked`). A study whose objective lacks them records the draft
+later with `exactory-draft init --title TITLE --category CATEGORY`, from the
+command's own values, and the objective does not change.
 
 ```sh
 exactory-lab init --dir study --slug study --expected-revision 0 --request-id initialize-study
@@ -954,6 +960,37 @@ limited delivery requires all old cycles to be executed again.
 
 ## ai-science: manuscript and publication milestones
 
+Entering `write` records the draft workspace when the objective carries
+`title` and `category`, no draft record exists, and no entry exists at
+`.exactory/draft.json`. The export then writes `.exactory/draft.json` (the
+marker) and creates `draft/`. Otherwise entering `write` records no draft.
+While no draft record exists, or the marker is not a regular file that holds
+the record's JSON, `status` and `next` select `draft_marker_missing` as `next`
+(the full list appends it after the other obligations), and its message names
+the step for the state:
+
+- A draft record whose marker is missing, differs or is a link: `export`.
+- A draft record whose entry is a directory or another type: move the entry
+  to an unused name in `.exactory/`, then `export`.
+- No record, and a regular file that holds a JSON object with `version`
+  absent, 1 or 2: `adopt` with `.exactory/draft.json` in `files`.
+- No record, and a link (dangling included), a directory or a file that
+  adoption refuses: move the entry to an unused name in `.exactory/`, then
+  run `status` again.
+- Neither record nor entry, and the objective lacks a field, or has both
+  while the study status is `done`:
+  `exactory-draft init --title TITLE --category CATEGORY`.
+- Neither record nor entry, both fields, and a status other than `done`:
+  `exactory-lab state set --stage write`.
+
+Take that step before the first LaTeX source. The authorship hook records
+`written_by_exactory` for a whole `.tex` file written with Write under
+`draft/` only while `.exactory/draft.json` is a file, and no later creation,
+export, adoption or move of the marker records an earlier source.
+`exactory-draft deposit` reads the paper's title from the marker. The
+[CLI reference](research-cli.md#status-projections-and-recovery) gives the
+obligation's fields and every state.
+
 Draft from the reviewed evidence and field standards. Keep source support,
 source-level contradiction, unsupported attribution, and unresolved access
 separate from scientific proof, replication, or refutation. Every quantitative
@@ -1169,6 +1206,21 @@ grand-challenge orchestrations, and Version 7 adoption compatibility for
 verification and native verification nodes, are out of scope for this release.
 The problem-creation orchestration of `math-conjecturer` adopts Version 7 when
 `problem-init` creates its configuration.
+
+A study at `write` whose objective predates the fields `title` and `category`
+keeps that objective: `target` refuses the two fields on a committed
+objective, and the study does not need them. `status` lists
+`draft_marker_missing` and names the step for the state. When the workspace
+holds neither a draft record nor an entry at `.exactory/draft.json`,
+`exactory-draft init --title TITLE --category CATEGORY` in the study root
+records the draft from its own values and writes the marker. A regular file
+there that holds a JSON object with `version` absent, 1 or 2, with no draft
+record, is adopted with `adopt` (`.exactory/draft.json` in `files`), and
+`init` refuses the directory while that file exists. A link, a directory or a
+file that adoption refuses is first moved to an unused name in `.exactory/`,
+and `status` then names the next step. A draft record whose marker is missing
+or differs is written again with `export`. No step records authorship for a
+source written before the marker.
 
 ## Verification and native mathematics
 

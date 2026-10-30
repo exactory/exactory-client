@@ -145,6 +145,19 @@ source, then continue to stage 2.
 
 ## Stage 2: Draft
 
+In a managed study, entering `write` writes `.exactory/draft.json` (the marker)
+when the objective carries `title` and `category` and the workspace holds
+neither a draft record nor an entry at that path. When `next --summary` names
+`draft_marker_missing`, take the step that its message names before the first
+LaTeX source. The ai-science skill's STUDY.md lists every state: export for a
+record whose marker is missing or differs, adoption for a supported file
+without a record, a move of a link, a directory or an unsupported file to an
+unused name, and draft initialization when neither record nor entry exists.
+The authorship hook records `written_by_exactory` for a `.tex` file written
+with Write under `draft/` only while `.exactory/draft.json` is a file, and no
+later creation, export, adoption or move of the marker records an earlier
+source.
+
 Write section by section, LaTeX under `draft/`; `references.bib` lives there.
 Read the current field standards and source-grounded `cohort/doctrine.md`. Assess
 the applicable article type and venue when chosen, including methodological,
