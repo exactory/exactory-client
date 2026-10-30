@@ -3,6 +3,7 @@
 import copy
 import importlib.util
 import json
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -20,7 +21,7 @@ class ReviewProtocolTests(LiteratureCase):
             self.assertIn(field, current["text"])
         self.assertIn("nonempty JSON string", current["text"])
         self.assertIn("not an object or an array", current["text"])
-        previous = canonical_prompt("native_math", version=5)
+        previous = canonical_prompt("native_math", version=5, common_version=1)
         self.assertEqual(previous["template_hash"],
                          "6ec497976123ee7a6d662870831c2bd13ba5e6523ef1d8215830e7cd905c0d37")
         self.assertNotEqual(current, previous)
@@ -30,7 +31,7 @@ class ReviewProtocolTests(LiteratureCase):
         from research_harness.review_protocol import canonical_prompt, _prompt_matches
         current = canonical_prompt("native_math")
         self.assertEqual(current["text"], current["text"].strip())
-        previous = canonical_prompt("native_math", version=4)
+        previous = canonical_prompt("native_math", version=4, common_version=1)
         self.assertEqual(previous["template_hash"],
                          "1da5f10e808a90902fb477135379b80f39acf7a6daccd5c907bb489309e956c1")
         self.assertNotEqual(current, previous)
@@ -51,7 +52,7 @@ class ReviewProtocolTests(LiteratureCase):
 
     def test_native_version_three_prompt_remains_exactly_supported(self):
         from research_harness.review_protocol import canonical_prompt, _prompt_matches
-        previous = canonical_prompt("native_math", version=3)
+        previous = canonical_prompt("native_math", version=3, common_version=1)
         current = canonical_prompt("native_math")
         self.assertEqual(previous["template_hash"],
                          "911fd529e31ca9bf8efba3c743ecdd4d9c7e4cfe11ed7d97ed830e7002c81872")
@@ -173,7 +174,7 @@ class ReviewProtocolTests(LiteratureCase):
         hashes = {('bar', False, False): 'c474378cef1646b2adf449db3087a220baa27a155b278a10c88ef2448946d244', ('bar', True, False): 'b5de936b2aab5e08cf552557cf2d6b8e10e45af60c075f3444fe80e48da9efce', ('bar', False, True): '753203addd047e8f37d5446bd6aece514020cfccbd501546d19d72be6d02e945', ('slate', False, False): '99c7b148411e7c238899f73136ceedbb0818f21cbd8639195716ebcc745431e9', ('slate', True, False): 'c36c26caa5dd602382f78af2d3da81e1639a8ccaf7720e2ce82f7d8409b2554b', ('slate', False, True): 'b8eb03c2b906125c9f50a9bfaaead5e615b8dd17ca20cbcda2885d0e2202ec07', ('result', False, False): '980dddb9ba4e1e136de898ed9824927c90ce1426e0d9c87800f68a480afc4a00', ('result', True, False): '368c1d75342c9c770ae3c11f840ed25afe7d25e220aa59b9cf19305bb5ac88cd', ('result', False, True): '13fd492f4b52adb7ed52e5358bdf3843d67a333ef57023369366d6edf5cddf9a'}
         for (role, legacy, repair), expected in hashes.items():
             with self.subTest(role=role, legacy=legacy, repair=repair):
-                prompt = p.canonical_prompt(role, legacy=legacy, repair=repair, version=1)
+                prompt = p.canonical_prompt(role, legacy=legacy, repair=repair, version=1, common_version=1)
                 self.assertEqual(prompt["template_hash"], expected)
                 assignment = {"role": role, "prompt": prompt, "reassessment_required": repair}
                 self.assertTrue(p.is_previous_prompt(assignment))
@@ -413,6 +414,151 @@ class ReviewProtocolTests(LiteratureCase):
         with patch('research_harness.review_transport.send_request',side_effect=AssertionError('replayed network call')):
             replay=p.invoke_assignment(self.store,payload,expected_revision=revision,request_id='fixed',credential='test-only')
         self.assertEqual(result,replay)
+
+    def test_busy_writer_after_response_does_not_lose_review_observation(self):
+        p = self.protocol(); self.route(); self.run_probe(); self.assign()
+        entered, release = threading.Event(), threading.Event()
+        failures = []
+        def write():
+            try:
+                def hold(tx):
+                    entered.set()
+                    if not release.wait(5):
+                        raise AssertionError('Writer was not released')
+                    tx.put('fixture_concurrency', 'writer', {'id': 'writer'})
+                self.store.mutate('fixture.writer', {}, hold, expected_revision=self.store.revision,
+                                  request_id='concurrent-writer')
+            except BaseException as error:
+                failures.append(error)
+        writer = threading.Thread(target=write)
+        def provider(route, request, credential):
+            writer.start()
+            self.assertTrue(entered.wait(5))
+            threading.Timer(0.15, release.set).start()
+            return self.response({'verdict': 'sound'})
+        try:
+            with patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.02), \
+                    patch('research_harness.review_transport.send_request', side_effect=provider) as send:
+                result = self.mutate(p.invoke_assignment, {'id': 'attempt', 'assignment_id': 'assignment'},
+                                     credential='test-only')
+            self.assertEqual(send.call_count, 1)
+            self.assertEqual(result['result']['status'], 'completed')
+        finally:
+            release.set()
+            writer.join(5)
+        self.assertEqual(failures, [])
+        self.assertTrue(p.assignment_state(self.records(), self.artifacts, 'assignment')['ready'])
+
+    def test_refused_finish_leaves_review_and_probe_pending_without_dispatch(self):
+        from research_harness.storage import Store
+        p = self.protocol(); self.route(); self.run_probe(); self.assign()
+        mutate = self.store.mutate
+        for operation, function, payload in [
+                ('review.invoke', p.invoke_assignment, {'id': 'attempt', 'assignment_id': 'assignment'}),
+                ('review.route_probe', p.probe_route, {'id': 'later-probe', 'route_id': 'route'})]:
+            with self.subTest(operation=operation):
+                revision = self.store.revision
+                def refuse(name, *args, **kwargs):
+                    if name == operation:
+                        raise ResearchError('storage_io', 'Finishing write refused')
+                    return mutate(name, *args, **kwargs)
+                with patch.object(self.store, 'mutate', side_effect=refuse), \
+                        patch('research_harness.review_transport.send_request',
+                              return_value=self.response({'verdict': 'original'})) as send:
+                    with self.assertRaises(ResearchError) as caught:
+                        function(self.store, payload, expected_revision=revision, request_id=operation)
+                self.assertEqual(caught.exception.code, 'storage_io')
+                self.assertEqual(send.call_count, 1)
+                with patch('research_harness.review_transport.send_request', side_effect=AssertionError('Must not resend')):
+                    with self.assertRaises(ResearchError) as pending:
+                        function(Store(self.root), payload, expected_revision=revision, request_id=operation)
+                self.assertEqual(pending.exception.code, 'review_invocation_pending')
+        self.assertNotIn('attempt', self.records().get('review_attempt', {}))
+
+    def test_a_workspace_file_cannot_complete_a_pending_review(self):
+        # A pending invocation's outcome is unknown to the store. Bytes that anyone can write into the workspace are no
+        # observation of the reviewer: a copy of the real observation with a changed answer never becomes an attempt.
+        from research_harness.evidence import digest
+        p = self.protocol(); self.route(); self.run_probe(); self.assign()
+        payload = {'id': 'attempt', 'assignment_id': 'assignment'}
+        revision, mutate, observe, observed = self.store.revision, self.store.mutate, p._observed, []
+        def capture(*args, **kwargs):
+            observed.append(observe(*args, **kwargs))
+            return observed[-1]
+        def refuse(operation, *args, **kwargs):
+            if operation == 'review.invoke':
+                raise ResearchError('storage_io', 'Finishing write refused')
+            return mutate(operation, *args, **kwargs)
+        with patch.object(self.store, 'mutate', side_effect=refuse), patch.object(p, '_observed', side_effect=capture), \
+                patch('research_harness.review_transport.send_request',
+                      return_value=self.response({'verdict': 'unfavorable'})):
+            with self.assertRaises(ResearchError):
+                p.invoke_assignment(self.store, payload, expected_revision=revision, request_id='forged')
+        invocation = self.records()['review_invocation']['attempt']
+        favorable = json.dumps(self.response({'verdict': 'favorable'})).encode()
+        forged = dict(observed[0], response=self.artifacts.put(favorable, 'application/json'),
+                      output=self.artifacts.put(json.dumps({'verdict': 'favorable'}).encode(), 'application/json'))
+        manifest = json.dumps({'invocation_digest': digest(invocation), 'observation': forged}).encode()
+        manifest = self.artifacts.put(manifest, 'application/json')
+        sidecar = self.root / 'research' / 'review-observations' / (digest(['review.invoke', 'forged']) + '.json')
+        sidecar.parent.mkdir(parents=True, exist_ok=True)
+        sidecar.write_text(json.dumps(manifest))
+        with patch('research_harness.review_transport.send_request', side_effect=AssertionError('Must not resend')):
+            with self.assertRaises(ResearchError) as caught:
+                p.invoke_assignment(self.store, payload, expected_revision=revision, request_id='forged')
+        self.assertEqual(caught.exception.code, 'review_invocation_pending')
+        self.assertNotIn('attempt', self.records().get('review_attempt', {}))
+
+    def test_exhausted_busy_finish_leaves_the_invocation_pending_without_dispatch(self):
+        p = self.protocol(); self.route(); self.run_probe()
+        mutate = self.store.mutate
+        for failed in (True, False):
+            with self.subTest(failed=failed):
+                # A pending invocation keeps its assignment pending, so each case has its own assignment.
+                assignment = 'assignment-failed' if failed else 'assignment-completed'
+                self.assign(identifier=assignment)
+                payload = {'id': 'failed' if failed else 'completed', 'assignment_id': assignment}
+                request_id, revision, refusals = payload['id'], self.store.revision, []
+                def refuse(operation, *args, **kwargs):
+                    if operation == 'review.invoke':
+                        refusals.append(operation)
+                        raise ResearchError('store_busy', 'Writer remains busy')
+                    return mutate(operation, *args, **kwargs)
+                with patch.object(self.store, 'mutate', side_effect=refuse), \
+                        patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001), \
+                        patch('research_harness.review_transport.send_request',
+                              side_effect=TimeoutError('Original transport failure') if failed else None,
+                              return_value=self.response({'verdict': 'original'})) as send:
+                    with self.assertRaises(ResearchError) as caught:
+                        p.invoke_assignment(self.store, payload, expected_revision=revision, request_id=request_id)
+                self.assertEqual(caught.exception.code, 'store_busy')
+                self.assertEqual(send.call_count, 1)
+                self.assertGreater(len(refusals), 8, 'a finished reviewer call waits longer than other writes')
+                self.assertLessEqual(len(refusals), p._FINISH_ATTEMPT_COUNT)
+                with patch('research_harness.review_transport.send_request', side_effect=AssertionError('Must not resend')):
+                    with self.assertRaises(ResearchError) as pending:
+                        p.invoke_assignment(self.store, payload, expected_revision=revision, request_id=request_id)
+                self.assertEqual(pending.exception.code, 'review_invocation_pending')
+
+    def test_invalid_request_ids_are_refused_before_reserving_or_dispatching(self):
+        p = self.protocol(); self.route(); self.run_probe()
+        for index, request_id in enumerate(('', ' ', '\t', '\n')):
+            with self.subTest(request_id=request_id):
+                if index < 2:
+                    assignment = 'assignment-' + str(index)
+                    self.assign(identifier=assignment)
+                    function = p.invoke_assignment
+                    payload = {'id': 'attempt-' + str(index), 'assignment_id': assignment}
+                else:
+                    function = p.probe_route
+                    payload = {'id': 'probe-' + str(index), 'route_id': 'route'}
+                before = self.store.snapshot()
+                with patch('research_harness.review_transport.send_request',
+                           return_value=self.response({'verdict': 'original'})) as send:
+                    self.assert_error('invalid_input', lambda: function(self.store, payload,
+                        expected_revision=before['revision'], request_id=request_id))
+                self.assertEqual(send.call_count, 0)
+                self.assertEqual(self.store.snapshot(), before)
 
     def test_assignment_created_before_route_probe_never_becomes_independent_retroactively(self):
         p = self.protocol(); self.route(); self.assign(); self.run_probe(); self.invoke({'verdict':'sound'})

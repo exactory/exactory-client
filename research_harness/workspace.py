@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
+import stat
 import uuid
 
 from .artifacts import _Workspace, _regular_file, _relative_parts, _filesystem_error
@@ -66,6 +67,29 @@ def read_file(root, relative):
         raise ResearchError("artifact_missing", "Required workspace file is missing", {"path": relative}) from error
     except OSError as error:
         raise _filesystem_error(error) from error
+
+
+def find_entry_kind(root, relative):
+    """The kind of entry at a checked workspace path, "absent", "regular", "link" or "other"; a final link is not
+    followed."""
+    try:
+        with checked_parent(root, relative) as (directory, name):
+            mode = os.stat(name, dir_fd=directory, follow_symlinks=False).st_mode
+    except FileNotFoundError:
+        return "absent"
+    except OSError as error:
+        raise _filesystem_error(error) from error
+    if stat.S_ISLNK(mode):
+        return "link"
+    return "regular" if stat.S_ISREG(mode) else "other"
+
+
+def parse_workspace_marker(raw):
+    """A legacy workspace marker as stored: a JSON object whose version is 1 or 2; no version counts as 1."""
+    marker = strict_json(raw)
+    if not isinstance(marker, dict) or marker.get("version", 1) not in (1, 2):
+        raise ResearchError("migration_required", "Unsupported legacy workspace marker")
+    return marker
 
 
 def write_projection(root, relative, data):

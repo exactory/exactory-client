@@ -1668,7 +1668,10 @@ def _review(context, value, candidate, *, assignment_id=None):
                                            record_id=value["id"], assignment_id=assignment_id):
         raise ResearchError("readiness_review_stale", "Assess the exact current candidate, objective, literature and result bytes")
     assessor = value["assessor"]
-    _fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"))
+    _fields(assessor, ("id", "kind", "provenance", "relationship", "independence_basis"),
+            ("author_memory_notes_present",))
+    if "author_memory_notes_present" in assessor and type(assessor["author_memory_notes_present"]) is not bool:
+        raise ResearchError("invalid_development", "Author memory notes present must be a boolean")
     for key in ("id", "relationship", "independence_basis"):
         _text(assessor[key], "Independent assessor " + key)
     _choice(assessor["kind"], ("human", "agent"), "Assessor kind")

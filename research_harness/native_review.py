@@ -4,7 +4,7 @@ from datetime import date
 import re
 
 from .artifacts import validate_reference
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .operations import fields, text
 
@@ -192,52 +192,62 @@ RESULT_FINDINGS = ("statement", "assumptions", "scope", "dependencies", "policy"
 RECOVERY_FINDINGS = ("read_only_origin", "delta", "authority", "preservation", "quiescence")
 
 
-def _require(condition, message):
+def _require(condition, message, *, path):
     if not condition:
-        raise ResearchError("invalid_native_review", message)
+        raise ResearchError("invalid_native_review", message, {"path": path})
 
 
-def _closed(value, keys, message):
-    _require(isinstance(value, dict) and set(value) == set(keys), message)
+def _closed(value, keys, message, *, path):
+    _require(isinstance(value, dict) and set(value) == set(keys), message, path=path)
 
 
 def _nonempty(value):
     return isinstance(value, str) and bool(value.strip())
 
 
-def _validate_objections(value, *, empty=False):
+def _validate_objections(value, *, empty=False, path='/unresolved_objections'):
     _require(isinstance(value, list) and (not empty or not value), "unresolved_objections must be a list" +
-             (" and empty in an approval" if empty else ""))
-    for objection in value:
-        _closed(objection, ("blocking", "description"), "Each unresolved objection is exactly {blocking,description}")
-        _require(type(objection["blocking"]) is bool and _nonempty(objection["description"]),
-                 "An objection needs a boolean blocking flag and a nonempty description")
+             (" and empty in an approval" if empty else ""), path=path)
+    for index, objection in enumerate(value):
+        item_path = path + '/' + str(index)
+        _closed(objection, ("blocking", "description"), "Each unresolved objection is exactly {blocking,description}",
+                path=item_path)
+        _require(type(objection["blocking"]) is bool,
+                 "An objection needs a boolean blocking flag and a nonempty description", path=item_path + '/blocking')
+        _require(_nonempty(objection["description"]),
+                 "An objection needs a boolean blocking flag and a nonempty description", path=item_path + '/description')
 
 
-def _validate_openness(openness, claim_digest, *, structured_coverage):
+def _validate_openness(openness, claim_digest, *, structured_coverage, path='/findings/openness'):
     _require(isinstance(openness, dict) and set(openness) - {"minimum"} == {
         "outcome", "statement_digest", "evidence", "searched_at", "coverage", "reason"},
-        "openness is exactly {outcome,statement_digest,evidence,searched_at,coverage,reason}, with minimum when supplied")
-    _require(openness["outcome"] in ("supported_open", "already_solved", "unresolved"), "Unknown openness outcome")
-    _require(openness["statement_digest"] == claim_digest, "openness.statement_digest must equal native.claim_digest")
+        "openness is exactly {outcome,statement_digest,evidence,searched_at,coverage,reason}, with minimum when supplied",
+        path=path)
+    _require(openness["outcome"] in ("supported_open", "already_solved", "unresolved"), "Unknown openness outcome",
+             path=path + '/outcome')
+    _require(openness["statement_digest"] == claim_digest, "openness.statement_digest must equal native.claim_digest",
+             path=path + '/statement_digest')
     evidence = openness["evidence"]
     _require(isinstance(evidence, list) and evidence and len(set(map(str, evidence))) == len(evidence)
              and all(isinstance(item, str) and re.fullmatch(r"[0-9a-f]{64}", item) for item in evidence),
-             "openness.evidence is a nonempty list of distinct SHA-256 digests")
-    _require(all(_nonempty(openness[key]) for key in ("searched_at", "reason")),
-             "searched_at and reason must be nonempty strings")
+             "openness.evidence is a nonempty list of distinct SHA-256 digests", path=path + '/evidence')
+    for key in ("searched_at", "reason"):
+        _require(_nonempty(openness[key]), "searched_at and reason must be nonempty strings", path=path + '/' + key)
     # problem-openness records a problem record's coverage as given, also as a nonempty list or object.
     coverage = openness["coverage"]
     _require(_nonempty(coverage) or (structured_coverage and isinstance(coverage, (list, dict)) and bool(coverage)),
-             "coverage must be a nonempty string" + (", list or object" if structured_coverage else ""))
+             "coverage must be a nonempty string" + (", list or object" if structured_coverage else ""),
+             path=path + '/coverage')
     try:
         _require(date.fromisoformat(openness["searched_at"]).isoformat() == openness["searched_at"],
-                 "openness.searched_at must be YYYY-MM-DD")
+                 "openness.searched_at must be YYYY-MM-DD", path=path + '/searched_at')
     except ValueError as error:
-        raise ResearchError("invalid_native_review", "openness.searched_at must be YYYY-MM-DD") from error
+        raise ResearchError("invalid_native_review", "openness.searched_at must be YYYY-MM-DD",
+                            {"path": path + '/searched_at'}) from error
     if "minimum" in openness:
         from .openness_minimum import validate_minimum
-        validate_minimum(openness["minimum"])
+        with describe_error_at(path + '/minimum'):
+            validate_minimum(openness["minimum"])
 
 
 def validate_output(packet, output):
@@ -245,42 +255,53 @@ def validate_output(packet, output):
     the exact subject, claim and reviewer bindings of the packet, the decision vocabulary and the closed fields. A
     result or recovery that is not an approval is retained only as an assessment and authorizes nothing, so it needs
     only its decision and a reason."""
-    _require(isinstance(output, dict), "A native review is one JSON object")
+    _require(isinstance(output, dict), "A native review is one JSON object", path='')
     kind = packet["kind"]
     if kind != "proposal" and output.get("decision") != "approve":
-        _require(output.get("decision") in ("revise", "reject") and _nonempty(output.get("reason")),
-                 "A result or recovery that is not approved needs decision revise or reject and a nonempty reason")
+        _require(output.get("decision") in ("revise", "reject"),
+                 "A result or recovery that is not approved needs decision revise or reject and a nonempty reason",
+                 path='/decision')
+        _require(_nonempty(output.get("reason")),
+                 "A result or recovery that is not approved needs decision revise or reject and a nonempty reason",
+                 path='/reason')
         return
-    _require(output.get("subject_digest") == packet["subject_digest"], "Use the exact native.subject_digest")
-    _require(output.get("reviewer") == packet["reviewer"], "Use the exact native.reviewer object")
+    _require(output.get("subject_digest") == packet["subject_digest"], "Use the exact native.subject_digest",
+             path='/subject_digest')
+    _require(output.get("reviewer") == packet["reviewer"], "Use the exact native.reviewer object", path='/reviewer')
     if kind == "proposal":
         _closed(output, ("schema_version", "subject_digest", "claim_digest", "reviewer", "decision", "findings",
-                         "unresolved_objections"), "A proposal review has exactly the fields of the native Review")
-        _require(output["schema_version"] == 1 and type(output["schema_version"]) is int, "Proposal reviews use schema_version 1")
-        _require(output["claim_digest"] == packet["claim_digest"], "Use the exact native.claim_digest")
-        _require(output["decision"] in ("approve", "revise", "reject"), "Use decision approve, revise or reject")
-        _closed(output["findings"], PROPOSAL_FINDINGS, "Proposal findings are exactly the nine native findings")
-        _require(all(isinstance(value, str) for value in output["findings"].values()), "Proposal findings are strings")
+                         "unresolved_objections"), "A proposal review has exactly the fields of the native Review", path='')
+        _require(output["schema_version"] == 1 and type(output["schema_version"]) is int,
+                 "Proposal reviews use schema_version 1", path='/schema_version')
+        _require(output["claim_digest"] == packet["claim_digest"], "Use the exact native.claim_digest", path='/claim_digest')
+        _require(output["decision"] in ("approve", "revise", "reject"), "Use decision approve, revise or reject", path='/decision')
+        _closed(output["findings"], PROPOSAL_FINDINGS, "Proposal findings are exactly the nine native findings", path='/findings')
+        for key in PROPOSAL_FINDINGS:
+            _require(isinstance(output["findings"][key], str), "Proposal findings are strings", path='/findings/' + key)
         _validate_objections(output["unresolved_objections"])
     elif kind == "result":
         version = output.get("schema_version", 1)
-        _require(type(version) is int and version in (1, 2), "Result reviews use schema_version 1 or 2")
+        _require(type(version) is int and version in (1, 2), "Result reviews use schema_version 1 or 2", path='/schema_version')
         _closed(output, ("subject_digest", "claim_digest", "reviewer", "decision", "findings")
                 + (("schema_version",) if "schema_version" in output else ()),
-                "A result approval has exactly the fields of the native result review")
-        _require(output["claim_digest"] == packet["claim_digest"], "Use the exact native.claim_digest")
+                "A result approval has exactly the fields of the native result review", path='')
+        _require(output["claim_digest"] == packet["claim_digest"], "Use the exact native.claim_digest", path='/claim_digest')
         _closed(output["findings"], RESULT_FINDINGS + (("openness",) if version == 2 else ()),
-                "Result findings are statement, assumptions, scope, dependencies and policy, with openness in version 2")
-        _require(all(_nonempty(output["findings"][key]) for key in RESULT_FINDINGS),
-                 "findings.statement, findings.assumptions, findings.scope, findings.dependencies and findings.policy "
-                 "must each be a nonempty string; in schema_version 2, findings.openness is an object")
+                "Result findings are statement, assumptions, scope, dependencies and policy, with openness in version 2",
+                path='/findings')
+        for key in RESULT_FINDINGS:
+            _require(_nonempty(output["findings"][key]),
+                     "findings.statement, findings.assumptions, findings.scope, findings.dependencies and findings.policy "
+                     "must each be a nonempty string; in schema_version 2, findings.openness is an object", path='/findings/' + key)
         if version == 2:
             _validate_openness(output["findings"]["openness"], packet["claim_digest"],
                                structured_coverage=packet["contract"].get("orchestration") == "problem_creation")
     else:
         _closed(output, ("schema_version", "subject_digest", "reviewer", "decision", "findings", "unresolved_objections"),
-                "A recovery approval has exactly the fields of the native recovery review")
-        _require(output["schema_version"] == 1 and type(output["schema_version"]) is int, "Recovery reviews use schema_version 1")
-        _closed(output["findings"], RECOVERY_FINDINGS, "Recovery findings are exactly the five native findings")
-        _require(all(_nonempty(value) for value in output["findings"].values()), "Every recovery finding is a nonempty string")
+                "A recovery approval has exactly the fields of the native recovery review", path='')
+        _require(output["schema_version"] == 1 and type(output["schema_version"]) is int,
+                 "Recovery reviews use schema_version 1", path='/schema_version')
+        _closed(output["findings"], RECOVERY_FINDINGS, "Recovery findings are exactly the five native findings", path='/findings')
+        for key in RECOVERY_FINDINGS:
+            _require(_nonempty(output["findings"][key]), "Every recovery finding is a nonempty string", path='/findings/' + key)
         _validate_objections(output["unresolved_objections"], empty=True)

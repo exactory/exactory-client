@@ -2,9 +2,13 @@
 
 Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [managed research workflow](../../docs/research-workflow.md).
-`exactory-lab init` creates the study layer; `exactory-draft init` can add the
-draft layout when the title and category exist. Creating either layout leaves
-milestone gates pending. AI Science uses the
+`exactory-lab init` creates the study layer. Entering stage `write` adds the
+draft layer when the objective carries `title` and `category` and the
+workspace holds neither a draft record nor a `.exactory/draft.json` entry.
+When the objective lacks one of the fields and the workspace holds neither,
+`exactory-draft init --title TITLE --category CATEGORY` adds the draft layer
+("Study state and decisions" below gives every state). Creating either layer
+leaves milestone gates pending. AI Science uses the
 [shared tools](../../docs/research-tools.md) at any point; stage labels describe
 milestone progress. Every path is relative to the workspace root.
 
@@ -80,11 +84,62 @@ through `execution`. An approved canonical round `investigate` or `pivot`
 permits `evaluate` to return to `literature`. Enter unfinished work with
 `--status pending`; a proposed `done` status checks the destination too.
 
+Entering `write` also records the draft workspace, in the same mutation as the
+study state, and so does a later `exactory-lab state set` that succeeds while
+the study is at `write`. The mutation records the draft only when the
+objective carries both `title` and `category`, no draft record exists, and no
+entry exists at `.exactory/draft.json` (a regular file, a symbolic link,
+dangling or not, and a directory each count as an entry). The export then
+writes `.exactory/draft.json` (the marker) and creates `draft/`. Give the two
+fields when the objective is committed: `target` refuses them on a committed
+objective with `objective_locked`. At `write`, `status` and `next` carry one
+`draft_marker_missing` obligation, appended after the other obligations and
+selected as `next`, while no draft record exists or the marker is not a
+regular file that holds the record's JSON. Its message names the step for
+the state:
+
+- A draft record, and the marker is missing, holds other JSON or is a
+  symbolic link: `exactory-research export` writes the marker from the
+  record. It replaces a link and leaves the link's target alone.
+- A draft record, and the entry is a directory or another type: move the
+  entry to an unused name in `.exactory/`, then export.
+- No draft record, and a regular file that holds a JSON object whose
+  `version` is absent, 1 or 2: `exactory-research adopt` with
+  `.exactory/draft.json` in `files` records that object as the draft, as it
+  is. `exactory-draft init` refuses the directory while the file exists.
+- No draft record, and a symbolic link (dangling included), a directory or a
+  regular file that adoption refuses: move the entry to an unused name in
+  `.exactory/` (`mv -n`, no trailing slash on either path), then run `status`
+  again and take the step it names. The saved entry is not an input of
+  `adopt`.
+- Neither record nor entry, and the objective lacks a field:
+  `exactory-draft init --title TITLE --category CATEGORY` records the draft
+  from its own values and writes the marker. The objective does not change.
+- Neither record nor entry, the objective has both fields, and the study
+  status is not `done`: `exactory-lab state set --stage write` records the
+  draft from the objective.
+- Neither record nor entry, both fields, and the status is `done`: the same
+  `exactory-draft init` with the objective's values. The status stays
+  `done`. A same-stage update with status `done` checks the completion and
+  readiness gates of `write` first.
+
+The authorship hook records a `.tex` file written with Write under `draft/`
+only while `.exactory/draft.json` is a file, and it does not compare the file
+with its record. The creation, export, adoption or move of the marker records
+nothing for a source written before it.
+
 Change state with `exactory-lab state set`, and preserve actual decisions with
 `exactory-lab decide --stage STAGE --decision TEXT --why TEXT --evidence TEXT`.
 Both use revision and request identity, as do other managed mutations. Keep the
 original identity and payload when retrying a lost success. New decisions use a
-current revision and new ID.
+current revision and new ID. Both accept `--check`, as does every
+`exactory-research` mutation: the command validates its payload against one
+snapshot of the store and writes nothing. An accepted check is a diagnostic, not
+a record: it satisfies no gate, records no state, draft record or entry, and the
+write validates again. Acquisitions, reviewer calls and `reconcile-run` refuse
+it (`check_unsupported`), and so do `exactory-lab init`, `run`, `probe` and
+`colab-serve` and every `exactory-draft` command, before they read anything. The
+[CLI reference](../../docs/research-cli.md#inputs-and-receipts) lists the others.
 
 Waiting and free-form operational status describe conditions, not research
 completion. `loop.target`, `budget`, and `notes` record optional manuscript

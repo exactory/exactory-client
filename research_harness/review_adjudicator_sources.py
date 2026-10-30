@@ -94,16 +94,17 @@ def validate(artifacts, packet):
         if not complete_main:
             _incomplete({'version_id': source.get('request', {}).get('version_id'),
                          'reason': 'No validated complete main extraction is actually supplied.'})
-    required = {reference['sha256']: reference for reference in collect_references(
+    from .evidence import digest
+    required = {digest(reference): reference for reference in collect_references(
         [source.get('evidence', []) for source in sources] + [manifest.get('required_units', [])])}
     missing = []
-    for sha256, reference in sorted(required.items()):
+    for reference in (required[key] for key in sorted(required)):
         try:
             supplied = reference in packet.get('current_evidence', []) and has_attachment(artifacts, packet, reference)
         except (OSError, ResearchError, ValueError):
             supplied = False
         if not supplied:
-            missing.append(sha256)
+            missing.append(reference['sha256'])
     if missing:
         _incomplete({'artifact_digests': missing})
 

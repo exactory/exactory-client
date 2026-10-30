@@ -37,9 +37,18 @@ def load_0_65_2_openness_reading():
     return modules['openness_reading']
 
 
+def find_release_protocol(packet):
+    """The reading protocol that record_assignment passes for a 0.65.2 packet: none, so that canonical_prompt renders
+    the release's own current protocol, as 0.65.2 always did."""
+    return None
+
+
 @contextlib.contextmanager
 def build_as_0_65_2():
     """Record native_math assignments with the reading chain of 0.65.2: its v2 prompts, plan entries without a kind, its
-    verbose reading record and no record units."""
-    with patch.object(protocol, 'openness_reading', load_0_65_2_openness_reading()):
+    verbose reading record and no record units. The release had no find_protocol lookup, which the current
+    record_assignment calls; the module gets find_release_protocol in its place."""
+    released = load_0_65_2_openness_reading()
+    released.find_protocol = find_release_protocol
+    with patch.object(protocol, 'openness_reading', released):
         yield

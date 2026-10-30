@@ -4,6 +4,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -11,7 +12,7 @@ import unittest
 
 from research_harness.cli import status_report
 from research_harness.errors import ResearchError
-from research_harness.integration import export_workspace, initialize_workspace, update_study
+from research_harness.integration import adopt_workspace, export_workspace, initialize_workspace, update_study
 from research_harness.principles import initialize_research, set_target
 from research_harness.storage import Store
 
@@ -204,6 +205,123 @@ class DraftBootstrapTests(unittest.TestCase):
         self.mutate(update_study, {"status": "in_progress"})
         self.assertEqual(marker.read_text(), legacy)
         self.assertNotIn("draft", self.store.snapshot()["records"]["workspace"])
+
+    def find_marker_obligation(self):
+        report = status_report(self.store)
+        found = [item for item in report["obligations"] if item["code"] == "draft_marker_missing"]
+        self.assertLessEqual(len(found), 1)
+        if found:
+            self.assertLessEqual(len(found[0]["explanation"]), 120, "the next action must fit the summary hint")
+        return found[0] if found else None
+
+    def adopt_marker(self):
+        config = self.store.snapshot()["records"]["configuration"]["research"]
+        return self.mutate(adopt_workspace, {"id": "adopt-draft", "profile": config["profile"],
+                                             "target": config["target"], "files": [".exactory/draft.json"],
+                                             "reason": "Adopt the legacy draft marker."})
+
+    def move_marker_aside(self):
+        saved = self.root / ".exactory/draft.json.saved"
+        os.rename(self.root / ".exactory/draft.json", saved)
+        return saved
+
+    def test_unrecorded_link_marker_is_moved_aside_before_bootstrap(self):
+        outside = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, outside)
+        (outside / "draft.json").write_text('{"version": 2, "title": "Outside"}\n')
+        (self.root / "notes").mkdir()
+        (self.root / "notes/draft.json").write_text('{"version": 2, "title": "Inside"}\n')
+        targets = {"internal": "../notes/draft.json", "external": str(outside / "draft.json"),
+                   "missing": str(outside / "absent.json"), "directory": str(outside)}
+        self.set_objective()
+        self.enter_writing()
+        marker = self.root / ".exactory/draft.json"
+        for case, target in targets.items():
+            with self.subTest(case=case):
+                if marker.is_symlink():
+                    marker.unlink()
+                os.symlink(target, marker)
+                obligation = self.find_marker_obligation()
+                self.assertIn("unused name", obligation["explanation"])
+                self.assertNotIn("adopt", obligation["explanation"].lower())
+                with self.assertRaises(ResearchError) as caught:
+                    self.adopt_marker()
+                self.assertEqual(caught.exception.code, "unsafe_path")
+                saved = self.move_marker_aside()
+                self.assertIn("state set --stage write", self.find_marker_obligation()["explanation"])
+                self.assertEqual(os.readlink(saved), target)
+                saved.unlink()
+        if marker.is_symlink():
+            marker.unlink()
+        self.assertEqual((outside / "draft.json").read_text(), '{"version": 2, "title": "Outside"}\n')
+        self.mutate(update_study, {"status": "in_progress"})
+        self.assertIsNone(self.find_marker_obligation())
+
+    def test_unadoptable_regular_marker_is_moved_aside_instead_of_adopted(self):
+        self.set_objective()
+        self.enter_writing()
+        marker = self.root / ".exactory/draft.json"
+        for case, content in {"malformed": "{", "duplicate": '{"version": 1, "version": 2}',
+                              "array": "[]", "version": '{"version": 3, "title": "Later"}'}.items():
+            with self.subTest(case=case):
+                marker.write_text(content)
+                obligation = self.find_marker_obligation()
+                self.assertIn("unused name", obligation["explanation"])
+                self.assertEqual(marker.read_text(), content)
+                with self.assertRaises(ResearchError) as caught:
+                    self.adopt_marker()
+                self.assertIn(caught.exception.code, ("invalid_json", "migration_required"))
+                self.move_marker_aside().unlink()
+        if marker.exists():
+            marker.unlink()
+        self.initialize_draft()
+        self.assertIsNone(self.find_marker_obligation())
+
+    def test_directory_marker_is_moved_aside_with_and_without_a_record(self):
+        self.set_objective()
+        self.enter_writing()
+        marker = self.root / ".exactory/draft.json"
+        marker.mkdir()
+        (marker / "kept.txt").write_text("kept")
+        self.assertIn("unused name", self.find_marker_obligation()["explanation"])
+        saved = self.move_marker_aside()
+        self.mutate(update_study, {"status": "in_progress"})
+        self.assertIsNone(self.find_marker_obligation())
+        self.assertEqual((saved / "kept.txt").read_text(), "kept")
+        recorded = marker.read_text()
+        marker.unlink()
+        marker.mkdir()
+        self.assertIn("unused name", self.find_marker_obligation()["explanation"])
+        os.rename(marker, self.root / ".exactory/draft.json.second")
+        self.assertIn("export", self.find_marker_obligation()["explanation"])
+        export_workspace(self.store)
+        self.assertIsNone(self.find_marker_obligation())
+        self.assertEqual(marker.read_text(), recorded)
+
+    def test_completed_write_stage_names_explicit_draft_initialization(self):
+        self.set_objective()
+        self.seed([("workspace", "study", dict(self.store.snapshot()["records"]["workspace"]["study"],
+                                                stage="write", status="done"))])
+        objective = self.store.snapshot()["records"]["configuration"]["research"]["target"]
+        obligation = self.find_marker_obligation()
+        self.assertIn("exactory-draft init", obligation["explanation"])
+        self.assertEqual(obligation["missing_fields"], [])
+        self.initialize_draft()
+        snapshot = self.store.snapshot()
+        self.assertIsNone(self.find_marker_obligation())
+        self.assertEqual(snapshot["records"]["workspace"]["study"]["status"], "done")
+        self.assertEqual(snapshot["records"]["configuration"]["research"]["target"], objective)
+
+    def test_versionless_regular_marker_is_adopted_as_stored(self):
+        self.set_objective({})
+        self.enter_writing()
+        marker = self.root / ".exactory/draft.json"
+        marker.write_text('{"title": "Legacy", "category": "cs.LG"}\n')
+        self.assertIn("adopt", self.find_marker_obligation()["explanation"].lower())
+        self.adopt_marker()
+        self.assertEqual(self.store.snapshot()["records"]["workspace"]["draft"],
+                         {"title": "Legacy", "category": "cs.LG"})
+        self.assertIsNone(self.find_marker_obligation())
 
     def test_failed_transition_creates_no_draft_and_successful_return_to_write_still_bootstraps(self):
         self.set_objective()

@@ -42,11 +42,18 @@ Every new independent native approval uses the shared observed reviewer adapter.
 Follow [the native review delivery contract](SEARCH.md#observed-native-review-delivery):
 export the exact native subject with `search review-packet`, use its returned
 artifact in a `native_math` assignment on a verified route, and retain the unchanged `review-run`
-output in the original native review field. A fresh agent or declared host name
-alone cannot establish independence. This applies to admission, reassessment,
-amendments, verification inputs and policy, result acceptance, closure, adoption
-and reviewed recovery. Native mathematical objectives keep their existing proof
-and resource rules; no strategic intent, dossier, bar or value gate is added.
+output in the original native review field. At binding, the controller builds the
+packet again and compares it with the packet the reviewer saw, as canonical JSON
+bytes. One difference is permitted: an unrelated node that finished since the
+export. It applies only to a standalone proposal anchored to the objective, with a
+new budget and no dependency on another node, evidence or assumption. Every other
+change, and every change of a strategy, result, recovery or closure packet, needs
+a fresh export and review (`SEARCH.md#observed-native-review-delivery`). A fresh
+agent or declared host name alone cannot establish independence. This applies to
+admission, reassessment, amendments, verification inputs and policy, result
+acceptance, closure, adoption and reviewed recovery. Native mathematical
+objectives keep their existing proof and resource rules; no strategic intent,
+dossier, bar or value gate is added.
 
 ## Overview
 
@@ -64,7 +71,11 @@ or explain why the existing hypotheses still suffice. Obtain an independent
 review through the observed native adapter and submit `search reassess` using the exact contract
 in `SEARCH.md#mandatory-strategy-reassessment`. New research cannot continue under
 an old assessment. Reassessment preserves the original objective, all remaining
-obligations, proof requirements and resource accounts.
+obligations, proof requirements and resource accounts. Accepted root support
+requests `finalize_root`; it does not authorize `search complete` while an admitted
+standalone node is neither finished nor retreated. `search next` names such nodes
+in `closure_blocking_node_ids`. Drive each one to `finish` or `retreat` first, under
+its own account and the side-interval rules of `SEARCH.md`.
 
 Reject a proposed run that merely extends an unbounded prefix, even when it is cheap, ready, checkable, or likely to receive administrative review. Proceed only when the proposal names a necessary diagnostic decision, covers an actually finite root, depends on an accepted finite reduction such as a proved finite-residue bridge, is a properly reviewed bounded counterexample search whose witness could settle the original decision, or is an independently reviewed substantial standalone result, using the exact schemas in `SEARCH.md#computation-admission-and-mandatory-interpretation`. A necessary diagnostic that resolves a named strategy decision and a complete finite-residue check after its analytical reduction are positive controls. A no-hit prefix is not proof and grants no automatic renewal; calling an unexplained prefix a counterexample search does not bypass substantive review. Without one of these bases, return to root strategy analysis; do not prepare another proposal for the same extension. Likewise, do not renew the same-scope account unless a substantive qualifying checkpoint and new evidence satisfy `SEARCH.md#resource-accounts-and-hard-budgets`; a copied record or bookkeeping change does not qualify.
 
@@ -72,7 +83,7 @@ Three levels of text carry the method. A strategy (one file under `strategies/`)
 
 Five rules hold throughout. The controller contract preserves the original claim, requested proof or decision standard, deliverables, and limits; a local statement or finish never replaces them. No result is declared before the novelty check has run for that exact statement (stage 3). No move is journalled under a strategy before that strategy's study record exists; `journal add` refuses one (stage 5). Every move is reserved with `search begin`, then journalled with `journal add` before the next move starts (stage 5). The cash-out (stage 7) starts only from one of the three native rules stage 7 names, and one of them fires within the budget the harness enforces.
 
-Every command below is `exactory-math ...`, which is on PATH while this plugin is enabled, run from the directory the user is working in. The controller root defaults to `attack/`; admitted native workspaces live under `attack/<slug>/`. Give `--attack-root DIR` before the command when it lives elsewhere. Controller mutations use `search`, an exact JSON spec, the current expected revision, and a unique request ID. `search status` and `search next` are read-only. The strategy, entry, study, and reference files this document names are the skill's own files, not the user's: run `exactory-math skill-dir` once, and read each of them under the directory it prints.
+Every command below is `exactory-math ...`, which is on PATH while this plugin is enabled, run from the directory the user is working in. The controller root defaults to `attack/`; admitted native workspaces live under `attack/<slug>/`. Give `--attack-root DIR` before the command when it lives elsewhere. Controller mutations use `search`, an exact JSON spec, the current expected revision, and a unique request ID. `search status` and `search next` are read-only. Every other `search` command and every legacy command that writes accept `--check`: `search pause`, `side-interval`, `retreat`, `interpret` and `render` then build and validate the event as the write does and write nothing, and every other command refuses the flag with `check_unsupported` before it opens the store (`SEARCH.md#filesystem-service-and-cli`). The strategy, entry, study, and reference files this document names are the skill's own files, not the user's: run `exactory-math skill-dir` once, and read each of them under the directory it prints.
 
 The shared `exactory-lab probe` may explore a question in the common workspace,
 under its common budget and exploratory provenance, outside managed math execution.
@@ -113,7 +124,7 @@ conditions of a claim, execution authority or proof dependency.
 
 A session can end before the objective does. The controller event record is the authority across all admitted nodes; each native record is the save for its local stage. Nothing needed for continuation is held only in the session.
 
-Resume, instead of starting at stage 1, when the input asks to resume, restart, or continue, or when the session-start hook reports a managed objective. Run `search status --json`, then `search next --json`, and perform exactly the returned controller action. This includes an open objective whose native attacks all have `units/FINISHED.json`: local completion can leave another obligation, result review, root audit, or required deliverable pending. For the selected node, also run `status <slug>` and read `tasks.json`; these give local stage detail but do not override `search next`. A recorded pause survives status checks and session resume. Only an explicit authorized `search resume` clears it. Existing unmanaged work requires explicit reviewed adoption; never migrate or resume it automatically.
+Resume, instead of starting at stage 1, when the input asks to resume, restart, or continue, or when the session-start hook reports a managed objective. Run `search status --json`, then `search next --json`, and perform exactly the returned controller action. This includes an open objective whose native attacks all have `units/FINISHED.json`: local completion can leave another obligation, result review, root audit, or required deliverable pending. For the selected node, also run `status <slug>` and read `tasks.json`; these give local stage detail but do not override `search next`. `status <slug>` is also a harness command. After a harness command on the attack in this session, the activity hook also records this session's ordinary shell calls on the attack. A session without one records only its writes and edits there. Activity is advisory: it never changes controller work, proof credit or the stage. A recorded pause survives status checks and session resume. Only an explicit authorized `search resume` clears it. Existing unmanaged work requires explicit reviewed adoption; never migrate or resume it automatically.
 
 Keep the action list current from the first move: when a strategy is entered, add one task per plan step it will dispatch; mark each done after the move that ran it; add a task for every deterministic run before writing its code. A task named nowhere in the record is the one thing a resumed session cannot recover.
 
@@ -121,11 +132,11 @@ Keep the action list current from the first move: when a strategy is entered, ad
 
 Activate when the input contains a statement with a truth value that is open or claimed open: "prove that", "disprove", "is it true that", "conjecture", "open problem", a problem number from a list with its statement, or a stated bound with a question about its optimality. An exercise with a known solution and a request to explain a known proof do not activate the skill.
 
-Produces: the immutable objective contract and, after reviewed admission, the first native workspace. Write the exact `Contract` from `SEARCH.md#contract-claims-and-scopes`, including the original claim, requested outcome (`proof` or `decision`), proof policy, deliverables, and resource policy. Run `search init --spec contract.json`, then follow the proposal, review, and admission flow in `SEARCH.md#proposal` and `SEARCH.md#review-and-provenance`. The normal proposal limits are explicitly 24 moves, 24 runs, 300 seconds, and one worker. Choose a kebab-case `attack_slug` from the claim's objects and quantities. `search admit` initializes `attack/<slug>/` with the native skeleton; do not call legacy `init` to create a managed node.
+Produces: the immutable objective contract and, after reviewed admission, the first native workspace. Write the exact `Contract` from `SEARCH.md#contract-claims-and-scopes`, including the original claim, requested outcome (`proof` or `decision`), proof policy, deliverables, and resource policy. Run `search init --spec contract.json`, then follow the proposal, review, and admission flow in `SEARCH.md#proposal` and `SEARCH.md#review-and-provenance`. The normal proposal limits are explicitly 24 moves, 24 runs, 300 seconds, and one worker. Choose a kebab-case `attack_slug` from the claim's objects and quantities. `search admit` completes the native skeleton of `attack/<slug>/`. It creates the directories `deterministic/`, `units/` and `study/`. It also creates the absent files among `problem.json`, `novelty.md`, an empty `journal.jsonl` and, for a native child, `parent.json`. A file that already exists keeps its bytes, so writing `problem.json` and the study files before admission is normal. A directory that holds `units/FINISHED.json` or a nonempty `journal.jsonl` refuses admission with `adoption_required`. Do not call legacy `init` to create a managed node, and do not write `journal.jsonl` by hand. If a native command reports `journal.jsonl: missing; admission skeleton is incomplete; run search reconcile`, run `search status --json` first. A pending initialization effect is recovered by replaying the admit request or by `search render`. Otherwise the node was admitted by a release before 0.64.0, and `search reconcile` with an empty spec records the missing skeleton effect.
 
 ## Stage 2: set the problem
 
-Produces: the controller `Claim` and the admitted node's `problem.json`. Validates: reviewed proposal admission first, then `check-problem <slug>`, which requires every key present, no empty strings, and `direction` and `mode` from their allowed sets. `problem.json.claim` must preserve the admitted claim. A changed statement is a separately reviewed route, coverage node, continuation, or standalone proposal; it never silently edits the original objective.
+Produces: the controller `Claim` and the node's `problem.json`. Validates: `check-problem <slug>`, which requires every key present, no empty strings, and `direction` and `mode` from their allowed sets. You can write `problem.json` into `attack/<slug>/` and run `check-problem` before the proposal is admitted. Admission keeps the file's bytes. `plan` (stage 4) needs the admitted node. `problem.json.claim` must preserve the admitted claim. A changed statement is a separately reviewed route, coverage node, continuation, or standalone proposal; it never silently edits the original objective.
 
 Write four parts.
 
@@ -151,7 +162,7 @@ Write four parts.
 
 ## Stage 3: study the problem and check novelty
 
-The problem-level study under `STUDY.md`, run against the sources in `references/sources.md`, with the novelty check inside it. Produces: `study/problem.md` and `novelty.md`, reusable evidence for admission and openness review. `plan <slug>` at stage 4 validates the complete `problem.json` and precondition inputs it actually reads; it does not read or require `study/problem.md`. `check-unit` at stage 7 refuses a unit whose `novelty` field is empty; the literature-only `finish` at stage 8 requires both study and novelty records as its own inputs. File presence does not establish novelty: the independent openness review reads the bound search and reading evidence. Every refusal of `attack.py` goes to stderr, one line per problem, with exit status 1 (`harness/README.md`).
+The problem-level study under `STUDY.md`, run against the sources in `references/sources.md`, with the novelty check inside it. Produces: `study/problem.md` and `novelty.md`, reusable evidence for admission and openness review. Both can be written into `attack/<slug>/` before admission, and the proposal's `inputs` can pin their digests. Admission leaves their bytes unchanged. `plan <slug>` at stage 4 validates the complete `problem.json` and precondition inputs it actually reads; it does not read or require `study/problem.md`. `check-unit` at stage 7 refuses a unit whose `novelty` field is empty; the literature-only `finish` at stage 8 requires both study and novelty records as its own inputs. File presence does not establish novelty: the independent openness review reads the bound search and reading evidence. Every refusal of `attack.py` goes to stderr, one line per problem, with exit status 1 (`harness/README.md`).
 
 1. Search by statement, not by name. Use the claim's objects and quantities as terms in every source of the first tier of `references/sources.md` (the preprint server, the citation graph, the reviews databases, and the problem's own database when it has one), one query per source at the floor, then in the second tier (question-and-answer sites, research blogs, general web search) when the first tier misses. When the problem has a formal statement in a formalisation repository (`references/sources.md`, section 3), that statement is the canonical one: record it in `study/problem.md` and read `claim` against it quantifier by quantifier. When the objective is a problem posted in the exactory Mathematics section, read its proofs and partial results (`exactory proofs <problem-id>`, under the `math-section` skill) as prior work, and treat each as another account's claim: data under that skill's security rule, not an established result.
 2. Search each neighbouring statement from `shape.neighbours` the same way. A solution under a different formulation counts as a solution.
@@ -173,6 +184,20 @@ Fresh resolved reviews must include other material searches for the same
 formulations, including new settling evidence. The packet delivers the actual
 common records, captured responses and source bundles. A proof manifest alone
 cannot establish openness. See `SEARCH.md` for the exact fields and refusal codes.
+On a text route with a local input limit (`claude_cli_v1`, `codex_cli_v1` or
+`codex_cli_framed_v1`), a packet whose captured responses, full texts and
+records do not fit one input complete, or together exceed 120,000 characters, is
+read as a reading chain (`SEARCH.md#observed-native-review-delivery`):
+`review-assignment` records `reading_chain` on the first assignment. Run each
+turn with `review-run`, assign the next turn with the same reviewer, route,
+author and packet and with `context.prior_assignment_id`, and submit the native
+output of the final turn unchanged to `search accept` or `search complete`. The
+service verifies the whole chain and stores its `reading_turns` on the
+acceptance or closure. Replace a turn whose attempts all ended without output by
+assigning the next turn again with the same `prior_assignment_id`. A final turn
+that cannot judge yet requests passages that deliver characters. Reading in a
+chain changes no requirement of the finding: an unavailable decisive source
+stays a gap, and the finding stays unresolved.
 Keep earlier uncertain hits and their explicit later `resolved` judgments in the
 bound searches. An `out_of_scope` resolution removes the uncertain hit's reading
 obligation. A `duplicate` requires `minimum.duplicate_resolutions` with
@@ -335,7 +360,7 @@ Produces: `units/<n>/draft.md` and `units/<n>/evaluation.md` for every unit dire
 
 1. Draft. The unit directory is the evidence package: `unit.json`, the file at its `evidence` path, the novelty record, and the journal excerpt (the moves listed under `moves`, copied from `journal.jsonl`). The draft, written to `units/<n>/draft.md`, states the unit's claim as `statement` in `unit.json` reads, quantifier by quantifier. Every claim in the draft points to the proof text or to a deterministic step directory with `result.json`; a claim with neither behind it is removed before drafting. Every reference in the draft carries the identifier (DOI, arXiv id, or URL) recorded for it in `known` of `problem.json`, in `novelty.md`, or in a `study/` record. The venue follows the unit's position relative to the target, on the path or off to the side, as `CASHOUT.md` states.
 2. Evaluate. Before the draft leaves the workspace, a reader who did not write it reads it against the evidence package under the self-check in `CASHOUT.md`, resolves every reference to its identifier, and compares the draft's statement with `unit.json`, and writes the findings to `units/<n>/evaluation.md`. The draft passes when every claim points to its evidence, every reference resolves, and the statement is the unit's; otherwise it returns to step 1 with the reader's findings, and `check-unit` is re-run when `unit.json` changed.
-3. Run `finish <slug>`. It writes `units/FINISHED.json` with the numbers of the units that stand, and the native attack is locally done. An attack that ended at stage 3 runs `finish` as well: with no move and no inventory it accepts the workspace on a non-empty `study/problem.md` and `novelty.md`, and records the local outcome as solved-in-literature. Return the local result, accepted evidence, and all remaining obligation IDs to the controller. If `search next` reports another ready node, continue it. If it reports `finalize_root`, run the independent closure review and `search complete` using `SEARCH.md#final-closure-and-local-delivery`; only successful completion changes the root proof status. For every objective, including prove or disprove requests, an unresolved openness finding keeps closure pending even when the proof is accepted. The final finding must be `supported_open` or `already_solved`. A required formalization or other original deliverable remains required after either finding and after a literature finish. Do not start an unrelated alternative while root-ready evidence awaits audit and completion.
+3. Run `finish <slug>`. It writes `units/FINISHED.json` with the numbers of the units that stand, and the native attack is locally done. An attack that ended at stage 3 runs `finish` as well: with no move and no inventory it accepts the workspace on a non-empty `study/problem.md` and `novelty.md`, and records the local outcome as solved-in-literature. Return the local result, accepted evidence, and all remaining obligation IDs to the controller. If `search next` reports another ready node, continue it. If it reports `finalize_root`, read its `closure_blocking_node_ids`. While the list names an admitted standalone node, finish or retreat that node first. `search complete` refuses with `standalone_closure_pending` until the list is empty. Then run the independent closure review, as a reading chain when its packet exceeds one turn, and `search complete` using `SEARCH.md#final-closure-and-local-delivery`; only successful completion changes the root proof status. For every objective, including prove or disprove requests, an unresolved openness finding keeps closure pending even when the proof is accepted. The final finding must be `supported_open` or `already_solved`. A required formalization or other original deliverable remains required after either finding and after a literature finish. Do not start an unrelated alternative while root-ready evidence awaits audit and completion.
 
 ## Red flags
 

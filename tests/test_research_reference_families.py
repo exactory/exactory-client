@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 from research_fixtures import atom, crossref, entry
@@ -66,6 +67,24 @@ class ReferenceFamilyTests(LiteratureCase):
             reference["target_family"] = DOI
         bundle["bibliography"]["entries"] = [reference]
         return root, bundle
+
+    def test_an_import_refuses_a_concurrent_write_instead_of_reporting_conflicts_of_an_older_snapshot(self):
+        # The family conflicts come from the snapshot that the import read, so its finishing write keeps that revision.
+        self.import_doi_metadata()
+        real_prepare_work, written = acquisition.prepare_work, []
+
+        def prepare_after_a_concurrent_write(*args, **kwargs):
+            if not written:
+                written.append(True)
+                self.store.mutate("fixture.concurrent", {}, lambda tx: tx.put("fixture_concurrency", "writer", {}),
+                                  expected_revision=self.store.revision, request_id="concurrent-writer")
+            return real_prepare_work(*args, **kwargs)
+
+        with patch.object(acquisition, "prepare_work", side_effect=prepare_after_a_concurrent_write):
+            with self.assertRaises(ResearchError) as raised:
+                self.import_bytes("arxiv", self.build_arxiv_bytes(), "raced-arxiv")
+        self.assertEqual(raised.exception.code, "stale_revision")
+        self.assertNotIn("raced-arxiv", self.store.snapshot()["records"].get("source_import", {}))
 
     def test_import_reports_new_doi_family_conflicts_and_replays_its_recorded_report(self):
         self.import_doi_metadata()

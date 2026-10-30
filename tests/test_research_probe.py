@@ -1,5 +1,7 @@
 """Exploratory probes retain pinned artifacts and actual costs without result credit."""
 
+from unittest.mock import patch
+
 from development_fixtures import DevelopmentCase
 from literature_fixtures import LiteratureCase
 from research_harness import cli, resources
@@ -17,6 +19,31 @@ class ProbeTests(LiteratureCase):
 
     def record_outcome(self, value=None):
         return self.mutate(cli.OPERATIONS["probe"], value or build_probe_outcome(self.artifacts))
+
+    def test_probe_finishing_writes_retry_busy_store(self):
+        from research_harness.errors import ResearchError
+        from research_harness.probe import commit_probe_mutation, record_probe
+        from research_harness.probe_provenance import record_probe_artifact_origin, pin_probe_local_artifact
+        from research_harness.storage import Store
+        self.record_intent()
+        payload = build_probe_outcome(self.artifacts)
+        mutate, refused = Store.mutate, set()
+        operations = {'research.probe_artifact', 'research.probe', 'workspace.artifact'}
+        def refuse(store, operation, *args, **kwargs):
+            if operation in operations and operation not in refused:
+                refused.add(operation)
+                raise ResearchError('store_busy', 'Concurrent writer')
+            return mutate(store, operation, *args, **kwargs)
+        (self.root / 'pin.txt').write_text('Original captured bytes')
+        with patch.object(Store, 'mutate', new=refuse), \
+                patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001):
+            record_probe_artifact_origin(self.root, payload['id'], payload['stdout']['sha256'], 'stdout')
+            receipt = commit_probe_mutation(self.store, record_probe, payload, 'busy-probe')
+            pinned = pin_probe_local_artifact(self.store, {'id': 'pin', 'path': 'pin.txt', 'media_type': 'text/plain'},
+                                             expected_revision=self.store.revision, request_id='busy-pin')
+        self.assertEqual(receipt['result']['exit_status'], payload['exit_status'])
+        self.assertEqual(self.artifacts.read(pinned['result']['artifact']), b'Original captured bytes')
+        self.assertEqual(refused, operations)
 
     def test_record_before_any_target_or_cycle_and_charge_once(self):
         self.record_intent()

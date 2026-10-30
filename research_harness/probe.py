@@ -17,6 +17,7 @@ import uuid
 from . import resources
 from .artifacts import ArtifactStore, is_sealed_artifact
 from .errors import ResearchError
+from .finishing import retry_store_write
 from .operations import fields, immutable_record, is_finite_number, prepared_mutation, text
 from .probe_worker import capture_probe_outcome, find_probe_stream_origins
 from .probe_provenance import pin_probe_artifact
@@ -139,12 +140,7 @@ def find_probe_receipt(store, identifier):
 
 
 def commit_probe_mutation(store, operation, payload, request_id):
-    while True:
-        try:
-            return operation(store, payload, expected_revision=store.revision, request_id=request_id)
-        except ResearchError as error:
-            if error.code != "stale_revision":
-                raise
+    return retry_store_write(lambda: operation(store, payload, expected_revision=store.revision, request_id=request_id))
 
 
 def build_probe_directory(identifier):

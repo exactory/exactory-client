@@ -27,7 +27,7 @@ with actual evidence before recording a call.
 | Read | Exact works and versions, abstract or full-text depth, required units and supplements; acquisition and reading allowance. State the number of abstract-only and full readings. | `acquire`, `fulltext`, `visual`, `bundle`, `read`, `read-batch`, `require-fulltext`, `availability`, `defer-source`, `resume-source`. | Original bytes and extraction provenance, `source_bundle` unit and bibliography inventories, `reading` inspections and notes, `fulltext_requirement` dependencies, availability and source-deferral history. A capture establishes acquisition; a reading establishes only its inspected coverage. An unavailable unit remains a gap. |
 | Expand | Exact roots, references or citing works, number of levels and reading depth at each level; request, byte and reading allowance. | `roots`, `expand`, `acquire`, `import-response`, `search`, and the reading commands. | `literature_scope` selects exact roots and collections. Captured bibliography occurrences and provider responses preserve the source network and identity conflicts. `expand` acquires an unresolved identifier. The caller repeats expansion for the stated levels and records citing-work captures through search. Direction and levels are caller instructions, not additional `expand` flags. |
 | Ideate | Question, candidate count, credible alternatives, evidence, distinguishing tests, failure signals and resource demand. | `intent`, `strategy`, `research-lead`, `work-item`. | `research_intent`, `strategy_dossier`, `research_lead` and `research_work_item` retain proposed questions, comparisons, provenance, dispositions, actual execution status and dependencies. Candidate count is the caller's requested depth. Committing a direction uses the orchestration's decision gate. |
-| Probe | Exact question, Python program, pinned inputs, timeout and experiment allowance. | `exactory-lab probe`, `probe-intent`, `probe`. | `probe_intent` pins the program and inputs and reserves time; `probe_launch` retains the frozen local launch; the `probe` outcome retains outputs, streams, exit status, elapsed time and observation with exploratory provenance. See the two-phase contract below. |
+| Probe | Exact question, Python program, pinned inputs, timeout and experiment allowance; for a run of a program that a plan will admit, the future cycle id, the program's stable path and the outputs read. | `exactory-lab probe`, `probe-intent`, `probe`. | `probe_intent` pins the program and inputs and reserves time; `probe_launch` retains the frozen local launch; the `probe` outcome retains outputs, streams, exit status, elapsed time and observation with exploratory provenance. A disclosed run adds `program_run` to the intent and the outcome; without a read output its files and streams are sealed unread. See the two-phase contract below. |
 | Run | Current admitted prospective plan, pinned program and inputs, exact runtime, outputs, validation and resource reservation. | `cycle`, `admit`, `bind-run`, `exactory-lab run`, `reconcile-run`, `assess`, `checkpoint`. | `cycle_plan`, `execution_admission`, binding and execution observations, `cycle_assessment` and checkpoints preserve authority, original outcomes, sealed outputs, actual usage, validity, scope, failures and next questions. Acceptance of a result uses the orchestration's gate. |
 | Synthesis notes | Exact supporting sources, field and applicability, claim scope, rationale, innovation cases and context; reading and analysis allowance. Innovation calls state candidate and case counts. | `standards`, `rationale`, `innovation`, `context`. | Selected immutable `synthesis` sections bind their own evidence and assessments. Innovation retains the effective candidate and case amounts. Notes inform claims; the direction gate checks the standards it needs. |
 | Challenges ahead | Ultimate and nearer goals, advance criteria, exact full-read evidence and reason for a changed direction; source and analysis allowance. | `grand-challenge`. | `grand_challenge` and its current selection retain goals, criteria and evidence for the study. This study record is distinct from a challenge posted on exactory. It belongs to ai-science's direction minimum. |
@@ -114,6 +114,13 @@ exactory-research probe-intent --file probe-intent.json --expected-revision REVI
 exactory-research probe --file probe.json --expected-revision REVISION --request-id outcome-finite-example-001
 ```
 
+Both accept `--check`, which reports the first refusal of the payload, for
+example `probe_intent_missing` for an outcome without an intent, and reserves and
+charges nothing. `exactory-lab probe --check` is refused with `check_unsupported`
+before the launcher reads anything, because the launcher runs a program. A check
+of `artifact` on a probe path is refused with `check_unsupported`, because that
+pin commits in two steps.
+
 The launcher persists `supervision.json` with the worker and program start
 identities, process group and frozen deadline. An independent watchdog enforces
 that deadline after worker loss even without another CLI invocation. It writes
@@ -121,6 +128,18 @@ that deadline after worker loss even without another CLI invocation. It writes
 `supervisor-terminal.json` after verifying termination. A later retry reconciles
 the outcome and budget using those receipts; the watchdog's terminal file alone
 does not release the reservation.
+
+A probe can disclose a run of the program that a later plan admits, so that the
+plan accounts for what was known before it. Add `--cycle-id ID` and
+`--program-path PATH` to the command, and `--read-output PATH` for each output
+that you read (`work/FILE`, `stdout` or `stderr`). The intent then carries
+`program_run: {cycle_id, program_path, read_outputs}` and the outcome
+`program_run: {started_at, ended_at, outputs, read_outputs, outputs_unread}`.
+A run with no read path is a completion check: its outputs and streams are
+stored sealed, their hashes are recorded, and their bytes are not read, cited or
+delivered. The plan names each such run in `prior_knowledge`, and `admit`
+requires the program that the plan froze. The CLI reference gives the
+[fields and refusals](research-cli.md#exploratory-computation-probe-intent-probe).
 
 Resolve duplicate IDs before launch. A repeated ID returns its recorded outcome
 without executing again; a changed intent under that ID is refused. Launch

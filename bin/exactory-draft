@@ -3,6 +3,7 @@
 
 Commands:
   init            - create the draft workspace layout and .exactory/draft.json
+  package         - write the ZIP of code, data and records behind a pinned manuscript (deposit --sources)
   deposit         - upload the built PDF (and optional sources) to Zenodo
   reconcile       - settle the claimed step of a saved deposit intent, then continue that deposit
   attach-problem  - settle the recorded deposit for a math problem and attach its published record
@@ -1645,8 +1646,10 @@ def _run_attach_problem(args: argparse.Namespace) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    # The description keeps the line breaks of the module docstring, so its command table stays aligned and a
+    # hyphenated name such as exactory-check is never broken across lines.
     parser = argparse.ArgumentParser(prog="exactory-draft", description=__doc__,
-                                     allow_abbrev=False)
+                                     formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
     commands = parser.add_subparsers(dest="command", required=True)
 
     init = commands.add_parser("init", allow_abbrev=False,
@@ -1713,12 +1716,21 @@ def _build_parser() -> argparse.ArgumentParser:
              " It never publishes.")
     attach_problem.set_defaults(handler=_run_attach_problem)
 
+    for item, effect in ((init, "creates the workspace layout"), (package, "writes an archive"),
+                         (deposit, "uploads to Zenodo"), (reconcile, "continues a deposit on Zenodo"),
+                         (attach_problem, "attaches a record on exactory")):
+        item.add_argument("--check", action="store_true",
+                          help="Refused with check_unsupported before anything is read: this command " + effect
+                               + ", which check mode does not simulate.")
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
     try:
+        if getattr(args, "check", False):
+            raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
+                                {"command": args.command})
         args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))

@@ -100,6 +100,83 @@ class ProblemExecutionToolsTests(ProblemToolsCase):
         self.assert_error("research_not_ready", context.require_ready)
 
 
+class ProblemLabToolsTests(ProblemToolsCase):
+    def run_command(self, command, *arguments, directory=None, expected_code=0):
+        completed = subprocess.run([sys.executable, str(PLUGIN / "bin" / command), *arguments],
+            cwd=directory or self.root, capture_output=True, text=True, timeout=30)
+        self.assertEqual(completed.returncode, expected_code, completed.stdout + completed.stderr)
+        return completed
+
+    def run_research_operation(self, operation, payload):
+        path = self.root / (operation + ".json")
+        path.write_text(json.dumps(payload))
+        completed = self.run_command("exactory-research", operation, "--file", str(path),
+            "--expected-revision", str(self.store.revision), "--request-id", "cli-" + operation)
+        return json.loads(completed.stdout)
+
+    def initialize_problem(self):
+        return self.run_research_operation("problem-init", {"slug": "bounded-sequences", "area": "math.CO",
+            "field": "Extremal sequences and finite bounds", "authors": ["problem-author"]})["result"]
+
+    def test_lab_runs_reconciles_and_assesses_an_admitted_problem_computation(self):
+        self.prepare_problem()
+        plan = self.plan()
+        body = PROGRAM.decode() + "\nfrom pathlib import Path\nPath('validation.json').write_text(" + repr(
+            json.dumps({"result": {"values": [0, 1, 4, 9], "bound": 9}, "validation": {"passed": True}})) + ")\n"
+        admission = admit_lab(self, body=body, plan=plan, outputs=[
+            {"id": "result", "requirement_id": "measurements", "path": "stdout", "media_type": "application/json"},
+            {"id": "validation", "requirement_id": "checks", "path": "validation.json", "media_type": "application/json"}])
+        directory = self.root / "experiment/code"
+        arguments = ("run", "code/program.py", "--admission", admission["id"], "--backend", "local", "--timeout", "5",
+            "--expected-revision", str(self.store.revision), "--request-id", "problem-cli-launch")
+        launched = json.loads(self.run_command("exactory-lab", *arguments, directory=directory).stdout)
+        self.assertTrue(launched["ok"])
+        records = self.store.snapshot()["records"]
+        self.assertEqual(records["execution_claim"][admission["id"]]["request_id"], "problem-cli-launch")
+        observed = records["execution"][records["execution_outcome"][admission["id"]]["execution_id"]]["payload"]
+        self.assertEqual(observed["origin"], {"kind": "managed", "admission_id": admission["id"]})
+        self.assertEqual(observed["status"], "completed")
+        self.assertEqual(json.loads(self.artifacts.read(observed["outputs"][0]["artifact"])), launched["metric"])
+        self.assertEqual(self.run_research_operation("reconcile-run", {"admission_id": admission["id"]}), launched)
+        assessed = self.run_research_operation("assess", self.assessment(plan, observed))["result"]
+        self.assertTrue(assessed["validated_result"])
+        self.assertEqual(assessed["obligations"], [])
+        snapshot = self.store.snapshot()
+        self.assertEqual(json.loads(self.run_command("exactory-lab", *arguments).stdout), launched)
+        self.assertEqual(self.store.snapshot(), snapshot)
+        self.assertEqual(len(snapshot["records"]["execution"]), 1)
+        self.assertNotIn("study", snapshot["records"]["workspace"])
+        self.assertFalse((self.root / ".exactory/study.json").exists())
+
+    def test_lab_records_an_explicit_cohort_decision_without_creating_a_study(self):
+        self.initialize_problem()
+        directory = self.root / "notes"
+        directory.mkdir()
+        arguments = ("decide", "--stage", "cohort", "--decision", "Explore extremal sequences",
+            "--why", "The field evidence motivates this population", "--evidence", "cohort/doctrine.md",
+            "--expected-revision", str(self.store.revision), "--request-id", "problem-cohort-choice")
+        decision = json.loads(self.run_command("exactory-lab", *arguments, directory=directory).stdout)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(decision, records["workspace_decision"]["problem-cohort-choice"]["entry"])
+        self.assertEqual(decision["stage"], "cohort")
+        self.assertEqual(decision["evidence"], "cohort/doctrine.md")
+        self.assertEqual(json.loads((self.root / ".exactory/decisions.jsonl").read_text()), decision)
+        snapshot = self.store.snapshot()
+        self.assertEqual(json.loads(self.run_command("exactory-lab", *arguments).stdout), decision)
+        self.assertEqual(self.store.snapshot(), snapshot)
+        self.assertFalse((self.root / ".exactory/study.json").exists())
+
+    def test_lab_requires_an_explicit_decision_stage_in_a_problem_workspace(self):
+        self.initialize_problem()
+        snapshot = self.store.snapshot()
+        completed = self.run_command("exactory-lab", "decide", "--decision", "Choose the population",
+            "--why", "The evidence motivates it", expected_code=1)
+        self.assertEqual(json.loads(completed.stderr)["error"]["code"], "invalid_input")
+        self.assertIn("--stage", json.loads(completed.stderr)["error"]["message"])
+        self.assertEqual(self.store.snapshot(), snapshot)
+        self.assertFalse((self.root / ".exactory/decisions.jsonl").exists())
+
+
 class ProblemSharedToolsTests(DeferralCase, ProblemToolsCase):
     def test_budget_depth_scope_search_and_reading_before_statement(self):
         self.initialize_problem()

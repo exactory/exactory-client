@@ -397,7 +397,8 @@ class ProblemDirectionPromptTests(unittest.TestCase):
     def test_previous_prompt_bytes_authenticate_without_refreshing_bars_or_slates(self):
         for (role, repair), expected_hash in PREVIOUS_HASHES.items():
             with self.subTest(role=role, repair=repair):
-                old = protocol.canonical_prompt(role, version=4, repair=repair, orchestration='problem_creation')
+                old = protocol.canonical_prompt(role, version=4, repair=repair, orchestration='problem_creation',
+                                            common_version=1)
                 current = protocol.canonical_prompt(role, repair=repair, orchestration='problem_creation')
                 suffix = '/context-repair' if repair else ''
                 self.assertEqual(old['template_id'], ('exactory-problem-review-v4/' if role == 'result' else
@@ -411,6 +412,6 @@ class ProblemDirectionPromptTests(unittest.TestCase):
                 altered = copy.deepcopy(assignment)
                 altered['prompt']['text'] += ' '
                 self.assertFalse(protocol._prompt_matches(altered))
-        adjudicator = protocol.canonical_prompt('adjudicator', orchestration='problem_creation')
+        adjudicator = protocol.canonical_prompt('adjudicator', orchestration='problem_creation', common_version=1)
         self.assertEqual(adjudicator['template_id'], 'exactory-problem-review-v2/adjudicator')
         self.assertEqual(adjudicator['template_hash'], '352e433bb6ebe3a989437c65a1e9150d46bf1971d55b040a940ead24ceb873b2')

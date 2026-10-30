@@ -1,5 +1,6 @@
 """Binary result evidence survives observed review, scientific delivery and manuscript pinning."""
 
+import base64
 import copy
 import json
 import tempfile
@@ -16,6 +17,100 @@ from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
 from test_research_binary_pdf import authored_pdf
 from test_research_binary_results import PNG
+
+
+class UnscopedBinaryResultJourneyTests(DevelopmentCase):
+    def build_result_evidence(self, outcome, validation=False):
+        if validation:
+            return super().result_evidence(outcome, True)
+        output = outcome["outputs"][0]
+        return {"kind": "result", "execution_id": outcome["id"], "output_id": output["id"],
+                "artifact": output["artifact"], "locator": {"kind": "artifact"}}
+
+    result_evidence = build_result_evidence
+
+    def run_binary_manuscript_journey(self, data, media, suffix):
+        self.prepared_study()
+        original_admit = integration_fixtures.admit_lab
+        body = integration_fixtures.OBSERVED_PROGRAM + (
+            "Path('results/result." + suffix + "').write_bytes(" + repr(data) + ")\n")
+        outputs = [{"id": "result", "requirement_id": "measurements", "path": "results/result." + suffix,
+                    "media_type": media},
+                   {"id": "validation", "requirement_id": "checks", "path": "results/validation.json",
+                    "media_type": "application/json"}]
+
+        def admit_binary(case, *args, **kwargs):
+            return original_admit(case, *args, **dict(kwargs, body=body, outputs=outputs))
+
+        with patch.object(integration_fixtures, "admit_lab", side_effect=admit_binary):
+            outcome = integration_fixtures.observed_candidate(self)
+        reference = self.build_result_evidence(outcome)
+        files = {"pdf": "draft/paper.pdf", "abstract": "draft/abstract.txt",
+                 "bibliography": "draft/references.bib", "claims": "evidence/claims.json", "sources": None}
+        for kind, content in {"pdf": authored_pdf(), "abstract": b"The finite maximum is 9.",
+                              "bibliography": b"Authored fixture references.",
+                              "claims": b'[{"id":"bound","claim":"The finite maximum is 9."}]'}.items():
+            path = self.root / files[kind]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        bundle = self.mutate(publication.prepare_publication, {"id": "binary-paper", "files": files,
+            "claim_evidence": [{"claim_id": "bound", "evidence": [reference]}],
+            "citation_accounting": integration_fixtures.account_fixture_citations(self)})["result"]
+        review = integration_fixtures.build_manuscript_review(self, bundle, "binary-reviewer")
+        self.mutate(publication.record_manuscript_review, review)
+        records = self.store.snapshot()["records"]
+        assignment = records["review_assignment"][review["assignment_id"]]
+        attempt = next(a for a in records["review_attempt"].values() if a["assignment_id"] == assignment["id"])
+        self.assertEqual(attempt["status"], "completed")
+        request = json.loads(self.artifacts.read(attempt["request"]))
+        content = review_transport.logical_messages(request)[-1]["content"]
+        if suffix == "npy":
+            text = content if isinstance(content, str) else content[0]["text"]
+            actual = json.loads(text[len(review_transport.PACKET_LABEL):])
+            attached = {} if isinstance(content, str) else review_input_projection.collect_attachments(content)
+            review_input_projection.project_evidence(actual, attached)
+            entry = next(row for row in actual["evidence"] if row["artifact"] == reference["artifact"])
+            self.assertEqual(entry["delivery"], "inline-result-bytes")
+            self.assertEqual(base64.b64decode(entry["content"]), data)
+        else:
+            attached = review_input_projection.collect_attachments(content)
+            self.assertEqual(base64.b64decode(review_input_projection.find_attachment(attached, reference["artifact"])), data)
+        self.assertEqual(records["execution_binding"]["lab-run"]["outputs"][0]["media_type"], media)
+        self.assertTrue(records["cycle_assessment"]["assessment-1"]["assessment"]["validated_result"])
+        self.assertEqual(publication._bundle(records, self.artifacts)["digest"], bundle["digest"])
+        observation = records["execution_observation"]["lab-run"]
+        self.assertIn(reference["artifact"], [entry["artifact"] for entry in observation["files"]])
+        from codex_route_fixtures import invoke_codex, read_sent_packet, record_codex_route
+        record_codex_route(self, "binary-text-route")
+        self.mutate(review_protocol.record_assignment, {"id": "binary-text-review", "route_id": "binary-text-route",
+            "dossier_id": None, "role": "manuscript", "reviewer_id": "binary-text-reviewer",
+            "author_id": bundle["candidate"]["authors"][0], "context": {"bundle": bundle}})
+        completed = invoke_codex(self, "binary-text-review", json.loads(self.artifacts.read(attempt["output"])))
+        self.assertEqual(completed["result"]["status"], "completed")
+        text_request, text_packet = read_sent_packet(self, "attempt-binary-text-review")
+        entry = next(row for row in text_packet["evidence"] if row["artifact"] == reference["artifact"])
+        self.assertEqual(entry["encoding"], "omitted")
+        self.assertEqual(entry["delivery"], "bytes-omitted-on-text-route")
+        self.assertNotIn(base64.b64encode(data).decode("ascii"), json.dumps(text_request))
+        generic = self.artifacts.put(data, "application/octet-stream")
+        self.store.mutate("fixture.alias", {}, lambda tx: tx.put("fixture", "binary-alias", generic),
+                          expected_revision=self.store.revision, request_id="binary-alias")
+        from research_harness.native_export import export_native
+        attack = self.root / "attack"
+        attack.mkdir()
+        exported = export_native(self.store, attack, attack / "inputs")
+        paths = [entry["path"] for entry in exported["inputs"]]
+        self.assertEqual(len(paths), len(set(paths)))
+        self.assertEqual((attack / "inputs/artifacts" / generic["sha256"]).read_bytes(), data)
+
+    def test_png_output_reaches_an_observed_manuscript_review(self):
+        self.run_binary_manuscript_journey(PNG, "image/png", "png")
+
+    def test_pdf_output_reaches_an_observed_manuscript_review(self):
+        self.run_binary_manuscript_journey(authored_pdf(), "application/pdf", "pdf")
+
+    def test_opaque_output_reaches_an_observed_manuscript_review(self):
+        self.run_binary_manuscript_journey(b"\x93NUMPY\x01\x00\xff\x00finite-result", "application/x-npy", "npy")
 
 
 class BinaryResultJourneyTests(SourceLimitedCase):
@@ -119,7 +214,21 @@ class BinaryResultJourneyTests(SourceLimitedCase):
         self.assert_binary_bytes(directory, references)
         pinned = publication._bundle(self.store.snapshot()["records"], self.artifacts)
         self.assertEqual(pinned["digest"], bundle["digest"])
+        integration_fixtures.build_manuscript_review(self, bundle, "binary-paper-reviewer")
         records = self.store.snapshot()["records"]
+        paper_assignment = next(a for a in records["review_assignment"].values()
+                                if a["role"] == "manuscript")
+        paper_attempt = next(a for a in records["review_attempt"].values()
+                             if a["assignment_id"] == paper_assignment["id"])
+        self.assertEqual(paper_attempt["status"], "completed")
+        paper_request = json.loads(self.artifacts.read(paper_attempt["request"]))
+        attached = review_input_projection.collect_attachments(
+            review_transport.logical_messages(paper_request)[-1]["content"])
+        for reference in references[:2]:
+            self.assertIsNotNone(review_input_projection.find_attachment(attached, reference["artifact"]))
+        observed = records["execution_observation"]["lab-run"]["files"]
+        for reference in references[:2]:
+            self.assertIn(reference["artifact"], [entry["artifact"] for entry in observed])
         for identifier in decision["payload"]["review_ids"]:
             assignment = records["review_assignment"][records["value_review"][identifier]["assignment_id"]]
             attempt = next(a for a in records["review_attempt"].values() if a["assignment_id"] == assignment["id"])
@@ -179,6 +288,33 @@ class BinaryResultJourneyTests(SourceLimitedCase):
 
 
 class ResultOutputProjectionTests(unittest.TestCase):
+    def test_multiple_recorded_media_aliases_project_independently_of_result_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifacts = ArtifactStore(directory)
+            output = artifacts.put(PNG, "image/png")
+            alternate = artifacts.put(PNG, "image/PNG")
+            observed = artifacts.put(PNG, "application/octet-stream")
+            terminal = artifacts.put(b'{"status":"completed","exit_code":0}', "application/json")
+            references = [{"kind": "result", "execution_id": "png", "output_id": name,
+                           "artifact": ref, "locator": {"kind": "artifact"}}
+                          for name, ref in (("figure", output), ("alternate", alternate))]
+            records = {"execution": {"png": {"payload": {"origin": {"kind": "managed", "admission_id": "run"},
+                       "outputs": [{"id": "figure", "artifact": output}, {"id": "alternate", "artifact": alternate}]}}},
+                       "execution_observation": {"run": {"terminal": terminal,
+                           "files": [{"path": "figure.png", "artifact": observed}]}}}
+            contract = {"payload": {"scientific_delivery": [{"original_sha256": output["sha256"],
+                "disposition": "project", "projection": {"kind": "result_output",
+                "context": "Both exact recorded media descriptors refer to the observed PNG bytes."}}]}}
+            delivered = []
+            for ordered in (references, list(reversed(references))):
+                manifest = {"observed_file": observed, "evidence": ordered}
+                projected, derived = scientific_delivery.project_delivery(records, artifacts, contract, manifest)
+                self.assertEqual(projected["evidence"], ordered)
+                self.assertIn(projected["observed_file"], (output, alternate))
+                self.assertEqual(derived, {})
+                delivered.append(projected["observed_file"])
+            self.assertEqual(delivered[0], delivered[1])
+
     def test_result_output_keeps_its_context_when_public_source_bytes_have_another_media_type(self):
         with tempfile.TemporaryDirectory() as directory:
             artifacts = ArtifactStore(directory)

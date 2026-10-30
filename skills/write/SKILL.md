@@ -145,6 +145,19 @@ source, then continue to stage 2.
 
 ## Stage 2: Draft
 
+In a managed study, entering `write` writes `.exactory/draft.json` (the marker)
+when the objective carries `title` and `category` and the workspace holds
+neither a draft record nor an entry at that path. When `next --summary` names
+`draft_marker_missing`, take the step that its message names before the first
+LaTeX source. The ai-science skill's STUDY.md lists every state: export for a
+record whose marker is missing or differs, adoption for a supported file
+without a record, a move of a link, a directory or an unsupported file to an
+unused name, and draft initialization when neither record nor entry exists.
+The authorship hook records `written_by_exactory` for a `.tex` file written
+with Write under `draft/` only while `.exactory/draft.json` is a file, and no
+later creation, export, adoption or move of the marker records an earlier
+source.
+
 Write section by section, LaTeX under `draft/`; `references.bib` lives there.
 Read the current field standards and source-grounded `cohort/doctrine.md`. Assess
 the applicable article type and venue when chosen, including methodological,
@@ -192,7 +205,11 @@ reference, and `mismatches` in the details lists every pair.
 
 Pin the exact PDF, abstract, bibliography, claims, and optional sources with
 `exactory-research manuscript`, including actual claim-to-evidence mappings and
-`citation_accounting`. The pin accounts for every work that the study read in
+`citation_accounting`. `manuscript --check` runs the pin's validation on one
+snapshot of the store with the files staged in memory: it reports the first
+refusal, for example `publication_evidence_mismatch`, or an acceptance, and
+records no bundle, so the pin that follows validates again. The pin accounts for
+every work that the study read in
 full and every work that a selected five-purpose search cites. A BibTeX entry
 cites such a work when it carries the work's arXiv family or DOI, or a DOI of a
 stored alias, or has the work's title as its title. Pin once without
@@ -206,6 +223,16 @@ for each listed work, and for no other work:
 - `{"work_id": ..., "reason": ...}` when the paper does not cite the work,
   saying why the work does not bear on the paper.
 
+When the deposit is to carry the code and data, build the archive and pin it as
+`sources`. The archive comes from a pinned bundle, so pin the manuscript once,
+run `exactory-draft package --output draft/sources.zip` (with `--include` for
+each file that no admitted run froze), and pin again with `draft/sources.zip` as
+`sources`; the reviews and predictions then belong to that bundle. An archive
+built after a pin does not change the pin: a managed deposit uploads only the
+`sources` bytes that the reviewed bundle holds. The archive records the snapshot
+and the bundle it was built from, not the reviews of the bundle that pins it.
+The deposit skill describes the command and its refusals.
+
 After the pin, the pinned working files (the PDF, the abstract, the
 bibliography, the claims file and the sources when pinned) stay as pinned until
 the bundle's measurement is complete: three assessors with a review and a
@@ -216,11 +243,21 @@ and do not change the other files, until the last review and prediction of the
 bundle are recorded. If `exactory-research status` lists a file under
 `bundle_drift`, run `exactory-research restore --bundle DIGEST` with the
 `bundle_digest` it reports, the `digest` that the pin returned. The command
-stores the current bytes of each differing file as a backup artifact, then
-writes the pinned bytes, and lists each file under `restored` with its
-`backup` reference. Keep that output: no record names a backup, and its `path`
-under `research/sources/objects/` is where you read the displaced edit back
-after the measurement, for the next revision.
+moves each differing file to `.restore-backup-<32 hexadecimal digits>` in its
+directory, stores the moved bytes as a backup artifact, then writes the pinned
+bytes, and lists each file under `restored` with its `backup` reference and
+its `backup_path`. Keep that output: no record names a backup. After the
+measurement, read the displaced edit back for the next revision from the
+moved file or from the backup's `path` under `research/sources/objects/`. An
+editor or a compiler that still had the file open continues to write to the
+moved file, not to the backup.
+
+The blind reviewers of the pinned bundle run in a context without the author's
+memory index, for example a separate CLI process with no automatic memory. An
+index edited after a session started still leaves its loaded notes in that
+session, so the author's own session is never a reviewer. Each review's
+`assessor` discloses its context with the boolean `author_memory_notes_present`
+(the evaluate skill, "2. Quality review").
 
 Stage report: present the compiled draft, evidence scope and limitations, citation
 findings, and where refreshed searches changed the text. Include a citation map:

@@ -89,11 +89,14 @@ def validate_evidence_contract(records, artifacts, values, *, required=True, pac
             raise
 
 
-def evidence_arrays(output):
+def evidence_arrays(output, *, with_paths=False):
     value = output['value']
-    return [value['evidence']] + [row['evidence'] for row in (
-        value['assurances'] + value['work_items'] + value['objection_findings'] + output['objections']
-        + output.get('reassessment', {}).get('findings', []))]
+    arrays = [('/value/evidence', value['evidence'])]
+    for path, rows in (('/value/assurances', value['assurances']), ('/value/work_items', value['work_items']),
+                       ('/value/objection_findings', value['objection_findings']), ('/objections', output['objections']),
+                       ('/reassessment/findings', output.get('reassessment', {}).get('findings', []))):
+        arrays.extend((path + '/' + str(index) + '/evidence', row['evidence']) for index, row in enumerate(rows))
+    return arrays if with_paths else [evidence for path, evidence in arrays]
 
 
 def classify_observed_output(records, artifacts, attempt_id):
@@ -115,17 +118,22 @@ def classify_observed_output(records, artifacts, attempt_id):
             validate_adjudication_contract(records, artifacts, assignment, packet, output)
         elif assignment['role'] == 'native_math':
             from .native_review import validate_output
-            from .openness_reading import find_stage, validate_turn_output
+            from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,
+                                           has_deliverable_passage, validate_turn_output)
             with contract_check('native.output'):
                 packet = json.loads(artifacts.read(assignment['packet']))
                 if find_stage(packet) is None:
                     validate_output(packet['native'], output)
                 else:
                     validate_turn_output(packet, output)
+            # Reading the bound bodies stays outside the contract check: an unavailable body is not an output failure.
+            if not has_deliverable_passage(records, artifacts, packet, output):
+                with contract_check('native.output'):
+                    raise ResearchError(INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, {'path': '/passage_requests'})
     except ResearchError as error:
         check = getattr(error, 'contract_check', None)
         if check is not None:
-            return {'code': error.code, 'details': error.details, 'check': check}
+            return {'code': error.code, 'details': dict(error.details or {}, message=error.message), 'check': check}
     except (ValueError, TypeError, KeyError):
         # Unavailable/malformed frozen inputs are not an output-contract finding.
         return None

@@ -52,6 +52,21 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
             identifier="invalid-new-correction", review_ids=["review-result-first", "review-result-second"],
             objection_id="unsupported-implication", correction=self.build_correction(self.new_source)))
 
+    def test_each_current_descriptor_is_required_even_when_its_bytes_have_an_alias(self):
+        from research_harness import review_adjudicator_sources as current
+        _, packet = self.prepare_current_comparator()
+        generic = dict(self.new_source, media_type="application/octet-stream")
+        source = next(row for row in packet["current_source_delivery"]["sources"]
+                      if self.new_source in row["evidence"])
+        packet["evidence"].append({"artifact": generic, "encoding": "utf-8",
+                                   "content": self.artifacts.read(generic).decode("utf-8")})
+        for references in ([self.new_source, generic], [generic, self.new_source]):
+            source["evidence"] = references
+            with self.subTest(references=references):
+                with self.assertRaises(ResearchError) as raised:
+                    current.validate(self.artifacts, packet)
+                self.assertEqual(raised.exception.code, "review_current_source_incomplete")
+
     def test_descriptors_or_altered_bytes_cannot_satisfy_current_source_delivery(self):
         from research_harness import review_adjudicator_sources as current
         _, packet = self.prepare_current_comparator()

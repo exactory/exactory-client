@@ -38,17 +38,20 @@ class NativeFrozenRecordTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'review_evidence_undelivered')
         reference = payload['value']['evidence'][0]
         # A reference without a digest is named with digest None, as 0.56.1 reports it.
-        details = {'record_kind': reference['record_kind'], 'id': reference['id'], 'digest': reference.get('digest')}
+        details = {'record_kind': reference['record_kind'], 'id': reference['id'], 'digest': reference.get('digest'),
+                   'path': '/value/evidence'}
         self.assertEqual(caught.exception.details, details)
         records = fixture.store.snapshot()['records']
         refusal = records['review_output_refusal'][attempt['id']]
         self.assertEqual(fixture.store.revision, revision + 1)
         self.assertEqual((refusal['code'], refusal['check'], refusal['details']),
-                         ('review_evidence_undelivered', 'review.evidence_delivery', details))
+                         ('review_evidence_undelivered', 'review.evidence_delivery',
+                          dict(details, message=caught.exception.message)))
         self.assertEqual(fixture.artifacts.read(attempt['output']), original_output)
         self.assertNotIn(payload['id'], records.get('value_review', {}))
         self.assertEqual(review_refusal.classify_observed_output(records, fixture.artifacts, attempt['id']),
-                         {'code': refusal['code'], 'check': refusal['check'], 'details': details})
+                         {'code': refusal['code'], 'check': refusal['check'],
+                          'details': dict(details, message=caught.exception.message)})
 
     def test_observed_omitted_digest_records_without_rewriting_the_output_or_payload(self):
         payload = self.observe(copy.deepcopy(self.reference))

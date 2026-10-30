@@ -33,6 +33,7 @@ LOCAL_ADAPTERS = {'claude_cli_v1': 'review_claude_transport', 'codex_cli_v1': 'r
 # Both local adapters carry text only: a binary artifact is named in the packet without its bytes.
 TEXT_ONLY_ADAPTERS = frozenset(name for name in LOCAL_ADAPTERS if name != 'codex_cli_visual_v1')
 TEXT_ONLY_DELIVERY_VARIABLE = 'EXACTORY_REVIEW_TEXT_ONLY_DELIVERY'
+RESULT_BYTES_DELIVERY = 'inline-result-bytes'
 
 
 def text_only_enabled():
@@ -546,6 +547,8 @@ def request_body(route, prompt, packet, history=(), order=FIT_ORDER):
             evidence['encoding'] = 'omitted'
             evidence['delivery'] = 'bytes-omitted-on-text-route'
             evidence['note'] = OMITTED_BYTES_NOTE
+            continue
+        if evidence.get('delivery') == RESULT_BYTES_DELIVERY:
             continue
         encoded = evidence.pop('content')
         delivered_type, _ = detect_media_type(base64.b64decode(encoded), reference['media_type'])

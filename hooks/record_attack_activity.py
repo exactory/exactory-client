@@ -3,12 +3,21 @@
 
 A session can end before an attack does, and the harness's record says what was
 decided but not what the agent was in the middle of. This hook appends one line
-to `attack/<slug>/activity.jsonl` for every Write, Edit, or Bash call that
-touched that workspace: a file under it, a harness command naming its slug, or
-a shell command naming a path under it. `exactory-math status` reports the last
-entries, so a resumed session sees where the previous one stopped. The log keeps
-the last 200 entries. Any other call, and any internal error, is silent: exit 0,
-no output. It never blocks: it runs after the tool already did its work.
+to `attack/<slug>/activity.jsonl` for a successful Write or Edit under that
+workspace. It appends one line for a harness command (`exactory-math` or
+`attack.py`) that names the attack by its slug or by a path inside it. A harness
+command whose own arguments include `--check` leaves no entry, because a check
+writes nothing. An ordinary shell command that names a path under the workspace
+is appended only after a harness-command entry of the same host and session. An
+inspection by another session, or by a session without a host identity, leaves
+the file unchanged. Each entry carries the time, the tool, the target, the
+host-qualified `session_id` (or null) and `harness_command`. The log keeps the
+last 200 entries of all sessions. `exactory-math status` shows the last entries
+of the latest session with a harness-command entry. Any other call, a failed
+tool result and any internal error, including a failure of the shell parser, is
+silent. The hook exits 0 with no output and appends nothing. It never blocks: it
+runs after the tool already did its work, and the PreToolUse guard does not
+depend on it.
 """
 
 from __future__ import annotations
@@ -79,6 +88,9 @@ def _describe_shell_calls(command: str, cwd: Path) -> list[tuple[Path, str, bool
             attack_root = _resolve(call_tokens[index + 1], cwd)
         is_harness_call = (executable_position < end
                            and Path(tokens[executable_position]).name in _HARNESS_COMMANDS)
+        if is_harness_call and "--check" in tokens[executable_position:end]:
+            # A check writes nothing, so it leaves no activity entry either.
+            continue
         for index in range(start, end):
             token = tokens[index]
             if not is_path_candidate(token):

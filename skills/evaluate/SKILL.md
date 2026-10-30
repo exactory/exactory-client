@@ -143,6 +143,20 @@ permitted tools; record author-history isolation, prior-assessment isolation and
 identity masking separately. The probe must demonstrate intended evidence access
 as well as exclusion of synthetic forbidden context.
 
+Run every blind assessor in a context that holds no memory index of the author's
+session: for example a separate CLI process with its own working directory and
+no automatic memory, or a verified route whose probe showed the index absent. A
+session loads an index at startup, and an edit of the index afterwards does not
+remove the notes that the session already holds. Record what the assessor's
+context held in the `assessor` of `review`, `manuscript-review`,
+`manuscript-prediction`, `round-review` and `scoped-review`:
+`author_memory_notes_present: true` when the author's memory notes were
+present, `false` when the context was verified to hold none. The field is an
+optional boolean and a disclosure only. The harness keeps either value, refuses
+another type, adds no gate on it, and treats an absent field in an older review
+as unknown exposure. Omit the field when neither value is known; an omitted
+field is not `false`.
+
 A new session, directory or host and a clean packet do not establish isolation.
 If an automatic memory index or later tool read exposes prior scores, retain the
 response and record contamination even when the answer never repeats them.
@@ -209,9 +223,10 @@ pinned bytes. Before you record a review or a prediction, read
 `exactory-research status`: `bundle_drift` names each differing file while
 the measurement is incomplete. If it names one, run
 `exactory-research restore --bundle DIGEST` with the reported `bundle_digest`.
-The command keeps the current bytes of each differing file as a backup
-artifact before it writes the pinned bytes, and changes no record (the write
-skill's WORKSPACE.md, "The measurement").
+The command moves each differing file aside and stores its bytes as a backup
+artifact before it writes the pinned bytes, and changes no record. Its output
+names the moved file and the backup (the write skill's WORKSPACE.md, "The
+measurement").
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch

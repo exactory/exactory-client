@@ -1,0 +1,2963 @@
+{
+ "cases": [
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "88b53e388fa267f8aa5f72da297b28ebdab5ac6e020f81b4be6c2b756d30f3ca",
+    "template_hash": "88b53e388fa267f8aa5f72da297b28ebdab5ac6e020f81b4be6c2b756d30f3ca",
+    "template_id": "exactory-q1-review-v2/bar"
+   },
+   "is_previous_prompt": false,
+   "options": {},
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "c474378cef1646b2adf449db3087a220baa27a155b278a10c88ef2448946d244",
+    "template_hash": "c474378cef1646b2adf449db3087a220baa27a155b278a10c88ef2448946d244",
+    "template_id": "exactory-independent-review-sources-v2/bar"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "38fed1d12ce4376f4144d3dd6c57e2e9475db73a30b7a86c8471f00c84588312",
+    "template_hash": "38fed1d12ce4376f4144d3dd6c57e2e9475db73a30b7a86c8471f00c84588312",
+    "template_id": "exactory-q1-review-v2/slate"
+   },
+   "is_previous_prompt": false,
+   "options": {},
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "99c7b148411e7c238899f73136ceedbb0818f21cbd8639195716ebcc745431e9",
+    "template_hash": "99c7b148411e7c238899f73136ceedbb0818f21cbd8639195716ebcc745431e9",
+    "template_id": "exactory-independent-review-sources-v2/slate"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "result"
+    },
+    "rendered_prompt_hash": "236703cb1f256d93b60cfa4c82ea7e2eb76fcd7a66c9984542767c675e4e32bc",
+    "template_hash": "236703cb1f256d93b60cfa4c82ea7e2eb76fcd7a66c9984542767c675e4e32bc",
+    "template_id": "exactory-q1-review-v2/result"
+   },
+   "is_previous_prompt": false,
+   "options": {},
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "result"
+    },
+    "rendered_prompt_hash": "980dddb9ba4e1e136de898ed9824927c90ce1426e0d9c87800f68a480afc4a00",
+    "template_hash": "980dddb9ba4e1e136de898ed9824927c90ce1426e0d9c87800f68a480afc4a00",
+    "template_id": "exactory-independent-review-sources-v2/result"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "adjudicator"
+    },
+    "rendered_prompt_hash": "ed0fc66536eb341d267a5aefdaf6aa7d788212b2ba7c963a17391636b79ab523",
+    "template_hash": "ed0fc66536eb341d267a5aefdaf6aa7d788212b2ba7c963a17391636b79ab523",
+    "template_id": "exactory-focused-review-evidence-v2/adjudicator"
+   },
+   "is_previous_prompt": true,
+   "options": {},
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "adjudicator",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "manuscript"
+    },
+    "rendered_prompt_hash": "afc5985ec6eef1f3b6deee760289c162756b765e38e74446b28c440611853f6f",
+    "template_hash": "afc5985ec6eef1f3b6deee760289c162756b765e38e74446b28c440611853f6f",
+    "template_id": "exactory-independent-review-v1/manuscript"
+   },
+   "is_previous_prompt": true,
+   "options": {},
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "manuscript",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "standalone"
+    },
+    "rendered_prompt_hash": "c41915f1e2018b1160f406470b6880bcbb194f45707942f02ee0b1d0a630ad4e",
+    "template_hash": "c41915f1e2018b1160f406470b6880bcbb194f45707942f02ee0b1d0a630ad4e",
+    "template_id": "exactory-independent-review-v1/standalone"
+   },
+   "is_previous_prompt": true,
+   "options": {},
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "standalone",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "verification"
+    },
+    "rendered_prompt_hash": "e73f95aeac7dbc415fd592e4ee5d27c8ff36061d8ca7e730803c883b865da1ce",
+    "template_hash": "e73f95aeac7dbc415fd592e4ee5d27c8ff36061d8ca7e730803c883b865da1ce",
+    "template_id": "exactory-independent-review-v1/verification"
+   },
+   "is_previous_prompt": true,
+   "options": {},
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "verification",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "1483d2d9fca1520fa921bd98d9d11c64431183e782c8cd9036131fc31019d935",
+    "template_hash": "1483d2d9fca1520fa921bd98d9d11c64431183e782c8cd9036131fc31019d935",
+    "template_id": "exactory-independent-review-v1/native_math"
+   },
+   "is_previous_prompt": false,
+   "options": {},
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "78ddf9f58eb62a90ddc56a0dfd5f9f254a2ee235da59c9ed5f18666d928259ea",
+    "template_hash": "78ddf9f58eb62a90ddc56a0dfd5f9f254a2ee235da59c9ed5f18666d928259ea",
+    "template_id": "exactory-independent-review-v1/native_math"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "b5de936b2aab5e08cf552557cf2d6b8e10e45af60c075f3444fe80e48da9efce",
+    "template_hash": "b5de936b2aab5e08cf552557cf2d6b8e10e45af60c075f3444fe80e48da9efce",
+    "template_id": "exactory-independent-review-v1/bar"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "legacy": true,
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "c36c26caa5dd602382f78af2d3da81e1639a8ccaf7720e2ce82f7d8409b2554b",
+    "template_hash": "c36c26caa5dd602382f78af2d3da81e1639a8ccaf7720e2ce82f7d8409b2554b",
+    "template_id": "exactory-independent-review-v1/slate"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "legacy": true,
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "result"
+    },
+    "rendered_prompt_hash": "368c1d75342c9c770ae3c11f840ed25afe7d25e220aa59b9cf19305bb5ac88cd",
+    "template_hash": "368c1d75342c9c770ae3c11f840ed25afe7d25e220aa59b9cf19305bb5ac88cd",
+    "template_id": "exactory-independent-review-v1/result"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "legacy": true,
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "adjudicator"
+    },
+    "rendered_prompt_hash": "86d6d62f30c988972e87f581806f96ff92cd1eb25b1ef74d02b2ff9090e3a35b",
+    "template_hash": "86d6d62f30c988972e87f581806f96ff92cd1eb25b1ef74d02b2ff9090e3a35b",
+    "template_id": "exactory-independent-review-v1/adjudicator"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "legacy": true,
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "adjudicator",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "62c73721aeb908c0cdd46a9dbf128c33d3abab8cdaa8315b352344fd3572d989",
+    "template_hash": "62c73721aeb908c0cdd46a9dbf128c33d3abab8cdaa8315b352344fd3572d989",
+    "template_id": "exactory-independent-review-v1/native_math"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "legacy": true
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "445b1a1605417b4abd9f4a9e4dade092617a2a3141211468b87c05ac2caa7103",
+    "template_hash": "445b1a1605417b4abd9f4a9e4dade092617a2a3141211468b87c05ac2caa7103",
+    "template_id": "exactory-independent-review-v1/native_math"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "version": 2
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "911fd529e31ca9bf8efba3c743ecdd4d9c7e4cfe11ed7d97ed830e7002c81872",
+    "template_hash": "911fd529e31ca9bf8efba3c743ecdd4d9c7e4cfe11ed7d97ed830e7002c81872",
+    "template_id": "exactory-independent-review-v1/native_math"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "version": 3
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "1da5f10e808a90902fb477135379b80f39acf7a6daccd5c907bb489309e956c1",
+    "template_hash": "1da5f10e808a90902fb477135379b80f39acf7a6daccd5c907bb489309e956c1",
+    "template_id": "exactory-independent-review-v1/native_math"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "version": 4
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "6ec497976123ee7a6d662870831c2bd13ba5e6523ef1d8215830e7cd905c0d37",
+    "template_hash": "6ec497976123ee7a6d662870831c2bd13ba5e6523ef1d8215830e7cd905c0d37",
+    "template_id": "exactory-independent-review-v1/native_math"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "version": 5
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "df528f634409dce53d62fb13de6ba9a94a74e101d8dd8051155c9d6760674232",
+    "template_hash": "df528f634409dce53d62fb13de6ba9a94a74e101d8dd8051155c9d6760674232",
+    "template_id": "exactory-q1-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "753203addd047e8f37d5446bd6aece514020cfccbd501546d19d72be6d02e945",
+    "template_hash": "753203addd047e8f37d5446bd6aece514020cfccbd501546d19d72be6d02e945",
+    "template_id": "exactory-independent-review-sources-v2/bar/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "repair": true,
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "f8dcfc075d5dd722ce9c9311defe8eede2e8e669e2e1e306dc4d44e8268b591f",
+    "template_hash": "f8dcfc075d5dd722ce9c9311defe8eede2e8e669e2e1e306dc4d44e8268b591f",
+    "template_id": "exactory-q1-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-0"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "5f8d39c5e1c777a89badac04eb4845cd9314e5c219e5d0c305b3f1e234182bcd",
+    "template_hash": "5f8d39c5e1c777a89badac04eb4845cd9314e5c219e5d0c305b3f1e234182bcd",
+    "template_id": "exactory-q1-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-1"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "0942cccd2a599321cfb86fed2e61602fb057503efd91e8a7fbc9de27b03429ff",
+    "template_hash": "0942cccd2a599321cfb86fed2e61602fb057503efd91e8a7fbc9de27b03429ff",
+    "template_id": "exactory-q1-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-2"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "d11b3b4493abf44568930a1b40b495eab13fece6619e0b7d6096a386b91060c5",
+    "template_hash": "d11b3b4493abf44568930a1b40b495eab13fece6619e0b7d6096a386b91060c5",
+    "template_id": "exactory-q1-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-3"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "05dbf324f0c26ef1923671ad830bc742a0f86db0e3591917600aa36d15f8ebda",
+    "template_hash": "05dbf324f0c26ef1923671ad830bc742a0f86db0e3591917600aa36d15f8ebda",
+    "template_id": "exactory-q1-review-v2/bar"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "591bed57e62590726bb94e069c897045cbc8b40fec7a89ccb93315e9b4fc68f1",
+    "template_hash": "591bed57e62590726bb94e069c897045cbc8b40fec7a89ccb93315e9b4fc68f1",
+    "template_id": "exactory-q1-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "6eed4bd2752fb5e106b0d2ed6a1c4ba979784eb5ddd3ec0663150e330020ba06",
+    "template_hash": "6eed4bd2752fb5e106b0d2ed6a1c4ba979784eb5ddd3ec0663150e330020ba06",
+    "template_id": "exactory-q1-review-v2/bar"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "5d68bae3c510e6a3fa531c494329104236dda9048d69d5086a5ddc46dc1818d5",
+    "template_hash": "5d68bae3c510e6a3fa531c494329104236dda9048d69d5086a5ddc46dc1818d5",
+    "template_id": "exactory-q1-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "325bd03c5c615259bc15ea0ed4c7cfbae1220a2477cbc9a05f2546ce835db6a8",
+    "template_hash": "325bd03c5c615259bc15ea0ed4c7cfbae1220a2477cbc9a05f2546ce835db6a8",
+    "template_id": "exactory-q1-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "b8eb03c2b906125c9f50a9bfaaead5e615b8dd17ca20cbcda2885d0e2202ec07",
+    "template_hash": "b8eb03c2b906125c9f50a9bfaaead5e615b8dd17ca20cbcda2885d0e2202ec07",
+    "template_id": "exactory-independent-review-sources-v2/slate/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "repair": true,
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "ddb8af3ea0a461049028b9481f984812723710c66b71648d08a29bf64ed0603b",
+    "template_hash": "ddb8af3ea0a461049028b9481f984812723710c66b71648d08a29bf64ed0603b",
+    "template_id": "exactory-q1-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-0"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "43389584c36ff2313fa7ec6462b60174f17bd5eaaa9b28d4cd66f600efe1b033",
+    "template_hash": "43389584c36ff2313fa7ec6462b60174f17bd5eaaa9b28d4cd66f600efe1b033",
+    "template_id": "exactory-q1-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-1"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "fbd6b51334d1bcdb4432607405cd81c3d40b3037e4e30fb690ac5ae1ae7fec29",
+    "template_hash": "fbd6b51334d1bcdb4432607405cd81c3d40b3037e4e30fb690ac5ae1ae7fec29",
+    "template_id": "exactory-q1-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-2"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "a1f03203769ff30124cd73bec5202a197d47fa9bdf0b1fef56fafa9f1fecff09",
+    "template_hash": "a1f03203769ff30124cd73bec5202a197d47fa9bdf0b1fef56fafa9f1fecff09",
+    "template_id": "exactory-q1-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-3"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "e2ca93ce5ff945a25b79acd4daa211eab9470d132e664e9ded9bd25aadbe5141",
+    "template_hash": "e2ca93ce5ff945a25b79acd4daa211eab9470d132e664e9ded9bd25aadbe5141",
+    "template_id": "exactory-q1-review-v2/slate"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "6ac19deb9ba88be8d86d0bffdcebc332a722d0687649aff746a1632345693a6a",
+    "template_hash": "6ac19deb9ba88be8d86d0bffdcebc332a722d0687649aff746a1632345693a6a",
+    "template_id": "exactory-q1-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "746f0a9ce62d67c7ae48396d3113e27bb20044847730dde2280b66bef9a66f00",
+    "template_hash": "746f0a9ce62d67c7ae48396d3113e27bb20044847730dde2280b66bef9a66f00",
+    "template_id": "exactory-q1-review-v2/slate"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "2fe975a47a2465b6b3965710fe3c6a6f0eca968bea670e093b07b779fd296095",
+    "template_hash": "2fe975a47a2465b6b3965710fe3c6a6f0eca968bea670e093b07b779fd296095",
+    "template_id": "exactory-q1-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "result"
+    },
+    "rendered_prompt_hash": "9a46015c705e8324582a4171362b45d2071b60033e88a96e41443e753597d7a5",
+    "template_hash": "9a46015c705e8324582a4171362b45d2071b60033e88a96e41443e753597d7a5",
+    "template_id": "exactory-q1-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "result"
+    },
+    "rendered_prompt_hash": "13fd492f4b52adb7ed52e5358bdf3843d67a333ef57023369366d6edf5cddf9a",
+    "template_hash": "13fd492f4b52adb7ed52e5358bdf3843d67a333ef57023369366d6edf5cddf9a",
+    "template_id": "exactory-independent-review-sources-v2/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "repair": true,
+    "version": 1
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "result"
+    },
+    "rendered_prompt_hash": "8b3c7ee6b451175d16475f1ca5ac9a977e58a32e141f2a9a8dc1122deadc8956",
+    "template_hash": "8b3c7ee6b451175d16475f1ca5ac9a977e58a32e141f2a9a8dc1122deadc8956",
+    "template_id": "exactory-q1-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-0"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "result"
+    },
+    "rendered_prompt_hash": "d81a89d0c268b9d158b32d9a799777565a625be126a7c450bb55473b0324bb60",
+    "template_hash": "d81a89d0c268b9d158b32d9a799777565a625be126a7c450bb55473b0324bb60",
+    "template_id": "exactory-q1-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-1"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "result"
+    },
+    "rendered_prompt_hash": "8123d86e7152b30b8d0dfe4b8d63f0be3acaadadc5ba4bc18de3aff714c0110e",
+    "template_hash": "8123d86e7152b30b8d0dfe4b8d63f0be3acaadadc5ba4bc18de3aff714c0110e",
+    "template_id": "exactory-q1-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-2"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "role": "result"
+    },
+    "rendered_prompt_hash": "39f080f4e18656147e8d0d1bb35922762e62e7abfaefb63af25a8efa28504bfe",
+    "template_hash": "39f080f4e18656147e8d0d1bb35922762e62e7abfaefb63af25a8efa28504bfe",
+    "template_id": "exactory-q1-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "repair": true,
+    "repair_prompt": "earlier-3"
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "6e2d9137f4be871ef8f480f5ca6c07b1ea93959c4786291786467d5b40a90205",
+    "template_hash": "6e2d9137f4be871ef8f480f5ca6c07b1ea93959c4786291786467d5b40a90205",
+    "template_id": "exactory-q1-review-v2/result"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "cd466d84cf5da1706f203859a2428a27473823041cccd22998ed14a9321188a1",
+    "template_hash": "cd466d84cf5da1706f203859a2428a27473823041cccd22998ed14a9321188a1",
+    "template_id": "exactory-q1-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "cb6cac4c23f5c4ee828cd630ede0af61df35ca544378c899e131eb19e538e032",
+    "template_hash": "cb6cac4c23f5c4ee828cd630ede0af61df35ca544378c899e131eb19e538e032",
+    "template_id": "exactory-q1-review-v2/result"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "9a439cee93f55de0976843e3b00e4f2b1b46e0b118823223a387813b94a3c9db",
+    "template_hash": "9a439cee93f55de0976843e3b00e4f2b1b46e0b118823223a387813b94a3c9db",
+    "template_id": "exactory-q1-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "repair": true
+   },
+   "problem": false,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "reading_stage": "reading",
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "c3b851f86bef6f01a1ba4318d95b89cb20ce8f6bb5f6f237d8e555de78beff9f",
+    "template_hash": "c3b851f86bef6f01a1ba4318d95b89cb20ce8f6bb5f6f237d8e555de78beff9f",
+    "template_id": "exactory-openness-reading-v1/reading"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "reading_protocol": "exactory-openness-reading-v1",
+    "reading_stage": "reading"
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "reading_stage": "final",
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "5a9359e8c3b9c27301011cab6a19b1157d9f466e4c5ce2db8d9940a02bde9739",
+    "template_hash": "5a9359e8c3b9c27301011cab6a19b1157d9f466e4c5ce2db8d9940a02bde9739",
+    "template_id": "exactory-openness-reading-v1/final"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "reading_protocol": "exactory-openness-reading-v1",
+    "reading_stage": "final"
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "reading_stage": "reading",
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "0cd98895abb64e7da1674dc1f9e332c2cba309e6a6bfb8560903ad842f4a4857",
+    "template_hash": "0cd98895abb64e7da1674dc1f9e332c2cba309e6a6bfb8560903ad842f4a4857",
+    "template_id": "exactory-openness-reading-v2/reading"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "reading_protocol": "exactory-openness-reading-v2",
+    "reading_stage": "reading"
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "reading_stage": "final",
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "e52d3ac0cebb2b5ab2cb79e5412138d74fc98374c4fe53614bcbf019f95ca301",
+    "template_hash": "e52d3ac0cebb2b5ab2cb79e5412138d74fc98374c4fe53614bcbf019f95ca301",
+    "template_id": "exactory-openness-reading-v2/final"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "reading_protocol": "exactory-openness-reading-v2",
+    "reading_stage": "final"
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "reading_stage": "reading",
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "f0046cd110be7b578a23db1a977fe1ca0d57d24d9a6d8cdf1ec8a2d1b7a7a9c2",
+    "template_hash": "f0046cd110be7b578a23db1a977fe1ca0d57d24d9a6d8cdf1ec8a2d1b7a7a9c2",
+    "template_id": "exactory-openness-reading-v3/reading"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "reading_protocol": "exactory-openness-reading-v3",
+    "reading_stage": "reading"
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "reading_stage": "final",
+     "role": "native_math"
+    },
+    "rendered_prompt_hash": "5c52fed6ef690922bc61fcb50cebc3c147db3d47f687d9fd7ee501dd5a19074a",
+    "template_hash": "5c52fed6ef690922bc61fcb50cebc3c147db3d47f687d9fd7ee501dd5a19074a",
+    "template_id": "exactory-openness-reading-v3/final"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "reading_protocol": "exactory-openness-reading-v3",
+    "reading_stage": "final"
+   },
+   "problem": false,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "native_math",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "bf26d5391917ab8804c806b6b01394ea8e83a101370deeac387085b52a6c8962",
+    "template_hash": "bf26d5391917ab8804c806b6b01394ea8e83a101370deeac387085b52a6c8962",
+    "template_id": "exactory-problem-review-v5/bar"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "818b715d1acdfcd10db45e60d70ce6ef5f864dcdcbd82be9312125cf0fe42fca",
+    "template_hash": "818b715d1acdfcd10db45e60d70ce6ef5f864dcdcbd82be9312125cf0fe42fca",
+    "template_id": "exactory-problem-review-v1/bar"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": false,
+    "version": 1
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b",
+    "template_hash": "e402dcf92926adac0a536d702e93a6e0d33c317f8ec5ff9440028731f695703b",
+    "template_id": "exactory-problem-review-v2/bar"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": false,
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "81186a4b16988f1b05fa503f34dd3b808657b26eb2563fbec7459434f227ad7a",
+    "template_hash": "81186a4b16988f1b05fa503f34dd3b808657b26eb2563fbec7459434f227ad7a",
+    "template_id": "exactory-problem-review-v5/bar"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "2b32ce76ba0350a4f013dde35dee1bfe26550f6a94c37e0cba8e811a02c49485",
+    "template_hash": "2b32ce76ba0350a4f013dde35dee1bfe26550f6a94c37e0cba8e811a02c49485",
+    "template_id": "exactory-problem-review-v5/bar"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "eaec54476747e95fdf2a3f11f72f57191f267ab6d7aff47bd0ceac5dabbdae2e",
+    "template_hash": "eaec54476747e95fdf2a3f11f72f57191f267ab6d7aff47bd0ceac5dabbdae2e",
+    "template_id": "exactory-problem-review-v5/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "19a4be7e4ff2fe4925a19808a6c908238db3c6d05d38296fbf845f24e4f37375",
+    "template_hash": "19a4be7e4ff2fe4925a19808a6c908238db3c6d05d38296fbf845f24e4f37375",
+    "template_id": "exactory-problem-review-v1/bar/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "version": 1
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "6b383f8edaf372617444e25f84d5022563bd5b45fb8767810d867e90aaf8bcea",
+    "template_hash": "6b383f8edaf372617444e25f84d5022563bd5b45fb8767810d867e90aaf8bcea",
+    "template_id": "exactory-problem-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "fcf79ccd45606833338f49b94f6a391bdef83e80a1fbb6171a249e5eebfa9564",
+    "template_hash": "fcf79ccd45606833338f49b94f6a391bdef83e80a1fbb6171a249e5eebfa9564",
+    "template_id": "exactory-problem-review-v5/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "82963ccb820da69e572ad660ee2cfd73e736c6d376ee1b1df1b16268c0be8366",
+    "template_hash": "82963ccb820da69e572ad660ee2cfd73e736c6d376ee1b1df1b16268c0be8366",
+    "template_id": "exactory-problem-review-v5/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "5c639c001cfcd22864130b984d8ee7474a6d63d9c1660f3718bc8d8f0e6ed651",
+    "template_hash": "5c639c001cfcd22864130b984d8ee7474a6d63d9c1660f3718bc8d8f0e6ed651",
+    "template_id": "exactory-problem-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-0",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "0f92854b4363ede4f76eec1a0b5150eeed6737d82578bc7a3e8b9a56173864ba",
+    "template_hash": "0f92854b4363ede4f76eec1a0b5150eeed6737d82578bc7a3e8b9a56173864ba",
+    "template_id": "exactory-problem-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-1",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "3fd5414847a30bc3fb1034e1a22e9e5acc8cacdf1bab881bf05efa5edd403e4e",
+    "template_hash": "3fd5414847a30bc3fb1034e1a22e9e5acc8cacdf1bab881bf05efa5edd403e4e",
+    "template_id": "exactory-problem-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-2",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "08db0e0755eb95aa63fd31d4a3c3cca04dd84129c63034fe6c9b676f3a5bdc71",
+    "template_hash": "08db0e0755eb95aa63fd31d4a3c3cca04dd84129c63034fe6c9b676f3a5bdc71",
+    "template_id": "exactory-problem-review-v2/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-3",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "15098f4e82c33d6ec324d77ad0906b8b7b21f5ed0b24b55bb5b11426ff65dd56",
+    "template_hash": "15098f4e82c33d6ec324d77ad0906b8b7b21f5ed0b24b55bb5b11426ff65dd56",
+    "template_id": "exactory-problem-review-v5/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-0",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "bff803fc1f2e56245761b490981b4458a214d4347a3373119b01276adbc80a1c",
+    "template_hash": "bff803fc1f2e56245761b490981b4458a214d4347a3373119b01276adbc80a1c",
+    "template_id": "exactory-problem-review-v5/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-1",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "fa1da6871f23ba529707aa9f32ac7949b07bd631539ef3e427db6e96819c7bc5",
+    "template_hash": "fa1da6871f23ba529707aa9f32ac7949b07bd631539ef3e427db6e96819c7bc5",
+    "template_id": "exactory-problem-review-v5/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-2",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "bar"
+    },
+    "rendered_prompt_hash": "dedec01cd0a16c3ea32f505c2aec5e7be591d33328d4405ecfa3dbf0b19470b4",
+    "template_hash": "dedec01cd0a16c3ea32f505c2aec5e7be591d33328d4405ecfa3dbf0b19470b4",
+    "template_id": "exactory-problem-review-v5/bar/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-3",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "bar",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "99aa30432492d3b35fe125d53449f4bf32a18fff16029f57c9bb1259a461f7f9",
+    "template_hash": "99aa30432492d3b35fe125d53449f4bf32a18fff16029f57c9bb1259a461f7f9",
+    "template_id": "exactory-problem-review-v5/slate"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "4ec89a2c1947308006fcf53a68f382660970c0fa61bcb401e72437da55023381",
+    "template_hash": "4ec89a2c1947308006fcf53a68f382660970c0fa61bcb401e72437da55023381",
+    "template_id": "exactory-problem-review-v2/slate"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": false,
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "178ba1221fd81afff3b76603a260c97ee60b8367ff6e517a1d514c2eb962791c",
+    "template_hash": "178ba1221fd81afff3b76603a260c97ee60b8367ff6e517a1d514c2eb962791c",
+    "template_id": "exactory-problem-review-v5/slate"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "b04317ff571b995fea401f6b03dc46c4415685fb76fe4e7e21a02316cca38621",
+    "template_hash": "b04317ff571b995fea401f6b03dc46c4415685fb76fe4e7e21a02316cca38621",
+    "template_id": "exactory-problem-review-v5/slate"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "d965a2cbd58e00cd22bf6412f9fbf95339fc1800c0813b9c94b5d41f9ca0faa2",
+    "template_hash": "d965a2cbd58e00cd22bf6412f9fbf95339fc1800c0813b9c94b5d41f9ca0faa2",
+    "template_id": "exactory-problem-review-v5/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "41b566a961b90d92fbdf4798d67aecdfe556b20979de4759f83c8164e01f20bf",
+    "template_hash": "41b566a961b90d92fbdf4798d67aecdfe556b20979de4759f83c8164e01f20bf",
+    "template_id": "exactory-problem-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "0fd82bce51fcb62a91bdce850ee0987cf15770767f5ef183366d5a8ce053cfa1",
+    "template_hash": "0fd82bce51fcb62a91bdce850ee0987cf15770767f5ef183366d5a8ce053cfa1",
+    "template_id": "exactory-problem-review-v5/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "99123a139105b3ec79f04411a4f6d6b71982bb67ef6e7bc30a4a5dbc4b7c30bd",
+    "template_hash": "99123a139105b3ec79f04411a4f6d6b71982bb67ef6e7bc30a4a5dbc4b7c30bd",
+    "template_id": "exactory-problem-review-v5/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "56995aa053b2b2c0957afa4fcee685210402dcfaded9bdc3188bbdc43dded963",
+    "template_hash": "56995aa053b2b2c0957afa4fcee685210402dcfaded9bdc3188bbdc43dded963",
+    "template_id": "exactory-problem-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-0",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "980f87e0071619b3358384021267ecede3cb02165a673a991b6aef25a150c1c4",
+    "template_hash": "980f87e0071619b3358384021267ecede3cb02165a673a991b6aef25a150c1c4",
+    "template_id": "exactory-problem-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-1",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "013faa0f06da0858b7718f32af4cb6590021910578cff772c4d6e0ee871033b2",
+    "template_hash": "013faa0f06da0858b7718f32af4cb6590021910578cff772c4d6e0ee871033b2",
+    "template_id": "exactory-problem-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-2",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "a263a2232aa79970a23c49dafe90f1208e71e56d1ca1da7b14efbf1cb4b1508b",
+    "template_hash": "a263a2232aa79970a23c49dafe90f1208e71e56d1ca1da7b14efbf1cb4b1508b",
+    "template_id": "exactory-problem-review-v2/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-3",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "cdbf7c34702985cfeac240deefcd812f81b7c5987a18fabb2646a21a406ced0a",
+    "template_hash": "cdbf7c34702985cfeac240deefcd812f81b7c5987a18fabb2646a21a406ced0a",
+    "template_id": "exactory-problem-review-v5/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-0",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "933f66d9fa6547af929997eab516eadb6832a0ad3c835ef280ae6d5d395c9a78",
+    "template_hash": "933f66d9fa6547af929997eab516eadb6832a0ad3c835ef280ae6d5d395c9a78",
+    "template_id": "exactory-problem-review-v5/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-1",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "da5e88c5e82c99fe35df57119b4a4cdedd87701d8ab221cb6956a2819a267eef",
+    "template_hash": "da5e88c5e82c99fe35df57119b4a4cdedd87701d8ab221cb6956a2819a267eef",
+    "template_id": "exactory-problem-review-v5/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-2",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "slate"
+    },
+    "rendered_prompt_hash": "ef37a9f8ad90c32ff80af927454ffb485c67eca6654f0bc2da11cc216f687aae",
+    "template_hash": "ef37a9f8ad90c32ff80af927454ffb485c67eca6654f0bc2da11cc216f687aae",
+    "template_id": "exactory-problem-review-v5/slate/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-3",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "slate",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "9bf897203f51d2121a720a99ee2bb4d2eb00344046d3544d2abe689f61dcef24",
+    "template_hash": "9bf897203f51d2121a720a99ee2bb4d2eb00344046d3544d2abe689f61dcef24",
+    "template_id": "exactory-problem-review-v5/result"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "31a44bac73484c1aaf62a02199623a147e71a57902ee6d50d61973166a28364b",
+    "template_hash": "31a44bac73484c1aaf62a02199623a147e71a57902ee6d50d61973166a28364b",
+    "template_id": "exactory-problem-review-v1/result"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": false,
+    "version": 1
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "dbe0052d524fce3b04fd975777f3c19d163e5e13bb6e56fc50943d547782fc93",
+    "template_hash": "dbe0052d524fce3b04fd975777f3c19d163e5e13bb6e56fc50943d547782fc93",
+    "template_id": "exactory-problem-review-v2/result"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": false,
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "056bdeefc13d36316b4f860bb838f52b70eecd706c2b0db1f709c510d7365631",
+    "template_hash": "056bdeefc13d36316b4f860bb838f52b70eecd706c2b0db1f709c510d7365631",
+    "template_id": "exactory-problem-review-v5/result"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "prior_assignment_id": "assignment-prior"
+   },
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "ec2f4399b63e099390f8c5d5c0452c0c8fe7b33878fb9b621d7a7cad0468c3be",
+    "template_hash": "ec2f4399b63e099390f8c5d5c0452c0c8fe7b33878fb9b621d7a7cad0468c3be",
+    "template_id": "exactory-problem-review-v5/result"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": false
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "5ccf9e641573032a8a8042ede0139f0853a7e02d931bbad35dcdc8ae87d041c6",
+    "template_hash": "5ccf9e641573032a8a8042ede0139f0853a7e02d931bbad35dcdc8ae87d041c6",
+    "template_id": "exactory-problem-review-v5/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "7165fbbdcaabd1ba8d1761c45e8f8d916e2151af7749d6e44da645b9b218b8fb",
+    "template_hash": "7165fbbdcaabd1ba8d1761c45e8f8d916e2151af7749d6e44da645b9b218b8fb",
+    "template_id": "exactory-problem-review-v1/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "version": 1
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "c40a37aafa2e6a145d132d68c9e51a346e6617abc43ac66447c294d6b570272a",
+    "template_hash": "c40a37aafa2e6a145d132d68c9e51a346e6617abc43ac66447c294d6b570272a",
+    "template_id": "exactory-problem-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v1",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "9476db267b0641b66e9b3206719b3afc128b8c1ea2e21ff0387fc8e3488ac729",
+    "template_hash": "9476db267b0641b66e9b3206719b3afc128b8c1ea2e21ff0387fc8e3488ac729",
+    "template_id": "exactory-problem-review-v5/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v1",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {
+    "context_repair": {
+     "assignment_id": "assignment-prior"
+    }
+   },
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "reviewer_excerpts": "exactory-review-excerpts-v2",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "25292e7b400b63c13e6f6eff73e3f04e64ff2edccd2b230c2d03681df02e1053",
+    "template_hash": "25292e7b400b63c13e6f6eff73e3f04e64ff2edccd2b230c2d03681df02e1053",
+    "template_id": "exactory-problem-review-v5/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "excerpt_rules": "exactory-review-excerpts-v2",
+    "excerpts": true,
+    "orchestration": "problem_creation",
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "8ff925f6465f7c1dc234f5c57134974e343c9b5bd96604f4e2aafa2cd89df523",
+    "template_hash": "8ff925f6465f7c1dc234f5c57134974e343c9b5bd96604f4e2aafa2cd89df523",
+    "template_id": "exactory-problem-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-0",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "79c2e4ec2754ceb5bbf4b79bbfe5ae9bc7a1cc80832d0270f7eb4e0232dbca8a",
+    "template_hash": "79c2e4ec2754ceb5bbf4b79bbfe5ae9bc7a1cc80832d0270f7eb4e0232dbca8a",
+    "template_id": "exactory-problem-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-1",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "d4f39634bd4668d4f6e7ed0439384656339d96d434693b71d225d750343956c2",
+    "template_hash": "d4f39634bd4668d4f6e7ed0439384656339d96d434693b71d225d750343956c2",
+    "template_id": "exactory-problem-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-2",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "3fbfbe6347325c7d6f71505f8936fd33fc9f2a0c2bc5db56e5fca3b1b1910406",
+    "template_hash": "3fbfbe6347325c7d6f71505f8936fd33fc9f2a0c2bc5db56e5fca3b1b1910406",
+    "template_id": "exactory-problem-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-3",
+    "version": 2
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "f3f8ec180dc2542d35fa13d6c636c54b35a85df3a9cedae48d0a592c564b3743",
+    "template_hash": "f3f8ec180dc2542d35fa13d6c636c54b35a85df3a9cedae48d0a592c564b3743",
+    "template_id": "exactory-problem-review-v5/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-0",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "5e3a2e299d81edf4d68b496d504fd698a83dbe911a1ccb8d7fae223f93d92f4f",
+    "template_hash": "5e3a2e299d81edf4d68b496d504fd698a83dbe911a1ccb8d7fae223f93d92f4f",
+    "template_id": "exactory-problem-review-v5/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-1",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "e968640d19d9251ed509287ba8e53b3440c2deb9e2c921d44646eed56cb2d843",
+    "template_hash": "e968640d19d9251ed509287ba8e53b3440c2deb9e2c921d44646eed56cb2d843",
+    "template_id": "exactory-problem-review-v5/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-2",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "5e061c1b704d645e1552caf70f83d43deeb8a6e81f9d8a89bcf6e07bcc3493ae",
+    "template_hash": "5e061c1b704d645e1552caf70f83d43deeb8a6e81f9d8a89bcf6e07bcc3493ae",
+    "template_id": "exactory-problem-review-v5/result/context-repair"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-3",
+    "version": 6
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": true
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "a5d5a1ed1edb88d4442d2506cc59eccd2cf34cae6c016c775bbabb70160c9839",
+    "template_hash": "a5d5a1ed1edb88d4442d2506cc59eccd2cf34cae6c016c775bbabb70160c9839",
+    "template_id": "exactory-problem-review-v3/result"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "version": 3
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "83cc6e48e08869d4c95486d29c512fd516f65bb268bcbdb81b8508afcbed1df8",
+    "template_hash": "83cc6e48e08869d4c95486d29c512fd516f65bb268bcbdb81b8508afcbed1df8",
+    "template_id": "exactory-problem-review-v3/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-0",
+    "version": 3
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "73f68f06cb5e9a426c11601e54238815cdae7de6add5b1572e7b7054b85995cd",
+    "template_hash": "73f68f06cb5e9a426c11601e54238815cdae7de6add5b1572e7b7054b85995cd",
+    "template_id": "exactory-problem-review-v3/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-1",
+    "version": 3
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "4c9f338e8939a7e9dc9638f49cad79657b4fc29f337b5275ad39016050e2a708",
+    "template_hash": "4c9f338e8939a7e9dc9638f49cad79657b4fc29f337b5275ad39016050e2a708",
+    "template_id": "exactory-problem-review-v3/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-2",
+    "version": 3
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "96c29be793d5f8eca0ca20f79086b6b8eb04ea696440d99b17792a24a0977006",
+    "template_hash": "96c29be793d5f8eca0ca20f79086b6b8eb04ea696440d99b17792a24a0977006",
+    "template_id": "exactory-problem-review-v3/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-3",
+    "version": 3
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "a30080740a6d75258353df01e098efc1534b30fd18b3bf15bc2ff430a9bccfaa",
+    "template_hash": "a30080740a6d75258353df01e098efc1534b30fd18b3bf15bc2ff430a9bccfaa",
+    "template_id": "exactory-problem-review-v3/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "current",
+    "version": 3
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "c94242e16a09ff7249e409e25e44bc08a1e8c0a978e8455bfb54e85869d94682",
+    "template_hash": "c94242e16a09ff7249e409e25e44bc08a1e8c0a978e8455bfb54e85869d94682",
+    "template_id": "exactory-problem-review-v4/result"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "version": 4
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "83cc6e48e08869d4c95486d29c512fd516f65bb268bcbdb81b8508afcbed1df8",
+    "template_hash": "83cc6e48e08869d4c95486d29c512fd516f65bb268bcbdb81b8508afcbed1df8",
+    "template_id": "exactory-problem-review-v4/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-0",
+    "version": 4
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "73f68f06cb5e9a426c11601e54238815cdae7de6add5b1572e7b7054b85995cd",
+    "template_hash": "73f68f06cb5e9a426c11601e54238815cdae7de6add5b1572e7b7054b85995cd",
+    "template_id": "exactory-problem-review-v4/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-1",
+    "version": 4
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "4c9f338e8939a7e9dc9638f49cad79657b4fc29f337b5275ad39016050e2a708",
+    "template_hash": "4c9f338e8939a7e9dc9638f49cad79657b4fc29f337b5275ad39016050e2a708",
+    "template_id": "exactory-problem-review-v4/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-2",
+    "version": 4
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "96c29be793d5f8eca0ca20f79086b6b8eb04ea696440d99b17792a24a0977006",
+    "template_hash": "96c29be793d5f8eca0ca20f79086b6b8eb04ea696440d99b17792a24a0977006",
+    "template_id": "exactory-problem-review-v4/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "earlier-3",
+    "version": 4
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "a30080740a6d75258353df01e098efc1534b30fd18b3bf15bc2ff430a9bccfaa",
+    "template_hash": "a30080740a6d75258353df01e098efc1534b30fd18b3bf15bc2ff430a9bccfaa",
+    "template_id": "exactory-problem-review-v4/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "repair": true,
+    "repair_prompt": "current",
+    "version": 4
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "canonical_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "4ac669f17499b113cb9fcea6a091045bfe39f637b99c03eaeb8360051c0f273e",
+    "template_hash": "4ac669f17499b113cb9fcea6a091045bfe39f637b99c03eaeb8360051c0f273e",
+    "template_id": "exactory-problem-review-v2/result"
+   },
+   "is_previous_prompt": true,
+   "options": {},
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "previous_problem_result_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "context_repair": true,
+     "orchestration": "problem_creation",
+     "role": "result"
+    },
+    "rendered_prompt_hash": "8f75a1563ee314c3c21a9070129bc32719ef513cf9f299d90c0d9113c9bfcd26",
+    "template_hash": "8f75a1563ee314c3c21a9070129bc32719ef513cf9f299d90c0d9113c9bfcd26",
+    "template_id": "exactory-problem-review-v2/result/context-repair"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "repair": true
+   },
+   "problem": true,
+   "reassessment_required": true,
+   "renderer": "previous_problem_result_prompt",
+   "role": "result",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "adjudicator"
+    },
+    "rendered_prompt_hash": "352e433bb6ebe3a989437c65a1e9150d46bf1971d55b040a940ead24ceb873b2",
+    "template_hash": "352e433bb6ebe3a989437c65a1e9150d46bf1971d55b040a940ead24ceb873b2",
+    "template_id": "exactory-problem-review-v2/adjudicator"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "orchestration": "problem_creation"
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "adjudicator",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "adjudicator"
+    },
+    "rendered_prompt_hash": "80a3eeb2a0cd65f1edf434c74a245b68cc8bb33a2edffffcdadbd562a35dd346",
+    "template_hash": "80a3eeb2a0cd65f1edf434c74a245b68cc8bb33a2edffffcdadbd562a35dd346",
+    "template_id": "exactory-problem-review-v2/adjudicator"
+   },
+   "is_previous_prompt": false,
+   "options": {
+    "adjudicator_prompt": "before-not-binding",
+    "orchestration": "problem_creation"
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "adjudicator",
+   "uses_previous_repair_suffix": false
+  },
+  {
+   "context": {},
+   "envelope": {
+    "parameters": {
+     "orchestration": "problem_creation",
+     "role": "adjudicator"
+    },
+    "rendered_prompt_hash": "b355755fc920543576e40a154051c5405f5d7d53f1f92831c934dec316585e37",
+    "template_hash": "b355755fc920543576e40a154051c5405f5d7d53f1f92831c934dec316585e37",
+    "template_id": "exactory-problem-review-v1/adjudicator"
+   },
+   "is_previous_prompt": true,
+   "options": {
+    "orchestration": "problem_creation",
+    "version": 1
+   },
+   "problem": true,
+   "reassessment_required": false,
+   "renderer": "canonical_prompt",
+   "role": "adjudicator",
+   "uses_previous_repair_suffix": false
+  }
+ ],
+ "note": "Envelopes without text; the two hashes pin the exact bytes of each text.",
+ "origin": "40ebd1b (Exactory 0.66.3)"
+}

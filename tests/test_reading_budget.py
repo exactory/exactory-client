@@ -258,7 +258,7 @@ class EarlierPromptTests(unittest.TestCase):
                    ('native_math', 'final'): '5a9359e8c3b9c27301011cab6a19b1157d9f466e4c5ce2db8d9940a02bde9739'}
         for (role, stage), template_hash in earlier.items():
             prompt = protocol.canonical_prompt(role, reading_stage=stage,
-                                               reading_protocol=openness_reading.PROTOCOL_V1)
+                                               reading_protocol=openness_reading.PROTOCOL_V1, common_version=1)
             self.assertEqual((prompt['template_id'], prompt['template_hash']),
                              (openness_reading.PROTOCOL_V1 + '/' + stage, template_hash))
             assignment = {'role': role, 'prompt': prompt, 'context': {}}
@@ -274,7 +274,7 @@ class EarlierPromptTests(unittest.TestCase):
                 ({}, '05dbf324f0c26ef1923671ad830bc742a0f86db0e3591917600aa36d15f8ebda')):
             with self.subTest(options=options):
                 prompt = protocol.canonical_prompt('bar', excerpts=True, excerpt_rules=review_excerpts.PROTOCOL_V1,
-                                                   **options)
+                                                   common_version=1, **options)
                 self.assertEqual(prompt['template_hash'], template_hash)
                 context = {'context_repair': {}} if options.get('repair') else {'prior_assignment_id': 'earlier'}
                 assignment = {'role': 'bar', 'prompt': prompt, 'context': context,
@@ -293,4 +293,4 @@ class EarlierPromptTests(unittest.TestCase):
         self.assertNotIn('120,000', review_excerpts.PHASE_PROMPT_V1)
         self.assertEqual(json.dumps(sorted(openness_reading.PROMPTS)),
                          json.dumps(sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2,
-                                            openness_reading.PROTOCOL])))
+                                            openness_reading.PROTOCOL, openness_reading.MATH_PROTOCOL])))

@@ -38,6 +38,17 @@ watchdog enforces the deadline after worker loss even without a retry. It writes
 and writes `supervisor-terminal.json`. A later retry records the outcome and
 reconciles actual usage before releasing the reservation.
 
+When the probe runs the program that a planned cycle will admit, disclose it:
+add `--cycle-id` with the future cycle's id and `--program-path` with the
+program's stable path in the workspace. Add `--read-output work/FILE`,
+`--read-output stdout` or `--read-output stderr` for each output that you read.
+Give no read path for a completion check: the harness then seals every output
+and both streams unread, keeps their hashes, and never delivers their bytes.
+Record the id of each disclosed run in the plan's `prior_knowledge`, with the
+program, its path and an account of what was known. A plan that omits such a
+run is refused with the run's id, and `admit` refuses a program other than the
+one the plan froze.
+
 Repeating an ID returns its outcome
 or `pending` for a live owner. Reconcile an unfinished intent only after owner
 loss or checked terminal evidence and confirmation that the original computation
@@ -98,11 +109,23 @@ resolved file instead. To give the program the venv's packages, admit and bind a
 new run.
 
 Use the current revision and exact bound values, as described in the workflow.
+`cycle`, `admit` and `bind-run` accept `--check`, which reports the first refusal
+from one snapshot of the store and records nothing: an accepted check of `cycle`
+is no plan, and `admit` needs the recorded plan. `exactory-lab run --check` and
+`exactory-lab probe --check` are refused with `check_unsupported` before the
+launcher reads anything, because the launcher runs a program, and
+`reconcile-run --check` is refused for a new request.
 The worker executes a private copy of pinned inputs and seals the observed output
 inventory. Metrics may be printed as JSON or written to the bound fallback path,
 but a process exit or metric alone is not a scientific assessment. Read the saved
 outputs and original observation before recording conclusions. Keep the human
 `experiment/journal.jsonl` consistent with the authoritative execution history.
+
+A `result` output takes any media type. Bind a figure, a PDF or another binary
+file to a `result` requirement when the assessment is to cite it. A `validation`
+output stays text or JSON; `bind-run` refuses another type for it. Cite a whole
+binary output with `{"kind": "artifact"}` and a page of a PDF output with a
+result `pdf` locator, as "Assess and deepen" shows.
 
 Keep scripts and data within `experiment/`. Choose data, scale and methods adequate
 for the question within authorized resources. Small public or synthetic data are
@@ -113,6 +136,17 @@ runner and a justified test; if unavailable, prospectively admit an adequate loc
 test or preserve the unresolved resource requirement. Retrying the same admission
 reconciles the existing execution and never launches it again.
 
+When the outputs of an assessed cycle are needed in another format, admit a
+format-only run instead of a successor: add `format_only_of` with the id of the
+completed, assessed execution to the `admit` payload, then bind and launch as
+usual. The harness records the run only when every output equals an earlier
+output of the same requirement, byte for byte or as an equal strict JSON value
+(`format_only_output_mismatch` otherwise). The earlier failures stay recorded,
+the run charges the original strategy budget and tranche, and the converted
+outputs need their own assessment. A figure redrawn in another image format,
+such as PNG to SVG, is not covered by this check; the harness has no route for
+it yet.
+
 ## Assess and deepen
 
 Separate a valid negative result from invalid methodology, a code defect, timeout,
@@ -121,6 +155,14 @@ missing output, or unknown execution. Retain every outcome and its cost. Use
 reservation and cannot provide completed evidence. Assess the real result and
 validity checks separately, with scope, novelty, contribution, assumptions,
 failure signals, and remaining obligations for the full objective.
+
+A result reference cites a whole output of any media type with
+`{"kind": "artifact"}` as its locator, and a page of a PDF output with
+`{"kind": "pdf", "page_index": 0, "printed_page": null, "region": [0, 0, 1, 1]}`,
+where the page count comes from `pdfinfo` on the output bytes. The reference's
+`artifact` must equal the output descriptor that the execution recorded. A
+locator alone grants nothing: `validated_result` still follows from the
+assessment's validity checks, which cite text or JSON `validation` outputs.
 
 Save a durable `checkpoint` with its stable ID, exact claim, evidence, verification
 status, unresolved obligations, and next hypothesis. Deepen promising branches
@@ -163,7 +205,10 @@ comparisons, failures, work-item execution and consequence status. No manuscript
 is needed. Deliver the canonical result packet to two independent assessors on
 verified reviewer routes. Each checks validity, scope, novelty, contribution
 support and branch obligations before value in one response. Preserve unchanged
-outputs and exact assignment/evidence bindings. The canonical support and value
+outputs and exact assignment/evidence bindings. The packet lists each run that a
+probe disclosed before a plan under `program_probes` of its branch, with the
+program diff against the admission and the read status of its outputs. An output
+sealed unread reaches no reviewer. The canonical support and value
 findings derive compatible readiness; do not add a separate full readiness-review
 loop. Blind manuscript measurement later evaluates the paper separately.
 

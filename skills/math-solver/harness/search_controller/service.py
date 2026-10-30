@@ -14,6 +14,13 @@ from .scheduler import next_action
 from .storage import Store, canonical_bytes, safe_path, _strict_json
 
 
+def require_checkable_command(name):
+    if name not in {"pause", "side-interval", "retreat", "interpret", "render"}:
+        from .errors import SearchError
+        raise SearchError("check_unsupported", "Check mode cannot prepare this command. Only pause, side-interval, "
+                          "retreat, interpret and render accept --check")
+
+
 class Controller:
     def __init__(self, root: Path, strategies_dir=None):
         self.root = Path(root).resolve()
@@ -50,7 +57,10 @@ class Controller:
         return {"source": "operator", "actor_id": "search-controller",
                 "attestation_id": "filesystem-audit:" + operation}
 
-    def command(self, name, spec, expected_revision, request_id, target=None, *, workspace_root=None, hook_session=None):
+    def command(self, name, spec, expected_revision, request_id, target=None, *, workspace_root=None, hook_session=None,
+                check=False):
+        if check:
+            require_checkable_command(name)
         s.require(isinstance(spec, dict), "Command spec must be an object")
         if name == "review-packet":
             s.require(target is None and workspace_root is None and hook_session is None,
@@ -133,7 +143,14 @@ class Controller:
                 event = self.store.append_operation(identity, expected_revision, request_id,
                     build,
                     lambda document, candidate: apply_event(replay(document), candidate),
-                    before_commit=check_recovery_commit if name == "reconcile" and spec else None)
+                    before_commit=check_recovery_commit if name == "reconcile" and spec else None, check=check)
+        if check:
+            if event.get("check") == "accepted":
+                return event
+            document = self.store.read()
+            old = replay(dict(document, events=document["events"][:event["sequence"]]))
+            return {"objective_id": old["objective_id"], "revision": old["revision"],
+                    "proof_status": old["proof_status"], "command": name}
         if name == "run" and built:
             from .execution import launch
             state = replay(self.store.read())
@@ -510,6 +527,10 @@ class Controller:
         paths = {"SEARCH_TREE.md"} | {n["attack_slug"] + "/LINEAGE.md" for n in state["nodes"].values()}
         if name == "admit":
             paths.add(proposal["attack_slug"] + "/LINEAGE.md")
+        for relative in sorted(paths):
+            # Rendering refuses a symlink at a generated view, so the operation refuses it before anything is recorded.
+            s.require(not safe_path(self.root, relative).is_symlink(), "Generated views cannot be symlinks",
+                      "unsafe_path")
         preserved = set()
         for effect in state["service"]["effects"]:
             if effect["kind"] == "preserve_manual_views":

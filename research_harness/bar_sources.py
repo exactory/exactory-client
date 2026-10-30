@@ -9,10 +9,10 @@ import json
 import os
 
 from . import review_excerpts
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evaluation import Evaluation
 from .evidence import digest
-from .operations import fields, text
+from .operations import describe_received_value, fields, text
 from .reading import current_readings, validate_read_evidence
 from .source_links import captured_source, validate_link
 
@@ -64,11 +64,15 @@ def _page(rows, inventory_digest, page, query=None, *, page_size=None):
     if type(page_size) is not int or page_size < 1:
         raise ResearchError('review_inventory_mismatch', 'The original inventory page size must be a positive integer')
     if type(page) is not int or page < 0:
-        raise ResearchError('invalid_review_source_request', 'Inventory pages are nonnegative integers, not booleans')
+        raise ResearchError('invalid_review_source_request', 'Inventory pages are nonnegative integers, not booleans',
+                            dict(describe_received_value('page', page), minimum_page=0))
     selected = rows if query is None else [row for row in rows if query.casefold() in
         (row['id'] + '\n' + (row.get('title') or '')).casefold()]
     if page > 0 and page * page_size >= len(selected):
-        raise ResearchError('invalid_review_source_request', 'The requested inventory page is out of range')
+        raise ResearchError('invalid_review_source_request', 'The requested inventory page is out of range',
+                            dict(describe_received_value('page', page), minimum_page=0,
+                                 maximum_page=max(0, (len(selected) - 1) // page_size), page_size=page_size,
+                                 total=len(selected)))
     return {'page': page, 'page_size': page_size, 'total': len(selected), 'inventory_total': len(rows),
             'inventory_digest': inventory_digest, 'query': query, 'metadata_not_read': True,
             'items': selected[page * page_size:(page + 1) * page_size],
@@ -177,53 +181,75 @@ def requests(output, *, passages=False):
     """The validated source requests of an output. Passage requests belong to a turn under the excerpt rules."""
     values = output.get('source_requests', []) if isinstance(output, dict) else []
     if not isinstance(values, list):
-        raise ResearchError('invalid_review_source_request', 'source_requests must be an array')
+        raise ResearchError('invalid_review_source_request', 'source_requests must be an array',
+                            {'path': '/source_requests'})
     shapes = {'inventory_page': ('id', 'kind', 'page'), 'inventory_query': ('id', 'kind', 'query', 'page'),
               'source': ('id', 'kind', 'version_id', 'depth')}
     if passages:
         shapes['passage'] = ('id', 'kind', 'version_id', 'anchor', 'characters')
     seen = set()
-    for request in values:
-        if not isinstance(request, dict):
-            raise ResearchError('invalid_review_source_request', 'Each source request is an object')
-        kind = request.get('kind')
-        text(kind, 'Source request kind', code='invalid_review_source_request')
-        required = shapes.get(kind)
-        if required is None:
-            raise ResearchError('invalid_review_source_request', 'Use a native inventory or exact source request')
-        fields(request, required, code='invalid_review_source_request')
-        text(request['id'], 'Request ID', code='invalid_review_source_request')
-        if request['id'] in seen:
-            raise ResearchError('invalid_review_source_request', 'Source request IDs must be unique')
-        seen.add(request['id'])
-        if kind == 'source':
-            require_exact_version(request['version_id'])
-            if request['depth'] not in ('abstract', 'fulltext'):
-                raise ResearchError('invalid_review_source_request', 'Source depth is abstract or fulltext')
-        elif kind == 'passage':
-            review_excerpts.validate_passage_request(request, 'invalid_review_source_request')
-        else:
-            if type(request['page']) is not int or request['page'] < 0:
-                raise ResearchError('invalid_review_source_request', 'Inventory pages are nonnegative integers')
-            if kind == 'inventory_query':
-                text(request['query'], 'Literal ID or title query', code='invalid_review_source_request')
+    for index, request in enumerate(values):
+        path = '/source_requests/' + str(index)
+        identifier = request.get('id') if isinstance(request, dict) else None
+        context = {'request_id': identifier} if (
+            isinstance(identifier, str) and identifier.strip() and '\x00' not in identifier
+            and not any('\ud800' <= character <= '\udfff' for character in identifier)) else {}
+        with describe_error_at(path, **context):
+            if not isinstance(request, dict):
+                raise ResearchError('invalid_review_source_request', 'Each source request is an object')
+            kind = request.get('kind')
+            with describe_error_at(path + '/kind'):
+                text(kind, 'Source request kind', code='invalid_review_source_request')
+            required = shapes.get(kind)
+            if required is None:
+                raise ResearchError('invalid_review_source_request', 'Use a native inventory or exact source request',
+                                    {'path': path + '/kind'})
+            fields(request, required, code='invalid_review_source_request', path=path)
+            with describe_error_at(path + '/id'):
+                text(request['id'], 'Request ID', code='invalid_review_source_request')
+                if request['id'] in seen:
+                    raise ResearchError('invalid_review_source_request', 'Source request IDs must be unique')
+            seen.add(request['id'])
+            if kind == 'source':
+                with describe_error_at(path + '/version_id'):
+                    require_exact_version(request['version_id'])
+                if request['depth'] not in ('abstract', 'fulltext'):
+                    raise ResearchError('invalid_review_source_request', 'Source depth is abstract or fulltext',
+                                        {'path': path + '/depth'})
+            elif kind == 'passage':
+                review_excerpts.validate_passage_request(request, 'invalid_review_source_request', path=path)
+            else:
+                if type(request['page']) is not int or request['page'] < 0:
+                    raise ResearchError('invalid_review_source_request', 'Inventory pages are nonnegative integers',
+                                        dict(describe_received_value('page', request['page']), path=path + '/page',
+                                             minimum_page=0))
+                if kind == 'inventory_query':
+                    with describe_error_at(path + '/query'):
+                        text(request['query'], 'Literal ID or title query', code='invalid_review_source_request')
     if values:
         value = output.get('value')
         if not isinstance(value, dict):
-            raise ResearchError('invalid_review_source_request', 'A source request turn requires an unresolved value object')
-        if output.get('stage') not in ROLES or output.get('support') is not None or value.get('status') != 'unresolved':
-            raise ResearchError('invalid_review_source_request', 'A source request is an unresolved strategic phase turn without a final support assessment')
-        if output['stage'] == 'bar' and (any(value.get(key) != 'not_assessed' for key in ('objective_adequacy', 'method_adequacy'))
-                or any(value.get(key) != [] for key in ('bar_ids', 'work_items', 'assurances', 'objection_findings'))):
-            raise ResearchError('invalid_review_source_request', 'A bar source request precedes objective or method assessment')
+            raise ResearchError('invalid_review_source_request', 'A source request turn requires an unresolved value object',
+                                {'path': '/value'})
+        for path, valid in (('/stage', output.get('stage') in ROLES), ('/support', output.get('support') is None),
+                            ('/value/status', value.get('status') == 'unresolved')):
+            if not valid:
+                raise ResearchError('invalid_review_source_request', 'A source request is an unresolved strategic phase turn without a final support assessment',
+                                    {'path': path})
+        if output['stage'] == 'bar':
+            for key in ('objective_adequacy', 'method_adequacy', 'bar_ids', 'work_items', 'assurances', 'objection_findings'):
+                if value.get(key) != ('not_assessed' if key in ('objective_adequacy', 'method_adequacy') else []):
+                    raise ResearchError('invalid_review_source_request', 'A bar source request precedes objective or method assessment',
+                                        {'path': '/value/' + key})
     return values
 
 
 def pending(packet, output):
     combined = {request['id']: request for request in packet.get('pending_source_requests', [])}
-    for request in requests(output, passages=review_excerpts.KEY in packet):
+    for index, request in enumerate(requests(output, passages=review_excerpts.KEY in packet)):
         if request['id'] in combined and combined[request['id']] != request:
-            raise ResearchError('invalid_review_source_request', 'A pending request ID cannot name different source evidence')
+            raise ResearchError('invalid_review_source_request', 'A pending request ID cannot name different source evidence',
+                                {'path': '/source_requests/' + str(index) + '/id', 'request_id': request['id']})
         combined[request['id']] = request
     return list(combined.values())
 

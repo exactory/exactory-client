@@ -6,6 +6,7 @@ a response never authorizes repeating an uncertain remote mutation.
 """
 
 from .errors import ResearchError
+from .finishing import retry_store_write
 from .evidence import digest
 from .operations import immutable_record, prepared_mutation, text
 
@@ -90,7 +91,8 @@ def resolve_step(store, identifier, name, response, observation):
         replies = dict(record["responses"])
         replies[name] = {"request": pending["request"], "response": response, "observation": observation}
         return dict(record, pending=None, responses=replies, status="confirmed")
-    _change(store, identifier, "resolve", {"name": name, "response": response, "observation": observation}, transform)
+    retry_store_write(lambda: _change(store, identifier, "resolve",
+        {"name": name, "response": response, "observation": observation}, transform))
     return response
 
 
@@ -105,10 +107,14 @@ def discard_step(store, identifier, name, observation):
         _read_pending_step(record, name)
         return dict(record, pending=None, status="confirmed" if record["responses"] else "prepared",
                     discarded=record.get("discarded", []) + [{"name": name, "observation": observation}])
-    _change(store, identifier, "discard", {"name": name, "observation": observation}, transform)
+    retry_store_write(lambda: _change(store, identifier, "discard", {"name": name, "observation": observation}, transform))
 
 
 def finish_intent(store, identifier, kind, receipt, *, workspace=None):
+    return retry_store_write(lambda: _finish_intent_once(store, identifier, kind, receipt, workspace=workspace))
+
+
+def _finish_intent_once(store, identifier, kind, receipt, *, workspace=None):
     expected = store.revision
     def prepare(records, value):
         current = records["remote_intent"][identifier]

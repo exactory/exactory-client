@@ -239,7 +239,8 @@ class Store:
             self._write_runtime_identity()
         return self._read_document()
 
-    def append_operation(self, identity, expected_revision, request_id, build, validate=None, before_commit=None):
+    def append_operation(self, identity, expected_revision, request_id, build, validate=None, before_commit=None,
+                         *, check=False):
         """Build one service operation under lock after request/revision checks.
 
         build(isolated_document, content_sink) returns the closed event payload.
@@ -247,6 +248,16 @@ class Store:
         lock. Neither builders nor validators receive authoritative mutable data.
         An optional read-only before_commit check runs after content persistence,
         while the transaction lock is still held, immediately before the event.
+
+        With check=True the request, revision, build, validation and document
+        checks run as in a write, and each staged object is compared with the
+        bytes at its digest path. The call then returns the diagnostic {"check":
+        "accepted", "revision", "recorded": False, "operation"} without running
+        before_commit and without writing content, the event or the runtime
+        identity. A recorded request returns its event, as in a write. The check
+        acquires the writer lock only when the lock file exists and creates none.
+        The controller allows this path for pause, side-interval, retreat,
+        interpret and render only.
         """
         if not isinstance(identity, dict) or set(identity) != {"command", "target", "spec_digest"}:
             raise SearchError("invalid_input", "Operation identity is malformed")
@@ -256,7 +267,7 @@ class Store:
                 or (before_commit is not None and not callable(before_commit))):
             raise SearchError("invalid_input", "Operation request is malformed")
         self._check_root()
-        with self._writer_lock():
+        with self._writer_lock(create=False) if check else self._writer_lock():
             document = self._read_document()
             for existing in document["events"]:
                 if existing["request_id"] == request_id:
@@ -281,6 +292,12 @@ class Store:
                          _strict_json(canonical_bytes(event), "invalid_json"))
             candidate = dict(document, events=document["events"] + [event])
             _validate_document(candidate)
+            if check:
+                for (namespace, digest), raw in sink.staged.items():
+                    suffix = ".json" if namespace == "blobs" else ""
+                    self._check_immutable(self._content_path(namespace, digest + suffix, create=False), raw)
+                return {"check": "accepted", "revision": revision, "recorded": False,
+                        "operation": identity["command"]}
             for (namespace, digest), raw in sink.staged.items():
                 suffix = ".json" if namespace == "blobs" else ""
                 self._write_immutable(self._content_path(namespace, digest + suffix), raw)
@@ -383,7 +400,7 @@ class Store:
     def get_blob(self, digest: str) -> Any:
         self._check_root()
         self._validate_digest(digest)
-        path = self._content_path("blobs", digest + ".json")
+        path = self._content_path("blobs", digest + ".json", create=False)
         raw = self._read_content(path, "corrupt_blob")
         if hashlib.sha256(raw).hexdigest() != digest:
             raise SearchError("corrupt_blob", "blob digest does not match its name")
@@ -410,7 +427,7 @@ class Store:
     def get_artifact(self, digest: str) -> bytes:
         self._check_root()
         self._validate_digest(digest)
-        path = self._content_path("artifacts", digest)
+        path = self._content_path("artifacts", digest, create=False)
         raw = self._read_content(path, "corrupt_artifact")
         if hashlib.sha256(raw).hexdigest() != digest:
             raise SearchError(
@@ -446,8 +463,10 @@ class Store:
             raise SearchError("unsafe_path", "controller subdirectory is not safe")
         return path
 
-    def _content_path(self, directory: str, filename: str) -> Path:
-        parent = self._ensure_directory(directory)
+    def _content_path(self, directory: str, filename: str, *, create=True) -> Path:
+        parent = self._ensure_directory(directory) if create else safe_path(self.root, directory)
+        if parent.is_symlink() or parent.exists() and not parent.is_dir():
+            raise SearchError("unsafe_path", "controller subdirectory is not safe")
         path = safe_path(self.root, directory + "/" + filename)
         if path.is_symlink():
             raise SearchError("unsafe_path", "content path cannot be a symlink")
@@ -470,18 +489,25 @@ class Store:
         document = _strict_json(raw, "corrupt_state")
         return _validate_document(document)
 
-    @contextlib.contextmanager
-    def _writer_lock(self) -> Iterator[None]:
-        self._check_root()
+    def _check_lock_path(self) -> Path:
         lock_path = safe_path(self.root, "tree.lock")
         if lock_path.is_symlink():
             raise SearchError("unsafe_path", "tree.lock cannot be a symlink")
-        flags = os.O_RDWR | os.O_CREAT
+        return lock_path
+
+    @contextlib.contextmanager
+    def _writer_lock(self, *, create=True) -> Iterator[None]:
+        self._check_root()
+        lock_path = self._check_lock_path()
+        flags = os.O_RDWR | (os.O_CREAT if create else 0)
         if hasattr(os, "O_NOFOLLOW"):
             flags |= os.O_NOFOLLOW
         try:
             descriptor = os.open(str(lock_path), flags, 0o600)
         except OSError as error:
+            if not create and error.errno == errno.ENOENT:
+                yield
+                return
             raise SearchError(
                 "storage_error", "cannot open writer lock", {"reason": str(error)}
             ) from error
@@ -529,16 +555,21 @@ class Store:
             except FileNotFoundError:
                 pass
 
-    def _write_immutable(self, target: Path, content: bytes) -> None:
+    def _check_immutable(self, target: Path, content: bytes) -> bool:
         if target.is_symlink():
             raise SearchError("unsafe_path", "immutable content cannot be a symlink")
         if target.exists():
             existing = self._read_content(target, "immutable_collision")
             if existing == content:
-                return
+                return True
             raise SearchError(
                 "immutable_collision", "digest path already contains different bytes"
             )
+        return False
+
+    def _write_immutable(self, target: Path, content: bytes) -> None:
+        if self._check_immutable(target, content):
+            return
         descriptor, temporary_name = tempfile.mkstemp(
             prefix="." + target.name + ".", suffix=".tmp", dir=str(target.parent)
         )

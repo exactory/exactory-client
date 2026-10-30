@@ -31,6 +31,18 @@ at every stage. State each call's question, depth and authorized budget; record
 effective amounts, actual work, coverage, stopping reason and cost. Tool records
 grant no approval. Independent assessment is a condition attached to a claim.
 
+Every mutation accepts `--check`: the command validates its payload against one
+snapshot of the store, reports the first refusal or an acceptance, and writes
+nothing. A check is a diagnostic. It satisfies no gate, records no plan,
+admission, attempt, review or decision, and is no evidence that a reviewer or a
+tool can cite. The write that follows validates again. Acquisitions, reviewer
+calls, reconciliations and projections refuse the flag. `exactory-lab state set`
+and `exactory-lab decide` run the same check and write no state, entry or
+projection. `exactory-lab run` and `probe` and every `exactory-draft` command
+refuse the flag before they read anything. The
+[CLI reference](research-cli.md#inputs-and-receipts) states the output and the
+refusals.
+
 A gate requires the claim type's fixed minimum and independent assessment of
 whether its evidence is sufficient. Choose tool order and additional depth to
 answer the research question. A quick probe may inform the first direction or a
@@ -47,7 +59,7 @@ store so existing studies continue from their recorded state.
 | `literature` | Commit the direction. Completing this stage and entering `ideate` require `gate direction`. |
 | `ideate` | Plan the investigation. Entering `experiment` requires `gate execution` with a valid pending admission. |
 | `experiment` | Assess actual results and checkpoint them. Entering writing requires the current result decision and applicable readiness gate. |
-| `write` | Pin the exact evidence-grounded manuscript with citation accounting. |
+| `write` | Pin the exact evidence-grounded manuscript with citation accounting. Entering it records the draft workspace from the objective's `title` and `category` when both exist and the workspace holds neither a draft record nor a `.exactory/draft.json` entry. `status` lists `draft_marker_missing` while no draft record exists or the marker disagrees with its record, and the [CLI reference](research-cli.md#status-projections-and-recovery) names the step for each state. |
 | `evaluate` | Measure that bundle blindly and decide the next action. |
 | `deposit`, `submit`, `complete` | Satisfy publication gates and preserve confirmed endpoint receipts. |
 
@@ -304,7 +316,13 @@ the same statement is refused.
 ## Initiate and resume
 
 Create an author study once. Keep the initial target pending while literature
-informs the prospective comparison of the objective and first approach.
+informs the prospective comparison of the objective and first approach. When
+the direction milestone commits the objective, give it `title` and `category`
+beside the statement: entering `write` records the draft workspace from them,
+and `target` refuses the two fields added to a committed objective
+(`objective_locked`). A study whose objective lacks them records the draft
+later with `exactory-draft init --title TITLE --category CATEGORY`, from the
+command's own values, and the objective does not change.
 
 ```sh
 exactory-lab init --dir study --slug study --expected-revision 0 --request-id initialize-study
@@ -514,7 +532,13 @@ found work with a disposition (relevant, contradictory, potentially relevant, ou
 of scope, duplicate, unresolved) and a reason; a later search for the same purpose
 carries its contradictory and unresolved findings forward or resolves them by name. Tool or web
 responses can be retained through `import-response` with original JSON pointer
-mappings. A `nothing-new` result still needs the captured search, including an
+mappings. Before a later import, `import-response --preview` reports the DOI
+families of the store that the batch makes ambiguous, without writing; a real
+import continues and records the same report as `identity_conflicts`. When the
+reference of an earlier reading turns `reference_identity_ambiguous` after such
+an import, a new `bundle` of that reading's body resolves the occurrence with an
+evidence-backed `target_family`, and the new bundle's own entries can carry the
+choice too (the CLI reference, `bundle`). A `nothing-new` result still needs the captured search, including an
 actual empty results array when that is what the search returned. Under
 `lineage-v1` these five captures are stage 1 of the bounded loop described at
 the end of this section.
@@ -752,11 +776,13 @@ and the managed records.
 
 Write a prospective `cycle` with its exact scope, predecessor/checkpoint,
 inheritance or reopening reason, distinguishing test, expected outcomes, failure
-signals, evidence requirements, and resource limits. Plan `result` and
-`validation` requirements for text or JSON outputs that an assessment can cite,
-and declare figures and other binary files under a `log` requirement; `bind-run`
-refuses an output bound to `result` or `validation` whose media type is not text
-or JSON. Pin actual program and input bytes with `artifact`. Use the returned plan
+signals, evidence requirements, and resource limits. Plan `result` requirements
+for the outputs that an assessment cites: text or JSON outputs through a span,
+text or JSON locator, and figures, PDFs or other binary outputs through
+`{"kind": "artifact"}` or a result `pdf` locator. Plan `validation` requirements
+for text or JSON outputs only; `bind-run` refuses a `validation` output of
+another media type, so bind such a file to a `result` or `log` requirement. Pin
+actual program and input bytes with `artifact`. Use the returned plan
 digest and artifact references in `admit`; bind the exact backend,
 interpreter/version, seed or null-seed reason, timeout, input paths, and declared
 output/usage contract before a launch.
@@ -842,6 +868,11 @@ the completed output of a planned `validation` requirement; until that output
 exists, record the check as `unresolved`. Preserve a durable `checkpoint` with a
 stable ID and the next hypothesis. Deepen a promising branch from that checkpoint;
 reopen a failed branch only when new evidence addresses its recorded obstruction.
+A run that only changes the format of an assessed cycle's outputs is not a
+reopening. Admit it with `format_only_of` naming the earlier execution, as
+[Actual execution](research-cli.md#actual-execution) describes. The recorded
+failures stay, the conversion charges the original strategy budget and tranche,
+and the converted outputs need their own `assess` before a candidate cites them.
 There is no fixed cycle count. Resource exhaustion and incomplete evidence are
 recorded conditions, not conclusions of success or impossibility.
 
@@ -945,6 +976,37 @@ limited delivery requires all old cycles to be executed again.
 
 ## ai-science: manuscript and publication milestones
 
+Entering `write` records the draft workspace when the objective carries
+`title` and `category`, no draft record exists, and no entry exists at
+`.exactory/draft.json`. The export then writes `.exactory/draft.json` (the
+marker) and creates `draft/`. Otherwise entering `write` records no draft.
+While no draft record exists, or the marker is not a regular file that holds
+the record's JSON, `status` and `next` select `draft_marker_missing` as `next`
+(the full list appends it after the other obligations), and its message names
+the step for the state:
+
+- A draft record whose marker is missing, differs or is a link: `export`.
+- A draft record whose entry is a directory or another type: move the entry
+  to an unused name in `.exactory/`, then `export`.
+- No record, and a regular file that holds a JSON object with `version`
+  absent, 1 or 2: `adopt` with `.exactory/draft.json` in `files`.
+- No record, and a link (dangling included), a directory or a file that
+  adoption refuses: move the entry to an unused name in `.exactory/`, then
+  run `status` again.
+- Neither record nor entry, and the objective lacks a field, or has both
+  while the study status is `done`:
+  `exactory-draft init --title TITLE --category CATEGORY`.
+- Neither record nor entry, both fields, and a status other than `done`:
+  `exactory-lab state set --stage write`.
+
+Take that step before the first LaTeX source. The authorship hook records
+`written_by_exactory` for a whole `.tex` file written with Write under
+`draft/` only while `.exactory/draft.json` is a file, and no later creation,
+export, adoption or move of the marker records an earlier source.
+`exactory-draft deposit` reads the paper's title from the marker. The
+[CLI reference](research-cli.md#status-projections-and-recovery) gives the
+obligation's fields and every state.
+
 Draft from the reviewed evidence and field standards. Keep source support,
 source-level contradiction, unsupported attribution, and unresolved access
 separate from scientific proof, replication, or refutation. Every quantitative
@@ -978,7 +1040,14 @@ review is separate from the earlier research support/value assessment. Use the
 shared canonical reviewer assignment and a verified route for manuscript reviews
 too; clean exported files alone do not exclude automatic memory, startup context
 or later tool exposure. Preserve contaminated returns without giving them
-independent approval credit.
+independent approval credit. Run each blind assessor in a context without the
+author's memory index, such as a separate CLI process with no automatic memory;
+an index edited after a session started keeps its loaded notes in that session.
+Each `assessor` can state `author_memory_notes_present`, a boolean, as a
+disclosure. An absent field in an older record means unknown exposure, and no
+gate reads the field. A bundle pinned since 0.65.0 holds its review inputs and
+execution observations as artifacts, written once per distinct export, and
+every reader resolves both that shape and the inline shape of earlier bundles.
 
 ```sh
 exactory-research check-claims --file manuscript.json
@@ -998,14 +1067,18 @@ from its pinned bytes. Do not recompile the PDF or change those files while a
 review or a prediction of the bundle is still to be recorded. `status` names
 each differing file under `bundle_drift`, with the bundle's `bundle_digest`,
 while the measurement is incomplete. `exactory-research restore --bundle DIGEST`
-writes the pinned bytes back. It first stores the current bytes of each
-differing file as a backup artifact and reports it under `restored` as
-`backup`, `{sha256, path, size, media_type}`, with the bytes at that `path`
-under `research/sources/objects/`. It records nothing, so keep its output: no
-record names a backup. Once the measurement is complete, read the backup back
-to continue the displaced edit in the next revision. The same command restores
-the files of any recorded bundle, for example the measured bundle before its
-deposit.
+writes the pinned bytes back. It first moves each differing file to
+`.restore-backup-<32 hexadecimal digits>` in its directory and stores the moved
+bytes as a backup artifact, then writes the pinned bytes. It reports each file
+under `restored` as `{path, artifact, backup, backup_path}`: `backup` is
+`{sha256, path, size, media_type}`, with the bytes at that `path` under
+`research/sources/objects/`, and `backup_path` is the moved file, which stays
+in the working tree. It records nothing, so keep its output: no record names a
+backup. Once the measurement is complete, read the displaced edit back from
+either copy to continue it in the next revision. An editor or a compiler that
+still had the file open continues to write to the moved file only. The same
+command restores the files of any recorded bundle, for example the measured
+bundle before its deposit.
 
 Managed publication uses the current exact bundle, two applicable accepting
 reviews, current decision requirements and existing citation/remote receipt checks.
@@ -1037,6 +1110,12 @@ assessors each have a review. A bundle takes three predicting assessors, so a
 complete measurement stays complete; an incomplete group, or an ambiguous one
 recorded before this rule, reports counts and null medians.
 Publication-only reviewers remain outside the measurement.
+
+A later round sometimes needs an output of an assessed cycle under another name
+or serialization. A format-only run (`admit` with `format_only_of`) gives it
+without reopening that cycle's failures. It adds no evidence that a failure was
+addressed, and a claim on the converted output still needs its assessment and
+current readiness.
 
 ### After each measurement: the contribution analysis
 
@@ -1156,6 +1235,21 @@ grand-challenge orchestrations, and Version 7 adoption compatibility for
 verification and native verification nodes, are out of scope for this release.
 The problem-creation orchestration of `math-conjecturer` adopts Version 7 when
 `problem-init` creates its configuration.
+
+A study at `write` whose objective predates the fields `title` and `category`
+keeps that objective: `target` refuses the two fields on a committed
+objective, and the study does not need them. `status` lists
+`draft_marker_missing` and names the step for the state. When the workspace
+holds neither a draft record nor an entry at `.exactory/draft.json`,
+`exactory-draft init --title TITLE --category CATEGORY` in the study root
+records the draft from its own values and writes the marker. A regular file
+there that holds a JSON object with `version` absent, 1 or 2, with no draft
+record, is adopted with `adopt` (`.exactory/draft.json` in `files`), and
+`init` refuses the directory while that file exists. A link, a directory or a
+file that adoption refuses is first moved to an unused name in `.exactory/`,
+and `status` then names the next step. A draft record whose marker is missing
+or differs is written again with `export`. No step records authorship for a
+source written before the marker.
 
 ## Verification and native mathematics
 

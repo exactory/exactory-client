@@ -9,6 +9,7 @@ import stat
 
 from .artifacts import ArtifactStore, describe_artifact, is_sealed_artifact
 from .errors import ResearchError
+from .finishing import retry_store_write
 from .operations import _read_preparation, fields, immutable_record, prepared_mutation, text
 from .storage import Store
 from .workspace import checked_parent, read_file, strict_json
@@ -56,13 +57,8 @@ def record_probe_artifact_origin(root, probe_id, sha256, role):
         if probe_id not in records.get("probe_intent", {}):
             raise ResearchError("probe_intent_missing", "Pin exploratory output only after its immutable probe intent")
         return [immutable_record(records, "probe_artifact", identifier, value)], value
-    while True:
-        try:
-            return prepared_mutation(store, "research.probe_artifact", payload, prepare,
-                expected_revision=store.revision, request_id="probe-artifact:" + identifier)
-        except ResearchError as error:
-            if error.code != "stale_revision":
-                raise
+    return retry_store_write(lambda: prepared_mutation(store, "research.probe_artifact", payload, prepare,
+        expected_revision=store.revision, request_id="probe-artifact:" + identifier))
 
 
 def pin_probe_artifact(root, probe_id, data, media_type, role, *, sealed=False):
@@ -187,13 +183,8 @@ def pin_probe_local_artifact(store, payload, *, expected_revision, request_id, _
         record = dict(value, artifact=artifact, scientific_validation=False)
         return [immutable_record(records, "local_artifact", value["id"], record)], record
 
-    while True:
-        try:
-            return prepared_mutation(store, "workspace.artifact", intent["payload"], prepare_record,
-                expected_revision=store.revision, request_id=request_id)
-        except ResearchError as error:
-            if error.code != "stale_revision":
-                raise
+    return retry_store_write(lambda: prepared_mutation(store, "workspace.artifact", intent["payload"], prepare_record,
+        expected_revision=store.revision, request_id=request_id))
 
 
 def find_probe_artifact_origins(records, descriptors, *, artifacts=None):

@@ -9,7 +9,13 @@ current action in the [decision protocol](../../docs/research-decisions.md).
 The manuscript reviews
 described here evaluate the exact paper separately.
 
-`exactory-draft init` creates this layout. Every path below is relative to the
+`exactory-draft init` creates this layout from its own `--title` and
+`--category`. In a managed study, entering stage `write` records the draft
+workspace instead when the objective carries `title` and `category` and the
+workspace holds neither a draft record nor a `.exactory/draft.json` entry. The
+export then writes `.exactory/draft.json` and creates `draft/`. An entry that
+already exists at that path blocks this, and the ai-science skill's STUDY.md
+names the recovery for each kind of entry. Every path below is relative to the
 workspace root. In a full Exactory AI Science study the workspace also carries
 the study layer (context, cohort, idea, experiment); that fuller layout is in
 the ai-science skill's STUDY.md. The measurement protocol and iteration cadence
@@ -32,6 +38,12 @@ below are what the ai-science loop (LOOP.md) refers to.
 `.exactory/draft.json` projects the managed draft fields, including its common
 research Store reference. The CLI writes it. Read `exactory-research status --summary`
 and `next --summary` for authoritative obligations rather than editing the projection.
+The draft record in the store is the authority. In a managed study at stage
+`write`, `status` lists `draft_marker_missing` while the file is missing, is not
+a regular file, or holds JSON that differs from the record (compared as parsed
+JSON, not as bytes), and also while a file, a link or another entry exists at
+that path with no draft record. The ai-science skill's STUDY.md names the step
+for each state.
 
 ## research/literature.md: the survey log
 
@@ -206,14 +218,19 @@ still to be recorded. `exactory-research status` names each such file under
 `bundle_drift`, `{bundle_id, bundle_digest, files: [{path, code}]}`, while the
 measurement is incomplete, and `status --summary` carries the same list with
 long names cut. `exactory-research restore --bundle DIGEST`, with that
-`bundle_digest`, writes the pinned bytes back. It first stores the current
-bytes of each differing file as an `application/octet-stream` artifact, then
-writes the pinned bytes, and returns `{revision, bundle_id, bundle_digest,
-restored: [{path, artifact, backup}], unchanged: [path, ...]}`. `backup` is
-`{sha256, path, size, media_type}` of the stored copy, or null for a file that
-was missing. The bytes are at that `path`, under `research/sources/objects/`.
-The command records nothing, so no record names a backup. Keep the output, or
-the `sha256`, to read the displaced edit back once the measurement is complete.
+`bundle_digest`, writes the pinned bytes back. For each differing file it first
+moves the current file to `.restore-backup-<32 hexadecimal digits>` in the same
+directory and stores the moved bytes as an `application/octet-stream` artifact,
+then writes the pinned bytes at the path. It returns `{revision, bundle_id,
+bundle_digest, restored: [{path, artifact, backup, backup_path}], unchanged:
+[path, ...]}`. `backup` is `{sha256, path, size, media_type}` of the stored
+copy, with the bytes at that `path` under `research/sources/objects/`, and
+`backup_path` is the moved file, which stays in the working tree. Both are
+null for a file that was missing. The command records nothing, so no record
+names a backup. Keep the output, or the `sha256`, to read the displaced edit
+back once the measurement is complete. An editor or a compiler that still had
+the file open continues to write to the moved file, not to the stored copy, so
+read `backup_path` for an edit that continued after the restore.
 
 ## Commits and reverts (the improvement loop)
 
@@ -235,9 +252,10 @@ current status and records. Unmeasured changes are preserved until understood;
 they are not automatically reset. Respect a user's local-only artifact policy.
 `exactory-research restore --bundle DIGEST` is a file operation, not a commit or
 a revert: it writes a recorded bundle's pinned files back to their paths, keeps
-the replaced bytes as backup artifacts, and changes no record, selection or
-review. An edit that a restore displaced is read back from the backup's `path`
-in the restore output, `research/sources/objects/<sha256>`.
+each replaced file as a moved file next to its path and as a backup artifact,
+and changes no record, selection or review. An edit that a restore displaced is
+read back from the moved file, `backup_path` in the restore output, or from the
+backup's `path`, `research/sources/objects/<sha256>`.
 
 For publication, pin the exact current manuscript bundle and export its actual
 bytes for two independent blind assessors through the verified assignment

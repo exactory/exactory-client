@@ -11,8 +11,14 @@ between the inner loop (which you can re-run) and the outer loop (which runs
 against something that no longer moves).
 
 Run every command from the workspace root, the directory that holds
-`.exactory/draft.json`. The tools are `exactory-draft` and `exactory-check`, on
-PATH while this plugin is enabled.
+`.exactory/draft.json`. A managed study holds that file after it entered
+`write` with an objective that carries `title` and `category` and with neither
+a draft record nor an entry at that path, or after the step that `status`
+names under `draft_marker_missing`. The deposit reads the paper's title from
+that file, so when `exactory-research status --summary` names
+`draft_marker_missing`, take the step that its message names before the
+deposit (the ai-science skill's STUDY.md lists every state). The tools are
+`exactory-draft` and `exactory-check`, on PATH while this plugin is enabled.
 
 ## Before anything else
 
@@ -55,18 +61,39 @@ PATH while this plugin is enabled.
    file separates no paragraphs in the record's description. This file becomes
    the record's description on Zenodo, so it must match the abstract in the PDF
    word for word.
-3. **Deposit and publish to production.**
+3. **Build the sources archive, when the record carries the code and data.** Run
+   `exactory-draft package --output draft/sources.zip` from the workspace root,
+   with `--include PATH` for each workspace file or directory that no admitted
+   run froze, such as figure and table programs or a disclosure file. The
+   archive holds, for each run that the pinned bundle's claims cite, the
+   admitted program and inputs at the version of that run under `runs/`, the
+   sealed outputs under `data/`, the claim registry with its evidence map, the
+   study's records under `managed-record/`, and `package.json` and
+   `data/INDEX.json` as its index. It reads the selected bundle unless `--bundle`
+   names another pinned bundle by id or digest, and it changes nothing in the
+   study. It refuses an existing destination (`package_destination_exists`) and
+   a cited run whose frozen paths are not recorded (`package_binding_missing`).
+   A managed deposit uploads only an archive that the reviewed bundle pinned as
+   `sources`, byte for byte; an archive that the bundle did not pin takes the
+   direct path, with the `Managed record skipped` line. The write skill says when
+   to build and pin the archive.
+4. **Deposit and publish to production.**
    ```
-   exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>" --abstract-file draft/abstract.txt
+   exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>" --abstract-file draft/abstract.txt --sources draft/sources.zip
    ```
-   Repeat `--creator` for more authors. The record's description opens with the
+   Give `--sources` exactly when the reviewed bundle pinned a sources file, and
+   name that file. Repeat `--creator` for more authors. The record's description opens with the
    abstract and closes with a disclosure naming the human as the responsible
    author. There are two disclosures, and the command picks between them: it
    names exactory.ai as the paper's writer when the PDF comes from this
    workspace's `draft/` tree and `.exactory/authorship.json` reads
    `written_by_exactory` true, which the plugin writes when an agent writes a
-   LaTeX source under `draft/`, and otherwise it states only that the paper was
-   prepared with AI assistance and deposited through exactory.ai. The PDF is
+   whole `.tex` file under `draft/` with the Write tool while
+   `.exactory/draft.json` is a file (the hook does not compare that file with
+   the draft record), and otherwise it states only that the paper was prepared
+   with AI assistance and deposited through exactory.ai. A later creation,
+   export, adoption or move of the marker records nothing for a source written
+   before it, so an older study can carry the second disclosure. The PDF is
    uploaded as `paper.pdf` and listed first; the sources archive follows it.
    State the command in the report beside its result: the record DOI and the
    concept DOI. The concept DOI names the paper across all its versions;
@@ -74,7 +101,7 @@ PATH while this plugin is enabled.
    the disclosure back to the user from the record, never from memory. When the
    user named a stop before production, park instead and hand them the exact
    command.
-4. **A test record, when the user asks for one.** The same command without
+5. **A test record, when the user asks for one.** The same command without
    `--production` (and without `--confirm-publish`) creates the record on the
    Zenodo sandbox with `ZENODO_SANDBOX_TOKEN`. A sandbox record is a rehearsal:
    the server cannot fetch it, so it is never the record to submit.

@@ -348,7 +348,12 @@ and failures are intended continuity evidence, and are included explicitly.
 Submit the reviewed record with the current revision and a unique request ID.
 The service freezes the context, assessment, review and native plans, and records
 an `assessment-000001` style ID with its predecessor. Replaying the original
-request returns its original result and cannot clear later progress. Read
+request returns its original result and cannot clear later progress. A new request
+that reuses a recorded review output is not a replay. The service builds the packet
+again from the current context and compares it with the packet the reviewer
+received. A packet that omits a later assessment or carries any other change is
+refused with `review_packet_mismatch`. A strategy packet has no permitted
+difference, and a refusal writes no native event. Read
 `search next --json` again after submission. An old assessment or a new `replan`
 alone cannot authorize execution.
 
@@ -590,6 +595,16 @@ conflict preserves the user's files and reports the original intent and command.
 Unresolved native intents block new research mutations. Reconcile does not replay
 an unknown native operation or duplicate a prior acknowledgement.
 
+Ordinary `reconcile` also repairs an admitted node that an earlier release left
+without an initialization effect and without `journal.jsonl`. It records the missing
+`initialize_workspace` effect, whose snapshot lists only the absent skeleton files.
+If such a node has a recorded move, the missing journal held research history, and
+reconcile refuses with `recovery_conflict`
+(`Missing journal has recorded moves; restore it before reconciliation`). A node
+whose journal exists, including one repaired by hand or populated, receives no new
+effect, and a node imported by adoption is not touched. The repaired node's native
+observations are recorded by a later reconciliation, after its files exist.
+
 Before recording the intent, the synchronous native invocation exclusively locks
 its fresh `native/ID.lock` file and retains that descriptor through all native
 writes and acknowledgement. Its immutable ownership blob is
@@ -660,6 +675,20 @@ Schema version is integer `1`. Each event has exactly `sequence`, `request_id`,
 identical request replay and conflicting reuse before invoking validation.
 The pure reducer rejects duplicate event IDs or noncontiguous sequence numbers.
 
+After initialization and after each committed event, still under the writer lock,
+the store replaces `.search/writer-runtime.json` atomically. The file holds the
+identity of the runtime that wrote: `{plugin_version, controller_digest, launcher}`.
+`controller_digest` is the SHA-256 over the relative names and bytes of
+`bin/exactory-math`, the harness Python files, `search_controller/*.py` and
+`research_harness/*.py`. `launcher` is the absolute path of that plugin's
+`bin/exactory-math`. A process computes the identity once. Reads, replays of a
+recorded request, stale revisions and refused commands do not refresh the file. A
+crash between the tree commit and this replacement leaves the previous writer
+named, or no file after initialization. The next committed event repairs it; a
+replay does not. The file is not part of the event document. `tree.json` keeps its
+four fields, historical events and replay results are unchanged, and a controller
+older than 0.64.0 ignores the file.
+
 Use `validate=lambda document, event: apply_event(replay(document), event)` with
 `Store.append`. Validation runs under the writer lock. The storage layer supplies
 isolated snapshots; the callback cannot change the event being persisted.
@@ -671,7 +700,7 @@ Supported events and exact payloads:
 | `proposal_recorded` | `{"proposal": Proposal, "digest": SHA256(Proposal)}` |
 | `review_workspace_recorded` | `{workspace: "."}` or a canonical ancestor; the objective's stable shared review-store association |
 | `probe_origins_recorded` | `{bindings: [{digest: SHA256, raw_digest?: SHA256, origins: [{probe_id: Text, sha256: SHA256, roles: ["outputs"|"stdout"|"stderr"]}]}]}`; raw identities are retained even when `origins` is empty |
-| `review_recorded` | `{"proposal_id": ID, "review": Review, "digest": SHA256(Review)}` |
+| `review_recorded` | `{"proposal_id": ID, "review": Review, "digest": SHA256(Review)}`, optionally also `"context_drift": [{path: Text, from: JSON, to: JSON}]` for the permitted unrelated-finish difference of a proposal review (each `path` starts with `/scientific_context/`, `from` differs from `to`, paths are distinct); a plugin older than 0.64.0 rejects an event that carries this field |
 | `proposal_admitted` | `{"proposal_id": ID}` |
 | `checkpoint_recorded` | `{"checkpoint": CheckpointInput, "digest": SHA256(CheckpointInput)}` |
 | `result_accepted` | `{"acceptance": AcceptanceInput, "digest": SHA256(AcceptanceInput)}` |
@@ -971,12 +1000,38 @@ bundles. The reviewer returns that same declaration as `findings.openness.minimu
 and binds its search and reading digests in `findings.openness.evidence`. The
 records must exist in this objective's associated common review store; copying a
 record from another workspace does not establish that association.
-`OpennessMinimum` has no delivery priority of full texts, so a text route cannot
-withhold this packet's full texts by priority; it still omits binary originals,
+`OpennessMinimum` has no delivery priority of full texts, and a text route never
+withholds a body of this packet by priority. It still omits binary originals,
 which a text route never carries. A problem record exports its openness packet
-with `exactory-research export --kind problem-openness` instead, whose
-`minimum.text_priority` lets a text route withhold full-text bodies in a declared
-order.
+with `exactory-research export --kind problem-openness` instead.
+
+The reviewer reads the whole packet. Its reading units are the captured
+responses of the bound searches, the extracted full texts of the originals that
+the bound readings pin, and the bound search and reading records, each record as
+its exact JSON text. On a text route (`claude_cli_v1` with an input limit of
+1,300,000 characters, `codex_cli_v1` and `codex_cli_framed_v1` with 1,048,576)
+the packet stays a single turn only when those units together are at most
+120,000 characters and the fitted request carries each of them complete within
+the limit. On a route without a local input limit the packet stays a single
+turn. In every other case `review-assignment` starts a reading chain under
+the protocol `exactory-openness-reading-math-v1`, the math form of the chain
+that a problem openness review uses. It records `reading_chain:
+{first_assignment_id, turn}` on the assignment, which becomes reading turn 1,
+and builds that turn. Each reading turn delivers at most 120,000 characters of
+new unit text, whole units or consecutive parts of a longer body, in this order:
+the captured responses in the order of `minimum.searches` and then of each
+search record's `responses`, the full texts by version id and text digest, the
+search records in the order of the minimum, and the reading records by record
+id. The native subject, a checkpoint or the closure subject, stays the subject
+of the review, and the chain delivers no statement record. The reviewer returns
+notes and verbatim excerpts, which the harness checks against the bound bodies,
+and can request bounded passages. Every turn is a fresh input, and a compact
+reading record carries the earlier turns. The packet must carry every response
+body, full text and record as evidence. A missing one refuses the assignment
+with `openness_reading_incomplete`, and a capture recorded after the export
+never enlarges the chain. The [CLI reference](../../docs/research-cli.md#problem-creation)
+describes the turn packets, the reading record, the excerpt and passage rules,
+the final turn and the refusal codes.
 
 ```sh
 exactory-math --attack-root attack search review-packet --spec native-review.json --json
@@ -1014,13 +1069,54 @@ Create this assignment with the returned `native_packet` reference:
 
 Run `exactory-research review-assignment --workspace WORKSPACE --file assignment.json`
 and `exactory-research review-run --workspace WORKSPACE --file invocation.json`,
-each with its current `--expected-revision` and unique `--request-id`.
+each with its current `--expected-revision` and unique `--request-id`. `--check`
+on either command records nothing: `review-run --check` is refused for a new
+request, and `review-assignment --check` is refused while the store holds a
+Claude or Codex route, because recording the route state needs the installed
+reviewer adapter (`check_unsupported`).
 The invocation is `{id: AttemptID, assignment_id: ASSIGNMENT_ID}`. These are real
 reviewer calls and must remain within the user's authorized resources. Read the
 retained observed output and submit it unchanged in the appropriate native
-command. For native verification, save that exact input `ResultReview` as
-`verification-review.json`. The shared runner retains rejected result/recovery
-responses, but they cannot be converted into approve-only native records.
+command. On the Claude route that output can be the last object of an answer
+whose earlier objects were withdrawn. Each withdrawn object is followed by a line
+that is exactly `RETRACTED`. The whole original text stays in the response under
+`execution.result_text` with `self_corrected: true`. Submit the retained output,
+not the raw text. An answer with a second object and no marker, or with prose
+between the blocks, is a failed attempt on every route. For native verification,
+save that exact input `ResultReview` as `verification-review.json`. The shared
+runner retains rejected result/recovery responses, but they cannot be converted
+into approve-only native records.
+
+In a reading chain, run reading turn 1 with `review-run`. Then assign the next
+turn with the same reviewer, route, author and packet and with `context:
+{native_packet, prior_assignment_id}` that names the previous turn, and run it.
+The previous turn must be ready and its answer a valid reading answer. The
+harness checks the excerpts of that answer, answers its passage requests, and
+builds the next reading turn while units remain. After the last reading turn the
+next assignment is the final turn: the native packet with the reading record of
+the earlier turns, on the prompt of the final turn. Only as far as its request
+needs to fit the route limit, the final turn withholds bodies that reading turns
+delivered complete (full texts largest first, then captured responses, reading
+records and search records), then the notes of the earliest turns, and never an
+excerpt or a passage. The final turn returns the `ResultReview`, or a reading
+answer with at least one passage request while the passage allowance has
+characters left. A further final turn, assigned in the same way, then delivers
+those passages. At least one request of such an answer must deliver characters.
+An answer whose requests all have an absent anchor, name no single stored body,
+or exceed the remaining allowance is refused with `invalid_reading_response`.
+Run the same assignment again with `review-run` under a new invocation id. When
+every attempt of a turn ended without a completed output, for example at the
+route timeout, assign the next turn again with the same `prior_assignment_id`.
+The new assignment replaces the failed turn, which can no longer run or be
+continued (`review_assignment_replaced`). A second live continuation of one turn
+is refused with `review_source_continuation_fork`. When the first unit of a
+reading turn does not fit the route alone, or the final turn does not fit after
+every withholding, `review-assignment` refuses with `review_input_too_large`.
+For the final turn the details give the sizes of the base packet, the notes, the
+excerpts and the passages. Submit the native output of the final turn unchanged.
+Its `attestation_id` names the first turn, the assignment id chosen before the
+export. `accept` and `complete` follow the chain from that turn to its terminal
+turn and verify every turn.
 
 The packet retains the original objective and proof policy, exact subject,
 required scientific context, previous relevant strategy assessments and failures,
@@ -1032,6 +1128,28 @@ not presented as scientific text. The native executor still verifies their bytes
 and the complete typed toolchain inventory. Unsupported binary scientific input
 requires a supported exact-byte delivery mechanism, and is never silently turned
 into executable provenance.
+
+When a native command binds a review, the service builds the packet again from the
+current state. It compares that packet with the packet the reviewer received, as
+canonical JSON bytes, so `1`, `true` and `1.0` differ. One difference is permitted,
+for a proposal review only. The proposal must be `standalone` in category and
+relationship, anchored to the objective, with `budget.mode: new`. It must have no
+`native_parent`, no `logical_predecessor`, empty `equivalent_node_ids`,
+`inherited_evidence`, `inherited_assumption_ids` and claim `assumption_ids`, and
+no computation `dependencies`. For such a proposal, a node with a different claim
+can have moved from `admitted`, `active`, `waiting` or `result_ready` to `finished`
+since the export. The service restores that node's earlier status and the strategy
+inventory derived from it. The rest of the packet must then match exactly: the
+evidence closure, the reviewer, the subject and every other field. Strategy,
+result, recovery and root-closure packets have no permitted difference, and a new
+strategy assessment still invalidates an earlier proposal packet. The permitted
+differences are recorded as `context_drift: [{path, from, to}]` in the
+`review_recorded` event beside the unchanged review and its digest. Every binding
+validates its packet afresh, also when the output already has a binding. A retry
+of the same request returns its original event, and a refused binding writes no
+event. A review exported before a strategy reassessment, or before moves of its
+own node, stays refused. The reassessment changes `previous_assessments`, and
+moves can change evidence and plans.
 
 Pure event replay preserves historical records without contacting a reviewer.
 Missing old runtime metadata means historical independence is unknown, not that
@@ -1063,7 +1181,8 @@ An obligation has `id`, `schema_version`, `claim`, `claim_digest`, `proposal_id`
 
 Proposal wrappers have `id`, `schema_version`, `record`, `digest`, and `status`
 (`proposed` or `admitted`). Review wrappers have `id`, `schema_version`,
-`proposal_id`, `record`, and `digest`.
+`proposal_id`, `record`, and `digest`. A wrapper whose binding recorded the
+permitted difference also has `context_drift`; other wrappers have no such field.
 
 A node has `id`, `schema_version`, `attack_slug`, `obligation_id`, `claim`,
 `claim_digest`, `role`, `category`, `relationship`, `logical_predecessor`,
@@ -1241,7 +1360,10 @@ pinned journal prefix really belongs to this producer, the move was properly
 reserved and journalled, and the admitted milestone corresponds to the actual
 result snapshot. A matching integer move number alone is not that check.
 
-New `AcceptanceInput` has exactly (recorded version 1 omits `claims_openness`):
+New `AcceptanceInput` has exactly the fields below (recorded version 1 omits
+`claims_openness`). When the review came from a reading chain, the stored record
+also carries the derived `reading_turns`, described with the stored acceptance
+fields below, which callers never submit:
 
 ```text
 schema_version: 2
@@ -1406,6 +1528,24 @@ Historical invalidation does not grant a fresh research allowance either.
 New accepted claims/reductions/obstructions can qualify. Semantic duplication
 still requires the admission/result review boundary.
 
+An acceptance whose review came from a reading chain also stores `reading_turns:
+[{assignment_id, attempt_id, delivered_units: [{kind, <identity>}],
+delivered_parts?: [{kind, <identity>, part, parts, start, end, characters}]}]`,
+one entry per turn of the chain, the final turn included: the units whose whole
+body, and the parts whose exact slice, the actual recorded request of that turn
+delivered complete. `accept` derives it from the verified chain, adds it to the
+stored `AcceptanceInput` and recomputes the acceptance digest. The `accept` spec
+stays closed to its listed fields, so callers cannot submit it. A review of a
+single turn stores no receipts. Every audit of a recorded acceptance or closure,
+in `search audit`, in a status with a full audit, before `accept`, `complete`
+and `reassess`, and in the dependency audits, follows the chain again, verifies
+every turn and requires the recorded receipts to equal the receipts verified
+now. A chain that no longer verifies is `review_context_unverified` with the
+cause `openness_reading_incomplete`. A receipt that differs is
+`openness_reading_incomplete` itself ("The recorded reading turns changed").
+Either failure makes the acceptance fail that audit. The scientific checks of
+the review, `audit_minimum` included, are unchanged.
+
 `qualifying_progress` consumes the full checkpoint digest and accepted status as
 before, and now also requires derived `progress_eligible` for Task 3 records.
 Historical minimal Task 2 fixture records retain compatibility. Renewal identity
@@ -1453,7 +1593,9 @@ with accepted root counterexample requires the host to report that conflict and
 request user direction, while accurately retaining outcome `counterexample` or
 proof status `disproved`.
 
-`Closure` is `{subject: ClosureSubject, review: ResultReview, audit: ClosureAudit}`.
+`Closure` is `{subject: ClosureSubject, review: ResultReview, audit: ClosureAudit}`,
+with the derived `reading_turns` of the acceptance receipts when the review came
+from a reading chain.
 Here ResultReview's subject digest covers `ClosureSubject`, and its claim digest
 is the original claim digest. Its reviewer is independent of every local producer.
 
@@ -1498,6 +1640,16 @@ previous closure bytes. This conservatively requires reassessment for new native
 scientific evidence without making current common preparation a currency gate.
 Recorded version 1 closures replay unchanged.
 
+The closure review is its own observed review. Export the closure subject as a
+`result` packet with the complete current `OpennessMinimum`, run it, as a
+reading chain when the packet exceeds a single turn, and submit the output of
+its final turn with `search complete`. A checkpoint review cannot stand in for
+it: the closure binds the exact subject digest of the closure subject. A closure
+whose review came from a chain also stores `reading_turns` in the shape of the
+acceptance receipts. `complete` derives them from the verified chain, and every
+audit of the closure compares them as for an acceptance. The requirements on the
+finding do not change.
+
 `search status` derives `openness` without appending an event: `status` is `pending`
 until the final review and closure, `accepted` after version 2 closure, or
 `historical` for a replayed version 1 closure. Its `outcome`, `statement_digest` and
@@ -1513,7 +1665,18 @@ exception, it verifies that all contributing artifacts are checked and unused
 native children are the sole remaining local finish refusal. The reducer requires
 exactly the actual unfinished native child IDs and excludes contributing children.
 It does not mark any child or parent finished. Other local gate failures cannot use
-this exception. Root completion remains independent of unused alternative research.
+this exception. Root completion does not require unused alternative research to be
+delivered, but a new `search complete` waits for every admitted standalone node.
+While a standalone node admitted through a proposal has a status other than
+`finished` or `retreated`, the command refuses with `standalone_closure_pending`.
+The message is `Finish or retreat admitted standalone nodes before root closure:
+NODE_IDS`, with the sorted IDs in `details.node_ids`. This holds with or without a
+side interval and whatever the node's readiness, suspension, exhaustion or deferral.
+The refusal comes before the closure inputs are imported and before any event is
+built. A node imported by adoption has no proposal and does not count. Retreat is
+sufficient even when the node still has local cash-out work. Recorded
+`objective_completed` events replay unchanged, and a resolved objective reports no
+blocker.
 
 ## Node facts, retreat and replanning
 
@@ -1706,6 +1869,12 @@ after research exhaustion. New verification requires a current account and
 remaining moves/runs; accepting historical immutable evidence does not require
 a current account or a rerun. Stable creation IDs break otherwise equal choices.
 
+The public `search next` response is the pure action, plus `closure_blocking_node_ids`
+when that list is nonempty: the admitted standalone nodes that block a new
+`search complete`. A `finalize_root` with blockers means that the final review can
+run, but `complete` waits until those nodes finish or retreat. The tagged shapes
+above are unchanged.
+
 `control.stop_decision` is one of:
 
 ```text
@@ -1762,7 +1931,7 @@ Public command specs are closed records:
 | admit ID | `{}`; `--spec` may be omitted |
 | begin ID | The `begin NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
 | run ID | The tagged `run NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
-| reconcile | `{}` normally; optional `--spec` for the exact [rank operator recovery](harness/RANK_RECOVERY.md) record |
+| reconcile | `{}` normally; it also records the missing skeleton effect of a node admitted without `journal.jsonl` before 0.64.0; optional `--spec` for the exact [rank operator recovery](harness/RANK_RECOVERY.md) record |
 | amend-computation ID | The amendment record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | interpret ID | The interpretation record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
@@ -1798,6 +1967,26 @@ exactory-math --attack-root attack search status --json
 exactory-math --attack-root attack search next --json
 ```
 
+Every command except `status`, `next` and `strategy-context` also accepts
+`--check`, with the same spec, `--expected-revision` and `--request-id`. `pause`,
+`side-interval`, `retreat`, `interpret` and `render` then run a check. The
+controller reads the event document and builds the event with the same builder,
+reducer and document validation as the write. It compares each staged content
+object with the bytes at its digest path and prints `{"check": "accepted",
+"revision": N, "recorded": false, "operation": NAME}`, where `revision` is the
+current revision and `operation` the command name. The check writes no event,
+content, runtime identity or view, and it creates no lock file: it takes the
+writer lock when `tree.lock` exists and runs without one when the file is
+absent. A request ID already recorded with the same command inputs returns the
+original command response, one recorded with other inputs fails with
+`request_id_conflict`, and a stale revision fails with `revision_conflict`. A
+staged object whose digest path holds different bytes fails with
+`immutable_collision`, and a symlink or a directory at `tree.lock` refuses the
+check as it refuses the write. An accepted check is a diagnostic, not an event:
+it reserves nothing, and the write that follows validates again. Every other
+command refuses the flag with `check_unsupported` before the controller opens
+the store. That refusal says nothing about the spec.
+
 The proposal's normal limits are explicit values, not omitted defaults:
 `{"max_moves":24,"max_runs":24,"timeout_seconds":300,"workers":1}`.
 `PublicCheckpoint` is `CheckpointInput` without `verification_status`; the service
@@ -1830,6 +2019,11 @@ completion always inspect the full accepted dependency closure. A failed final
 delivery audit conservatively invalidates its contributing acceptance support and
 the recorded closure, retaining all history. None of these audits runs a compiler,
 checker, Lean, shell script or mathematical job.
+
+`status` also derives `closure_blocking_node_ids`: the sorted IDs of the standalone
+nodes admitted through a proposal that are neither finished nor retreated. On
+resolved history the list is empty. `next` carries the same list only when it is
+nonempty. Neither is a persisted event field.
 
 ### Workspace discovery and session ownership
 
@@ -1905,6 +2099,25 @@ add operations. Native and journal intents retain recovery precedence, and the
 logs cannot grant proof credit. Newly managed-node shell activity records only a
 relative target or native command name and slug, not raw shell arguments; existing
 unmanaged advisory formatting and authoritative controlled-run argv are unchanged.
+Each new activity entry carries `session_id`, the host-qualified session
+(`claude:<id>` or `codex:<id>`, or null without a host identity), and
+`harness_command`. A successful Write or Edit under a workspace is always recorded.
+So is a harness command (`exactory-math` or `attack.py`) that names the attack by
+its slug or by a path inside the workspace. A harness command whose own arguments
+include `--check` leaves no entry, because a check writes nothing. An ordinary
+shell command that names a path under the workspace is recorded only after a
+harness-command entry of the same session. A null identity never admits one, and a
+harness command on another attack does not admit inspection of this one. The log
+keeps the last 200 entries of all sessions. When a session's harness entry leaves
+the window, its ordinary calls stop being recorded until its next harness command.
+The recorder splits a command with the guard's lexer settings and attributes a
+compound command to each workspace once. Quoted or escaped separators do not make
+a harness call. Only the direct command that the host reports is seen, not programs
+it starts. If the parser fails, the recorder appends nothing for the whole call. The
+recorder never blocks a tool and the PreToolUse guard does not depend on it.
+`status` shows the last three entries of the latest session with a harness-command
+entry, and that session's count. A log without such an entry keeps the unfiltered
+view, and anonymous harness entries select nothing.
 The 40th continuation requests one summary; later
 Stop calls permit stopping until explicit operator resume, even with absent or
 false `stop_hook_active` and after an admitted alternative or replan.
@@ -1921,10 +2134,27 @@ of that length, such as a long `task add` text with a slash, is not probed. A
 shorter token with a slash remains a candidate path, subject to the hook's other
 filters for options, interpreter code or module arguments, and newline or NUL
 characters.
-The hooks read a record with the controller of their own plugin. When that
-controller cannot replay the record's log, the denial names the controller and
-says that a record written by another exactory-math, such as a newer release or a
-local runtime, needs a release that reads it; the log does not name its writer.
+The hooks read a record with the controller of their own plugin. Read, Glob, Grep,
+WebSearch and WebFetch calls are never checked. A Write, Edit or Delete under a
+registered root, and a supported shell command that names a path under it, call
+the controller first. When that call fails, the hook confirms the failure with one
+plain `search status --json` call inside the same 20-second deadline. If the status
+succeeds, the record is readable and the message keeps its operational diagnostic,
+`Controller recovery required: DIAGNOSTIC`, for example a focus or revision
+conflict. If the status fails too, the hook compares `.search/writer-runtime.json`
+with the installed runtime. A different `plugin_version` or `controller_digest`
+gives `The installed controller Exactory VERSION (controller sha256 DIGEST,
+launcher PATH) cannot read a record written by Exactory VERSION (...): DIAGNOSTIC.
+Run the search command under the recorded runtime: PYTHON LAUNCHER --attack-root
+ROOT search <command>.` A missing or unreadable file (no file, invalid JSON,
+duplicate keys, deep nesting, a wrong shape, a symlinked `.search`) gives `The
+installed controller ... cannot read this record: DIAGNOSTIC. No writer runtime
+identity is recorded; use the runtime that wrote the record.` Only a matching
+version and digest keeps `Controller recovery required: DIAGNOSTIC`; a different
+launcher path alone is not a mismatch. The hook never runs the recorded launcher.
+PreToolUse denies the operation with `[math-solver] ` and the message; SessionStart
+and Stop add the same message as context. A record that the installed controller
+replays is handled as before, whichever runtime wrote it.
 Recognized managed mutations with corrupt state or unsupported visible shell or
 wrapper payloads fail closed with direct-call recovery guidance. The adapter does
 not parse arbitrary shell programs or JavaScript. Nested operations that the host
@@ -2290,8 +2520,11 @@ exhaustion and must be resolved through a bounded, explicitly authorized renewal
 `Store.append_operation(identity, expected_revision, request_id, build, validate=None)`
 is the internal service transaction API. Identity is exactly
 `{command,target,spec_digest}`. Identical replay and conflicting-ID checks precede
-the builder; stale new requests never call it. `build(isolated_document, content_sink)`
-returns `{command,target,spec_digest,operations,effects}`. The sink stages immutable
+the builder; stale new requests never call it. A replay therefore returns the
+committed event of its request before any packet validation. A new request with a
+new ID that reuses the same review output runs the builder and its fresh packet
+validation. `build(isolated_document, content_sink)` returns
+`{command,target,spec_digest,operations,effects}`. The sink stages immutable
 bytes in memory and supplies `put/get_blob` and `put/get_artifact`; it does not
 reacquire the writer lock. After pure validation succeeds, the same locked writer
 persists staged content and atomically replaces the event document. Callback
@@ -2307,7 +2540,10 @@ operations commit neither a prefix nor staged artifacts.
 
 Effects are `{kind:"initialize_workspace"|"preserve_manual_views",slug,snapshot_digest}`.
 Workspace effects pin an immutable `{directories:[RelativePath],files:[{path,digest}]}`
-snapshot. View-preservation effects use slug `.` and save original view bytes.
+snapshot. For an attack directory that already exists, the snapshot lists the three
+skeleton directories and only the absent files. Application therefore never replaces
+existing bytes, and the file list can be empty. Old snapshots replay unchanged.
+View-preservation effects use slug `.` and save original view bytes.
 The committed event is the durable intent. Idempotent filesystem application
 happens afterward, with content-bound `.search/effect-DIGEST.json`
 acknowledgements. Interrupted initialization does not imply an atomic transaction

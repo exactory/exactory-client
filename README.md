@@ -35,6 +35,14 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.67.0](docs/releases/0.67.0.md) resolves the open harness-improvement records: a review observation
+survives a busy store, a disabled Codex `exec` call that ran nothing is a notice, every recorded result output
+reaches its reviewer, a refused review output names the failed rule and item, new reviewer prompts carry a
+versioned common text that forbids tool calls and states the `RETRACTED` form, every writing command has a check
+mode, the draft-marker obligation names a step that works in every state, `exactory-lab run` works in a problem
+record, and a math-solver result review with an oversized openness minimum reaches its reviewer as a reading
+chain. The agent-facing texts of 0.62.0 to 0.66.0 are written.
+
 Version [0.66.3](docs/releases/0.66.3.md) bounds the final turn of an openness reading chain: the packet's records
 arrive as reading units after the full texts, the final turn withholds delivered bodies and then the oldest notes
 only as far as its request needs, and a refusal names the size of each part.
@@ -533,7 +541,9 @@ non-zero when the citation gate does not pass. The gate also fails when the
 bibliography or the manuscript changed after the report.
 
 **`exactory-draft`** manages the paper workspace. `init` creates the layout,
-and `deposit` sends the built PDF and sources to Zenodo. The sandbox API and
+`package` writes a ZIP of the code, inputs, outputs and records behind a pinned
+manuscript for the deposit's sources archive, and `deposit` sends the built PDF
+and sources to Zenodo. The sandbox API and
 draft state are the defaults. A production publish also needs the
 `--confirm-publish` flag, because a published DOI is permanent. `--new-version`
 publishes a revised version of a record already deposited, keeping the concept
@@ -632,18 +642,33 @@ workspace they do nothing.
 - **Unit flow.** A write under `units/<n>/` is denied until `stall` wrote the
   inventory, and a `draft.md` or `evaluation.md` is denied until `check-unit`
   stamped the unit as it stands.
-- **Activity.** After every Write, Edit, or Bash call that touched an attack
-  workspace, one line goes to its `activity.jsonl`: the time, the tool, and
-  the file or command. `status` shows the last three, so a resumed session
-  sees what the previous one was doing when it stopped.
+- **Activity.** After a Write or Edit under an attack workspace, one line goes
+  to its `activity.jsonl`. The same happens after a harness command
+  (`exactory-math` or `attack.py`) that names the attack. A harness command
+  whose own arguments include `--check` leaves no entry, because a check writes
+  nothing. The line holds the time, the tool, the file or command, the
+  host-qualified session and whether it was a harness command. An ordinary
+  shell command that names a path under the workspace is recorded only after a
+  harness-command entry of the same host and session. An inspection by another
+  session therefore leaves the file byte for byte unchanged, also at the
+  200-entry cap. `status` shows the last three entries of the latest session
+  with such an entry. A resumed session therefore sees what the previous one
+  was doing when it stopped.
 - **Resume.** At session start (a new session, a resume, a clear, or a
   compaction), the hooks report managed controller actions and native status.
   Resume from `search status` and `search next`, then the selected native record.
   Reading status does not clear a pause or satisfy a current gate.
-- **Continue.** Continuation follows current controller authority, budgets,
-  pause state, and pending evidence or review. Native unfinished-work handling
-  retains its `EXACTORY_ATTACK_MAX` advance cap. A native completion marker
-  cannot close a broader managed objective with remaining obligations.
+- **Continue.** At each stop, the hook asks the controller (`hook-stop`)
+  whether the focused objective continues. The controller decides from its own
+  authority: budgets, pause state, and pending evidence or review. When the
+  objective has a next action, the hook blocks the stop and names that action.
+  When the objective is paused, resolved, blocked, handed off or waiting for an
+  execution, the session stops. The controller counts the stops of the
+  objective. At the fortieth it asks for one summary and pauses the objective.
+  Only an explicit authorized `search resume` clears the pause and starts a new
+  count. The bound is fixed. No environment variable changes it. A native
+  completion marker cannot close a broader managed objective with remaining
+  obligations.
 
 ## Citation report and hooks
 

@@ -635,6 +635,21 @@ class TestRecordAttackActivity(unittest.TestCase):
         self._run("Bash", {"command": "cat attack/sample/problem.json"})
         self.assertEqual(log_path.read_bytes(), before)
 
+    def test_a_checked_harness_command_leaves_no_activity(self) -> None:
+        # A check writes nothing, so it leaves no activity entry either; another call of the same shell command still
+        # records its own.
+        self._run("Bash", {"command": "exactory-math status sample"})
+        log_path = self.workspace / "activity.jsonl"
+        before = log_path.read_bytes()
+        for command in ("exactory-math search pause sample --expected-revision 3 --request-id check-pause --check",
+                        "exactory-math journal add sample --check --json '{\"move\": 1}'"):
+            with self.subTest(command=command):
+                self._run("Bash", {"command": command})
+                self.assertEqual(log_path.read_bytes(), before)
+        self._run("Bash", {"command": "exactory-math journal add sample --check;exactory-math status sample"})
+        self.assertEqual(len(self.read_log()), 2)
+        self.assertIs(self.read_log()[-1]["harness_command"], True)
+
     def test_compound_harness_commands_use_shell_token_boundaries(self) -> None:
         for command in ("exactory-math status sample;printf done", "NAME=value exactory-math status sample|cat"):
             with self.subTest(command=command):

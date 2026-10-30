@@ -27,22 +27,22 @@ def collect_attachments(parts):
             data = base64.b64decode(encoded, validate=True)
         except (binascii.Error, ValueError):
             continue
-        attached[(len(data), hashlib.sha256(data).hexdigest())] = (media, encoded, data)
+        attached.setdefault((len(data), hashlib.sha256(data).hexdigest()), {})[media] = (encoded, data)
     return attached
 
 
 def find_attachment(attached, reference):
     """The base64 body of an actual attachment of exactly the descriptor's bytes, attached as the media type that
     request construction attaches for the descriptor: a PDF reported as generic binary is attached as a PDF."""
-    found = attached.get((reference.get('size'), reference.get('sha256')))
-    if found is None:
-        return None
-    media, encoded, data = found
     reported = reference.get('media_type')
-    if not isinstance(reported, str) or not transport.is_binary_evidence(data, reported):
+    if not isinstance(reported, str):
         return None
-    expected, _ = detect_media_type(data, reported)
-    return encoded if media == expected else None
+    for media, (encoded, data) in attached.get((reference.get('size'), reference.get('sha256')), {}).items():
+        if transport.is_binary_evidence(data, reported):
+            expected, _ = detect_media_type(data, reported)
+            if media == expected:
+                return encoded
+    return None
 
 
 def _require_problem_packet(packet):
@@ -75,6 +75,16 @@ def project_evidence(packet, attached):
         if not isinstance(media, str):
             raise ResearchError('review_input_unreadable', 'Evidence requires an explicit native media type')
         content = entry.get('content')
+        if entry.get('delivery') == transport.RESULT_BYTES_DELIVERY and entry.get('encoding') == 'base64':
+            try:
+                data = base64.b64decode(content, validate=True)
+            except (binascii.Error, TypeError, ValueError):
+                pass
+            else:
+                if (len(data) == reference.get('size')
+                        and hashlib.sha256(data).hexdigest() == reference.get('sha256')
+                        and not transport.is_binary_evidence(data, media)):
+                    continue
         if (entry.get('encoding') == 'omitted' and content == ''
                 and entry.get('delivery') != 'bytes-omitted-on-text-route'):
             continue

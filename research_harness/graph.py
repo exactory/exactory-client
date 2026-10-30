@@ -27,6 +27,10 @@ reference of those papers is still inventoried and read at abstract depth.
 Registry observations never establish a complete article bibliography. Aliases
 resolve families only; an unversioned reference includes all captured versions
 of its unambiguous family without claiming their contents are interchangeable.
+An occurrence or resolution that carries target_family resolves to that family
+alone, after the same validation as at import; an exact arXiv target of that
+family keeps its version. Every other occurrence keeps the ordinary lookup, so
+conflicting assertions still report ambiguous_alias.
 """
 
 from .errors import ResearchError

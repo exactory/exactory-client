@@ -909,12 +909,13 @@ class ReadingPromptAcceptanceTests(unittest.TestCase):
         for (reading_protocol, stage), template_hash in EARLIER_PROMPT_HASHES.items():
             with self.subTest(protocol=reading_protocol, stage=stage):
                 prompt = protocol.canonical_prompt('native_math', reading_stage=stage,
-                                                   reading_protocol=reading_protocol)
+                                                   reading_protocol=reading_protocol, common_version=1)
                 self.assertEqual((prompt['template_id'], prompt['template_hash'], prompt['rendered_prompt_hash']),
                                  (reading_protocol + '/' + stage, template_hash, template_hash))
                 with patch.object(protocol, 'openness_reading', released):
                     self.assertEqual(protocol.canonical_prompt('native_math', reading_stage=stage,
-                                                               reading_protocol=reading_protocol), prompt)
+                                                               reading_protocol=reading_protocol, common_version=1),
+                                     prompt)
 
     def test_the_v3_prompts_state_the_unit_identities_and_the_withholding_rules(self):
         self.assertEqual(openness_reading.PROTOCOL, PROTOCOL_V3)

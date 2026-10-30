@@ -11,6 +11,7 @@ from pathlib import Path
 from .artifacts import ArtifactStore, describe_artifact, is_sealed_artifact
 from .execution_evidence import author_readiness_state
 from .errors import ResearchError
+from .evidence import digest
 from .evaluation import Evaluation
 from .publication import _bundle, publication_state
 from .review_packets import manuscript_packet, readiness_packet, round_packet, find_round_investigation_responses
@@ -24,7 +25,7 @@ def references(value):
     def visit(item):
         if isinstance(item, dict):
             if {"path", "sha256", "size", "media_type"} <= item.keys() and not is_sealed_artifact(item):
-                found[item["path"]] = item
+                found[(item["path"], digest(item))] = item
             for child in item.values():
                 visit(child)
         elif isinstance(item, list):
@@ -43,9 +44,10 @@ def deliver_packet(store, destination, manifest, *, derived=None, transitive=Fal
     values, pending, seen = [], references(manifest), set()
     while pending:
         ref = pending.pop()
-        if ref["path"] in seen:
+        key = digest(ref)
+        if key in seen:
             continue
-        seen.add(ref["path"])
+        seen.add(key)
         data = derived[ref["path"]] if ref["path"] in derived else artifacts.read(ref)
         values.append((ref, data))
         if transitive and (data or ref not in empty_captures):

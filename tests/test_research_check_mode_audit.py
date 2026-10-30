@@ -1,10 +1,20 @@
 """Exercise every check command and real fixture preparations without workspace writes."""
 
 import copy
+import argparse
+from contextlib import contextmanager
+import importlib.machinery
+import importlib.util
+import hashlib
 import json
+import os
 from pathlib import Path
+import runpy
 import shutil
+import subprocess
 import sys
+import tempfile
+import unittest
 from unittest import mock
 
 from development_fixtures import DevelopmentCase
@@ -21,13 +31,301 @@ from test_research_problem_claims import ProblemCase
 
 PLUGIN = Path(__file__).resolve().parents[1]
 EXTERNAL_COMMANDS = frozenset((*cli.ACQUISITION, "review-probe", "review-run", "review-output-correction",
-                               "reconcile-run", "batches", "export", "recover", "restore"))
+                               "reconcile-run", "batches", "export", "recover", "restore", "strategy-packet"))
 OTHER_ARGUMENTS = {
     "batches": ["--destination", "check-batches"],
     "export": [],
     "recover": [],
     "restore": ["--bundle", "0" * 64],
+    "strategy-packet": ["--role", "standalone", "--reviewer-id", "check-reviewer"],
 }
+
+READ_ONLY_COMMANDS = {
+    "exactory-research": frozenset((name,) for name in (
+        "status", "next", "obligations", "population-query", "policy-report", "gate", "check-claims", "example",
+        "research-decision-assess", "review-route-assess")),
+    "exactory-lab": frozenset({("keys",), ("state", "show"), ("colab-status",)}),
+    "exactory-draft": frozenset(),
+    "exactory-math": frozenset({("check-problem",), ("budget",), ("status",), ("task", "list"),
+                                ("search", "status"), ("search", "next"), ("search", "strategy-context")}),
+}
+MATH_STORE_COMMANDS = frozenset({"pause", "side-interval", "retreat", "interpret", "render"})
+
+
+@contextmanager
+def read_command_parsers():
+    harness_path = PLUGIN / "skills/math-solver/harness"
+    with mock.patch.object(sys, "path", [str(harness_path), *sys.path]), mock.patch.dict(sys.modules):
+        modules = {}
+        for name in ("exactory-lab", "exactory-draft", "exactory-math"):
+            loader = importlib.machinery.SourceFileLoader(name.replace("-", "_"), str(PLUGIN / "bin" / name))
+            spec = importlib.util.spec_from_loader(loader.name, loader)
+            module = importlib.util.module_from_spec(spec)
+            loader.exec_module(module)
+            modules[name] = module
+        modules["exactory-math"] = modules["exactory-math"]._load_harness()
+        yield {"exactory-research": cli.build_parser(),
+               "exactory-math": modules["exactory-math"].build_parser(),
+               "exactory-lab": modules["exactory-lab"]._build_parser(),
+               "exactory-draft": modules["exactory-draft"]._build_parser()}
+
+
+def iter_command_parsers(parser, path=()):
+    groups = [action for action in parser._actions if isinstance(action, argparse._SubParsersAction)]
+    if not groups:
+        yield path, parser
+    for group in groups:
+        for name, child in group.choices.items():
+            yield from iter_command_parsers(child, (*path, name))
+
+
+def build_required_arguments(parser, payload_path):
+    arguments = []
+    for action in parser._actions:
+        if isinstance(action, (argparse._HelpAction, argparse._SubParsersAction)):
+            continue
+        if action.option_strings and not action.required and action.dest not in ("expected_revision", "request_id"):
+            continue
+        if action.nargs == "?":
+            continue
+        value = (str(payload_path) if action.dest in ("file", "spec") else
+                 str(next(iter(action.choices))) if action.choices else
+                 "0" if action.type in (int, float) else "check-input")
+        if action.option_strings:
+            arguments.append(action.option_strings[0])
+        arguments.append(value)
+    return arguments
+
+
+class ParserCheckTests(CheckCommandMixin, unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name) / "workspace"
+        self.root.mkdir()
+        self.store = Store(self.root, create=True)
+        self.payload_path = self.root.parent / "input.json"
+        self.payload_path.write_text("{}", encoding="utf-8")
+
+    def invoke_program(self, program, arguments):
+        environment = dict(os.environ, PYTHONPATH=str(PLUGIN), EXACTORY_API_KEY="", PYTHONDONTWRITEBYTECODE="1")
+        return subprocess.run([sys.executable, str(PLUGIN / "bin" / program), *arguments], cwd=self.root,
+                              env=environment, capture_output=True, text=True, timeout=20)
+
+    def test_every_writing_parser_accepts_check(self):
+        with read_command_parsers() as parsers:
+            for program, parser in parsers.items():
+                commands = dict(iter_command_parsers(parser))
+                self.assertLessEqual(READ_ONLY_COMMANDS[program], commands.keys())
+                for path, command_parser in commands.items():
+                    if path in READ_ONLY_COMMANDS[program]:
+                        continue
+                    with self.subTest(program=program, command=path):
+                        self.assertTrue(any("--check" in action.option_strings for action in command_parser._actions),
+                                        "Writing command lacks --check: " + program + " " + " ".join(path))
+
+    def test_external_checks_refuse_without_workspace_writes(self):
+        with read_command_parsers() as parsers:
+            for program, parser in parsers.items():
+                for path, command_parser in iter_command_parsers(parser):
+                    if path in READ_ONLY_COMMANDS[program]:
+                        continue
+                    if (program == "exactory-research" and path[0] not in EXTERNAL_COMMANDS
+                            or program == "exactory-lab" and path in {("state", "set"), ("decide",)}
+                            or program == "exactory-math" and path[0] == "search"
+                            and path[1] in MATH_STORE_COMMANDS):
+                        continue
+                    with self.subTest(program=program, command=path):
+                        arguments = [*path, *build_required_arguments(command_parser, self.payload_path), "--check"]
+                        before = self.read_workspace()
+                        result = self.invoke_program(program, arguments)
+                        self.assertEqual(self.read_workspace(), before)
+                        self.assertEqual(result.returncode, 1, result.stderr)
+                        self.assertEqual(json.loads(result.stderr)["error"]["code"], "check_unsupported")
+
+    def test_lab_store_checks_preserve_acceptance_refusal_and_replay_without_projection_writes(self):
+        initialized = self.invoke_program("exactory-lab", ["init", "--slug", "checked-study"])
+        self.assertEqual(initialized.returncode, 0, initialized.stderr)
+        self.store = Store(self.root)
+        for arguments in (["state", "set", "--status", "running"],
+                          ["decide", "--decision", "Keep the plan", "--why", "The evidence still supports it"]):
+            with self.subTest(command=arguments[:2]):
+                revision = self.store.revision
+                identity = ["--expected-revision", str(revision), "--request-id", "checked-" + arguments[0]]
+                before = self.read_workspace()
+                checked = self.invoke_program("exactory-lab", [*arguments, *identity, "--check"])
+                self.assertEqual(self.read_workspace(), before)
+                self.assertEqual(checked.returncode, 0, checked.stderr)
+                self.assertEqual(json.loads(checked.stdout)["check"], "accepted")
+                self.assertEqual(json.loads(checked.stdout)["revision"], revision)
+                written = self.invoke_program("exactory-lab", [*arguments, *identity])
+                self.assertEqual(written.returncode, 0, written.stderr)
+                before = self.read_workspace()
+                replayed = self.invoke_program("exactory-lab", [*arguments, *identity, "--check"])
+                self.assertEqual(self.read_workspace(), before)
+                self.assertEqual(replayed.returncode, 0, replayed.stderr)
+                self.assertEqual(json.loads(replayed.stdout)["result"], json.loads(written.stdout))
+        for arguments in (["state", "set", "--loop-budget", "-1"],
+                          ["decide", "--decision", "Keep the plan", "--why", ""]):
+            before = self.read_workspace()
+            checked = self.invoke_program("exactory-lab", [*arguments, "--check"])
+            self.assertEqual(self.read_workspace(), before)
+            written = self.invoke_program("exactory-lab", arguments)
+            self.assertEqual(checked.returncode, written.returncode, checked.stderr)
+            self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
+
+    def test_math_store_checks_use_native_validation_without_events_artifacts_or_views(self):
+        with read_command_parsers():
+            from search_controller.service import Controller
+            fixtures = runpy.run_path(str(PLUGIN / "skills/math-solver/harness/tests/search_fixtures.py"))
+            attack_root = self.root / "attack"
+            attack_root.mkdir()
+            controller = Controller(attack_root)
+            controller.command("init", {"contract": fixtures["contract"]()}, 0, "initialize")
+            (attack_root / ".search/tree.lock").unlink()
+            for command, spec in (("render", {}),
+                                  ("pause", {"reason": "Check the evidence"})):
+                spec_path = self.root.parent / "native-spec.json"
+                spec_path.write_text(json.dumps(spec), encoding="utf-8")
+                revision = controller.status()["revision"]
+                arguments = ["--attack-root", str(attack_root), "search", command,
+                             "--expected-revision", str(revision), "--request-id", "checked-" + command]
+                if command == "pause":
+                    arguments.extend(["--spec", str(spec_path)])
+                before = self.read_workspace()
+                checked = self.invoke_program("exactory-math", [*arguments, "--check"])
+                self.assertEqual(self.read_workspace(), before)
+                self.assertEqual(checked.returncode, 0, checked.stderr)
+                self.assertEqual(json.loads(checked.stdout)["check"], "accepted")
+                self.assertEqual(json.loads(checked.stdout)["revision"], revision)
+                written = self.invoke_program("exactory-math", arguments)
+                self.assertEqual(written.returncode, 0, written.stderr)
+                before = self.read_workspace()
+                replayed = self.invoke_program("exactory-math", [*arguments, "--check"])
+                self.assertEqual(self.read_workspace(), before)
+                self.assertEqual(json.loads(replayed.stdout), json.loads(written.stdout))
+            spec_path.write_text("{}", encoding="utf-8")
+            arguments = ["--attack-root", str(attack_root), "search", "pause", "--spec", str(spec_path),
+                         "--expected-revision", str(controller.status()["revision"]), "--request-id", "refused-pause"]
+            before = self.read_workspace()
+            checked = self.invoke_program("exactory-math", [*arguments, "--check"])
+            self.assertEqual(self.read_workspace(), before)
+            written = self.invoke_program("exactory-math", arguments)
+            self.assertEqual(checked.returncode, 1, checked.stderr)
+            self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
+            for command in ("side-interval", "retreat", "interpret"):
+                with self.subTest(command=command):
+                    arguments = ["--attack-root", str(attack_root), "search", command, "unknown-node",
+                                 "--spec", str(spec_path), "--expected-revision",
+                                 str(controller.status()["revision"]), "--request-id", "refused-" + command]
+                    before = self.read_workspace()
+                    checked = self.invoke_program("exactory-math", [*arguments, "--check"])
+                    self.assertEqual(self.read_workspace(), before)
+                    written = self.invoke_program("exactory-math", arguments)
+                    self.assertEqual(checked.returncode, 1, checked.stderr)
+                    self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
+
+    def test_native_missing_content_reads_do_not_create_namespace_directories(self):
+        with read_command_parsers():
+            from search_controller.storage import Store as NativeStore
+            from search_controller.errors import SearchError
+            native_root = self.root / ".search"
+            native_root.mkdir()
+            store = NativeStore(native_root)
+            before = self.read_workspace()
+            for read in (store.get_blob, store.get_artifact):
+                with self.assertRaises(SearchError):
+                    read("0" * 64)
+                self.assertEqual(self.read_workspace(), before)
+
+    def test_math_check_refuses_a_corrupt_existing_staged_artifact(self):
+        with read_command_parsers():
+            from search_controller.service import Controller
+            fixtures = runpy.run_path(str(PLUGIN / "skills/math-solver/harness/tests/search_fixtures.py"))
+            attack_root = self.root / "attack"
+            attack_root.mkdir()
+            controller = Controller(attack_root)
+            controller.command("init", {"contract": fixtures["contract"]()}, 0, "initialize")
+            manual = (attack_root / "SEARCH_TREE.md").read_bytes()
+            target = attack_root / ".search/artifacts" / hashlib.sha256(manual).hexdigest()
+            target.write_bytes(b"Corrupt existing immutable bytes")
+            arguments = ["--attack-root", str(attack_root), "search", "render", "--expected-revision", "1",
+                         "--request-id", "preserve-manual"]
+            before = self.read_workspace()
+            checked = self.invoke_program("exactory-math", [*arguments, "--check"])
+            self.assertEqual(self.read_workspace(), before)
+            written = self.invoke_program("exactory-math", arguments)
+            self.assertEqual(written.returncode, 1, written.stderr)
+            self.assertEqual(json.loads(written.stderr)["error"]["code"], "immutable_collision")
+            self.assertEqual(checked.returncode, written.returncode, checked.stdout)
+            self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
+
+    def test_a_symlink_at_a_generated_view_refuses_check_and_write_before_any_event(self):
+        with read_command_parsers():
+            from search_controller.service import Controller
+            fixtures = runpy.run_path(str(PLUGIN / "skills/math-solver/harness/tests/search_fixtures.py"))
+            attack_root = self.root / "attack"
+            attack_root.mkdir()
+            controller = Controller(attack_root)
+            controller.command("init", {"contract": fixtures["contract"]()}, 0, "initialize")
+            view = attack_root / "SEARCH_TREE.md"
+            view.unlink()
+            view.symlink_to("missing-view.md")
+            arguments = ["--attack-root", str(attack_root), "search", "render", "--expected-revision", "1",
+                         "--request-id", "linked-view"]
+            before = self.read_workspace()
+            checked = self.invoke_program("exactory-math", [*arguments, "--check"])
+            self.assertEqual(self.read_workspace(), before)
+            written = self.invoke_program("exactory-math", arguments)
+            self.assertEqual(written.returncode, 1, written.stderr)
+            self.assertEqual(json.loads(written.stderr)["error"]["code"], "unsafe_path")
+            self.assertEqual(controller.status()["revision"], 1)
+            self.assertEqual(checked.returncode, written.returncode, checked.stdout)
+            self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
+
+    def test_math_check_refuses_an_unsafe_writer_lock_without_changing_it(self):
+        with read_command_parsers():
+            from search_controller.service import Controller
+            fixtures = runpy.run_path(str(PLUGIN / "skills/math-solver/harness/tests/search_fixtures.py"))
+            attack_root = self.root / "attack"
+            attack_root.mkdir()
+            controller = Controller(attack_root)
+            controller.command("init", {"contract": fixtures["contract"]()}, 0, "initialize")
+            lock = attack_root / ".search/tree.lock"
+            lock.unlink()
+            lock.symlink_to("tree.json")
+            arguments = ["--attack-root", str(attack_root), "search", "render", "--expected-revision", "1",
+                         "--request-id", "unsafe-lock"]
+            before = self.read_workspace()
+            checked = self.invoke_program("exactory-math", [*arguments, "--check"])
+            self.assertEqual(self.read_workspace(), before)
+            written = self.invoke_program("exactory-math", arguments)
+            self.assertEqual(written.returncode, 1, written.stderr)
+            self.assertEqual(json.loads(written.stderr)["error"]["code"], "unsafe_path")
+            self.assertEqual(checked.returncode, written.returncode, checked.stdout)
+            self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
+
+    def test_math_check_refuses_a_directory_at_the_writer_lock_path(self):
+        with read_command_parsers():
+            from search_controller.service import Controller
+            fixtures = runpy.run_path(str(PLUGIN / "skills/math-solver/harness/tests/search_fixtures.py"))
+            attack_root = self.root / "attack"
+            attack_root.mkdir()
+            controller = Controller(attack_root)
+            controller.command("init", {"contract": fixtures["contract"]()}, 0, "initialize")
+            lock = attack_root / ".search/tree.lock"
+            lock.unlink()
+            lock.mkdir()
+            arguments = ["--attack-root", str(attack_root), "search", "render", "--expected-revision", "1",
+                         "--request-id", "lock-directory"]
+            before = self.read_workspace()
+            checked = self.invoke_program("exactory-math", [*arguments, "--check"])
+            self.assertEqual(self.read_workspace(), before)
+            written = self.invoke_program("exactory-math", arguments)
+            self.assertEqual(written.returncode, 1, written.stderr)
+            self.assertEqual(json.loads(written.stderr)["error"]["code"], "storage_error")
+            self.assertEqual(checked.returncode, written.returncode, checked.stdout)
+            self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
 REFUSED_OUTCOMES = {
     "admit": "unknown_cycle",
     "assess": "unknown_cycle",

@@ -197,8 +197,8 @@ class ProblemReviewTests(LiteratureCase):
             "slate": "38fed1d12ce4376f4144d3dd6c57e2e9475db73a30b7a86c8471f00c84588312",
             "result": "236703cb1f256d93b60cfa4c82ea7e2eb76fcd7a66c9984542767c675e4e32bc"}
         for role, expected in hashes.items():
-            self.assertEqual(protocol.canonical_prompt(role)["template_hash"], expected)
-        self.assertEqual(protocol.canonical_prompt("native_math", version=3)["template_hash"],
+            self.assertEqual(protocol.canonical_prompt(role, common_version=1)["template_hash"], expected)
+        self.assertEqual(protocol.canonical_prompt("native_math", version=3, common_version=1)["template_hash"],
                          "911fd529e31ca9bf8efba3c743ecdd4d9c7e4cfe11ed7d97ed830e7002c81872")
         for role in ("bar", "result", "adjudicator"):
             prompt = protocol.canonical_prompt(role, orchestration="problem_creation")
@@ -249,6 +249,7 @@ class ProblemReviewTests(LiteratureCase):
         before = {"adjudicator_prompt": protocol._PROBLEM_ADJUDICATOR_PROMPT_BEFORE_NOT_BINDING}
         for role, expected in version_two.items():
             self.assertEqual(protocol.canonical_prompt(role, version=2, orchestration="problem_creation",
+                                                       common_version=1,
                                                        **(before if role == "adjudicator" else {}))["template_hash"], expected)
         slate = protocol.canonical_prompt("slate", orchestration="problem_creation")
         self.assertEqual(slate["template_id"], "exactory-problem-review-v5/slate")
@@ -332,10 +333,13 @@ class ProblemReviewTests(LiteratureCase):
                   'result': '31a44bac73484c1aaf62a02199623a147e71a57902ee6d50d61973166a28364b',
                   'adjudicator': 'b355755fc920543576e40a154051c5405f5d7d53f1f92831c934dec316585e37'}
         for role, expected in hashes.items():
-            self.assertEqual(original(role, orchestration='problem_creation', version=1)['template_hash'], expected)
+            prompt = original(role, orchestration='problem_creation', version=1, common_version=1)
+            self.assertEqual(prompt['template_hash'], expected)
         def previous_prompt(role, **options):
             if options.get('orchestration') == 'problem_creation':
                 options['version'] = 1
+            # A 0.53.0 store recorded the common text of version 1.
+            options.setdefault('common_version', 1)
             return original(role, **options)
         # A 0.53.0 store recorded these results before version 1 bars were refused at result assignment.
         with patch.object(protocol, 'canonical_prompt', side_effect=previous_prompt), \
@@ -357,7 +361,7 @@ class ProblemReviewTests(LiteratureCase):
             ('problem_rubric_review_required', 'review-result-second')})
         for role in hashes:
             assignment = {'role': role, 'subject': {'kind': 'problem'},
-                          'prompt': original(role, orchestration='problem_creation', version=1)}
+                          'prompt': original(role, orchestration='problem_creation', version=1, common_version=1)}
             self.assertTrue(protocol._prompt_matches(assignment))
             assignment['prompt']['template_hash'] = '0' * 64
             self.assertFalse(protocol._prompt_matches(assignment))

@@ -198,13 +198,50 @@ def scope_subset(child, parent):
     return child == parent
 
 
+def validate_reading_turns(turns):
+    """The shape of the reading-turn receipts that the service derives from an observed openness reading chain: each
+    turn names its assignment and attempt, the units whose whole body its request delivered complete, and the parts
+    when it delivered parts. The service authenticates them; this check opens no artifact."""
+    from research_harness.review_excerpts import IDENTITY_FIELDS, RECORD_KINDS
+
+    def validate_unit(unit, extra=()):
+        s.require(isinstance(unit, dict) and unit.get("kind") in IDENTITY_FIELDS, "Unknown reading unit kind")
+        required, optional = IDENTITY_FIELDS[unit["kind"]]
+        identity = required + tuple(key for key in optional if key in unit)
+        s.closed(unit, " ".join(("kind",) + identity + extra))
+        for key in identity:
+            s.text(unit[key])
+        if unit["kind"] == "record":
+            s.choice(unit["record_kind"], RECORD_KINDS)
+
+    s.require(bool(s.records(turns)), "Reading turns name at least one turn")
+    for turn in turns:
+        s.closed(turn, "assignment_id attempt_id delivered_units" +
+                 (" delivered_parts" if isinstance(turn, dict) and "delivered_parts" in turn else ""))
+        s.text(turn["assignment_id"])
+        s.text(turn["attempt_id"])
+        for unit in s.records(turn["delivered_units"]):
+            validate_unit(unit)
+        for part in s.records(turn.get("delivered_parts", [])):
+            validate_unit(part, ("part", "parts", "start", "end", "characters"))
+            s.integer(part["parts"], 2)
+            s.integer(part["part"], 1, part["parts"])
+            s.integer(part["start"])
+            s.integer(part["end"], part["start"] + 1)
+            s.require(part["characters"] == part["end"] - part["start"],
+                      "The characters of a part equal its end minus its start")
+
+
 def accept_result(state, payload):
     s.closed(payload, "acceptance digest")
     value = payload["acceptance"]
     s.closed(value, "schema_version checkpoint_id checkpoint_digest obligation_id outcome classification standard dependency_ids route_bindings review audit" +
-             (" claims_openness" if isinstance(value, dict) and value.get("schema_version") == 2 else ""))
+             (" claims_openness" if isinstance(value, dict) and value.get("schema_version") == 2 else "") +
+             (" reading_turns" if isinstance(value, dict) and "reading_turns" in value else ""))
     s.require(s.digest(value) == payload["digest"], "Acceptance digest differs", "digest_mismatch")
     s.integer(value["schema_version"], 1, 2)
+    if "reading_turns" in value:
+        validate_reading_turns(value["reading_turns"])
     cp = reference(state["checkpoints"], value["checkpoint_id"], "checkpoint")
     s.require(s.digest(cp) == value["checkpoint_digest"], "Checkpoint differs", "digest_mismatch")
     s.require(cp["kind"] != "hypothesis", "Hypotheses grant no accepted progress")
@@ -468,8 +505,11 @@ def find_closure_blocking_nodes(state):
 def complete_objective(state, payload):
     s.closed(payload, "closure digest")
     closure = payload["closure"]
-    s.closed(closure, "subject review audit")
+    s.closed(closure, "subject review audit" +
+             (" reading_turns" if isinstance(closure, dict) and "reading_turns" in closure else ""))
     s.require(s.digest(closure) == payload["digest"], "Closure digest differs", "digest_mismatch")
+    if "reading_turns" in closure:
+        validate_reading_turns(closure["reading_turns"])
     subject = closure["subject"]
     s.closed(subject, "schema_version objective_id contract_digest outcome acceptance_ids evidence_digests local_deliveries deliverables")
     s.integer(subject["schema_version"], 1, 2)

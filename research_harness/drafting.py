@@ -2,11 +2,35 @@
 
 from .errors import ResearchError
 from .graph import obligation
-from .workspace import checked_parent, read_file, strict_json
+from .workspace import checked_parent, find_entry_kind, parse_workspace_marker, read_file, strict_json
 
 
 _MARKER = ".exactory/draft.json"
 _METADATA = ("title", "category")
+# The explanation of each state that the draft-marker obligation reports, with its one next action. The record
+# messages are keyed by the kind of entry at the marker path.
+_OBJECTIVE_COMPLETE_MSG = ("No draft is recorded. Record it from the objective's title and category "
+                           "with exactory-lab state set --stage write.")
+_OBJECTIVE_COMPLETE_STUDY_DONE_MSG = ("No draft is recorded and the study is done. "
+                                      "Create it with exactory-draft init and the objective's title and category.")
+_RECORD_MARKER_MSGS = {
+    "absent": ("The draft record exists, but .exactory/draft.json is missing. "
+               "Write it with exactory-research export."),
+    "regular": ("The draft record exists, but .exactory/draft.json differs from it. "
+                "Write the file again with exactory-research export."),
+    "link": ("The draft record exists, but .exactory/draft.json is a symbolic link. "
+             "Run exactory-research export to replace it."),
+    "other": ("The draft record exists, but .exactory/draft.json is not a file. "
+              "Move it to an unused name in .exactory/, then export.")}
+_UNRECORDED_MARKER_MSGS = {
+    "supported": ("No draft is recorded, but .exactory/draft.json exists. "
+                  "Adopt the file with exactory-research adopt, naming it in files."),
+    "regular": ("No draft is recorded and adopt refuses .exactory/draft.json. "
+                "Move it to an unused name in .exactory/, then run status."),
+    "link": ("No draft is recorded and .exactory/draft.json is a link. "
+             "Move it to an unused name in .exactory/, then run status again."),
+    "other": ("No draft is recorded and .exactory/draft.json is not a file. "
+              "Move it to an unused name in .exactory/, then run status.")}
 
 
 def _resolve_draft_metadata(records):
@@ -30,27 +54,42 @@ def prepare_draft(records, root, study):
     return [("workspace", "draft", state)]
 
 
+def _read_marker(root, parse):
+    """The regular marker as `parse` reads it, or None when it vanished, changed kind or holds refused content."""
+    try:
+        return parse(read_file(root, _MARKER))
+    except ResearchError as error:
+        if error.code not in ("artifact_missing", "invalid_json", "migration_required", "unsafe_path"):
+            raise
+        return None
+
+
 def find_draft_obligations(records, root):
     workspace = records.get("workspace", {})
-    if workspace.get("study", {}).get("stage") != "write":
+    study = workspace.get("study", {})
+    if study.get("stage") != "write":
         return []
+    kind = find_entry_kind(root, _MARKER)
     draft = workspace.get("draft")
+    missing = []
     if draft is not None:
-        try:
-            if strict_json(read_file(root, _MARKER)) == draft:
-                return []
-        except ResearchError as error:
-            if error.code not in ("artifact_missing", "invalid_json", "unsafe_path"):
-                raise
-        message = "Export the recorded draft marker with exactory-research export."
-        missing = []
-    elif (root / _MARKER).exists() or (root / _MARKER).is_symlink():
-        message = "Explicitly adopt the existing draft marker before using it as the study's draft."
-        missing = []
+        if kind == "regular" and _read_marker(root, strict_json) == draft:
+            return []
+        # Export replaces a missing, different or linked marker; it cannot replace another kind of entry.
+        message = _RECORD_MARKER_MSGS[kind]
+    elif kind != "absent":
+        # Adoption refuses a link, another kind of entry and unsupported content; moving such an entry aside keeps
+        # its bytes and leaves the absent-marker state.
+        supported = kind == "regular" and _read_marker(root, parse_workspace_marker) is not None
+        message = _UNRECORDED_MARKER_MSGS["supported" if supported else kind]
     else:
         missing = [key for key in _METADATA if key not in _resolve_draft_metadata(records)]
-        message = ("Supply the missing objective " + " and ".join(missing) + " with exactory-draft init." if missing
-                   else "Create the draft marker with exactory-lab state set --stage write.")
+        if missing:
+            message = ("The objective has no " + " and no ".join(missing) + ". "
+                       "Create the draft with exactory-draft init --title TITLE --category CATEGORY.")
+        else:
+            # A same-stage update of a completed study checks the stage's completion gate first.
+            message = _OBJECTIVE_COMPLETE_STUDY_DONE_MSG if study.get("status") == "done" else _OBJECTIVE_COMPLETE_MSG
     return [obligation("draft_marker_missing", message, stage="write", path=_MARKER, missing_fields=missing)]
 
 

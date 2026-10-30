@@ -3,6 +3,7 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from research_harness.acquisition import acquire_work, acquire_fulltext, import_response
@@ -24,6 +25,38 @@ class AcquisitionTests(unittest.TestCase):
         http, _, _ = client([xml_response(atom([entry("2601.00001" + version, **kwargs)], total=1))])
         return acquire_work(self.store, "arxiv:2601.00001" + version, request_id="metadata-" + version,
                             expected_revision=self.store.revision, http=http)
+
+    def test_acquisition_finish_retries_busy_and_stale_without_refetch(self):
+        self.metadata()
+        mutate = self.store.mutate
+        raw = b"<article class='ltx_document'><section class='ltx_section'><h2>Results</h2><p>The original body.</p></section></article>"
+        for index, acquire in enumerate(('metadata', 'fulltext')):
+            with self.subTest(acquire=acquire):
+                http, wire, _ = client([xml_response(atom([entry()], total=1))] if acquire == 'metadata'
+                                       else [(200, {'Content-Type': 'text/html'}, raw)])
+                refusals = []
+                def refuse(operation, *args, **kwargs):
+                    if operation == 'acquisition.finish' and len(refusals) < 2:
+                        code = ('store_busy', 'stale_revision')[len(refusals)]
+                        refusals.append(code)
+                        if code == 'stale_revision':
+                            mutate('fixture.writer', {}, lambda tx: tx.put('fixture', 'writer', {}),
+                                   expected_revision=self.store.revision, request_id='writer-' + acquire)
+                        raise ResearchError(code, 'Concurrent writer')
+                    return mutate(operation, *args, **kwargs)
+                revision = self.store.revision
+                with patch.object(self.store, 'mutate', side_effect=refuse), \
+                        patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001):
+                    if acquire == 'metadata':
+                        result = acquire_work(self.store, '2601.00001v1', request_id='retry-metadata',
+                                              expected_revision=revision, http=http)
+                    else:
+                        result = acquire_fulltext(self.store, '2601.00001v1', 'https://arxiv.org/html/2601.00001v1',
+                                                  request_id='retry-fulltext', expected_revision=revision, http=http)
+                self.assertEqual(result['status'], 'complete')
+                self.assertEqual(result['revision'], self.store.revision)
+                self.assertEqual(len(wire.requests), 1)
+                self.assertEqual(refusals, ['store_busy', 'stale_revision'])
 
     def test_acquisition_preserves_versions_alias_evidence_and_replay(self):
         original = self.metadata(doi="10.1234/example")

@@ -12,6 +12,8 @@ acquire_fulltext(store, identifier, url, *, request_id, expected_revision,
                  http=None, max_requests=None, extractor=None, extraction_options=None, component=None)
 import_response(store, provider, response: bytes, *, source_url, captured_at,
                 request_id, expected_revision, media_type=None, mappings=None)
+preview_import_response(store, provider, response: bytes, *, source_url, captured_at,
+                        media_type=None, mappings=None)
 
 Collection definitions are exactly freeze's four fields. collection/{id} holds
 definition, page_size, active_operation, partitions [{id,start,end,offset,total,
@@ -69,6 +71,16 @@ source_import/{request_id} holds provider, source_url, captured_at,
 response_sha256, media_type, mappings, source_id, work_ids and parser failures.
 Web/MCP source_url identifies the supplied result's provenance, not a verified
 origin article download. Their partial excerpts cannot replace full sources.
+
+preview_import_response parses the same payload against the current snapshot
+and returns {status: "preview", scope: "metadata_import", revision, work_ids,
+pending, warnings, identity_conflicts} without a record, artifact, receipt or
+charge. identity_conflicts, also in the original result of every new
+import_response, lists each DOI whose family assertions the batch makes
+ambiguous: {identifier, existing_families, incoming_families, candidates}, the
+three arrays sorted. It covers conflicts inside one batch; an assertion that
+repeats a recorded family adds none. The import continues; the field is
+advisory, and an earlier result replays without it.
 """
 
 import copy
@@ -77,6 +89,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
+from .finishing import retry_store_write
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_media_type, extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
@@ -153,6 +166,10 @@ def _begin(store, operation, payload, request_id, expected_revision, *, target=N
 
 
 def _finish(store, request_id, revision, result, *, apply=None):
+    return retry_store_write(lambda: _finish_once(store, request_id, store.revision, result, apply=apply))
+
+
+def _finish_once(store, request_id, revision, result, *, apply=None):
     final = dict(result, request_id=request_id, revision=revision + 1)
 
     def commit(transaction):
@@ -477,10 +494,10 @@ def _run_collection(store, collection_id, request_id, budget, http):
         sources = prepare_sources(artifacts, attempts, "arxiv", request_id, start=collection["source_count"])
         if page is not None:
             prepared = [prepare_work(artifacts, w, sources[-1]["id"]) for w in page.works]
-        result = store.mutate("cohort.page", {"collection_id": collection_id, "sequence": collection["sequence"],
+        result = retry_store_write(lambda: store.mutate("cohort.page", {"collection_id": collection_id, "sequence": collection["sequence"],
                               "source_ids": [s["id"] for s in sources], "failure": failure.code if failure else None},
-            lambda tx: _page_update(tx, collection, partition["id"], page, prepared, sources, failure, request_id),
-            expected_revision=snapshot["revision"], request_id=derived_id(request_id, "page", collection["sequence"]))
+            lambda tx: _page_update(tx, copy.deepcopy(collection), partition["id"], page, prepared, sources, failure, request_id),
+            expected_revision=store.revision, request_id=derived_id(request_id, "page", collection["sequence"])))
         if result["result"]["disposition"] == "pending":
             continue
     result = _collection_summary(snapshot["records"], collection)
@@ -744,10 +761,12 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
         transaction.put("source_import", request_id,
                         dict(payload, source_id=sources[0]["id"], work_ids=[w["id"] for w in page.works], failures=page.failures))
 
-    return _finish(store, request_id, snapshot["revision"],
-                   {"status": "pending" if pending else "complete", "scope": "metadata_import", "pending": pending,
-                    "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources],
-                    "identity_conflicts": identity_conflicts}, apply=commit)
+    # The family conflicts come from this snapshot, so the write keeps its revision instead of retrying on a later one;
+    # an import costs no network request to run again.
+    return _finish_once(store, request_id, snapshot["revision"],
+                        {"status": "pending" if pending else "complete", "scope": "metadata_import", "pending": pending,
+                         "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources],
+                         "identity_conflicts": identity_conflicts}, apply=commit)
 
 
 def digest_bytes(data):

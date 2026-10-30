@@ -59,6 +59,12 @@ def is_finite_number(value):
         return False
 
 
+def describe_received_value(name, value):
+    """A received value by name for refusal details when it is a boolean or a finite number; any other value, which
+    could nest beyond the store's bounds, is named only by the path of the error."""
+    return {name: value} if type(value) is bool or is_finite_number(value) else {}
+
+
 def profile_name(value):
     if value not in ("research", "verification"):
         raise ResearchError("invalid_profile", "Profile must be research or verification")

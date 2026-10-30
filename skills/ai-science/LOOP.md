@@ -141,8 +141,9 @@ working files as pinned until the three reviews and predictions are recorded:
 `manuscript-review` and `manuscript-prediction` refuse a differing file with
 `publication_artifact_changed`. `status` names such a file under `bundle_drift`
 while the measurement is incomplete. `exactory-research restore --bundle DIGEST`
-writes the pinned bytes back after it stores the current bytes as a backup
-artifact named in its output (write skill, WORKSPACE.md).
+writes the pinned bytes back after it moves each current file aside and stores
+its bytes as a backup artifact. Its output names both (write skill,
+WORKSPACE.md).
 
 For each substantive iteration:
 

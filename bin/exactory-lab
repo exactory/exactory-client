@@ -27,6 +27,7 @@ from research_harness.storage import Store
 from research_harness.integration import (command_identity, current_store, initialization_payload, initialize_workspace,
                                            study_state, update_study, record_decision)
 from research_harness.cli import add_identity
+from research_harness.check_mode import check_mutation
 
 # The release version has one definition: the plugin manifest. Deriving the
 # User-Agent from it at boot keeps the two from drifting apart.
@@ -285,19 +286,32 @@ def _run_state_set(args: argparse.Namespace) -> None:
         changes.setdefault("loop", {})["notes"] = args.loop_notes
     try:
         store = current_store(workspace_dir)
-        result = update_study(store, changes, **command_identity(store, args))
+        result = _prepare_command(store, update_study, changes, args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
-    print(json.dumps(result["result"], indent=2))
+    print(json.dumps(result if getattr(args, "check", False) else result["result"], indent=2))
 
 
 def _run_decide(args: argparse.Namespace) -> None:
-    workspace_dir = _find_workspace()
-    stage = args.stage or _load_study_state(workspace_dir)["stage"]
-    store = current_store(workspace_dir)
-    entry = {"stage": stage, "decision": args.decision, "why": args.why, "evidence": args.evidence or ""}
-    result = record_decision(store, entry, **command_identity(store, args))
-    print(json.dumps(result["result"], indent=2))
+    workspace_dir = _find_research_workspace()
+    try:
+        if args.stage is None and not (workspace_dir / _STUDY_STATE_PATH).is_file():
+            raise ResearchError("invalid_input", "This workspace has no study, so a decision has no default stage."
+                                " Give the stage with --stage.")
+        stage = args.stage or _load_study_state(workspace_dir)["stage"]
+        store = current_store(workspace_dir)
+        entry = {"stage": stage, "decision": args.decision, "why": args.why, "evidence": args.evidence or ""}
+        result = _prepare_command(store, record_decision, entry, args)
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
+    print(json.dumps(result if getattr(args, "check", False) else result["result"], indent=2))
+
+
+def _prepare_command(store, operation, payload, args):
+    identity = command_identity(store, args)
+    if getattr(args, "check", False):
+        return check_mutation(store, operation, payload, bounded_payload=payload, **identity)
+    return operation(store, payload, **identity)
 
 
 # Shared-folder compute uses the same admitted execution protocol as local runs.
@@ -364,7 +378,7 @@ _BACKENDS = ("local", "colab")
 
 
 def _run_run(args: argparse.Namespace) -> None:
-    workspace_dir = _find_workspace()
+    workspace_dir = _find_research_workspace()
     experiment_dir = (workspace_dir / "experiment").resolve()
     script_path = (experiment_dir / args.script).resolve()
     if not script_path.is_file() or experiment_dir not in script_path.parents:
@@ -479,7 +493,8 @@ def _build_parser() -> argparse.ArgumentParser:
     decide.add_argument("--why", required=True,
                         help="Why this over the alternatives.")
     decide.add_argument("--stage", type=_parse_stage, choices=_STAGES,
-                        help="Stage the decision belongs to. Default: the current one.")
+                        help="Stage of the log entry. Default: the study's current stage."
+                             " Required in a workspace without a study, such as a problem record.")
     decide.add_argument("--evidence",
                         help="File or result the decision rests on.")
     decide.set_defaults(handler=_run_decide)
@@ -533,12 +548,28 @@ def _build_parser() -> argparse.ArgumentParser:
                                   " EXACTORY_LAB_COLAB_POLL or 10.")
     colab_serve.set_defaults(handler=_run_colab_serve)
 
+    for item, effect in ((init, "creates a workspace"), (run, "launches a program"), (probe, "runs a program"),
+                         (colab_serve, "runs the job loop")):
+        item.add_argument("--check", action="store_true",
+                          help="Refused with check_unsupported before anything is read: this command " + effect
+                               + ", which check mode does not simulate.")
+    for item, subject in ((state_set, "the state change"), (decide, "the decision entry")):
+        item.add_argument("--check", action="store_true",
+                          help="Validate " + subject + " against one snapshot of the store, print the first refusal "
+                               "or {check: accepted, revision, recorded: false, ...}, and write nothing: no record "
+                               "and no projection. A request ID already committed returns its original receipt.")
     return parser
 
 
 def main() -> None:
     args = _build_parser().parse_args()
-    args.handler(args)
+    try:
+        if getattr(args, "check", False) and args.handler not in (_run_state_set, _run_decide):
+            raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
+                                {"command": args.command})
+        args.handler(args)
+    except ResearchError as error:
+        _exit_with_error(json.dumps({"error": error.as_dict()}))
 
 
 if __name__ == "__main__":

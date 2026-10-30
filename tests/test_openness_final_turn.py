@@ -573,13 +573,14 @@ class ReadingPromptTests(unittest.TestCase):
         for (reading_protocol, stage), template_hash in earlier.items():
             with self.subTest(protocol=reading_protocol, stage=stage):
                 prompt = protocol.canonical_prompt('native_math', reading_stage=stage,
-                                                   reading_protocol=reading_protocol)
+                                                   reading_protocol=reading_protocol, common_version=1)
                 self.assertEqual((prompt['template_id'], prompt['template_hash']),
                                  (reading_protocol + '/' + stage, template_hash))
                 self.assertTrue(protocol._prompt_matches({'role': 'native_math', 'prompt': prompt, 'context': {}}))
         self.assertEqual(openness_reading.PROTOCOL, 'exactory-openness-reading-v3')
         self.assertEqual(sorted(openness_reading.PROMPTS),
-                         [openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2, openness_reading.PROTOCOL])
+                         sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2, openness_reading.PROTOCOL,
+                                 openness_reading.MATH_PROTOCOL]))
         for stage in openness_reading.STAGES:
             prompt = protocol.canonical_prompt('native_math', reading_stage=stage)
             self.assertEqual(prompt['template_id'], openness_reading.PROTOCOL + '/' + stage)

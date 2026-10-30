@@ -19,6 +19,7 @@ import uuid
 from .artifacts import ArtifactStore, _relative_parts
 from .development import record_execution, validate_admitted_execution
 from .errors import ResearchError
+from .finishing import retry_store_write
 from .evidence import digest
 from .execution_outputs import log_bytes, output_metric, output_path, read_sealed_outputs, seal_outputs
 from .operations import _read_preparation, fields, immutable_record, is_finite_number, prepared_mutation, text
@@ -234,9 +235,13 @@ def _prelaunch(store, admission_id, claim):
         _files(store, admission, binding)
         result = {"admission_id": admission_id, "binding_digest": binding["digest"], "revision": store_revision}
         return [("execution_prelaunch", admission_id, result)], result
-    store_revision = store.revision
-    return prepared_mutation(store, "execution.prelaunch", {"admission_id": admission_id, "claim": claim["config_artifact"]["sha256"]},
-        prepare, expected_revision=store_revision, request_id="prelaunch-" + digest(claim))
+    def commit():
+        nonlocal store_revision
+        store_revision = store.revision
+        return prepared_mutation(store, "execution.prelaunch", {"admission_id": admission_id, "claim": claim["config_artifact"]["sha256"]},
+            prepare, expected_revision=store_revision, request_id="prelaunch-" + digest(claim))
+    store_revision = None
+    return retry_store_write(commit)
 
 
 def launch_execution(store, admission_id, *, expected_revision, request_id):
@@ -316,8 +321,14 @@ def record_reconciliation(store, payload, summary, *, expected_revision, request
 
 
 def _finish_reconciliation(store, payload, observation, expected_revision, request_id):
-    receipt = record_reconciliation(store, payload, observation["summary"],
-                                    expected_revision=expected_revision, request_id=request_id)
+    first = True
+    def commit():
+        nonlocal first
+        revision = expected_revision if first else store.revision
+        first = False
+        return record_reconciliation(store, payload, observation["summary"],
+                                     expected_revision=revision, request_id=request_id)
+    receipt = retry_store_write(commit)
     summary = observation["summary"]
     directory = _directory(payload["admission_id"])
     json_projection(store.root, directory + "/summary.json", summary)
@@ -329,7 +340,6 @@ def _finish_reconciliation(store, payload, observation, expected_revision, reque
 
 
 def _reconcile(store, payload, expected_revision, request_id):
-    fields(payload, ("admission_id",), ("resolution", "reason"))
     admission_id = payload["admission_id"]
     records = store.snapshot()["records"]
     claim = records.get("execution_claim", {}).get(admission_id)
@@ -368,6 +378,7 @@ def _reconcile(store, payload, expected_revision, request_id):
         if terminal.exists() and observed["output_seal"]["origin"] != "worker":
             raise ResearchError("execution_output_seal_required", "A producer terminal requires its original worker output seal")
         outputs = []
+        output_media_types = {output_path(item["path"]): item["media_type"] for item in binding["outputs"]}
         for item in binding["outputs"]:
             path = output_path(item["path"])
             if path in files:
@@ -395,7 +406,8 @@ def _reconcile(store, payload, expected_revision, request_id):
         observation = {"admission_id": admission_id, "claim_digest": digest(claim), "binding_digest": binding["digest"],
                        "execution": execution,
                        "terminal": artifacts.put(_canonical(observed).encode(), "application/json"), "log": log_ref, "summary": summary,
-                       "files": [{"path": path, "artifact": artifacts.put(data, "application/octet-stream")} for path, data in files.items()]}
+                       "files": [{"path": path, "artifact": artifacts.put(data, output_media_types.get(path, "application/octet-stream"))}
+                                 for path, data in files.items()]}
         outcome = records.get("execution_outcome", {}).get(admission_id)
         if outcome is not None:
             if records["execution"][outcome["execution_id"]]["payload"] != execution:
@@ -404,16 +416,19 @@ def _reconcile(store, payload, expected_revision, request_id):
             from .probe_provenance import find_probe_artifact_origins
             observed_origin = {"_observation": observation} if find_probe_artifact_origins(
                 records, [item["artifact"] for item in outputs], artifacts=artifacts) else {}
-            record_execution(store, execution, expected_revision=store.revision, request_id="launcher-outcome-" + digest(claim), **observed_origin)
-        prepared_mutation(store, "execution.observe", {"admission_id": admission_id},
+            retry_store_write(lambda: record_execution(store, execution, expected_revision=store.revision,
+                request_id="launcher-outcome-" + digest(claim), **observed_origin))
+        retry_store_write(lambda: prepared_mutation(store, "execution.observe", {"admission_id": admission_id},
             lambda current, value: ([immutable_record(current, "execution_observation", admission_id, observation)], observation),
-            expected_revision=store.revision, request_id=request_id + ":observation")
+            expected_revision=store.revision, request_id=request_id + ":observation"))
         # Rebuild familiar operational views even after a lost projection write.
         # Their bytes never supply execution authority.
         return _finish_reconciliation(store, payload, observation, store.revision, request_id)
 
 
 def reconcile_execution(store, payload, *, expected_revision, request_id, owned=False):
+    fields(payload, ("admission_id",), ("resolution", "reason"))
+    text(payload["admission_id"], "Admission ID")
     if owned:
         return _reconcile(store, payload, expected_revision, request_id)
     with _owner(store.root, payload["admission_id"]):

@@ -109,6 +109,27 @@ class PmcFigureReadingTests(LiteratureCase):
     def test_pmc_direct_image_must_be_linked_and_explicitly_inspected(self):
         self.assert_reading(PMC_URL)
 
+    def test_visual_example_acquires_its_referenced_image(self):
+        examples = json.loads((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_text(
+            encoding="utf-8"))
+        example = examples["visual"]["link"]
+        self.assertEqual(example["artifact"]["media_type"], "text/html")
+        self.assertEqual(sorted(example["locator"]), ["anchor", "kind"])
+        self.assertEqual(example["locator"]["kind"], "html")
+        bundle, link = self.build_figure_bundle()
+        self.mutate(import_bundle, bundle)
+        # Only the identities and offsets of this fixture replace the example's values; its kinds stay.
+        payload = copy.deepcopy(example)
+        payload.update({key: link[key] for key in ("version_id", "source_id", "artifact")})
+        payload["locator"]["anchor"] = link["locator"]["anchor"]
+        self.assertEqual(payload["artifact"]["media_type"], example["artifact"]["media_type"])
+        self.assertEqual(payload["locator"]["anchor"]["kind"], example["locator"]["anchor"]["kind"])
+        asset, _, _ = self.acquire(payload, PMC_URL + "images/figure-1.jpg")
+        self.assertEqual(asset["status"], "complete")
+        self.assertEqual(asset["capture"]["html_sha256"], link["artifact"]["sha256"])
+        self.assertEqual(self.artifacts.read(asset["asset_link"]["artifact"]),
+                         (FIXTURES / "authored-grid.jpg").read_bytes())
+
     def test_europe_pmc_html_uses_its_own_referenced_direct_image(self):
         self.assert_reading(EUROPE_PMC_URL)
 

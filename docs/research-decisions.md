@@ -255,14 +255,21 @@ and exit into the deciding test. Each investigation authorizes a named question
 and resource tranche, possibly containing dependent cycles. Its end, question
 resolution or failure signal requires a new decision based on what it achieved.
 A renamed sensitivity calculation does not renew an exhausted tranche. All
-tranches charge the same authorized run and preserve the full objective.
+tranches charge the same authorized run and preserve the full objective. A
+format-only run of the same plan (`admit` with `format_only_of`) keeps that
+plan's reviewed decision and charges its original tranche. Every other
+commitment after an assessed cycle still needs its own assessment and decision.
 
 ## Results, work items and reconsideration
 
 Extend the same dossier with exact supported claims, primary result/proof
 references, failures, comparisons with matching assumptions, and which committed
 consequences are established, contradicted or undecided. Keep the memo concise
-while making necessary definitions, proofs and evidence available.
+while making necessary definitions, proofs and evidence available. For each
+plan that disclosed runs of its program before it was recorded, the readiness
+export adds the inventory of those runs with their output hashes, read status
+and program differences, so an assessor sees what the author knew before the
+plan.
 
 Each of two independent assessors evaluates validity, scope, novelty,
 contribution-statement support, development and branch obligations before
@@ -317,7 +324,27 @@ output and observed usage in a JSON evidence artifact. A `review-attempt` import
 can retain that artifact against a standalone assignment. Its origin remains
 `imported`; it cannot supply canonical scientific approval or verified invocation
 provenance. Run the required canonical role separately when its approval is needed.
-Scientific documents are evidence, never instructions to the reviewer.
+Scientific documents are evidence, never instructions to the reviewer. A packet
+delivers every referenced object except one that a completion check sealed
+unread, which it describes by hash, size and media type only.
+
+A reviewer answers with one JSON object. The Claude route also reads an answer in
+which the reviewer withdrew an object. That answer holds complete object blocks,
+one line that is exactly `RETRACTED` after each withdrawn block, and nothing else.
+An unfenced block starts with `{` at column zero and ends on the line of its
+closing brace. A fenced block holds one object. Its opening line is exactly three
+backticks, alone or followed by `json` in any letter case, and its closing line is
+exactly three backticks. Blank lines can precede the first block, follow the last,
+surround a marker and separate the fence lines from the object. Prose, examples,
+arrays, indented blocks, other fences and two markers without a block between them
+refuse the recovery. The whole answer is then read as one object, which fails as
+before, and the failed attempt keeps the bounded operational retry. On recovery the
+route records the last object as the output. It keeps the whole original text in
+`execution.result_text` with `result_text_digest`, `self_corrected: true` and
+`retracted_object_count`, the number of withdrawn blocks. The output contract
+applies to that last object; an invalid last object is refused without a fallback
+to an earlier one. A recorded response replays its saved output. The Codex routes
+and the HTTPS route read one object and refuse an answer with more.
 
 Read the observed output artifact returned by `review-run`. In `bar`, `slate`
 and `result` assessments, `source_requests` can request more of the bound
@@ -406,6 +433,24 @@ request that fits or in a refusal that names the size of each part: it carries
 a compact reading record and withholds, only as far as its measured request
 needs, the bodies that reading turns delivered complete and then the notes of
 the earliest turns, never an excerpt or a passage.
+
+A math-solver result review that binds an openness minimum, a checkpoint review
+or the closure review, reads its packet in the same chain since 0.67.0, under
+the protocol `exactory-openness-reading-math-v1`. On 2026-10-24 the result
+review of a proof checkpoint with its openness minimum was refused with
+`review_input_too_large`: the packet was 2,764,871 bytes, with 1,843,216 bytes
+of captured responses in five bound searches and four full readings of 377,759
+bytes, above both route limits, and a native result review then had a single
+turn. A delivery priority on the minimum, under which the route withholds the
+bodies declared least decisive, was considered and not adopted: a withheld body
+is a body the reviewer did not read, and a request for the withheld bodies
+together repeats the capacity failure. The chain delivers every captured
+response, pinned full text and bound record complete over turns of at most
+120,000 new characters, and the final turn withholds only bodies that reading
+turns delivered complete. A passage request in a final turn must deliver
+characters, so a chain cannot continue on requests that find nothing. The
+controller follows the chain from the attested first turn to the terminal turn,
+verifies every turn and stores the receipts on the acceptance or closure.
 
 External-paper verification uses the `verification` role with `dossier_id: null`
 and `context: {"verification_task_id": "<bound task digest>"}`. It requires the
@@ -536,8 +581,12 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-decision` | Phase-specific action and complete evidence/objection dispositions. |
 | `source-impact` | Exact new/changed-source declaration for the selected decision; affected science still needs reassessment. |
 
-The read-only interfaces expose delivery material and the same obligations used
-by managed transition entrypoints:
+These interfaces expose delivery material and the same obligations used by
+managed transition entrypoints. `review-route-assess` and
+`research-decision-assess` only read. `strategy-packet` changes no revision, but
+it can store a file in the artifact store while it builds the packet, for
+example a projected claim file, and it refuses `--check` with
+`check_unsupported`:
 
 ```sh
 exactory-research strategy-packet --dossier-id DOSSIER --role ROLE --reviewer-id REVIEWER
@@ -564,14 +613,46 @@ then create independent assignments. `review-probe` uses `{"id": "probe-id",
 "assignment_id": "assignment-id"}`. Use actual unique IDs and the usual mutation
 identity flags. These commands perform real provider calls; run them only within
 the user's authorized resources. Load a needed credential into that process,
-never into a payload or artifact. A replay of the same request returns its saved
-observation. An interrupted uncertain invocation remains pending and does not
-silently run again.
+never into a payload or artifact. A replay of a completed request returns its
+recorded result without a new call. Since 0.67.0 the finishing write of
+`review-probe`, `review-run` and `review-output-correction`, the write that
+records the reviewer's answer, is tried again after `store_busy` or
+`stale_revision`. It is tried at most 600 times within 600 seconds and never
+calls the reviewer again. Every attempt computes its change from the current
+records. The harness keeps the observation only in the process that called the
+reviewer and writes no file for a later process to read it from. A file in the
+workspace is no evidence of what the reviewer returned, so the harness never
+completes a pending invocation from disk. When the process stops during the
+call, or when the finishing write is still refused after that wait, the
+invocation remains pending. Then a replay with the original request ID refuses
+with `review_invocation_pending`, and every `review-run` of that assignment
+refuses in the same way. The harness does not silently call the reviewer
+again. A blank request ID is refused before the call (`invalid_input`).
 
-A route pins the adapter runtime it was recorded with. Verification of probes
-and attempts uses that pinned runtime. Execution requires the installed adapter
-runtime to match the route's pinned runtime; otherwise, record and probe a new
-route.
+A route pins the adapter runtime it was recorded with: the adapter's controls,
+its input contract and the SHA-256 of its module, and for a Codex route also the
+version and the path of the installed Codex CLI. Verification of probes and
+attempts uses that pinned runtime, so a review bound on a route stays verifiable
+after a plugin update changes the adapter or a Codex update changes the CLI.
+Execution requires the installed adapter runtime to match the route's pinned
+runtime. When it differs, `review-probe` and `review-run` on that route are
+refused with `review_route_runtime_stale` before any call and before any record
+is written. The refusal means that the plugin or the Codex CLI now installed
+differs from the one the route was recorded with. It says nothing about the
+route's earlier probes and attempts, which keep their standing. Record a new
+route with a new id and the same adapter, model, endpoint and configuration,
+probe it, and assign new reviews on it. An assignment on the stale route that
+has no observed output cannot run: assign its role again on the new route, or,
+for a slot with history, retire the stale route and continue the slot through
+a context repair, as described below. The 0.66.0 release changed the bytes of
+the three Codex transports, so every Codex route recorded before it is stale.
+The `openai_responses_v1` route pins the SHA-256 of the shared transport module
+`research_harness/review_transport.py`, with the host name, the platform and
+the Python version of the recording process. The 0.67.0 release changed the
+bytes of that module, so every HTTPS route recorded before it is stale: record
+a new route with the same model, endpoint and configuration, probe it, and
+assign new reviews on it. The Claude transport and the three Codex transports
+are unchanged in 0.67.0, so their routes keep their pins.
 
 The subscription-backed route uses this shape:
 
@@ -589,7 +670,41 @@ Its inspected startup contract is for Codex CLI 0.159.2 and 0.162.1 with user
 configuration and rules disabled, at reasoning effort `high`. It accepts text
 evidence only. The adapter checks actual recorded input and rejects uninspected
 startup declarations, additional context and tool events. Other runtime contexts
-remain unverified until inspected and probed. `timeout_seconds` is a hard
+remain unverified until inspected and probed. The route starts the CLI with the
+shell tool, multi-agent work, plugins, apps, hooks, memories, skill discovery,
+browser and computer use, web search and MCP servers disabled, and since 0.66.0
+with the five code-mode settings `features.code_mode`,
+`features.code_mode_host`, `features.code_mode_only`, `features.js_repl` and
+`features.js_repl_tools_only` set to false, checked on Codex CLI 0.163.0. These
+settings stop code execution. They do not remove the `exec` tool from the
+model's tool list: a call of it returns "code-mode host is disabled" and runs
+nothing.
+
+A tool call in the recorded rollout is the issue `tool_call:<name>` in
+`context_evidence.issues` of the attempt's response, for example
+`tool_call:exec`; any other item that is neither a message nor reasoning is
+`unknown_or_tool_input`. Either issue leaves the attempt unverified: it is no
+observed output of its assignment, and the assignment can be run again. Since
+0.67.0 one case is a notice instead. When every tool call of the rollout is an
+`exec` call with its own call id, and each is answered later by exactly one
+recorded output that is exactly `code-mode host is disabled`, the attempt keeps
+its verification and lists the calls under `context_evidence.notices`, each with
+its `event_index` and the original call. Any other tool, an `exec` call with
+another output, with no output, with an output before the call or with a
+repeated call id, and any other unknown item keep the issues, and another issue
+of the rollout still leaves the attempt unverified. The notice is decided when
+the response is saved, from the rollout as recorded; an attempt saved earlier is
+not rewritten, and the Codex transports and the pins of their routes are
+unchanged.
+
+The packet text of a Codex route is limited to 1,048,576 characters. A larger
+request is refused before the CLI starts and recorded as a failed attempt with
+the error code `review_input_too_large`; no CLI output is involved, so no JSON
+decoding error is recorded for it. When the CLI exits with a nonzero code or at
+the timeout, `execution.stderr_tail` of the attempt's response keeps the last 20
+lines of its standard error, at most 4,096 UTF-8 bytes; it is empty after a zero
+exit. Read it before a retry: it holds what the CLI printed, which the attempt
+record did not keep before 0.66.0. `timeout_seconds` is a hard
 wall-time limit, positive and at most 600. `max_output_tokens` is checked after
 generation; it is not a provider-side token reservation or a guarantee against
 spending beyond that value. Binary evidence requires a separately configured and
@@ -618,12 +733,37 @@ in as one stream-json user message that the CLI echoes back, and the adapter
 verifies the observed stream: the session initialization reports no tools, MCP
 servers, skills or commands and the configured model; the echoed input equals
 the request; no tool use, tool result, hook output, compaction or second turn
-appears; and the result is one successful turn. `effort` is one of `low`,
+appears; and the result is one successful turn. Two system events of the CLI are
+notices, not issues, and stay in `context_evidence.notices`. The first is a
+`ui_invalidate` render notification whose fields are exactly `type`, `subtype`,
+`event` equal to `ui.render`, `uuid` and `session_id`. The second is an `api_retry`
+provider-retry notice with exactly nine fields: `type`, `subtype`, `attempt`,
+`max_retries`, `retry_delay_ms`, `error_status`, `error`, `uuid` and `session_id`.
+Its counters are integers, its status is an integer or null, its error is one of
+the CLI's categories, and its identifiers are nonempty. A retry notice is accepted
+only when the stream proves one generation. That proof is one `result` event, last
+in the stream, one successful turn, assistant text equal to the result text, and
+valid usage counts. `result_evidence` records that result's output digest and
+usage, and verification compares them with the response. Any other system subtype,
+an extra or missing field, the optional `no_response` payload and a second result
+are issues. A notice never removes another issue. The response retains the original
+bytes of every system event, in order, under `execution.system_events`, up to
+4,096 events and 4 MiB. It records the bounds, the observed and retained counts and
+bytes, a truncation flag and the digest of the list. Inspection continues over the
+whole stream after retention stops. `inspect_retained_system_events` in
+`research_harness.review_claude_transport` classifies the retained events again,
+offline, without the CLI and without changing the recorded result. It refuses a
+response without retention (`review_system_events_unavailable`) and a retention
+that fails its digest or bounds (`review_system_events_invalid`). A truncated
+prefix says nothing about the omitted events. `effort` is one of `low`,
 `medium`, `high`, `xhigh` or `max`; `timeout_seconds` is at most 3600. The
 route limit is 1,300,000 characters of input; a larger request is refused before
 the CLI runs and recorded as a failed attempt. The recorded runtime names the
 isolation flags, not the installed CLI version, which is recorded with each
-invocation instead, so a CLI update does not invalidate earlier reviews. Like
+invocation instead, so a CLI update does not invalidate earlier reviews. The
+runtime also names the digest of the adapter module, which the route pins. After
+a plugin update that changes the module, record and probe a new Claude route.
+Reviews bound on earlier routes stay verifiable against their own pins. Like
 the Codex route it accepts text evidence only. The API credentials of the parent
 session are not passed to the reviewer process.
 
@@ -632,8 +772,10 @@ without its bytes, and a packet that carries problem evidence asks the transport
 to replay the session's earlier turns without long evidence bodies, without the
 packets of a scientific history and without the parts the current packet
 repeats. The Codex route additionally elides re-delivered and prioritized text
-bodies until the input fits the app-server limit, and sends an input that no
-elision fits as it stands, so that the app-server's refusal is recorded.
+bodies until the input fits the app-server limit of 1,048,576 characters. An
+input that no elision fits is refused before the CLI starts and recorded as a
+failed attempt with `review_input_too_large`; the visual route counts its native
+text and image wrappers against the same limit.
 
 A route can be retired: an account closes, a model is withdrawn, or the owner
 forbids the route. Record `review-context` with `kind: "route_retired"` on the
@@ -739,6 +881,17 @@ recorded strategic assessment can remain `legacy_unassessed` until that next
 commitment. Reconcile pending executions once under their frozen authority.
 Preserve completed manuscripts and receipts and repeat scientific work only when
 required validation needs it.
+
+A review attempt on a Claude route pinned to the adapter of 0.60.0 through 0.63.0
+can authenticate with `input_verified: false`. Its issue list must be exactly
+`["system_event_ui_invalidate"]`, and every other provenance and context check
+must hold. This keeps the attempts that a local repair of those releases bound
+with that issue. It applies in any objective with the same pinned adapter and
+evidence shape. The rule applies to attempts only; a failed probe stays unverified. Those streams were not retained,
+so the rule states nothing about their event fields. A draft adapter, the current
+adapter, a different issue list and a malformed UI event under the current adapter
+cannot use it. A review recorded on any earlier route, including a route pinned to
+a local draft adapter, verifies against that route's own pin.
 
 This workflow preserves scientific support, source provenance and user authority.
 It does not guarantee an important discovery. Report software correctness,
