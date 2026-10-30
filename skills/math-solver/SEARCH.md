@@ -2013,9 +2013,10 @@ Each new activity entry carries `session_id`, the host-qualified session
 (`claude:<id>` or `codex:<id>`, or null without a host identity), and
 `harness_command`. A successful Write or Edit under a workspace is always recorded.
 So is a harness command (`exactory-math` or `attack.py`) that names the attack by
-its slug or by a path inside the workspace. An ordinary shell command that names a
-path under the workspace is recorded only after a harness-command entry of the
-same session. A null identity never admits one, and a
+its slug or by a path inside the workspace. A harness command whose own arguments
+include `--check` leaves no entry, because a check writes nothing. An ordinary
+shell command that names a path under the workspace is recorded only after a
+harness-command entry of the same session. A null identity never admits one, and a
 harness command on another attack does not admit inspection of this one. The log
 keeps the last 200 entries of all sessions. When a session's harness entry leaves
 the window, its ordinary calls stop being recorded until its next harness command.

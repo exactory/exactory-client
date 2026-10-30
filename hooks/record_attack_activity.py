@@ -5,17 +5,19 @@ A session can end before an attack does, and the harness's record says what was
 decided but not what the agent was in the middle of. This hook appends one line
 to `attack/<slug>/activity.jsonl` for a successful Write or Edit under that
 workspace. It appends one line for a harness command (`exactory-math` or
-`attack.py`) that names the attack by its slug or by a path inside it. An
-ordinary shell command that names a path under the workspace is appended only
-after a harness-command entry of the same host and session. An inspection by
-another session, or by a session without a host identity, leaves the file
-unchanged. Each entry carries the time, the tool, the target, the host-qualified
-`session_id` (or null) and `harness_command`. The log keeps the last 200 entries
-of all sessions. `exactory-math status` shows the last entries of the latest
-session with a harness-command entry. Any other call, a failed tool result and
-any internal error, including a failure of the shell parser, is silent. The hook
-exits 0 with no output and appends nothing. It never blocks: it runs after the
-tool already did its work, and the PreToolUse guard does not depend on it.
+`attack.py`) that names the attack by its slug or by a path inside it. A harness
+command whose own arguments include `--check` leaves no entry, because a check
+writes nothing. An ordinary shell command that names a path under the workspace
+is appended only after a harness-command entry of the same host and session. An
+inspection by another session, or by a session without a host identity, leaves
+the file unchanged. Each entry carries the time, the tool, the target, the
+host-qualified `session_id` (or null) and `harness_command`. The log keeps the
+last 200 entries of all sessions. `exactory-math status` shows the last entries
+of the latest session with a harness-command entry. Any other call, a failed
+tool result and any internal error, including a failure of the shell parser, is
+silent. The hook exits 0 with no output and appends nothing. It never blocks: it
+runs after the tool already did its work, and the PreToolUse guard does not
+depend on it.
 """
 
 from __future__ import annotations

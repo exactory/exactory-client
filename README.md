@@ -643,14 +643,16 @@ workspace they do nothing.
   stamped the unit as it stands.
 - **Activity.** After a Write or Edit under an attack workspace, one line goes
   to its `activity.jsonl`. The same happens after a harness command
-  (`exactory-math` or `attack.py`) that names the attack. The line holds the
-  time, the tool, the file or command, the host-qualified session and whether
-  it was a harness command. An ordinary shell command that names a path under
-  the workspace is recorded only after a harness-command entry of the same host
-  and session. An inspection by another session therefore leaves the file byte
-  for byte unchanged, also at the 200-entry cap. `status` shows the last three
-  entries of the latest session with such an entry. A resumed session therefore
-  sees what the previous one was doing when it stopped.
+  (`exactory-math` or `attack.py`) that names the attack. A harness command
+  whose own arguments include `--check` leaves no entry, because a check writes
+  nothing. The line holds the time, the tool, the file or command, the
+  host-qualified session and whether it was a harness command. An ordinary
+  shell command that names a path under the workspace is recorded only after a
+  harness-command entry of the same host and session. An inspection by another
+  session therefore leaves the file byte for byte unchanged, also at the
+  200-entry cap. `status` shows the last three entries of the latest session
+  with such an entry. A resumed session therefore sees what the previous one
+  was doing when it stopped.
 - **Resume.** At session start (a new session, a resume, a clear, or a
   compaction), the hooks report managed controller actions and native status.
   Resume from `search status` and `search next`, then the selected native record.

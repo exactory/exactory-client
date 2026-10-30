@@ -1731,8 +1731,8 @@ def _observed(artifacts, route, request, credential):
     return record
 
 
-# A finished reviewer call waits for a busy store at most as long as one reviewer turn may take, because its
-# observation cannot be recorded later by another process.
+# A finished reviewer call waits for a busy store for up to ten minutes, because its observation cannot be recorded
+# later by another process.
 _FINISH_ATTEMPT_COUNT = 600
 _FINISH_WAIT_SECONDS = 600.0
 

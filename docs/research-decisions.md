@@ -595,21 +595,20 @@ then create independent assignments. `review-probe` uses `{"id": "probe-id",
 "assignment_id": "assignment-id"}`. Use actual unique IDs and the usual mutation
 identity flags. These commands perform real provider calls; run them only within
 the user's authorized resources. Load a needed credential into that process,
-never into a payload or artifact. A replay of the same request returns its saved
-observation. Since 0.67.0 `review-run` and `review-probe` save the reviewer's
-observation as an artifact, with a descriptor under
-`research/review-observations/`, before they write the attempt or the probe.
-That finishing write is tried again after `store_busy` or `stale_revision`, at
-most eight times within eight seconds, and never calls the reviewer again. When
-it is still refused, run the same command again with the original request ID,
-payload and revision: the harness reads the saved observation, checks that it
-binds to the reserved invocation, and records it without a new call. A saved
-observation whose bytes changed is refused with `artifact_corrupt`, and one
-that does not bind to the invocation with `review_observation_mismatch`;
-neither records anything or calls the reviewer. An invocation whose
-observation was never saved, because the process stopped during the call,
-remains pending: the replay and every `review-run` of that assignment refuse
-with `review_invocation_pending`, and the harness does not silently run it
+never into a payload or artifact. A replay of a completed request returns its
+recorded result without a new call. Since 0.67.0 the finishing write of
+`review-probe`, `review-run` and `review-output-correction`, the write that
+records the reviewer's answer, is tried again after `store_busy` or
+`stale_revision`. It is tried at most 600 times within 600 seconds and never
+calls the reviewer again. Every attempt computes its change from the current
+records. The harness keeps the observation only in the process that called the
+reviewer and writes no file for a later process to read it from. A file in the
+workspace is no evidence of what the reviewer returned, so the harness never
+completes a pending invocation from disk. When the process stops during the
+call, or when the finishing write is still refused after that wait, the
+invocation remains pending. Then a replay with the original request ID refuses
+with `review_invocation_pending`, and every `review-run` of that assignment
+refuses in the same way. The harness does not silently call the reviewer
 again. A blank request ID is refused before the call (`invalid_input`).
 
 A route pins the adapter runtime it was recorded with: the adapter's controls,
