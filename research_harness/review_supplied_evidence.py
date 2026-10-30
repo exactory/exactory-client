@@ -101,9 +101,11 @@ def register_supplied_artifact(references, reference):
 
 
 def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
-    """The artifacts that the packets of the assignments' lineages attached, retaining exact aliases, and the passage mappings they
-    delivered: prior context, an adjudicator's original and version passages, and passages delivered with a material
-    objection or an objection of a historical review. Focused refreshes and corrections retain their packet lineage."""
+    """The artifacts that the packets of the assignments' lineages attached, and the passage mappings they delivered:
+    prior context, an adjudicator's original and version passages, and passages delivered with a material objection or
+    an objection of a historical review. Two descriptors of the same bytes are both kept: the one whose digest sorts
+    first is the entry of the SHA-256, and every other one is an entry of the SHA-256 joined with its own digest.
+    Focused refreshes and corrections retain their packet lineage."""
     references, mappings = {}, []
     from .review_source_capacity import BODY_DELIVERY
     from .review_source_complete import ALTERNATE

@@ -340,6 +340,18 @@ result and its source; start no solver work to reproduce an established result.
      turn again with the same `prior_assignment_id`. The new assignment replaces the failed turn,
      which can no longer be run or continued (`review_assignment_replaced`). When the first turn
      fails, export the packet again under a new assignment id and start a new chain.
+   - When the receipt of `review-run` carries `output_refusal`, the answer was refused as a whole:
+     none of its notes, excerpts or passage requests is in the chain, and the saved output is an
+     attempt artifact, not chain evidence. Read `output_refusal.details` before you do anything
+     else: `message` states the failed rule, `path` points into the answer, for example
+     `/passage_requests/0/anchor`, `request_id` names the passage request when its id is valid,
+     and a measurement stands against its limit, such as `normalized_characters: 18` against
+     `minimum_characters: 20`. Then run `review-run` on the same turn again: it sends the exact
+     same request, and the reviewer learns nothing about the refusal. A second refusal exhausts
+     the turn (`review_slot_exhausted`). The chain cannot continue from a refused turn
+     (`review_source_continuation_unverified`), and a turn with a refused output is not replaced
+     by a sibling turn (`review_source_continuation_fork`): export the packet again under a new
+     assignment id and start a new chain, and keep both diagnostics in your report.
    - The assignment after the last reading turn is the final turn (prompt template
      `exactory-openness-reading-v3/final`): the native packet with the reading record of the
      earlier turns. To fit the route's input limit it withholds, only as far as needed, the bodies

@@ -592,8 +592,21 @@ then create independent assignments. `review-probe` uses `{"id": "probe-id",
 identity flags. These commands perform real provider calls; run them only within
 the user's authorized resources. Load a needed credential into that process,
 never into a payload or artifact. A replay of the same request returns its saved
-observation. An interrupted uncertain invocation remains pending and does not
-silently run again.
+observation. Since 0.67.0 `review-run` and `review-probe` save the reviewer's
+observation as an artifact, with a descriptor under
+`research/review-observations/`, before they write the attempt or the probe.
+That finishing write is tried again after `store_busy` or `stale_revision`, at
+most eight times within eight seconds, and never calls the reviewer again. When
+it is still refused, run the same command again with the original request ID,
+payload and revision: the harness reads the saved observation, checks that it
+binds to the reserved invocation, and records it without a new call. A saved
+observation whose bytes changed is refused with `artifact_corrupt`, and one
+that does not bind to the invocation with `review_observation_mismatch`;
+neither records anything or calls the reviewer. An invocation whose
+observation was never saved, because the process stopped during the call,
+remains pending: the replay and every `review-run` of that assignment refuse
+with `review_invocation_pending`, and the harness does not silently run it
+again. A blank request ID is refused before the call (`invalid_input`).
 
 A route pins the adapter runtime it was recorded with: the adapter's controls,
 its input contract and the SHA-256 of its module, and for a Codex route also the
@@ -612,6 +625,13 @@ has no observed output cannot run: assign its role again on the new route, or,
 for a slot with history, retire the stale route and continue the slot through
 a context repair, as described below. The 0.66.0 release changed the bytes of
 the three Codex transports, so every Codex route recorded before it is stale.
+The `openai_responses_v1` route pins the SHA-256 of the shared transport module
+`research_harness/review_transport.py`, with the host name, the platform and
+the Python version of the recording process. The 0.67.0 release changed the
+bytes of that module, so every HTTPS route recorded before it is stale: record
+a new route with the same model, endpoint and configuration, probe it, and
+assign new reviews on it. The Claude transport and the three Codex transports
+are unchanged in 0.67.0, so their routes keep their pins.
 
 The subscription-backed route uses this shape:
 
@@ -653,7 +673,8 @@ another output, with no output, with an output before the call or with a
 repeated call id, and any other unknown item keep the issues, and another issue
 of the rollout still leaves the attempt unverified. The notice is decided when
 the response is saved, from the rollout as recorded; an attempt saved earlier is
-not rewritten, and the transports and the route pins are unchanged.
+not rewritten, and the Codex transports and the pins of their routes are
+unchanged.
 
 The packet text of a Codex route is limited to 1,048,576 characters. A larger
 request is refused before the CLI starts and recorded as a failed attempt with

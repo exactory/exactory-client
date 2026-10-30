@@ -567,7 +567,9 @@ def _evidence(artifacts, value, *, transitive=False, records=None):
                 content, encoding = data.decode('utf-8'), 'utf-8'
             except UnicodeDecodeError as error:
                 if reference['sha256'] not in result_hashes:
-                    raise ResearchError('review_evidence_unreadable', 'The adapter supports text, PDF, and image evidence') from error
+                    raise ResearchError('review_evidence_unreadable',
+                                        'This artifact is not UTF-8 text, a PDF, an image or a recorded result '
+                                        'output; a reviewer packet delivers no other bytes') from error
                 binary, opaque = True, True
         if binary and transport.text_only_enabled():
             # A text-only reviewer route receives no original bytes; the omission is explicit in the packet.
@@ -1746,7 +1748,10 @@ def _read_observation(artifacts, path, invocation):
             or observation['request_digest'] != digest(request)
             or invocation.get('route_digest', observation['route_digest']) != observation['route_digest']
             or observation['status'] == 'completed' and transport.response_output(response) != output):
-        raise ResearchError('review_observation_mismatch', 'Saved observation differs from its reserved invocation')
+        raise ResearchError('review_observation_mismatch',
+                            'The saved observation does not bind to the reserved invocation: its invocation, '
+                            'request or route digest differs, or its output disagrees with its response. '
+                            'Nothing was recorded, and the reviewer was not called again')
     return observation
 
 
