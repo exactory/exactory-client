@@ -524,7 +524,7 @@ class SourceContractTests(LiteratureCase):
         self.assertEqual(result["pending"][0]["code"], "request_budget")
         self.assertFalse(wire.requests)
         self.assertIsNone(result["capture"]["artifact"])
-        http, _, _ = client([(200, {"Content-Type": "image/png"}, self.png())])
+        http, wire, _ = client([(200, {"Content-Type": "image/png"}, self.png())])
         original_get = http.get
         def concurrently_changed(*args, **kwargs):
             response = original_get(*args, **kwargs)
@@ -532,11 +532,20 @@ class SourceContractTests(LiteratureCase):
                               expected_revision=self.store.revision, request_id="concurrent")
             return response
         http.get = concurrently_changed
-        self.assert_error("stale_revision", lambda: acquire_visual_asset(self.store, link, "https://arxiv.org/assets/required.png",
-            http=http, expected_revision=self.store.revision, request_id="interrupted-visual"))
+        revision = self.store.revision
+        result = acquire_visual_asset(self.store, link, "https://arxiv.org/assets/required.png",
+            http=http, expected_revision=revision, request_id="interrupted-visual")
+        self.assertEqual(result['status'], 'complete')
+        self.assertEqual(len(wire.requests), 1)
         records = self.store.snapshot()["records"]
-        self.assertNotIn("interrupted-visual", records["visual_asset"])
-        self.assertEqual(records["acquisition_operation"]["interrupted-visual"]["state"], "admitted")
+        self.assertEqual(records['visual_asset']['interrupted-visual'], result['capture'])
+        self.assertEqual(self.artifacts.read(result['capture']['artifact']), self.png())
+        self.assertEqual(records['note']['concurrent'], {'text': 'Concurrent update'})
+        self.assertEqual(records["acquisition_operation"]["interrupted-visual"]["state"], "finished")
+        self.assertEqual(acquire_visual_asset(self.store, link, 'https://arxiv.org/assets/required.png',
+            http=http, expected_revision=revision, request_id='interrupted-visual'), result)
+        self.assertEqual(len(wire.requests), 1)
+        self.assertEqual(self.store.snapshot()['records'], records)
 
     def test_inline_svg_escaped_resources_are_pending(self):
         a = self.metadata()

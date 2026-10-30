@@ -17,6 +17,8 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import _read_preparation, fields, immutable_record, normalized_text, prepared_mutation, text
+from .finishing import retry_store_write
+from .workspace import json_projection, read_file, strict_json
 from . import review_transport as transport
 from . import bar_sources
 from . import openness_reading
@@ -1652,36 +1654,60 @@ def _observed(artifacts, route, request, credential):
     return record
 
 
+def _read_observation(artifacts, path, invocation):
+    try:
+        reference = strict_json(read_file(artifacts.root, path))
+    except ResearchError as error:
+        if error.code == 'artifact_missing':
+            return None
+        raise
+    saved = _read_json(artifacts, reference)
+    observation = saved['observation']
+    request = _read_json(artifacts, observation['request'])
+    response = _read_json(artifacts, observation['response']) if observation['response'] is not None else None
+    output = _read_json(artifacts, observation['output']) if observation['output'] is not None else None
+    if (saved['invocation_digest'] != digest(invocation) or observation['request'] != invocation['request']
+            or observation['request_digest'] != digest(request)
+            or invocation.get('route_digest', observation['route_digest']) != observation['route_digest']
+            or observation['status'] == 'completed' and transport.response_output(response) != output):
+        raise ResearchError('review_observation_mismatch', 'Saved observation differs from its reserved invocation')
+    return observation
+
+
 def _invoke_once(store, payload, operation, start, finish, *, expected_revision, request_id, credential):
     """Reserve before I/O; retries replay saved observations and never repeat uncertain calls."""
+    text(request_id, 'Request ID')
     snapshot = _read_preparation(store)
     if snapshot.has_request(request_id):
         return prepared_mutation(store, operation, payload, lambda r, v: None,
                                  expected_revision=expected_revision, request_id=request_id, _snapshot=snapshot)
     beginning = request_id + ':start'
-    if snapshot.has_request(beginning):
-        # Validate request replay/conflict through Store, then retain the unknown result.
-        prepared_mutation(store, operation + '_start', payload, lambda r, v: None,
-                          expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot)
-        raise ResearchError('review_invocation_pending', 'The prior invocation is pending; reconcile it before any explicit retry')
-    invocation = prepared_mutation(store, operation + '_start', payload, start,
-                                   expected_revision=expected_revision, request_id=beginning,
-                                   _snapshot=snapshot)['result']
     artifacts = store.build_artifact_store()
-    route = _get(store.snapshot()['records'], 'review_route', invocation['route_id'])
-    request = _read_json(artifacts, invocation['request'])
-    observation = _observed(artifacts, route, request, credential)
-    for _ in range(8):
+    path = 'research/review-observations/' + digest([operation, request_id]) + '.json'
+    if snapshot.has_request(beginning):
+        # Validate the original operation and payload before looking for saved observations.
+        invocation = prepared_mutation(store, operation + '_start', payload, lambda r, v: None,
+                          expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot)['result']
+        if _read_observation(artifacts, path, invocation) is None:
+            raise ResearchError('review_invocation_pending', 'The prior invocation is pending; reconcile it before any explicit retry')
+    else:
+        invocation = prepared_mutation(store, operation + '_start', payload, start,
+                                       expected_revision=expected_revision, request_id=beginning,
+                                       _snapshot=snapshot)['result']
+        route = _get(store.snapshot()['records'], 'review_route', invocation['route_id'])
+        request = _read_json(artifacts, invocation['request'])
+        observation = _observed(artifacts, route, request, credential)
+        reference = _put_json(artifacts, {'invocation_digest': digest(invocation), 'observation': observation})
+        json_projection(store.root, path, reference)
+    def commit():
         revision = store.revision
         def prepare(current, value):
+            # Recovered and immediate observations use the same byte checks and finishing callback.
+            observation = _read_observation(artifacts, path, invocation)
             return finish(current, value, invocation, observation, revision + 1)
-        try:
-            return prepared_mutation(store, operation, payload, prepare,
-                                     expected_revision=revision, request_id=request_id)
-        except ResearchError as error:
-            if error.code != 'stale_revision':
-                raise
-    raise ResearchError('review_invocation_pending', 'The response artifacts are saved; concurrent writes left the invocation pending')
+        return prepared_mutation(store, operation, payload, prepare,
+                                 expected_revision=revision, request_id=request_id)
+    return retry_store_write(commit)
 
 
 def probe_route(store, payload, *, expected_revision, request_id, credential=None):

@@ -77,6 +77,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from .artifacts import ArtifactStore, describe_artifact
 from .errors import ResearchError
+from .finishing import retry_store_write
 from .evidence import derived_id, digest, media_type as response_media_type, prepare_sources, prepare_work, put_sources, put_work
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_media_type, extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
@@ -153,6 +154,10 @@ def _begin(store, operation, payload, request_id, expected_revision, *, target=N
 
 
 def _finish(store, request_id, revision, result, *, apply=None):
+    return retry_store_write(lambda: _finish_once(store, request_id, store.revision, result, apply=apply))
+
+
+def _finish_once(store, request_id, revision, result, *, apply=None):
     final = dict(result, request_id=request_id, revision=revision + 1)
 
     def commit(transaction):
@@ -477,10 +482,10 @@ def _run_collection(store, collection_id, request_id, budget, http):
         sources = prepare_sources(artifacts, attempts, "arxiv", request_id, start=collection["source_count"])
         if page is not None:
             prepared = [prepare_work(artifacts, w, sources[-1]["id"]) for w in page.works]
-        result = store.mutate("cohort.page", {"collection_id": collection_id, "sequence": collection["sequence"],
+        result = retry_store_write(lambda: store.mutate("cohort.page", {"collection_id": collection_id, "sequence": collection["sequence"],
                               "source_ids": [s["id"] for s in sources], "failure": failure.code if failure else None},
-            lambda tx: _page_update(tx, collection, partition["id"], page, prepared, sources, failure, request_id),
-            expected_revision=snapshot["revision"], request_id=derived_id(request_id, "page", collection["sequence"]))
+            lambda tx: _page_update(tx, copy.deepcopy(collection), partition["id"], page, prepared, sources, failure, request_id),
+            expected_revision=store.revision, request_id=derived_id(request_id, "page", collection["sequence"])))
         if result["result"]["disposition"] == "pending":
             continue
     result = _collection_summary(snapshot["records"], collection)

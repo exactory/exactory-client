@@ -39,6 +39,38 @@ class ResearchExecutionTests(DevelopmentCase):
     def require_launcher(self):
         self.assertTrue((PLUGIN / "research_harness/execution.py").is_file(), "The admitted launch boundary is missing")
 
+    def test_execution_finishing_writes_retry_without_relaunch(self):
+        from research_harness import execution
+        from research_harness.errors import ResearchError
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
+        mutate = self.store.mutate
+        refused = set()
+        operations = {'execution.prelaunch', 'development.execution', 'execution.observe', 'execution.reconcile'}
+        def refuse(operation, *args, **kwargs):
+            if operation in operations and operation not in refused:
+                refused.add(operation)
+                raise ResearchError('store_busy', 'Concurrent writer')
+            return mutate(operation, *args, **kwargs)
+        with mock.patch.object(self.store, 'mutate', side_effect=refuse), \
+                mock.patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001), \
+                mock.patch.object(execution.subprocess, 'Popen', wraps=subprocess.Popen) as launch:
+            result = execution.launch_execution(self.store, admission['id'], expected_revision=self.store.revision,
+                                                request_id='busy-launch')
+        self.assertTrue(result['ok'])
+        self.assertEqual(launch.call_count, 1)
+        self.assertEqual(refused, operations)
+        self.assertEqual(len(self.store.snapshot()['records']['execution']), 1)
+
+    def test_saved_execution_reconciliation_keeps_revision_input_validation(self):
+        from research_harness import execution
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
+        execution.launch_execution(self.store, admission['id'], expected_revision=self.store.revision,
+                                   request_id='original-launch')
+        before = self.store.snapshot()
+        self.assert_error('invalid_input', lambda: execution.reconcile_execution(self.store,
+            {'admission_id': admission['id']}, expected_revision=-1, request_id='invalid-revision'))
+        self.assertEqual(self.store.snapshot(), before)
+
     def test_real_execution_uses_frozen_bytes_and_cannot_replay_a_launch(self):
         self.require_launcher()
         admission = admit_lab(self, body="import json\nprint(json.dumps({'metric': 7}))\n")

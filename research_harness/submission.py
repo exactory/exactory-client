@@ -3,6 +3,7 @@
 from urllib.parse import quote
 
 from .errors import ResearchError
+from .finishing import retry_store_write
 from .evidence import digest
 from .execution import _owner
 from .operations import immutable_record, prepared_mutation
@@ -15,9 +16,9 @@ from .verification import task_identity, validate_verdict
 def _observation(store, intent_id, status, response):
     payload = {"intent_id": intent_id, "status": status, "response": response}
     identifier = intent_id + ":observation:" + digest(payload)
-    return prepared_mutation(store, "submission.observe", payload,
+    return retry_store_write(lambda: prepared_mutation(store, "submission.observe", payload,
         lambda records, value: ([immutable_record(records, "remote_observation", identifier, value)], value),
-        expected_revision=store.revision, request_id=identifier)
+        expected_revision=store.revision, request_id=identifier))
 
 
 def validate_submission(store, body):

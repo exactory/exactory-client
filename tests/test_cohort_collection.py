@@ -59,6 +59,28 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(collect_cohort(self.store, DEFINITION, request_id="collect-1", expected_revision=0,
                                       max_requests=1, http=http, page_size=2), result)
 
+    def test_cohort_page_retries_finishing_write_without_fetching_again(self):
+        http, wire, _ = client([xml_response(atom([entry()], total=1))])
+        mutate = self.store.mutate
+        calls = []
+        def refuse(operation, *args, **kwargs):
+            if operation == 'cohort.page' and len(calls) < 2:
+                code = ('store_busy', 'stale_revision')[len(calls)]
+                calls.append(code)
+                if code == 'stale_revision':
+                    mutate('fixture.writer', {}, lambda tx: tx.put('fixture', 'writer', {}),
+                           expected_revision=self.store.revision, request_id='writer')
+                raise ResearchError(code, 'Concurrent writer')
+            return mutate(operation, *args, **kwargs)
+        with unittest.mock.patch.object(self.store, 'mutate', side_effect=refuse), \
+                unittest.mock.patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001):
+            result = collect_cohort(self.store, DEFINITION, request_id='retry-page', expected_revision=0, http=http)
+        self.assertEqual(result['status'], 'complete')
+        self.assertEqual(len(wire.requests), 1)
+        records = self.store.snapshot()['records']
+        self.assertEqual(len(records['collection_page']), 1)
+        self.assertEqual(len(records['cohort_member']), 1)
+
     def test_malformed_provider_doi_is_retained_as_warning_and_does_not_restart_partition(self):
         page = atom([entry(abstract="First member."), entry("2601.00002v1", abstract="Second member.", doi="0.1016/j.rinp.2022.105691")], total=2, size=2)
         http, wire, _ = client([xml_response(page)])
@@ -310,7 +332,7 @@ class CollectionTests(unittest.TestCase):
         self.assertEqual(done["status"], "complete")
         self.assertEqual(parse_qs(urlsplit(wire.requests[-1][0]).query)["start"], ["1"])
 
-    def test_concurrent_revision_change_rejects_page_commit_and_resume_keeps_prior_evidence(self):
+    def test_concurrent_revision_change_retains_page_and_replay_keeps_prior_evidence(self):
         http, wire, _ = client([xml_response(atom([entry()], total=1)), xml_response(atom([entry()], total=1))])
         original_transport = http.transport
         def concurrent(url, headers, **kwargs):
@@ -318,16 +340,19 @@ class CollectionTests(unittest.TestCase):
                               request_id="other-writer", expected_revision=self.store.revision)
             return original_transport(url, headers, **kwargs)
         http.transport = concurrent
-        with self.assertRaises(ResearchError) as error:
-            collect_cohort(self.store, DEFINITION, request_id="cas", expected_revision=0, http=http)
-        self.assertEqual(error.exception.code, "stale_revision")
+        result = collect_cohort(self.store, DEFINITION, request_id="cas", expected_revision=0, http=http)
+        self.assertEqual(result['status'], 'complete')
+        self.assertEqual(len(wire.requests), 1)
         records = self.store.snapshot()["records"]
-        self.assertNotIn("work", records)
+        self.assertIn('arxiv:2601.00001v1', records['work'])
+        self.assertEqual(len(records['source']), 1)
+        self.assertEqual(len(records['collection_page']), 1)
         self.assertEqual(records["unrelated"]["value"], {"x": 1})
         http.transport = original_transport
-        collection_id = next(iter(records["collection"]))
-        result = resume_cohort(self.store, collection_id, request_id="cas-resume", expected_revision=self.store.revision, http=http)
-        self.assertEqual(result["status"], "complete")
+        replay = collect_cohort(self.store, DEFINITION, request_id="cas", expected_revision=0, http=http)
+        self.assertEqual(replay, result)
+        self.assertEqual(len(wire.requests), 1)
+        self.assertEqual(self.store.snapshot()['records'], records)
 
     def test_population_loss_after_changed_total_remains_pending(self):
         http, _, _ = client([xml_response(atom([entry()], total=3, size=1)),

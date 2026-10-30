@@ -11,6 +11,7 @@ from .evaluation import Evaluation
 from .gates import require_ready
 from .integration import export_workspace
 from .operations import immutable_record, prepared_mutation
+from .finishing import retry_store_write
 from .publication import publication_state, validate_upload
 from .remote import begin_intent, discard_step, finish_intent, get_intent, remote_step, resolve_step
 from .rounds import round_state
@@ -110,8 +111,8 @@ def _record_read_back_publication(store, identifier, receipt, published):
             changes.append(("workspace", "deposit", value["deposit"]))
         return changes, value["receipt"]
 
-    prepared_mutation(store, "publication.read_back", {"receipt": read_back, "deposit": state}, prepare,
-                      expected_revision=store.revision, request_id=identifier + ":read-back:" + digest(read_back))
+    retry_store_write(lambda: prepared_mutation(store, "publication.read_back", {"receipt": read_back, "deposit": state}, prepare,
+                      expected_revision=store.revision, request_id=identifier + ":read-back:" + digest(read_back)))
     return read_back
 
 
