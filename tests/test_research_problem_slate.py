@@ -663,7 +663,7 @@ class ProblemResultCalibrationTests(ProblemDeliveryCase):
         with patch("research_harness.review_refusal._record_refusal"), self.assertRaises(ResearchError) as caught:
             self.mutate(decisions.record_value_review, payload)
         self.assertEqual((caught.exception.code, caught.exception.details),
-                         ("review_bar_mismatch", {"bar_ids": self.version_two_bar_ids}))
+                         ("review_bar_mismatch", {"bar_ids": self.version_two_bar_ids, "path": "/value/bar_ids"}))
         with patch.object(decisions, "find_undelivered_bar_ids", return_value=[]):
             self.mutate(decisions.record_value_review, payload)
         self.observe("result", "first", self.build_calibrated_result(), identifier="refreshed-first")

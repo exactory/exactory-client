@@ -7,6 +7,7 @@ from openness_reading_fixtures import OpennessReadingCase, build_theorem
 from research_harness import openness_reading, review_excerpts, review_protocol as protocol
 from research_harness import review_transport as transport
 from research_harness import review_codex_transport as codex
+from research_harness import review_refusal
 
 
 class OpennessReadingChainTests(OpennessReadingCase):
@@ -100,6 +101,61 @@ class OpennessReadingChainTests(OpennessReadingCase):
         state = protocol.assignment_state(self.store.snapshot()['records'], self.artifacts, 'turn-1')
         self.assertTrue(state['ready'], state['obligations'])
         self.assertEqual(state['attempt_id'], 'attempt-turn-1-retry')
+
+    def test_short_anchor_refusal_names_request_and_rule(self):
+        self.limit_input()
+        native = self.export()
+        self.assign('turn-1', native)
+        packet = self.read_packet('turn-1')
+        passage = {'id': 'lemma-35', 'version_id': self.versions[0],
+                   'anchor': 'Lemma 35. Let Wℓ,m', 'characters': 100}
+        output = self.build_reading_response(packet, passages=[passage])
+        receipt = self.invoke('turn-1', output)
+        records = self.store.snapshot()['records']
+        refusal = records['review_output_refusal']['attempt-turn-1']
+        expected = {'message': 'A passage anchor is a verbatim phrase of at least 20 characters',
+                    'path': '/passage_requests/0/anchor', 'request_id': 'lemma-35',
+                    'normalized_characters': 18, 'minimum_characters': 20}
+        self.assertEqual(refusal['details'], expected)
+        self.assertEqual(receipt['output_refusal'], {key: refusal[key] for key in ('code', 'check', 'details')})
+        attempt = records['review_attempt']['attempt-turn-1']
+        saved = self.artifacts.read(attempt['output'])
+        self.assertEqual(json.loads(saved), output)
+        self.assertTrue(protocol.authenticate_attempt(records, self.artifacts,
+                                                      records['review_assignment']['turn-1'], attempt))
+        self.assert_error('review_source_continuation_unverified',
+                          lambda: self.assign('turn-2', native, prior='turn-1'))
+        accepted = self.build_reading_response(packet)
+        self.invoke('turn-1', accepted, attempt='attempt-turn-1-retry')
+        self.assign('turn-2', native, prior='turn-1')
+        turn = self.read_packet('turn-2')['reading_turn']['reading_record']['turns'][0]
+        self.assertEqual(turn['attempt_id'], 'attempt-turn-1-retry')
+        self.assertEqual(self.artifacts.read(attempt['output']), saved)
+
+    def test_historical_null_refusal_remains_immutable(self):
+        self.limit_input()
+        self.assign('turn-1', self.export())
+        output = dict(self.build_reading_response(self.read_packet('turn-1')), notes='')
+        legacy = {'code': 'invalid_reading_response', 'check': 'native.output', 'details': None}
+        with patch.object(review_refusal, 'classify_observed_output', return_value=legacy):
+            receipt = self.invoke('turn-1', output)
+        before = self.store.snapshot()['records']
+        fresh = review_refusal.classify_observed_output(before, self.artifacts, 'attempt-turn-1')
+        self.assertEqual(fresh['details']['path'], '/notes')
+        self.assertIn('message', fresh['details'])
+        self.assertEqual(self.invoke('turn-1', output), receipt)
+        self.assertEqual(self.store.snapshot()['records'], before)
+        retry = self.invoke('turn-1', output, attempt='attempt-turn-1-retry')
+        after = self.store.snapshot()['records']
+        self.assertEqual(after['review_output_refusal']['attempt-turn-1'],
+                         before['review_output_refusal']['attempt-turn-1'])
+        self.assertIsNone(receipt['output_refusal']['details'])
+        self.assertIsNotNone(retry['output_refusal']['details'])
+        first, second = [after['review_attempt'][identifier] for identifier in
+                         ('attempt-turn-1', 'attempt-turn-1-retry')]
+        self.assertEqual(self.artifacts.read(first['request']), self.artifacts.read(second['request']))
+        self.assert_error('review_slot_exhausted',
+                          lambda: self.invoke('turn-1', output, attempt='attempt-turn-1-third'))
 
     def test_the_final_turn_carries_the_reading_record(self):
         self.limit_input()

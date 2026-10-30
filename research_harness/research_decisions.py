@@ -11,7 +11,7 @@ from functools import partial
 
 from .artifacts import ArtifactStore
 from .claim_dependencies import verify_record_dependency
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
@@ -48,40 +48,52 @@ def _response(payload):
     return {key: value for key, value in payload.items() if key not in ("id", "dossier_id", "assignment_id")}
 
 
-def _validate_checks(records, artifacts, values, expected, *, evidence_validator=validate_evidence_contract, review_binding=False):
-    checks = strategy.items(values, "Independent decision assurances")
+def _validate_checks(records, artifacts, values, expected, *, evidence_validator=validate_evidence_contract, review_binding=False,
+                     path='/value/assurances'):
+    with describe_error_at(path):
+        checks = strategy.items(values, "Independent decision assurances")
     seen = set()
-    for check in checks:
-        fields(check, ("kind", "status", "reason", "evidence"), code="invalid_value_review")
+    for index, check in enumerate(checks):
+        item_path = path + '/' + str(index)
+        fields(check, ("kind", "status", "reason", "evidence"), code="invalid_value_review", path=item_path)
         problem = set(expected) == set(PROBLEM_CHECKS)
-        strategy.choice(check["kind"], PROBLEM_CHECKS if problem else ALL_CHECKS, "Independent assurance", "invalid_value_review")
-        strategy.choice(check["status"], ("passed", "failed", "not_assessed") if problem else ("passed", "failed", "unresolved"), "Assurance status", "invalid_value_review")
-        text(check["reason"], "Independent assurance reasoning")
-        evidence_validator(records, artifacts, check["evidence"], review_binding=review_binding)
+        with describe_error_at(item_path + '/kind'):
+            strategy.choice(check["kind"], PROBLEM_CHECKS if problem else ALL_CHECKS, "Independent assurance", "invalid_value_review")
+        with describe_error_at(item_path + '/status'):
+            strategy.choice(check["status"], ("passed", "failed", "not_assessed") if problem else ("passed", "failed", "unresolved"), "Assurance status", "invalid_value_review")
+        with describe_error_at(item_path + '/reason'):
+            text(check["reason"], "Independent assurance reasoning")
+        with describe_error_at(item_path + '/evidence'):
+            evidence_validator(records, artifacts, check["evidence"], review_binding=review_binding)
         if check["kind"] in seen:
-            raise ResearchError("invalid_value_review", "Assess each independent assurance once")
+            raise ResearchError("invalid_value_review", "Assess each independent assurance once", {"path": item_path + '/kind'})
         seen.add(check["kind"])
     if seen != set(expected):
-        raise ResearchError("invalid_value_review", "Address all phase-required independent assurances", {"required": list(expected)})
+        raise ResearchError("invalid_value_review", "Address all phase-required independent assurances",
+                            {"required": list(expected), "path": path})
 
 
 def _validate_slate_potential(value, packet):
     """A problem slate review assesses no statement and grades the potential of exactly the packet's candidates."""
     if set(value["bar_ids"]) != set(packet["bar_ids"]):
-        raise ResearchError("invalid_value_review", "Assess both bars of the slate packet", {"bar_ids": packet["bar_ids"]})
-    if any(check["status"] != "not_assessed" for check in value["assurances"]):
-        raise ResearchError("invalid_value_review", "This role grades candidate potential; leave every realized-problem assurance not_assessed.")
+        raise ResearchError("invalid_value_review", "Assess both bars of the slate packet",
+                            {"bar_ids": packet["bar_ids"], "path": '/value/bar_ids'})
+    for index, check in enumerate(value["assurances"]):
+        if check["status"] != "not_assessed":
+            raise ResearchError("invalid_value_review", "This role grades candidate potential; leave every realized-problem assurance not_assessed.",
+                                {"path": '/value/assurances/' + str(index) + '/status'})
     candidate_ids = sorted(candidate["id"] for candidate in packet["candidates"])
     potential = value["rubric_potential"]
     if not isinstance(potential, dict) or sorted(potential) != candidate_ids:
         raise ResearchError("invalid_value_review", "Grade the potential of exactly the packet's candidates",
-                            {"candidate_ids": candidate_ids})
+                            {"candidate_ids": candidate_ids, "path": '/value/rubric_potential'})
     for candidate_id, grades in sorted(potential.items()):
-        fields(grades, ("significance", "priority"), code="invalid_value_review")
+        path = '/value/rubric_potential/' + candidate_id.replace('~', '~0').replace('/', '~1')
+        fields(grades, ("significance", "priority"), code="invalid_value_review", path=path)
         try:
             problem_rubric.validate_grades(grades, potential=True)
         except ResearchError as error:
-            raise ResearchError("invalid_value_review", error.message, {"candidate_id": candidate_id}) from error
+            raise ResearchError("invalid_value_review", error.message, {"candidate_id": candidate_id, "path": path}) from error
 
 
 def _validate_value(records, artifacts, value, stage, dossier, historical=(), *, expected_checks=ALL_CHECKS, problem=None,
@@ -92,61 +104,90 @@ def _validate_value(records, artifacts, value, stage, dossier, historical=(), *,
     fields(value, ("status", "consequence", "bar_ids", "objective_adequacy", "method_adequacy", "reason", "evidence",
                    "work_items", "assurances", "objection_findings") +
            (("rubric", "rubric_evidence") if rubric_required else ()) +
-           (("rubric_potential",) if potential_required else ()), code="invalid_value_review")
+           (("rubric_potential",) if potential_required else ()), code="invalid_value_review", path='/value')
     if rubric_required:
-        problem_rubric.validate_grades(value["rubric"], allow_previous=allow_previous_rubric)
+        with describe_error_at('/value/rubric'):
+            problem_rubric.validate_grades(value["rubric"], allow_previous=allow_previous_rubric)
         items = tuple(value["rubric"]["admission"]) + problem_rubric.NON_ADMISSION_ITEMS
-        fields(value["rubric_evidence"], items, code="invalid_value_review")
+        fields(value["rubric_evidence"], items, code="invalid_value_review", path='/value/rubric_evidence')
         for item in items:
-            text(value["rubric_evidence"][item], "Rubric item evidence", code="invalid_value_review")
-    strategy.choice(value["status"], ("sufficient", "insufficient", "unresolved"), "Scientific consequence", "invalid_value_review")
+            with describe_error_at('/value/rubric_evidence/' + item):
+                text(value["rubric_evidence"][item], "Rubric item evidence", code="invalid_value_review")
+    with describe_error_at('/value/status'):
+        strategy.choice(value["status"], ("sufficient", "insufficient", "unresolved"), "Scientific consequence", "invalid_value_review")
     for key in ("consequence", "reason"):
-        text(value[key], "Independent " + key)
+        with describe_error_at('/value/' + key):
+            text(value[key], "Independent " + key)
     for key in ("objective_adequacy", "method_adequacy"):
-        strategy.choice(value[key], ("adequate", "inadequate", "unresolved", "not_assessed"), key, "invalid_value_review")
-    strings(value["bar_ids"], "Independently recorded bar reviews")
-    evidence_validator(records, artifacts, value["evidence"], review_binding=problem is not None)
+        with describe_error_at('/value/' + key):
+            strategy.choice(value[key], ("adequate", "inadequate", "unresolved", "not_assessed"), key, "invalid_value_review")
+    with describe_error_at('/value/bar_ids'):
+        strings(value["bar_ids"], "Independently recorded bar reviews")
+    with describe_error_at('/value/evidence'):
+        evidence_validator(records, artifacts, value["evidence"], review_binding=problem is not None)
     if stage == "bar":
-        if value["bar_ids"] or any(value[key] != "not_assessed" for key in ("objective_adequacy", "method_adequacy")):
-            raise ResearchError("invalid_value_review", "The initial bar cannot assess the withheld author proposal")
+        for key in ('bar_ids', 'objective_adequacy', 'method_adequacy'):
+            if value[key] != ([] if key == 'bar_ids' else 'not_assessed'):
+                raise ResearchError("invalid_value_review", "The initial bar cannot assess the withheld author proposal",
+                                    {"path": '/value/' + key})
         expected = ()
     else:
         expected = expected_checks
         if require_two_bars and len(value["bar_ids"]) < 2:
-            raise ResearchError("review_bar_pending", "Assess the recorded independent bars before accepting the slate or result")
+            raise ResearchError("review_bar_pending", "Assess the recorded independent bars before accepting the slate or result",
+                                {"path": '/value/bar_ids', "items": len(value["bar_ids"]), "minimum_items": 2})
     _validate_checks(records, artifacts, value["assurances"], expected, evidence_validator=evidence_validator,
                      review_binding=problem is not None)
     if potential_required:
         _validate_slate_potential(value, slate_packet)
     work_ids = set()
-    for finding in strategy.items(value["work_items"], "Independent work-item classifications"):
-        fields(finding, ("id", "classification", "status", "reason", "evidence"), code="invalid_value_review")
-        text(finding["id"], "Independent work-item ID", code="invalid_value_review")
-        strategy.choice(finding["classification"], strategy.CLASSIFICATIONS, "Independent obligation class", "invalid_value_review")
-        strategy.choice(finding["status"], ("accepted", "rejected", "unresolved"), "Work finding", "invalid_value_review")
-        text(finding["reason"], "Work-item reasoning")
-        evidence_validator(records, artifacts, finding["evidence"], review_binding=problem is not None)
-        if finding["id"] in work_ids:
-            raise ResearchError("invalid_value_review", "Assess each work item once")
-        work_ids.add(finding["id"])
+    with describe_error_at('/value/work_items'):
+        findings = strategy.items(value["work_items"], "Independent work-item classifications")
+    for index, finding in enumerate(findings):
+        item_path = '/value/work_items/' + str(index)
+        with describe_error_at(item_path):
+            fields(finding, ("id", "classification", "status", "reason", "evidence"), code="invalid_value_review", path=item_path)
+            with describe_error_at(item_path + '/id'):
+                text(finding["id"], "Independent work-item ID", code="invalid_value_review")
+            with describe_error_at(item_path + '/classification'):
+                strategy.choice(finding["classification"], strategy.CLASSIFICATIONS, "Independent obligation class", "invalid_value_review")
+            with describe_error_at(item_path + '/status'):
+                strategy.choice(finding["status"], ("accepted", "rejected", "unresolved"), "Work finding", "invalid_value_review")
+            with describe_error_at(item_path + '/reason'):
+                text(finding["reason"], "Work-item reasoning")
+            with describe_error_at(item_path + '/evidence'):
+                evidence_validator(records, artifacts, finding["evidence"], review_binding=problem is not None)
+            if finding["id"] in work_ids:
+                raise ResearchError("invalid_value_review", "Assess each work item once", {"path": item_path + "/id"})
+            work_ids.add(finding["id"])
     if work_ids != (set() if stage == "bar" or problem is not None else set(dossier["payload"]["work_items"])):
-        raise ResearchError("review_work_items_incomplete", "Independently assess every dossier work item")
+        raise ResearchError("review_work_items_incomplete", "Independently assess every dossier work item",
+                            {"path": "/value/work_items"})
     prior_ids = set()
-    for finding in strategy.items(value["objection_findings"], "Independent prior-objection findings"):
-        fields(finding, ("id", "status", "reason", "evidence"), code="invalid_value_review")
-        text(finding["id"], "Prior objection ID")
-        strategy.choice(finding["status"], ("resolved", "continuing", "contested"), "Prior objection status", "invalid_value_review")
-        text(finding["reason"], "Prior objection reasoning")
-        evidence_validator(records, artifacts, finding["evidence"], review_binding=problem is not None)
-        if finding["id"] in prior_ids:
-            raise ResearchError("invalid_value_review", "Assess each prior objection once")
-        prior_ids.add(finding["id"])
+    with describe_error_at('/value/objection_findings'):
+        findings = strategy.items(value["objection_findings"], "Independent prior-objection findings")
+    for index, finding in enumerate(findings):
+        item_path = '/value/objection_findings/' + str(index)
+        with describe_error_at(item_path):
+            fields(finding, ("id", "status", "reason", "evidence"), code="invalid_value_review", path=item_path)
+            with describe_error_at(item_path + '/id'):
+                text(finding["id"], "Prior objection ID")
+            with describe_error_at(item_path + '/status'):
+                strategy.choice(finding["status"], ("resolved", "continuing", "contested"), "Prior objection status", "invalid_value_review")
+            with describe_error_at(item_path + '/reason'):
+                text(finding["reason"], "Prior objection reasoning")
+            with describe_error_at(item_path + '/evidence'):
+                evidence_validator(records, artifacts, finding["evidence"], review_binding=problem is not None)
+            if finding["id"] in prior_ids:
+                raise ResearchError("invalid_value_review", "Assess each prior objection once", {"path": item_path + "/id"})
+            prior_ids.add(finding["id"])
     material = None if problem is not None else dossier["payload"]["material_change"]
     expected_ids = set() if stage == "bar" or material is None else {item["id"] for item in material["prior_objections"]}
     expected_ids.update(objection["id"] for review in historical for objection in review["payload"]["objections"])
     expected_ids.update(objection["id"] for objection in problem_objections)
     if prior_ids != expected_ids:
-        raise ResearchError("review_objection_history_incomplete", "Assess each recorded predecessor objection")
+        raise ResearchError("review_objection_history_incomplete", "Assess each recorded predecessor objection",
+                            {"path": "/value/objection_findings"})
 
 
 def _validate_review_bar_records(records, artifacts, output, dossier, problem):
@@ -198,8 +239,9 @@ def validate_review_contract(records, artifacts, assignment, output):
     from .review_protocol import has_problem_result_rubric, is_previous_prompt, collect_carried_records
     with contract_check("review.shape"):
         fields(output, ("stage", "support", "value", "objections", "limitations"),
-               ("source_requests", "reassessment", "excerpts"), code="invalid_value_review")
-        strategy.choice(output["stage"], ("bar", "slate", "result"), "Review phase", "invalid_value_review")
+               ("source_requests", "reassessment", "excerpts"), code="invalid_value_review", path='')
+        with describe_error_at('/stage'):
+            strategy.choice(output["stage"], ("bar", "slate", "result"), "Review phase", "invalid_value_review")
     route = records['review_route'][assignment['route_id']]
     visual = route['adapter'] == 'codex_cli_visual_v1'
     frozen = json.loads(artifacts.read(assignment['packet']))
@@ -214,21 +256,24 @@ def validate_review_contract(records, artifacts, assignment, output):
         packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment["id"]])
     packet = packets[0]
     if "excerpts" in output:
-        with contract_check("review.shape"):
+        with contract_check("review.shape"), describe_error_at('/excerpts'):
             if review_excerpts.KEY not in frozen:
                 raise ResearchError("invalid_value_review", "Only a turn under the excerpt rules returns excerpts")
             review_excerpts.validate_excerpts(output["excerpts"], "invalid_value_review")
     contract_evidence = partial(validate_evidence_contract, packets=packets)
-    with contract_check("review.source_requests"):
+    with contract_check("review.source_requests"), describe_error_at('/source_requests'):
         pending = bar_sources.pending(packet, output)
     if pending and "source_inventory" in packet:
         inventory = packet["source_inventory"]
         rows = bar_sources.validate_inventory(artifacts, inventory)
+        paths = {item['id']: '/source_requests/' + str(index) + '/page'
+                 for index, item in enumerate(output.get('source_requests', []))}
         with contract_check("review.source_requests"):
             for request in pending:
                 if request["kind"] in ("inventory_page", "inventory_query"):
-                    bar_sources._page(rows, inventory["digest"], request["page"], request.get("query"),
-                                      page_size=inventory["page_size"])
+                    with describe_error_at(paths.get(request['id'], '/source_requests'), request_id=request['id']):
+                        bar_sources._page(rows, inventory["digest"], request["page"], request.get("query"),
+                                          page_size=inventory["page_size"])
     # Valid pending requests are retained turns, not intrinsically unrecordable final assessments.
     if pending:
         return
@@ -247,7 +292,7 @@ def validate_review_contract(records, artifacts, assignment, output):
     expected_checks = (PROBLEM_CHECKS if problem else
                        CONTINUE_CHECKS_V1 + ("stop",) if is_previous_prompt(assignment) else ALL_CHECKS)
     delivered_bars = {bar["id"] for item in packets for bar in item.get("bars", [])}
-    with contract_check("review.value"):
+    with contract_check("review.value"), describe_error_at('/value'):
         _validate_value(records, artifacts, output["value"], stage, frozen_dossier,
                         expected_checks=expected_checks, problem={} if problem else None,
                         problem_rubric_required=(has_problem_result_rubric(assignment) if problem else not is_previous_prompt(assignment)),
@@ -257,24 +302,31 @@ def validate_review_contract(records, artifacts, assignment, output):
         if stage != "bar":
             undelivered = find_undelivered_bar_ids(records, artifacts, assignment["id"], output["value"]["bar_ids"], packets=packets)
             if undelivered:
-                raise ResearchError("review_bar_mismatch", "Assess only bars delivered to this reviewer", {"bar_ids": undelivered})
-        strings(output["limitations"], "Independent assessment limitations", nonempty=True)
-    with contract_check("review.objections"):
+                raise ResearchError("review_bar_mismatch", "Assess only bars delivered to this reviewer",
+                                    {"bar_ids": undelivered, "path": '/value/bar_ids'})
+        with describe_error_at('/limitations'):
+            strings(output["limitations"], "Independent assessment limitations", nonempty=True)
+    with contract_check("review.objections"), describe_error_at('/objections'):
         candidate_ids = ({candidate["id"] for candidate in packet["candidates"]} if problem and stage == "slate" else None)
         seen = set()
-        for objection in strategy.items(output["objections"], "Material objections"):
+        for index, objection in enumerate(strategy.items(output["objections"], "Material objections")):
+            path = '/objections/' + str(index)
             fields(objection, ("id", "claim", "reason", "evidence", "resolution_condition") +
-                   (("candidate_ids",) if candidate_ids is not None else ()), code="invalid_value_review")
+                   (("candidate_ids",) if candidate_ids is not None else ()), code="invalid_value_review", path=path)
             for key in ("id", "claim", "reason", "resolution_condition"):
-                text(objection[key], "Material objection " + key)
-            contract_evidence(records, artifacts, objection["evidence"], review_binding=problem)
+                with describe_error_at(path + '/' + key):
+                    text(objection[key], "Material objection " + key)
+            with describe_error_at(path + '/evidence'):
+                contract_evidence(records, artifacts, objection["evidence"], review_binding=problem)
             if candidate_ids is not None:
-                strings(objection["candidate_ids"], "Candidates of a slate objection", code="invalid_value_review")
+                with describe_error_at(path + '/candidate_ids'):
+                    strings(objection["candidate_ids"], "Candidates of a slate objection", code="invalid_value_review")
                 if not set(objection["candidate_ids"]) <= candidate_ids:
                     raise ResearchError("invalid_value_review", "Name only candidates of the slate packet",
-                                        {"objection_id": objection["id"], "candidate_ids": sorted(candidate_ids)})
+                                        {"objection_id": objection["id"], "candidate_ids": sorted(candidate_ids),
+                                         "path": path + '/candidate_ids'})
             if objection["id"] in seen:
-                raise ResearchError("invalid_value_review", "Material objection identities must be unique")
+                raise ResearchError("invalid_value_review", "Material objection identities must be unique", {"path": path + '/id'})
             seen.add(objection["id"])
         if problem:
             # A stated id that names another claim than the delivered objection it restates is an output failure, so its
@@ -283,14 +335,14 @@ def validate_review_contract(records, artifacts, assignment, output):
             # only at recording.
             _assign_objection_identities(records, artifacts, dict(output, assignment_id=assignment["id"], id=assignment["id"]), True)
     repair_packet = review_context_repair.frozen_reassessment_packet(records, artifacts, assignment)
-    with contract_check("review.reassessment"):
+    with contract_check("review.reassessment"), describe_error_at('/reassessment'):
         review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False, packet=repair_packet,
                                                     evidence_validator=contract_evidence)
     if problem:
         carried = collect_carried_records(records, artifacts, assignment["id"], packets=packets)
         supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual else
                               review_supplied_evidence.supplied_context(records, artifacts, [assignment["id"]], frozen=True))
-        for evidence in evidence_arrays(output):
+        for path, evidence in evidence_arrays(output, with_paths=True):
             missing = review_supplied_evidence.undelivered_references(records, artifacts, evidence, carried, supplied, mappings,
                                                                      frozen=True, packets=packets if visual else ())
             if missing:
@@ -298,10 +350,10 @@ def validate_review_contract(records, artifacts, assignment, output):
                 description = (details["record_kind"] + " " + details["id"] + " at the cited digest"
                                if "record_kind" in details else "artifact " + details["sha256"]
                                + (" within the cited locator" if "locator" in details else ""))
-                with contract_check("review.evidence_delivery"):
+                with contract_check("review.evidence_delivery"), describe_error_at(path):
                     raise ResearchError("review_evidence_undelivered",
                         "Cite only content that this review received: no packet of the review delivered " + description, details)
-    with contract_check("review.support"):
+    with contract_check("review.support"), describe_error_at('/support'):
         if problem and output["support"] is not None:
             raise ResearchError("invalid_value_review", "A problem review supplies problem assurances, not native proof acceptance")
         if not problem and stage != "result" and output["support"] is not None:

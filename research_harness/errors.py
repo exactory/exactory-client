@@ -1,5 +1,6 @@
 """Typed failures for research services and their command-line callers."""
 
+from contextlib import contextmanager
 from typing import Optional
 
 
@@ -22,3 +23,13 @@ class ResearchError(Exception):
         if self.details is not None:
             result["details"] = self.details
         return result
+
+
+@contextmanager
+def describe_error_at(path, **context):
+    """Add absent output location and context to the same error from an existing validator."""
+    try:
+        yield
+    except ResearchError as error:
+        error.details = dict({'path': path, **context}, **(error.details or {}))
+        raise

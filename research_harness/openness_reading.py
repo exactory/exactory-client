@@ -21,7 +21,7 @@ import json
 from . import review_excerpts
 from . import review_transport as transport
 from .bar_sources import _reference, descriptor
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .operations import fields, normalized_text, text
 
@@ -721,33 +721,45 @@ def prepare_packet(records, artifacts, value, route, packet):
     return _build_final_turn(route, packet, record, rows, spans, observations), chain
 
 
-def _require(condition, message):
+def _require(condition, message, **details):
     if not condition:
-        raise ResearchError(INVALID_RESPONSE, message)
+        raise ResearchError(INVALID_RESPONSE, message, details)
 
 
 def _validate_reading_response(binding, output, protocol):
     _require(isinstance(output, dict) and set(output) == set(RESPONSE_FIELDS),
              'A reading response is exactly {schema_version,stage,subject_digest,claim_digest,reviewer,excerpts,notes,'
-             'passage_requests}')
-    _require(type(output['schema_version']) is int and output['schema_version'] == 1 and output['stage'] == 'reading',
-             'A reading response has schema_version 1 and stage "reading"')
-    _require(all(output[key] == binding[key] for key in ('subject_digest', 'claim_digest', 'reviewer')),
-             'Copy subject_digest, claim_digest and reviewer exactly')
-    _require(isinstance(output['notes'], str) and bool(output['notes'].strip())
-             and len(output['notes']) <= NOTES_CHARACTERS, 'notes is a nonempty string of at most 20,000 characters')
+             'passage_requests}', path='')
+    _require(type(output['schema_version']) is int and output['schema_version'] == 1,
+             'A reading response has schema_version 1 and stage "reading"', path='/schema_version')
+    _require(output['stage'] == 'reading',
+             'A reading response has schema_version 1 and stage "reading"', path='/stage')
+    for key in ('subject_digest', 'claim_digest', 'reviewer'):
+        _require(output[key] == binding[key], 'Copy subject_digest, claim_digest and reviewer exactly', path='/' + key)
+    with describe_error_at('/notes'):
+        _require(isinstance(output['notes'], str), 'notes is a nonempty string of at most 20,000 characters')
+        _require(bool(output['notes'].strip()) and len(output['notes']) <= NOTES_CHARACTERS,
+                 'notes is a nonempty string of at most 20,000 characters', characters=len(output['notes']),
+                 minimum_characters=1, maximum_characters=NOTES_CHARACTERS)
     # The responses of 0.64.2 to 0.66.2 name versions only.
     kinds = review_excerpts.UNIT_KINDS if protocol == PROTOCOL else None
     review_excerpts.validate_excerpts(output['excerpts'], INVALID_RESPONSE, kinds)
-    _require(isinstance(output['passage_requests'], list), 'passage_requests is a list')
+    _require(isinstance(output['passage_requests'], list), 'passage_requests is a list', path='/passage_requests')
     seen = set()
-    for request in output['passage_requests']:
-        required, optional = review_excerpts.find_identity_fields(request, kinds)
-        fields(request, ('id', 'anchor', 'characters') + required, optional, code=INVALID_RESPONSE)
-        text(request['id'], 'Passage request ID', code=INVALID_RESPONSE)
-        _require(request['id'] not in seen, 'Passage request IDs are unique')
-        seen.add(request['id'])
-        review_excerpts.validate_passage_request(request, INVALID_RESPONSE, kinds)
+    for index, request in enumerate(output['passage_requests']):
+        path = '/passage_requests/' + str(index)
+        identifier = request.get('id') if isinstance(request, dict) else None
+        context = {'request_id': identifier} if (
+            isinstance(identifier, str) and identifier.strip() and '\x00' not in identifier
+            and not any('\ud800' <= character <= '\udfff' for character in identifier)) else {}
+        with describe_error_at(path, **context):
+            required, optional = review_excerpts.find_identity_fields(request, kinds)
+            fields(request, ('id', 'anchor', 'characters') + required, optional, code=INVALID_RESPONSE, path=path)
+            with describe_error_at(path + '/id'):
+                text(request['id'], 'Passage request ID', code=INVALID_RESPONSE)
+                _require(request['id'] not in seen, 'Passage request IDs are unique')
+            seen.add(request['id'])
+            review_excerpts.validate_passage_request(request, INVALID_RESPONSE, kinds, path=path)
 
 
 def validate_turn_output(packet, output):
@@ -761,10 +773,12 @@ def validate_turn_output(packet, output):
         return
     _validate_reading_response(find_binding(packet), output, _find_protocol(packet))
     if final:
-        _require(bool(output['passage_requests']), 'A reading response in a final turn requests at least one passage')
+        _require(bool(output['passage_requests']), 'A reading response in a final turn requests at least one passage',
+                 path='/passage_requests', items=len(output['passage_requests']), minimum_items=1)
         allowance = packet[RECORD_KEY]['allowances']['passages']
         _require(allowance['used'] < allowance['characters'],
-                 'The passage allowance is used up; return the native result review')
+                 'The passage allowance is used up; return the native result review', path='/passage_requests',
+                 used_characters=allowance['used'], maximum_characters=allowance['characters'])
 
 
 def _list_legacy_texts(records, native):

@@ -14,7 +14,7 @@ import hashlib
 import json
 import unicodedata
 
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .operations import fields, text
 
 KEY = 'reviewer_excerpts'
@@ -315,42 +315,52 @@ def answer_passages(records, artifacts, requests, allowances, *, unit_sources=No
     return answers, dict(allowances, passages=allowance)
 
 
-def _require_record_kind(value, code):
+def _require_record_kind(value, code, *, path):
     if 'record_kind' in value and value['record_kind'] not in RECORD_KINDS:
-        raise ResearchError(code, 'A record_kind is literature_search, reading or problem_statement')
+        raise ResearchError(code, 'A record_kind is literature_search, reading or problem_statement',
+                            {'path': path + '/record_kind'})
 
 
-def validate_excerpts(values, code, kinds=None):
+def validate_excerpts(values, code, kinds=None, *, path='/excerpts'):
     """The shape of a reviewer's excerpts: a list of {version_id, text, purpose} with nonempty strings. With kinds, an
     excerpt names a reading unit of one of those kinds by the identity fields of that kind instead."""
     if not isinstance(values, list):
-        raise ResearchError(code, 'excerpts is a list of {version_id, text, purpose}')
-    for value in values:
+        raise ResearchError(code, 'excerpts is a list of {version_id, text, purpose}', {'path': path})
+    for index, value in enumerate(values):
+        item_path = path + '/' + str(index)
         required, optional = find_identity_fields(value, kinds)
-        fields(value, required + ('text', 'purpose'), optional, code=code)
+        fields(value, required + ('text', 'purpose'), optional, code=code, path=item_path)
         for key in required + optional + ('text', 'purpose'):
             if key in value:
-                text(value[key], 'Excerpt ' + key, code=code)
-        _require_record_kind(value, code)
+                with describe_error_at(item_path + '/' + key):
+                    text(value[key], 'Excerpt ' + key, code=code)
+        _require_record_kind(value, code, path=item_path)
 
 
-def validate_passage_request(request, code, kinds=None):
+def validate_passage_request(request, code, kinds=None, *, path=''):
     """The values of a passage request: an exact version, or with kinds the identity of a reading unit of one of those
     kinds, a verbatim anchor of at least 20 normalized characters and a whole number of characters from 1 to
     20,000."""
     from .bar_sources import require_exact_version
     required, optional = find_identity_fields(request, kinds)
     for key in required + optional:
-        if key == 'version_id':
-            require_exact_version(request[key], code)
-        elif key in request:
-            text(request[key], 'Passage ' + key, code=code)
-    _require_record_kind(request, code)
-    text(request['anchor'], 'Passage anchor', code=code)
-    if len(normalize_with_offsets(request['anchor'])[0]) < MINIMUM_PHRASE_CHARACTERS:
-        raise ResearchError(code, 'A passage anchor is a verbatim phrase of at least 20 characters')
+        with describe_error_at(path + '/' + key):
+            if key == 'version_id':
+                require_exact_version(request[key], code)
+            elif key in request:
+                text(request[key], 'Passage ' + key, code=code)
+    _require_record_kind(request, code, path=path)
+    with describe_error_at(path + '/anchor'):
+        text(request['anchor'], 'Passage anchor', code=code)
+    normalized_characters = len(normalize_with_offsets(request['anchor'])[0])
+    if normalized_characters < MINIMUM_PHRASE_CHARACTERS:
+        raise ResearchError(code, 'A passage anchor is a verbatim phrase of at least 20 characters',
+                            {'path': path + '/anchor', 'normalized_characters': normalized_characters,
+                             'minimum_characters': MINIMUM_PHRASE_CHARACTERS})
     if type(request['characters']) is not int or not 1 <= request['characters'] <= PASSAGE_CHARACTERS:
-        raise ResearchError(code, 'A passage has a whole number of characters from 1 to 20,000')
+        raise ResearchError(code, 'A passage has a whole number of characters from 1 to 20,000',
+                            {'path': path + '/characters', 'characters': request['characters'],
+                             'minimum_characters': 1, 'maximum_characters': PASSAGE_CHARACTERS})
 
 
 def carry_session(records, artifacts, packet, output):

@@ -337,7 +337,11 @@ class ClaudeResultTextTests(unittest.TestCase):
         text = json.dumps(output) + '\nRETRACTED\n' + json.dumps(invalid)
         attempt = self.assert_correction(text, invalid)
         self.assertEqual(self.classify_attempt(attempt),
-                         {'code': 'invalid_native_review', 'check': 'native.output', 'details': None})
+                         {'code': 'invalid_native_review', 'check': 'native.output', 'details': {
+                             'path': '/findings/policy',
+                             'message': 'findings.statement, findings.assumptions, findings.scope, findings.dependencies '
+                                        'and findings.policy must each be a nonempty string; in schema_version 2, '
+                                        'findings.openness is an object'}})
         with self.assertRaises(ResearchError):
             native_review.validate_output(self.native, self.read_json(attempt['output']))
 

@@ -227,7 +227,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         with patch("research_harness.review_refusal._record_refusal"), self.assertRaises(ResearchError) as caught:
             self.mutate(decisions.record_value_review, payload)
         self.assertEqual((caught.exception.code, caught.exception.details),
-                         ("review_evidence_undelivered", {"sha256": unsupplied["sha256"]}))
+                         ("review_evidence_undelivered", {"sha256": unsupplied["sha256"],
+                                                         "path": "/objections/0/evidence"}))
         records = self.store.snapshot()["records"]
         assignment = records["review_assignment"][payload["assignment_id"]]
         state = protocol.assignment_state(records, self.artifacts, assignment["id"])
@@ -373,8 +374,9 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         with self.assertRaises(ResearchError) as caught:
             self.observe("result", "first", output)
         self.assertEqual((caught.exception.code, caught.exception.details),
-                         ("review_evidence_undelivered", {key: output["objections"][0]["evidence"][0][key]
-                                                          for key in ("record_kind", "id", "digest")}))
+                         ("review_evidence_undelivered", dict(
+                             {key: output["objections"][0]["evidence"][0][key] for key in ("record_kind", "id", "digest")},
+                             path="/objections/0/evidence")))
         self.assertIn("problem_candidate candidate-1", caught.exception.message)
 
     def test_a_result_review_citing_a_record_without_a_digest_passes_the_frozen_audit(self):
@@ -402,7 +404,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         with self.assertRaises(ResearchError) as caught:
             self.observe("result", "first", output)
         self.assertEqual((caught.exception.code, caught.exception.details),
-                         ("review_evidence_undelivered", {"record_kind": "problem_candidate", "id": "candidate-1", "digest": None}))
+                         ("review_evidence_undelivered", {"record_kind": "problem_candidate", "id": "candidate-1", "digest": None,
+                                                         "path": "/objections/0/evidence"}))
 
     def test_a_stop_assurance_written_as_not_assessed_passes_the_gate(self):
         """The version 2 result prompt's own example writes the stop assurance as not_assessed with the reason that
@@ -523,7 +526,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         with self.assertRaises(ResearchError) as caught:
             self.observe("slate", "first", output)
         self.assertEqual((caught.exception.code, caught.exception.details), ("review_evidence_undelivered",
-                         {key: cited[key] for key in ("record_kind", "id", "digest")}))
+                         dict({key: cited[key] for key in ("record_kind", "id", "digest")}, path="/objections/0/evidence")))
 
     def test_the_bar_standards_attach_no_bytes_beyond_a_supplied_passage(self):
         """Astra's F3 reproduction: the adjudicator receives a passage-only source within its bounds."""
@@ -634,7 +637,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                 with self.assertRaises(ResearchError) as caught:
                     self.observe("result", reviewer, output)
                 self.assertEqual(caught.exception.code, code)
-        self.assertEqual(caught.exception.details, {"sha256": never_received["sha256"]})
+        self.assertEqual(caught.exception.details, {"sha256": never_received["sha256"], "path": "/objections/0/evidence"})
         self.assertNotIn(never_received["sha256"], {entry["artifact"]["sha256"] for entry in self.read_packet("result-second")["evidence"]})
 
     def test_result_packets_stored_with_raw_review_payloads_stay_complete(self):
@@ -846,7 +849,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         with self.assertRaises(ResearchError) as caught:
             self.observe("result", "first", output)
         self.assertEqual((caught.exception.code, caught.exception.details),
-                         ("review_evidence_undelivered", {"sha256": link["artifact"]["sha256"], "locator": link["locator"]}))
+                         ("review_evidence_undelivered", {"sha256": link["artifact"]["sha256"], "locator": link["locator"],
+                                                         "path": "/value/objection_findings/0/evidence"}))
 
     def test_a_citation_within_a_supplied_passage_is_recorded_and_delivered(self):
         output, _ = self.contest_on_a_span_of_the_unbound_unit(lambda text: 0, lambda text: len(text) // 4)
@@ -1015,7 +1019,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
             self.mutate(decisions.record_value_review,
                 dict(output, id="review-repaired-result", dossier_id=None, assignment_id="repaired-result"))
         self.assertEqual((caught.exception.code, caught.exception.details),
-                         ("review_evidence_undelivered", {"sha256": link["artifact"]["sha256"], "locator": link["locator"]}))
+                         ("review_evidence_undelivered", {"sha256": link["artifact"]["sha256"], "locator": link["locator"],
+                                                         "path": "/reassessment/findings/0/evidence"}))
 
     def test_legacy_undelivered_adjudication_blocks_post_and_refreshes_the_fixed_adjudicator(self):
         from research_harness.cli import status_report

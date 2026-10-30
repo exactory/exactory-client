@@ -89,11 +89,14 @@ def validate_evidence_contract(records, artifacts, values, *, required=True, pac
             raise
 
 
-def evidence_arrays(output):
+def evidence_arrays(output, *, with_paths=False):
     value = output['value']
-    return [value['evidence']] + [row['evidence'] for row in (
-        value['assurances'] + value['work_items'] + value['objection_findings'] + output['objections']
-        + output.get('reassessment', {}).get('findings', []))]
+    arrays = [('/value/evidence', value['evidence'])]
+    for path, rows in (('/value/assurances', value['assurances']), ('/value/work_items', value['work_items']),
+                       ('/value/objection_findings', value['objection_findings']), ('/objections', output['objections']),
+                       ('/reassessment/findings', output.get('reassessment', {}).get('findings', []))):
+        arrays.extend((path + '/' + str(index) + '/evidence', row['evidence']) for index, row in enumerate(rows))
+    return arrays if with_paths else [evidence for path, evidence in arrays]
 
 
 def classify_observed_output(records, artifacts, attempt_id):
@@ -125,7 +128,7 @@ def classify_observed_output(records, artifacts, attempt_id):
     except ResearchError as error:
         check = getattr(error, 'contract_check', None)
         if check is not None:
-            return {'code': error.code, 'details': error.details, 'check': check}
+            return {'code': error.code, 'details': dict(error.details or {}, message=error.message), 'check': check}
     except (ValueError, TypeError, KeyError):
         # Unavailable/malformed frozen inputs are not an output-contract finding.
         return None
