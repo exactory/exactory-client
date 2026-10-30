@@ -220,11 +220,14 @@ and do not change the other files, until the last review and prediction of the
 bundle are recorded. If `exactory-research status` lists a file under
 `bundle_drift`, run `exactory-research restore --bundle DIGEST` with the
 `bundle_digest` it reports, the `digest` that the pin returned. The command
-stores the current bytes of each differing file as a backup artifact, then
-writes the pinned bytes, and lists each file under `restored` with its
-`backup` reference. Keep that output: no record names a backup, and its `path`
-under `research/sources/objects/` is where you read the displaced edit back
-after the measurement, for the next revision.
+moves each differing file to `.restore-backup-<32 hexadecimal digits>` in its
+directory, stores the moved bytes as a backup artifact, then writes the pinned
+bytes, and lists each file under `restored` with its `backup` reference and
+its `backup_path`. Keep that output: no record names a backup. After the
+measurement, read the displaced edit back for the next revision from the
+moved file or from the backup's `path` under `research/sources/objects/`. An
+editor or a compiler that still had the file open continues to write to the
+moved file, not to the backup.
 
 Stage report: present the compiled draft, evidence scope and limitations, citation
 findings, and where refreshed searches changed the text. Include a citation map:

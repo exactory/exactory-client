@@ -646,10 +646,17 @@ workspace they do nothing.
   compaction), the hooks report managed controller actions and native status.
   Resume from `search status` and `search next`, then the selected native record.
   Reading status does not clear a pause or satisfy a current gate.
-- **Continue.** Continuation follows current controller authority, budgets,
-  pause state, and pending evidence or review. Native unfinished-work handling
-  retains its `EXACTORY_ATTACK_MAX` advance cap. A native completion marker
-  cannot close a broader managed objective with remaining obligations.
+- **Continue.** At each stop, the hook asks the controller (`hook-stop`)
+  whether the focused objective continues. The controller decides from its own
+  authority: budgets, pause state, and pending evidence or review. When the
+  objective has a next action, the hook blocks the stop and names that action.
+  When the objective is paused, resolved, blocked, handed off or waiting for an
+  execution, the session stops. The controller counts the stops of the
+  objective. At the fortieth it asks for one summary and pauses the objective.
+  Only an explicit authorized `search resume` clears the pause and starts a new
+  count. The bound is fixed. No environment variable changes it. A native
+  completion marker cannot close a broader managed objective with remaining
+  obligations.
 
 ## Citation report and hooks
 

@@ -209,9 +209,10 @@ pinned bytes. Before you record a review or a prediction, read
 `exactory-research status`: `bundle_drift` names each differing file while
 the measurement is incomplete. If it names one, run
 `exactory-research restore --bundle DIGEST` with the reported `bundle_digest`.
-The command keeps the current bytes of each differing file as a backup
-artifact before it writes the pinned bytes, and changes no record (the write
-skill's WORKSPACE.md, "The measurement").
+The command moves each differing file aside and stores its bytes as a backup
+artifact before it writes the pinned bytes, and changes no record. Its output
+names the moved file and the backup (the write skill's WORKSPACE.md, "The
+measurement").
 
 **Before deposit, run the dual-reviewer gate.** If the `santa-method` skill is
 installed, use it; the essential protocol is stated here in full either way. Launch

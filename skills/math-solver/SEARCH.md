@@ -1051,9 +1051,15 @@ reviewer adapter (`check_unsupported`).
 The invocation is `{id: AttemptID, assignment_id: ASSIGNMENT_ID}`. These are real
 reviewer calls and must remain within the user's authorized resources. Read the
 retained observed output and submit it unchanged in the appropriate native
-command. For native verification, save that exact input `ResultReview` as
-`verification-review.json`. The shared runner retains rejected result/recovery
-responses, but they cannot be converted into approve-only native records.
+command. On the Claude route that output can be the last object of an answer
+whose earlier objects were withdrawn. Each withdrawn object is followed by a line
+that is exactly `RETRACTED`. The whole original text stays in the response under
+`execution.result_text` with `self_corrected: true`. Submit the retained output,
+not the raw text. An answer with a second object and no marker, or with prose
+between the blocks, is a failed attempt on every route. For native verification,
+save that exact input `ResultReview` as `verification-review.json`. The shared
+runner retains rejected result/recovery responses, but they cannot be converted
+into approve-only native records.
 
 The packet retains the original objective and proof policy, exact subject,
 required scientific context, previous relevant strategy assessments and failures,
@@ -2403,8 +2409,11 @@ exhaustion and must be resolved through a bounded, explicitly authorized renewal
 `Store.append_operation(identity, expected_revision, request_id, build, validate=None)`
 is the internal service transaction API. Identity is exactly
 `{command,target,spec_digest}`. Identical replay and conflicting-ID checks precede
-the builder; stale new requests never call it. `build(isolated_document, content_sink)`
-returns `{command,target,spec_digest,operations,effects}`. The sink stages immutable
+the builder; stale new requests never call it. A replay therefore returns the
+committed event of its request before any packet validation. A new request with a
+new ID that reuses the same review output runs the builder and its fresh packet
+validation. `build(isolated_document, content_sink)` returns
+`{command,target,spec_digest,operations,effects}`. The sink stages immutable
 bytes in memory and supplies `put/get_blob` and `put/get_artifact`; it does not
 reacquire the writer lock. After pure validation succeeds, the same locked writer
 persists staged content and atomically replaces the event document. Callback
@@ -2420,7 +2429,10 @@ operations commit neither a prefix nor staged artifacts.
 
 Effects are `{kind:"initialize_workspace"|"preserve_manual_views",slug,snapshot_digest}`.
 Workspace effects pin an immutable `{directories:[RelativePath],files:[{path,digest}]}`
-snapshot. View-preservation effects use slug `.` and save original view bytes.
+snapshot. For an attack directory that already exists, the snapshot lists the three
+skeleton directories and only the absent files. Application therefore never replaces
+existing bytes, and the file list can be empty. Old snapshots replay unchanged.
+View-preservation effects use slug `.` and save original view bytes.
 The committed event is the durable intent. Idempotent filesystem application
 happens afterward, with content-bound `.search/effect-DIGEST.json`
 acknowledgements. Interrupted initialization does not imply an atomic transaction

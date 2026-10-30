@@ -709,7 +709,10 @@ prefix says nothing about the omitted events. `effort` is one of `low`,
 route limit is 1,300,000 characters of input; a larger request is refused before
 the CLI runs and recorded as a failed attempt. The recorded runtime names the
 isolation flags, not the installed CLI version, which is recorded with each
-invocation instead, so a CLI update does not invalidate earlier reviews. Like
+invocation instead, so a CLI update does not invalidate earlier reviews. The
+runtime also names the digest of the adapter module, which the route pins. After
+a plugin update that changes the module, record and probe a new Claude route.
+Reviews bound on earlier routes stay verifiable against their own pins. Like
 the Codex route it accepts text evidence only. The API credentials of the parent
 session are not passed to the reviewer process.
 

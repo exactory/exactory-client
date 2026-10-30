@@ -206,14 +206,19 @@ still to be recorded. `exactory-research status` names each such file under
 `bundle_drift`, `{bundle_id, bundle_digest, files: [{path, code}]}`, while the
 measurement is incomplete, and `status --summary` carries the same list with
 long names cut. `exactory-research restore --bundle DIGEST`, with that
-`bundle_digest`, writes the pinned bytes back. It first stores the current
-bytes of each differing file as an `application/octet-stream` artifact, then
-writes the pinned bytes, and returns `{revision, bundle_id, bundle_digest,
-restored: [{path, artifact, backup}], unchanged: [path, ...]}`. `backup` is
-`{sha256, path, size, media_type}` of the stored copy, or null for a file that
-was missing. The bytes are at that `path`, under `research/sources/objects/`.
-The command records nothing, so no record names a backup. Keep the output, or
-the `sha256`, to read the displaced edit back once the measurement is complete.
+`bundle_digest`, writes the pinned bytes back. For each differing file it first
+moves the current file to `.restore-backup-<32 hexadecimal digits>` in the same
+directory and stores the moved bytes as an `application/octet-stream` artifact,
+then writes the pinned bytes at the path. It returns `{revision, bundle_id,
+bundle_digest, restored: [{path, artifact, backup, backup_path}], unchanged:
+[path, ...]}`. `backup` is `{sha256, path, size, media_type}` of the stored
+copy, with the bytes at that `path` under `research/sources/objects/`, and
+`backup_path` is the moved file, which stays in the working tree. Both are
+null for a file that was missing. The command records nothing, so no record
+names a backup. Keep the output, or the `sha256`, to read the displaced edit
+back once the measurement is complete. An editor or a compiler that still had
+the file open continues to write to the moved file, not to the stored copy, so
+read `backup_path` for an edit that continued after the restore.
 
 ## Commits and reverts (the improvement loop)
 
@@ -235,9 +240,10 @@ current status and records. Unmeasured changes are preserved until understood;
 they are not automatically reset. Respect a user's local-only artifact policy.
 `exactory-research restore --bundle DIGEST` is a file operation, not a commit or
 a revert: it writes a recorded bundle's pinned files back to their paths, keeps
-the replaced bytes as backup artifacts, and changes no record, selection or
-review. An edit that a restore displaced is read back from the backup's `path`
-in the restore output, `research/sources/objects/<sha256>`.
+each replaced file as a moved file next to its path and as a backup artifact,
+and changes no record, selection or review. An edit that a restore displaced is
+read back from the moved file, `backup_path` in the restore output, or from the
+backup's `path`, `research/sources/objects/<sha256>`.
 
 For publication, pin the exact current manuscript bundle and export its actual
 bytes for two independent blind assessors through the verified assignment

@@ -1007,14 +1007,18 @@ from its pinned bytes. Do not recompile the PDF or change those files while a
 review or a prediction of the bundle is still to be recorded. `status` names
 each differing file under `bundle_drift`, with the bundle's `bundle_digest`,
 while the measurement is incomplete. `exactory-research restore --bundle DIGEST`
-writes the pinned bytes back. It first stores the current bytes of each
-differing file as a backup artifact and reports it under `restored` as
-`backup`, `{sha256, path, size, media_type}`, with the bytes at that `path`
-under `research/sources/objects/`. It records nothing, so keep its output: no
-record names a backup. Once the measurement is complete, read the backup back
-to continue the displaced edit in the next revision. The same command restores
-the files of any recorded bundle, for example the measured bundle before its
-deposit.
+writes the pinned bytes back. It first moves each differing file to
+`.restore-backup-<32 hexadecimal digits>` in its directory and stores the moved
+bytes as a backup artifact, then writes the pinned bytes. It reports each file
+under `restored` as `{path, artifact, backup, backup_path}`: `backup` is
+`{sha256, path, size, media_type}`, with the bytes at that `path` under
+`research/sources/objects/`, and `backup_path` is the moved file, which stays
+in the working tree. It records nothing, so keep its output: no record names a
+backup. Once the measurement is complete, read the displaced edit back from
+either copy to continue it in the next revision. An editor or a compiler that
+still had the file open continues to write to the moved file only. The same
+command restores the files of any recorded bundle, for example the measured
+bundle before its deposit.
 
 Managed publication uses the current exact bundle, two applicable accepting
 reviews, current decision requirements and existing citation/remote receipt checks.

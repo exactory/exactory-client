@@ -1106,20 +1106,23 @@
       "version_id": "arxiv:2601.00001v1",
       "source_id": "SOURCE_ID",
       "artifact": {
-        "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
-        "path": "research/sources/objects/0000000000000000000000000000000000000000000000000000000000000000",
-        "size": 15,
-        "media_type": "text/plain"
+        "sha256": "9cd789e020760af93337723ca9245baf6bea6855385a78703edcf9e6ba12b127",
+        "path": "research/sources/objects/9cd789e020760af93337723ca9245baf6bea6855385a78703edcf9e6ba12b127",
+        "size": 326,
+        "media_type": "text/html"
       },
       "locator": {
-        "kind": "span",
-        "start": 0,
-        "end": 15,
-        "sha256": "012bf3924437baf5382a1783506c0eb7c5a1f9926a1f047ca4be7ed992bed9f9",
-        "excerpt": "Source passage."
+        "kind": "html",
+        "anchor": {
+          "kind": "span",
+          "start": 255,
+          "end": 286,
+          "sha256": "636e0fdff11e212b5f976471996fe6001740dad1a6125418793811e0cd2f86b1",
+          "excerpt": "Figure 1: The bounded sequence."
+        }
       }
     },
-    "url": "https://example.org/figure.png",
+    "url": "https://arxiv.org/html/2601.00001v1/x1.png",
     "max_requests": 2
   },
   "standards": {
