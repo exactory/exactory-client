@@ -130,6 +130,18 @@ Keep an uncertain hit and its later explicit `resolved` search judgment bound:
 `minimum.duplicate_resolutions: [{search_digest, work_id, canonical_work_id}]`
 to a fully read `relevant` or `contradictory` source in that search.
 
+A result review that binds an `OpennessMinimum` is delivered complete. When its
+captured responses, full texts and records do not fit one input of the text
+route complete, or together exceed 120,000 characters, `review-assignment` reads
+them as a reading chain of fresh inputs, the math form of the problem openness
+chain, and the final turn is the native review with the reading record
+(`../SEARCH.md#observed-native-review-delivery`). `accept` and `complete` follow
+the chain from the attested first turn to its final turn, verify every turn
+against the actual recorded requests, and store the derived `reading_turns` on
+the acceptance or closure. Every audit of that acceptance or closure verifies
+the chain again and compares the receipts. Single-turn reviews, historical
+records and the scientific checks are unchanged.
+
 Native imports retain raw and canonical identities and use the shared probe-origin
 resolver in the objective's associated common review store. Fresh dependencies
 and strategy decisions cannot gain credit from copied or JSON-wrapped exploratory

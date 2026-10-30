@@ -1869,7 +1869,10 @@ input limit, and those units together are at most 120,000 characters (the
 reading budget of one turn). In every other case the openness review reads the
 packet in a reading chain of several turns: `review-assignment` records
 `reading_chain: {first_assignment_id, turn}` on the assignment, which becomes
-reading turn 1. Native result reviews of math-solver objectives keep their
+reading turn 1. A native result review of a math-solver objective whose packet
+binds `scientific_context.openness_minimum` outside problem creation follows
+the same rule with its own units and protocol, described after the problem
+chain below. A native result review without an openness minimum keeps its
 single turn.
 
 A reading unit has a kind and an identity. A `fulltext` unit is the extracted
@@ -1893,8 +1896,9 @@ the selected representation of each version is read. A record arrives as the
 exact JSON text of
 the artifact that the packet carries, so the unit is the same bytes that the
 final turn and `problem-openness` see. The `search_response` kind is accepted
-by the splitter, the checks and the chain verification, for chains that
-deliver captured responses; a problem-openness chain delivers none. A unit of
+by the splitter, the checks and the chain verification. A problem-openness
+chain delivers none, and the math chain below delivers the captured responses
+of its bound searches. A unit of
 at most 120,000 characters is delivered whole. A longer unit is cut into parts
 by the rule of the excerpt rules above, and each part is saved as its own text
 artifact; a part of a record or of a captured response is saved as plain text
@@ -2070,6 +2074,48 @@ whose final turn returned passage requests, therefore reads its records next,
 and the final turn follows. A final turn that returned the native result still
 ends its chain.
 
+A native result review of a math-solver objective reads its packet in the same
+chain when the packet binds `scientific_context.openness_minimum` outside
+problem creation: a checkpoint review or the closure review of `exactory-math
+search`. Its protocol is `exactory-openness-reading-math-v1`, with its own
+prompts. Its units come in three groups. First, the captured responses of the
+bound searches (`search_response`, by `source_id` with `text_sha256`), in the
+order of `minimum.searches` and then of each search record's `responses`, each
+source once. Second, the extracted full text of the main capture of the
+original that each bound reading's source bundle pins (`fulltext`, by
+`version_id` with `text_sha256`), by version id and text digest. Third, the
+bound search records in the order of the minimum and the reading records by
+record id. The packet must carry every response body, text and record as
+evidence. A missing one refuses the assignment with
+`openness_reading_incomplete`, and a capture recorded after the export never
+enlarges the chain. There is no statement record: `reading_turn.statement` is
+the native subject, the checkpoint or the closure subject, and
+`reading_turn.formulations` holds the statement and the neighbours of the
+minimum. The turn packets, the reading record, the budget, the parts, the
+excerpt and passage rules and the final turn are those of the problem chain.
+The final turn withholds the full texts largest first, then the captured
+responses, the reading records and the search records, each kind largest first,
+and then the earliest notes. Two rules are added. A reading answer in a final
+turn must request at least one passage that the harness delivers from a bound
+body within the remaining allowance. An answer whose requests are all not
+found, name no single stored body or exceed the allowance is refused with
+`invalid_reading_response` (`details.path` `/passage_requests`),
+`review-assignment` does not continue from it, and the same assignment runs
+again under a new `review-run` invocation. The chain is also verified at the
+controller, not by `problem-openness`. `exactory-math search accept` and
+`search complete` resolve the review's attestation, which names the first turn,
+to the effective terminal turn: a turn that ended without output and was
+replaced is history, and a second live continuation is
+`review_source_continuation_fork`. They require every turn to keep the native
+packet, route, reviewer, author, protocol and prompt of the first turn and to
+carry the reading record that the observed outputs of the earlier turns give,
+the final turn to withhold only bodies that reading turns delivered complete,
+and the chain to end at its first final turn that returns the native result.
+They store `reading_turns` on the acceptance or closure, and every later audit
+of that record follows the chain again and compares them. The math-solver
+`SEARCH.md` describes the receipts. A minimum whose units fit one turn stays a
+single native turn.
+
 Refusal codes of a reading chain:
 
 - `review_input_too_large`: the first unit of a reading turn does not fit
@@ -2081,13 +2127,16 @@ Refusal codes of a reading chain:
   `input_characters`, `input_limit_characters` and `parts`.
 - `invalid_reading_response`: a malformed reading answer, an excerpt or passage
   request with mixed identity fields, a reading answer in a final turn without
-  a passage request, or one after the passage allowance is used up.
-  `review-run` records it as an output refusal, and `review-assignment` refuses
-  to continue from it.
+  a passage request, one after the passage allowance is used up, or, in a math
+  chain, a reading answer in a final turn whose passage requests all deliver no
+  characters. `review-run` records it as an output refusal, and
+  `review-assignment` refuses to continue from it.
 - `review_source_continuation_mismatch`: the next turn names another packet,
   reviewer, route or author, or a turn that is not part of a reading chain.
 - `review_source_continuation_fork`: another turn already continues the named
-  turn, and that turn has a completed output or has not run.
+  turn, and that turn has a completed output or has not run. At `search accept`
+  or `search complete` of a math chain, one turn has more than one live
+  continuation.
 - `review_assignment_replaced`: the named turn ended without output and a later
   turn of the same parent replaced it; it can be neither run nor continued.
 - `review_source_continuation_unverified`: the named turn has no observed,
@@ -2102,6 +2151,14 @@ Refusal codes of a reading chain:
   identity, with `missing_parts` for a unit delivered in parts, and
   `details.version_ids` lists the missing full texts as before), a chain with
   a missing turn, or a reading record that no longer names the observed turns.
+  For a math chain the controller reports it as the `cause` of
+  `review_context_unverified`, also for a packet that does not carry a bound
+  response body, text or record, a chain that has not reached a final turn with
+  the native result, a turn whose binding, protocol, prompt or reading record
+  differs from what the chain gives, a final turn that withholds a body outside
+  the delivered prefix, and a chain that continues after a native result.
+  Recorded `reading_turns` that differ from the chain verified now are
+  `openness_reading_incomplete` itself, raised by the controller.
 
 When a local supporting proof is material, the spec also accepts optional
 `native_reviews: [{attempt_id, assignment_id}]`. Each entry names the current

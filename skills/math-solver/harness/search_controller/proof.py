@@ -214,7 +214,7 @@ def validate_reading_turns(turns):
         if unit["kind"] == "record":
             s.choice(unit["record_kind"], RECORD_KINDS)
 
-    s.require(bool(s.records(turns)), "Reading turns name the turns of their chain")
+    s.require(bool(s.records(turns)), "Reading turns name at least one turn")
     for turn in turns:
         s.closed(turn, "assignment_id attempt_id delivered_units" +
                  (" delivered_parts" if isinstance(turn, dict) and "delivered_parts" in turn else ""))
@@ -228,7 +228,8 @@ def validate_reading_turns(turns):
             s.integer(part["part"], 1, part["parts"])
             s.integer(part["start"])
             s.integer(part["end"], part["start"] + 1)
-            s.require(part["characters"] == part["end"] - part["start"], "A part's characters are its end minus start")
+            s.require(part["characters"] == part["end"] - part["start"],
+                      "The characters of a part equal its end minus its start")
 
 
 def accept_result(state, payload):

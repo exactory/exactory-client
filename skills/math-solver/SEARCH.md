@@ -1000,12 +1000,38 @@ bundles. The reviewer returns that same declaration as `findings.openness.minimu
 and binds its search and reading digests in `findings.openness.evidence`. The
 records must exist in this objective's associated common review store; copying a
 record from another workspace does not establish that association.
-`OpennessMinimum` has no delivery priority of full texts, so a text route cannot
-withhold this packet's full texts by priority; it still omits binary originals,
+`OpennessMinimum` has no delivery priority of full texts, and a text route never
+withholds a body of this packet by priority. It still omits binary originals,
 which a text route never carries. A problem record exports its openness packet
-with `exactory-research export --kind problem-openness` instead, whose
-`minimum.text_priority` lets a text route withhold full-text bodies in a declared
-order.
+with `exactory-research export --kind problem-openness` instead.
+
+The reviewer reads the whole packet. Its reading units are the captured
+responses of the bound searches, the extracted full texts of the originals that
+the bound readings pin, and the bound search and reading records, each record as
+its exact JSON text. On a text route (`claude_cli_v1` with an input limit of
+1,300,000 characters, `codex_cli_v1` and `codex_cli_framed_v1` with 1,048,576)
+the packet stays a single turn only when those units together are at most
+120,000 characters and the fitted request carries each of them complete within
+the limit. On a route without a local input limit the packet stays a single
+turn. In every other case `review-assignment` starts a reading chain under
+the protocol `exactory-openness-reading-math-v1`, the math form of the chain
+that a problem openness review uses. It records `reading_chain:
+{first_assignment_id, turn}` on the assignment, which becomes reading turn 1,
+and builds that turn. Each reading turn delivers at most 120,000 characters of
+new unit text, whole units or consecutive parts of a longer body, in this order:
+the captured responses in the order of `minimum.searches` and then of each
+search record's `responses`, the full texts by version id and text digest, the
+search records in the order of the minimum, and the reading records by record
+id. The native subject, a checkpoint or the closure subject, stays the subject
+of the review, and the chain delivers no statement record. The reviewer returns
+notes and verbatim excerpts, which the harness checks against the bound bodies,
+and can request bounded passages. Every turn is a fresh input, and a compact
+reading record carries the earlier turns. The packet must carry every response
+body, full text and record as evidence. A missing one refuses the assignment
+with `openness_reading_incomplete`, and a capture recorded after the export
+never enlarges the chain. The [CLI reference](../../docs/research-cli.md#problem-creation)
+describes the turn packets, the reading record, the excerpt and passage rules,
+the final turn and the refusal codes.
 
 ```sh
 exactory-math --attack-root attack search review-packet --spec native-review.json --json
@@ -1060,6 +1086,37 @@ between the blocks, is a failed attempt on every route. For native verification,
 save that exact input `ResultReview` as `verification-review.json`. The shared
 runner retains rejected result/recovery responses, but they cannot be converted
 into approve-only native records.
+
+In a reading chain, run reading turn 1 with `review-run`. Then assign the next
+turn with the same reviewer, route, author and packet and with `context:
+{native_packet, prior_assignment_id}` that names the previous turn, and run it.
+The previous turn must be ready and its answer a valid reading answer. The
+harness checks the excerpts of that answer, answers its passage requests, and
+builds the next reading turn while units remain. After the last reading turn the
+next assignment is the final turn: the native packet with the reading record of
+the earlier turns, on the prompt of the final turn. Only as far as its request
+needs to fit the route limit, the final turn withholds bodies that reading turns
+delivered complete (full texts largest first, then captured responses, reading
+records and search records), then the notes of the earliest turns, and never an
+excerpt or a passage. The final turn returns the `ResultReview`, or a reading
+answer with at least one passage request while the passage allowance has
+characters left. A further final turn, assigned in the same way, then delivers
+those passages. At least one request of such an answer must deliver characters.
+An answer whose requests all have an absent anchor, name no single stored body,
+or exceed the remaining allowance is refused with `invalid_reading_response`.
+Run the same assignment again with `review-run` under a new invocation id. When
+every attempt of a turn ended without a completed output, for example at the
+route timeout, assign the next turn again with the same `prior_assignment_id`.
+The new assignment replaces the failed turn, which can no longer run or be
+continued (`review_assignment_replaced`). A second live continuation of one turn
+is refused with `review_source_continuation_fork`. When the first unit of a
+reading turn does not fit the route alone, or the final turn does not fit after
+every withholding, `review-assignment` refuses with `review_input_too_large`.
+For the final turn the details give the sizes of the base packet, the notes, the
+excerpts and the passages. Submit the native output of the final turn unchanged.
+Its `attestation_id` names the first turn, the assignment id chosen before the
+export. `accept` and `complete` follow the chain from that turn to its terminal
+turn and verify every turn.
 
 The packet retains the original objective and proof policy, exact subject,
 required scientific context, previous relevant strategy assessments and failures,
@@ -1303,7 +1360,10 @@ pinned journal prefix really belongs to this producer, the move was properly
 reserved and journalled, and the admitted milestone corresponds to the actual
 result snapshot. A matching integer move number alone is not that check.
 
-New `AcceptanceInput` has exactly (recorded version 1 omits `claims_openness`):
+New `AcceptanceInput` has exactly the fields below (recorded version 1 omits
+`claims_openness`). When the review came from a reading chain, the stored record
+also carries the derived `reading_turns`, described with the stored acceptance
+fields below, which callers never submit:
 
 ```text
 schema_version: 2
@@ -1468,6 +1528,24 @@ Historical invalidation does not grant a fresh research allowance either.
 New accepted claims/reductions/obstructions can qualify. Semantic duplication
 still requires the admission/result review boundary.
 
+An acceptance whose review came from a reading chain also stores `reading_turns:
+[{assignment_id, attempt_id, delivered_units: [{kind, <identity>}],
+delivered_parts?: [{kind, <identity>, part, parts, start, end, characters}]}]`,
+one entry per turn of the chain, the final turn included: the units whose whole
+body, and the parts whose exact slice, the actual recorded request of that turn
+delivered complete. `accept` derives it from the verified chain, adds it to the
+stored `AcceptanceInput` and recomputes the acceptance digest. The `accept` spec
+stays closed to its listed fields, so callers cannot submit it. A review of a
+single turn stores no receipts. Every audit of a recorded acceptance or closure,
+in `search audit`, in a status with a full audit, before `accept`, `complete`
+and `reassess`, and in the dependency audits, follows the chain again, verifies
+every turn and requires the recorded receipts to equal the receipts verified
+now. A chain that no longer verifies is `review_context_unverified` with the
+cause `openness_reading_incomplete`. A receipt that differs is
+`openness_reading_incomplete` itself ("The recorded reading turns changed").
+Either failure makes the acceptance fail that audit. The scientific checks of
+the review, `audit_minimum` included, are unchanged.
+
 `qualifying_progress` consumes the full checkpoint digest and accepted status as
 before, and now also requires derived `progress_eligible` for Task 3 records.
 Historical minimal Task 2 fixture records retain compatibility. Renewal identity
@@ -1515,7 +1593,9 @@ with accepted root counterexample requires the host to report that conflict and
 request user direction, while accurately retaining outcome `counterexample` or
 proof status `disproved`.
 
-`Closure` is `{subject: ClosureSubject, review: ResultReview, audit: ClosureAudit}`.
+`Closure` is `{subject: ClosureSubject, review: ResultReview, audit: ClosureAudit}`,
+with the derived `reading_turns` of the acceptance receipts when the review came
+from a reading chain.
 Here ResultReview's subject digest covers `ClosureSubject`, and its claim digest
 is the original claim digest. Its reviewer is independent of every local producer.
 
@@ -1559,6 +1639,16 @@ the final openness milestone and root closure, retaining accepted proofs and the
 previous closure bytes. This conservatively requires reassessment for new native
 scientific evidence without making current common preparation a currency gate.
 Recorded version 1 closures replay unchanged.
+
+The closure review is its own observed review. Export the closure subject as a
+`result` packet with the complete current `OpennessMinimum`, run it, as a
+reading chain when the packet exceeds a single turn, and submit the output of
+its final turn with `search complete`. A checkpoint review cannot stand in for
+it: the closure binds the exact subject digest of the closure subject. A closure
+whose review came from a chain also stores `reading_turns` in the shape of the
+acceptance receipts. `complete` derives them from the verified chain, and every
+audit of the closure compares them as for an acceptance. The requirements on the
+finding do not change.
 
 `search status` derives `openness` without appending an event: `status` is `pending`
 until the final review and closure, `accepted` after version 2 closure, or

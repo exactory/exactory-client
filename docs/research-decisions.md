@@ -434,6 +434,24 @@ a compact reading record and withholds, only as far as its measured request
 needs, the bodies that reading turns delivered complete and then the notes of
 the earliest turns, never an excerpt or a passage.
 
+A math-solver result review that binds an openness minimum, a checkpoint review
+or the closure review, reads its packet in the same chain since 0.67.0, under
+the protocol `exactory-openness-reading-math-v1`. On 2026-10-24 the result
+review of a proof checkpoint with its openness minimum was refused with
+`review_input_too_large`: the packet was 2,764,871 bytes, with 1,843,216 bytes
+of captured responses in five bound searches and four full readings of 377,759
+bytes, above both route limits, and a native result review then had a single
+turn. A delivery priority on the minimum, under which the route withholds the
+bodies declared least decisive, was considered and not adopted: a withheld body
+is a body the reviewer did not read, and a request for the withheld bodies
+together repeats the capacity failure. The chain delivers every captured
+response, pinned full text and bound record complete over turns of at most
+120,000 new characters, and the final turn withholds only bodies that reading
+turns delivered complete. A passage request in a final turn must deliver
+characters, so a chain cannot continue on requests that find nothing. The
+controller follows the chain from the attested first turn to the terminal turn,
+verifies every turn and stores the receipts on the acceptance or closure.
+
 External-paper verification uses the `verification` role with `dossier_id: null`
 and `context: {"verification_task_id": "<bound task digest>"}`. It requires the
 same verified actual context but no author strategy or research-decision gates.

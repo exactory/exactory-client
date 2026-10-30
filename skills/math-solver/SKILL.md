@@ -184,6 +184,20 @@ Fresh resolved reviews must include other material searches for the same
 formulations, including new settling evidence. The packet delivers the actual
 common records, captured responses and source bundles. A proof manifest alone
 cannot establish openness. See `SEARCH.md` for the exact fields and refusal codes.
+On a text route with a local input limit (`claude_cli_v1`, `codex_cli_v1` or
+`codex_cli_framed_v1`), a packet whose captured responses, full texts and
+records do not fit one input complete, or together exceed 120,000 characters, is
+read as a reading chain (`SEARCH.md#observed-native-review-delivery`):
+`review-assignment` records `reading_chain` on the first assignment. Run each
+turn with `review-run`, assign the next turn with the same reviewer, route,
+author and packet and with `context.prior_assignment_id`, and submit the native
+output of the final turn unchanged to `search accept` or `search complete`. The
+service verifies the whole chain and stores its `reading_turns` on the
+acceptance or closure. Replace a turn whose attempts all ended without output by
+assigning the next turn again with the same `prior_assignment_id`. A final turn
+that cannot judge yet requests passages that deliver characters. Reading in a
+chain changes no requirement of the finding: an unavailable decisive source
+stays a gap, and the finding stays unresolved.
 Keep earlier uncertain hits and their explicit later `resolved` judgments in the
 bound searches. An `out_of_scope` resolution removes the uncertain hit's reading
 obligation. A `duplicate` requires `minimum.duplicate_resolutions` with
@@ -346,7 +360,7 @@ Produces: `units/<n>/draft.md` and `units/<n>/evaluation.md` for every unit dire
 
 1. Draft. The unit directory is the evidence package: `unit.json`, the file at its `evidence` path, the novelty record, and the journal excerpt (the moves listed under `moves`, copied from `journal.jsonl`). The draft, written to `units/<n>/draft.md`, states the unit's claim as `statement` in `unit.json` reads, quantifier by quantifier. Every claim in the draft points to the proof text or to a deterministic step directory with `result.json`; a claim with neither behind it is removed before drafting. Every reference in the draft carries the identifier (DOI, arXiv id, or URL) recorded for it in `known` of `problem.json`, in `novelty.md`, or in a `study/` record. The venue follows the unit's position relative to the target, on the path or off to the side, as `CASHOUT.md` states.
 2. Evaluate. Before the draft leaves the workspace, a reader who did not write it reads it against the evidence package under the self-check in `CASHOUT.md`, resolves every reference to its identifier, and compares the draft's statement with `unit.json`, and writes the findings to `units/<n>/evaluation.md`. The draft passes when every claim points to its evidence, every reference resolves, and the statement is the unit's; otherwise it returns to step 1 with the reader's findings, and `check-unit` is re-run when `unit.json` changed.
-3. Run `finish <slug>`. It writes `units/FINISHED.json` with the numbers of the units that stand, and the native attack is locally done. An attack that ended at stage 3 runs `finish` as well: with no move and no inventory it accepts the workspace on a non-empty `study/problem.md` and `novelty.md`, and records the local outcome as solved-in-literature. Return the local result, accepted evidence, and all remaining obligation IDs to the controller. If `search next` reports another ready node, continue it. If it reports `finalize_root`, read its `closure_blocking_node_ids`. While the list names an admitted standalone node, finish or retreat that node first. `search complete` refuses with `standalone_closure_pending` until the list is empty. Then run the independent closure review and `search complete` using `SEARCH.md#final-closure-and-local-delivery`; only successful completion changes the root proof status. For every objective, including prove or disprove requests, an unresolved openness finding keeps closure pending even when the proof is accepted. The final finding must be `supported_open` or `already_solved`. A required formalization or other original deliverable remains required after either finding and after a literature finish. Do not start an unrelated alternative while root-ready evidence awaits audit and completion.
+3. Run `finish <slug>`. It writes `units/FINISHED.json` with the numbers of the units that stand, and the native attack is locally done. An attack that ended at stage 3 runs `finish` as well: with no move and no inventory it accepts the workspace on a non-empty `study/problem.md` and `novelty.md`, and records the local outcome as solved-in-literature. Return the local result, accepted evidence, and all remaining obligation IDs to the controller. If `search next` reports another ready node, continue it. If it reports `finalize_root`, read its `closure_blocking_node_ids`. While the list names an admitted standalone node, finish or retreat that node first. `search complete` refuses with `standalone_closure_pending` until the list is empty. Then run the independent closure review, as a reading chain when its packet exceeds one turn, and `search complete` using `SEARCH.md#final-closure-and-local-delivery`; only successful completion changes the root proof status. For every objective, including prove or disprove requests, an unresolved openness finding keeps closure pending even when the proof is accepted. The final finding must be `supported_open` or `already_solved`. A required formalization or other original deliverable remains required after either finding and after a literature finish. Do not start an unrelated alternative while root-ready evidence awaits audit and completion.
 
 ## Red flags
 

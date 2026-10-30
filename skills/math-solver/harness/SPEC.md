@@ -46,6 +46,14 @@ has a `minimum.duplicate_resolutions` binding (`search_digest`, `work_id`,
 that decisive canonical source needs full reading. Decisive judgments retain
 their obligations; a missing canonical binding or reading is `openness_reading_gap`.
 
+The observed packet is read complete. On a text route with a local input limit
+(`claude_cli_v1`, `codex_cli_v1` or `codex_cli_framed_v1`), a packet whose
+captured responses, full texts and records do not fit one input complete, or
+together exceed 120,000 characters, is read as a reading chain
+(`../SEARCH.md#observed-native-review-delivery`). The service stores the chain's
+derived `reading_turns` on the acceptance or closure and compares them in every
+audit of that record.
+
 Native evidence import records original and canonical content identities and
 resolves shared exploratory probe origins in the associated common store.
 Fresh checkpoint, admission, strategy, computation and acceptance dependency
