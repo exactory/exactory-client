@@ -114,6 +114,12 @@ exactory-research probe-intent --file probe-intent.json --expected-revision REVI
 exactory-research probe --file probe.json --expected-revision REVISION --request-id outcome-finite-example-001
 ```
 
+Both accept `--check`, which reports the first refusal of the payload, for
+example `probe_intent_missing` for an outcome without an intent, and reserves and
+charges nothing; `exactory-lab probe` has no check mode. A check of `artifact` on
+a probe path is refused with `check_unsupported`, because that pin commits in two
+steps.
+
 The launcher persists `supervision.json` with the worker and program start
 identities, process group and frozen deadline. An independent watchdog enforces
 that deadline after worker loss even without another CLI invocation. It writes

@@ -31,6 +31,15 @@ at every stage. State each call's question, depth and authorized budget; record
 effective amounts, actual work, coverage, stopping reason and cost. Tool records
 grant no approval. Independent assessment is a condition attached to a claim.
 
+Every mutation accepts `--check`: the command validates its payload against one
+snapshot of the store, reports the first refusal or an acceptance, and writes
+nothing. A check is a diagnostic. It satisfies no gate, records no plan,
+admission, attempt, review or decision, and is no evidence that a reviewer or a
+tool can cite. The write that follows validates again. Acquisitions, reviewer
+calls, reconciliations and projections refuse the flag. The
+[CLI reference](research-cli.md#inputs-and-receipts) states the output and the
+refusals.
+
 A gate requires the claim type's fixed minimum and independent assessment of
 whether its evidence is sufficient. Choose tool order and additional depth to
 answer the research question. A quick probe may inform the first direction or a

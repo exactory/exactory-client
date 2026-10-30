@@ -161,7 +161,10 @@ under the current decision before running its prospective test. Pin its actual p
 with `artifact`, `admit` the exact plan with the resource reservation, then
 `bind-run` its backend, seed, timeout, input paths, and expected outputs. Follow the
 executable recipe in the workflow. Changes to these choices require a current
-matching admission, including a fallback from unavailable compute.
+matching admission, including a fallback from unavailable compute. `cycle --check`
+and `admit --check` report the first refusal, for example a scope refusal, without
+recording. An accepted check is no recorded plan or admission: `admit` still needs
+the recorded `cycle`, and the launch the recorded admission.
 
 The draft layer may be initialized once the title and category are known with
 `exactory-draft init`; this creates a pending layout and does not authorize writing.

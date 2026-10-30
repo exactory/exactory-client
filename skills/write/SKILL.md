@@ -192,7 +192,11 @@ reference, and `mismatches` in the details lists every pair.
 
 Pin the exact PDF, abstract, bibliography, claims, and optional sources with
 `exactory-research manuscript`, including actual claim-to-evidence mappings and
-`citation_accounting`. The pin accounts for every work that the study read in
+`citation_accounting`. `manuscript --check` runs the pin's validation on one
+snapshot of the store with the files staged in memory: it reports the first
+refusal, for example `publication_evidence_mismatch`, or an acceptance, and
+records no bundle, so the pin that follows validates again. The pin accounts for
+every work that the study read in
 full and every work that a selected five-purpose search cites. A BibTeX entry
 cites such a work when it carries the work's arXiv family or DOI, or a DOI of a
 stored alias, or has the work's title as its title. Pin once without

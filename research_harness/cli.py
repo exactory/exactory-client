@@ -211,7 +211,12 @@ def build_parser():
             description="Use --file with the typed JSON shape in docs/research-cli.md. Saved assertions and downloads are not successful readings.")
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
-        item.add_argument("--check", action="store_true")
+        item.add_argument("--check", action="store_true",
+                          help="Validate the payload against one snapshot of the existing store, print the first "
+                               "refusal or {check: accepted, revision, recorded: false, ...}, and write nothing: an "
+                               "accepted check is no record. A request ID already committed returns its original "
+                               "receipt. Acquisitions, reviewer calls, reconciliations and a preparation that needs "
+                               "the reviewer CLI, a PDF tool or a second commit refuse with check_unsupported.")
         add_identity(item, required=command != "import-response")
         if command == "import-response":
             item.add_argument("--preview", action="store_true",
@@ -230,7 +235,9 @@ def build_parser():
                   "recover": "Explicitly recover a hot SQLite journal without migrating or certifying research."}[command])
         item.add_argument("--workspace", default=".")
         if command in ("batches", "export", "recover"):
-            item.add_argument("--check", action="store_true")
+            item.add_argument("--check", action="store_true",
+                              help="Refused with check_unsupported: this command writes files or recovery state "
+                                   "outside the store, which check mode does not simulate.")
         if command == "check-claims":
             item.add_argument("--file", required=True, help="The claim_evidence array of a manuscript payload, "
                               "or the whole payload, as UTF-8 JSON without duplicate keys or nonfinite numbers.")
@@ -290,7 +297,9 @@ def build_parser():
                                        "The command first stores each differing working file as a backup artifact. "
                                        "The revision does not change.")
     restore.add_argument("--workspace", default=".")
-    restore.add_argument("--check", action="store_true")
+    restore.add_argument("--check", action="store_true",
+                         help="Refused with check_unsupported: this command writes working files, which check mode "
+                              "does not simulate.")
     restore.add_argument("--bundle", required=True,
                          help="The digest of a recorded manuscript bundle as the pin returned it: 64 lowercase "
                               "hexadecimal digits. It names any recorded bundle, not only the selected one.")

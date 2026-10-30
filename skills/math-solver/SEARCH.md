@@ -1043,7 +1043,11 @@ Create this assignment with the returned `native_packet` reference:
 
 Run `exactory-research review-assignment --workspace WORKSPACE --file assignment.json`
 and `exactory-research review-run --workspace WORKSPACE --file invocation.json`,
-each with its current `--expected-revision` and unique `--request-id`.
+each with its current `--expected-revision` and unique `--request-id`. `--check`
+on either command records nothing: `review-run --check` is refused for a new
+request, and `review-assignment --check` is refused while the store holds a
+Claude or Codex route, because recording the route state needs the installed
+reviewer adapter (`check_unsupported`).
 The invocation is `{id: AttemptID, assignment_id: ASSIGNMENT_ID}`. These are real
 reviewer calls and must remain within the user's authorized resources. Read the
 retained observed output and submit it unchanged in the appropriate native

@@ -586,10 +586,23 @@ never into a payload or artifact. A replay of the same request returns its saved
 observation. An interrupted uncertain invocation remains pending and does not
 silently run again.
 
-A route pins the adapter runtime it was recorded with. Verification of probes
-and attempts uses that pinned runtime. Execution requires the installed adapter
-runtime to match the route's pinned runtime; otherwise, record and probe a new
-route.
+A route pins the adapter runtime it was recorded with: the adapter's controls,
+its input contract and the SHA-256 of its module, and for a Codex route also the
+version and the path of the installed Codex CLI. Verification of probes and
+attempts uses that pinned runtime, so a review bound on a route stays verifiable
+after a plugin update changes the adapter or a Codex update changes the CLI.
+Execution requires the installed adapter runtime to match the route's pinned
+runtime. When it differs, `review-probe` and `review-run` on that route are
+refused with `review_route_runtime_stale` before any call and before any record
+is written. The refusal means that the plugin or the Codex CLI now installed
+differs from the one the route was recorded with. It says nothing about the
+route's earlier probes and attempts, which keep their standing. Record a new
+route with a new id and the same adapter, model, endpoint and configuration,
+probe it, and assign new reviews on it. An assignment on the stale route that
+has no observed output cannot run: assign its role again on the new route, or,
+for a slot with history, retire the stale route and continue the slot through
+a context repair, as described below. The 0.66.0 release changed the bytes of
+the three Codex transports, so every Codex route recorded before it is stale.
 
 The subscription-backed route uses this shape:
 
@@ -607,7 +620,40 @@ Its inspected startup contract is for Codex CLI 0.159.2 and 0.162.1 with user
 configuration and rules disabled, at reasoning effort `high`. It accepts text
 evidence only. The adapter checks actual recorded input and rejects uninspected
 startup declarations, additional context and tool events. Other runtime contexts
-remain unverified until inspected and probed. `timeout_seconds` is a hard
+remain unverified until inspected and probed. The route starts the CLI with the
+shell tool, multi-agent work, plugins, apps, hooks, memories, skill discovery,
+browser and computer use, web search and MCP servers disabled, and since 0.66.0
+with the five code-mode settings `features.code_mode`,
+`features.code_mode_host`, `features.code_mode_only`, `features.js_repl` and
+`features.js_repl_tools_only` set to false, checked on Codex CLI 0.163.0. These
+settings stop code execution. They do not remove the `exec` tool from the
+model's tool list: a call of it returns "code-mode host is disabled" and runs
+nothing.
+
+A tool call in the recorded rollout is the issue `tool_call:<name>` in
+`context_evidence.issues` of the attempt's response, for example
+`tool_call:exec`; any other item that is neither a message nor reasoning is
+`unknown_or_tool_input`. Either issue leaves the attempt unverified: it is no
+observed output of its assignment, and the assignment can be run again. Since
+0.67.0 one case is a notice instead. When every tool call of the rollout is an
+`exec` call with its own call id, and each is answered later by exactly one
+recorded output that is exactly `code-mode host is disabled`, the attempt keeps
+its verification and lists the calls under `context_evidence.notices`, each with
+its `event_index` and the original call. Any other tool, an `exec` call with
+another output, with no output, with an output before the call or with a
+repeated call id, and any other unknown item keep the issues, and another issue
+of the rollout still leaves the attempt unverified. The notice is decided when
+the response is saved, from the rollout as recorded; an attempt saved earlier is
+not rewritten, and the transports and the route pins are unchanged.
+
+The packet text of a Codex route is limited to 1,048,576 characters. A larger
+request is refused before the CLI starts and recorded as a failed attempt with
+the error code `review_input_too_large`; no CLI output is involved, so no JSON
+decoding error is recorded for it. When the CLI exits with a nonzero code or at
+the timeout, `execution.stderr_tail` of the attempt's response keeps the last 20
+lines of its standard error, at most 4,096 UTF-8 bytes; it is empty after a zero
+exit. Read it before a retry: it holds what the CLI printed, which the attempt
+record did not keep before 0.66.0. `timeout_seconds` is a hard
 wall-time limit, positive and at most 600. `max_output_tokens` is checked after
 generation; it is not a provider-side token reservation or a guarantee against
 spending beyond that value. Binary evidence requires a separately configured and
@@ -672,8 +718,10 @@ without its bytes, and a packet that carries problem evidence asks the transport
 to replay the session's earlier turns without long evidence bodies, without the
 packets of a scientific history and without the parts the current packet
 repeats. The Codex route additionally elides re-delivered and prioritized text
-bodies until the input fits the app-server limit, and sends an input that no
-elision fits as it stands, so that the app-server's refusal is recorded.
+bodies until the input fits the app-server limit of 1,048,576 characters. An
+input that no elision fits is refused before the CLI starts and recorded as a
+failed attempt with `review_input_too_large`; the visual route counts its native
+text and image wrappers against the same limit.
 
 A route can be retired: an account closes, a model is withdrawn, or the owner
 forbids the route. Record `review-context` with `kind: "route_retired"` on the

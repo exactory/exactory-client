@@ -33,7 +33,13 @@ Every `exactory-research` mutation below takes `--file FILE --expected-revision 
 Retry an interrupted mutation with its original request id, revision and payload: the harness
 returns the original receipt. `exactory-research example OPERATION` prints a complete example
 payload. `exactory-research next` names the first missing condition with the action that clears
-it.
+it. Add `--check` to validate a payload without writing: the harness reports the first refusal
+or `{check: "accepted", revision, recorded: false, ...}` from one snapshot of the store and
+records nothing, so an accepted check is no evidence for any gate, and the write validates
+again. `review-probe` and `review-run` refuse the flag for a new request, and so does every
+command whose validation evaluates a route or an assignment state while the record holds a
+Claude or Codex route (`check_unsupported`); see
+[Inputs and receipts](../../docs/research-cli.md#inputs-and-receipts).
 
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on success.
 It prints an error message on stderr and exits non-zero on failure.

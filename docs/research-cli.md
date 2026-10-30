@@ -217,8 +217,10 @@ step 10, where a whole source is deferred as pending. Each withheld body names
 its delivery and a note. [Problem creation](#problem-creation) states which
 records, readings and artifact bytes each result reviewer's actual request must
 deliver for the post gate's result coverage check, and how that check treats a
-body that step 6 withholds. A request that still does not fit is sent as it
-stands, and the route's refusal is recorded. The harness also keeps the earlier
+body that step 6 withholds. A request that still does not fit is refused before
+the reviewer CLI starts and recorded as a failed attempt with
+`review_input_too_large`, whose message names the route's limit; the CLI
+receives nothing. The harness also keeps the earlier
 reduction orders of 0.56.0, of 0.56.1 and 0.57.0, and of the two repaired
 copies of 0.56.0 that the extremal-graph-stability and Sidorenko girth-six
 problem records ran before 0.58.0, which the
@@ -412,6 +414,25 @@ exactory-research example bind-verdict > verdict-assessment.json
 The complete inputs are in [research-cli-examples.json](research-cli-examples.json). These are JSON payload shapes, not acquired evidence or finished assessments. Replace the uppercase IDs, zero hashes, paths, source passages, claims, and judgments with actual records and observations. The examples intentionally have no resolvable evidence objects. The innovation example shows one case of each relation; current research preparation still requires the configured minimum of distinct external cases. No example certifies an assessment merely by being saved.
 
 JSON must be UTF-8, an object of the documented shape, and contain neither duplicate keys nor nonfinite numbers. Unlisted fields are rejected by the corresponding domain operation. Mutation output is a JSON receipt with `revision`, `request_id`, and the operation-specific `result`; acquisition reports additionally expose their retained operation and collection status. A refused gate or mutation writes a structured `error` to stderr and exits nonzero. Read operations do not repair a journal or migrate evidence.
+
+Every mutation also accepts `--check`, with the same `--file`, `--expected-revision` and `--request-id`:
+
+```sh
+exactory-research OPERATION --workspace /absolute/path/to/study --file payload.json \
+  --expected-revision 42 --request-id study-specific-operation-001 --check
+```
+
+A check opens the store read-only, reads one snapshot, and runs the operation's own validation and preparation on it, in the order of the write. It writes no record, receipt, artifact or request reservation, and it creates no lock file. It prints the first refusal, with the code and the message that the write gives, or the diagnostic `{"check": "accepted", "revision": N, "recorded": false, "operation": NAME, "payload_digest": D, "snapshot_digest": D, "artifact_digests": [D, ...]}`. `revision` is the revision of the snapshot. `operation` is the store operation name, for example `review.route` for `review-route`. `payload_digest` is the digest of the canonical payload. `snapshot_digest` binds the database identity, the revision and the authenticated history. `artifact_digests` lists the SHA-256 of every artifact that the preparation read, verified or staged. Bytes that the preparation stores, such as the files of a `manuscript` pin, stay in memory; an object that already exists at their path is checked as a write checks it. An accepted check is a diagnostic, not a record: it satisfies no gate, grants no admission, is no attempt, review or decision, and cannot be cited as evidence. An accepted check of `cycle` gives `admit` nothing to admit; `admit` needs the recorded plan. The write that follows validates everything again on the store as it is then, and a store that changed in between refuses the write with `stale_revision`. A check needs an existing store and creates none: outside a workspace it fails with `migration_required`, and in a workspace without a store with `store_missing`, also for `init`, `adopt` and `problem-init`. A check keeps the request rules of the write. A request ID already committed with the same payload returns its original receipt, one committed with another payload fails with `request_id_conflict`, and a stale revision fails with `stale_revision`. The payload bounds above apply to a new request.
+
+A check refuses with `check_unsupported` when the operation acts outside the store:
+
+- `collect`, `resume`, `acquire`, `expand`, `fulltext`, `import-response`, `import-oai-cohort` and `visual`, which acquire sources; `review-probe`, `review-run` and `review-output-correction`, which call a reviewer; and `reconcile-run`. A new request is refused before any effect. A request already recorded returns its receipt.
+- `batches`, `export`, `recover` and `restore`, which write files or recovery state.
+- A preparation that needs the installed reviewer CLI: `review-route` with a local adapter (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1` or `codex_cli_visual_v1`), and, in a workspace that holds a route of a local adapter, every command whose validation evaluates a route or an assignment state, for example `review-assignment`, `value-review`, `review-adjudication` and `problem-openness`. That evaluation reads the installed runtime of each local adapter in use, and reading a Codex runtime runs the Codex CLI.
+- A preparation that needs a PDF tool or renders images: a `result` locator into a PDF output, whose page count `pdfinfo` reads, and `review-assignment` on a `codex_cli_visual_v1` route.
+- A preparation that commits in two steps: `artifact` on a probe path.
+
+`check_unsupported` says that check mode cannot prepare the operation. It says nothing about the payload; run the write for that answer. A test of 0.66.0 runs `--check` for each of the 87 commands and compares the whole workspace tree before and after; no command writes.
 
 The store writes only JSON that every supported Python reads back. The payload, each record that a mutation writes, and its result must hold no integer of more than 4300 digits and must nest at most 100 levels. A mutation outside these bounds fails with `invalid_input` and does not change the revision. The CLI parses the payload file before the store checks it, and a file that the interpreter cannot parse fails with `invalid_json`. For example, an interpreter that limits integer string conversion (`sys.get_int_max_str_digits()`, 4300 digits by default) cannot parse a longer integer. Reads and retries of committed requests do not check these bounds, so a store that an earlier release wrote stays as readable as before.
 
@@ -1548,7 +1569,12 @@ already recorded in the configuration.
 Every mutation below uses `--file FILE --expected-revision REVISION
 --request-id ID`. Read the revision before a new mutation; an interrupted retry
 retains its original identity and payload. These operations append immutable
-records and move explicit selections.
+records and move explicit selections. Each also accepts `--check`
+([Inputs and receipts](#inputs-and-receipts)). In a record that holds a Claude or
+Codex route, a check whose validation evaluates a route or an assignment state,
+such as `review-assignment`, `value-review` or `problem-openness`, is refused with
+`check_unsupported`, because that evaluation reads the runtime of the installed
+reviewer adapter.
 
 | Command | JSON payload | Records and behavior |
 | --- | --- | --- |
@@ -1708,8 +1734,10 @@ reading record, with its notes and inspected excerpts, and every protected body
 the body is listed. A listed version needs a captured full text. Without the
 field the route withholds no full text by priority; the binary originals that a
 text route never carries and the projection of an `openness_delivery` record
-still apply, and a request that stays above the limit fails on the route (the
-Claude route reports `review_input_too_large`). Without `text_priority`, the
+still apply, and a request that stays above the limit is refused before the
+reviewer CLI starts and recorded as a failed attempt with
+`review_input_too_large`, on the Claude route and on the Codex routes alike (the
+visual route counts its image wrappers in its limit). Without `text_priority`, the
 export estimates the packet and returns a `review_input_too_large` warning that
 names each registered text route whose limit the estimate exceeds; the estimate
 counts the packet and its UTF-8 evidence as JSON strings, so a delivery
