@@ -298,7 +298,9 @@ def build_parser():
     route.add_argument("--route-id", required=True)
     restore = commands.add_parser("restore", allow_abbrev=False,
                                   help="Write the pinned files of a recorded manuscript bundle back to their paths. "
-                                       "The command first stores each differing working file as a backup artifact. "
+                                       "The command first moves each differing working file to "
+                                       ".restore-backup-<32 hexadecimal digits> in its directory and stores the moved "
+                                       "bytes as a backup artifact. The output names the moved file as backup_path. "
                                        "The revision does not change.")
     restore.add_argument("--workspace", default=".")
     restore.add_argument("--check", action="store_true",

@@ -85,8 +85,8 @@ permits `evaluate` to return to `literature`. Enter unfinished work with
 `--status pending`; a proposed `done` status checks the destination too.
 
 Entering `write` also records the draft workspace, in the same mutation as the
-study state, and so does a later `exactory-lab state set` that succeeds while
-the study is at `write`. The mutation records the draft only when the
+study state, and so does a later `exactory-lab state set` that succeeds and
+keeps the study at `write`. The mutation records the draft only when the
 objective carries both `title` and `category`, no draft record exists, and no
 entry exists at `.exactory/draft.json` (a regular file, a symbolic link,
 dangling or not, and a directory each count as an entry). The export then

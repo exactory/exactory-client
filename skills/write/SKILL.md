@@ -149,10 +149,16 @@ In a managed study, entering `write` writes `.exactory/draft.json` (the marker)
 when the objective carries `title` and `category` and the workspace holds
 neither a draft record nor an entry at that path. When `next --summary` names
 `draft_marker_missing`, take the step that its message names before the first
-LaTeX source. The ai-science skill's STUDY.md lists every state: export for a
-record whose marker is missing or differs, adoption for a supported file
-without a record, a move of a link, a directory or an unsupported file to an
-unused name, and draft initialization when neither record nor entry exists.
+LaTeX source. The ai-science skill's STUDY.md lists every state. With a draft
+record, `exactory-research export` writes the marker when it is missing,
+differs or is a link, and a directory or another kind of entry moves to an
+unused name in `.exactory/` first. Without a record, `exactory-research adopt`
+records a supported file, and a link, a directory or a file that adoption
+refuses moves to an unused name before the next `status`. With neither record
+nor entry, `exactory-lab state set --stage write` records the draft from an
+objective that has both fields while the study is not done, and
+`exactory-draft init` creates it when the objective lacks a field or the
+study is done.
 The authorship hook records `written_by_exactory` for a `.tex` file written
 with Write under `draft/` only while `.exactory/draft.json` is a file, and no
 later creation, export, adoption or move of the marker records an earlier
@@ -248,9 +254,11 @@ directory, stores the moved bytes as a backup artifact, then writes the pinned
 bytes, and lists each file under `restored` with its `backup` reference and
 its `backup_path`. Keep that output: no record names a backup. After the
 measurement, read the displaced edit back for the next revision from the
-moved file or from the backup's `path` under `research/sources/objects/`. An
-editor or a compiler that still had the file open continues to write to the
-moved file, not to the backup.
+moved file or from the backup's `path` under `research/sources/objects/`. A
+process that opened the file before the restore continues to write to the
+moved file, not to the backup. A later write that opens the path again, such
+as a save in an editor or a new compiler run, replaces the restored bytes at
+the working path, and `status` lists the file under `bundle_drift` again.
 
 The blind reviewers of the pinned bundle run in a context without the author's
 memory index, for example a separate CLI process with no automatic memory. An

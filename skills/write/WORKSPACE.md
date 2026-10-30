@@ -228,9 +228,12 @@ copy, with the bytes at that `path` under `research/sources/objects/`, and
 `backup_path` is the moved file, which stays in the working tree. Both are
 null for a file that was missing. The command records nothing, so no record
 names a backup. Keep the output, or the `sha256`, to read the displaced edit
-back once the measurement is complete. An editor or a compiler that still had
-the file open continues to write to the moved file, not to the stored copy, so
-read `backup_path` for an edit that continued after the restore.
+back once the measurement is complete. A process that opened the file before
+the restore continues to write to the moved file, not to the stored copy, so
+read `backup_path` for an edit that continued after the restore. A later write
+that opens the path again, such as a save in an editor or a new compiler run,
+replaces the restored bytes at the working path, and `status` lists the file
+under `bundle_drift` again.
 
 ## Commits and reverts (the improvement loop)
 

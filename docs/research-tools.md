@@ -137,8 +137,13 @@ that you read (`work/FILE`, `stdout` or `stderr`). The intent then carries
 `program_run: {started_at, ended_at, outputs, read_outputs, outputs_unread}`.
 A run with no read path is a completion check: its outputs and streams are
 stored sealed, their hashes are recorded, and their bytes are not read, cited or
-delivered. The plan names each such run in `prior_knowledge`, and `admit`
-requires the program that the plan froze. The CLI reference gives the
+delivered. The plan's `prior_knowledge` names every disclosed run that carries
+the plan's cycle id, and every disclosed run whose program path or program bytes
+`prior_knowledge` names, whether the run's outputs were read or sealed. A run
+left out refuses the plan with `preplan_probe_missing`. With `prior_knowledge`,
+`admit` requires the program that the plan froze. Without it, `admit` refuses a
+program that a disclosed probe ran before the plan was recorded. The CLI
+reference gives the
 [fields and refusals](research-cli.md#exploratory-computation-probe-intent-probe).
 
 Resolve duplicate IDs before launch. A repeated ID returns its recorded outcome
