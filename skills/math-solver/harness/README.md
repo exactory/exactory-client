@@ -30,12 +30,44 @@ evidence acceptance, and root closure are in `../SEARCH.md`. The native commands
 below operate inside an admitted node. Reviewed `search admit` creates managed
 workspaces and native children; do not call `init --from` after admission.
 
+`search admit` also completes an attack directory that already exists. It creates
+the directories `deterministic/`, `units/` and `study/`. It creates only the absent
+files among `problem.json`, `novelty.md`, an empty `journal.jsonl` and
+`parent.json`; existing bytes stay as they are. A directory with
+`units/FINISHED.json` or a nonempty journal needs explicit adoption instead. Inside
+a managed root, a native command that finds no `journal.jsonl` reports
+`journal.jsonl: missing; admission skeleton is incomplete; run search reconcile`.
+If `search status` shows a pending initialization effect, replay the admit request
+or run `search render`. Otherwise the node was admitted by a release before 0.64.0,
+and `search reconcile` with an empty spec records the missing skeleton effect. If
+that node has a recorded move, reconcile refuses with `recovery_conflict` instead
+of writing an empty journal. Conflicting bytes are refused (`../SEARCH.md`, "Locked
+command construction and recoverable projections").
+
 Validation problems go to stderr, one line each, with exit status 1.
 
 Stop a dependent command sequence after any nonzero exit. In shell batches,
 join dependent invocations with `&&` or check each exit status explicitly.
 After `recovery_required` or `recovery_conflict`, preserve the workspace and
 follow the recovery procedure in `../SEARCH.md` before editing inputs or retrying.
+
+`search complete` refuses with `standalone_closure_pending` while an admitted
+standalone node is neither finished nor retreated. The message and `details.node_ids`
+name every such node, and `search status` and `search next` report them as
+`closure_blocking_node_ids`. Finish or retreat those nodes first (`../SEARCH.md`,
+"Final closure and local delivery").
+
+The hooks read a record with the controller of their own plugin. When that
+controller cannot replay a record, the refusal says which case it is.
+`Controller recovery required: ...` means that the record's own runtime wrote it
+(same plugin version and controller digest) and the record needs recovery.
+`The installed controller ... cannot read a record written by ...` names both
+runtimes and gives the command that runs the search commands under the recorded
+launcher. The record needs its writer, not recovery. `The installed controller ...
+cannot read this record: ... No writer runtime identity is recorded` means that
+`.search/writer-runtime.json` is missing or unreadable. Use the runtime that wrote
+the record. The messages and the file are described in `../SEARCH.md`, "Pure model
+and storage integration" and "Hook lifecycle and supported host boundary".
 
 `ranking.json` must be an object containing an `order` array, with every admitted
 opening exactly once. Other top-level JSON types are validation failures.
@@ -68,7 +100,16 @@ failures. Neither an assessment nor a hypothesis resets an account.
 New independent native reviews use the shared observed adapter. Export their
 exact subject with `search review-packet --spec FILE --json`, then use the
 returned workspace and artifact in a verified `native_math` assignment. Submit
-the observed output unchanged through the existing native command. The
+the observed output unchanged through the existing native command. On the Claude
+route that output can be the last object of an answer with withdrawn earlier
+objects. Each withdrawn object is followed by a line that is exactly `RETRACTED`,
+and the raw text stays in the response as evidence. A review binds only while its
+packet still matches the current state. The one permitted difference (an unrelated
+node that finished, for an independent standalone proposal) and the retry rule are
+in the delivery contract. A review bound earlier verifies against the runtime its
+route pins. A proposal or a node can therefore hold reviews bound under different
+adapter versions. A new review or probe needs a route whose pin matches the
+installed adapter. The
 [delivery contract](../SEARCH.md#observed-native-review-delivery) covers proposals,
 amendments, strategy assessments, input and result reviews, closure, adoption and
 recovery. It preserves native schemas and historical replay and adds no
@@ -142,7 +183,7 @@ found.
 | `stall <slug>` | refuses while no cash-out rule holds; otherwise writes `units/INVENTORY.md`: the walk, then every move grouped by strategy, marking the ones whose failure signal fired, the one that closed the attack, and what each paid, with the whole ledger summed at the top, and names the rule |
 | `check-unit <slug> <n>` | refuses before the inventory exists; validates `units/<n>/unit.json`: `statement`, `form`, `evidence` (a path relative to the workspace that exists, with a `result.json` when it is a deterministic run), `novelty`, `moves` (journal move numbers), `costs` (the ledger the evidence carries), and the form against the evidence and the ledger; writes `units/<n>/check-unit.json` on success |
 | `finish <slug>` | refuses while any unit lacks a matching stamp, a `draft.md`, or an `evaluation.md`, and while a child attack is open; writes `units/FINISHED.json`. With no move and no inventory, records the local stage 3 literature exit. Local finish does not close the controller objective |
-| `status <slug>` | prints where the attack stands, derived from the record, with the parent or the children when there are any, ending with the `next:` line a resumed session continues from |
+| `status <slug>` | prints where the attack stands, derived from the record, with the parent or the children when there are any, ending with the `next:` line a resumed session continues from; its `activity:` lines show the last three entries of the latest session that ran a harness command on the attack, with that session's count, and a log without such an entry keeps the unfiltered view |
 | `task add <slug> <text>`, `task done <slug> <id>`, `task list <slug>` | the action list in `tasks.json`, each change stamped with the time and the move count |
 
 Budget constants at the top of the file: 8 moves per pass, 3 passes,
@@ -190,7 +231,11 @@ Points where the spec left a choice, and what the code does:
   list.
 - `status` derives the stage from the files alone and never from
   `tasks.json` or `activity.jsonl`, which it only reports, so a stale task
-  cannot move the stage.
+  cannot move the stage. Its activity view selects the latest entry whose
+  `harness_command` is true and whose `session_id` is a nonempty string. It
+  keeps that session's entries and shows the last three, including Write and
+  Edit entries made before the harness command. Without such an entry it shows
+  the last three of all entries, as before.
 
 ## A native harness run
 

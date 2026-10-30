@@ -348,7 +348,12 @@ and failures are intended continuity evidence, and are included explicitly.
 Submit the reviewed record with the current revision and a unique request ID.
 The service freezes the context, assessment, review and native plans, and records
 an `assessment-000001` style ID with its predecessor. Replaying the original
-request returns its original result and cannot clear later progress. Read
+request returns its original result and cannot clear later progress. A new request
+that reuses a recorded review output is not a replay. The service builds the packet
+again from the current context and compares it with the packet the reviewer
+received. A packet that omits a later assessment or carries any other change is
+refused with `review_packet_mismatch`. A strategy packet has no permitted
+difference, and a refusal writes no native event. Read
 `search next --json` again after submission. An old assessment or a new `replan`
 alone cannot authorize execution.
 
@@ -590,6 +595,16 @@ conflict preserves the user's files and reports the original intent and command.
 Unresolved native intents block new research mutations. Reconcile does not replay
 an unknown native operation or duplicate a prior acknowledgement.
 
+Ordinary `reconcile` also repairs an admitted node that an earlier release left
+without an initialization effect and without `journal.jsonl`. It records the missing
+`initialize_workspace` effect, whose snapshot lists only the absent skeleton files.
+If such a node has a recorded move, the missing journal held research history, and
+reconcile refuses with `recovery_conflict`
+(`Missing journal has recorded moves; restore it before reconciliation`). A node
+whose journal exists, including one repaired by hand or populated, receives no new
+effect, and a node imported by adoption is not touched. The repaired node's native
+observations are recorded by a later reconciliation, after its files exist.
+
 Before recording the intent, the synchronous native invocation exclusively locks
 its fresh `native/ID.lock` file and retains that descriptor through all native
 writes and acknowledgement. Its immutable ownership blob is
@@ -660,6 +675,20 @@ Schema version is integer `1`. Each event has exactly `sequence`, `request_id`,
 identical request replay and conflicting reuse before invoking validation.
 The pure reducer rejects duplicate event IDs or noncontiguous sequence numbers.
 
+After initialization and after each committed event, still under the writer lock,
+the store replaces `.search/writer-runtime.json` atomically. The file holds the
+identity of the runtime that wrote: `{plugin_version, controller_digest, launcher}`.
+`controller_digest` is the SHA-256 over the relative names and bytes of
+`bin/exactory-math`, the harness Python files, `search_controller/*.py` and
+`research_harness/*.py`. `launcher` is the absolute path of that plugin's
+`bin/exactory-math`. A process computes the identity once. Reads, replays of a
+recorded request, stale revisions and refused commands do not refresh the file. A
+crash between the tree commit and this replacement leaves the previous writer
+named, or no file after initialization. The next committed event repairs it; a
+replay does not. The file is not part of the event document. `tree.json` keeps its
+four fields, historical events and replay results are unchanged, and a controller
+older than 0.64.0 ignores the file.
+
 Use `validate=lambda document, event: apply_event(replay(document), event)` with
 `Store.append`. Validation runs under the writer lock. The storage layer supplies
 isolated snapshots; the callback cannot change the event being persisted.
@@ -671,7 +700,7 @@ Supported events and exact payloads:
 | `proposal_recorded` | `{"proposal": Proposal, "digest": SHA256(Proposal)}` |
 | `review_workspace_recorded` | `{workspace: "."}` or a canonical ancestor; the objective's stable shared review-store association |
 | `probe_origins_recorded` | `{bindings: [{digest: SHA256, raw_digest?: SHA256, origins: [{probe_id: Text, sha256: SHA256, roles: ["outputs"|"stdout"|"stderr"]}]}]}`; raw identities are retained even when `origins` is empty |
-| `review_recorded` | `{"proposal_id": ID, "review": Review, "digest": SHA256(Review)}` |
+| `review_recorded` | `{"proposal_id": ID, "review": Review, "digest": SHA256(Review)}`, optionally also `"context_drift": [{path: Text, from: JSON, to: JSON}]` for the permitted unrelated-finish difference of a proposal review (each `path` starts with `/scientific_context/`, `from` differs from `to`, paths are distinct); a plugin older than 0.64.0 rejects an event that carries this field |
 | `proposal_admitted` | `{"proposal_id": ID}` |
 | `checkpoint_recorded` | `{"checkpoint": CheckpointInput, "digest": SHA256(CheckpointInput)}` |
 | `result_accepted` | `{"acceptance": AcceptanceInput, "digest": SHA256(AcceptanceInput)}` |
@@ -1033,6 +1062,28 @@ and the complete typed toolchain inventory. Unsupported binary scientific input
 requires a supported exact-byte delivery mechanism, and is never silently turned
 into executable provenance.
 
+When a native command binds a review, the service builds the packet again from the
+current state. It compares that packet with the packet the reviewer received, as
+canonical JSON bytes, so `1`, `true` and `1.0` differ. One difference is permitted,
+for a proposal review only. The proposal must be `standalone` in category and
+relationship, anchored to the objective, with `budget.mode: new`. It must have no
+`native_parent`, no `logical_predecessor`, empty `equivalent_node_ids`,
+`inherited_evidence`, `inherited_assumption_ids` and claim `assumption_ids`, and
+no computation `dependencies`. For such a proposal, a node with a different claim
+can have moved from `admitted`, `active`, `waiting` or `result_ready` to `finished`
+since the export. The service restores that node's earlier status and the strategy
+inventory derived from it. The rest of the packet must then match exactly: the
+evidence closure, the reviewer, the subject and every other field. Strategy,
+result, recovery and root-closure packets have no permitted difference, and a new
+strategy assessment still invalidates an earlier proposal packet. The permitted
+differences are recorded as `context_drift: [{path, from, to}]` in the
+`review_recorded` event beside the unchanged review and its digest. Every binding
+validates its packet afresh, also when the output already has a binding. A retry
+of the same request returns its original event, and a refused binding writes no
+event. A review exported before a strategy reassessment, or before moves of its
+own node, stays refused. The reassessment changes `previous_assessments`, and
+moves can change evidence and plans.
+
 Pure event replay preserves historical records without contacting a reviewer.
 Missing old runtime metadata means historical independence is unknown, not that
 contamination has been proved. Old proposed reviews alone cannot authorize a new
@@ -1063,7 +1114,8 @@ An obligation has `id`, `schema_version`, `claim`, `claim_digest`, `proposal_id`
 
 Proposal wrappers have `id`, `schema_version`, `record`, `digest`, and `status`
 (`proposed` or `admitted`). Review wrappers have `id`, `schema_version`,
-`proposal_id`, `record`, and `digest`.
+`proposal_id`, `record`, and `digest`. A wrapper whose binding recorded the
+permitted difference also has `context_drift`; other wrappers have no such field.
 
 A node has `id`, `schema_version`, `attack_slug`, `obligation_id`, `claim`,
 `claim_digest`, `role`, `category`, `relationship`, `logical_predecessor`,
@@ -1513,7 +1565,18 @@ exception, it verifies that all contributing artifacts are checked and unused
 native children are the sole remaining local finish refusal. The reducer requires
 exactly the actual unfinished native child IDs and excludes contributing children.
 It does not mark any child or parent finished. Other local gate failures cannot use
-this exception. Root completion remains independent of unused alternative research.
+this exception. Root completion does not require unused alternative research to be
+delivered, but a new `search complete` waits for every admitted standalone node.
+While a standalone node admitted through a proposal has a status other than
+`finished` or `retreated`, the command refuses with `standalone_closure_pending`.
+The message is `Finish or retreat admitted standalone nodes before root closure:
+NODE_IDS`, with the sorted IDs in `details.node_ids`. This holds with or without a
+side interval and whatever the node's readiness, suspension, exhaustion or deferral.
+The refusal comes before the closure inputs are imported and before any event is
+built. A node imported by adoption has no proposal and does not count. Retreat is
+sufficient even when the node still has local cash-out work. Recorded
+`objective_completed` events replay unchanged, and a resolved objective reports no
+blocker.
 
 ## Node facts, retreat and replanning
 
@@ -1706,6 +1769,12 @@ after research exhaustion. New verification requires a current account and
 remaining moves/runs; accepting historical immutable evidence does not require
 a current account or a rerun. Stable creation IDs break otherwise equal choices.
 
+The public `search next` response is the pure action, plus `closure_blocking_node_ids`
+when that list is nonempty: the admitted standalone nodes that block a new
+`search complete`. A `finalize_root` with blockers means that the final review can
+run, but `complete` waits until those nodes finish or retreat. The tagged shapes
+above are unchanged.
+
 `control.stop_decision` is one of:
 
 ```text
@@ -1762,7 +1831,7 @@ Public command specs are closed records:
 | admit ID | `{}`; `--spec` may be omitted |
 | begin ID | The `begin NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
 | run ID | The tagged `run NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
-| reconcile | `{}` normally; optional `--spec` for the exact [rank operator recovery](harness/RANK_RECOVERY.md) record |
+| reconcile | `{}` normally; it also records the missing skeleton effect of a node admitted without `journal.jsonl` before 0.64.0; optional `--spec` for the exact [rank operator recovery](harness/RANK_RECOVERY.md) record |
 | amend-computation ID | The amendment record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | interpret ID | The interpretation record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
@@ -1830,6 +1899,11 @@ completion always inspect the full accepted dependency closure. A failed final
 delivery audit conservatively invalidates its contributing acceptance support and
 the recorded closure, retaining all history. None of these audits runs a compiler,
 checker, Lean, shell script or mathematical job.
+
+`status` also derives `closure_blocking_node_ids`: the sorted IDs of the standalone
+nodes admitted through a proposal that are neither finished nor retreated. On
+resolved history the list is empty. `next` carries the same list only when it is
+nonempty. Neither is a persisted event field.
 
 ### Workspace discovery and session ownership
 
@@ -1905,6 +1979,24 @@ add operations. Native and journal intents retain recovery precedence, and the
 logs cannot grant proof credit. Newly managed-node shell activity records only a
 relative target or native command name and slug, not raw shell arguments; existing
 unmanaged advisory formatting and authoritative controlled-run argv are unchanged.
+Each new activity entry carries `session_id`, the host-qualified session
+(`claude:<id>` or `codex:<id>`, or null without a host identity), and
+`harness_command`. A successful Write or Edit under a workspace is always recorded.
+So is a harness command (`exactory-math` or `attack.py`) that names the attack by
+its slug or by a path inside the workspace. An ordinary shell command that names a
+path under the workspace is recorded only after a harness-command entry of the
+same session. A null identity never admits one, and a
+harness command on another attack does not admit inspection of this one. The log
+keeps the last 200 entries of all sessions. When a session's harness entry leaves
+the window, its ordinary calls stop being recorded until its next harness command.
+The recorder splits a command with the guard's lexer settings and attributes a
+compound command to each workspace once. Quoted or escaped separators do not make
+a harness call. Only the direct command that the host reports is seen, not programs
+it starts. If the parser fails, the recorder appends nothing for the whole call. The
+recorder never blocks a tool and the PreToolUse guard does not depend on it.
+`status` shows the last three entries of the latest session with a harness-command
+entry, and that session's count. A log without such an entry keeps the unfiltered
+view, and anonymous harness entries select nothing.
 The 40th continuation requests one summary; later
 Stop calls permit stopping until explicit operator resume, even with absent or
 false `stop_hook_active` and after an admitted alternative or replan.
@@ -1921,10 +2013,27 @@ of that length, such as a long `task add` text with a slash, is not probed. A
 shorter token with a slash remains a candidate path, subject to the hook's other
 filters for options, interpreter code or module arguments, and newline or NUL
 characters.
-The hooks read a record with the controller of their own plugin. When that
-controller cannot replay the record's log, the denial names the controller and
-says that a record written by another exactory-math, such as a newer release or a
-local runtime, needs a release that reads it; the log does not name its writer.
+The hooks read a record with the controller of their own plugin. Read, Glob, Grep,
+WebSearch and WebFetch calls are never checked. A Write, Edit or Delete under a
+registered root, and a supported shell command that names a path under it, call
+the controller first. When that call fails, the hook confirms the failure with one
+plain `search status --json` call inside the same 20-second deadline. If the status
+succeeds, the record is readable and the message keeps its operational diagnostic,
+`Controller recovery required: DIAGNOSTIC`, for example a focus or revision
+conflict. If the status fails too, the hook compares `.search/writer-runtime.json`
+with the installed runtime. A different `plugin_version` or `controller_digest`
+gives `The installed controller Exactory VERSION (controller sha256 DIGEST,
+launcher PATH) cannot read a record written by Exactory VERSION (...): DIAGNOSTIC.
+Run the search command under the recorded runtime: PYTHON LAUNCHER --attack-root
+ROOT search <command>.` A missing or unreadable file (no file, invalid JSON,
+duplicate keys, deep nesting, a wrong shape, a symlinked `.search`) gives `The
+installed controller ... cannot read this record: DIAGNOSTIC. No writer runtime
+identity is recorded; use the runtime that wrote the record.` Only a matching
+version and digest keeps `Controller recovery required: DIAGNOSTIC`; a different
+launcher path alone is not a mismatch. The hook never runs the recorded launcher.
+PreToolUse denies the operation with `[math-solver] ` and the message; SessionStart
+and Stop add the same message as context. A record that the installed controller
+replays is handled as before, whichever runtime wrote it.
 Recognized managed mutations with corrupt state or unsupported visible shell or
 wrapper payloads fail closed with direct-call recovery guidance. The adapter does
 not parse arbitrary shell programs or JavaScript. Nested operations that the host

@@ -632,9 +632,15 @@ workspace they do nothing.
 - **Unit flow.** A write under `units/<n>/` is denied until `stall` wrote the
   inventory, and a `draft.md` or `evaluation.md` is denied until `check-unit`
   stamped the unit as it stands.
-- **Activity.** After every Write, Edit, or Bash call that touched an attack
-  workspace, one line goes to its `activity.jsonl`: the time, the tool, and
-  the file or command. `status` shows the last three, so a resumed session
+- **Activity.** After a Write or Edit under an attack workspace, one line goes
+  to its `activity.jsonl`. The same happens after a harness command
+  (`exactory-math` or `attack.py`) that names the attack. The line holds the
+  time, the tool, the file or command, the host-qualified session and whether
+  it was a harness command. An ordinary shell command that names a path under
+  the workspace is recorded only after a harness-command entry of the same host
+  and session. An inspection by another session therefore leaves the file byte
+  for byte unchanged, also at the 200-entry cap. `status` shows the last three
+  entries of the latest session with such an entry. A resumed session therefore
   sees what the previous one was doing when it stopped.
 - **Resume.** At session start (a new session, a resume, a clear, or a
   compaction), the hooks report managed controller actions and native status.
