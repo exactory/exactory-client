@@ -86,6 +86,9 @@ def _describe_shell_calls(command: str, cwd: Path) -> list[tuple[Path, str, bool
             attack_root = _resolve(call_tokens[index + 1], cwd)
         is_harness_call = (executable_position < end
                            and Path(tokens[executable_position]).name in _HARNESS_COMMANDS)
+        if is_harness_call and "--check" in tokens[executable_position:end]:
+            # A check writes nothing, so it leaves no activity entry either.
+            continue
         for index in range(start, end):
             token = tokens[index]
             if not is_path_candidate(token):
