@@ -35,6 +35,13 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.67.0](docs/releases/0.67.0.md) resolves the open harness-improvement records: a review observation
+survives a busy store, a disabled Codex `exec` call that ran nothing is a notice, every recorded result output
+reaches its reviewer, a refused review output names the failed rule and item, new reviewer prompts carry a
+versioned common text that forbids tool calls and states the `RETRACTED` form, every writing command has a check
+mode, the draft-marker obligation names a step that works in every state, and `exactory-lab run` works in a
+problem record. The agent-facing texts of 0.62.0 to 0.66.0 are written.
+
 Version [0.66.3](docs/releases/0.66.3.md) bounds the final turn of an openness reading chain: the packet's records
 arrive as reading units after the full texts, the final turn withholds delivered bodies and then the oldest notes
 only as far as its request needs, and a refusal names the size of each part.
