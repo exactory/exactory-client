@@ -83,7 +83,7 @@ Three levels of text carry the method. A strategy (one file under `strategies/`)
 
 Five rules hold throughout. The controller contract preserves the original claim, requested proof or decision standard, deliverables, and limits; a local statement or finish never replaces them. No result is declared before the novelty check has run for that exact statement (stage 3). No move is journalled under a strategy before that strategy's study record exists; `journal add` refuses one (stage 5). Every move is reserved with `search begin`, then journalled with `journal add` before the next move starts (stage 5). The cash-out (stage 7) starts only from one of the three native rules stage 7 names, and one of them fires within the budget the harness enforces.
 
-Every command below is `exactory-math ...`, which is on PATH while this plugin is enabled, run from the directory the user is working in. The controller root defaults to `attack/`; admitted native workspaces live under `attack/<slug>/`. Give `--attack-root DIR` before the command when it lives elsewhere. Controller mutations use `search`, an exact JSON spec, the current expected revision, and a unique request ID. `search status` and `search next` are read-only. Every other `search` command and every legacy command that writes accept `--check`: `search pause`, `side-interval`, `retreat`, `interpret` and `render` then build and validate the event as the write does and write nothing, and every other command refuses the flag with `check_unsupported` before it opens the store (`SEARCH.md#filesystem-service-and-cli`). The strategy, entry, study, and reference files this document names are the skill's own files, not the user's: run `exactory-math skill-dir` once, and read each of them under the directory it prints.
+Every command below is `exactory-math ...`, which is on PATH while this plugin is enabled, run from the directory the user is working in. The controller root defaults to `attack/`; admitted native workspaces live under `attack/<slug>/`. Give `--attack-root DIR` before the command when it lives elsewhere. Controller mutations use `search`, an exact JSON spec, the current expected revision, and a unique request ID. `search status` and `search next` are read-only. `search status`, `search next` and `search strategy-context` have no `--check` flag, and the flag is an argument error there (`invalid_command`). Every other `search` command and every legacy command that writes has the flag. Only `search pause`, `side-interval`, `retreat`, `interpret` and `render` accept `--check`: they build and validate the event as the write does and write nothing. Every other command refuses the flag with `check_unsupported` before it opens the store (`SEARCH.md#filesystem-service-and-cli`). The strategy, entry, study, and reference files this document names are the skill's own files, not the user's: run `exactory-math skill-dir` once, and read each of them under the directory it prints.
 
 The shared `exactory-lab probe` may explore a question in the common workspace,
 under its common budget and exploratory provenance, outside managed math execution.
@@ -193,8 +193,12 @@ turn with `review-run`, assign the next turn with the same reviewer, route,
 author and packet and with `context.prior_assignment_id`, and submit the native
 output of the final turn unchanged to `search accept` or `search complete`. The
 service verifies the whole chain and stores its `reading_turns` on the
-acceptance or closure. Replace a turn whose attempts all ended without output by
-assigning the next turn again with the same `prior_assignment_id`. A final turn
+acceptance or closure. A turn whose attempts all ended without output can run
+again under a new invocation id while its route is not retired, not changed and
+its pinned runtime equals the installed adapter. A turn after the first can
+instead be replaced by assigning the next turn again with the same
+`prior_assignment_id`. When the first turn cannot run again, export a new packet
+under a new assignment id and start a new chain. A final turn
 that cannot judge yet requests passages that deliver characters. Reading in a
 chain changes no requirement of the finding: an unavailable decisive source
 stays a gap, and the finding stays unresolved.

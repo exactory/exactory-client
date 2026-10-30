@@ -69,7 +69,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
-| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. A run interrupted during the call, or whose write is still refused after that wait, stays pending (`review_invocation_pending`). After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last `store_busy` or `stale_revision`. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
@@ -221,8 +221,11 @@ its delivery and a note. [Problem creation](#problem-creation) states which
 records, readings and artifact bytes each result reviewer's actual request must
 deliver for the post gate's result coverage check, and how that check treats a
 body that step 6 withholds. A request that still does not fit is refused before
-the reviewer CLI starts and recorded as a failed attempt with
-`review_input_too_large`, whose message names the route's limit; the CLI
+the reviewer CLI starts and recorded as a failed attempt with the code
+`review_input_too_large`. The record keeps the code, not the message. The limit
+is 1,300,000 characters on `claude_cli_v1` and 1,048,576 on `codex_cli_v1` and
+`codex_cli_framed_v1` (the
+[route instructions](research-decisions.md#commands-and-shared-state)). The CLI
 receives nothing. The harness also keeps the earlier
 reduction orders of 0.56.0, of 0.56.1 and 0.57.0, and of the two repaired
 copies of 0.56.0 that the extremal-graph-stability and Sidorenko girth-six
@@ -260,7 +263,10 @@ and its limit, for example `normalized_characters: 18` with
 passage, `items` with `minimum_items` for a final turn without a passage
 request, and `page` with `minimum_page` for an inventory page, plus
 `maximum_page`, `page_size` and `total` for a page out of range; a closed object
-adds `expected_type`, `received_type`, `missing_fields` and `unexpected_fields`;
+that the shared field check refuses, for example a passage request or an
+excerpt, adds `expected_type`, `received_type`, `missing_fields` and
+`unexpected_fields`, while a closed object of a native review and the top level
+of a reading response carry only `path` and `message`;
 and the checks of bars, work items, objections and candidates keep the
 identities they gave before. A check that runs on the items of a list names the
 item by its index or by its valid id, and the first failed check is the one
@@ -280,11 +286,15 @@ the refusal record (check `native.output`) at once, and the receipt of
 from the receipt without opening the output artifact. A check that
 depends on the store (a pending source request, a reading that is not current, a
 conflict with a stored review) writes no record. An output whose provenance does
-not authenticate is never refused. An answer that the route cannot read as one
-JSON object is a failed attempt (`review_transport_failure`), not an output
-refusal. On the Claude route this includes an answer that the marked-block form
-does not cover. It writes no refusal record and keeps the bounded operational
-retry of a failed call. While every completed attempt of an
+not authenticate is never refused. An answer that does not parse as JSON is a
+failed attempt with the code `review_transport_failure`. Parsed JSON that is
+not one object, or a response that is not complete, is a failed attempt with
+the code `review_incomplete`. Neither is an output refusal. On the Claude route
+this includes an answer that the `RETRACTED` correction form of the
+[reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement)
+does not cover: the whole answer is then read as one object. A failed attempt
+writes no refusal record and keeps the bounded operational retry of a failed
+call. While every completed attempt of an
 assignment is refused, and each refused output still fails its check,
 `review-run` invokes the assignment again with the same packet, prompt, route
 and request, and the reviewer receives nothing about the refusal. A refused
@@ -2095,14 +2105,15 @@ minimum. The turn packets, the reading record, the budget, the parts, the
 excerpt and passage rules and the final turn are those of the problem chain.
 The final turn withholds the full texts largest first, then the captured
 responses, the reading records and the search records, each kind largest first,
-and then the earliest notes. Two rules are added. A reading answer in a final
-turn must request at least one passage that the harness delivers from a bound
-body within the remaining allowance. An answer whose requests are all not
-found, name no single stored body or exceed the allowance is refused with
-`invalid_reading_response` (`details.path` `/passage_requests`),
-`review-assignment` does not continue from it, and the same assignment runs
-again under a new `review-run` invocation. The chain is also verified at the
-controller, not by `problem-openness`. `exactory-math search accept` and
+and then the earliest notes. Two rules are added. The first is the passage rule
+of a final turn. A reading answer in a final turn must request at least one
+passage that the harness delivers from a bound body within the remaining
+allowance. An answer whose requests are all not found, name no single stored
+body or exceed the allowance is refused with `invalid_reading_response`
+(`details.path` `/passage_requests`), `review-assignment` does not continue
+from it, and the same assignment runs again under a new `review-run`
+invocation. The second is the verification of the chain at the controller, not
+by `problem-openness`. `exactory-math search accept` and
 `search complete` resolve the review's attestation, which names the first turn,
 to the effective terminal turn: a turn that ended without output and was
 replaced is history, and a second live continuation is
@@ -2135,8 +2146,9 @@ Refusal codes of a reading chain:
   reviewer, route or author, or a turn that is not part of a reading chain.
 - `review_source_continuation_fork`: another turn already continues the named
   turn, and that turn has a completed output or has not run. At `search accept`
-  or `search complete` of a math chain, one turn has more than one live
-  continuation.
+  or `search complete` of a math chain, and in every audit of the acceptance or
+  closure, one turn has more than one live continuation. The controller reports
+  it as the `cause` of `review_context_unverified`.
 - `review_assignment_replaced`: the named turn ended without output and a later
   turn of the same parent replaced it; it can be neither run nor continued.
 - `review_source_continuation_unverified`: the named turn has no observed,
@@ -2144,7 +2156,12 @@ Refusal codes of a reading chain:
 - `review_resampling_forbidden`: the named final turn returned the native result,
   which ends the chain.
 - `review_context_unverified`: `problem-openness` finds a turn of the chain
-  without an observed, authenticated output in a verified context.
+  without an observed, authenticated output in a verified context. For a math
+  chain, `search accept`, `search complete` and every audit of the acceptance
+  or closure give it for any failed chain check, with `details.cause` set to
+  the code of that check: `review_context_unverified` for a turn that is not
+  ready, `review_source_continuation_fork`, `invalid_reading_response` or
+  `openness_reading_incomplete`.
 - `openness_reading_incomplete`: `problem-openness` names a turn without a
   native result, a unit of the packet that reached neither a reading turn nor
   the final turn's request complete (`details.units` lists each by kind and

@@ -439,8 +439,8 @@ or the closure review, reads its packet in the same chain since 0.67.0, under
 the protocol `exactory-openness-reading-math-v1`. On 2026-10-24 the result
 review of a proof checkpoint with its openness minimum was refused with
 `review_input_too_large`: the packet was 2,764,871 bytes, with 1,843,216 bytes
-of captured responses in five bound searches and four full readings of 377,759
-bytes, above both route limits, and a native result review then had a single
+of captured responses in five bound searches and 377,759 bytes of four full
+readings, above both route limits, and a native result review then had a single
 turn. A delivery priority on the minimum, under which the route withholds the
 bodies declared least decisive, was considered and not adopted: a withheld body
 is a body the reviewer did not read, and a request for the withheld bodies
@@ -624,10 +624,24 @@ reviewer and writes no file for a later process to read it from. A file in the
 workspace is no evidence of what the reviewer returned, so the harness never
 completes a pending invocation from disk. When the process stops during the
 call, or when the finishing write is still refused after that wait, the
-invocation remains pending. Then a replay with the original request ID refuses
-with `review_invocation_pending`, and every `review-run` of that assignment
-refuses in the same way. The harness does not silently call the reviewer
-again. A blank request ID is refused before the call (`invalid_input`).
+invocation remains pending. The run that waited exits with the last
+`store_busy` or `stale_revision`. Then a replay with the original request ID
+refuses with `review_invocation_pending`, and every `review-run` of that
+assignment refuses in the same way. The harness does not silently call the
+reviewer again. The refusals say to reconcile the invocation, and the step is
+`review-attempt`. An invocation is pending while no `review_attempt` record has
+its id, which is the `id` of the `review-run` payload, the attempt id.
+`review-attempt` with `{"id": "attempt-id", "assignment_id": "assignment-id",
+"status": "failed", "output": null, "reason": "the process stopped during the
+call", "usage": {"input_tokens": null, "output_tokens": null, "cost_usd": null,
+"wall_seconds": null}}` imports an attempt under that id, marked
+`origin: "imported"`, which never counts as observed transport. The import ends
+the pending state. A `review-run` of the assignment under a new `id` and
+request ID is then permitted, while the replay of the original request ID stays
+refused. In a reading chain the turn then counts as ended without output: the
+same assignment can run again, and a turn after the first can be replaced by
+assigning the next turn again with the same `prior_assignment_id`. A blank
+request ID is refused before the call (`invalid_input`).
 
 A route pins the adapter runtime it was recorded with: the adapter's controls,
 its input contract and the SHA-256 of its module, and for a Codex route also the
@@ -744,9 +758,14 @@ the CLI's categories, and its identifiers are nonempty. A retry notice is accept
 only when the stream proves one generation. That proof is one `result` event, last
 in the stream, one successful turn, assistant text equal to the result text, and
 valid usage counts. `result_evidence` records that result's output digest and
-usage, and verification compares them with the response. Any other system subtype,
-an extra or missing field, the optional `no_response` payload and a second result
-are issues. A notice never removes another issue. The response retains the original
+usage, and verification compares them with the response. A notice subtype with
+an extra or missing field, the optional `no_response` payload included, is an
+issue. `init`, whose content the initialization check above covers, and
+`thinking_tokens`, which reports the thinking budget that the turn used, are
+neither notices nor issues. Every other system subtype is an issue,
+`system_event_` followed by the subtype, for example
+`system_event_compact_boundary`, and a second result is an issue. A notice
+never removes another issue. The response retains the original
 bytes of every system event, in order, under `execution.system_events`, up to
 4,096 events and 4 MiB. It records the bounds, the observed and retained counts and
 bytes, a truncation flag and the digest of the list. Inspection continues over the
