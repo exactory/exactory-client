@@ -293,4 +293,4 @@ class EarlierPromptTests(unittest.TestCase):
         self.assertNotIn('120,000', review_excerpts.PHASE_PROMPT_V1)
         self.assertEqual(json.dumps(sorted(openness_reading.PROMPTS)),
                          json.dumps(sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2,
-                                            openness_reading.PROTOCOL])))
+                                            openness_reading.PROTOCOL, openness_reading.MATH_PROTOCOL])))

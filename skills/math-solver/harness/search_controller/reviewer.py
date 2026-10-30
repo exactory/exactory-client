@@ -376,11 +376,17 @@ def validate_packet_context(supplied, expected, state):
     return sorted(drift, key=lambda row: row["path"])
 
 
-def require_review(root, state, content, value, *, subject=None, new=False, common_guard=None):
-    """Check actual invocation and exact native evidence, not self-attestation."""
+def require_review(root, state, content, value, *, subject=None, new=False, common_guard=None, record=None):
+    """Check actual invocation and exact native evidence, not self-attestation.
+
+    An attestation that names the first turn of an openness reading chain stands for the chain's effective terminal
+    turn: the whole chain is verified, and the result carries its reading_turns receipts. record is the recorded
+    acceptance or closure that relies on this review; its reading_turns must equal the receipts verified now.
+    """
     from research_harness.artifacts import ArtifactStore
     from research_harness.errors import ResearchError
     from research_harness.native_review import load_packet
+    from research_harness.openness_reading import find_final_assignment, verify_chain
     from research_harness.operations import normalized_text
     from research_harness.review_protocol import assignment_state
     from research_harness.storage import Store
@@ -400,7 +406,14 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
         assignment = records["review_assignment"][identifier]
         s.require(assignment["role"] == "native_math" and assignment["dossier_id"] is None,
                   "Native approval requires its native mathematical assignment", "review_assignment_mismatch")
+        if "reading_chain" in assignment:
+            assignment = find_final_assignment(records, artifacts, identifier)
+            current = dict(assignment_state(records, artifacts, assignment["id"]),
+                           reading_turns=verify_chain(records, artifacts, assignment))
         s.require(current["output"] == value, "Use the observed native review without author changes", "review_output_mismatch")
+        if record is not None:
+            s.require(record.get("reading_turns") == current.get("reading_turns"),
+                      "The recorded reading turns changed", "openness_reading_incomplete")
         supplied = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
         s.require(supplied["root"] == str(Path(root).resolve()) and supplied["objective_id"] == state["objective_id"]
                   and supplied["contract"] == state["contract"] and supplied["reviewer"] == value["reviewer"]
@@ -509,6 +522,13 @@ def validate_submitted(controller, state, spec, candidate, content, locks):
         checked = require_review(controller.root, state, content, value, subject=subject,
                                  new=new_review or command in {"review", "reassess", "accept", "complete"},
                                  common_guard=guard)
+        if "reading_turns" in checked:
+            # The controller derives the receipts of the chain that delivered this review; callers never submit them.
+            for operation in candidate["operations"]:
+                key = {"result_accepted": "acceptance", "objective_completed": "closure"}.get(operation["kind"])
+                if key is not None and operation["payload"][key]["review"] == value:
+                    operation["payload"][key]["reading_turns"] = checked["reading_turns"]
+                    operation["payload"]["digest"] = content.put_blob(operation["payload"][key])
         if command == "review" and checked.get("context_drift"):
             for operation in candidate["operations"]:
                 if operation["kind"] == "review_recorded" and operation["payload"]["review"] == value:

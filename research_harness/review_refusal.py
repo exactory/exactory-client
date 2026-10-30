@@ -118,13 +118,18 @@ def classify_observed_output(records, artifacts, attempt_id):
             validate_adjudication_contract(records, artifacts, assignment, packet, output)
         elif assignment['role'] == 'native_math':
             from .native_review import validate_output
-            from .openness_reading import find_stage, validate_turn_output
+            from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,
+                                           has_deliverable_passage, validate_turn_output)
             with contract_check('native.output'):
                 packet = json.loads(artifacts.read(assignment['packet']))
                 if find_stage(packet) is None:
                     validate_output(packet['native'], output)
                 else:
                     validate_turn_output(packet, output)
+            # Reading the bound bodies stays outside the contract check: an unavailable body is not an output failure.
+            if not has_deliverable_passage(records, artifacts, packet, output):
+                with contract_check('native.output'):
+                    raise ResearchError(INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG)
     except ResearchError as error:
         check = getattr(error, 'contract_check', None)
         if check is not None:

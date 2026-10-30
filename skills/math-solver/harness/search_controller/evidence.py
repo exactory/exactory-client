@@ -250,7 +250,8 @@ def audit_dependencies(root, state, content, checkpoint_ids, *, manifest_digests
         checkpoint = reference(state["checkpoints"], accepted["checkpoint_id"], "accepted checkpoint")
         audit_checkpoint(root, state, checkpoint, content, common_guard=common_guard, fresh=True)
         from .reviewer import require_review
-        require_review(root, state, content, accepted["review"], subject=checkpoint, common_guard=common_guard)
+        require_review(root, state, content, accepted["review"], subject=checkpoint, common_guard=common_guard,
+                       record=accepted)
         checked.add(identity)
         pending.extend(accepted["dependency_ids"])
         manifests.extend(checkpoint["evidence_digests"])
@@ -268,7 +269,8 @@ def audit_state(root, state, content, *, common_guard=None, fresh=False):
             audit_checkpoint(root, state, checkpoint, content, verify=True, common_guard=common_guard, fresh=fresh)
             s.require(content.get_blob(s.digest(accepted["review"])) == accepted["review"], "Pinned review differs", "digest_mismatch")
             from .reviewer import require_review
-            require_review(root, state, content, accepted["review"], subject=checkpoint, common_guard=common_guard)
+            require_review(root, state, content, accepted["review"], subject=checkpoint, common_guard=common_guard,
+                           record=accepted)
         except SearchError as error:
             failures[identity] = {"code": error.code, "message": error.message}
     closure = state["control"]["closure"]
@@ -276,7 +278,8 @@ def audit_state(root, state, content, *, common_guard=None, fresh=False):
         try:
             s.require(content.get_blob(s.digest(closure["review"])) == closure["review"], "Final review differs", "digest_mismatch")
             from .reviewer import require_review
-            require_review(root, state, content, closure["review"], subject=closure["subject"], common_guard=common_guard)
+            require_review(root, state, content, closure["review"], subject=closure["subject"],
+                           common_guard=common_guard, record=closure)
             for item in closure["subject"]["deliverables"]:
                 content.get_artifact(item["digest"])
             for delivery in closure["subject"]["local_deliveries"]:

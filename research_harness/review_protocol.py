@@ -2310,7 +2310,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         prompt = canonical_prompt(value['role'], repair=reassessment_required,
                                   orchestration='problem_creation' if problem else None,
                                   excerpts=review_excerpts.KEY in packet,
-                                  reading_stage=openness_reading.find_stage(packet))
+                                  reading_stage=openness_reading.find_stage(packet),
+                                  reading_protocol=openness_reading.find_protocol(packet))
         history = []
         session_id = value['id']
         history_assignment_id = None
