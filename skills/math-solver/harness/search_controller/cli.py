@@ -86,5 +86,9 @@ def install_parser(commands, strategies_default):
             parser.add_argument("--request-id", required=True)
         parser.add_argument("--json", action="store_true")
         if name not in {"status", "next", "strategy-context"}:
-            parser.add_argument("--check", action="store_true")
+            parser.add_argument("--check", action="store_true",
+                                help="pause, side-interval, retreat, interpret and render: build and validate the "
+                                     "event as the write does, write nothing, and print the check diagnostic or the "
+                                     "original response of a recorded request. Every other command: refused with "
+                                     "check_unsupported before the store is opened")
         parser.set_defaults(run=run_search)

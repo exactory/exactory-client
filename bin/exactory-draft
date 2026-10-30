@@ -1714,8 +1714,12 @@ def _build_parser() -> argparse.ArgumentParser:
              " It never publishes.")
     attach_problem.set_defaults(handler=_run_attach_problem)
 
-    for item in (init, package, deposit, reconcile, attach_problem):
-        item.add_argument("--check", action="store_true")
+    for item, effect in ((init, "creates the workspace layout"), (package, "writes an archive"),
+                         (deposit, "uploads to Zenodo"), (reconcile, "continues a deposit on Zenodo"),
+                         (attach_problem, "attaches a record on exactory")):
+        item.add_argument("--check", action="store_true",
+                          help="Refused with check_unsupported before anything is read: this command " + effect
+                               + ", which check mode does not simulate.")
     return parser
 
 

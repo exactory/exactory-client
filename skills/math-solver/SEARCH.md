@@ -1877,6 +1877,26 @@ exactory-math --attack-root attack search status --json
 exactory-math --attack-root attack search next --json
 ```
 
+Every command except `status`, `next` and `strategy-context` also accepts
+`--check`, with the same spec, `--expected-revision` and `--request-id`. `pause`,
+`side-interval`, `retreat`, `interpret` and `render` then run a check. The
+controller reads the event document and builds the event with the same builder,
+reducer and document validation as the write. It compares each staged content
+object with the bytes at its digest path and prints `{"check": "accepted",
+"revision": N, "recorded": false, "operation": NAME}`, where `revision` is the
+current revision and `operation` the command name. The check writes no event,
+content, runtime identity or view, and it creates no lock file: it takes the
+writer lock when `tree.lock` exists and runs without one when the file is
+absent. A request ID already recorded with the same command inputs returns the
+original command response, one recorded with other inputs fails with
+`request_id_conflict`, and a stale revision fails with `revision_conflict`. A
+staged object whose digest path holds different bytes fails with
+`immutable_collision`, and a symlink or a directory at `tree.lock` refuses the
+check as it refuses the write. An accepted check is a diagnostic, not an event:
+it reserves nothing, and the write that follows validates again. Every other
+command refuses the flag with `check_unsupported` before the controller opens
+the store. That refusal says nothing about the spec.
+
 The proposal's normal limits are explicit values, not omitted defaults:
 `{"max_moves":24,"max_runs":24,"timeout_seconds":300,"workers":1}`.
 `PublicCheckpoint` is `CheckpointInput` without `verification_status`; the service

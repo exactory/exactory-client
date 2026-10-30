@@ -36,7 +36,10 @@ snapshot of the store, reports the first refusal or an acceptance, and writes
 nothing. A check is a diagnostic. It satisfies no gate, records no plan,
 admission, attempt, review or decision, and is no evidence that a reviewer or a
 tool can cite. The write that follows validates again. Acquisitions, reviewer
-calls, reconciliations and projections refuse the flag. The
+calls, reconciliations and projections refuse the flag. `exactory-lab state set`
+and `exactory-lab decide` run the same check and write no state, entry or
+projection. `exactory-lab run` and `probe` and every `exactory-draft` command
+refuse the flag before they read anything. The
 [CLI reference](research-cli.md#inputs-and-receipts) states the output and the
 refusals.
 

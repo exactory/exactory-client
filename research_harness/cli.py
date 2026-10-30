@@ -284,7 +284,10 @@ def build_parser():
     packet = commands.add_parser("strategy-packet", allow_abbrev=False,
                                  help="Build a canonical reviewer packet without recording approval.")
     packet.add_argument("--workspace", default=".")
-    packet.add_argument("--check", action="store_true")
+    packet.add_argument("--check", action="store_true",
+                        help="Refused with check_unsupported before the workspace is opened: building a packet can "
+                             "store a file in the artifact store, for example a projected claim file, which check "
+                             "mode does not simulate.")
     packet.add_argument("--dossier-id")
     packet.add_argument("--role", choices=review_protocol.ROLES, required=True)
     packet.add_argument("--reviewer-id", required=True)

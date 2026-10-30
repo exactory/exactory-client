@@ -132,11 +132,13 @@ Change state with `exactory-lab state set`, and preserve actual decisions with
 `exactory-lab decide --stage STAGE --decision TEXT --why TEXT --evidence TEXT`.
 Both use revision and request identity, as do other managed mutations. Keep the
 original identity and payload when retrying a lost success. New decisions use a
-current revision and new ID. Every `exactory-research` mutation also accepts
-`--check`, which validates the payload against one snapshot of the store and
-writes nothing. An accepted check is a diagnostic, not a record: it satisfies no
-gate, and the write validates again. Acquisitions, reviewer calls and
-`reconcile-run` refuse it (`check_unsupported`); the
+current revision and new ID. Both accept `--check`, as does every
+`exactory-research` mutation: the command validates its payload against one
+snapshot of the store and writes nothing. An accepted check is a diagnostic, not
+a record: it satisfies no gate, records no state, draft record or entry, and the
+write validates again. Acquisitions, reviewer calls and `reconcile-run` refuse
+it (`check_unsupported`), and so do `exactory-lab init`, `run`, `probe` and
+`colab-serve` and every `exactory-draft` command, before they read anything. The
 [CLI reference](../../docs/research-cli.md#inputs-and-receipts) lists the others.
 
 Waiting and free-form operational status describe conditions, not research

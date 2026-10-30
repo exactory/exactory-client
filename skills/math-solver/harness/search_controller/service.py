@@ -17,7 +17,8 @@ from .storage import Store, canonical_bytes, safe_path, _strict_json
 def require_checkable_command(name):
     if name not in {"pause", "side-interval", "retreat", "interpret", "render"}:
         from .errors import SearchError
-        raise SearchError("check_unsupported", "Check mode cannot prepare external or recovery effects")
+        raise SearchError("check_unsupported", "Check mode cannot prepare this command. Only pause, side-interval, "
+                          "retreat, interpret and render accept --check")
 
 
 class Controller:

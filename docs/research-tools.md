@@ -116,9 +116,10 @@ exactory-research probe --file probe.json --expected-revision REVISION --request
 
 Both accept `--check`, which reports the first refusal of the payload, for
 example `probe_intent_missing` for an outcome without an intent, and reserves and
-charges nothing; `exactory-lab probe` has no check mode. A check of `artifact` on
-a probe path is refused with `check_unsupported`, because that pin commits in two
-steps.
+charges nothing. `exactory-lab probe --check` is refused with `check_unsupported`
+before the launcher reads anything, because the launcher runs a program. A check
+of `artifact` on a probe path is refused with `check_unsupported`, because that
+pin commits in two steps.
 
 The launcher persists `supervision.json` with the worker and program start
 identities, process group and frozen deadline. An independent watchdog enforces

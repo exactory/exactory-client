@@ -563,8 +563,12 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-decision` | Phase-specific action and complete evidence/objection dispositions. |
 | `source-impact` | Exact new/changed-source declaration for the selected decision; affected science still needs reassessment. |
 
-The read-only interfaces expose delivery material and the same obligations used
-by managed transition entrypoints:
+These interfaces expose delivery material and the same obligations used by
+managed transition entrypoints. `review-route-assess` and
+`research-decision-assess` only read. `strategy-packet` changes no revision, but
+it can store a file in the artifact store while it builds the packet, for
+example a projected claim file, and it refuses `--check` with
+`check_unsupported`:
 
 ```sh
 exactory-research strategy-packet --dossier-id DOSSIER --role ROLE --reviewer-id REVIEWER

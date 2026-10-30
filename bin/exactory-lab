@@ -548,8 +548,16 @@ def _build_parser() -> argparse.ArgumentParser:
                                   " EXACTORY_LAB_COLAB_POLL or 10.")
     colab_serve.set_defaults(handler=_run_colab_serve)
 
-    for item in (init, state_set, decide, run, probe, colab_serve):
-        item.add_argument("--check", action="store_true")
+    for item, effect in ((init, "creates a workspace"), (run, "launches a program"), (probe, "runs a program"),
+                         (colab_serve, "runs the job loop")):
+        item.add_argument("--check", action="store_true",
+                          help="Refused with check_unsupported before anything is read: this command " + effect
+                               + ", which check mode does not simulate.")
+    for item, subject in ((state_set, "the state change"), (decide, "the decision entry")):
+        item.add_argument("--check", action="store_true",
+                          help="Validate " + subject + " against one snapshot of the store, print the first refusal "
+                               "or {check: accepted, revision, recorded: false, ...}, and write nothing: no record "
+                               "and no projection. A request ID already committed returns its original receipt.")
     return parser
 
 

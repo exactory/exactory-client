@@ -111,8 +111,10 @@ new run.
 Use the current revision and exact bound values, as described in the workflow.
 `cycle`, `admit` and `bind-run` accept `--check`, which reports the first refusal
 from one snapshot of the store and records nothing: an accepted check of `cycle`
-is no plan, and `admit` needs the recorded plan. `exactory-lab run` has no check
-mode, and `reconcile-run --check` is refused for a new request.
+is no plan, and `admit` needs the recorded plan. `exactory-lab run --check` and
+`exactory-lab probe --check` are refused with `check_unsupported` before the
+launcher reads anything, because the launcher runs a program, and
+`reconcile-run --check` is refused for a new request.
 The worker executes a private copy of pinned inputs and seals the observed output
 inventory. Metrics may be printed as JSON or written to the bound fallback path,
 but a process exit or metric alone is not a scientific assessment. Read the saved

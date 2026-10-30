@@ -248,6 +248,16 @@ class Store:
         lock. Neither builders nor validators receive authoritative mutable data.
         An optional read-only before_commit check runs after content persistence,
         while the transaction lock is still held, immediately before the event.
+
+        With check=True the request, revision, build, validation and document
+        checks run as in a write, and each staged object is compared with the
+        bytes at its digest path. The call then returns the diagnostic {"check":
+        "accepted", "revision", "recorded": False, "operation"} without running
+        before_commit and without writing content, the event or the runtime
+        identity. A recorded request returns its event, as in a write. The check
+        acquires the writer lock only when the lock file exists and creates none.
+        The controller allows this path for pause, side-interval, retreat,
+        interpret and render only.
         """
         if not isinstance(identity, dict) or set(identity) != {"command", "target", "spec_digest"}:
             raise SearchError("invalid_input", "Operation identity is malformed")
