@@ -761,10 +761,12 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
         transaction.put("source_import", request_id,
                         dict(payload, source_id=sources[0]["id"], work_ids=[w["id"] for w in page.works], failures=page.failures))
 
-    return _finish(store, request_id, snapshot["revision"],
-                   {"status": "pending" if pending else "complete", "scope": "metadata_import", "pending": pending,
-                    "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources],
-                    "identity_conflicts": identity_conflicts}, apply=commit)
+    # The family conflicts come from this snapshot, so the write keeps its revision instead of retrying on a later one;
+    # an import costs no network request to run again.
+    return _finish_once(store, request_id, snapshot["revision"],
+                        {"status": "pending" if pending else "complete", "scope": "metadata_import", "pending": pending,
+                         "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources],
+                         "identity_conflicts": identity_conflicts}, apply=commit)
 
 
 def digest_bytes(data):
