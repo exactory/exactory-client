@@ -12,7 +12,7 @@ from . import review_excerpts
 from .errors import ResearchError, describe_error_at
 from .evaluation import Evaluation
 from .evidence import digest
-from .operations import fields, text
+from .operations import describe_received_value, fields, text
 from .reading import current_readings, validate_read_evidence
 from .source_links import captured_source, validate_link
 
@@ -65,13 +65,14 @@ def _page(rows, inventory_digest, page, query=None, *, page_size=None):
         raise ResearchError('review_inventory_mismatch', 'The original inventory page size must be a positive integer')
     if type(page) is not int or page < 0:
         raise ResearchError('invalid_review_source_request', 'Inventory pages are nonnegative integers, not booleans',
-                            {'page': page, 'minimum_page': 0})
+                            dict(describe_received_value('page', page), minimum_page=0))
     selected = rows if query is None else [row for row in rows if query.casefold() in
         (row['id'] + '\n' + (row.get('title') or '')).casefold()]
     if page > 0 and page * page_size >= len(selected):
         raise ResearchError('invalid_review_source_request', 'The requested inventory page is out of range',
-                            {'page': page, 'minimum_page': 0, 'maximum_page': max(0, (len(selected) - 1) // page_size),
-                             'page_size': page_size, 'total': len(selected)})
+                            dict(describe_received_value('page', page), minimum_page=0,
+                                 maximum_page=max(0, (len(selected) - 1) // page_size), page_size=page_size,
+                                 total=len(selected)))
     return {'page': page, 'page_size': page_size, 'total': len(selected), 'inventory_total': len(rows),
             'inventory_digest': inventory_digest, 'query': query, 'metadata_not_read': True,
             'items': selected[page * page_size:(page + 1) * page_size],
@@ -220,7 +221,8 @@ def requests(output, *, passages=False):
             else:
                 if type(request['page']) is not int or request['page'] < 0:
                     raise ResearchError('invalid_review_source_request', 'Inventory pages are nonnegative integers',
-                                        {'path': path + '/page', 'page': request['page'], 'minimum_page': 0})
+                                        dict(describe_received_value('page', request['page']), path=path + '/page',
+                                             minimum_page=0))
                 if kind == 'inventory_query':
                     with describe_error_at(path + '/query'):
                         text(request['query'], 'Literal ID or title query', code='invalid_review_source_request')

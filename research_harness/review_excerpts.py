@@ -15,7 +15,7 @@ import json
 import unicodedata
 
 from .errors import ResearchError, describe_error_at
-from .operations import fields, text
+from .operations import describe_received_value, fields, text
 
 KEY = 'reviewer_excerpts'
 PROTOCOL_V1 = 'exactory-review-excerpts-v1'
@@ -359,8 +359,9 @@ def validate_passage_request(request, code, kinds=None, *, path=''):
                              'minimum_characters': MINIMUM_PHRASE_CHARACTERS})
     if type(request['characters']) is not int or not 1 <= request['characters'] <= PASSAGE_CHARACTERS:
         raise ResearchError(code, 'A passage has a whole number of characters from 1 to 20,000',
-                            {'path': path + '/characters', 'characters': request['characters'],
-                             'minimum_characters': 1, 'maximum_characters': PASSAGE_CHARACTERS})
+                            dict(describe_received_value('characters', request['characters']),
+                                 path=path + '/characters', minimum_characters=1,
+                                 maximum_characters=PASSAGE_CHARACTERS))
 
 
 def carry_session(records, artifacts, packet, output):

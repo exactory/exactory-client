@@ -132,6 +132,26 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.assertEqual(turn['attempt_id'], 'attempt-turn-1-retry')
         self.assertEqual(self.artifacts.read(attempt['output']), saved)
 
+    def test_a_refusal_of_a_deeply_nested_value_is_recorded_without_the_value(self):
+        self.limit_input()
+        native = self.export()
+        self.assign('turn-1', native)
+        packet = self.read_packet('turn-1')
+        characters = 100
+        for _ in range(120):
+            characters = [characters]
+        passage = {'id': 'p', 'version_id': self.versions[0],
+                   'anchor': 'A sufficiently long verbatim anchor.', 'characters': characters}
+        receipt = self.invoke('turn-1', self.build_reading_response(packet, passages=[passage]))
+        refusal = self.store.snapshot()['records']['review_output_refusal']['attempt-turn-1']
+        self.assertEqual(refusal['details'], {'message': 'A passage has a whole number of characters from 1 to 20,000',
+                                              'path': '/passage_requests/0/characters', 'request_id': 'p',
+                                              'minimum_characters': 1, 'maximum_characters': 20000})
+        self.assertEqual(receipt['output_refusal']['details'], refusal['details'])
+        self.invoke('turn-1', self.build_reading_response(packet), attempt='attempt-turn-1-retry')
+        state = protocol.assignment_state(self.store.snapshot()['records'], self.artifacts, 'turn-1')
+        self.assertTrue(state['ready'], state['obligations'])
+
     def test_historical_null_refusal_remains_immutable(self):
         self.limit_input()
         self.assign('turn-1', self.export())
