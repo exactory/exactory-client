@@ -4,6 +4,7 @@ import copy
 import types
 import unittest
 from contextlib import ExitStack
+from unittest.mock import patch
 
 from research_harness import openness_reading, review_excerpts, review_protocol as protocol
 from research_harness import review_transport as transport
@@ -301,6 +302,18 @@ class MathOpennessReadingTests(MathOpennessChainCase, unittest.TestCase):
                          {key: value for key, value in accepted.items() if key != 'status'})
         self.assertEqual(self.controller.store.read(), document)
         self.assertEqual(self.controller.status()['acceptances']['acceptance-000001'], accepted)
+
+    def test_a_chain_verifies_under_the_common_text_that_its_turns_record(self):
+        self.build_fixture()
+        turns = self.run_chain()
+        self.accept_result()
+        receipts = self.read_receipts(turns[-1])
+        later = dict(protocol._COMMON_PROMPTS)
+        later[3] = later[protocol.COMMON_VERSION] + 'A later release adds this sentence. '
+        with patch.object(protocol, '_COMMON_PROMPTS', later), patch.object(protocol, 'COMMON_VERSION', 3):
+            audited = self.controller.status(full_audit=True)
+            self.assertEqual(audited['freshness']['status'], 'fresh', audited['freshness']['failures'])
+            self.assertEqual(self.read_receipts(turns[-1]), receipts)
 
     def test_every_pinned_original_of_a_version_is_read_and_a_later_capture_is_not(self):
         self.build_fixture(response_sizes=(70000,), text_sizes=(60000,))

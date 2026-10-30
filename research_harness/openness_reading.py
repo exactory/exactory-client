@@ -1101,11 +1101,12 @@ def _require_withheld_bodies(packet, rows, spans, observations):
 
 def _require_math_continuity(records, artifacts, native, chain, rows, spans, observations):
     """A math chain keeps the binding of its first turn: the native packet, route, reviewer, author, protocol and the
-    canonical prompt of each stage. Each turn carries the reading record that the observed outputs of the turns before
-    it give, with only the notes that fitting withholds, and a final turn withholds only bodies that reading turns
-    delivered complete. Every turn but the last returned a valid reading response that continued the chain, and the
-    last is a final turn whose output is the native result."""
-    from .review_protocol import canonical_prompt
+    canonical prompt of each stage, under the common text that the turn's own prompt records. Each turn carries the
+    reading record that the observed outputs of the turns before it give, with only the notes that fitting withholds,
+    and a final turn withholds only bodies that reading turns delivered complete. Every turn but the last returned a
+    valid reading response that continued the chain, and the last is a final turn whose output is the native
+    result."""
+    from .review_protocol import canonical_prompt, find_common_prompt_version
     first, record = chain[0], _create_record(MATH_PROTOCOL)
     for index, (assignment, observation) in enumerate(zip(chain, observations)):
         packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
@@ -1122,8 +1123,9 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
                 or normalized_text(assignment['reviewer_id']) != normalized_text(first['reviewer_id'])
                 or normalized_text(assignment['author_id']) != normalized_text(first['author_id'])
                 or assignment.get('reading_chain') != {'first_assignment_id': first['id'], 'turn': index + 1}
-                or assignment['prompt'] != canonical_prompt('native_math', reading_stage=stage,
-                                                            reading_protocol=MATH_PROTOCOL)):
+                or assignment['prompt'] != canonical_prompt(
+                    'native_math', reading_stage=stage, reading_protocol=MATH_PROTOCOL,
+                    common_version=find_common_prompt_version(assignment['prompt']))):
             raise ResearchError('openness_reading_incomplete', 'Every turn of a math reading chain keeps the binding, '
                                 'protocol and prompt of its first turn', {'assignment_id': assignment['id']})
         carried = _find_record(packet)

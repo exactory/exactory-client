@@ -655,7 +655,7 @@ def _build_prompt(template_id, prompt, parameters, common_version):
             'parameters': parameters, 'text': prompt}
 
 
-def _find_common_prompt_version(prompt):
+def find_common_prompt_version(prompt):
     """The common version that a recorded envelope names: none named is version 1, and only an exact integer names
     a later one; any other value names no supported version (None)."""
     parameters = prompt.get('parameters')
@@ -1879,7 +1879,7 @@ def _list_previous_problem_result_prompts(repair, common_version):
 def is_previous_prompt(assignment):
     """Whether the exact assignment uses a supported previous canonical prompt. The common text that the prompt
     records does not decide it: the scientific contract does."""
-    common_version = _find_common_prompt_version(assignment['prompt'])
+    common_version = find_common_prompt_version(assignment['prompt'])
     if common_version is None:
         return False
     repair = assignment.get('reassessment_required') is True
@@ -1907,7 +1907,7 @@ def is_previous_prompt(assignment):
 def _uses_previous_repair_suffix(assignment):
     """A context-repair assignment recorded with an earlier context-repair suffix keeps its verified prompt. The
     suffix does not make it a previous (version 1) prompt: its checks and rubric are those of its template."""
-    common_version = _find_common_prompt_version(assignment['prompt'])
+    common_version = find_common_prompt_version(assignment['prompt'])
     if assignment.get('reassessment_required') is not True or common_version is None:
         return False
     role, problem = assignment['role'], assignment.get('subject', {}).get('kind') == 'problem'
@@ -1940,13 +1940,13 @@ def has_problem_result_rubric(assignment):
 
 def _matches_current_problem_adjudicator_prompt(prompt):
     """Whether a problem adjudicator prompt has the current body, under the common text that it records."""
-    common_version = _find_common_prompt_version(prompt)
+    common_version = find_common_prompt_version(prompt)
     return common_version is not None and prompt == canonical_prompt('adjudicator', orchestration='problem_creation',
                                                                      common_version=common_version)
 
 
 def _prompt_matches(assignment):
-    common_version = _find_common_prompt_version(assignment['prompt'])
+    common_version = find_common_prompt_version(assignment['prompt'])
     if common_version is None:
         return False
     repair = assignment.get('reassessment_required') is True
