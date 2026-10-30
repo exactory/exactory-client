@@ -1646,8 +1646,10 @@ def _run_attach_problem(args: argparse.Namespace) -> None:
 
 
 def _build_parser() -> argparse.ArgumentParser:
+    # The description keeps the line breaks of the module docstring, so its command table stays aligned and a
+    # hyphenated name such as exactory-check is never broken across lines.
     parser = argparse.ArgumentParser(prog="exactory-draft", description=__doc__,
-                                     allow_abbrev=False)
+                                     formatter_class=argparse.RawDescriptionHelpFormatter, allow_abbrev=False)
     commands = parser.add_subparsers(dest="command", required=True)
 
     init = commands.add_parser("init", allow_abbrev=False,
