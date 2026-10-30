@@ -35,6 +35,10 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.66.3](docs/releases/0.66.3.md) bounds the final turn of an openness reading chain: the packet's records
+arrive as reading units after the full texts, the final turn withholds delivered bodies and then the oldest notes
+only as far as its request needs, and a refusal names the size of each part.
+
 Version [0.66.2](docs/releases/0.66.2.md) lowers the peak memory of history validation: the UTF-8 check and the
 digest of a stored value run in pieces of 65,536 characters, and each completed event is released before the next
 one is read. A push starts CI only on `main`; pull requests start CI as before.

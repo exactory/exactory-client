@@ -395,6 +395,18 @@ and written its excerpts. The input limit was not the constraint; the work of
 one turn was. A turn that ended without output can therefore be replaced by a
 new continuation of the same parent.
 
+The records that an openness packet carries as evidence (its bound search
+records, its reading records and the statement record) are reading units like
+the full texts, delivered as exact JSON text in the reading turns and quoted
+against those bytes, because on 2026-10-28 a final turn was refused at
+1,284,492 characters after 17 completed reading turns: every full-text body was
+already withheld, and the packet's 17 records, about 431,000 characters, had
+reached no reading turn. The final turn is bounded, so that a chain ends in a
+request that fits or in a refusal that names the size of each part: it carries
+a compact reading record and withholds, only as far as its measured request
+needs, the bodies that reading turns delivered complete and then the notes of
+the earliest turns, never an excerpt or a passage.
+
 External-paper verification uses the `verification` role with `dossier_id: null`
 and `context: {"verification_task_id": "<bound task digest>"}`. It requires the
 same verified actual context but no author strategy or research-decision gates.

@@ -1713,45 +1713,137 @@ Claude route reports `review_input_too_large`). Without `text_priority`, the
 export estimates the packet and returns a `review_input_too_large` warning that
 names each registered text route whose limit the estimate exceeds; the estimate
 counts the packet and its UTF-8 evidence as JSON strings, so a delivery
-projection or a framed route can send less.
+projection or a framed route can send less. In a reading chain the list also
+orders the full-text units, listed versions first, and the final turn withholds
+delivered full texts from the end of the list first.
 
-A reviewer reads every full text itself. When one input of a text route cannot
-hold them all, the openness review reads them in a reading chain of several
-turns. `review-assignment` starts the chain when the single-turn request, as the
-route fits it, would leave out the body of an extracted full text of the packet's
-readings or would still exceed the route limit. The assignment then records
-`reading_chain: {first_assignment_id, turn}` and becomes reading turn 1; in every
-other case nothing changes. Native result reviews of math-solver objectives keep
-their single turn.
+A reviewer reads every full text itself. An openness packet stays a single
+turn only when its request, as the route fits it, holds every unit of the
+packet (the full texts and the records described below) complete within the
+input limit, and those units together are at most 120,000 characters (the
+reading budget of one turn). In every other case the openness review reads the
+packet in a reading chain of several turns: `review-assignment` records
+`reading_chain: {first_assignment_id, turn}` on the assignment, which becomes
+reading turn 1. Native result reviews of math-solver objectives keep their
+single turn.
+
+A reading unit has a kind and an identity. A `fulltext` unit is the extracted
+full text of a read version, named by `version_id`. A `search_response` unit
+is the captured response of a search, named by `source_id`. A `record` unit is
+a record of the store that the packet carries as evidence, named by
+`record_kind` (`literature_search`, `reading` or `problem_statement`) and
+`record_id`. A full text or a captured response can also carry `text_sha256`,
+the SHA-256 of its whole stored body. A problem-openness chain delivers the
+full texts of the packet's readings, in `text_delivery_priority` order and
+then by version id and text digest, and after them the packet's own records:
+its bound search records in the order of `minimum.searches`, each once, its
+reading records by record id, and the statement record. The full texts are the
+extracted texts of the main full-text captures of each bound reading's version
+that the exported packet carries as evidence, one unit per version and text
+digest; a capture or reading recorded after the export does not enlarge the
+chain. When the packet binds an `openness_delivery` record (an export with
+`native_reviews`), the alternate main bodies that the record omits
+(`scientific_context.openness_delivery.alternate_body_digests`) are not units;
+the selected representation of each version is read. A record arrives as the
+exact JSON text of
+the artifact that the packet carries, so the unit is the same bytes that the
+final turn and `problem-openness` see. The `search_response` kind is accepted
+by the splitter, the checks and the chain verification, for chains that
+deliver captured responses; a problem-openness chain delivers none. A unit of
+at most 120,000 characters is delivered whole. A longer unit is cut into parts
+by the rule of the excerpt rules above, and each part is saved as its own text
+artifact; a part of a record or of a captured response is saved as plain text
+(`text/plain; charset=utf-8`), because a fragment of a JSON body is not JSON.
 
 A reading turn is a fresh input without the earlier turns. Its packet holds
 `reading_turn`: the subject digest, claim digest and reviewer of the native
 packet, the statement record, the formulations (the statement and its
 neighbours), `reading_plan` (`turn`, `delivered_now`, `delivered_before` and
-`remaining`) and `reading_record`, which carries the earlier turns: their notes,
-checked excerpts, passage answers and the allowances used. Its evidence is only
-the units of `delivered_now`; the search and reading records wait for the final
-turn. A unit is a whole extracted full text of at most 120,000 characters, or a
-part of a longer one, cut by the rule of the excerpt rules above and saved as
-its own text artifact. Each plan entry names its unit with `{version_id, part,
-parts, start, end, characters}`. The units follow `text_delivery_priority` and
-then the version id. A turn takes the longest run of the next units, at least
-one, whose characters together are at most 120,000 and whose actual fitted
-request delivers each of them complete within the input limit. A unit that does
-not fit the input limit alone fails the assignment with
-`review_input_too_large`, which names the version and its size. The reviewer is
-told that a text or part delivered in a turn is not delivered in a later
-reading turn, and that the final turn repeats a full text only when its input
-has room for it, so it cannot count on seeing the text again. It answers with
+`remaining`) and `reading_record`, the compact record of the earlier turns
+described below. Its evidence is only the units of `delivered_now`. Each plan
+entry names its unit by kind and identity, with `{part, parts, start, end,
+characters}` for a part, where `start` and `end` are character offsets in the
+whole body. An entry outside `delivered_now` carries the descriptor of its
+artifact instead of a reference to it, so no earlier body is delivered again
+by accident. A plan entry without `kind`, from a chain that 0.64.2 to 0.66.2
+started, is a full text. A turn takes the longest run of the next units, at
+least one, whose characters together are at most 120,000 and whose actual
+fitted request delivers each of them complete within the input limit. When
+that request does not fit, the turn withholds the notes of the earliest turns,
+oldest first, as the final turn does below, and never a unit of
+`delivered_now`. A unit that does not fit alone, even with every note
+withheld, fails the assignment with `review_input_too_large`. The reviewer is
+told that a unit or part delivered in a turn is not delivered in a later
+reading turn, and that the final turn withholds bodies that reading turns
+delivered when its input has no room for them, so it keeps what the judgment
+needs as excerpts and in its latest notes. It answers with
 `{schema_version: 1, stage: "reading", subject_digest, claim_digest, reviewer,
 excerpts, notes, passage_requests}`: `notes` (at most 20,000 characters) says
-what each delivered work or part proves and leaves open and how it bears on each
-formulation, `excerpts` are verbatim copies, and each passage request is
-`{id, version_id, anchor, characters}`. Excerpts and passages follow
-the checks and limits of the excerpt rules of bar, slate and result sessions in
+what each delivered unit or part proves and leaves open and how it bears on
+each formulation, `excerpts` are verbatim copies, and each passage request is
+`{id, <identity>, anchor, characters}`. An excerpt or a passage request names
+its unit by one identity form: `version_id` or `source_id`, each with an
+optional `text_sha256`, or `record_kind` and `record_id`; mixed identity
+fields are refused. The harness checks it against the exact bytes of the bound
+unit, a full text against the whole stored text and a record against its JSON
+text with the escapes inside its strings, under the checks and limits of the
+excerpt rules of bar, slate and result sessions in
 [Scientific contribution decisions](#scientific-contribution-decisions). A
-malformed answer is refused with `invalid_reading_response` (check
-`native.output`), and the ordinary retry rules apply.
+`text_sha256` that differs from the bound body, or an identity that names no
+bound unit, gives `unmatched` or `not_found` with the reason `no_stored_text`,
+as there; an identity without `text_sha256` that names more than one bound
+body gives the same statuses with the reason `ambiguous_identity`. A malformed
+answer is refused with `invalid_reading_response` (check `native.output`), and
+the ordinary retry rules apply.
+
+The reading record is compact. It holds `protocol`, `turns`, `sources`,
+`excerpts`, `passages` and `allowances`. `turns` lists the earlier turns with
+their assignment, attempt and delivery fields and their `notes`, or
+`notes_withheld`, a sentence naming the turn, when the notes are withheld from
+this input. `sources` lists one descriptor per cited artifact with the unit
+identities that name it. A verified excerpt or a delivered passage keeps its
+identity, `start`, `end`, the SHA-256 of the span, `status`, `text` and, for
+an excerpt, `purpose`; a passage also keeps the assignment and request id that
+asked for it. An unmatched excerpt keeps its `reason`, and an entry over an
+allowance keeps its `characters`. The locator, descriptor and note that every
+entry repeated under 0.64.2 to 0.66.2 are gone. The entries keep their order
+and every text that the allowance rules retained.
+
+The final turn is the native packet, its evidence and the reading record, on
+its own prompt. The harness builds it with every body and every note and
+measures the exact request that the route sends. While that request exceeds
+the input limit, it withholds content in this order, one item at a time, and
+stops at the first request that fits:
+
+1. the full texts that reading turns of the chain delivered complete, from the
+   end of `text_delivery_priority`;
+2. the other full texts that reading turns delivered complete, largest first;
+3. the captured responses that reading turns delivered complete as units,
+   largest first;
+4. the reading records that reading turns delivered complete, largest first;
+5. the search records that reading turns delivered complete, largest first;
+6. the notes of the earlier turns, oldest first, the newest last.
+
+Within a kind, equal sizes go by identity and then by artifact SHA-256. A body
+counts as delivered only when the actual authenticated requests of the reading
+turns carried it whole or in all of its parts; a plan entry or a claimed
+delivery does not count. Protected bodies (required proof bytes, selected
+source texts and screening evidence) are never withheld. A withheld body keeps
+its artifact reference and encoding, with `content: ""`,
+`delivery: "body-delivered-in-reading-turns"` and a note that names the turns
+that delivered it. A withheld note is replaced by `notes_withheld` in this
+input only; the observed outputs keep every note, and each later assignment
+starts from the full notes again. The statement and its record, the
+formulations, every excerpt, every passage, the source descriptors and the
+allowances are never withheld. When even the fully reduced request does not
+fit, `review-assignment` refuses with `review_input_too_large` before it
+records the assignment. The details give `input_characters`,
+`input_limit_characters` and `parts: {base_packet, notes, excerpts,
+passages}`, the characters that the reduced request spends on each part; the
+four parts add up to the input characters, and the message names all four.
+What remains at that point is protected evidence, the statement, and the
+excerpts and passages that the allowances let the chain keep. A new export of
+the same record does not reduce them.
 
 Run a reading chain turn by turn:
 
@@ -1768,12 +1860,11 @@ Run a reading chain turn by turn:
    assignment replaces the failed turn, which can no longer be run or continued
    (`review_assignment_replaced`). A failed first turn has no parent; export the
    packet again under a new assignment id and start a new chain.
-3. After the last reading turn the next assignment is the final turn: the native
-   packet with `reading_record`, built and fitted as a single turn, on its own
-   prompt. `text_delivery_priority` decides which full texts it can repeat. When
-   its request does not fit, `review-assignment` refuses with
-   `review_input_too_large`; export again with `minimum.text_priority` and start
-   a new chain.
+3. After the last reading turn the next assignment is the final turn, built and
+   fitted as described above. When its request does not fit after every
+   withholding, `review-assignment` refuses with `review_input_too_large` and
+   the four part sizes. A new export does not change them; report the sizes to
+   the owner.
 4. The final turn returns the native result review, or a reading answer with at
    least one passage request while the passage allowance has characters left. A
    further final turn, assigned as in step 2, then delivers the passages.
@@ -1781,31 +1872,62 @@ Run a reading chain turn by turn:
    `problem-openness` and its `assignment_id`.
 
 `problem-openness` on a final turn keeps every check and also checks the chain:
-each earlier turn is ready, the reading record names their observed attempts,
-and every extracted full text of the readings reached reading turns complete,
-whole or in all of its parts, in their actual recorded requests. The record adds
-`reading_turns: [{assignment_id, attempt_id, delivered, delivered_parts?}]`:
-`delivered` lists the versions whose whole text a turn delivered, and
-`delivered_parts` the parts `{version_id, part, parts}` when it delivered any.
-The openness assessment checks them again. When a turn is no longer ready or its observed attempt changes, the
-finding becomes `problem_openness_stale` with the cause `review_context_unverified`
-or `openness_reading_incomplete`. A finding without reading turns behaves as
-before.
+each turn is ready, the reading record names the observed attempts of the
+turns before the final turn, and every unit of the packet, each extracted full
+text of the readings and each packet record, was delivered complete in the
+actual recorded requests of the reading turns, whole or in all of its parts,
+or whole in the final turn's own request. A part counts as delivered when a
+request carried, complete, the exact bytes of that part of the unit's whole
+body as the part rule cuts it. An excerpt, a passage, a descriptor, a withheld
+body or a planned part is not a delivery. An earlier final turn that returned
+passage requests keeps its notes and passages, and its entry lists the units
+whose bodies its own request carried complete, but only the reading turns and
+the terminal final turn's own request count as deliveries. The record adds
+`reading_turns: [{assignment_id, attempt_id, delivered_units,
+delivered_parts?}]` for every turn of the chain, the final turn included:
+`delivered_units` lists the identities of the units whose whole body a turn
+delivered, each `{kind, ...}` with the identity fields of its kind, and
+`delivered_parts` the parts `{<identity>, part, parts, start, end,
+characters}` when it delivered any. The openness assessment checks them
+again. When a turn is no longer ready or its observed attempt changes, the
+finding becomes `problem_openness_stale` with the cause
+`review_context_unverified` or `openness_reading_incomplete`. A finding without
+reading turns behaves as before.
 
-A chain that 0.64.2 to 0.65.1 started (prompts `exactory-openness-reading-v1`,
-whole texts without a reading budget) keeps its recorded turns, which stay
-authenticated. Its next turn divides the remaining texts into units and
-continues under the current prompts (`exactory-openness-reading-v2`).
+A chain that 0.64.2 to 0.66.2 started (prompts `exactory-openness-reading-v1`
+or `exactory-openness-reading-v2`) keeps its recorded turns, which stay
+authenticated under their own protocol, and a finding recorded from it stays
+current: its chain is verified under that protocol and gives the same
+`reading_turns` entries, `{assignment_id, attempt_id, delivered,
+delivered_parts?}`. Its next assignment continues under the current prompts
+(`exactory-openness-reading-v3`) with the same native packet, first assignment
+id, route, reviewer and author. The previous answer is validated under its own
+protocol, and its excerpts and passages are checked by version id as before;
+the carried record becomes the compact form without charging them again, and
+its turns are listed again from the observed outputs of the chain. The harness
+does not schedule from the earlier plan. At every continuation it computes what remains
+from the actual authenticated requests of the chain's reading turns: in the
+order of the units, full texts and then records, it delivers next every unit
+that no reading turn delivered complete, the unit whole or the parts of it
+that no reading turn delivered. A chain whose full texts were all read, or
+whose final turn returned passage requests, therefore reads its records next,
+and the final turn follows. A final turn that returned the native result still
+ends its chain.
 
 Refusal codes of a reading chain:
 
-- `review_input_too_large`: a full text does not fit one reading turn alone, or
-  the final turn does not fit. The message names the version and its size, or
-  `minimum.text_priority`.
-- `invalid_reading_response`: a malformed reading answer, a reading answer in a
-  final turn without a passage request, or one after the passage allowance is
-  used up. `review-run` records it as an output refusal, and `review-assignment`
-  refuses to continue from it.
+- `review_input_too_large`: the first unit of a reading turn does not fit
+  alone, even with every earlier note withheld, or the final turn does not fit
+  after every withholding. The message says that the reading turn, or the
+  final turn, has that many input characters after it withholds every body and
+  note that it may withhold, above the route input limit, and names the base
+  packet, the notes, the excerpts and the passages; the details give
+  `input_characters`, `input_limit_characters` and `parts`.
+- `invalid_reading_response`: a malformed reading answer, an excerpt or passage
+  request with mixed identity fields, a reading answer in a final turn without
+  a passage request, or one after the passage allowance is used up.
+  `review-run` records it as an output refusal, and `review-assignment` refuses
+  to continue from it.
 - `review_source_continuation_mismatch`: the next turn names another packet,
   reviewer, route or author, or a turn that is not part of a reading chain.
 - `review_source_continuation_fork`: another turn already continues the named
@@ -1818,10 +1940,12 @@ Refusal codes of a reading chain:
   which ends the chain.
 - `review_context_unverified`: `problem-openness` finds a turn of the chain
   without an observed, authenticated output in a verified context.
-- `openness_reading_incomplete`: `problem-openness` names a turn without a native
-  result, a full text of the readings did not reach a reading turn complete
-  (`version_ids` names them), or the reading record no longer names the observed
-  turns.
+- `openness_reading_incomplete`: `problem-openness` names a turn without a
+  native result, a unit of the packet that reached neither a reading turn nor
+  the final turn's request complete (`details.units` lists each by kind and
+  identity, with `missing_parts` for a unit delivered in parts, and
+  `details.version_ids` lists the missing full texts as before), a chain with
+  a missing turn, or a reading record that no longer names the observed turns.
 
 When a local supporting proof is material, the spec also accepts optional
 `native_reviews: [{attempt_id, assignment_id}]`. Each entry names the current

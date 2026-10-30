@@ -1,10 +1,13 @@
 """Reviewer excerpts and bounded passages, checked against the stored source text.
 
 A reviewer that reads its sources over several turns keeps its own verbatim excerpts. The harness finds each excerpt
-in the stored text of its exact version and delivers the original characters at their exact span, never the
-reviewer's copy. A passage request returns a bounded part of a stored text that starts at a verbatim anchor. One turn
-reads at most TURN_FULLTEXT_CHARACTERS of new full text, so a longer text is read in consecutive parts. The same
-stored records always give the same result.
+in the stored text that it names and delivers the original characters at their exact span, never the reviewer's
+copy. A passage request returns a bounded part of a stored text that starts at a verbatim anchor. The excerpt rules of
+bar, slate and result sessions name a text by its exact version. An openness reading chain names the reading unit of a
+text by its identity: a full text by version_id and a captured search response by source_id, each with an optional
+text_sha256 of the whole body, and a store record by record_kind and record_id. One turn reads at most
+TURN_FULLTEXT_CHARACTERS of new text, so a longer text is read in consecutive parts. The same stored records always
+give the same result.
 """
 
 import hashlib
@@ -31,6 +34,12 @@ EXCERPT_OVER_ALLOWANCE_NOTE = ('This excerpt was found, but the verified excerpt
                                'session total of characters, so its text is not delivered.')
 PASSAGE_OVER_ALLOWANCE_NOTE = ('The anchor of this passage was found, but the delivered passages of this session '
                                'already use the session total of characters, so its text is not delivered.')
+# The kinds of reading units, each with the fields that name one: required, then optional.
+UNIT_KINDS = ('fulltext', 'search_response', 'record')
+IDENTITY_FIELDS = {'fulltext': (('version_id',), ('text_sha256',)),
+                   'search_response': (('source_id',), ('text_sha256',)),
+                   'record': (('record_kind', 'record_id'), ())}
+RECORD_KINDS = ('literature_search', 'reading', 'problem_statement')
 # The excerpt rules of 0.64.2 to 0.65.1, kept for the assignments recorded with them.
 PHASE_PROMPT_V1 = (
     ' Excerpt rules of this session. The full texts that you request can be longer together than one input of this '
@@ -150,12 +159,12 @@ def compute_part_digests(value):
     return [hashlib.sha256(value[start:end].encode('utf-8')).hexdigest() for start, end in compute_part_spans(value)]
 
 
-def save_part(artifacts, value, reference, start, end):
+def save_part(artifacts, value, reference, start, end, media_type=None):
     """The text artifact of one part: the stored text itself when the part is the whole text, otherwise the exact
-    UTF-8 bytes of the part, saved with the stored text's media type."""
+    UTF-8 bytes of the part, saved with the given media type or else with the stored text's."""
     if (start, end) == (0, len(value)):
         return reference
-    return artifacts.put(value[start:end].encode('utf-8'), reference['media_type'])
+    return artifacts.put(value[start:end].encode('utf-8'), media_type or reference['media_type'])
 
 
 def find_source_text(records, version_id):
@@ -168,16 +177,66 @@ def find_source_text(records, version_id):
     return abstracts[0]['artifact'] if abstracts else None
 
 
-def _read_sources(records, artifacts, version_ids):
-    """The stored text of each version that holds one, with its normalized form and offsets."""
+def find_kind(value):
+    """The kind of reading unit that an excerpt, a passage request or a unit names by its identity fields."""
+    if 'record_kind' in value or 'record_id' in value:
+        return 'record'
+    return 'search_response' if 'source_id' in value else 'fulltext'
+
+
+def find_identity(value):
+    """The identity of the reading unit that a value names: its kind, then the (field, value) pairs of the identity
+    fields that it carries, required fields first."""
+    kind = find_kind(value)
+    required, optional = IDENTITY_FIELDS[kind]
+    return (kind,) + tuple((key, value[key]) for key in required + optional if key in value)
+
+
+def find_identity_fields(value, kinds=None):
+    """The required and optional identity fields of an excerpt or a passage request. Without kinds it names a version
+    alone. With kinds it names a reading unit of one of those kinds; a value that names another kind gets the fields of
+    a version, which its own fields then fail."""
+    kind = find_kind(value) if isinstance(value, dict) else 'fulltext'
+    if kinds is None or kind not in kinds:
+        return ('version_id',), ()
+    return IDENTITY_FIELDS[kind]
+
+
+def find_source_reference(records, identity, unit_sources=None):
+    """The reference of the whole stored text that an identity names, or None. Without unit_sources only a bare version
+    names a text, its main full text or else its abstract capture, as the excerpt rules of bar, slate and result
+    sessions have it. unit_sources maps the required identity of each unit of a reading chain to its bound whole bodies
+    by SHA-256: an identity with text_sha256 names that body, and one without names the only bound body."""
+    values = dict(identity[1:])
+    if unit_sources is None:
+        return find_source_text(records, values['version_id']) if set(values) == {'version_id'} else None
+    kind = identity[0]
+    bodies = unit_sources.get((kind,) + tuple((key, values[key]) for key in IDENTITY_FIELDS[kind][0]), {})
+    if 'text_sha256' in values:
+        return bodies.get(values['text_sha256'])
+    return next(iter(bodies.values())) if len(bodies) == 1 else None
+
+
+def _find_missing_reason(identity, unit_sources):
+    """Why an identity names no stored text: it names several bound bodies without text_sha256, or none."""
+    values = dict(identity[1:])
+    if unit_sources is not None and 'text_sha256' not in values:
+        required = IDENTITY_FIELDS[identity[0]][0]
+        if len(unit_sources.get((identity[0],) + tuple((key, values.get(key)) for key in required), {})) > 1:
+            return 'ambiguous_identity'
+    return 'no_stored_text'
+
+
+def _read_sources(records, artifacts, identities, unit_sources=None):
+    """The stored text that each identity names, with its normalized form and offsets."""
     sources = {}
-    for version_id in sorted(version_ids):
-        reference = find_source_text(records, version_id)
+    for identity in sorted(identities):
+        reference = find_source_reference(records, identity, unit_sources)
         if reference is not None:
             content = artifacts.read(reference).decode('utf-8')
             normalized, offsets = normalize_with_offsets(content)
-            sources[version_id] = {'reference': reference, 'text': content, 'normalized': normalized,
-                                   'offsets': offsets}
+            sources[identity] = {'reference': reference, 'text': content, 'normalized': normalized,
+                                 'offsets': offsets}
     return sources
 
 
@@ -197,20 +256,21 @@ def _describe_span(source, start, end):
             'artifact_descriptor': descriptor(source['reference'])}
 
 
-def check_excerpts(records, artifacts, excerpts, allowances):
-    """Check excerpts in output order against the stored text of their versions. A verified excerpt carries the
-    original characters of its first match; the session allowance counts the characters of verified excerpts.
-    Return the checked entries and the allowances after them."""
+def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=None):
+    """Check excerpts in output order against the stored text that each names, found as find_source_reference finds
+    it. A verified excerpt carries the original characters of its first match; the session allowance counts the
+    characters of verified excerpts. Return the checked entries and the allowances after them."""
     allowance = dict(allowances['excerpts'])
-    sources = _read_sources(records, artifacts, {excerpt['version_id'] for excerpt in excerpts})
+    sources = _read_sources(records, artifacts, {find_identity(excerpt) for excerpt in excerpts}, unit_sources)
     checked = []
     for excerpt in excerpts:
-        entry = {'version_id': excerpt['version_id'], 'purpose': excerpt['purpose']}
-        source = sources.get(excerpt['version_id'])
+        identity = find_identity(excerpt)
+        entry = dict(identity[1:], purpose=excerpt['purpose'])
+        source = sources.get(identity)
         phrase, _ = normalize_with_offsets(excerpt['text'])
         span = None
         if source is None:
-            reason = 'no_stored_text'
+            reason = _find_missing_reason(identity, unit_sources)
         elif len(phrase) < MINIMUM_PHRASE_CHARACTERS:
             reason = 'too_short'
         else:
@@ -229,20 +289,20 @@ def check_excerpts(records, artifacts, excerpts, allowances):
     return checked, dict(allowances, excerpts=allowance)
 
 
-def answer_passages(records, artifacts, requests, allowances):
+def answer_passages(records, artifacts, requests, allowances, *, unit_sources=None):
     """Answer passage requests in order: the original text that starts at the first occurrence of the anchor and has
-    at most the requested number of characters, within the session allowance. Return the answers and the
-    allowances after them."""
+    at most the requested number of characters, within the session allowance; the stored text is found as for
+    check_excerpts. Return the answers and the allowances after them."""
     allowance = dict(allowances['passages'])
-    sources = _read_sources(records, artifacts, {request['version_id'] for request in requests})
+    sources = _read_sources(records, artifacts, {find_identity(request) for request in requests}, unit_sources)
     answers = []
     for request in requests:
         answer = {'request': request, 'reading_credit': False}
-        source = sources.get(request['version_id'])
+        source = sources.get(find_identity(request))
         span = None if source is None else _locate(source, normalize_with_offsets(request['anchor'])[0])
         if span is None:
-            answers.append(dict(answer, status='not_found',
-                                reason='no_stored_text' if source is None else 'anchor_not_found'))
+            answers.append(dict(answer, status='not_found', reason='anchor_not_found' if source is not None
+                                else _find_missing_reason(find_identity(request), unit_sources)))
             continue
         start = span[0]
         end = min(start + request['characters'], len(source['text']))
@@ -255,21 +315,37 @@ def answer_passages(records, artifacts, requests, allowances):
     return answers, dict(allowances, passages=allowance)
 
 
-def validate_excerpts(values, code):
-    """The shape of a reviewer's excerpts: a list of {version_id, text, purpose} with nonempty strings."""
+def _require_record_kind(value, code):
+    if 'record_kind' in value and value['record_kind'] not in RECORD_KINDS:
+        raise ResearchError(code, 'A record_kind is literature_search, reading or problem_statement')
+
+
+def validate_excerpts(values, code, kinds=None):
+    """The shape of a reviewer's excerpts: a list of {version_id, text, purpose} with nonempty strings. With kinds, an
+    excerpt names a reading unit of one of those kinds by the identity fields of that kind instead."""
     if not isinstance(values, list):
         raise ResearchError(code, 'excerpts is a list of {version_id, text, purpose}')
     for value in values:
-        fields(value, ('version_id', 'text', 'purpose'), code=code)
-        for key in ('version_id', 'text', 'purpose'):
-            text(value[key], 'Excerpt ' + key, code=code)
+        required, optional = find_identity_fields(value, kinds)
+        fields(value, required + ('text', 'purpose'), optional, code=code)
+        for key in required + optional + ('text', 'purpose'):
+            if key in value:
+                text(value[key], 'Excerpt ' + key, code=code)
+        _require_record_kind(value, code)
 
 
-def validate_passage_request(request, code):
-    """The values of a passage request: an exact version, a verbatim anchor of at least 20 normalized characters and
-    a whole number of characters from 1 to 20,000."""
+def validate_passage_request(request, code, kinds=None):
+    """The values of a passage request: an exact version, or with kinds the identity of a reading unit of one of those
+    kinds, a verbatim anchor of at least 20 normalized characters and a whole number of characters from 1 to
+    20,000."""
     from .bar_sources import require_exact_version
-    require_exact_version(request['version_id'], code)
+    required, optional = find_identity_fields(request, kinds)
+    for key in required + optional:
+        if key == 'version_id':
+            require_exact_version(request[key], code)
+        elif key in request:
+            text(request[key], 'Passage ' + key, code=code)
+    _require_record_kind(request, code)
     text(request['anchor'], 'Passage anchor', code=code)
     if len(normalize_with_offsets(request['anchor'])[0]) < MINIMUM_PHRASE_CHARACTERS:
         raise ResearchError(code, 'A passage anchor is a verbatim phrase of at least 20 characters')
