@@ -12,6 +12,8 @@ acquire_fulltext(store, identifier, url, *, request_id, expected_revision,
                  http=None, max_requests=None, extractor=None, extraction_options=None, component=None)
 import_response(store, provider, response: bytes, *, source_url, captured_at,
                 request_id, expected_revision, media_type=None, mappings=None)
+preview_import_response(store, provider, response: bytes, *, source_url, captured_at,
+                        media_type=None, mappings=None)
 
 Collection definitions are exactly freeze's four fields. collection/{id} holds
 definition, page_size, active_operation, partitions [{id,start,end,offset,total,
@@ -69,6 +71,16 @@ source_import/{request_id} holds provider, source_url, captured_at,
 response_sha256, media_type, mappings, source_id, work_ids and parser failures.
 Web/MCP source_url identifies the supplied result's provenance, not a verified
 origin article download. Their partial excerpts cannot replace full sources.
+
+preview_import_response parses the same payload against the current snapshot
+and returns {status: "preview", scope: "metadata_import", revision, work_ids,
+pending, warnings, identity_conflicts} without a record, artifact, receipt or
+charge. identity_conflicts, also in the original result of every new
+import_response, lists each DOI whose family assertions the batch makes
+ambiguous: {identifier, existing_families, incoming_families, candidates}, the
+three arrays sorted. It covers conflicts inside one batch; an assertion that
+repeats a recorded family adds none. The import continues; the field is
+advisory, and an earlier result replays without it.
 """
 
 import copy

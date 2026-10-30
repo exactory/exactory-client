@@ -533,7 +533,9 @@ non-zero when the citation gate does not pass. The gate also fails when the
 bibliography or the manuscript changed after the report.
 
 **`exactory-draft`** manages the paper workspace. `init` creates the layout,
-and `deposit` sends the built PDF and sources to Zenodo. The sandbox API and
+`package` writes a ZIP of the code, inputs, outputs and records behind a pinned
+manuscript for the deposit's sources archive, and `deposit` sends the built PDF
+and sources to Zenodo. The sandbox API and
 draft state are the defaults. A production publish also needs the
 `--confirm-publish` flag, because a published DOI is permanent. `--new-version`
 publishes a revised version of a record already deposited, keeping the concept

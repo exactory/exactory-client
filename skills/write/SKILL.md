@@ -223,6 +223,16 @@ for each listed work, and for no other work:
 - `{"work_id": ..., "reason": ...}` when the paper does not cite the work,
   saying why the work does not bear on the paper.
 
+When the deposit is to carry the code and data, build the archive and pin it as
+`sources`. The archive comes from a pinned bundle, so pin the manuscript once,
+run `exactory-draft package --output draft/sources.zip` (with `--include` for
+each file that no admitted run froze), and pin again with `draft/sources.zip` as
+`sources`; the reviews and predictions then belong to that bundle. An archive
+built after a pin does not change the pin: a managed deposit uploads only the
+`sources` bytes that the reviewed bundle holds. The archive records the snapshot
+and the bundle it was built from, not the reviews of the bundle that pins it.
+The deposit skill describes the command and its refusals.
+
 After the pin, the pinned working files (the PDF, the abstract, the
 bibliography, the claims file and the sources when pinned) stay as pinned until
 the bundle's measurement is complete: three assessors with a review and a
@@ -241,6 +251,13 @@ measurement, read the displaced edit back for the next revision from the
 moved file or from the backup's `path` under `research/sources/objects/`. An
 editor or a compiler that still had the file open continues to write to the
 moved file, not to the backup.
+
+The blind reviewers of the pinned bundle run in a context without the author's
+memory index, for example a separate CLI process with no automatic memory. An
+index edited after a session started still leaves its loaded notes in that
+session, so the author's own session is never a reviewer. Each review's
+`assessor` discloses its context with the boolean `author_memory_notes_present`
+(the evaluate skill, "2. Quality review").
 
 Stage report: present the compiled draft, evidence scope and limitations, citation
 findings, and where refreshed searches changed the text. Include a citation map:

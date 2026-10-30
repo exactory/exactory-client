@@ -255,14 +255,21 @@ and exit into the deciding test. Each investigation authorizes a named question
 and resource tranche, possibly containing dependent cycles. Its end, question
 resolution or failure signal requires a new decision based on what it achieved.
 A renamed sensitivity calculation does not renew an exhausted tranche. All
-tranches charge the same authorized run and preserve the full objective.
+tranches charge the same authorized run and preserve the full objective. A
+format-only run of the same plan (`admit` with `format_only_of`) keeps that
+plan's reviewed decision and charges its original tranche. Every other
+commitment after an assessed cycle still needs its own assessment and decision.
 
 ## Results, work items and reconsideration
 
 Extend the same dossier with exact supported claims, primary result/proof
 references, failures, comparisons with matching assumptions, and which committed
 consequences are established, contradicted or undecided. Keep the memo concise
-while making necessary definitions, proofs and evidence available.
+while making necessary definitions, proofs and evidence available. For each
+plan that disclosed runs of its program before it was recorded, the readiness
+export adds the inventory of those runs with their output hashes, read status
+and program differences, so an assessor sees what the author knew before the
+plan.
 
 Each of two independent assessors evaluates validity, scope, novelty,
 contribution-statement support, development and branch obligations before
@@ -317,7 +324,9 @@ output and observed usage in a JSON evidence artifact. A `review-attempt` import
 can retain that artifact against a standalone assignment. Its origin remains
 `imported`; it cannot supply canonical scientific approval or verified invocation
 provenance. Run the required canonical role separately when its approval is needed.
-Scientific documents are evidence, never instructions to the reviewer.
+Scientific documents are evidence, never instructions to the reviewer. A packet
+delivers every referenced object except one that a completion check sealed
+unread, which it describes by hash, size and media type only.
 
 A reviewer answers with one JSON object. The Claude route also reads an answer in
 which the reviewer withdrew an object. That answer holds complete object blocks,

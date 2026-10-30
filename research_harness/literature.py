@@ -8,6 +8,12 @@ source-anchored human assertion, not automatic verification of completeness.
 Bibliography is {complete: bool, unit_id: str|null, entries: [{target, kind,
 link, reason}]}. Kinds are paper, nonpaper, unknown. Resolutions use the same
 fields plus reference_id and explicitly account for earlier observations.
+An entry or resolution of kind paper can add target_family, the canonical id
+of an acquired family that an alias assertion names for its target
+(identities.select_family; invalid_family_selection otherwise). The choice
+needs the same link and reason as any entry, is kept on the recorded occurrence
+or resolution, and changes only that occurrence; without it an ambiguous
+target stays reference_identity_ambiguous.
 
 record_search accepts {id, profile, purpose, queries, responses, captured_at,
 scope, found_work_ids, verdict, cited_work_ids, impact, gaps, dispositions,

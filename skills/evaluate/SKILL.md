@@ -143,6 +143,18 @@ permitted tools; record author-history isolation, prior-assessment isolation and
 identity masking separately. The probe must demonstrate intended evidence access
 as well as exclusion of synthetic forbidden context.
 
+Run every blind assessor in a context that holds no memory index of the author's
+session: for example a separate CLI process with its own working directory and
+no automatic memory, or a verified route whose probe showed the index absent. A
+session loads an index at startup, and an edit of the index afterwards does not
+remove the notes that the session already holds. Record what the assessor's
+context held in the `assessor` of `manuscript-review`, `manuscript-prediction`,
+`round-review` and `scoped-review`: `author_memory_notes_present: true` when the
+author's memory notes were present, `false` when the context was verified to
+hold none. The field is an optional boolean and a disclosure only. The harness
+keeps either value, refuses another type, adds no gate on it, and treats an
+absent field in an older review as unknown exposure.
+
 A new session, directory or host and a clean packet do not establish isolation.
 If an automatic memory index or later tool read exposes prior scores, retain the
 response and record contamination even when the answer never repeats them.

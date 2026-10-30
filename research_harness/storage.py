@@ -61,6 +61,9 @@ _MAX_STORED_DEPTH = 100
 # bundle holds the same component at
 # review_inputs.synthesis.foundation.source_deferrals[i].dependencies.work.fulltexts[k].component.spec. So an input of
 # 32 levels reaches 44 of the store's 100 levels in a record.
+# Since 0.65.0 a new bundle holds its review inputs and execution observations as artifacts, and the pin checks
+# both values against the store bounds before it writes them (publication._check_stored_bounds). The inline
+# copies of earlier bundles stay at context.bundle.
 _MAX_INPUT_DEPTH = 32
 _UTF8_CHUNK_CHARACTERS = 65536
 _PUBLICATION_NAME = re.compile(r"\.research-[0-9a-f]{32}\.sqlite3\Z")

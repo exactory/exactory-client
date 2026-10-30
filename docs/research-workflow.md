@@ -529,7 +529,13 @@ found work with a disposition (relevant, contradictory, potentially relevant, ou
 of scope, duplicate, unresolved) and a reason; a later search for the same purpose
 carries its contradictory and unresolved findings forward or resolves them by name. Tool or web
 responses can be retained through `import-response` with original JSON pointer
-mappings. A `nothing-new` result still needs the captured search, including an
+mappings. Before a later import, `import-response --preview` reports the DOI
+families of the store that the batch makes ambiguous, without writing; a real
+import continues and records the same report as `identity_conflicts`. When the
+reference of an earlier reading turns `reference_identity_ambiguous` after such
+an import, a new `bundle` of that reading's body resolves the occurrence with an
+evidence-backed `target_family`, and the new bundle's own entries can carry the
+choice too (the CLI reference, `bundle`). A `nothing-new` result still needs the captured search, including an
 actual empty results array when that is what the search returned. Under
 `lineage-v1` these five captures are stage 1 of the bounded loop described at
 the end of this section.
@@ -767,11 +773,13 @@ and the managed records.
 
 Write a prospective `cycle` with its exact scope, predecessor/checkpoint,
 inheritance or reopening reason, distinguishing test, expected outcomes, failure
-signals, evidence requirements, and resource limits. Plan `result` and
-`validation` requirements for text or JSON outputs that an assessment can cite,
-and declare figures and other binary files under a `log` requirement; `bind-run`
-refuses an output bound to `result` or `validation` whose media type is not text
-or JSON. Pin actual program and input bytes with `artifact`. Use the returned plan
+signals, evidence requirements, and resource limits. Plan `result` requirements
+for the outputs that an assessment cites: text or JSON outputs through a span,
+text or JSON locator, and figures, PDFs or other binary outputs through
+`{"kind": "artifact"}` or a result `pdf` locator. Plan `validation` requirements
+for text or JSON outputs only; `bind-run` refuses a `validation` output of
+another media type, so bind such a file to a `result` or `log` requirement. Pin
+actual program and input bytes with `artifact`. Use the returned plan
 digest and artifact references in `admit`; bind the exact backend,
 interpreter/version, seed or null-seed reason, timeout, input paths, and declared
 output/usage contract before a launch.
@@ -857,6 +865,11 @@ the completed output of a planned `validation` requirement; until that output
 exists, record the check as `unresolved`. Preserve a durable `checkpoint` with a
 stable ID and the next hypothesis. Deepen a promising branch from that checkpoint;
 reopen a failed branch only when new evidence addresses its recorded obstruction.
+A run that only changes the format of an assessed cycle's outputs is not a
+reopening. Admit it with `format_only_of` naming the earlier execution, as
+[Actual execution](research-cli.md#actual-execution) describes. The recorded
+failures stay, the conversion charges the original strategy budget and tranche,
+and the converted outputs need their own `assess` before a candidate cites them.
 There is no fixed cycle count. Resource exhaustion and incomplete evidence are
 recorded conditions, not conclusions of success or impossibility.
 
@@ -1024,7 +1037,14 @@ review is separate from the earlier research support/value assessment. Use the
 shared canonical reviewer assignment and a verified route for manuscript reviews
 too; clean exported files alone do not exclude automatic memory, startup context
 or later tool exposure. Preserve contaminated returns without giving them
-independent approval credit.
+independent approval credit. Run each blind assessor in a context without the
+author's memory index, such as a separate CLI process with no automatic memory;
+an index edited after a session started keeps its loaded notes in that session.
+Each `assessor` can state `author_memory_notes_present`, a boolean, as a
+disclosure. An absent field in an older record means unknown exposure, and no
+gate reads the field. A bundle pinned since 0.65.0 holds its review inputs and
+execution observations as artifacts, written once per distinct export, and
+every reader resolves both that shape and the inline shape of earlier bundles.
 
 ```sh
 exactory-research check-claims --file manuscript.json
@@ -1087,6 +1107,12 @@ assessors each have a review. A bundle takes three predicting assessors, so a
 complete measurement stays complete; an incomplete group, or an ambiguous one
 recorded before this rule, reports counts and null medians.
 Publication-only reviewers remain outside the measurement.
+
+A later round sometimes needs an output of an assessed cycle under another name
+or serialization. A format-only run (`admit` with `format_only_of`) gives it
+without reopening that cycle's failures. It adds no evidence that a failure was
+addressed, and a claim on the converted output still needs its assessment and
+current readiness.
 
 ### After each measurement: the contribution analysis
 

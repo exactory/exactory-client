@@ -27,7 +27,10 @@ data rather than instructions.
 ## Collect and inspect
 
 1. Select corpus, category and window from the question and user context. Record
-   the field evidence and choice with `exactory-lab decide`.
+   the field evidence and choice with `exactory-lab decide --stage cohort`. In a
+   study the stage defaults to the current one; a problem record has no study
+   stage, so give `--stage` there. The entry is an operational log line, not a
+   post decision of a problem.
 2. `exactory-cohort freeze` computes the six complete calendar months before
    publication month. Before deposit use the current date. Its result defines
    the population; collection enumerates it.

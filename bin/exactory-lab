@@ -295,7 +295,8 @@ def _run_decide(args: argparse.Namespace) -> None:
     workspace_dir = _find_research_workspace()
     try:
         if args.stage is None and not (workspace_dir / _STUDY_STATE_PATH).is_file():
-            raise ResearchError("invalid_input", "Decisions outside a study need an explicit --stage.")
+            raise ResearchError("invalid_input", "This workspace has no study, so a decision has no default stage."
+                                " Give the stage with --stage.")
         stage = args.stage or _load_study_state(workspace_dir)["stage"]
         store = current_store(workspace_dir)
         entry = {"stage": stage, "decision": args.decision, "why": args.why, "evidence": args.evidence or ""}
@@ -484,7 +485,8 @@ def _build_parser() -> argparse.ArgumentParser:
     decide.add_argument("--why", required=True,
                         help="Why this over the alternatives.")
     decide.add_argument("--stage", type=_parse_stage, choices=_STAGES,
-                        help="Stage the decision belongs to. Default: the current one.")
+                        help="Stage of the log entry. Default: the study's current stage."
+                             " Required in a workspace without a study, such as a problem record.")
     decide.add_argument("--evidence",
                         help="File or result the decision rests on.")
     decide.set_defaults(handler=_run_decide)

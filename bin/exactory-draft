@@ -3,6 +3,7 @@
 
 Commands:
   init            - create the draft workspace layout and .exactory/draft.json
+  package         - write the ZIP of code, data and records behind a pinned manuscript (deposit --sources)
   deposit         - upload the built PDF (and optional sources) to Zenodo
   reconcile       - settle the claimed step of a saved deposit intent, then continue that deposit
   attach-problem  - settle the recorded deposit for a math problem and attach its published record

@@ -74,6 +74,17 @@ acquisition; a source-linked reading records the actual inspection. A reading
 stays current while its bundle's units are unchanged; parsed bibliography entries
 do not require re-reading. Record critical missing sources as pending.
 
+Identity conflicts stay stored: provider families are never merged. Before an
+import that registers the arXiv version of a paper the store knows by its DOI,
+run `exactory-research import-response --preview --file PAYLOAD` to see the
+DOI families that the batch makes ambiguous; the real import then reports the
+same under `identity_conflicts` and continues. A reference that the conflict
+turns `reference_identity_ambiguous`, in an earlier reading or in the new
+bundle, is repaired by a new `bundle` of its body whose entry or resolution
+names `target_family`, the acquired family that the evidence supports, with the
+same link and reason as any entry. The choice resolves that occurrence only; the
+conflicting assertions and the original evidence stay recorded.
+
 The five-purpose preparation preset covers `direct`, `originals`, `theory`, `adjacent`,
 and `recent`. Choose the purposes the question needs, retaining original
 queries, every captured response, bounded or complete coverage, versions,
