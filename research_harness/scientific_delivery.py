@@ -360,7 +360,10 @@ class ScientificDelivery:
                     for entry in observation.get("files", []):
                         captured = entry["artifact"]
                         if all(captured[key] == ref[key] for key in ("path", "sha256", "size")):
-                            self.result_aliases[digest(captured)] = ref
+                            key = digest(captured)
+                            previous = self.result_aliases.get(key)
+                            if previous is None or digest(ref) < digest(previous):
+                                self.result_aliases[key] = ref
                 self.required.setdefault(ref["sha256"], {})[digest(value["locator"])] = value["locator"]
             for child in value.values():
                 self._inventory(child)

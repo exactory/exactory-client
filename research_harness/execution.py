@@ -378,6 +378,7 @@ def _reconcile(store, payload, expected_revision, request_id):
         if terminal.exists() and observed["output_seal"]["origin"] != "worker":
             raise ResearchError("execution_output_seal_required", "A producer terminal requires its original worker output seal")
         outputs = []
+        output_media_types = {output_path(item["path"]): item["media_type"] for item in binding["outputs"]}
         for item in binding["outputs"]:
             path = output_path(item["path"])
             if path in files:
@@ -405,7 +406,8 @@ def _reconcile(store, payload, expected_revision, request_id):
         observation = {"admission_id": admission_id, "claim_digest": digest(claim), "binding_digest": binding["digest"],
                        "execution": execution,
                        "terminal": artifacts.put(_canonical(observed).encode(), "application/json"), "log": log_ref, "summary": summary,
-                       "files": [{"path": path, "artifact": artifacts.put(data, "application/octet-stream")} for path, data in files.items()]}
+                       "files": [{"path": path, "artifact": artifacts.put(data, output_media_types.get(path, "application/octet-stream"))}
+                                 for path, data in files.items()]}
         outcome = records.get("execution_outcome", {}).get(admission_id)
         if outcome is not None:
             if records["execution"][outcome["execution_id"]]["payload"] != execution:

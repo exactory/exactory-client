@@ -172,14 +172,14 @@ def _visual_supplied_context(records, artifacts, packets):
     """Credit exact delivered bytes and scoped mappings on the native visual route."""
     from .direction_sources import has_attachment
     from .evaluation import Evaluation
-    from .review_supplied_evidence import list_delivered_objections, list_delivered_parts
+    from .review_supplied_evidence import list_delivered_objections, list_delivered_parts, register_supplied_artifact
     evaluation = Evaluation.of(records, artifacts)
     references, mappings = {}, []
     for packet in packets:
         for entry in packet.get('evidence', []):
             reference = entry['artifact']
             if has_attachment(evaluation, packet, reference):
-                references[reference['sha256']] = reference
+                register_supplied_artifact(references, reference)
         delivered = (packet.get('prior_context', []) + packet.get('version_source_mappings', [])
                      + packet.get('supplied_source_mappings', []))
         delivered += [mapping for objection in list_delivered_objections(packet)

@@ -371,10 +371,16 @@ def parse_base_media_type(media_type):
 
 
 def detect_media_type(data, media_type):
-    """Return the media type these bytes are handled as, and how it was decided: a body reported as generic binary
-    whose bytes start with the PDF signature is a PDF, and every other body keeps its reported type."""
+    """Recognize PDF and raster signatures in generic binary; preserve other reported types."""
     if media_type in GENERIC_BINARY_MEDIA_TYPES and data.startswith(b"%PDF-"):
         return "application/pdf", "pdf_signature_from_generic_binary"
+    if media_type in GENERIC_BINARY_MEDIA_TYPES:
+        for signature, detected in ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg"),
+                                    (b"GIF87a", "image/gif"), (b"GIF89a", "image/gif")):
+            if data.startswith(signature):
+                return detected, "image_signature_from_generic_binary"
+        if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+            return "image/webp", "image_signature_from_generic_binary"
     return media_type, "reported_media_type"
 
 

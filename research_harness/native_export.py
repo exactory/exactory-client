@@ -42,7 +42,11 @@ def export_native(store, attack_root, destination, *, claim_binding=None):
                  "claim_binding": claim_binding}
     inputs = [{"path": relative + "/snapshot.json", "kind": "blob", "digest": reference["snapshot_digest"]}]
     originals = [(ref, artifacts.read(ref)) for ref in references(value)]
+    written = set()
     for ref, data in originals:
+        if ref["path"] in written:
+            continue
+        written.add(ref["path"])
         path = relative + "/artifacts/" + ref["sha256"]
         write_projection(attack_root, path, data)
         inputs.append({"path": path, "kind": "artifact", "digest": ref["sha256"]})

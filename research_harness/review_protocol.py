@@ -505,35 +505,66 @@ def collect_references(value):
             yield from collect_references(item)
 
 
-def _evidence(artifacts, value, *, transitive=False):
-    included, pending = {}, list(collect_references(value))
+def collect_result_artifacts(value):
+    if isinstance(value, dict):
+        reference = value.get('artifact')
+        if (value.get('kind') == 'result' and {'execution_id', 'output_id', 'locator'} <= value.keys()
+                and isinstance(reference, dict) and {'path', 'sha256', 'size', 'media_type'} <= reference.keys()):
+            yield reference
+        for key, item in value.items():
+            if key != 'citation':
+                yield from collect_result_artifacts(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from collect_result_artifacts(item)
+
+
+def _evidence(artifacts, value, *, transitive=False, records=None):
+    contents, pending = {}, list(collect_references(value))
+    result_hashes = {reference['sha256'] for reference in collect_result_artifacts(value)}
+    if records is not None:
+        result_hashes.update(output['artifact']['sha256']
+                             for execution in records.get('execution', {}).values()
+                             for output in execution['payload']['outputs'])
     while pending:
         reference = pending.pop()
-        if reference['sha256'] in included:
+        key = (reference['sha256'], digest(reference))
+        if key in contents:
             continue
         data = artifacts.read(reference)
-        binary = transport.is_binary_evidence(data, reference['media_type'])
-        if binary and transport.text_only_enabled():
-            # A text-only reviewer route receives no original bytes; the omission is explicit in the packet.
-            included[reference['sha256']] = {'artifact': reference, 'content': '', 'encoding': 'omitted',
-                'delivery': 'bytes-omitted-on-text-route',
-                'note': 'The original bytes of this artifact are not delivered on the text-only reviewer route. '
-                        'When the harness captured an extraction of a full text, its text is a separate evidence entry.'}
-            continue
-        if binary:
-            content, encoding = base64.b64encode(data).decode('ascii'), 'base64'
-        else:
-            try:
-                content, encoding = data.decode('utf-8'), 'utf-8'
-            except UnicodeDecodeError as error:
-                raise ResearchError('review_evidence_unreadable', 'The adapter supports text, PDF, and image evidence') from error
-        included[reference['sha256']] = {'artifact': reference, 'content': content, 'encoding': encoding}
-        if transitive and not binary:
+        contents[key] = (reference, data)
+        if transitive and not transport.is_binary_evidence(data, reference['media_type']):
             from .scientific_json import parse_scientific_json
             is_json, structured = parse_scientific_json(data, reference['media_type'])
             if is_json:
                 pending.extend(collect_references(structured))
-    return [included[key] for key in sorted(included)]
+                result_hashes.update(reference['sha256'] for reference in collect_result_artifacts(structured))
+    included = []
+    for key in sorted(contents):
+        reference, data = contents[key]
+        binary = transport.is_binary_evidence(data, reference['media_type'])
+        opaque = False
+        if not binary:
+            try:
+                content, encoding = data.decode('utf-8'), 'utf-8'
+            except UnicodeDecodeError as error:
+                if reference['sha256'] not in result_hashes:
+                    raise ResearchError('review_evidence_unreadable', 'The adapter supports text, PDF, and image evidence') from error
+                binary, opaque = True, True
+        if binary and transport.text_only_enabled():
+            # A text-only reviewer route receives no original bytes; the omission is explicit in the packet.
+            included.append({'artifact': reference, 'content': '', 'encoding': 'omitted',
+                'delivery': 'bytes-omitted-on-text-route',
+                'note': 'The original bytes of this artifact are not delivered on the text-only reviewer route. '
+                        'When the harness captured an extraction of a full text, its text is a separate evidence entry.'})
+            continue
+        if binary:
+            content, encoding = base64.b64encode(data).decode('ascii'), 'base64'
+        entry = {'artifact': reference, 'content': content, 'encoding': encoding}
+        if opaque:
+            entry['delivery'] = transport.RESULT_BYTES_DELIVERY
+        included.append(entry)
+    return included
 
 
 def _reference_templates(value):
@@ -1083,16 +1114,17 @@ def describe_version_evidence(records, artifacts, version):
             found = find_carried_record(records, carried, reference)
             if found is not None:
                 projection, delivered = found
-                content = {item['sha256']: supplied[item['sha256']] for item in list(collect_references(projection)) + delivered
-                           if item['sha256'] in supplied}
+                identities = {item['sha256'] for item in list(collect_references(projection)) + delivered}
+                content = {key: item for key, item in supplied.items() if item['sha256'] in identities}
                 entries.append(dict(reference, record=_reference_templates(projection), artifacts=list(content.values())))
                 continue
         else:
             artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
             identity = artifact['sha256']
             cited.add(identity)
-            if identity in supplied:
-                entries.append(supplied[identity])
+            delivered = [item for item in supplied.values() if item['sha256'] == identity]
+            if delivered:
+                entries.extend(delivered)
                 continue
             # A passage-only artifact is delivered through its passages, a source link only within their bounds.
             if supplied_evidence.is_received(records, reference, supplied, mappings, artifacts=artifacts):
@@ -1434,7 +1466,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             if 'source_delivery' in context:
                 from .review_source_complete import prepare
                 prepare(records, artifacts, prior, state, packet)
-            packet['evidence'] = _evidence(artifacts, packet)
+            packet['evidence'] = _evidence(artifacts, packet, records=records)
             packet['digest'] = digest(packet)
             return packet
     if problem and role == 'adjudicator':
@@ -1444,7 +1476,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
         from . import review_adjudicator_sources
         review_adjudicator_sources.prepare(records, artifacts, packet)
         packet['current_evidence'] = [entry['artifact'] for entry in _evidence(artifacts,
-            [packet['problem_evidence'], packet[review_adjudicator_sources.MARKER]])]
+            [packet['problem_evidence'], packet[review_adjudicator_sources.MARKER]], records=records)]
     elif problem:
         marker = records['workspace']['problem']
         packet.update(area=marker['area'], field=marker['field'],
@@ -1596,7 +1628,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id, context)
     if role in ('slate', 'result') and not problem:
         add_direction_evidence(records, artifacts, packet, dossier_id)
-    packet['evidence'] = _evidence(artifacts, packet, transitive=projected)
+    packet['evidence'] = _evidence(artifacts, packet, transitive=projected, records=records)
     if problem and role == 'adjudicator':
         review_adjudicator_sources.validate(artifacts, packet)
     packet['digest'] = digest(packet)
@@ -1959,7 +1991,7 @@ def _repair_packet(records, artifacts, value, repair):
         packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
     elif value['role'] in ('slate', 'result') and not problem:
         add_direction_evidence(records, artifacts, packet, value['dossier_id'])
-    packet['evidence'] = _evidence(artifacts, packet)
+    packet['evidence'] = _evidence(artifacts, packet, records=records)
     packet['digest'] = digest(packet)
     return packet
 
@@ -2218,7 +2250,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                             packet['focused_refresh']['undelivered_keys'] = undelivered
                         if reason == 'disposition_unsupported':
                             packet['focused_refresh']['undelivered_references'] = unsupported
-                        packet['evidence'] = _evidence(artifacts, packet)
+                        packet['evidence'] = _evidence(artifacts, packet, records=records)
                         packet['digest'] = digest(packet)
                         continue
                 attempts = [a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == previous['id']]
@@ -2539,7 +2571,7 @@ def record_context_event(store, payload, *, expected_revision, request_id):
             text(value[key], key)
         if not isinstance(value['evidence'], list) or not list(collect_references(value['evidence'])):
             raise ResearchError('invalid_review_context', 'Context events require actual evidence artifacts')
-        _evidence(artifacts, value['evidence'])
+        _evidence(artifacts, value['evidence'], records=records)
         record = dict(value, recorded_revision=expected_revision + 1)
         return [immutable_record(records, 'review_context_event', value['id'], record)], record
     return prepared_mutation(store, 'review.context_event', payload, prepare, expected_revision=expected_revision, request_id=request_id)
@@ -2597,7 +2629,7 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
         if packet.get('subject', {}).get('kind') == 'problem':
             from .strategy import evidence
             evidence(records, artifacts, value['evidence'])
-        _evidence(artifacts, value['evidence'])
+        _evidence(artifacts, value['evidence'], records=records)
         record = dict(value, dossier_id=state['dossier_id'], recorded_revision=expected_revision + 1)
         if packet.get('subject', {}).get('kind') == 'problem':
             record.update(subject=packet['subject'], problem_evidence_digest=packet['problem_evidence_digest'])

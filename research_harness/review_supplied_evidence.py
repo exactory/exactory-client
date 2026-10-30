@@ -3,6 +3,7 @@
 import json
 
 from .errors import ResearchError
+from .evidence import digest
 from .source_links import contains, contains_locator, validate_link
 
 PROTOCOL = 'exactory-focused-review-evidence-v2'
@@ -87,8 +88,20 @@ def collect_qualified_objections(packet):
         yield from collect_qualified_objections(turn['packet'])
 
 
+def register_supplied_artifact(references, reference):
+    identity = reference['sha256']
+    previous = references.get(identity)
+    if previous is None:
+        references[identity] = reference
+    elif previous != reference:
+        primary, alias = sorted((previous, reference), key=digest)
+        references[identity] = primary
+        references.pop(identity + ':' + digest(primary), None)
+        references[identity + ':' + digest(alias)] = alias
+
+
 def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
-    """The artifacts that the packets of the assignments' lineages attached, by sha256, and the passage mappings they
+    """The artifacts that the packets of the assignments' lineages attached, retaining exact aliases, and the passage mappings they
     delivered: prior context, an adjudicator's original and version passages, and passages delivered with a material
     objection or an objection of a historical review. Focused refreshes and corrections retain their packet lineage."""
     references, mappings = {}, []
@@ -96,11 +109,11 @@ def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
     from .review_source_complete import ALTERNATE
     for packet in lineage_packets(records, artifacts, assignment_ids):
         for entry in packet.get('evidence', []):
-            if entry.get('delivery') in (BODY_DELIVERY, ALTERNATE):
+            if entry.get('delivery') in (BODY_DELIVERY, ALTERNATE) or entry.get('encoding') == 'omitted':
                 continue
             reference = entry['artifact']
             artifacts.read(reference)
-            references[reference['sha256']] = reference
+            register_supplied_artifact(references, reference)
         delivered = (packet.get('prior_context', []) + packet.get('version_source_mappings', [])
                      + packet.get('supplied_source_mappings', [])) + [mapping for objection in list_delivered_objections(packet)
                                                        for mapping in objection.get('version_source_mappings', [])]
@@ -165,7 +178,7 @@ def is_received(records, reference, references, mappings, *, artifacts, frozen=F
         evaluation = Evaluation.of(records, artifacts)
         if any(has_pdf_page(evaluation, packet, reference['link']) for packet in packets):
             return True
-    if artifact['sha256'] in references:
+    if any(item['sha256'] == artifact['sha256'] for item in references.values()):
         return True
     passages = [mapping for mapping in mappings if mapping['origin']['artifact_descriptor']['sha256'] == artifact['sha256']]
     if reference.get('kind') != 'source':
@@ -252,8 +265,7 @@ def validate_correction(records, artifacts, evidence, references, mappings):
         if isinstance(value, dict):
             if {'version_id', 'source_id', 'artifact', 'locator'} <= value.keys():
                 validate_link(records, artifacts, value)
-                supplied = references.get(value['artifact']['sha256'])
-                if supplied != value['artifact']:
+                if value['artifact'] not in references.values():
                     allowed = False
                     for mapping in mappings:
                         outer = cite_passage(artifacts, mapping)
@@ -265,7 +277,7 @@ def validate_correction(records, artifacts, evidence, references, mappings):
                         raise ResearchError('invalid_review_correction', 'A correction must stay inside an exact source passage actually supplied earlier')
                 count += 1
             elif {'path', 'sha256', 'size', 'media_type'} <= value.keys():
-                if references.get(value['sha256']) != value:
+                if value not in references.values():
                     raise ResearchError('invalid_review_correction', 'An unsupplied original requires a permitted exact source locator')
                 artifacts.read(value)
                 count += 1
