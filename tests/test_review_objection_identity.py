@@ -177,6 +177,22 @@ class BlindObjectionIdentityTests(fixtures.ProblemDeliveryCase):
         self.assertNotIn(QUALIFIED_ID, self.find_unresolved_identities())
         self.assertIn(SHARED_ID, self.find_unresolved_identities())
 
+    def test_the_current_adjudicator_body_under_the_earlier_common_text_keeps_not_binding(self):
+        self.prepare_colliding_bars()
+        self.observe_results({SHARED_ID: "continuing", QUALIFIED_ID: "continuing"})
+        with patch.object(protocol, "COMMON_VERSION", 1):
+            self.adjudicate("focused", QUALIFIED_ID, BARS, "not_binding")
+        self.assertNotIn(QUALIFIED_ID, self.find_unresolved_identities())
+
+    def test_a_change_of_the_common_text_alone_does_not_refresh_an_adjudication(self):
+        self.prepare_colliding_bars()
+        self.observe_results({SHARED_ID: "continuing", QUALIFIED_ID: "continuing"})
+        with patch.object(protocol, "COMMON_VERSION", 1):
+            self.adjudicate("focused", QUALIFIED_ID, BARS, "upheld")
+        with self.assertRaises(ResearchError) as refused:
+            self.adjudicate("focused-2", QUALIFIED_ID, BARS, "not_binding")
+        self.assertEqual(refused.exception.code, "review_adjudicator_fixed")
+
     def test_the_earlier_adjudicator_prompt_offers_no_not_binding_disposition(self):
         self.prepare_colliding_bars()
         self.observe_results({SHARED_ID: "continuing", QUALIFIED_ID: "continuing"})

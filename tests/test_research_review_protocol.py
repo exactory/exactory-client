@@ -21,7 +21,7 @@ class ReviewProtocolTests(LiteratureCase):
             self.assertIn(field, current["text"])
         self.assertIn("nonempty JSON string", current["text"])
         self.assertIn("not an object or an array", current["text"])
-        previous = canonical_prompt("native_math", version=5)
+        previous = canonical_prompt("native_math", version=5, common_version=1)
         self.assertEqual(previous["template_hash"],
                          "6ec497976123ee7a6d662870831c2bd13ba5e6523ef1d8215830e7cd905c0d37")
         self.assertNotEqual(current, previous)
@@ -31,7 +31,7 @@ class ReviewProtocolTests(LiteratureCase):
         from research_harness.review_protocol import canonical_prompt, _prompt_matches
         current = canonical_prompt("native_math")
         self.assertEqual(current["text"], current["text"].strip())
-        previous = canonical_prompt("native_math", version=4)
+        previous = canonical_prompt("native_math", version=4, common_version=1)
         self.assertEqual(previous["template_hash"],
                          "1da5f10e808a90902fb477135379b80f39acf7a6daccd5c907bb489309e956c1")
         self.assertNotEqual(current, previous)
@@ -52,7 +52,7 @@ class ReviewProtocolTests(LiteratureCase):
 
     def test_native_version_three_prompt_remains_exactly_supported(self):
         from research_harness.review_protocol import canonical_prompt, _prompt_matches
-        previous = canonical_prompt("native_math", version=3)
+        previous = canonical_prompt("native_math", version=3, common_version=1)
         current = canonical_prompt("native_math")
         self.assertEqual(previous["template_hash"],
                          "911fd529e31ca9bf8efba3c743ecdd4d9c7e4cfe11ed7d97ed830e7002c81872")
@@ -174,7 +174,7 @@ class ReviewProtocolTests(LiteratureCase):
         hashes = {('bar', False, False): 'c474378cef1646b2adf449db3087a220baa27a155b278a10c88ef2448946d244', ('bar', True, False): 'b5de936b2aab5e08cf552557cf2d6b8e10e45af60c075f3444fe80e48da9efce', ('bar', False, True): '753203addd047e8f37d5446bd6aece514020cfccbd501546d19d72be6d02e945', ('slate', False, False): '99c7b148411e7c238899f73136ceedbb0818f21cbd8639195716ebcc745431e9', ('slate', True, False): 'c36c26caa5dd602382f78af2d3da81e1639a8ccaf7720e2ce82f7d8409b2554b', ('slate', False, True): 'b8eb03c2b906125c9f50a9bfaaead5e615b8dd17ca20cbcda2885d0e2202ec07', ('result', False, False): '980dddb9ba4e1e136de898ed9824927c90ce1426e0d9c87800f68a480afc4a00', ('result', True, False): '368c1d75342c9c770ae3c11f840ed25afe7d25e220aa59b9cf19305bb5ac88cd', ('result', False, True): '13fd492f4b52adb7ed52e5358bdf3843d67a333ef57023369366d6edf5cddf9a'}
         for (role, legacy, repair), expected in hashes.items():
             with self.subTest(role=role, legacy=legacy, repair=repair):
-                prompt = p.canonical_prompt(role, legacy=legacy, repair=repair, version=1)
+                prompt = p.canonical_prompt(role, legacy=legacy, repair=repair, version=1, common_version=1)
                 self.assertEqual(prompt["template_hash"], expected)
                 assignment = {"role": role, "prompt": prompt, "reassessment_required": repair}
                 self.assertTrue(p.is_previous_prompt(assignment))

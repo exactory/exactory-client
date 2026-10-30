@@ -573,7 +573,7 @@ class ReadingPromptTests(unittest.TestCase):
         for (reading_protocol, stage), template_hash in earlier.items():
             with self.subTest(protocol=reading_protocol, stage=stage):
                 prompt = protocol.canonical_prompt('native_math', reading_stage=stage,
-                                                   reading_protocol=reading_protocol)
+                                                   reading_protocol=reading_protocol, common_version=1)
                 self.assertEqual((prompt['template_id'], prompt['template_hash']),
                                  (reading_protocol + '/' + stage, template_hash))
                 self.assertTrue(protocol._prompt_matches({'role': 'native_math', 'prompt': prompt, 'context': {}}))

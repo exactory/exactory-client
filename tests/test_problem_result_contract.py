@@ -39,7 +39,7 @@ class ProblemResultContractTests(unittest.TestCase):
         return case.read_records()['review_assignment']['result-first'], output
 
     def test_new_result_example_does_not_treat_completed_no_stop_assessment_as_incomplete(self):
-        old = protocol.canonical_prompt('result', version=2, orchestration='problem_creation')
+        old = protocol.canonical_prompt('result', version=2, orchestration='problem_creation', common_version=1)
         current = protocol.canonical_prompt('result', orchestration='problem_creation')
         self.assertEqual(old['template_hash'], 'dbe0052d524fce3b04fd975777f3c19d163e5e13bb6e56fc50943d547782fc93')
         self.assertEqual(current['template_id'], 'exactory-problem-review-v5/result')
@@ -319,7 +319,7 @@ class PromptTerminalBoundaryTests(unittest.TestCase):
             with self.subTest(repair=repair):
                 # The version 3 prompt was recorded with the context-repair suffix of 0.56.0.
                 prompt = protocol.canonical_prompt('result', version=3, repair=repair, orchestration='problem_creation',
-                                                   repair_prompt=protocol.context_repair.PROMPT_0560)
+                                                   repair_prompt=protocol.context_repair.PROMPT_0560, common_version=1)
                 suffix = '/context-repair' if repair else ''
                 self.assertEqual(prompt['template_id'], 'exactory-problem-review-v3/result' + suffix)
                 self.assertEqual(prompt['template_hash'], native_hash)
