@@ -1641,8 +1641,10 @@ def _require_route_runtime(route):
 
 
 def _observed(artifacts, route, request, credential):
+    from .review_codex_notices import record_disabled_exec_notices
     _require_route_runtime(route)
     observed = transport.observe(route, request, credential)
+    record_disabled_exec_notices(route, observed['response'])
     record = {key: value for key, value in observed.items() if key not in ('request', 'response', 'output')}
     record['request'] = _put_json(artifacts, request)
     record['response'] = None if observed['response'] is None else _put_json(artifacts, observed['response'])
