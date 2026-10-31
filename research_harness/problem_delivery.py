@@ -200,7 +200,8 @@ def export_problem(store, destination=None):
     if directory.exists() or directory.is_symlink():
         if has_exported_files(directory, files):
             return result
-        raise ResearchError("review_destination_exists", "The destination holds other files; export into a new directory",
+        raise ResearchError("review_destination_exists",
+                            "The destination already holds files that differ from this export. Export into a new directory",
                             {"destination": str(directory)})
     from .workspace import write_projection
     directory.mkdir(mode=0o700, parents=True)

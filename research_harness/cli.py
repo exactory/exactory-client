@@ -279,9 +279,11 @@ def build_parser():
             item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-openness", "outputs"), default="workspace")
             item.add_argument("--spec", help="JSON assignment identity, openness minimum, optional analytical native_reviews [{attempt_id,assignment_id}], and source_evidence [{source_id,reason,locator?}] for problem-openness.")
             item.add_argument("--destination", help=(
-                "New directory for the export. The problem export goes inside final/ of the workspace, by default "
-                "final/problem/exports/<export digest>/. A readiness, manuscript, round or problem-openness packet "
-                "goes anywhere, by default intermediate/reviews/packets/<id>/. A native export requires it."))
+                "Directory of the export. A problem export goes under final/problem/exports/ of the workspace, by "
+                "default final/problem/exports/<export digest>/; a directory that already holds exactly the exported "
+                "files is reused. A problem-openness, readiness, manuscript or round packet goes into any new "
+                "directory, by default intermediate/reviews/packets/<assignment id>/ or "
+                "intermediate/reviews/packets/<kind>-r<revision>/. A native export requires a new directory."))
             item.add_argument("--attack-root", help="Native attack root for an immutable foundation delivery.")
             item.add_argument("--claim-binding", help="JSON source correspondence for an external native verification claim.")
         if command == "recover":
@@ -593,12 +595,12 @@ def run(args):
         require_ready(report, args.action)
         return report
     if args.kind == "problem":
-        final = find_workspace_root(store.root) / "final"
-        if args.destination is not None and final not in Path(os.path.realpath(args.destination)).parents:
+        folder = find_workspace_root(store.root) / PROBLEM_EXPORTS_FOLDER
+        if args.destination is not None and folder not in Path(os.path.realpath(args.destination)).parents:
             raise ResearchError("export_destination_outside_final",
-                                "Export the problem inside final/ of the workspace. Without --destination it goes to "
-                                + PROBLEM_EXPORTS_FOLDER + "/<export digest>/.",
-                                {"destination": args.destination, "final": str(final)})
+                                "Leave out --destination, or give a directory under " + PROBLEM_EXPORTS_FOLDER + "/ of the workspace. Without "
+                                "--destination the export goes to " + PROBLEM_EXPORTS_FOLDER + "/<export digest>/.",
+                                {"destination": args.destination, "folder": str(folder)})
         from .problem_delivery import export_problem
         return export_problem(store, args.destination)
     if args.kind == "problem-openness":

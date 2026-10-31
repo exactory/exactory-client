@@ -20,6 +20,10 @@ from search_controller.errors import SearchError
 from search_controller.model import EVENT_HANDLERS, apply_event, initial_state
 from search_controller.service import Controller
 from search_controller.storage import Store
+# search_controller puts the plugin root, which holds the research harness, on the import path.
+from research_harness import cli as research_cli, output_views as research_views, review_protocol
+from research_harness.storage import Store as ResearchStore
+from tests.native_reviewer_support import mutate
 from tests.search_execution_support import admit_workspace, begin_spec, invoke
 from tests.search_fixtures import contract, digest, proposal, provenance, review
 from tests.support import WorkspaceTest, make_move
@@ -418,8 +422,9 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(action["kind"], "paused")
         for value in (status, action):
             [advisory] = value["advisories"]
-            self.assertEqual((advisory["kind"], advisory["action"], advisory["rendered_revision"], advisory["revision"]),
-                             ("output_views_stale", "exactory-math search render", 1, 2))
+            self.assertEqual((advisory["code"], advisory["action"], advisory["reason"], advisory["rendered_revision"],
+                              advisory["revision"]), ("output_views_stale", "exactory-math search render",
+                                                      "render_failed", 1, 2))
             self.assertIn("No space left on device", advisory["error"])
             self.assertEqual(advisory["path"], str(self.workspace / "final/math/attack"))
         self.command("render", {}, "render-1")
@@ -427,6 +432,46 @@ class RenderTests(unittest.TestCase):
         self.assertNotIn("advisories", self.controller.command("next", {}, None, None))
         self.assertEqual(json.loads((self.workspace / "final/math/attack/objective.json").read_bytes())
                          ["execution_status"], "paused")
+
+    def test_every_advisory_names_its_reason_with_the_research_fields(self):
+        def advise(reason, rendered, revision=1):
+            return [{"code": "output_views_stale", "action": "exactory-math search render", "reason": reason,
+                     "path": None, "error": None, "rendered_revision": rendered, "revision": revision}]
+
+        def read_advisories():
+            return [self.controller.command(name, {}, None, None).get("advisories") for name in ("status", "next")]
+
+        self.assertEqual(read_advisories(), [None, None])
+        marker = json.loads(self.marker.read_bytes())
+        for field, value, reason, rendered in (("plugin_version", "0.0.0", "plugin_changed", 1),
+                                               ("event_digest", "0" * 64, "history_changed", 1),
+                                               ("revision", 2, "history_changed", 2)):
+            self.marker.write_bytes(json.dumps(dict(marker, **{field: value})).encode())
+            self.assertEqual(read_advisories(), [advise(reason, rendered)] * 2, field)
+        self.marker.unlink()
+        self.assertEqual(read_advisories(), [advise("not_rendered", 0)] * 2)
+        self.marker.write_bytes(json.dumps(marker).encode())
+        with mock.patch.object(output_views, "render_views", return_value=None):
+            self.command("pause", {"reason": "Owner asked to pause"}, "pause-1")
+        self.assertEqual(read_advisories(), [advise("behind", 1, 2)] * 2)
+
+    def test_a_controller_root_named_deliveries_renders_nothing(self):
+        # Its views would share final/math/deliveries/ with the research harness's views of the native deliveries.
+        workspace = self.workspace.parent / "reserved"
+        (workspace / "deliveries").mkdir(parents=True)
+        controller = Controller(workspace / "deliveries")
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            controller.command("init", {"contract": contract()}, 0, "init")
+            controller.command("render", {}, 1, "render-1")
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertFalse((workspace / "final").exists() or (workspace / "intermediate").exists())
+        self.assertFalse((controller.root / ".search" / output_views.MARKER_NAME).exists())
+        expected = [{"code": "output_views_stale", "action": "exactory-math search render",
+                     "reason": "reserved_controller_root_name", "path": str(controller.root), "error": None,
+                     "rendered_revision": None, "revision": 2}]
+        self.assertEqual(controller.command("status", {}, None, None)["advisories"], expected)
+        self.assertEqual(controller.command("next", {}, None, None)["advisories"], expected)
 
     def test_a_foreign_file_in_the_way_stops_the_render_until_it_moves(self):
         workspace = self.workspace.parent / "other"
@@ -498,6 +543,133 @@ class NativeRenderTests(WorkspaceTest):
         self.assertEqual(marker["revision"], controller.status()["revision"])
 
 
+def read_owned_files(marker):
+    return set(json.loads(marker.read_bytes())["files"])
+
+
+def list_view_files(workspace):
+    """{path from the workspace root: (bytes, inode, modification time)} of every file in final/ and intermediate/."""
+    found = {}
+    for folder in ("final", "intermediate"):
+        for parent, _, names in os.walk(str(workspace / folder)):
+            for name in names:
+                path = Path(parent) / name
+                info = path.stat()
+                found[path.relative_to(workspace).as_posix()] = (path.read_bytes(), info.st_ino, info.st_mtime_ns)
+    return found
+
+
+def check_shared_workspace_root(test, workspace, rel):
+    """Both renderers' files fill final/ and intermediate/ of one workspace root: each file has one owner, each index
+    lists only its owner's files, and no file is unowned. Returns the research and the controller files."""
+    research = read_owned_files(workspace / ".exactory/output-views.json")
+    controller = read_owned_files(workspace / rel / ".search" / output_views.MARKER_NAME)
+    test.assertEqual(research & controller, set())
+    test.assertEqual(research | controller, set(list_view_files(workspace)))
+    for folder in ("final", "intermediate"):
+        index = json.loads((workspace / folder / "index.json").read_bytes())
+        test.assertEqual(index["unowned"], [], folder)
+        for entry in index["files"]:
+            test.assertIn(entry["type"], ("view", "controller"), entry)
+            test.assertIn(folder + "/" + entry["path"], controller if entry["type"] == "controller" else research)
+        own = json.loads((workspace / folder / "math" / rel / "index.json").read_bytes())
+        test.assertEqual(own["unowned"], [], folder)
+        test.assertLessEqual({entry["path"] for entry in own["files"]}, controller, folder)
+    test.assertIn({"path": "math/" + rel + "/index.json", "type": "controller"},
+                  json.loads((workspace / "final/index.json").read_bytes())["files"])
+    return research, controller
+
+
+def find_series_adoptions(workspace):
+    """{assignment id: the controller adoptions in its turn} over every reviewer series of the research store."""
+    adopted = {}
+    for path in sorted((workspace / "intermediate/reviews").glob("*/*/series.json")):
+        for turn in json.loads(path.read_bytes())["turns"]:
+            adopted[turn["assignment_id"]] = [item for item in turn["adopted_by"] if item["kind"] == "controller"]
+    return adopted
+
+
+def check_series_adoptions(test, workspace, rel):
+    """Every adoption in the controller's final index appears in the series of the assignment it names."""
+    index = "final/math/" + rel + "/index.json"
+    expected = {}
+    for adoption in json.loads((workspace / index).read_bytes())["adoptions"]:
+        expected.setdefault(adoption["assignment_id"], []).append(
+            {"kind": "controller", "index": index, "review_id": adoption["review_id"],
+             "adopting_record": adoption["adopting_record"]})
+    adopted = find_series_adoptions(workspace)
+    test.assertEqual({assignment: adopted.get(assignment) for assignment in expected}, expected)
+    return expected
+
+
+def check_second_renders_write_nothing(test, workspace, controller):
+    """A controller command that builds the whole controller model, then a full research render, write no view."""
+    before = list_view_files(workspace)
+    stderr = io.StringIO()
+    with contextlib.redirect_stderr(stderr):
+        controller.command("render", {}, controller.status()["revision"], "render-again")
+        research_views.render_all(ResearchStore(workspace))
+    test.assertEqual(stderr.getvalue(), "")
+    test.assertEqual(list_view_files(workspace), before)
+
+
+def build_route(identifier):
+    return {"id": identifier, "adapter": "openai_responses_v1", "model": "fixture-model",
+            "endpoint": "https://api.openai.com/v1/responses",
+            "configuration": {"max_output_tokens": 10000, "timeout_seconds": 5}}
+
+
+class SharedWorkspaceRootTests(WorkspaceTest):
+    """A problem record's layout: the research store at the workspace root and the controller root attack/ in it."""
+
+    def research(self, command, payload, request):
+        workspace = self.attack_root.parent
+        path = workspace / "work" / (request + ".json")
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(payload))
+        revision = ResearchStore(workspace).revision if (workspace / ".exactory/research.sqlite3").is_file() else 0
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            research_cli.main([command, "--workspace", str(workspace), "--file", str(path), "--expected-revision",
+                               str(revision), "--request-id", request])
+        self.assertEqual(stderr.getvalue(), "")
+        return json.loads(stdout.getvalue())
+
+    def test_both_renderers_share_one_workspace_root(self):
+        workspace = self.attack_root.parent
+        self.research("problem-init", {"slug": "fixture-problem", "area": "math.CO", "field": "Fixture propositions",
+                                       "authors": ["native-fixture-author"]}, "problem-init")
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            controller = admit_workspace(self.attack_root, review_workspace="..")
+        self.assertEqual(stderr.getvalue(), "")
+        self.research("review-route", build_route("second-route"), "second-route")
+        research, own = check_shared_workspace_root(self, workspace, "attack")
+        self.assertIn("intermediate/reviews/routes/second-route/route.json", research)
+        self.assertIn("final/math/attack/admissions/proposal-000001.json", own)
+        self.assertIn("intermediate/math/attack/nodes/sample/index.json", own)
+        attestation = controller.status()["reviews"]["review-000001"]["record"]["reviewer"]["attestation_id"]
+        assignment = attestation[len("review-assignment:"):]
+        [adoption] = check_series_adoptions(self, workspace, "attack")[assignment]
+        self.assertEqual(adoption["adopting_record"], {"kind": "admission_review", "id": "review-000001",
+                                                       "status": "current",
+                                                       "path": "final/math/attack/admissions/proposal-000001.json"})
+        check_second_renders_write_nothing(self, workspace, controller)
+        # Each harness reports views that are behind its records with the same fields; the research entry also
+        # carries its explanation.
+        with mock.patch.object(output_views, "render_views", return_value=None):
+            controller.command("pause", {"reason": "Owner asked to pause"}, controller.status()["revision"], "pause-1")
+        store = ResearchStore(workspace)
+        mutate(store, review_protocol.record_route, build_route("third-route"))
+        [research_advisory] = research_cli.status_report(store)["advisories"]
+        [controller_advisory] = controller.command("status", {}, None, None)["advisories"]
+        self.assertEqual(set(research_advisory) - {"explanation"}, set(controller_advisory))
+        for advisory in (research_advisory, controller_advisory):
+            self.assertEqual((advisory["code"], advisory["reason"], advisory["path"], advisory["error"]),
+                             ("output_views_stale", "behind", None, None))
+            self.assertLess(advisory["rendered_revision"], advisory["revision"])
+
+
 class AcceptanceCheckTests(unittest.TestCase):
     """A local check on a copy of a real record; it skips where the record is absent."""
 
@@ -517,6 +689,32 @@ class AcceptanceCheckTests(unittest.TestCase):
             self.assertEqual(len(index["adoptions"]), 10)
             print("\nunknotting copy: first render %.3f s, skipped render %.4f s, %d final files"
                   % (first, skipped, len(index["files"])))
+
+    @unittest.skipUnless((UNKNOTTING_ATTACK_ROOT.parent / ".exactory/research.sqlite3").is_file(),
+                         "the unknotting record is not on this machine")
+    def test_a_copy_of_the_unknotting_record_renders_both_views_side_by_side(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary).resolve() / "record"
+            shutil.copytree(str(UNKNOTTING_ATTACK_ROOT), str(workspace / "attack"), symlinks=True)
+            (workspace / ".exactory").mkdir()
+            shutil.copy2(str(UNKNOTTING_ATTACK_ROOT.parent / ".exactory/research.sqlite3"),
+                         str(workspace / ".exactory/research.sqlite3"))
+            objects = UNKNOTTING_ATTACK_ROOT.parent / "research/sources/objects"
+            if objects.is_dir():
+                shutil.copytree(str(objects), str(workspace / "research/sources/objects"))
+            controller = Controller(workspace / "attack")
+            stderr = io.StringIO()
+            started = time.monotonic()
+            with contextlib.redirect_stderr(stderr):
+                output_views.render_after_command(controller)
+            elapsed = time.monotonic() - started
+            self.assertEqual(stderr.getvalue(), "")
+            _, own = check_shared_workspace_root(self, workspace, "attack")
+            self.assertTrue([path for path in own if path.startswith("final/history/math/attack/")])
+            adoptions = check_series_adoptions(self, workspace, "attack")
+            check_second_renders_write_nothing(self, workspace, controller)
+            print("\nunknotting copy, both renderers: first render %.3f s, %d adopted assignments"
+                  % (elapsed, len(adoptions)))
 
 
 if __name__ == "__main__":

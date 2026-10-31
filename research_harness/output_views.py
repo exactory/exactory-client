@@ -55,10 +55,11 @@ _REVISION_FIELDS = ("recorded_revision", "revision", "reviewed_revision", "asses
                     "admitted_revision", "analyzed_revision", "prepared_revision")
 _STATUS_FOLDERS = {"current": "final/", "superseded": "final/history/", "historical": "final/history/",
                    "not_selected": "intermediate/"}
-# Folders that other writers own: the controller renderer owns every math subtree except the deliveries, the export
-# commands own their folders, and a session fills the legacy folder once.
-_CONTROLLER_FOLDERS = ("final/math/", "intermediate/math/")
-_DELIVERIES_FOLDER = "final/math/deliveries/"
+# Folders that other writers own: the controller renderer owns every math subtree of final/, final/history/ and
+# intermediate/ except this store's deliveries, the export commands own their folders, and a session fills the legacy
+# folder once.
+_CONTROLLER_FOLDERS = ("final/math/", "final/history/math/", "intermediate/math/")
+_DELIVERIES_FOLDERS = ("final/math/deliveries/", "final/history/math/deliveries/")
 _EXPORT_FOLDERS = tuple(folder + "/" for folder in (PROBLEM_EXPORTS_FOLDER, PACKETS_FOLDER, LITERATURE_EXPORTS_FOLDER))
 _LEGACY_FOLDER = "intermediate/legacy/"
 _CHECK_REPORT_PATHS = (".exactory/citation-check.json", ".exactory/derivation-check.json")
@@ -814,7 +815,7 @@ def _read_inputs(store_root, workspace_root):
             digests[relative] = hashlib.sha256(data).hexdigest()
     for directory, subdirectories, names in os.walk(workspace_root / "final/math"):
         relative = os.path.relpath(directory, workspace_root).replace(os.sep, "/") + "/"
-        if relative.startswith(_DELIVERIES_FOLDER):
+        if relative.startswith(_DELIVERIES_FOLDERS):
             subdirectories[:] = []
             continue
         if "index.json" in names and find_entry_kind(workspace_root, relative + "index.json") == "regular":
@@ -858,8 +859,9 @@ def read_rendered_revision(store):
 
 def find_view_advisories(store, revision):
     """The advisory output_views_stale while the views may not show the records at revision: with its reason, and
-    with the failing path and error of the last render when one failed. No gate reads it."""
-    def advise(reason, rendered=0, path=None, error=None):
+    with the failing path and error of the last render when one failed. A field that does not apply to the reason is
+    None, and the controller's advisory has the same fields. No gate reads it."""
+    def advise(reason, rendered=None, path=None, error=None):
         return [obligation("output_views_stale", STALE_VIEWS_EXPLANATION, action=STALE_VIEWS_ACTION, reason=reason,
                            rendered_revision=rendered, revision=revision, path=path, error=error)]
     if _is_shared_workspace_root(store.root):
@@ -875,7 +877,7 @@ def find_view_advisories(store, revision):
         path = sorted(marker["errors"])[0]
         return advise("file_errors", rendered, path, marker["errors"][path])
     if rendered == 0:
-        return advise("not_rendered") if revision > 0 else []
+        return advise("not_rendered", rendered) if revision > 0 else []
     if marker["plugin_version"] != plugin_version():
         return advise("plugin_changed", rendered)
     _, digests, _ = store.read_changes(rendered)
@@ -1037,7 +1039,7 @@ def _build_index(workspace_root, folder, model, errors):
                 exports.add(export + path[len(export):].split("/", 1)[0])
             elif path.startswith(_LEGACY_FOLDER):
                 entries.append({"path": path[len(prefix):], "type": "legacy"})
-            elif path.startswith(_CONTROLLER_FOLDERS) and not path.startswith(_DELIVERIES_FOLDER):
+            elif path.startswith(_CONTROLLER_FOLDERS) and not path.startswith(_DELIVERIES_FOLDERS):
                 if name == "index.json":
                     entries.append({"path": path[len(prefix):], "type": "controller"})
             elif (path not in model or path in errors) and path[len(prefix):] not in _FOLDER_FILE_NAMES:

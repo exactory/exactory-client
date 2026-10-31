@@ -25,12 +25,14 @@ redirection whose word does not begin with `>` (such as `2>`, `&>` or
 write is untouched. Any other file, any other tool, and any error of the hook's
 own checks are silent: exit 0, no output.
 
-Between the two checks, the hook denies a Write, an Edit or a NotebookEdit (whose
-path is `notebook_path`) into `final/` or `intermediate/` of a workspace root,
-except into `intermediate/legacy/`, when the harness renders those two folders there:
-the workspace root holds `.exactory/output-views.json` (a research store), or a
-folder in it holds `.search/output-views.json` (a math-solver controller), or
-is a controller root (it holds `.search/tree.json`) that holds
+After the controller check and before the check of the eight files, the hook
+denies a Write, an Edit or a NotebookEdit (its path is `notebook_path`) into
+`final/` or `intermediate/` of a workspace root, except into
+`intermediate/legacy/`, when the harness renders those two folders there. It
+renders them there in three cases: the workspace root holds
+`.exactory/output-views.json` (a research store); a folder in it holds
+`.search/output-views.json` (a math-solver controller); or a folder in it is a
+controller root (it holds `.search/tree.json`) and holds
 `.exactory/output-views.json` (a research store located at the controller
 root, which renders beside it). Only these two direct children of a workspace
 root are guarded, so a folder named `final` elsewhere, such as `draft/final/`,

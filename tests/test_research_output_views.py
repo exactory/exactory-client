@@ -752,6 +752,44 @@ class RenderTests(ViewCase):
         self.assertEqual((advisory["reason"], advisory["path"], advisory["error"]),
                          ("file_errors", "final/problem/statements/statement-1.json", "output_view_conflict"))
 
+    def test_the_controller_history_tree_belongs_to_the_controller(self):
+        self.put(("native_attempt", "a" * 64, {"objective_id": "objective-000001", "recorded_revision": 1}),
+                 ("native_attempt", "b" * 64, {"objective_id": "objective-000001", "recorded_revision": 2}),
+                 ("native_attempt_current", "c" * 64, {"native_attempt_digest": "b" * 64}))
+        controller = {"final/math/attack/index.json": "{}",
+                      "final/history/math/attack/reassessments/assessment-000001.json": "{}",
+                      "intermediate/math/attack/index.json": "{}"}
+        for relative, text in dict(controller, **{"final/history/math/deliveries/notes.txt": "mine"}).items():
+            (self.root / relative).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / relative).write_text(text, encoding="utf-8")
+        self.render()
+        index = self.read_json("final/index.json")
+        # The controller's history files are its own; the deliveries under history/ are this store's.
+        self.assertEqual(index["unowned"], ["history/math/deliveries/notes.txt"])
+        self.assertEqual([entry["path"] for entry in index["files"] if entry["path"].startswith("history/math/")],
+                         ["history/math/deliveries/attempts/" + "a" * 64 + ".json"])
+        self.assertIn({"path": "math/attack/index.json", "type": "controller"}, index["files"])
+        for relative, text in controller.items():
+            self.assertEqual((self.root / relative).read_text(encoding="utf-8"), text, relative)
+
+    def test_every_advisory_carries_the_same_fields(self):
+        self.put(("problem_candidate", "candidate-1", {"id": "candidate-1", "previous": None}))
+        fields = {"code": "output_views_stale", "explanation": output_views.STALE_VIEWS_EXPLANATION,
+                  "action": "exactory-research export --kind outputs", "path": None, "error": None,
+                  "revision": self.store.revision}
+        self.assertEqual(status_advisories(self.store), [dict(fields, reason="not_rendered", rendered_revision=0)])
+        controller = self.root / "attack"
+        (controller / ".search").mkdir(parents=True)
+        (controller / ".search/tree.json").write_text("{}", encoding="utf-8")
+        inner = Store(controller, create=True)
+        inner.mutate("fixture.seed", {},
+                     lambda tx: tx.put("problem_statement", "statement-1", {"id": "statement-1"}) or {},
+                     expected_revision=0, request_id="seed")
+        # The inner store renders nothing, so no rendered revision applies to it.
+        self.assertEqual(status_advisories(inner), [dict(fields, reason="shared_workspace_root", rendered_revision=None,
+                                                         path=str(inner.root.parent / ".exactory/research.sqlite3"),
+                                                         revision=inner.revision)])
+
     def test_two_processes_render_one_store(self):
         seed_journey(self)
         self.render()

@@ -39,6 +39,9 @@ LOCK_NAME = "output-views.lock"
 LOCK_TIMEOUT_SECONDS = 30.0
 COPY_LIMIT_BYTES = 1 << 20
 STALE_VIEWS_ACTION = "exactory-math search render"
+# A controller root of this name would share final/math/deliveries/ with the research harness's views of the native
+# deliveries (research_harness/output_views.py), so its views are never rendered.
+RESERVED_ROOT_NAME = "deliveries"
 _MARKER_SCHEMA = "exactory-controller-output-views-v1"
 _INDEX_SCHEMA = "exactory-controller-output-index-v1"
 _NODE_INDEX_SCHEMA = "exactory-controller-node-index-v1"
@@ -548,10 +551,16 @@ def hold_render_lock(store):
             time.sleep(0.05)
 
 
+def has_reserved_name(root):
+    return Path(root).name == RESERVED_ROOT_NAME
+
+
 def render_views(root, store, replayed=None):
     """Render the views when the marker does not show the document's last event; return the replayed state, or None
-    when the views were already current. replayed is a (document, state) pair the caller already holds; it is used
-    when no later event was committed since."""
+    when the views were already current or the root has the reserved name. replayed is a (document, state) pair the
+    caller already holds; it is used when no later event was committed since."""
+    if has_reserved_name(root):
+        return None
     descriptor = hold_render_lock(store)
     try:
         marker = read_marker(store)
@@ -625,15 +634,26 @@ def warn_unrendered(error):
 
 
 def find_stale_views(controller, state):
-    """The advisory output_views_stale while the views do not show the controller's current revision. It never gates
-    work and never replaces the next scientific action."""
+    """The advisory output_views_stale while the views do not show the controller's current revision, with the fields
+    and reason names of the research harness's advisory; a field that does not apply to the reason is None. It never
+    gates work and never replaces the next scientific action."""
+    revision = state["revision"]
+
+    def advise(reason, rendered=None, path=None, error=None):
+        return [{"code": "output_views_stale", "action": STALE_VIEWS_ACTION, "reason": reason, "path": path,
+                 "error": error, "rendered_revision": rendered, "revision": revision}]
+    if has_reserved_name(controller.root):
+        return advise("reserved_controller_root_name", path=str(controller.root))
     marker = read_marker(controller.store)
-    plugin_version = read_runtime_identity()["plugin_version"]
-    if marker["revision"] == state["revision"] and marker["plugin_version"] == plugin_version:
-        return []
-    failure = marker.get("failure") or {}
-    return [{"kind": "output_views_stale", "action": STALE_VIEWS_ACTION,
-             "path": failure.get("path", str(controller.root.parent / "final/math" / controller.root.name)),
-             "error": failure.get("error", "The views show revision {} of {}".format(marker["revision"],
-                                                                                    state["revision"])),
-             "rendered_revision": marker["revision"], "revision": state["revision"]}]
+    rendered = marker["revision"]
+    failure = marker.get("failure")
+    if failure:
+        return advise("render_failed", rendered, failure.get("path"), failure.get("error"))
+    if rendered == 0:
+        return advise("not_rendered", rendered)
+    if marker["plugin_version"] != read_runtime_identity()["plugin_version"]:
+        return advise("plugin_changed", rendered)
+    events = controller.store.read()["events"]
+    if rendered > len(events) or s.digest(events[rendered - 1]) != marker["event_digest"]:
+        return advise("history_changed", rendered)
+    return advise("behind", rendered) if rendered < revision else []

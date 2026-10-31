@@ -135,7 +135,7 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
                            {"problem_id": "posted-id", "export_directory": str(directory)})["result"]
         self.assertEqual(post["export_digest"], directory.name)
 
-    def test_the_cli_exports_the_problem_only_inside_final(self):
+    def test_the_cli_exports_the_problem_only_inside_the_exports_folder(self):
         from research_harness import cli
         self.prepare_ready()
         self.record_post_decision()
@@ -144,13 +144,19 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         def export(*arguments):
             return cli.run(parser.parse_args(["export", "--workspace", str(self.root), "--kind", "problem", *arguments]))
 
+        folder = self.store.root / "final/problem/exports"
         for outside in (self.root / "problem-export", self.root / "final/../problem-export", self.root / "finally",
-                        self.root.parent / "elsewhere"):
+                        self.root.parent / "elsewhere", self.root / "final/notes", self.root / "final/problem/exports",
+                        self.root / "final/problem/exports-old/x", self.root / "final/problem/exports/../x"):
             with self.subTest(destination=outside):
                 with self.assertRaises(ResearchError) as caught:
                     export("--destination", str(outside))
                 self.assertEqual(caught.exception.code, "export_destination_outside_final")
-                self.assertIn("final/problem/exports/", caught.exception.message)
+                self.assertEqual(caught.exception.message,
+                                 "Leave out --destination, or give a directory under final/problem/exports/ of the "
+                                 "workspace. Without --destination the export goes to final/problem/exports/<export "
+                                 "digest>/.")
+                self.assertEqual(caught.exception.details, {"destination": str(outside), "folder": str(folder)})
                 self.assertFalse(outside.exists())
         exported = export()
         self.assertEqual(Path(exported["destination"]).parent, self.store.root / "final/problem/exports")
