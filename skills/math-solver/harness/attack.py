@@ -1633,6 +1633,10 @@ def main(argv=None):
     finally:
         from search_controller.integration import release_native_ownership
         release_native_ownership(context)
+        if context is not None:
+            # A managed native command has committed its intent or acknowledgement; render its views outside the locks.
+            from search_controller.output_views import render_after_command
+            render_after_command(context["controller"], research=False)
 
 
 if __name__ == "__main__":

@@ -21,23 +21,71 @@ milestone progress. Every path is relative to the workspace root.
 │   ├── draft.json         current draft projection
 │   ├── deposit.json       projection of the observed deposit
 │   ├── citation-check.json
-│   └── citation-cache.json
+│   ├── citation-cache.json
+│   └── output-views.json  marker of the last render of final/ and intermediate/
 ├── context/               preserved human material and constraints
 ├── cohort/                source-linked notes and doctrine
 ├── idea/idea.md            full objective, branch hypotheses and prospective tests
 ├── experiment/
-│   ├── code/  logs/  results/  plots/
+│   ├── code/  plots/
 │   └── journal.jsonl      human search narrative linked to managed records
 ├── draft/                 manuscript sources and references.bib
 ├── evidence/claims.json   scoped claims with actual evidence and quantities
 ├── research/
 │   ├── sources/objects/   immutable captured and pinned bytes
 │   ├── probes/            exploratory programs, inputs, outputs and outcomes
+│   ├── runs/              the pinned directories of the admitted runs
 │   └── literature.md      cumulative human survey narrative
-├── reviews/               exact deliveries, original reviews and score history
-│   └── round-00N/admission.json   saved round-admit output: the admitted goal
+├── final/                 generated: the current step results (below)
+├── intermediate/          generated: every other output, item by item (below)
+├── work/                  your own files (payload files, notes, scripts); you create it
 └── learnings/iter_NNN.md   predictions, observations and next questions
 ```
+
+`final/` holds the current result of each step: the recorded reviews that count
+now in `final/reviews/<role>/` (`bar`, `slate`, `result`, `adjudicator`,
+`readiness`, `scoped-readiness`, `manuscript`, `prediction`, `round`); the
+current round admissions, round decisions and assessments, research decisions,
+cycle assessments, contribution analyses, checkpoints and receipts in
+`final/study/` (`round-admissions/`, `round-decisions/`, `round-assessments/`,
+`round-factual-assessments/`, `decisions/`, `cycle-assessments/`,
+`contribution-analyses/`, `checkpoints/`, `receipts/`); the selected and the
+deposited manuscript bundles with their pinned files in
+`final/study/manuscripts/<bundle id>/`; and the deposits with their uploaded
+files in `final/study/deposits/<intent id>/`. `final/history/` has the same
+layout and holds the results that a later record superseded or that lost their
+standing. `intermediate/` holds every other output, item by item: each reviewer
+turn in `intermediate/reviews/<role>/<root assignment id>/`, where `series.json`
+lists every turn and every run with its status, error, usage, refusal,
+correction, the selected run and the record that adopted the turn, and
+`<NN>-<assignment id>.<run id>.json` holds the output of one completed run of
+turn NN; the route probes in `intermediate/reviews/routes/`; the exported review
+packets in `intermediate/reviews/packets/`; the probes of the lab in
+`intermediate/lab/probes/<probe id>/probe.json` and the admitted runs in
+`intermediate/lab/runs/<admission id>/` (`run.json`, `result.json`, `log.txt`);
+the bundles that were neither selected nor deposited in
+`intermediate/study/bundles/`; the score history that the harness generates from
+the recorded manuscript reviews in `intermediate/study/score-history.json`; the
+remote intents and observations in `intermediate/study/`; and copies of the
+citation and derivation check reports in `intermediate/checks/`. `index.json` in
+each folder lists every file with the kind, id, revision and status of its
+record. Read the outputs there, and never copy them elsewhere.
+
+The harness writes both folders after each command that records something, and
+it owns them: the guard hook refuses `Write`, `Edit` and `NotebookEdit` into
+them, and every render rewrites the files it owns. Keep your own files, payload
+files, notes and scripts, in `work/`. `learnings/` stays the loop's ledger, and
+the other agent folders (`context/`, `idea/`, `evidence/`, `cohort/notes/`,
+`experiment/code/`, `draft/`) stay work areas. The one exception is
+`intermediate/legacy/`: a session that owns a workspace from before 0.68.0 moves
+the copies that its tools wrote (for example `reviews/`) to
+`intermediate/legacy/<original path>/` once, and the index lists them as
+`legacy`. `exactory-lab init` and `exactory-draft init` create no `reviews/`; an
+existing `reviews/` stays where it is until that move. When `status` or `next`
+carries an `advisories`
+entry with code `output_views_stale`, the folders do not show the latest
+records; run its `action`, `exactory-research export --kind outputs`. The
+advisory never changes `ready`, the obligations or `next`.
 
 SQLite records configuration, source collections, versions, readings, the Grand
 Challenge record, synthesis, cycles, admissions, execution observations,
@@ -49,10 +97,12 @@ intents. Read `exactory-research status --summary` and
 current round number, whether it is active or assessed, its decision, the number
 of its open round obligations, counts of its derived progress, the bundle's
 measurement, the admitted round's limits, the `development` budget and the usage
-since admission. It does not report the admitted goal; the saved `round-admit`
-output under `reviews/` carries it. Hand-editing a projection cannot authorize
-work. Explicit `export --kind workspace` rebuilds workspace views from current
-history; run reconciliation repairs execution views. Legacy work is adopted
+since admission. It does not report the admitted goal; the current round
+admission in `final/study/round-admissions/` carries it. Hand-editing a
+projection cannot authorize work. Explicit `export --kind workspace` rebuilds
+workspace views from current history; `export --kind outputs` renders `final/`
+and `intermediate/` again from the records; run reconciliation repairs
+execution views. Legacy work is adopted
 explicitly and does not inherit finished reading or execution credit from old
 labels.
 
@@ -239,8 +289,9 @@ the result delivery, run `check-claims` on the claim ledger (above), so that the
 delivered candidate carries every reference that the manuscript will cite.
 
 [LOOP.md](LOOP.md) governs development and manuscript iteration. The write skill's
-[WORKSPACE.md](../write/WORKSPACE.md) describes the human review and learning files.
-On resume, read current status, the search tree, checkpoint lineage, pending work,
-the saved `round-admit` output of an active round, and user context before
-continuing. Preserve unfinished source changes and all
+[WORKSPACE.md](../write/WORKSPACE.md) describes the measurement protocol and the
+learning files. On resume, read current status, the search tree, checkpoint
+lineage, pending work, the current round admission of an active round
+(`final/study/round-admissions/`), and user context before continuing. Preserve
+unfinished source changes and all
 managed history; a crash never authorizes erasing unmeasured work.

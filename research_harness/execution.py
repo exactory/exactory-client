@@ -332,10 +332,6 @@ def _finish_reconciliation(store, payload, observation, expected_revision, reque
     summary = observation["summary"]
     directory = _directory(payload["admission_id"])
     json_projection(store.root, directory + "/summary.json", summary)
-    json_projection(store.root, "experiment/results/" + summary["node"] + ".json", summary)
-    if observation.get("log") is not None:
-        write_projection(store.root, "experiment/logs/" + summary["node"] + ".log",
-                         store.build_artifact_store().read(observation["log"]))
     return receipt["result"]
 
 

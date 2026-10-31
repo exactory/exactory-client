@@ -40,7 +40,7 @@ def _load_bin_module(command_name: str, module_name: str):
 
 _draft = _load_bin_module("exactory-draft", "exactory_draft")
 
-_WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "reviews", "learnings")
+_WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "learnings")
 
 
 def _invoke_draft_command(argv: list[str], expected_exit_code: int | None,
@@ -446,6 +446,8 @@ class TestInit(unittest.TestCase):
         self._init()
         for dir_name in _WORKSPACE_DIR_NAMES:
             self.assertTrue((self.workspace_dir / dir_name).is_dir(), dir_name)
+        # The harness renders reviews into final/ and intermediate/, so no reviews/ folder is made.
+        self.assertFalse((self.workspace_dir / "reviews").exists())
         state = json.loads((self.workspace_dir / ".exactory" / "draft.json").read_text())
         self.assertEqual(state["version"], 2)
         self.assertEqual(state["title"], "Cohort Percentiles")
@@ -463,6 +465,13 @@ class TestInit(unittest.TestCase):
         self._init()
         stderr_text = self._init(expected_exit_code=1)
         self.assertIn("draft.json", stderr_text)
+
+    def test_init_leaves_an_existing_reviews_folder_as_it_is(self) -> None:
+        saved_review = self.workspace_dir / "reviews" / "review_001.json"
+        saved_review.parent.mkdir(parents=True)
+        saved_review.write_text("{}")
+        self._init()
+        self.assertEqual(saved_review.read_text(), "{}")
 
 
 class _DepositTestCase(unittest.TestCase):

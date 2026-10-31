@@ -19,6 +19,8 @@ from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .limits import describe_depth, limits_report
 from .operations import fields, text
+from .output_views import (PROBLEM_EXPORTS_FOLDER, find_view_advisories, find_workspace_root, render_all,
+                           render_views_after_command)
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
 from .storage import Store, check_command_bounds
@@ -274,9 +276,14 @@ def build_parser():
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
-            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-openness"), default="workspace")
+            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-openness", "outputs"), default="workspace")
             item.add_argument("--spec", help="JSON assignment identity, openness minimum, optional analytical native_reviews [{attempt_id,assignment_id}], and source_evidence [{source_id,reason,locator?}] for problem-openness.")
-            item.add_argument("--destination", help="New independent reviewer directory for the readiness, manuscript or round packet and its actual source bytes.")
+            item.add_argument("--destination", help=(
+                "Directory of the export. A problem export goes under final/problem/exports/ of the workspace, by "
+                "default final/problem/exports/<export digest>/; a directory that already holds exactly the exported "
+                "files is reused. A problem-openness, readiness, manuscript or round packet goes into any new "
+                "directory, by default intermediate/reviews/packets/<assignment id>/ or "
+                "intermediate/reviews/packets/<kind>-r<revision>/. A native export requires a new directory."))
             item.add_argument("--attack-root", help="Native attack root for an immutable foundation delivery.")
             item.add_argument("--claim-binding", help="JSON source correspondence for an external native verification claim.")
         if command == "recover":
@@ -367,6 +374,8 @@ def status_report(store, *, counters=False):
     snapshot = store.snapshot()
     records = snapshot["records"]
     evaluation = Evaluation(records, ArtifactStore(store.root))
+    # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
+    advisories = find_view_advisories(store, snapshot["revision"])
     if "problem" in records.get("workspace", {}):
         report = gate_state(records, evaluation, "post")
         slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
@@ -384,7 +393,7 @@ def status_report(store, *, counters=False):
                     # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
                     literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                     candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
-                    next=upcoming, review=_review_status(records, evaluation))
+                    next=upcoming, review=_review_status(records, evaluation), advisories=advisories)
     config = records.get("configuration", {}).get("research")
     profile = config["profile"] if config else "research"
     study = records.get("workspace", {}).get("study")
@@ -456,7 +465,8 @@ def status_report(store, *, counters=False):
                 pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                 remote_intents=list(records.get("remote_intent", {}).values()),
                 remote_observations=list(records.get("remote_observation", {}).values()),
-                historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=_review_status(records, evaluation))
+                historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=_review_status(records, evaluation),
+                advisories=advisories)
 
 
 def load_candidates(path):
@@ -585,17 +595,23 @@ def run(args):
         require_ready(report, args.action)
         return report
     if args.kind == "problem":
-        if not args.destination:
-            raise ResearchError("invalid_input", "Problem export requires --destination")
+        folder = find_workspace_root(store.root) / PROBLEM_EXPORTS_FOLDER
+        if args.destination is not None and folder not in Path(os.path.realpath(args.destination)).parents:
+            raise ResearchError("export_destination_outside_final",
+                                "Leave out --destination, or give a directory under " + PROBLEM_EXPORTS_FOLDER + "/ of the workspace. Without "
+                                "--destination the export goes to " + PROBLEM_EXPORTS_FOLDER + "/<export digest>/.",
+                                {"destination": args.destination, "folder": str(folder)})
         from .problem_delivery import export_problem
         return export_problem(store, args.destination)
     if args.kind == "problem-openness":
-        if not args.destination or not args.spec:
-            raise ResearchError("invalid_input", "Problem openness export requires --spec and --destination")
+        if not args.spec:
+            raise ResearchError("invalid_input", "Problem openness export requires --spec")
         from .problem_openness import export_openness
         return export_openness(store, strict_json(Path(args.spec).read_bytes()), args.destination)
     if args.kind == "workspace":
         return export_workspace(store)
+    if args.kind == "outputs":
+        return render_all(store)
     if args.kind == "foundation":
         profile = store.snapshot()["records"].get("configuration", {}).get("research", {}).get("profile", "research")
         return literature.export_foundation(store, profile)
@@ -606,13 +622,19 @@ def run(args):
         binding = strict_json(Path(args.claim_binding).read_bytes()) if args.claim_binding else None
         return export_native(store, Path(args.attack_root), Path(args.destination), claim_binding=binding)
     from .review_delivery import deliver_manuscript, deliver_readiness, deliver_round
-    if not args.destination:
-        raise ResearchError("invalid_input", "Reviewer delivery requires --destination for the separate reviewer")
     deliver = {"readiness": deliver_readiness, "manuscript": deliver_manuscript, "round": deliver_round}[args.kind]
-    return deliver(store, Path(args.destination))
+    return deliver(store, args.destination)
 
 
-def main(argv=None):
+def _is_recording_command(args):
+    """Whether the command can commit a record: a mutation or an acquisition that is not a check or a preview."""
+    return ((args.command in OPERATIONS or args.command in ACQUISITION) and not getattr(args, "check", False)
+            and not getattr(args, "preview", False))
+
+
+def main(argv=None, render_views=render_views_after_command):
+    """Run one command. After a command that can commit a record, whether it succeeded, failed or replayed a committed
+    request, render_views(--workspace) renders the output views once, outside every store lock."""
     args = build_parser().parse_args(argv)
     try:
         result = run(args)
@@ -623,3 +645,6 @@ def main(argv=None):
     except (OSError, ValueError) as error:
         print(json.dumps({"error": {"code": "input_io", "message": str(error)}}), file=sys.stderr)
         raise SystemExit(1)
+    finally:
+        if _is_recording_command(args):
+            render_views(args.workspace)

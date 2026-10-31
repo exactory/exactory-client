@@ -53,9 +53,12 @@ def strategy_assessment_lines(state, node_id=None):
 
 
 def replace_text(path, text):
+    replace_bytes(path, text.encode("utf-8"))
+
+
+def replace_bytes(path, data):
     if path.is_symlink():
         raise SearchError("unsafe_path", "Generated views cannot be symlinks")
-    data = text.encode("utf-8")
     if path.exists() and path.read_bytes() == data:
         return
     descriptor, temporary = tempfile.mkstemp(prefix="." + path.name, dir=str(path.parent))

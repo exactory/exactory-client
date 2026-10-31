@@ -178,7 +178,7 @@ def serialize_record(record):
     return json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
-def export_openness(store, spec, destination):
+def export_openness(store, spec, destination=None):
     records = store.snapshot()["records"]
     marker = require_problem(records)
     fields(spec, ("assignment_id", "reviewer_id", "minimum"), ("native_reviews", "source_evidence"))
@@ -265,7 +265,9 @@ def export_openness(store, spec, destination):
         scientific_context["openness_delivery"] = build_delivery(records, artifacts, packet)
     reference = artifacts.put(json.dumps(packet, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(), "application/json")
     load_packet(artifacts, reference, spec["reviewer_id"])
-    from .review_delivery import deliver_packet
+    from .review_delivery import deliver_packet, find_packet_destination
+    if destination is None:
+        destination = find_packet_destination(store, spec["assignment_id"])
     delivered = deliver_packet(store, destination, packet, transitive=True)
     result = dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"])
     if not spec["minimum"].get("text_priority"):

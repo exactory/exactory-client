@@ -288,8 +288,11 @@ class LiteratureTests(LiteratureCase):
         self.assertTrue(report["ready"], report["obligations"])
         self.assertIn("comprehension", report["limits"])
         exported = export_foundation(self.store, "research")
-        self.assertIn("inventory", exported)
+        self.assertEqual((exported["inventory"], exported["coverage"]),
+                         ("intermediate/literature/exports/research-inventory.md",
+                          "intermediate/literature/exports/research-coverage.md"))
         self.assertTrue((self.root / exported["inventory"]).exists())
+        self.assertFalse((self.root / "research/exports").exists())
         (self.root / exported["coverage"]).write_text("Fabricated readiness", encoding="utf-8")
         self.assertEqual(report["digest"], foundation_report(self.store, "research")["digest"])
 

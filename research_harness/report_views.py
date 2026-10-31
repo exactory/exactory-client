@@ -88,6 +88,9 @@ def next_summary(report, *, counters=False):
     if report.get("orchestration") == "problem_creation":
         result.update(orchestration=report["orchestration"], milestone=report["milestone"],
                       post_obligations=_obligations(report["obligations"]))
+    if report.get("advisories"):
+        # Stale output views are advisory and never replace the next hint.
+        result["advisories"] = [{"code": item["code"], "reason": item["reason"]} for item in report["advisories"]]
     if "manuscript_ready" in report:
         result.update({"manuscript_ready": report["manuscript_ready"], "objective_complete": report["objective_complete"],
                        "manuscript_obligations": _obligations(report["manuscript_obligations"]),

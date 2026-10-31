@@ -73,6 +73,70 @@ also lists its minimum's missing search, full readings, standards and Grand
 Challenge record alongside configuration and missing-decision obligations.
 Nonmanaged stores and verification retain their fixed contracts.
 
+## Final and intermediate outputs
+
+Every workspace of math-solver, ai-science and math-conjecturer has two output
+folders in its workspace root, which the harness generates from its records
+after each command that records something. `final/` holds the step results that
+the harness currently selects: the recorded reviews that count now in
+`reviews/<role>/`, the selected problem records in `problem/`, the current
+decisions, assessments, checkpoints and receipts of a study in `study/`, the
+selected and deposited manuscript bundles with their files in
+`study/manuscripts/` and the deposits in `study/deposits/`, the verification
+records in `verification/`, the delivered native attempts and closures in
+`math/deliveries/`, and the results that the math-solver controller relies on in
+`math/<controller root>/` (`attack` in the default layout). `final/history/`
+has the same layout and holds the results that a later record superseded or
+that lost their standing. `intermediate/` holds every other output, item by
+item, with its status: each reviewer turn in `reviews/<role>/<root assignment
+id>/`, where `series.json` lists every turn and every run with its status,
+error, usage, refusal, correction, the selected run and the record that adopted
+the turn, and `<NN>-<assignment id>.<run id>.json` holds the output of one
+completed run; the route probes in `reviews/routes/`; the problem candidates in
+`problem/candidates/`; the probes and the admitted runs of the lab in
+`lab/probes/` and `lab/runs/<admission id>/`; the bundles that were neither
+selected nor deposited, the generated score history, and the remote intents and
+observations in `study/`; copies of the citation and derivation check reports
+in `checks/`; and the controller's runs, checkpoints, proposals that were not
+admitted and invalidated results in `math/<controller root>/`. `README.md` and
+`index.json` in each folder describe the layout and list every file with the
+kind, id, revision and status of its record. Read the outputs there, and never
+copy them.
+
+The harness owns both folders. The guard hook refuses `Write`, `Edit` and
+`NotebookEdit` into them, and each render rewrites the files it owns and lists a
+file that it did not write under `unowned`. The agent keeps its own files,
+payload files, notes and scripts, in `work/`. The work areas that records pin
+(`draft/`, `experiment/code/`, `research/probes/`, `research/runs/`, the study's
+agent folders, the controller root and the node workspaces) and the storage
+(`.exactory/`, `research/sources/`, `.search/`) are unchanged. The one exception
+is `intermediate/legacy/`: a session that owns a record from before 0.68.0 moves
+the copies that its tools wrote (for example `reviews/outputs/`) to
+`intermediate/legacy/<original path>/` once, and the index lists them as
+`legacy`. The exports keep their own folders. `export --kind problem` writes to
+`final/problem/exports/<export digest>/`, where the export digest is the digest
+of all exported files, the value that the post records as `export_digest`, and
+refuses a `--destination` outside that folder. The packet exports write to
+`intermediate/reviews/packets/<assignment id>/` (`problem-openness`) or
+`intermediate/reviews/packets/<kind>-r<revision>/` (`readiness`, `manuscript`,
+`round`), with `-2`, `-3`, ... added when the folder exists, and accept any
+`--destination`, so that a reviewer can run outside the workspace.
+`export --kind foundation` writes to `intermediate/literature/exports/`.
+
+A render never changes a command's result. When it fails or falls behind,
+`status` and `next` carry `advisories` with one entry of code
+`output_views_stale`: its `reason`, the failing `path` and `error` when known,
+and the `action` `exactory-research export --kind outputs`, which renders both
+folders again. `search status` and `search next` of the math-solver controller
+carry the same advisory with the action `exactory-math search render` and the
+controller's own reasons ([Filesystem service and
+CLI](../skills/math-solver/SEARCH.md#filesystem-service-and-cli)). One of them,
+`reserved_controller_root_name`, is not repaired by the action: the controller
+root is named `deliveries`, the name of the folder of the delivered attempts and
+closures, so the harness renders nothing for that root; create the controller
+root under another name. No gate reads it, and it never replaces the scientific
+next action.
+
 ## Problem creation milestones
 
 A problem research record has its own `problem_creation` orchestration in the
@@ -305,11 +369,13 @@ milestone and first missing condition in the order slate, statement, attempt,
 openness, value, reviews, decision, export. They store no milestone projection.
 `status` also counts the current candidates and the latest slate's selected,
 deferred and rejected candidates, and names the latest slate. Once ready,
-`exactory-research export --kind problem --destination problem-export` writes
-the approved parts, projected citations and digest manifest. Check the exported
+`exactory-research export --kind problem` writes the approved parts, projected
+citations and digest manifest to `final/problem/exports/<export digest>/` and
+names the directory under `destination`. Check the exported
 citation locators and duplicates, pass those files to `exactory post-problem`,
 then record `{problem_id, export_directory}` with `problem-posted`. Its byte
-comparison rebuilds the projection from the records. A part changed after
+comparison rebuilds the projection from the records and ignores entries whose
+names start with a dot. A part changed after
 export requires a new statement and starts the gate again. A repeated post of
 the same statement is refused.
 
@@ -866,7 +932,10 @@ objective.
 
 ## ai-science: result milestone before writing
 
-Read the actual outputs and checks. `assess` separately records the result,
+Read the actual outputs and checks: the harness shows each admitted run in
+`intermediate/lab/runs/<admission id>/` as `run.json`, `result.json` and
+`log.txt`, and the run directory under `research/runs/` keeps the pinned files.
+`assess` separately records the result,
 validity evidence, scope, novelty/contribution, branch development, failures,
 assumptions, and remaining obligations. A validity check marked `passed` cites
 the completed output of a planned `validation` requirement; until that output
@@ -889,8 +958,14 @@ assessment and leaves its development obligation unmet.
 ```sh
 exactory-research assess --file assessment.json --expected-revision REVISION --request-id assess-cycle-001
 exactory-research checkpoint --file checkpoint.json --expected-revision REVISION --request-id checkpoint-cycle-001
-exactory-research export --kind readiness --destination reviews/research-candidate-001
+exactory-research export --kind readiness
 ```
+
+Without `--destination`, the readiness packet goes to
+`intermediate/reviews/packets/readiness-r<revision>/`, or to
+`readiness-r<revision>-2`, `-3`, ... when that folder exists, and the output
+names the directory under `destination`; `--destination PATH` places it anywhere
+else, for example outside the workspace for an isolated reviewer.
 
 Before that delivery, build the manuscript's claim ledger (write skill, stage 1)
 and run `exactory-research check-claims --file FILE` on its `claim_evidence`
@@ -1057,11 +1132,19 @@ every reader resolves both that shape and the inline shape of earlier bundles.
 ```sh
 exactory-research check-claims --file manuscript.json
 exactory-research manuscript --file manuscript.json --expected-revision REVISION --request-id pin-manuscript-001
-exactory-research export --kind manuscript --destination reviews/manuscript-001
+exactory-research export --kind manuscript
 exactory-research manuscript-review --file manuscript-review-a.json --expected-revision REVISION --request-id record-manuscript-review-a
 exactory-research manuscript-review --file manuscript-review-b.json --expected-revision REVISION --request-id record-manuscript-review-b
 exactory-research gate publication
 ```
+
+Without `--destination`, the manuscript packet goes to
+`intermediate/reviews/packets/manuscript-r<revision>/`, or to
+`manuscript-r<revision>-2`, `-3`, ... when that folder exists, and the output
+names the directory under `destination`; `--destination PATH` places it anywhere
+else, for example outside the workspace for an isolated reviewer. The recorded
+reviews and predictions are shown in `final/reviews/manuscript/` and
+`final/reviews/prediction/`.
 
 The working files of the pinned bundle stay as pinned until its measurement is
 complete, that is, until the three measurement reviews and their predictions

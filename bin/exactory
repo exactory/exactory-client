@@ -32,6 +32,7 @@ from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
 from research_harness.exactory_api import _DEFAULT_API_URL, read_api_base_url
 from research_harness.integration import command_identity, current_store
+from research_harness.output_views import render_views_after_command
 from research_harness.same_origin import (REQUEST_ERROR_TYPES, RefusedRedirectError,
                                           describe_request_error_cause, get_origin, is_read_method,
                                           open_url_within_origin, read_error_detail, is_request_known_unsent)
@@ -1785,7 +1786,9 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main(render_views=render_views_after_command) -> None:
+    """Run one command; after submit, verify and reconcile, which record in the research store, render its output
+    views once, outside every store lock."""
     global _API_BASE_URL
     args = _build_parser().parse_args()
     _API_BASE_URL = _read_checked_api_base_url()
@@ -1793,6 +1796,9 @@ def main() -> None:
         args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
+    finally:
+        if args.handler in (_run_submit, _run_verify, _run_reconcile):
+            render_views(None)
 
 
 if __name__ == "__main__":

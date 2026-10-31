@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PreToolUse gate: the files the math-solver harness writes are written by it alone.
+"""PreToolUse gate: the files the harness writes are written by it alone.
 
 An attack workspace is `attack/<slug>/`, laid out by `exactory-math init`. Eight
 of its files are the record the harness and the hooks write themselves:
@@ -24,6 +24,19 @@ redirection whose word does not begin with `>` (such as `2>`, `&>` or
 `x>file`), `>|file` without a space, and `dd of=`. A command that does not
 write is untouched. Any other file, any other tool, and any error of the hook's
 own checks are silent: exit 0, no output.
+
+After the controller check and before the check of the eight files, the hook
+denies a Write, an Edit or a NotebookEdit (its path is `notebook_path`) into
+`final/` or `intermediate/` of a workspace root, except into
+`intermediate/legacy/`, when the harness renders those two folders there. It
+renders them there in three cases: the workspace root holds
+`.exactory/output-views.json` (a research store); a folder in it holds
+`.search/output-views.json` (a math-solver controller); or a folder in it is a
+controller root (it holds `.search/tree.json`) and holds
+`.exactory/output-views.json` (a research store located at the controller
+root, which renders beside it). Only these two direct children of a workspace
+root are guarded, so a folder named `final` elsewhere, such as `draft/final/`,
+is not. Shell commands that write into them are not inspected.
 """
 
 from __future__ import annotations
@@ -50,6 +63,14 @@ _OWNED_FILES = (
     (re.compile(r"^units/FINISHED\.json$"), "exactory-math finish <slug>"),
 )
 _WRITING_TOKENS = {">", ">>", "tee", "cp", "mv", "rm", "truncate", "dd"}
+# The folders that the output renderers generate in a workspace root
+# (research_harness/output_views.py and the controller's output_views.py), the
+# one folder in them that a session may fill, and the renderers' markers.
+_OUTPUT_FOLDER_NAMES = ("final", "intermediate")
+_LEGACY_FOLDER_PARTS = ("intermediate", "legacy")
+_RESEARCH_MARKER_PATH = ".exactory/output-views.json"
+_CONTROLLER_MARKER_PATH = ".search/output-views.json"
+_PATH_FIELD_BY_TOOL = {"Write": "file_path", "Edit": "file_path", "NotebookEdit": "notebook_path"}
 
 
 def _deny(reason: str) -> None:
@@ -88,6 +109,33 @@ def _find_owner(path: Path) -> tuple[str, str] | None:
     return None
 
 
+def _has_output_views(root: Path) -> bool:
+    """Whether the harness renders final/ and intermediate/ in `root`: its research store's marker, or a controller
+    root in it that holds the controller's marker or the marker of a research store located there."""
+    if (root / _RESEARCH_MARKER_PATH).is_file():
+        return True
+    try:
+        children = [child for child in root.iterdir() if child.is_dir()]
+    except OSError:
+        return False
+    return any((child / _CONTROLLER_MARKER_PATH).is_file()
+               or ((child / ".search/tree.json").is_file() and (child / _RESEARCH_MARKER_PATH).is_file())
+               for child in children)
+
+
+def _find_output_folder(path: Path) -> Path | None:
+    """The generated final/ or intermediate/ folder that is or holds `path`, or None; intermediate/legacy/ takes the
+    files that a session moves there."""
+    for folder in (path, *path.parents):
+        if folder.name not in _OUTPUT_FOLDER_NAMES or not _has_output_views(folder.parent):
+            continue
+        parts = path.relative_to(folder.parent).parts
+        if parts[:2] == _LEGACY_FOLDER_PARTS and len(parts) > 2:
+            continue
+        return folder
+    return None
+
+
 def _find_shell_write_target(command: str, cwd: Path) -> tuple[str, str] | None:
     """The owned file a shell command writes to, when it carries a writing construct."""
     try:
@@ -122,8 +170,16 @@ def main() -> None:
     tool_name = payload.get("tool_name")
     tool_input = payload.get("tool_input") or {}
     cwd = Path(payload.get("cwd") or ".").resolve()
+    if tool_name in _PATH_FIELD_BY_TOOL:
+        target = _resolve(tool_input.get(_PATH_FIELD_BY_TOOL[tool_name], ""), cwd)
+        folder = _find_output_folder(target)
+        if folder is not None:
+            _deny(
+                f"[exactory] {target.relative_to(folder.parent).as_posix()} is in {folder.name}/, which the harness"
+                f" generates from its records. Write your own files to work/ instead."
+            )
     if tool_name in ("Write", "Edit"):
-        owner = _find_owner(_resolve(tool_input.get("file_path", ""), cwd))
+        owner = _find_owner(target)
     elif tool_name == "Bash":
         owner = _find_shell_write_target(tool_input.get("command", ""), cwd)
     else:

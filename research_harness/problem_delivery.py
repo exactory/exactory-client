@@ -170,20 +170,44 @@ def build_projection(records, artifacts):
     return files, manifest
 
 
-def export_problem(store, destination):
+def compute_export_digest(files):
+    """The digest of an export's files: the name of its default folder and the export_digest of its post."""
+    return digest({name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())})
+
+
+def has_exported_files(directory, files):
+    """Whether directory holds exactly these files with these bytes. A name that starts with a dot, such as the
+    .DS_Store that a file browser adds, is not part of an export."""
+    return (directory.is_dir() and not directory.is_symlink()
+            and {path.name for path in directory.iterdir() if not path.name.startswith(".")} == set(files)
+            and all(not (directory / name).is_symlink() and (directory / name).is_file()
+                    and (directory / name).read_bytes() == content for name, content in files.items()))
+
+
+def export_problem(store, destination=None):
+    """Write the reviewed parts into destination, by default final/problem/exports/<export digest>/ of the workspace
+    root. A destination that already holds exactly these files is returned as it is."""
     from .gates import require_ready
     records = store.snapshot()["records"]
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
     require_ready(assess_post(records, artifacts), "post")
-    directory = Path(destination).absolute()
-    if directory.exists() or directory.is_symlink():
-        raise ResearchError("review_destination_exists", "Export into a new directory")
     files, manifest = build_projection(records, artifacts)
+    if destination is None:
+        from .output_views import PROBLEM_EXPORTS_FOLDER, find_workspace_root
+        destination = find_workspace_root(store.root) / PROBLEM_EXPORTS_FOLDER / compute_export_digest(files)
+    directory = Path(destination).absolute()
+    result = dict(manifest, destination=str(directory))
+    if directory.exists() or directory.is_symlink():
+        if has_exported_files(directory, files):
+            return result
+        raise ResearchError("review_destination_exists",
+                            "The destination already holds files that differ from this export. Export into a new directory",
+                            {"destination": str(directory)})
     from .workspace import write_projection
     directory.mkdir(mode=0o700, parents=True)
     for name, content in files.items():
         write_projection(directory, name, content)
-    return dict(manifest, destination=str(directory))
+    return result
 
 
 def prepare_posted(records, artifacts, value):
@@ -203,14 +227,12 @@ def prepare_posted(records, artifacts, value):
     if not directory.is_absolute():
         directory = artifacts.root / directory
     try:
-        valid = (directory.is_dir() and not directory.is_symlink() and {path.name for path in directory.iterdir()} == set(files)
-                 and all(not (directory / name).is_symlink() and (directory / name).is_file()
-                         and (directory / name).read_bytes() == content for name, content in files.items()))
+        valid = has_exported_files(directory, files)
     except OSError as error:
         raise ResearchError("problem_export_mismatch", "Read the complete approved problem projection", {"export_directory": str(directory)}) from error
     if not valid:
         raise ResearchError("problem_export_mismatch", "The exported files must equal the current reviewed records byte for byte", {"export_directory": str(directory)})
-    export_digest = digest({name: hashlib.sha256(data).hexdigest() for name, data in sorted(files.items())})
+    export_digest = compute_export_digest(files)
     identifier = digest({"problem_id": value["problem_id"], "export_digest": export_digest})
     record = {"id": identifier, "problem_id": value["problem_id"], "statement_id": statement["id"],
               "statement_digest": manifest["statement_digest"], "problem_evidence_digest": manifest["problem_evidence_digest"],

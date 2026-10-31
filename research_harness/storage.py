@@ -324,6 +324,15 @@ the caller must discard it if any validation fails.
     return revision
 
 
+def _read_event_digests(connection, revisions):
+    """{revision: the digest of its event}, with None for revision 0, which has no event."""
+    digests = {revision: None for revision in revisions}
+    for row in connection.execute("SELECT revision, digest FROM events WHERE revision IN (" + ", ".join(
+            "?" for _ in revisions) + ")", tuple(revisions)):
+        digests[row["revision"]] = row["digest"]
+    return digests
+
+
 def _fingerprint_entry(fingerprint, entry):
     """Hash checked metadata only, without traversing expanded JSON values again."""
     fingerprint.update((_canonical(entry) + "\n").encode("utf-8"))
@@ -882,6 +891,28 @@ class Store:
                 yield guard
             finally:
                 guard._value = None
+
+    def read_changes(self, after_revision: int):
+        """(revision, {after_revision: its event digest, revision: its event digest}, the kinds that the events after
+        after_revision wrote), for the generated output views; revision 0 has no event and the digest None. These reads
+        check the store's structure and skip the replay of its history: a view decides nothing, and every
+        authoritative read still replays the history."""
+        with self._connection() as connection:
+            revision = _validate(connection, replay=False)
+            kinds = set()
+            for row in connection.execute("SELECT changes FROM events WHERE revision > ? ORDER BY revision",
+                                          (after_revision,)):
+                kinds.update(change["kind"] for change in _load(row["changes"], list))
+            return revision, _read_event_digests(connection, (after_revision, revision)), kinds
+
+    def read_kinds(self, kinds):
+        """(revision, the digest of its event, {kind: {key: value}}) for the current records of kinds, from one read,
+        with the checks of read_changes."""
+        with self._connection() as connection:
+            revision = _validate(connection, replay=False)
+            records = {kind: {row["key"]: _load(row["value"], dict) for row in connection.execute(
+                "SELECT key, value FROM records WHERE kind = ? ORDER BY key", (kind,))} for kind in kinds}
+            return revision, _read_event_digests(connection, (revision,))[revision], records
 
     def committed_request(self, request_id: str) -> Optional[dict]:
         """Read a validated original request without retrying or changing it."""

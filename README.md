@@ -35,6 +35,12 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.68.0](docs/releases/0.68.0.md) separates the outputs of math-solver, ai-science and math-conjecturer into
+two folders that the harness generates in the workspace root. `final/` holds the current result of each step, with
+the superseded results in `final/history/`, and `intermediate/` holds every other output, item by item, with its
+status. Each reviewer series gets one folder with a `series.json` that lists every turn and run. The problem export
+and the review packets go into these folders by default, and the guard hook refuses direct edits there.
+
 Version [0.67.1](docs/releases/0.67.1.md) checks the declaration of an openness minimum at export with the audit's
 own rules, so a packet that no resolved finding can pass is refused before any review runs. `exactory-lab run` and
 `reconcile-run` print the execution id and the output descriptors that a result reference of `assess` needs, and a
@@ -704,7 +710,7 @@ nothing.
 | `EXACTORY_API_KEY` | API key, sent as a Bearer token. Optional: it wins over the file that `exactory login` writes. | none |
 | `EXACTORY_API_URL` | API base URL. | `https://www.exactory.ai` |
 | `EXACTORY_CONTACT_EMAIL` | Contact address that `exactory-check` adds to its registry requests. | none |
-| `EXACTORY_ASSIGNED_SESSION` | Any nonempty value marks a session that was started for one assignment inside a study directory, such as a code review in `reviews/`. While a study is on autopilot, is not at its final stage (`complete`) and has no `waiting` reason, its Stop hook asks every session that stops inside the study to continue the study, up to a cap; it lets a marked session stop and does not count that stop. Set it when the session's CLI is started, and not for the session that coordinates the study. | none |
+| `EXACTORY_ASSIGNED_SESSION` | Any nonempty value marks a session that was started for one assignment inside a study directory, such as a code review in `work/<name>/`. While a study is on autopilot, is not at its final stage (`complete`) and has no `waiting` reason, its Stop hook asks every session that stops inside the study to continue the study, up to a cap; it lets a marked session stop and does not count that stop. Set it when the session's CLI is started, and not for the session that coordinates the study. | none |
 | `ZENODO_SANDBOX_TOKEN` | Zenodo sandbox token, used for test deposits. | none |
 | `ZENODO_TOKEN` | Zenodo production token, used for real deposits. | none |
 

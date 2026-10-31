@@ -13,6 +13,7 @@ from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evidence import digest
 from .evaluation import Evaluation
+from .output_views import PACKETS_FOLDER, _format_file_name, find_workspace_root
 from .publication import _bundle, publication_state
 from .review_packets import manuscript_packet, readiness_packet, round_packet, find_round_investigation_responses
 from .scientific_json import parse_scientific_json
@@ -33,6 +34,18 @@ def references(value):
                 visit(child)
     visit(value)
     return [found[key] for key in sorted(found)]
+
+
+def find_packet_destination(store, name):
+    """The default directory of a reviewer packet: intermediate/reviews/packets/<name>/ of the workspace root, or
+    <name>-2, <name>-3, ... when that directory exists. A name that is not a portable file name is replaced by its
+    digest, as the output views name records."""
+    folder, name = find_workspace_root(store.root) / PACKETS_FOLDER, _format_file_name(name)
+    destination, number = folder / name, 1
+    while destination.exists() or destination.is_symlink():
+        number += 1
+        destination = folder / (name + "-" + str(number))
+    return destination
 
 
 def deliver_packet(store, destination, manifest, *, derived=None, transitive=False, empty_captures=()):
@@ -64,8 +77,10 @@ def deliver_packet(store, destination, manifest, *, derived=None, transitive=Fal
             "revision": store.revision, "mechanical_only": True}
 
 
-def deliver_readiness(store, destination):
+def deliver_readiness(store, destination=None):
     snapshot = store.snapshot()
+    if destination is None:
+        destination = find_packet_destination(store, "readiness-r" + str(snapshot["revision"]))
     evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
     from .publication_scope import has_publication_scope, assess_manuscript_readiness
     scoped = has_publication_scope(snapshot["records"])
@@ -112,8 +127,10 @@ def _project_current_claims(bundle, artifacts):
     return dict(bundle, files=files, claim_evidence=evidence), {reference["path"]: data}
 
 
-def deliver_manuscript(store, destination):
+def deliver_manuscript(store, destination=None):
     snapshot = store.snapshot()
+    if destination is None:
+        destination = find_packet_destination(store, "manuscript-r" + str(snapshot["revision"]))
     artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root))
     report = publication_state(snapshot["records"], artifacts, "manuscript")
     if not report["ready"]:
@@ -131,9 +148,12 @@ def deliver_manuscript(store, destination):
     return deliver_packet(store, destination, packet, derived=derived)
 
 
-def deliver_round(store, destination):
+def deliver_round(store, destination=None):
     """The latest round decision on the exact current bundle, delivered to the independent round assessor."""
-    records = store.snapshot()["records"]
+    snapshot = store.snapshot()
+    records = snapshot["records"]
+    if destination is None:
+        destination = find_packet_destination(store, "round-r" + str(snapshot["revision"]))
     artifacts = Evaluation(records, ArtifactStore(store.root))
     bundle = _bundle(records, artifacts)
     decisions = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"]]

@@ -698,6 +698,81 @@ class TestContinueAutopilot(unittest.TestCase):
         self.assertIn("cap", decision["reason"].lower())
 
 
+_FILE_GUARD_SCRIPT_PATH = _PLUGIN_ROOT / "hooks" / "guard_attack_files.py"
+
+
+class TestGuardOutputFolders(unittest.TestCase):
+    """final/ and intermediate/ of a workspace root whose output views the harness renders take no agent writes."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.scratch = Path(scratch.name)
+        self.workspace = self.scratch / "study"
+        (self.workspace / ".exactory").mkdir(parents=True)
+        (self.workspace / ".exactory" / "output-views.json").write_text("{}")
+        (self.workspace / "work").mkdir()
+
+    def _run_tool(self, tool_name: str, path, cwd: Path | None = None) -> subprocess.CompletedProcess:
+        field = "notebook_path" if tool_name == "NotebookEdit" else "file_path"
+        return _run_hook(_FILE_GUARD_SCRIPT_PATH, {
+            "tool_name": tool_name,
+            "tool_input": {field: str(path)},
+            "cwd": str(cwd or self.workspace),
+        })
+
+    def _assert_denied(self, tool_name: str, path, cwd: Path | None = None) -> None:
+        completed = self._run_tool(tool_name, path, cwd)
+        self.assertNotEqual(completed.stdout, "", "the guard allowed " + str(path))
+        decision = json.loads(completed.stdout)["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")
+        self.assertIn("work/", decision["permissionDecisionReason"])
+
+    def test_writes_into_the_generated_folders_are_denied(self) -> None:
+        for tool_name, relative in (("Write", "final/reviews/bar/review-a.json"),
+                                    ("Edit", "intermediate/index.json"),
+                                    ("NotebookEdit", "final/analysis.ipynb"),
+                                    ("Write", "intermediate/legacy"),
+                                    ("Write", "final")):
+            with self.subTest(tool=tool_name, path=relative):
+                self._assert_denied(tool_name, self.workspace / relative)
+        self._assert_denied("Write", "final/notes.md")
+        self._assert_denied("Edit", "../intermediate/notes.md", cwd=self.workspace / "work")
+
+    def test_writes_elsewhere_and_into_the_legacy_folder_are_allowed(self) -> None:
+        for tool_name, relative in (("Write", "intermediate/legacy/reviews/outputs/turn.json"),
+                                    ("Write", "draft/final/paper.tex"),
+                                    ("Edit", "work/final/notes.md"),
+                                    ("Write", "finally/notes.md"),
+                                    ("NotebookEdit", "work/analysis.ipynb"),
+                                    ("Read", "final/index.json")):
+            with self.subTest(tool=tool_name, path=relative):
+                self.assertEqual(self._run_tool(tool_name, self.workspace / relative).stdout, "")
+
+    def test_a_workspace_without_a_marker_is_not_guarded(self) -> None:
+        plain = self.scratch / "plain"
+        (plain / ".exactory").mkdir(parents=True)
+        (plain / "draft").mkdir()
+        (plain / "draft" / ".exactory").mkdir()
+        (plain / "draft" / ".exactory" / "output-views.json").write_text("{}")
+        for relative in ("final/notes.md", "intermediate/notes.md"):
+            with self.subTest(path=relative):
+                self.assertEqual(self._run_tool("Write", plain / relative, cwd=plain).stdout, "")
+
+    def test_a_controller_marker_or_a_store_at_the_controller_root_guards_the_parent(self) -> None:
+        record = self.scratch / "record"
+        (record / "attack" / ".search").mkdir(parents=True)
+        (record / "attack" / ".search" / "output-views.json").write_text("{}")
+        self._assert_denied("Write", record / "final/math/attack/index.json", cwd=record)
+        self._assert_denied("Edit", record / "intermediate/math/attack/runs/run-1/run.json", cwd=record)
+        shared = self.scratch / "shared"
+        (shared / "attack" / ".search").mkdir(parents=True)
+        (shared / "attack" / ".search" / "tree.json").write_text("{}")
+        (shared / "attack" / ".exactory").mkdir()
+        (shared / "attack" / ".exactory" / "output-views.json").write_text("{}")
+        self._assert_denied("Write", shared / "final/reviews/bar/review-a.json", cwd=shared)
+
+
 class TestHooksManifest(unittest.TestCase):
     def setUp(self) -> None:
         self.config = json.loads((_PLUGIN_ROOT / "hooks" / "hooks.json").read_text())
