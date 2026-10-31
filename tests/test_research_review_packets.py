@@ -65,6 +65,18 @@ class PacketTests(ResearchPublicationTests):
             self.assertNotIn(forbidden, text)
         self.assertIn("sections", inputs["synthesis"])
 
+    def test_readiness_and_manuscript_packets_default_to_the_packets_folder(self):
+        delivery = importlib.import_module("research_harness.review_delivery")
+        packets = self.store.root / "intermediate/reviews/packets"
+        name = "readiness-r%d" % self.store.revision
+        self.assertEqual(delivery.deliver_readiness(self.store)["destination"], str(packets / name))
+        self.assertEqual(json.loads((packets / name / "inputs.json").read_text())["kind"], "readiness")
+        self.assertEqual(delivery.deliver_readiness(self.store)["destination"], str(packets / (name + "-2")))
+        self.mutate(self.publication().prepare_publication, self.bundle_payload())
+        name = "manuscript-r%d" % self.store.revision
+        self.assertEqual(delivery.deliver_manuscript(self.store)["destination"], str(packets / name))
+        self.assertEqual(json.loads((packets / name / "inputs.json").read_text())["kind"], "manuscript")
+
     def test_one_review_per_assessor_per_bundle_and_a_rejection_stands(self):
         api = self.publication()
         bundle = self.mutate(api.prepare_publication, self.bundle_payload())["result"]
@@ -164,6 +176,20 @@ class RoundPacketTests(RoundsCase):
         self.assertEqual(delivered.returncode, 0, delivered.stderr)
         manifest = json.loads((self.root / "packet-2/inputs.json").read_text())
         self.assertEqual((manifest["kind"], manifest["decision"]["digest"]), ("round", decision["digest"]))
+
+    def test_the_cli_round_packet_defaults_to_the_packets_folder(self):
+        from research_harness import rounds
+        bundle = self.pin(evidence=[self.result_evidence(self.execution_payload), self.source_evidence()], measure=False)
+        self.measure(bundle, "one")
+        self.analyze(bundle, "one")
+        self.mutate(rounds.record_round, self.decision_payload(bundle))
+        delivered = subprocess.run([sys.executable, str(PLUGIN / "bin/exactory-research"), "export", "--kind", "round"],
+                                   cwd=self.root, capture_output=True, text=True,
+                                   env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        self.assertEqual(delivered.returncode, 0, delivered.stderr)
+        directory = self.store.root / "intermediate/reviews/packets" / ("round-r%d" % self.store.revision)
+        self.assertEqual(json.loads(delivered.stdout)["destination"], str(directory))
+        self.assertEqual(json.loads((directory / "inputs.json").read_text())["kind"], "round")
 
     def test_the_manuscript_packet_stays_blind_to_rounds_and_predictions(self):
         from research_harness import rounds

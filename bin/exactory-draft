@@ -78,7 +78,7 @@ _PLUGIN_VERSION = json.loads(
 )["version"]
 _USER_AGENT = f"exactory-draft/{_PLUGIN_VERSION}"
 
-_WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "reviews", "learnings")
+_WORKSPACE_DIR_NAMES = (".exactory", "draft", "evidence", "research", "learnings")
 _DRAFT_STATE_PATH = Path(".exactory/draft.json")
 _DEPOSIT_STATE_PATH = Path(".exactory/deposit.json")
 _AUTHORSHIP_STATE_PATH = Path(".exactory/authorship.json")

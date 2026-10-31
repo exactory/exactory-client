@@ -19,7 +19,8 @@ from .gates import gate_report, gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .limits import describe_depth, limits_report
 from .operations import fields, text
-from .output_views import find_view_advisories, render_all, render_views_after_command
+from .output_views import (PROBLEM_EXPORTS_FOLDER, find_view_advisories, find_workspace_root, render_all,
+                           render_views_after_command)
 from .provenance import runtime_provenance
 from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
 from .storage import Store, check_command_bounds
@@ -277,7 +278,10 @@ def build_parser():
         if command == "export":
             item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-openness", "outputs"), default="workspace")
             item.add_argument("--spec", help="JSON assignment identity, openness minimum, optional analytical native_reviews [{attempt_id,assignment_id}], and source_evidence [{source_id,reason,locator?}] for problem-openness.")
-            item.add_argument("--destination", help="New independent reviewer directory for the readiness, manuscript or round packet and its actual source bytes.")
+            item.add_argument("--destination", help=(
+                "New directory for the export. The problem export goes inside final/ of the workspace, by default "
+                "final/problem/exports/<export digest>/. A readiness, manuscript, round or problem-openness packet "
+                "goes anywhere, by default intermediate/reviews/packets/<id>/. A native export requires it."))
             item.add_argument("--attack-root", help="Native attack root for an immutable foundation delivery.")
             item.add_argument("--claim-binding", help="JSON source correspondence for an external native verification claim.")
         if command == "recover":
@@ -589,13 +593,17 @@ def run(args):
         require_ready(report, args.action)
         return report
     if args.kind == "problem":
-        if not args.destination:
-            raise ResearchError("invalid_input", "Problem export requires --destination")
+        final = find_workspace_root(store.root) / "final"
+        if args.destination is not None and final not in Path(os.path.realpath(args.destination)).parents:
+            raise ResearchError("export_destination_outside_final",
+                                "Export the problem inside final/ of the workspace. Without --destination it goes to "
+                                + PROBLEM_EXPORTS_FOLDER + "/<export digest>/.",
+                                {"destination": args.destination, "final": str(final)})
         from .problem_delivery import export_problem
         return export_problem(store, args.destination)
     if args.kind == "problem-openness":
-        if not args.destination or not args.spec:
-            raise ResearchError("invalid_input", "Problem openness export requires --spec and --destination")
+        if not args.spec:
+            raise ResearchError("invalid_input", "Problem openness export requires --spec")
         from .problem_openness import export_openness
         return export_openness(store, strict_json(Path(args.spec).read_bytes()), args.destination)
     if args.kind == "workspace":
@@ -612,10 +620,8 @@ def run(args):
         binding = strict_json(Path(args.claim_binding).read_bytes()) if args.claim_binding else None
         return export_native(store, Path(args.attack_root), Path(args.destination), claim_binding=binding)
     from .review_delivery import deliver_manuscript, deliver_readiness, deliver_round
-    if not args.destination:
-        raise ResearchError("invalid_input", "Reviewer delivery requires --destination for the separate reviewer")
     deliver = {"readiness": deliver_readiness, "manuscript": deliver_manuscript, "round": deliver_round}[args.kind]
-    return deliver(store, Path(args.destination))
+    return deliver(store, args.destination)
 
 
 def _is_recording_command(args):

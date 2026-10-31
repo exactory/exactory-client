@@ -8,6 +8,7 @@ from test_research_problem_claims import ProblemCase
 import test_research_problem_reviews as reviewers
 from research_harness import problem_candidates, research_decisions, review_protocol
 from research_harness.cli import status_report
+from research_harness.errors import ResearchError
 from research_harness.gates import gate_state
 from research_harness.evidence import digest
 
@@ -110,6 +111,53 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         (directory / "problem-export.json").write_text(json.dumps(manifest))
         self.assert_error("problem_export_mismatch", lambda: self.mutate(self.load_problem_module().record_posted,
             {"problem_id": "forged-manifest", "export_directory": str(directory)}))
+
+    def test_export_defaults_to_final_and_reuses_an_identical_export(self):
+        from research_harness.problem_delivery import export_problem
+        self.prepare_ready()
+        self.record_post_decision()
+        exported = export_problem(self.store)
+        directory = Path(exported["destination"])
+        self.assertEqual(directory.parent, self.store.root / "final/problem/exports")
+        self.assertEqual(json.loads((directory / "problem-export.json").read_text())["files"], exported["files"])
+        self.assertEqual(export_problem(self.store), exported)
+        # The library still exports anywhere, and an identical export there is returned as it is too.
+        elsewhere = self.root.parent / "elsewhere"
+        self.assertEqual(export_problem(self.store, elsewhere)["destination"], str(elsewhere))
+        self.assertEqual(export_problem(self.store, elsewhere)["destination"], str(elsewhere))
+        (elsewhere / "statement.md").write_text("An unreviewed claim.\n")
+        self.assert_error("review_destination_exists", lambda: export_problem(self.store, elsewhere))
+        self.assertEqual((elsewhere / "statement.md").read_text(), "An unreviewed claim.\n")
+        # A dot file that a file browser adds leaves the exported set as it is, and the folder is named by the
+        # export digest that the post records.
+        (directory / ".DS_Store").write_bytes(b"\x00\x01")
+        post = self.mutate(self.load_problem_module().record_posted,
+                           {"problem_id": "posted-id", "export_directory": str(directory)})["result"]
+        self.assertEqual(post["export_digest"], directory.name)
+
+    def test_the_cli_exports_the_problem_only_inside_final(self):
+        from research_harness import cli
+        self.prepare_ready()
+        self.record_post_decision()
+        parser = cli.build_parser()
+
+        def export(*arguments):
+            return cli.run(parser.parse_args(["export", "--workspace", str(self.root), "--kind", "problem", *arguments]))
+
+        for outside in (self.root / "problem-export", self.root / "final/../problem-export", self.root / "finally",
+                        self.root.parent / "elsewhere"):
+            with self.subTest(destination=outside):
+                with self.assertRaises(ResearchError) as caught:
+                    export("--destination", str(outside))
+                self.assertEqual(caught.exception.code, "export_destination_outside_final")
+                self.assertIn("final/problem/exports/", caught.exception.message)
+                self.assertFalse(outside.exists())
+        exported = export()
+        self.assertEqual(Path(exported["destination"]).parent, self.store.root / "final/problem/exports")
+        chosen = self.root / "final/problem/exports/chosen"
+        self.assertEqual(export("--destination", str(chosen))["destination"], str(chosen))
+        self.assertEqual((chosen / "statement.md").read_bytes(),
+                         (Path(exported["destination"]) / "statement.md").read_bytes())
 
     def test_statement_selection_makes_prior_finding_and_decision_stale(self):
         self.prepare_ready()

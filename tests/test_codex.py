@@ -123,6 +123,22 @@ class TestCodexHooks(unittest.TestCase):
             with self.subTest(body=body):
                 self.assert_denied(self.run_hook("guard_attack_files.py", self.patch(body)), "harness")
 
+    def test_patches_into_the_generated_output_folders_are_denied(self):
+        (self.root / ".exactory").mkdir()
+        (self.root / ".exactory/output-views.json").write_text("{}")
+        bodies = [
+            "*** Add File: final/notes.md\n+x",
+            "*** Update File: intermediate/index.json\n@@\n+x",
+            "*** Delete File: final/index.json",
+            "*** Update File: notes.md\n*** Move to: intermediate/notes.md\n@@\n+x",
+        ]
+        for body in bodies:
+            with self.subTest(body=body):
+                self.assert_denied(self.run_hook("guard_attack_files.py", self.patch(body)), "work/")
+        for body in ("*** Add File: intermediate/legacy/tools/turn.json\n+x", "*** Add File: work/notes.md\n+x"):
+            with self.subTest(body=body):
+                self.assertIsNone(self.run_hook("guard_attack_files.py", self.patch(body)))
+
     def test_safe_patch_and_header_like_content_are_allowed(self):
         patch = self.patch("*** Add File: notes.md\n+*** Delete File: attack/sample/journal.jsonl")
         self.assertIsNone(self.run_hook("guard_attack_files.py", patch))

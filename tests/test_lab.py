@@ -19,6 +19,7 @@ from pathlib import Path
 
 from integration_fixtures import prepare_research, admit_lab
 from research_harness.errors import ResearchError
+from research_harness.output_views import render_views_after_command
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 
@@ -41,12 +42,9 @@ _STUDY_DIR_NAMES = (
     "cohort/notes",
     "idea",
     "experiment/code",
-    "experiment/logs",
-    "experiment/results",
     "experiment/plots",
     "evidence",
     "research",
-    "reviews",
     "learnings",
 )
 
@@ -101,6 +99,13 @@ class _InsideWorkspaceTestCase(_WorkspaceTestCase):
         original_dir = os.getcwd()
         os.chdir(self.workspace)
         self.addCleanup(os.chdir, original_dir)
+
+    def read_run_view(self, record: dict, name: str) -> str:
+        """A file of the run's view in intermediate/lab/runs/, rendered as the lab's entry point renders it after
+        each command."""
+        render_views_after_command(str(self.workspace))
+        return (self.workspace / "intermediate" / "lab" / "runs" / record["admission_id"] / name).read_text(
+            encoding="utf-8")
 
 
 class TestProbe(_InsideWorkspaceTestCase):
@@ -826,7 +831,16 @@ class TestInit(_WorkspaceTestCase):
         self.init_workspace()
         for dir_name in _STUDY_DIR_NAMES:
             self.assertTrue((self.workspace / dir_name).is_dir(), dir_name)
-        self.assertFalse((self.workspace / "draft").exists())
+        # The harness renders outputs into final/ and intermediate/, so no folder is made for them.
+        for dir_name in ("draft", "reviews", "experiment/results", "experiment/logs"):
+            self.assertFalse((self.workspace / dir_name).exists(), dir_name)
+
+    def test_init_leaves_an_existing_reviews_folder_as_it_is(self) -> None:
+        saved_review = self.workspace / "reviews" / "review_001.json"
+        saved_review.parent.mkdir(parents=True)
+        saved_review.write_text("{}", encoding="utf-8")
+        self.init_workspace()
+        self.assertEqual(saved_review.read_text(encoding="utf-8"), "{}")
 
     def test_init_writes_the_study_state(self) -> None:
         self.init_workspace()
@@ -989,12 +1003,6 @@ class TestRunLocal(_InsideWorkspaceTestCase):
             body, encoding="utf-8"
         )
 
-    def read_record(self, node: str) -> dict:
-        return json.loads(
-            (self.workspace / "experiment" / "results" / f"{node}.json")
-            .read_text(encoding="utf-8")
-        )
-
     def test_run_captures_the_metrics_line(self) -> None:
         self.write_script("n1.py", "import json\n"
                                    "print(json.dumps({'metric': 0.83, 'loss': 0.1}))\n")
@@ -1005,13 +1013,13 @@ class TestRunLocal(_InsideWorkspaceTestCase):
         self.assertEqual(record["returncode"], 0)
         self.assertEqual(record["metric"], {"metric": 0.83, "loss": 0.1})
         self.assertEqual(record["backend"], "local")
-        # The receipt names the recorded execution; the result file keeps the run summary alone.
+        # The receipt names the recorded execution; the run's result view keeps the run summary alone.
         from research_harness.storage import Store
         recorded = Store(self.workspace).snapshot()["records"]["execution"][record["execution_id"]]["payload"]
         self.assertEqual(record["outputs"], recorded["outputs"])
         self.assertEqual([output["id"] for output in record["outputs"]], ["result"])
         summary = {key: value for key, value in record.items() if key not in ("execution_id", "outputs")}
-        self.assertEqual(self.read_record("n1"), summary)
+        self.assertEqual(json.loads(self.read_run_view(record, "result.json")), summary)
 
     def test_run_falls_back_to_the_results_file(self) -> None:
         self.write_script("n2.py", "import json, pathlib\n"
@@ -1039,10 +1047,8 @@ class TestRunLocal(_InsideWorkspaceTestCase):
 
     def test_run_writes_the_log_file(self) -> None:
         self.write_script("n5.py", "print('hello')\n")
-        _run_lab_command(["run", "code/n5.py"], 1, self)
-        log_text = (self.workspace / "experiment" / "logs" / "n5.log").read_text(
-            encoding="utf-8"
-        )
+        output = _run_lab_command(["run", "code/n5.py"], 1, self)
+        log_text = self.read_run_view(json.loads(output.splitlines()[-1]), "log.txt")
         self.assertIn("STDOUT", log_text)
         self.assertIn("hello", log_text)
 
@@ -1158,15 +1164,10 @@ class TestColabBackend(_InsideWorkspaceTestCase):
         self.assertEqual(record["metric"], {"metric": 1.5})
         records = case.store.snapshot()["records"]
         self.assertEqual(record["execution_id"], records["execution_outcome"][admission["id"]]["execution_id"])
-        pulled_record = json.loads(
-            (self.workspace / "experiment" / "results" / "n4.json")
-            .read_text(encoding="utf-8")
-        )
+        pulled_record = json.loads(self.read_run_view(record, "result.json"))
         summary = {key: value for key, value in record.items() if key not in ("execution_id", "outputs")}
         self.assertEqual(pulled_record, summary)
-        self.assertTrue(
-            (self.workspace / "experiment" / "logs" / "n4.log").is_file()
-        )
+        self.assertIn("STDOUT", self.read_run_view(record, "log.txt"))
 
     def test_colab_status_reports_liveness(self) -> None:
         _run_lab_command(["colab-status"], 1, self)

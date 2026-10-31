@@ -88,12 +88,9 @@ _STUDY_DIR_NAMES = (
     "cohort/notes",
     "idea",
     "experiment/code",
-    "experiment/logs",
-    "experiment/results",
     "experiment/plots",
     "evidence",
     "research",
-    "reviews",
     "learnings",
 )
 

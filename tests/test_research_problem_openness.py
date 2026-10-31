@@ -37,6 +37,34 @@ class ProblemOpennessTests(ProblemCase):
         self.assertEqual(packet["claim_digest"], self.load_problem_module().compute_statement_digest(self.selected))
         self.assertTrue((self.root / "packet" / "inputs.json").is_file())
 
+    def test_the_packet_defaults_to_the_packets_folder_and_takes_any_destination(self):
+        import test_research_problem_openness_minimum as minimum_fixtures
+        from research_harness import cli
+        from research_harness.problem_openness import export_openness
+        search = minimum_fixtures.ProblemOpennessMinimumTests.search(self)
+        spec = {"assignment_id": "open-review", "reviewer_id": "openness-reviewer",
+                "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
+                            "settling_work_id": None, "duplicate_resolutions": []}}
+        packets = self.store.root / "intermediate/reviews/packets"
+        self.assertEqual(export_openness(self.store, spec)["destination"], str(packets / "open-review"))
+        self.assertTrue((packets / "open-review/inputs.json").is_file())
+        self.assertEqual(export_openness(self.store, spec)["destination"], str(packets / "open-review-2"))
+        path = self.root.parent / "openness-spec.json"
+        path.write_text(json.dumps(spec))
+
+        def export(*arguments):
+            return cli.run(cli.build_parser().parse_args(["export", "--workspace", str(self.root), "--kind",
+                                                          "problem-openness", "--spec", str(path), *arguments]))
+
+        self.assertEqual(export()["destination"], str(packets / "open-review-3"))
+        isolated = self.root.parent / "isolated-reviewer"
+        self.assertEqual(export("--destination", str(isolated))["destination"], str(isolated))
+        self.assertTrue((isolated / "inputs.json").is_file())
+        # An assignment id that is not a portable file name is named by its digest.
+        unportable = export_openness(self.store, dict(spec, assignment_id="open review/1"))
+        self.assertEqual(Path(unportable["destination"]).parent, packets)
+        self.assertRegex(Path(unportable["destination"]).name, r"^id-[0-9a-f]{32}$")
+
     def test_new_neighbour_and_material_search_make_finding_stale(self):
         from research_harness.problem_openness import assess_openness
         finding = {"id": "openness", "outcome": "supported_open", "statement_digest": self.load_problem_module().compute_statement_digest(self.selected),

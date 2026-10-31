@@ -879,7 +879,8 @@ def depth_is_exact_fulltext(requirements, work):
 
 
 def export_foundation(store, profile):
-    """Write safe mutable inventory/coverage projections; never read them as state."""
+    """Write safe mutable inventory/coverage projections into intermediate/literature/exports/ of the workspace root
+    and return their paths from that root; never read them as state."""
     report = foundation_report(store, profile)
     inventory = ["# Literature inventory", "", "Profile: " + profile, "", "| Exact version | Tier | Required depth | Saved sources |", "| --- | --- | --- | --- |"]
     for item in report["inventory"]:
@@ -888,8 +889,9 @@ def export_foundation(store, profile):
     coverage.extend("- " + item["code"] + ": " + item["explanation"] + " " + item.get("version_id", "") for item in report["obligations"])
     coverage.extend(["", "## Detailed coverage", "", "```json", json.dumps(report, indent=2, ensure_ascii=False), "```", ""])
     paths = {}
-    workspace = _Workspace(store.root)
-    with workspace.directory("research/exports", create=True) as directory:
+    from .output_views import LITERATURE_EXPORTS_FOLDER, find_workspace_root
+    workspace = _Workspace(find_workspace_root(store.root))
+    with workspace.directory(LITERATURE_EXPORTS_FOLDER, create=True) as directory:
         for kind, lines in (("inventory", inventory), ("coverage", coverage)):
             name = profile + "-" + kind + ".md"
             temporary = ".export-" + uuid.uuid4().hex
@@ -906,5 +908,5 @@ def export_foundation(store, profile):
                     os.unlink(temporary, dir_fd=directory)
                 except FileNotFoundError:
                     pass
-            paths[kind] = "research/exports/" + name
+            paths[kind] = LITERATURE_EXPORTS_FOLDER + "/" + name
     return dict(paths, digest=report["digest"])

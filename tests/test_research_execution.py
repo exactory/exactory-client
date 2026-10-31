@@ -16,6 +16,7 @@ from unittest import mock
 
 from development_fixtures import DevelopmentCase, PROGRAM
 from integration_fixtures import OBSERVED_PROGRAM, admit_lab, make_venv, observe_run
+from research_harness.evidence import digest
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -108,11 +109,17 @@ class ResearchExecutionTests(DevelopmentCase):
                                      str(self.store.revision), "--request-id", "printed-reconcile")
         self.assertEqual(reconcile.returncode, 0, reconcile.stderr)
         self.assertEqual(json.loads(reconcile.stdout), launched)
-        # The stored receipts and the result projection keep the run summary alone.
+        # The stored receipts, the run's summary and its generated view keep the run summary alone; no view is
+        # written under experiment/.
         summary = {key: value for key, value in launched.items() if key not in ("execution_id", "outputs")}
         for request_id in ("reconcile-printed-launch", "printed-reconcile"):
             self.assertEqual(self.store.committed_request(request_id)["response"]["result"], summary)
-        self.assertEqual(json.loads((self.root / "experiment/results/program.json").read_text()), summary)
+        run_directory = "research/runs/" + digest({"admission_id": admission["id"]})
+        self.assertEqual(json.loads((self.root / run_directory / "summary.json").read_text()), summary)
+        view = self.root / "intermediate/lab/runs" / admission["id"] / "result.json"
+        self.assertEqual(json.loads(view.read_text()), summary)
+        self.assertFalse((self.root / "experiment/results").exists())
+        self.assertFalse((self.root / "experiment/logs").exists())
 
     def test_a_run_whose_recording_fails_has_no_recorded_execution_id_or_outputs(self):
         from research_harness import development, execution
@@ -421,12 +428,10 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(before["execution"], after["execution"])
         self.assertEqual(before["strategy_account"], after["strategy_account"])
         # An acknowledged observation can outlive a failed projection write.
-        # Its exact retry repairs views without new execution or accounting.
-        summary = self.root / "experiment/results/program.json"
-        log = self.root / "experiment/logs/program.log"
-        expected_summary, expected_log = summary.read_bytes(), log.read_bytes()
+        # Its exact retry repairs the run's summary without new execution or accounting.
+        summary = self.root / "research/runs" / digest({"admission_id": admission["id"]}) / "summary.json"
+        expected_summary = summary.read_bytes()
         summary.unlink()
-        log.unlink()
         completed = self.store.snapshot()
         replay = api.reconcile_execution(self.store, {"admission_id": admission["id"]},
             expected_revision=before["execution_admission"][admission["id"]]["admitted_revision"],
@@ -434,7 +439,8 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(replay, result)
         self.assertEqual(self.store.snapshot(), completed)
         self.assertEqual(json.loads(summary.read_bytes()), json.loads(expected_summary))
-        self.assertEqual(log.read_bytes(), expected_log)
+        self.assertFalse((self.root / "experiment/results").exists())
+        self.assertFalse((self.root / "experiment/logs").exists())
 
     def test_local_terminal_recovery_rejects_changed_and_inserted_output_bytes(self):
         from research_harness.storage import Store

@@ -35,6 +35,10 @@ from .workspace import checked_parent, find_entry_kind, find_workspace, read_fil
 
 
 MARKER_PATH = ".exactory/output-views.json"
+# The folders that the export commands own, from the workspace root.
+PROBLEM_EXPORTS_FOLDER = "final/problem/exports"
+PACKETS_FOLDER = "intermediate/reviews/packets"
+LITERATURE_EXPORTS_FOLDER = "intermediate/literature/exports"
 COPY_LIMIT_BYTES = 1 << 20
 # A top-level field of a summarized record is shown when its canonical JSON takes at most this many bytes.
 FIELD_LIMIT_BYTES = 1 << 16
@@ -55,7 +59,7 @@ _STATUS_FOLDERS = {"current": "final/", "superseded": "final/history/", "histori
 # commands own their folders, and a session fills the legacy folder once.
 _CONTROLLER_FOLDERS = ("final/math/", "intermediate/math/")
 _DELIVERIES_FOLDER = "final/math/deliveries/"
-_EXPORT_FOLDERS = ("final/problem/exports/", "intermediate/reviews/packets/", "intermediate/literature/exports/")
+_EXPORT_FOLDERS = tuple(folder + "/" for folder in (PROBLEM_EXPORTS_FOLDER, PACKETS_FOLDER, LITERATURE_EXPORTS_FOLDER))
 _LEGACY_FOLDER = "intermediate/legacy/"
 _CHECK_REPORT_PATHS = (".exactory/citation-check.json", ".exactory/derivation-check.json")
 _FOLDER_FILE_NAMES = ("README.md", "index.json")
@@ -690,7 +694,7 @@ def _build_runs(records, artifacts, inputs):
         folder = "intermediate/lab/runs/" + _format_file_name(admission_id) + "/"
         files[folder + "run.json"] = ViewFile(_encode(view), entry)
         if observation is not None:
-            # The same bytes that json_projection gave experiment/results/<node>.json.
+            # The same bytes that json_projection gives the run's summary.json under research/runs/.
             files[folder + "result.json"] = ViewFile(
                 (json.dumps(observation["summary"], ensure_ascii=False, indent=2) + "\n").encode("utf-8"), entry)
             if observation.get("log") is not None and not is_sealed_artifact(observation["log"]):
