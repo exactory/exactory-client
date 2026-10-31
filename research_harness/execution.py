@@ -442,3 +442,13 @@ def execution_status(store, admission_id):
             "claim": records.get("execution_claim", {}).get(admission_id),
             "observation": records.get("execution_observation", {}).get(admission_id),
             "scientific_validation": False}
+
+
+def find_recorded_execution(store, admission_id):
+    """The id and outputs of the execution that the store records for the admitted run, or null for both."""
+    records = store.snapshot()["records"]
+    outcome = records.get("execution_outcome", {}).get(admission_id)
+    if outcome is None:
+        return {"execution_id": None, "outputs": None}
+    execution = records["execution"][outcome["execution_id"]]["payload"]
+    return {"execution_id": execution["id"], "outputs": execution["outputs"]}

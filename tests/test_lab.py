@@ -1005,7 +1005,13 @@ class TestRunLocal(_InsideWorkspaceTestCase):
         self.assertEqual(record["returncode"], 0)
         self.assertEqual(record["metric"], {"metric": 0.83, "loss": 0.1})
         self.assertEqual(record["backend"], "local")
-        self.assertEqual(self.read_record("n1"), record)
+        # The receipt names the recorded execution; the result file keeps the run summary alone.
+        from research_harness.storage import Store
+        recorded = Store(self.workspace).snapshot()["records"]["execution"][record["execution_id"]]["payload"]
+        self.assertEqual(record["outputs"], recorded["outputs"])
+        self.assertEqual([output["id"] for output in record["outputs"]], ["result"])
+        summary = {key: value for key, value in record.items() if key not in ("execution_id", "outputs")}
+        self.assertEqual(self.read_record("n1"), summary)
 
     def test_run_falls_back_to_the_results_file(self) -> None:
         self.write_script("n2.py", "import json, pathlib\n"
@@ -1150,11 +1156,14 @@ class TestColabBackend(_InsideWorkspaceTestCase):
         self.assertTrue(record["ok"])
         self.assertEqual(record["backend"], "colab")
         self.assertEqual(record["metric"], {"metric": 1.5})
+        records = case.store.snapshot()["records"]
+        self.assertEqual(record["execution_id"], records["execution_outcome"][admission["id"]]["execution_id"])
         pulled_record = json.loads(
             (self.workspace / "experiment" / "results" / "n4.json")
             .read_text(encoding="utf-8")
         )
-        self.assertEqual(pulled_record, record)
+        summary = {key: value for key, value in record.items() if key not in ("execution_id", "outputs")}
+        self.assertEqual(pulled_record, summary)
         self.assertTrue(
             (self.workspace / "experiment" / "logs" / "n4.log").is_file()
         )

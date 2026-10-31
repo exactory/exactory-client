@@ -15,7 +15,7 @@ import unittest
 from unittest import mock
 
 from development_fixtures import DevelopmentCase, PROGRAM
-from integration_fixtures import admit_lab, make_venv
+from integration_fixtures import OBSERVED_PROGRAM, admit_lab, make_venv, observe_run
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -85,6 +85,63 @@ class ResearchExecutionTests(DevelopmentCase):
         self.assertEqual(self.store.snapshot(), before)
         self.assertEqual(len(before["records"]["execution"]), 1)
         self.assertFalse(api.execution_status(self.store, admission["id"])["scientific_validation"])
+
+    def run_command(self, command, *arguments):
+        return subprocess.run([sys.executable, str(PLUGIN / "bin" / command), *arguments], cwd=self.root,
+                              capture_output=True, text=True, timeout=60)
+
+    def test_run_and_reconcile_run_print_the_recorded_execution_id_and_outputs(self):
+        admission = admit_lab(self, body="print('{\"metric\": 7}')\n")
+        launch = self.run_command("exactory-lab", "run", "code/program.py", "--admission", admission["id"],
+                                  "--timeout", "5", "--request-id", "printed-launch")
+        self.assertEqual(launch.returncode, 0, launch.stderr)
+        launched = json.loads(launch.stdout)
+        records = self.store.snapshot()["records"]
+        execution_id = records["execution_outcome"][admission["id"]]["execution_id"]
+        recorded = records["execution"][execution_id]["payload"]
+        self.assertEqual({key: launched.get(key) for key in ("execution_id", "outputs")},
+                         {"execution_id": execution_id, "outputs": recorded["outputs"]})
+        self.assertEqual([output["id"] for output in launched["outputs"]], ["result"])
+        path = self.root / "reconcile.json"
+        path.write_text(json.dumps({"admission_id": admission["id"]}))
+        reconcile = self.run_command("exactory-research", "reconcile-run", "--file", str(path), "--expected-revision",
+                                     str(self.store.revision), "--request-id", "printed-reconcile")
+        self.assertEqual(reconcile.returncode, 0, reconcile.stderr)
+        self.assertEqual(json.loads(reconcile.stdout), launched)
+        # The stored receipts and the result projection keep the run summary alone.
+        summary = {key: value for key, value in launched.items() if key not in ("execution_id", "outputs")}
+        for request_id in ("reconcile-printed-launch", "printed-reconcile"):
+            self.assertEqual(self.store.committed_request(request_id)["response"]["result"], summary)
+        self.assertEqual(json.loads((self.root / "experiment/results/program.json").read_text()), summary)
+
+    def test_a_run_whose_recording_fails_has_no_recorded_execution_id_or_outputs(self):
+        from research_harness import development, execution
+        earlier = observe_run(self)
+        plan = self.store.snapshot()["records"]["cycle_plan"][earlier["cycle_id"]]
+        self.mutate(development.assess_cycle, self.assessment(plan["payload"], earlier))
+        # A format-only conversion whose program writes another bound: its outputs differ from the earlier run's.
+        script = self.root / "experiment/code/convert.py"
+        script.write_text(OBSERVED_PROGRAM.replace('"bound": 9', '"bound": 10'))
+        command = {"argv": [sys.executable, str(script)], "inputs": [], "seed": None,
+                   "program": self.artifacts.put(script.read_bytes(), "text/x-python"),
+                   "versions": {"python": sys.version.split()[0]}, "seed_reason": "Deterministic fixture."}
+        self.mutate(development.admit_execution, {"id": "conversion", "cycle_id": plan["id"],
+            "plan_digest": plan["digest"], "command": command, "reserved_units": 1, "format_only_of": earlier["id"]})
+        self.mutate(execution.bind_execution, {"admission_id": "conversion", "script": "code/convert.py",
+            "backend": "local", "timeout_seconds": 5, "inputs": [], "usage_unit": "execution", "outputs": [
+                {"id": "result", "requirement_id": "measurements", "path": "results/result.json",
+                 "media_type": "application/json"},
+                {"id": "validation", "requirement_id": "checks", "path": "results/validation.json",
+                 "media_type": "application/json"}]})
+        launch = self.run_command("exactory-lab", "run", "code/convert.py", "--admission", "conversion",
+                                  "--timeout", "5")
+        self.assertEqual(launch.returncode, 1, launch.stdout)
+        self.assertEqual(json.loads(launch.stderr)["error"]["code"], "format_only_output_mismatch")
+        self.assertEqual(launch.stdout, "")
+        self.assertIn("conversion", self.store.snapshot()["records"]["execution_claim"])
+        self.assertEqual(execution.find_recorded_execution(self.store, "conversion"),
+                         {"execution_id": None, "outputs": None})
+        self.assertFalse((self.root / "experiment/results/convert.json").exists())
 
     def test_changed_script_after_binding_is_refused_before_process_claim(self):
         self.require_launcher()

@@ -390,7 +390,7 @@ def _run_run(args: argparse.Namespace) -> None:
     if not getattr(args, "admission", None):
         _exit_with_error("Research execution needs --admission from a prospective admitted cycle; run exactory-research next.")
     try:
-        from research_harness.execution import execution_status, launch_execution
+        from research_harness.execution import execution_status, find_recorded_execution, launch_execution
         store = current_store(workspace_dir)
         status = execution_status(store, args.admission)
         binding = status["binding"]
@@ -401,9 +401,10 @@ def _run_run(args: argparse.Namespace) -> None:
                 or binding["timeout_seconds"] != args.timeout or admission["command"]["seed"] != args.seed):
             raise ResearchError("execution_identity_mismatch", "Script, backend, seed and timeout must equal the admitted run binding")
         record = launch_execution(store, args.admission, **command_identity(store, args))
+        recorded_execution = find_recorded_execution(store, args.admission)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
-    print(json.dumps(record))
+    print(json.dumps(dict(record, **recorded_execution)))
     if not record["ok"]:
         raise SystemExit(1)
 

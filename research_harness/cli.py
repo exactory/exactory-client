@@ -117,8 +117,16 @@ def _review_output_correction(store, payload, **identity):
 OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
                    "review-output-correction": _review_output_correction})
 
-from .execution import bind_execution, reconcile_execution, record_imported_execution, record_reconciliation
-OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": reconcile_execution, "result": record_imported_execution})
+from .execution import (bind_execution, find_recorded_execution, reconcile_execution, record_imported_execution,
+                        record_reconciliation)
+
+
+def _reconcile_run(store, payload, **identity):
+    summary = reconcile_execution(store, payload, **identity)
+    return dict(summary, **find_recorded_execution(store, payload["admission_id"]))
+
+
+OPERATIONS.update({"bind-run": bind_execution, "reconcile-run": _reconcile_run, "result": record_imported_execution})
 from .publication import check_claims, list_publication_receipts, prepare_publication, record_manuscript_review
 from .publication_files import find_bundle_drift, restore_bundle
 from .verification import bind_verdict
@@ -373,6 +381,8 @@ def status_report(store, *, counters=False):
         return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
                     problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
                     limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
+                    # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
+                    literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                     candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
                     next=upcoming, review=_review_status(records, evaluation))
     config = records.get("configuration", {}).get("research")

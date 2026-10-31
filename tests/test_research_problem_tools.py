@@ -148,6 +148,32 @@ class ProblemLabToolsTests(ProblemToolsCase):
         self.assertNotIn("study", snapshot["records"]["workspace"])
         self.assertFalse((self.root / ".exactory/study.json").exists())
 
+    def check_cycle(self, plan, expected_code):
+        path = self.root / "cycle.json"
+        path.write_text(json.dumps(plan))
+        return self.run_command("exactory-research", "cycle", "--file", str(path), "--check", "--expected-revision",
+            str(self.store.revision), "--request-id", "cli-cycle-check", expected_code=expected_code)
+
+    def test_problem_status_reports_the_literature_digest_that_cycle_compares(self):
+        self.prepare_problem()
+        status = json.loads(self.run_command("exactory-research", "status").stdout)
+        self.assertIn("literature_digest", status)
+        plan = self.plan()
+        plan["literature"]["literature_digest"] = status["literature_digest"]
+        self.assertEqual(json.loads(self.check_cycle(plan, 0).stdout)["check"], "accepted")
+        plan["literature"]["literature_digest"] = "0" * 64
+        refused = self.check_cycle(plan, 1)
+        self.assertEqual(json.loads(refused.stderr)["error"]["code"], "literature_comparison_stale")
+
+    def test_study_status_keeps_the_literature_digest_in_its_preparation_report(self):
+        self.prepared_study()
+        status = json.loads(self.run_command("exactory-research", "status").stdout)
+        summary = json.loads(self.run_command("exactory-research", "status", "--summary").stdout)
+        self.assertEqual(status["preparation"]["literature_digest"],
+                         self.api().synthesis_report(self.store, "research")["literature_digest"])
+        self.assertNotIn("literature_digest", status)
+        self.assertNotIn("literature_digest", summary)
+
     def test_lab_records_an_explicit_cohort_decision_without_creating_a_study(self):
         self.initialize_problem()
         directory = self.root / "notes"
