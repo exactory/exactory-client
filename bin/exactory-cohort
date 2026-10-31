@@ -28,6 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from research_harness.errors import ResearchError
+from research_harness.output_views import render_views_after_command
 
 _ARXIV_API_URL = "https://export.arxiv.org/api/query"
 _ZENODO_API_URL = "https://zenodo.org/api/records"
@@ -285,13 +286,18 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main(render_views=render_views_after_command) -> None:
+    """Run one command; after collect, which records a cohort, render the output views once, outside every store
+    lock."""
     args = _build_parser().parse_args()
     try:
         args.handler(args)
     except ResearchError as error:
         print(json.dumps({"error": error.as_dict()}, ensure_ascii=False), file=sys.stderr)
         sys.exit(1)
+    finally:
+        if args.handler is _run_collect:
+            render_views(args.workspace)
 
 
 if __name__ == "__main__":

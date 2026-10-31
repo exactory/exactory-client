@@ -28,6 +28,7 @@ from research_harness.integration import (command_identity, current_store, initi
                                            study_state, update_study, record_decision)
 from research_harness.cli import add_identity
 from research_harness.check_mode import check_mutation
+from research_harness.output_views import render_views_after_command
 
 # The release version has one definition: the plugin manifest. Deriving the
 # User-Agent from it at boot keeps the two from drifting apart.
@@ -562,7 +563,9 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main(render_views=render_views_after_command) -> None:
+    """Run one command, then render the output views of its workspace once, outside every store lock; a check writes
+    nothing, so it renders nothing."""
     args = _build_parser().parse_args()
     try:
         if getattr(args, "check", False) and args.handler not in (_run_state_set, _run_decide):
@@ -571,6 +574,9 @@ def main() -> None:
         args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
+    finally:
+        if not getattr(args, "check", False):
+            render_views(getattr(args, "dir", None))
 
 
 if __name__ == "__main__":
