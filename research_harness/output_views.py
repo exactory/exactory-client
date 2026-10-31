@@ -806,6 +806,14 @@ def _is_shared_workspace_root(store_root):
             and find_entry_kind(store_root.parent, ".exactory/research.sqlite3") == "regular")
 
 
+def _is_controller_index(path):
+    """Whether path is the index of a controller root, final/math/<rel>/index.json or intermediate/math/<rel>/index.json:
+    <rel> is the controller root's name, and this store's deliveries are no controller root."""
+    parts = path.split("/")
+    return (len(parts) == 4 and parts[0] in ("final", "intermediate") and parts[1] == "math"
+            and parts[3] == "index.json" and not path.startswith(_DELIVERIES_FOLDERS))
+
+
 def _read_inputs(store_root, workspace_root):
     """(_ViewInputs, {path: sha256}) for the controller indexes under final/math/ and the check reports."""
     adoptions, check_reports, digests = {}, {}, {}
@@ -815,10 +823,10 @@ def _read_inputs(store_root, workspace_root):
             digests[relative] = hashlib.sha256(data).hexdigest()
     for directory, subdirectories, names in os.walk(workspace_root / "final/math"):
         relative = os.path.relpath(directory, workspace_root).replace(os.sep, "/") + "/"
-        if relative.startswith(_DELIVERIES_FOLDERS):
+        if relative != "final/math/":
             subdirectories[:] = []
-            continue
-        if "index.json" in names and find_entry_kind(workspace_root, relative + "index.json") == "regular":
+        if ("index.json" in names and _is_controller_index(relative + "index.json")
+                and find_entry_kind(workspace_root, relative + "index.json") == "regular"):
             data = read_file(workspace_root, relative + "index.json")
             digests[relative + "index.json"] = hashlib.sha256(data).hexdigest()
             try:
@@ -1040,7 +1048,7 @@ def _build_index(workspace_root, folder, model, errors):
             elif path.startswith(_LEGACY_FOLDER):
                 entries.append({"path": path[len(prefix):], "type": "legacy"})
             elif path.startswith(_CONTROLLER_FOLDERS) and not path.startswith(_DELIVERIES_FOLDERS):
-                if name == "index.json":
+                if _is_controller_index(path):
                     entries.append({"path": path[len(prefix):], "type": "controller"})
             elif (path not in model or path in errors) and path[len(prefix):] not in _FOLDER_FILE_NAMES:
                 unowned.append(path[len(prefix):])

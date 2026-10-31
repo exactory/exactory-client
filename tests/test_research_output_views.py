@@ -612,6 +612,29 @@ class SeriesTests(ViewCase):
         self.assertIn({"path": "math/attack/index.json", "type": "controller"},
                       self.read_json("final/index.json")["files"])
 
+    def test_only_the_index_of_a_controller_root_is_a_controller_index(self):
+        self.assign("solver-review", role="native_math")
+        self.run_turn("solver-review", "run-1", {"decision": "approve"})
+        adoption = {"review_id": "review-assignment:solver-review", "assignment_id": "solver-review",
+                    "adopting_record": "result_accepted"}
+        # An accepted artifact and a node index are also named index.json; neither is the index of a controller root.
+        files = {"final/math/attack/index.json": {"adoptions": [adoption]},
+                 "final/math/attack/results/acceptance-000001/artifacts/index.json": {"adoptions": [adoption]},
+                 "intermediate/math/attack/index.json": {},
+                 "intermediate/math/attack/nodes/sample/index.json": {}}
+        for relative, value in files.items():
+            (self.root / relative).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / relative).write_text(json.dumps(value), encoding="utf-8")
+        self.render()
+        self.assertEqual([item["index"] for item in
+                          self.read_series("native_math", "solver-review")["turns"][0]["adopted_by"]],
+                         ["final/math/attack/index.json"])
+        for folder in ("final", "intermediate"):
+            index = self.read_json(folder + "/index.json")
+            self.assertEqual([entry["path"] for entry in index["files"] if entry["type"] == "controller"],
+                             ["math/attack/index.json"], folder)
+            self.assertEqual(index["unowned"], [], folder)
+
     def test_large_and_sealed_outputs_are_listed_by_reference(self):
         self.assign("bar-a")
         large = self.artifacts.put(b"[" + b" " * output_views.COPY_LIMIT_BYTES + b"]", "application/json")
