@@ -5,7 +5,9 @@ from pathlib import Path
 from test_research_problem_claims import ProblemCase
 from test_research_problem_delivery import ProblemDeliveryCase
 from research_harness import problem_evidence, research_decisions as decisions, review_protocol
+from research_harness.errors import ResearchError
 from research_harness.evidence import digest
+from research_harness.acquisition import import_response
 from research_harness.literature import record_search
 from unittest.mock import patch
 import json
@@ -18,13 +20,15 @@ class ProblemOpennessTests(ProblemCase):
         self.put_selecting_slate()
         self.selected = self.select_statement(candidate_id="candidate-1")
 
-    def export(self, searches=()):
+    def export(self, searches):
         from research_harness.problem_openness import export_openness
         return export_openness(self.store, {"assignment_id": "open-review", "reviewer_id": "openness-reviewer",
             "minimum": {"searches": list(searches), "settling_work_id": None, "duplicate_resolutions": []}}, self.root / "packet")
 
     def test_export_binds_exact_assignment_and_current_statement(self):
-        result = self.export()
+        import test_research_problem_openness_minimum as minimum_fixtures
+        search = minimum_fixtures.ProblemOpennessMinimumTests.search(self)
+        result = self.export([{"formulation": self.selected["statement"], "search_id": search["id"]}])
         from research_harness.workspace import strict_json
         packet = strict_json(self.artifacts.read(result["native_packet"]))
         self.assertEqual(packet["reviewer"], {"source": "host", "actor_id": "openness-reviewer",
@@ -85,6 +89,132 @@ class ProblemOpennessTests(ProblemCase):
         self.assertEqual(assess_openness(self.store.snapshot()["records"], self.artifacts)[0]["code"], "problem_openness_stale")
 
 
+class ProblemOpennessExportCheckTests(ProblemCase):
+    """The export refuses, before it writes anything, an openness declaration that no resolved finding can pass."""
+
+    neighbour = "Does $B(n)\\leq 2n^2$ hold for every $n$?"
+
+    def setUp(self):
+        super().setUp()
+        self.initialize_problem()
+        self.put_selecting_slate()
+        self.scope([self.metadata(7)])
+        self.selected = self.select_statement(candidate_id="candidate-1", neighbours=[self.neighbour])
+        self.statement = self.selected["statement"]
+
+    def record(self, question=None, *, query="bounded sequence quadratic bound", found=(), disposition="relevant",
+               captured_at="2026-10-15T12:00:00Z"):
+        """Record a captured search; without a question it searches the literature scope."""
+        data = {"query": query, "results": [{"id": work, "title": "Authored source"} for work in found]}
+        self.sequence += 1
+        captured = import_response(self.store, "mcp", json.dumps(data).encode(), source_url="https://example.org/s",
+            captured_at=captured_at, media_type="application/json",
+            mappings=[{"id": "/results/%d/id" % i, "title": "/results/%d/title" % i} for i in range(len(found))],
+            expected_revision=self.store.revision, request_id="capture-" + str(self.sequence))
+        identifier = "search-" + str(self.sequence)
+        value = {"id": identifier, "profile": "research", "purpose": "direct", "queries": [query],
+            "responses": [{"source_id": captured["source_ids"][0], "query": query,
+                "query_locator": {"kind": "json", "pointer": "/query", "value": query}, "results_pointer": "/results"}],
+            "captured_at": captured_at, "found_work_ids": list(found), "verdict": "nothing-new", "cited_work_ids": [],
+            "dispositions": [{"work_id": work, "disposition": disposition, "reason": "Judged."} for work in found],
+            "impact": "Evidence for the formulation.", "gaps": [],
+            "scope": "The bounded-sequence problem." if question is None else question}
+        if question is not None:
+            value["question"] = question
+        self.mutate(record_search, value)
+        return self.store.snapshot()["records"]["literature_search"][identifier]
+
+    def build_spec(self, *bindings, duplicate_resolutions=(), text_priority=None):
+        minimum = {"searches": [{"formulation": formulation, "search_id": search_id}
+                                for formulation, search_id in bindings],
+                   "settling_work_id": None, "duplicate_resolutions": list(duplicate_resolutions)}
+        if text_priority is not None:
+            minimum["text_priority"] = text_priority
+        return {"assignment_id": "open-review", "reviewer_id": "openness-reviewer", "minimum": minimum}
+
+    def export(self, spec):
+        from research_harness.problem_openness import export_openness
+        return export_openness(self.store, spec, self.root / "packet")
+
+    def count_objects(self):
+        return sum(1 for path in (self.root / "research/sources/objects").rglob("*") if path.is_file())
+
+    def assert_refused_before_writing(self, spec, code, details):
+        before = self.count_objects()
+        with self.assertRaises(ResearchError) as caught:
+            self.export(spec)
+        self.assertEqual((caught.exception.code, caught.exception.details), (code, details))
+        self.assertEqual(self.count_objects(), before)
+        self.assertFalse((self.root / "packet").exists())
+
+    def test_a_search_that_does_not_address_its_formulation_is_refused_before_writing(self):
+        unaddressed, neighbour = self.record(), self.record(self.neighbour)
+        spec = self.build_spec((self.statement, unaddressed["id"]), (self.neighbour, neighbour["id"]))
+        self.assert_refused_before_writing(spec, "openness_statement_mismatch", {
+            "formulation": self.statement, "search_id": unaddressed["id"], "search_digest": digest(unaddressed)})
+
+    def test_an_unbound_declared_neighbour_is_refused_before_writing(self):
+        exact = self.record(self.statement)
+        self.assert_refused_before_writing(self.build_spec((self.statement, exact["id"])), "openness_search_missing",
+                                           {"formulations": [self.neighbour]})
+
+    def test_a_valid_spec_exports_its_exact_minimum_and_evidence(self):
+        from research_harness.problem_openness import collect_reading_artifacts
+        work = self.record_full_reading()["version_id"]
+        exact, neighbour = self.record(self.statement, found=[work]), self.record(self.neighbour)
+        result = self.export(self.build_spec((self.statement, exact["id"]), (self.neighbour, neighbour["id"]),
+                                             text_priority=[work]))
+        packet = json.loads(self.artifacts.read(result["native_packet"]))
+        records = self.store.snapshot()["records"]
+        reading = records["reading"]["read-full"]
+        self.assertEqual(packet["scientific_context"]["openness_minimum"], {
+            "schema_version": 1, "statement": self.statement, "neighbours": [self.neighbour],
+            "searches": [{"formulation": self.statement, "search_digest": digest(exact)},
+                         {"formulation": self.neighbour, "search_digest": digest(neighbour)}],
+            "reading_digests": [digest(reading)], "settling_work_id": None, "duplicate_resolutions": []})
+        self.assertEqual({entry["digest"] for entry in packet["evidence"]},
+                         {digest(exact), digest(neighbour), digest(reading), digest(self.selected)}
+                         | {row["sha256"] for row in collect_reading_artifacts(records, self.artifacts, reading)})
+
+    def test_a_binding_to_an_undeclared_formulation_is_refused_before_writing(self):
+        undeclared = "An undeclared formulation."
+        exact, neighbour, other = self.record(self.statement), self.record(self.neighbour), self.record(undeclared)
+        spec = self.build_spec((self.statement, exact["id"]), (self.neighbour, neighbour["id"]),
+                               (undeclared, other["id"]))
+        self.assert_refused_before_writing(spec, "openness_search_missing", {
+            "formulation": undeclared, "search_id": other["id"], "search_digest": digest(other)})
+
+    def test_an_unbound_material_search_is_refused_before_writing(self):
+        exact, neighbour = self.record(self.statement), self.record(self.neighbour)
+        material = self.record(self.statement, found=[self.metadata(3)], disposition="potentially_relevant",
+                               captured_at="2026-10-16T12:00:00Z")
+        spec = self.build_spec((self.statement, exact["id"]), (self.neighbour, neighbour["id"]))
+        self.assert_refused_before_writing(spec, "openness_search_stale", {"search_ids": [material["id"]]})
+
+    def test_the_shared_schema_is_checked_before_writing(self):
+        exact, neighbour = self.record(self.statement), self.record(self.neighbour)
+        malformed = [{"search_digest": "not-a-digest", "work_id": "w", "canonical_work_id": "w"}]
+        spec = self.build_spec((self.statement, exact["id"]), (self.neighbour, neighbour["id"]),
+                               duplicate_resolutions=malformed)
+        self.assert_refused_before_writing(spec, "invalid_record", None)
+        self.select_statement(identifier="statement-2", candidate_id="candidate-1", neighbours=[self.statement])
+        self.assert_refused_before_writing(self.build_spec((self.statement, exact["id"])), "invalid_record", None)
+
+    def test_an_unknown_search_id_is_refused_before_any_search_is_written(self):
+        exact = self.record(self.statement)
+        spec = self.build_spec((self.statement, exact["id"]), (self.neighbour, "no-such-search"))
+        self.assert_refused_before_writing(spec, "openness_search_missing",
+                                           {"formulation": self.neighbour, "search_id": "no-such-search"})
+
+    def test_a_search_whose_query_is_the_formulation_addresses_it(self):
+        exact, neighbour = self.record(query=self.statement), self.record(query=self.neighbour)
+        result = self.export(self.build_spec((self.statement, exact["id"]), (self.neighbour, neighbour["id"])))
+        packet = json.loads(self.artifacts.read(result["native_packet"]))
+        self.assertEqual(packet["scientific_context"]["openness_minimum"]["searches"],
+                         [{"formulation": self.statement, "search_digest": digest(exact)},
+                          {"formulation": self.neighbour, "search_digest": digest(neighbour)}])
+
+
 class ProblemNativeResultShapeTests(ProblemCase):
     def test_observed_packet_subject_must_be_the_exact_current_statement_record(self):
         import test_research_problem_reviews as fixtures
@@ -103,6 +233,28 @@ class ProblemNativeResultShapeTests(ProblemCase):
         with patch("research_harness.problem_openness.export_openness", side_effect=replace_subject):
             fixtures.ProblemOpennessReviewTests.observe_openness(self)
         self.assert_error("openness_statement_mismatch", lambda: self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"}))
+
+    def test_a_packet_that_declares_an_unbound_neighbour_is_still_refused_when_its_finding_is_recorded(self):
+        """A packet that an earlier release exported without the export check meets the same rule at record time."""
+        import test_research_problem_reviews as fixtures
+        from research_harness import problem_openness
+        neighbour = "A neighbouring formulation that no search binds."
+        self.initialize_problem()
+        self.selected = self.select_statement()
+        self.prepare_review_route = fixtures.ProblemReviewTests.prepare_review_route.__get__(self)
+        real_export = problem_openness.export_openness
+        def declare_unbound_neighbour(store, spec, destination):
+            exported = real_export(store, spec, destination)
+            packet = json.loads(self.artifacts.read(exported["native_packet"]))
+            packet["scientific_context"]["openness_minimum"]["neighbours"] = [neighbour]
+            exported["native_packet"] = self.artifacts.put(json.dumps(packet).encode(), "application/json")
+            return exported
+        with patch("research_harness.problem_openness.export_openness", side_effect=declare_unbound_neighbour):
+            fixtures.ProblemOpennessReviewTests.observe_openness(self)
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(self.load_problem_module().record_openness, {"assignment_id": "openness-assignment"})
+        self.assertEqual((caught.exception.code, caught.exception.details),
+                         ("openness_search_missing", {"formulations": [neighbour]}))
 
     def test_observed_unresolved_without_minimum_becomes_stale_after_a_new_neighbour(self):
         import test_research_problem_reviews as fixtures

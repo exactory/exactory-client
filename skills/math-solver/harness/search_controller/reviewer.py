@@ -302,6 +302,13 @@ def prepare_subject(controller, state, content, subject):
             _plan_files(controller, node, content)
 
 
+def find_reviewed_claim(subject, state, claim_digest):
+    """The claim record whose digest a result review names, from its exact subject or the native state."""
+    claim = next((row for row in objects([subject, state]) if s.digest(row) == claim_digest), None)
+    s.require(claim is not None, "The exact reviewed claim is unavailable", "claim_mismatch")
+    return claim
+
+
 def export_packet(controller, spec):
     """Write immutable common evidence objects, leaving native events unchanged."""
     from research_harness.artifacts import ArtifactStore
@@ -324,6 +331,10 @@ def export_packet(controller, spec):
         content.put_blob(spec["subject"])
         records = Store(common, create=True).snapshot()["records"]
         artifacts = ArtifactStore(common)
+        if "openness" in spec:
+            from .openness import validate_minimum_bindings
+            claim = find_reviewed_claim(spec["subject"], state, spec["claim_digest"])
+            validate_minimum_bindings(spec["openness"], claim, records)
         value = packet(controller.root, state, content, spec["subject"], spec["kind"],
                        spec["claim_digest"], spec["reviewer"], artifacts, write=True,
                        openness=spec.get("openness"), common_records=records)
@@ -442,9 +453,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
                       "Openness evidence must be delivered in the observed review packet", "review_packet_mismatch")
             if new and value["findings"]["openness"]["outcome"] != "unresolved":
                 from .openness import audit_minimum
-                claim = next((row for row in objects([supplied["subject"], state])
-                              if s.digest(row) == value["claim_digest"]), None)
-                s.require(claim is not None, "The exact reviewed claim is unavailable", "claim_mismatch")
+                claim = find_reviewed_claim(supplied["subject"], state, value["claim_digest"])
                 audit_minimum(value["findings"]["openness"], claim, records, artifacts, delivered)
         return current
     except ResearchError as error:

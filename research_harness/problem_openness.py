@@ -189,7 +189,7 @@ def export_openness(store, spec, destination):
     if statement is None:
         raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
     artifacts = ArtifactStore(store.root)
-    searches, required, evidence = [], set(), {}
+    bound, required, evidence = [], set(), {}
 
     def include_record(record):
         data = serialize_record(record)
@@ -201,9 +201,8 @@ def export_openness(store, spec, destination):
         search = records.get("literature_search", {}).get(binding["search_id"])
         if search is None:
             raise ResearchError("openness_search_missing", "Bind this store's exact search", binding)
-        searches.append({"formulation": binding["formulation"], "search_digest": digest(search)})
+        bound.append((binding["formulation"], search))
         required.update(row["work_id"] for row in search["dispositions"] if row["disposition"] in {"relevant", "contradictory"})
-        include_record(search)
     if spec["minimum"]["settling_work_id"] is not None:
         required.add(spec["minimum"]["settling_work_id"])
     readings = {}
@@ -211,13 +210,21 @@ def export_openness(store, spec, destination):
         coverage = fulltext_coverage(records, artifacts, work)
         for reading_id in coverage["readings"]:
             readings[reading_id] = records["reading"][reading_id]
+    minimum = {"schema_version": 1, "statement": statement["statement"], "neighbours": statement["neighbours"],
+               "searches": [{"formulation": formulation, "search_digest": digest(search)}
+                            for formulation, search in bound],
+               "reading_digests": sorted(digest(row) for row in readings.values()),
+               "settling_work_id": spec["minimum"]["settling_work_id"],
+               "duplicate_resolutions": spec["minimum"]["duplicate_resolutions"]}
+    # The declaration is checked against the store before the export writes anything.
+    from .openness_minimum import validate_minimum_bindings
+    validate_minimum_bindings(minimum, statement["statement"], records)
+    for _, search in bound:
+        include_record(search)
     for reading in readings.values():
         include_record(reading)
         for artifact in collect_reading_artifacts(records, artifacts, reading):
             evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
-    minimum = {"schema_version": 1, "statement": statement["statement"], "neighbours": statement["neighbours"],
-               "searches": searches, "reading_digests": sorted(digest(row) for row in readings.values()),
-               "settling_work_id": spec["minimum"]["settling_work_id"], "duplicate_resolutions": spec["minimum"]["duplicate_resolutions"]}
     include_record(statement)
     scientific_context = {"openness_minimum": minimum}
     if "source_evidence" in spec:
