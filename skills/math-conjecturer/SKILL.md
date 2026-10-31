@@ -406,7 +406,12 @@ grade it; the codes and grades stay in the assessment record, out of the public 
    - `reading`: a full reading of this store.
    - `computation`: an admitted, reconciled and assessed computation. Run it through `cycle`,
      `admit`, `bind-run`, `exactory-lab run`, `reconcile-run` and `assess`, with the current
-     statement as the objective.
+     statement as the objective. Give the plan's `literature` comparison the `literature_digest`
+     that `exactory-research status` reports in this record; `cycle` refuses another value with
+     `literature_comparison_stale`. Cite the computation with the `execution_id` that
+     `exactory-lab run` or `reconcile-run` printed and, as `output_id`, the `id` of the entry of
+     its `outputs` list. The assessment's result reference takes its `artifact` from the same
+     entry.
    - `result`: an accepted `proof`, `reduction` or `obstruction` of the current solver attempt,
      as `{kind: "result", attempt_id, acceptance_id}`.
 3. Do not cite a probe output as value evidence; a probe explores, it does not support.
