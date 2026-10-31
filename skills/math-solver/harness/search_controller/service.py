@@ -67,16 +67,21 @@ class Controller:
                       "Native review packet export has no mutation routing")
             from .reviewer import export_packet
             return export_packet(self, spec)
+        from .output_views import render_after_command
         if name == "deliver-closure":
             s.require(target is None and workspace_root is None and hook_session is None,
                       "Native closure delivery has no mutation routing")
             from .closure_delivery import deliver_closure
-            return deliver_closure(self, spec, expected_revision, request_id)
+            delivered = deliver_closure(self, spec, expected_revision, request_id)
+            render_after_command(self)
+            return delivered
         if name == "deliver-attempt":
             s.require(target is None and workspace_root is None and hook_session is None,
                       "Native attempt delivery has no mutation routing")
             from .attempt_delivery import deliver_attempt
-            return deliver_attempt(self, spec, expected_revision, request_id)
+            delivered = deliver_attempt(self, spec, expected_revision, request_id)
+            render_after_command(self)
+            return delivered
         if name in {"status", "next", "strategy-context"}:
             s.require(set(spec) <= {"session_id", "focus_request_id", "objective_id", "contract_digest"}, "Unknown read-only validation field")
             state = self.status()
@@ -85,14 +90,20 @@ class Controller:
                 from .discovery import validate_session
                 if not validate_session(state, spec["session_id"], spec.get("focus_request_id")):
                     return {"kind": "handoff", "reason": "Explicit matching session focus is required; run search focus"}
+            from .output_views import find_stale_views
+            # Stale views are reported under their own key: they never gate work or replace the next scientific action.
             if name == "status":
-                return state
+                advisories = find_stale_views(self, state)
+                return dict(state, advisories=advisories) if advisories else state
             from .strategy_refresh_io import describe_context, effective_next_action
             if name == "strategy-context":
                 return describe_context(self, state)
             action = effective_next_action(self, state)
             if state["closure_blocking_node_ids"]:
                 action["closure_blocking_node_ids"] = state["closure_blocking_node_ids"]
+            advisories = find_stale_views(self, state)
+            if advisories:
+                action["advisories"] = advisories
             return action
         s.integer(expected_revision)
         s.text(request_id)
@@ -180,6 +191,8 @@ class Controller:
                     raise SearchError("discovery_unpublished", "Controller command committed but discovery was not published; "
                         "inspect the conflict and use a fresh explicit focus if superseded", {"request_id": request_id,
                         "revision": event["sequence"], "reason": str(error)}) from error
+        # Every lock is released here. A replayed request renders too, which catches up a render that a crash interrupted.
+        render_after_command(self, (document, state))
         old = replay(dict(document, events=document["events"][:event["sequence"]]))
         response = {"objective_id": old["objective_id"], "revision": old["revision"],
                     "proof_status": old["proof_status"], "command": name}
