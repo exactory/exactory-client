@@ -32,8 +32,8 @@ workspaces and native children; do not call `init --from` after admission.
 
 `search admit` also completes an attack directory that already exists. It creates
 the directories `deterministic/`, `units/` and `study/`. It creates only the absent
-files among `problem.json`, `novelty.md`, an empty `journal.jsonl` and
-`parent.json`; existing bytes stay as they are. A directory with
+files among `problem.json`, `novelty.md`, an empty `journal.jsonl` and, for a
+native child, `parent.json`; existing bytes stay as they are. A directory with
 `units/FINISHED.json` or a nonempty journal needs explicit adoption instead. Inside
 a managed root, a native command that finds no `journal.jsonl` reports
 `journal.jsonl: missing; admission skeleton is incomplete; run search reconcile`.
@@ -57,10 +57,18 @@ name every such node, and `search status` and `search next` report them as
 `closure_blocking_node_ids`. Finish or retreat those nodes first (`../SEARCH.md`,
 "Final closure and local delivery").
 
-The hooks read a record with the controller of their own plugin. When that
-controller cannot replay a record, the refusal says which case it is.
-`Controller recovery required: ...` means that the record's own runtime wrote it
-(same plugin version and controller digest) and the record needs recovery.
+The hooks read a record with the controller of their own plugin. When a
+controller call fails, the refusal says which case it is.
+`Controller recovery required: DIAGNOSTIC` has two sources. When a plain
+`search status --json` still succeeds, the installed controller reads the
+record, whichever runtime wrote it, and the operation itself failed. The
+diagnostic names the failure, for example a missing focus, a discovery
+conflict or a revision conflict. No writer identity is compared, so act on the
+diagnostic. When the status call fails too and the recorded plugin version and
+controller digest equal the installed ones, the installed controller cannot
+replay the record, and the record needs recovery. `Controller recovery
+required after bounded invocation failed: ...` means that a controller call
+failed or timed out before it answered.
 `The installed controller ... cannot read a record written by ...` names both
 runtimes and gives the command that runs the search commands under the recorded
 launcher. The record needs its writer, not recovery. `The installed controller ...

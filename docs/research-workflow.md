@@ -512,7 +512,12 @@ tables, equations, proofs, appendices, and required supplements with `bundle`.
 Inspect their actual text and visuals; acquire referenced visual assets with
 `visual` when needed. A `fulltext` reading names that bundle and inspections for
 all required units. A text extraction alone does not inspect a figure, and an
-incomplete bibliography leaves expansion pending. Save unknowns and conflicts.
+incomplete bibliography leaves expansion pending. A figure unit of an HTML page
+that has a `style` element or a stylesheet link keeps a
+`visual_document_style_unsupported` item after its image is acquired, linked and
+inspected, so that reading stays `partial`. The figure units of a PDF capture of
+the same version, with `pdf` locators, carry no such item and can complete. Save
+unknowns and conflicts.
 
 Conduct and record each search purpose separately against the current scope:
 
@@ -1075,10 +1080,13 @@ under `restored` as `{path, artifact, backup, backup_path}`: `backup` is
 `research/sources/objects/`, and `backup_path` is the moved file, which stays
 in the working tree. It records nothing, so keep its output: no record names a
 backup. Once the measurement is complete, read the displaced edit back from
-either copy to continue it in the next revision. An editor or a compiler that
-still had the file open continues to write to the moved file only. The same
-command restores the files of any recorded bundle, for example the measured
-bundle before its deposit.
+either copy to continue it in the next revision. A process that opened the file
+before the restore continues to write to the moved file. A later write that
+opens the path again, such as a save in an editor or a new compiler run, goes
+to the working path and replaces the restored bytes, and `status` then names
+the file under `bundle_drift` again while the measurement is incomplete. The
+same command restores the files of any recorded bundle, for example the
+measured bundle before its deposit.
 
 Managed publication uses the current exact bundle, two applicable accepting
 reviews, current decision requirements and existing citation/remote receipt checks.

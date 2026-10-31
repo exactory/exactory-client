@@ -2919,8 +2919,7 @@
         "media_type": "text/plain"
       },
       "relationship": "Describe the assessor relationship to the author.",
-      "independence_basis": "Describe the separate blind review context and its exact input delivery.",
-      "author_memory_notes_present": false
+      "independence_basis": "Describe the separate blind review context and its exact input delivery."
     },
     "review": {
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
@@ -3579,8 +3578,7 @@
         "media_type": "text/plain"
       },
       "relationship": "Describe the assessor relationship to the author.",
-      "independence_basis": "Describe the separate blind review context and its exact input delivery.",
-      "author_memory_notes_present": false
+      "independence_basis": "Describe the separate blind review context and its exact input delivery."
     },
     "prediction": {
       "corpus": "arxiv",

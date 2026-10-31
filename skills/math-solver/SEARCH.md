@@ -1005,6 +1005,28 @@ withholds a body of this packet by priority. It still omits binary originals,
 which a text route never carries. A problem record exports its openness packet
 with `exactory-research export --kind problem-openness` instead.
 
+Before it writes the packet, `review-packet` checks the declaration against the
+records of that store, in this order: the minimum's schema (`invalid_record`);
+`statement` equal to the statement of the claim that `claim_digest` names
+(`openness_statement_mismatch`); every material search of the declared
+formulations bound (`openness_search_stale`, details `search_ids`); every entry
+of `reading_digests` the digest of a `reading` record
+(`openness_evidence_mismatch`, details `reading_digests`); each binding, in the
+order of `searches`, with a `search_digest` that names a `literature_search`
+record (`openness_search_missing`, details `formulation` and `search_digest`),
+a formulation that is the statement or a declared neighbour
+(`openness_search_missing`, details `formulation`, `search_id` and
+`search_digest`) and a search that addresses it, that is, its `question` is the
+formulation's exact text or that text is one of its `queries`
+(`openness_statement_mismatch`, the same details); and every formulation bound
+(`openness_search_missing`, details `formulations`). When `claim_digest` names
+no claim of the subject or the native state, the export refuses with
+`claim_mismatch` before these checks. A `recovery` spec has no claim digest, so
+it cannot carry `openness`. A refused export writes no evidence object. After
+the repair, export again under the same assignment id. `accept` and `complete`
+make the same checks again on the returned minimum, with the evidence checks of
+[Checkpoints and accepted results](#checkpoints-and-accepted-results).
+
 The reviewer reads the whole packet. Its reading units are the captured
 responses of the bound searches, the extracted full texts of the originals that
 the bound readings pin, and the bound search and reading records, each record as
@@ -1106,9 +1128,20 @@ An answer whose requests all have an absent anchor, name no single stored body,
 or exceed the remaining allowance is refused with `invalid_reading_response`.
 Run the same assignment again with `review-run` under a new invocation id. When
 every attempt of a turn ended without a completed output, for example at the
-route timeout, assign the next turn again with the same `prior_assignment_id`.
-The new assignment replaces the failed turn, which can no longer run or be
-continued (`review_assignment_replaced`). A second live continuation of one turn
+route timeout, the same assignment can also run again under a new invocation
+id: attempts without a completed output do not block a run while the route is
+not retired, not changed and its pinned runtime equals the installed adapter.
+A turn after the first can instead be replaced: assign the next turn again with
+the same `prior_assignment_id`. The new assignment replaces the failed turn,
+which can no longer run or be continued (`review_assignment_replaced`). The
+first turn has no `prior_assignment_id`. When it cannot run again, export a new
+packet under a new assignment id and start a new chain, and the final output's
+`attestation_id` then names the new first turn. A turn whose invocation is
+pending, because the process stopped during the call or the finishing write
+stayed refused, can be neither run nor replaced until `review-attempt` imports
+a `failed` attempt with `output: null` under the `id` of that `review-run`
+([the shared route instructions](../../docs/research-decisions.md#commands-and-shared-state)).
+A second live continuation of one turn
 is refused with `review_source_continuation_fork`. When the first unit of a
 reading turn does not fit the route alone, or the final turn does not fit after
 every withholding, `review-assignment` refuses with `review_input_too_large`.
@@ -1144,8 +1177,11 @@ evidence closure, the reviewer, the subject and every other field. Strategy,
 result, recovery and root-closure packets have no permitted difference, and a new
 strategy assessment still invalidates an earlier proposal packet. The permitted
 differences are recorded as `context_drift: [{path, from, to}]` in the
-`review_recorded` event beside the unchanged review and its digest. Every binding
-validates its packet afresh, also when the output already has a binding. A retry
+`review_recorded` event beside the unchanged review and its digest.
+`search review`, `reassess`, `accept` and `complete` build and compare the
+packet at every binding, also for an output that already has a binding. The
+other commands that bind a review compare the packet only for a review that no
+event records yet. A retry
 of the same request returns its original event, and a refused binding writes no
 event. A review exported before a strategy reassessment, or before moves of its
 own node, stays refused. The reassessment changes `previous_assessments`, and
@@ -1431,9 +1467,14 @@ their actual evidence; callers cannot relabel a computation as analytical.
 All findings are nonempty. A fresh `supported_open` or `already_solved` finding,
 including the final root review, requires `minimum`. Its `statement` equals the
 exact claim statement; `neighbours` declares the distinct neighbouring formulations
-from the novelty study. Each formulation needs a bound common `literature_search`
-record. Its `question` or an exact `queries` entry must match the formulation.
-Every query needs recorded `coverage` of kind `complete`, `top_k` or
+from the novelty study. Each formulation needs at least one bound common
+`literature_search` record that addresses it: its `question` is the formulation's
+exact text, character for character, or that text is one of its `queries`. A new
+search record can reuse the captured responses of an earlier search and carry the
+new `question`, without a new capture. `review-packet` makes the declaration
+checks of [Observed native review delivery](#observed-native-review-delivery) at
+export, and `accept` and `complete` make them again, with the evidence checks
+below. Every query needs recorded `coverage` of kind `complete`, `top_k` or
 `bounded_unordered` with `inspected_count`, and the search's `captured_at` date
 cannot follow `searched_at`. Integrity errors, unspecified coverage or search
 `gaps` prevent a resolved finding. Bounded coverage is explicit evidence, not a
@@ -1540,8 +1581,12 @@ single turn stores no receipts. Every audit of a recorded acceptance or closure,
 in `search audit`, in a status with a full audit, before `accept`, `complete`
 and `reassess`, and in the dependency audits, follows the chain again, verifies
 every turn and requires the recorded receipts to equal the receipts verified
-now. A chain that no longer verifies is `review_context_unverified` with the
-cause `openness_reading_incomplete`. A receipt that differs is
+now. A chain that no longer verifies is `review_context_unverified`, and
+`details.cause` holds the code of the chain check that failed:
+`review_context_unverified` for a turn that is not ready,
+`review_source_continuation_fork` for a turn with two live continuations,
+`invalid_reading_response` for a turn output that fails its check, or
+`openness_reading_incomplete`. A receipt that differs is
 `openness_reading_incomplete` itself ("The recorded reading turns changed").
 Either failure makes the acceptance fail that audit. The scientific checks of
 the review, `audit_minimum` included, are unchanged.
@@ -1594,8 +1639,8 @@ request user direction, while accurately retaining outcome `counterexample` or
 proof status `disproved`.
 
 `Closure` is `{subject: ClosureSubject, review: ResultReview, audit: ClosureAudit}`,
-with the derived `reading_turns` of the acceptance receipts when the review came
-from a reading chain.
+with `reading_turns` when its review came from a reading chain: the receipts of
+that chain, in the shape of the acceptance receipts.
 Here ResultReview's subject digest covers `ClosureSubject`, and its claim digest
 is the original claim digest. Its reviewer is independent of every local producer.
 
@@ -1645,9 +1690,9 @@ The closure review is its own observed review. Export the closure subject as a
 reading chain when the packet exceeds a single turn, and submit the output of
 its final turn with `search complete`. A checkpoint review cannot stand in for
 it: the closure binds the exact subject digest of the closure subject. A closure
-whose review came from a chain also stores `reading_turns` in the shape of the
-acceptance receipts. `complete` derives them from the verified chain, and every
-audit of the closure compares them as for an acceptance. The requirements on the
+whose review came from a chain also stores `reading_turns`. `complete` derives
+them from the verified chain, and every audit of the closure compares them as
+for an acceptance. The requirements on the
 finding do not change.
 
 `search status` derives `openness` without appending an event: `status` is `pending`
@@ -1967,9 +2012,11 @@ exactory-math --attack-root attack search status --json
 exactory-math --attack-root attack search next --json
 ```
 
-Every command except `status`, `next` and `strategy-context` also accepts
-`--check`, with the same spec, `--expected-revision` and `--request-id`. `pause`,
-`side-interval`, `retreat`, `interpret` and `render` then run a check. The
+Every command except `status`, `next` and `strategy-context` also has the
+`--check` flag. On those three it is an argument error (`invalid_command`).
+Only `pause`, `side-interval`, `retreat`, `interpret` and `render` accept
+`--check` and run the check, with the same spec, `--expected-revision` and
+`--request-id` as the write. The
 controller reads the event document and builds the event with the same builder,
 reducer and document validation as the write. It compares each staged content
 object with the bytes at its digest path and prints `{"check": "accepted",
@@ -2135,7 +2182,9 @@ shorter token with a slash remains a candidate path, subject to the hook's other
 filters for options, interpreter code or module arguments, and newline or NUL
 characters.
 The hooks read a record with the controller of their own plugin. Read, Glob, Grep,
-WebSearch and WebFetch calls are never checked. A Write, Edit or Delete under a
+WebSearch and WebFetch calls make no controller call, but discovery runs before
+that exemption, so a malformed or conflicting discovery registry denies them
+too. A Write, Edit or Delete under a
 registered root, and a supported shell command that names a path under it, call
 the controller first. When that call fails, the hook confirms the failure with one
 plain `search status --json` call inside the same 20-second deadline. If the status
@@ -2152,9 +2201,13 @@ installed controller ... cannot read this record: DIAGNOSTIC. No writer runtime
 identity is recorded; use the runtime that wrote the record.` Only a matching
 version and digest keeps `Controller recovery required: DIAGNOSTIC`; a different
 launcher path alone is not a mismatch. The hook never runs the recorded launcher.
-PreToolUse denies the operation with `[math-solver] ` and the message; SessionStart
-and Stop add the same message as context. A record that the installed controller
-replays is handled as before, whichever runtime wrote it.
+PreToolUse denies the operation with `[math-solver] ` and the message, and
+SessionStart and Stop add the same as context.
+`Controller recovery required: ...` arrives with a second prefix after
+`[math-solver] `: `Recovery required before this managed operation: ` from
+PreToolUse, and `Recovery or explicit focus is required: ` from SessionStart
+and Stop. A record that the installed controller replays is handled as before,
+whichever runtime wrote it.
 Recognized managed mutations with corrupt state or unsupported visible shell or
 wrapper payloads fail closed with direct-call recovery guidance. The adapter does
 not parse arbitrary shell programs or JavaScript. Nested operations that the host

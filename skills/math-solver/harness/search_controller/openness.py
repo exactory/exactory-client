@@ -26,3 +26,7 @@ def find_reassessment(search, formulation, selected, *, work_id=None):
 
 def audit_minimum(finding, claim, records, artifacts, delivered):
     return _call(openness_minimum.audit_minimum, finding, claim["statement"], records, artifacts, delivered)
+
+
+def validate_minimum_bindings(minimum, claim, records):
+    return _call(openness_minimum.validate_minimum_bindings, minimum, claim["statement"], records)

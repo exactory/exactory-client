@@ -65,9 +65,13 @@ families are sampled and audited, and `require-fulltext` families and unresolved
 references keep their obligations whatever the screen says.
 
 Capture and inventory each original body and inspect its required text, proofs,
-equations, figures, tables, appendices, bibliography, and supplements. Keep source
-bytes and exact inspection locations as `span` locators (offsets and the hash of
-the exact substring), never as whole-document quotes. Read the extraction
+equations, figures, tables, appendices, bibliography, and supplements. A figure
+unit of an HTML page that has a `style` element or a stylesheet link keeps a
+`visual_document_style_unsupported` item, so its full reading stays `partial`
+even after `visual` acquired its image. The figure units of a PDF capture of the
+same version, with `pdf` locators, can complete. Keep source bytes and exact
+inspection locations as `span` locators (offsets and the hash of the exact
+substring), never as whole-document quotes. Read the extraction
 diagnostics on a capture before dispatching a reader; re-capture with
 `extraction_options` when layout padding makes the text unreadable. A download is
 acquisition; a source-linked reading records the actual inspection. A reading

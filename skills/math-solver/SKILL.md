@@ -83,7 +83,7 @@ Three levels of text carry the method. A strategy (one file under `strategies/`)
 
 Five rules hold throughout. The controller contract preserves the original claim, requested proof or decision standard, deliverables, and limits; a local statement or finish never replaces them. No result is declared before the novelty check has run for that exact statement (stage 3). No move is journalled under a strategy before that strategy's study record exists; `journal add` refuses one (stage 5). Every move is reserved with `search begin`, then journalled with `journal add` before the next move starts (stage 5). The cash-out (stage 7) starts only from one of the three native rules stage 7 names, and one of them fires within the budget the harness enforces.
 
-Every command below is `exactory-math ...`, which is on PATH while this plugin is enabled, run from the directory the user is working in. The controller root defaults to `attack/`; admitted native workspaces live under `attack/<slug>/`. Give `--attack-root DIR` before the command when it lives elsewhere. Controller mutations use `search`, an exact JSON spec, the current expected revision, and a unique request ID. `search status` and `search next` are read-only. Every other `search` command and every legacy command that writes accept `--check`: `search pause`, `side-interval`, `retreat`, `interpret` and `render` then build and validate the event as the write does and write nothing, and every other command refuses the flag with `check_unsupported` before it opens the store (`SEARCH.md#filesystem-service-and-cli`). The strategy, entry, study, and reference files this document names are the skill's own files, not the user's: run `exactory-math skill-dir` once, and read each of them under the directory it prints.
+Every command below is `exactory-math ...`, which is on PATH while this plugin is enabled, run from the directory the user is working in. The controller root defaults to `attack/`; admitted native workspaces live under `attack/<slug>/`. Give `--attack-root DIR` before the command when it lives elsewhere. Controller mutations use `search`, an exact JSON spec, the current expected revision, and a unique request ID. `search status` and `search next` are read-only. `search status`, `search next` and `search strategy-context` have no `--check` flag, and the flag is an argument error there (`invalid_command`). Every other `search` command and every legacy command that writes has the flag. Only `search pause`, `side-interval`, `retreat`, `interpret` and `render` accept `--check`: they build and validate the event as the write does and write nothing. Every other command refuses the flag with `check_unsupported` before it opens the store (`SEARCH.md#filesystem-service-and-cli`). The strategy, entry, study, and reference files this document names are the skill's own files, not the user's: run `exactory-math skill-dir` once, and read each of them under the directory it prints.
 
 The shared `exactory-lab probe` may explore a question in the common workspace,
 under its common budget and exploratory provenance, outside managed math execution.
@@ -175,15 +175,25 @@ For `supported_open` or `already_solved`, prepare the mechanical
 [`OpennessMinimum`](SEARCH.md#checkpoints-and-accepted-results) with the exact `statement`, declared
 `neighbours`, `searches` binding each formulation to its common
 `literature_search` digest, `reading_digests` and `settling_work_id` (null for
-`supported_open`). Use `openness` on `search review-packet --spec FILE --json`;
-the result review returns it as `findings.openness.minimum`. Each search needs
-`coverage` and `captured_at`; every `relevant` or `contradictory` result needs a
-complete bound `fulltext` reading. `potentially_relevant`, `unresolved`, unavailable
-or deferred sources remain gaps. Bind all search/reading digests in `evidence`.
-Fresh resolved reviews must include other material searches for the same
-formulations, including new settling evidence. The packet delivers the actual
-common records, captured responses and source bundles. A proof manifest alone
-cannot establish openness. See `SEARCH.md` for the exact fields and refusal codes.
+`supported_open`). Each formulation needs at least one bound search whose
+`question` is that formulation's exact text, character for character. A search
+whose `queries` contain that text also addresses it. Bind as well every other
+search that addresses a formulation and has a `relevant`, `contradictory`,
+`potentially_relevant`, `unresolved` or `duplicate` result, or nonempty `gaps`.
+Use `openness` on `search review-packet --spec FILE --json`. The export refuses
+a false declaration before it writes the packet (a wrong statement, an unbound
+material search, an unknown search or reading digest, a search that does not
+address its formulation, an undeclared or unbound formulation), with the
+`openness_*` code and details that `accept` and `complete` give for the same
+defect. The result review returns the minimum as `findings.openness.minimum`.
+Each search needs `coverage` and `captured_at`; every `relevant` or
+`contradictory` result needs a complete bound `fulltext` reading.
+`potentially_relevant`, `unresolved`, unavailable or deferred sources remain
+gaps. Bind all search/reading digests in `evidence`. Fresh resolved reviews must
+include other material searches for the same formulations, including new
+settling evidence. The packet delivers the actual common records, captured
+responses and source bundles. A proof manifest alone cannot establish openness.
+See `SEARCH.md` for the exact fields and refusal codes.
 On a text route with a local input limit (`claude_cli_v1`, `codex_cli_v1` or
 `codex_cli_framed_v1`), a packet whose captured responses, full texts and
 records do not fit one input complete, or together exceed 120,000 characters, is
@@ -193,8 +203,12 @@ turn with `review-run`, assign the next turn with the same reviewer, route,
 author and packet and with `context.prior_assignment_id`, and submit the native
 output of the final turn unchanged to `search accept` or `search complete`. The
 service verifies the whole chain and stores its `reading_turns` on the
-acceptance or closure. Replace a turn whose attempts all ended without output by
-assigning the next turn again with the same `prior_assignment_id`. A final turn
+acceptance or closure. A turn whose attempts all ended without output can run
+again under a new invocation id while its route is not retired, not changed and
+its pinned runtime equals the installed adapter. A turn after the first can
+instead be replaced by assigning the next turn again with the same
+`prior_assignment_id`. When the first turn cannot run again, export a new packet
+under a new assignment id and start a new chain. A final turn
 that cannot judge yet requests passages that deliver characters. Reading in a
 chain changes no requirement of the finding: an unavailable decisive source
 stays a gap, and the finding stays unresolved.

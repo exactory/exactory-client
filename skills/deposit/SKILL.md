@@ -14,11 +14,19 @@ Run every command from the workspace root, the directory that holds
 `.exactory/draft.json`. A managed study holds that file after it entered
 `write` with an objective that carries `title` and `category` and with neither
 a draft record nor an entry at that path, or after the step that `status`
-names under `draft_marker_missing`. The deposit reads the paper's title from
-that file, so when `exactory-research status --summary` names
-`draft_marker_missing`, take the step that its message names before the
-deposit (the ai-science skill's STUDY.md lists every state). The tools are
-`exactory-draft` and `exactory-check`, on PATH while this plugin is enabled.
+named under `draft_marker_missing` while the study was at `write`. `status`
+reports that obligation at stage `write` only. At this stage a missing file
+appears only as the deposit's own refusal, a file that differs from the draft
+record is not reported, and the deposit reads the paper's title from the file
+as it is. When the file is missing or does not hold the draft record,
+`exactory-research export` writes it from the record at any stage and changes
+no record. The refusal advises `exactory-draft init`, which refuses with
+`workspace_exists` while a draft record exists, so run the export instead.
+Without a draft record and without an entry at that path, `exactory-draft init
+--title TITLE --category CATEGORY` records the draft and writes the file. For
+an entry without a record, take the step that the ai-science skill's STUDY.md
+lists. The tools are `exactory-draft` and `exactory-check`, on PATH while this
+plugin is enabled.
 
 ## Before anything else
 
@@ -61,22 +69,32 @@ deposit (the ai-science skill's STUDY.md lists every state). The tools are
    file separates no paragraphs in the record's description. This file becomes
    the record's description on Zenodo, so it must match the abstract in the PDF
    word for word.
-3. **Build the sources archive, when the record carries the code and data.** Run
-   `exactory-draft package --output draft/sources.zip` from the workspace root,
+3. **Name the pinned sources archive, when the record carries the code and
+   data.** In a managed study the archive exists before this stage: the write
+   skill builds it with `exactory-draft package --output draft/sources.zip`
+   after the first pin and pins it again as `sources`, and the reviews belong
+   to that bundle. A managed deposit uploads only the archive that the reviewed
+   bundle pinned as `sources`, byte for byte, so `--sources` in step 4 names
+   that file. Build no new archive now: the command refuses the existing
+   `draft/sources.zip` (`package_destination_exists`), and an archive built
+   under another name holds the revision and the records of its own snapshot,
+   so it is not the pinned `sources`. An archive that the bundle did not pin
+   takes the direct path, with the `Managed record skipped` line and no managed
+   receipt. An archive built at this stage fits only a deposit that takes the
+   direct path, from a workspace whose store holds a pinned bundle. For such a
+   deposit, run `exactory-draft package --output PATH` from the workspace root,
    with `--include PATH` for each workspace file or directory that no admitted
    run froze, such as figure and table programs or a disclosure file. The
    archive holds, for each run that the pinned bundle's claims cite, the
-   admitted program and inputs at the version of that run under `runs/`, the
-   sealed outputs under `data/`, the claim registry with its evidence map, the
-   study's records under `managed-record/`, and `package.json` and
+   admitted program and inputs at the version of that run under `runs/`, its
+   recorded outputs under `data/`, the claim registry with its evidence map,
+   the study's records under `managed-record/`, and `package.json` and
    `data/INDEX.json` as its index. It reads the selected bundle unless `--bundle`
    names another pinned bundle by id or digest, and it changes nothing in the
-   study. It refuses an existing destination (`package_destination_exists`) and
-   a cited run whose frozen paths are not recorded (`package_binding_missing`).
-   A managed deposit uploads only an archive that the reviewed bundle pinned as
-   `sources`, byte for byte; an archive that the bundle did not pin takes the
-   direct path, with the `Managed record skipped` line. The write skill says when
-   to build and pin the archive.
+   study. It refuses an existing destination (`package_destination_exists`), a
+   workspace with no selected bundle or a `--bundle` that names no recorded
+   bundle (`publication_bundle_missing`), and a cited run whose frozen paths
+   are not recorded (`package_binding_missing`).
 4. **Deposit and publish to production.**
    ```
    exactory-draft deposit --production --publish --confirm-publish --creator "<Family, Given>" --abstract-file draft/abstract.txt --sources draft/sources.zip

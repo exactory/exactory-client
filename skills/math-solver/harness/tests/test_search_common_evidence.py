@@ -9,6 +9,7 @@ from research_harness.artifacts import ArtifactStore
 from research_harness.principles import initialize_research
 from research_harness.probe import record_probe, record_probe_intent
 from research_harness.storage import Store as CommonStore
+from search_controller.errors import SearchError
 from search_controller.service import Controller
 from tests.native_reviewer_support import attest_spec, mutate
 from tests.search_fixtures import digest
@@ -44,6 +45,30 @@ class CommonEvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(result["error"]["code"], code)
         self.assertEqual(controller.store.read(), before)
 
+    def export_packet(self, spec):
+        """Export the result packet of the acceptance review directly, as observe_review does."""
+        review = spec["review"]
+        controller = Controller(self.root)
+        reviewer = dict(review["reviewer"], source="host", attestation_id="review-assignment:direct-export")
+        return controller.command("review-packet", {
+            "kind": "result", "subject": controller.status()["checkpoints"]["checkpoint-000001"],
+            "claim_digest": review["claim_digest"], "reviewer": reviewer, "inputs": [],
+            "openness": review["findings"]["openness"]["minimum"]}, None, None)
+
+    def assert_export_refused(self, spec, code, details):
+        """review-packet refuses the minimum before it writes the packet or any common artifact."""
+        controller = Controller(self.root)
+        objects = self.root / "research/sources/objects"
+        before = (controller.store.read(), sorted(objects.iterdir()))
+        with self.assertRaises(SearchError) as caught:
+            self.export_packet(spec)
+        self.assertEqual((caught.exception.code, caught.exception.details), (code, details))
+        self.assertEqual((controller.store.read(), sorted(objects.iterdir())), before)
+
+    def find_search_id(self, search_digest):
+        return next(row["id"] for row in CommonStore(self.root).snapshot()["records"]["literature_search"].values()
+                    if digest(row) == search_digest)
+
     def test_statement_and_neighbour_searches_with_full_readings_allow_resolved_acceptance(self):
         self.setup_external()
         spec = self.build_acceptance(neighbours=["Every requested dimension satisfies the equivalent bound."], relevant=True)
@@ -52,11 +77,43 @@ class CommonEvidenceTests(SearchCLIWorkspace, unittest.TestCase):
 
     def test_declared_neighbour_without_a_bound_search_is_a_gap(self):
         self.setup_external()
-        spec = self.build_acceptance(neighbours=["The equivalent neighbouring formulation."])
+        neighbour = "The equivalent neighbouring formulation."
+        spec = self.build_acceptance(neighbours=[neighbour])
         finding = spec["review"]["findings"]["openness"]
         removed = finding["minimum"]["searches"].pop()
         finding["evidence"].remove(removed["search_digest"])
-        self.assert_acceptance_refused(spec, "openness_search_missing")
+        self.assert_export_refused(spec, "openness_search_missing", {"formulations": [neighbour]})
+
+    def test_a_neighbour_bound_to_the_statement_search_is_refused_at_export(self):
+        self.setup_external()
+        neighbour = "The equivalent neighbouring formulation."
+        spec = self.build_acceptance(neighbours=[neighbour])
+        statement, bound = spec["review"]["findings"]["openness"]["minimum"]["searches"]
+        bound["search_digest"] = statement["search_digest"]
+        self.assert_export_refused(spec, "openness_statement_mismatch", {
+            "formulation": neighbour, "search_id": self.find_search_id(statement["search_digest"]),
+            "search_digest": statement["search_digest"]})
+
+    def test_a_binding_to_a_search_digest_without_a_record_is_refused_at_export(self):
+        self.setup_external()
+        spec = self.build_acceptance()
+        binding = spec["review"]["findings"]["openness"]["minimum"]["searches"][0]
+        binding["search_digest"] = "a" * 64
+        self.assert_export_refused(spec, "openness_search_missing",
+                                   {"formulation": binding["formulation"], "search_digest": "a" * 64})
+
+    def test_another_statement_an_unknown_reading_or_an_unknown_claim_is_refused_at_export(self):
+        self.setup_external()
+        spec = self.build_acceptance()
+        minimum = spec["review"]["findings"]["openness"]["minimum"]
+        minimum["statement"] = "Another exact statement."
+        self.assert_export_refused(spec, "openness_statement_mismatch", None)
+        spec = self.build_acceptance()
+        spec["review"]["findings"]["openness"]["minimum"]["reading_digests"] = ["b" * 64]
+        self.assert_export_refused(spec, "openness_evidence_mismatch", {"reading_digests": ["b" * 64]})
+        spec = self.build_acceptance()
+        spec["review"]["claim_digest"] = "c" * 64
+        self.assert_export_refused(spec, "claim_mismatch", None)
 
     def test_relevant_source_without_full_reading_keeps_openness_unresolved(self):
         self.setup_external()
@@ -271,6 +328,15 @@ class CommonEvidenceTests(SearchCLIWorkspace, unittest.TestCase):
     def test_new_relevant_search_requires_reassessment_of_an_older_empty_search(self):
         self.setup_external()
         spec = self.build_acceptance()
+        material = self.build_acceptance(relevant=True, read=False)
+        searches = material["review"]["findings"]["openness"]["minimum"]["searches"]
+        self.assert_export_refused(spec, "openness_search_stale",
+                                   {"search_ids": [self.find_search_id(searches[0]["search_digest"])]})
+
+    def test_a_relevant_search_recorded_after_the_export_requires_reassessment_at_acceptance(self):
+        self.setup_external()
+        spec = self.build_acceptance()
+        attest_spec(Controller(self.root), spec)
         self.build_acceptance(relevant=True, read=False)
         self.assert_acceptance_refused(spec, "openness_search_stale")
 
@@ -343,6 +409,16 @@ class CommonEvidenceTests(SearchCLIWorkspace, unittest.TestCase):
     def test_omitting_a_new_duplicate_search_cannot_hide_its_unread_canonical_source(self):
         self.setup_external()
         spec = self.build_acceptance()
+        duplicate = self.build_acceptance(relevant=True, read=False, disposition="duplicate",
+                                          search_tag="new-duplicate")
+        searches = duplicate["review"]["findings"]["openness"]["minimum"]["searches"]
+        self.assert_export_refused(spec, "openness_search_stale",
+                                   {"search_ids": [self.find_search_id(searches[0]["search_digest"])]})
+
+    def test_a_duplicate_search_recorded_after_the_export_cannot_hide_its_unread_canonical_source(self):
+        self.setup_external()
+        spec = self.build_acceptance()
+        attest_spec(Controller(self.root), spec)
         self.build_acceptance(relevant=True, read=False, disposition="duplicate", search_tag="new-duplicate")
         self.assert_acceptance_refused(spec, "openness_search_stale")
 

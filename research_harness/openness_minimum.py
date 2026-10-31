@@ -10,9 +10,9 @@ class OpennessError(ResearchError):
     """A minimum refusal, distinct from failures of the common evidence store."""
 
 
-def _require(condition, message, code="invalid_record"):
+def _require(condition, message, code="invalid_record", details=None):
     if not condition:
-        raise OpennessError(code, message)
+        raise OpennessError(code, message, details)
 
 
 def _require_closed_fields(value, fields):
@@ -113,6 +113,45 @@ def find_reassessment(search, formulation, selected, *, work_id=None):
     return None
 
 
+def validate_minimum_bindings(minimum, statement, records):
+    """Require a minimum whose declaration is true of this exact statement and these common records.
+
+    It names the statement, binds every material search of its formulations, names only existing readings, binds each
+    search to a declared formulation that the search addresses, and binds every declared formulation. These checks read
+    only the minimum and the immutable common records, so an export makes them before it writes a packet, and
+    audit_minimum makes them first.
+    """
+    validate_minimum(minimum)
+    _require(minimum["statement"] == statement, "Openness minimum names a different exact statement",
+             "openness_statement_mismatch")
+    formulations = {minimum["statement"], *minimum["neighbours"]}
+    bound = {item["search_digest"] for item in minimum["searches"]}
+    unbound = sorted(search["id"] for search in find_material_searches(records, formulations)
+                     if digest(search) not in bound)
+    _require(not unbound, "Bind each search in search_ids to the declared formulation it addresses: a search with a "
+             "relevant, contradictory, potentially_relevant, unresolved or duplicate result, or with gaps, can change "
+             "the openness claim", "openness_search_stale", {"search_ids": unbound})
+    unknown = sorted(set(minimum["reading_digests"]) - {digest(row) for row in records.get("reading", {}).values()})
+    _require(not unknown, "Openness readings must be exact records in the associated common store",
+             "openness_evidence_mismatch", {"reading_digests": unknown})
+    searches = {digest(row): row for row in records.get("literature_search", {}).values()}
+    for item in minimum["searches"]:
+        formulation, search = item["formulation"], searches.get(item["search_digest"])
+        _require(search is not None, "This binding's search_digest names no literature_search record of the common "
+                 "store: bind the digest of a search recorded there",
+                 "openness_search_missing", {"formulation": formulation, "search_digest": item["search_digest"]})
+        details = {"formulation": formulation, "search_id": search["id"], "search_digest": item["search_digest"]}
+        _require(formulation in formulations,
+                 "This binding's formulation is neither the exact statement nor a declared neighbour: declare it in "
+                 "neighbours or remove the binding", "openness_search_missing", details)
+        _require(search.get("question") == formulation or formulation in search["queries"],
+                 "The bound search does not address this formulation: record or bind a search whose question is the "
+                 "exact formulation text, or whose queries contain that text", "openness_statement_mismatch", details)
+    unsearched = sorted(formulations.difference(item["formulation"] for item in minimum["searches"]))
+    _require(not unsearched, "Bind a search that addresses each formulation in formulations: its question is that "
+             "exact text, or its queries contain it", "openness_search_missing", {"formulations": unsearched})
+
+
 def audit_minimum(finding, statement, records, artifacts, delivered):
     """Require captured searches and full readings, independently of review prose."""
     from .operations import timestamp
@@ -121,33 +160,15 @@ def audit_minimum(finding, statement, records, artifacts, delivered):
 
     minimum = finding.get("minimum")
     _require(minimum is not None, "Resolved openness requires its pinned common search/read minimum", "openness_minimum_required")
-    validate_minimum(minimum)
-    _require(minimum["statement"] == statement, "Openness minimum names a different exact statement", "openness_statement_mismatch")
-    formulations = {minimum["statement"], *minimum["neighbours"]}
-    covered, required, duplicates = set(), set(), set()
+    validate_minimum_bindings(minimum, statement, records)
+    required, duplicates = set(), set()
     searches = {digest(row): row for row in records.get("literature_search", {}).values()}
     bound = set(finding["evidence"])
-    selected = {row["search_digest"] for row in minimum["searches"]}
-    selected_records = [(item, searches[item["search_digest"]]) for item in minimum["searches"]
-                        if item["search_digest"] in searches]
-    for identity, search in searches.items():
-        if not (search.get("question") in formulations or formulations.intersection(search["queries"])):
-            continue
-        material = search.get("gaps") or any(row["disposition"] in {
-            "relevant", "contradictory", "potentially_relevant", "unresolved", "duplicate"} for row in search["dispositions"])
-        _require(not material or identity in selected,
-                  "Reassess material search evidence for the declared formulations", "openness_search_stale")
+    selected_records = [(item, searches[item["search_digest"]]) for item in minimum["searches"]]
     pinned_readings = {identity: row for identity, row in records.get("reading", {}).items()
                        if digest(row) in minimum["reading_digests"]}
-    _require({digest(row) for row in pinned_readings.values()} == set(minimum["reading_digests"]),
-              "Openness readings must be exact records in the associated common store", "openness_evidence_mismatch")
-    for item in minimum["searches"]:
+    for item, search in selected_records:
         identity, formulation = item["search_digest"], item["formulation"]
-        _require(formulation in formulations and identity in searches,
-                  "Bind each search to a declared formulation and its common record", "openness_search_missing")
-        search = searches[identity]
-        _require(search.get("question") == formulation or formulation in search["queries"],
-                  "The recorded search does not address this formulation", "openness_statement_mismatch")
         _require(identity in bound and identity in delivered,
                   "The finding and observed packet must bind the exact search record", "openness_evidence_mismatch")
         _require(check_search_coverage(search) or find_reassessment(search, formulation, selected_records) is not None,
@@ -165,7 +186,6 @@ def audit_minimum(finding, statement, records, artifacts, delivered):
                 duplicates.add((identity, row["work_id"]))
         required.update(row["work_id"] for row in search["dispositions"]
                         if row["disposition"] in {"relevant", "contradictory"})
-        covered.add(formulation)
     resolutions = {(row["search_digest"], row["work_id"]): row["canonical_work_id"]
                    for row in minimum.get("duplicate_resolutions", [])}
     _require(set(resolutions) == duplicates,
@@ -175,7 +195,6 @@ def audit_minimum(finding, statement, records, artifacts, delivered):
                       for row in searches[identity]["dispositions"]),
                   "A duplicate's canonical source must be decisive in the bound search", "openness_reading_gap")
         required.add(canonical)
-    _require(covered == formulations, "Search every declared neighbouring formulation and the exact statement", "openness_search_missing")
     _require(set(minimum["reading_digests"]) <= bound & delivered,
               "The finding and observed packet must bind every full reading", "openness_evidence_mismatch")
     pinned = dict(records, reading=pinned_readings)

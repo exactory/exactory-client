@@ -5,6 +5,7 @@ import json
 
 from test_research_problem_claims import ProblemCase
 from research_harness.acquisition import import_response
+from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.literature import import_bundle, record_search
 from research_harness.openness_minimum import audit_minimum, check_search_coverage, find_reassessment
@@ -234,6 +235,51 @@ class ProblemOpennessMinimumTests(ProblemCase):
         self.audit(finding)
         finding["outcome"] = "supported_open"
         self.assert_error("openness_settling_source", lambda: self.audit(finding))
+
+    def assert_declaration_refused(self, finding, code, details):
+        """The shared declaration check and the audit, which runs it first, give the same refusal."""
+        from research_harness.openness_minimum import validate_minimum_bindings
+        records = self.store.snapshot()["records"]
+        for check in (lambda: validate_minimum_bindings(finding["minimum"], self.selected["statement"], records),
+                      lambda: self.audit(finding)):
+            with self.assertRaises(ResearchError) as caught:
+                check()
+            self.assertEqual((caught.exception.code, caught.exception.details), (code, details))
+
+    def test_a_search_that_does_not_address_its_formulation_is_named_with_its_formulation(self):
+        other = self.search(formulation="A different mathematical question.")
+        finding = self.build_finding([other])
+        finding["minimum"]["searches"][0]["formulation"] = self.selected["statement"]
+        self.assert_declaration_refused(finding, "openness_statement_mismatch", {
+            "formulation": self.selected["statement"], "search_id": other["id"], "search_digest": digest(other)})
+
+    def test_each_false_declaration_is_named_in_its_details(self):
+        neighbour = "An equivalent extremal sequence formulation."
+        exact = self.search()
+        self.assert_declaration_refused(self.build_finding([exact], neighbours=[neighbour]), "openness_search_missing",
+                                        {"formulations": [neighbour]})
+        undeclared = self.search(formulation="An undeclared formulation.")
+        self.assert_declaration_refused(self.build_finding([exact, undeclared]), "openness_search_missing", {
+            "formulation": "An undeclared formulation.", "search_id": undeclared["id"],
+            "search_digest": digest(undeclared)})
+        unknown = self.build_finding([exact])
+        unknown["minimum"]["searches"].append({"formulation": self.selected["statement"], "search_digest": "a" * 64})
+        self.assert_declaration_refused(unknown, "openness_search_missing",
+                                        {"formulation": self.selected["statement"], "search_digest": "a" * 64})
+        unread = self.build_finding([exact])
+        unread["minimum"]["reading_digests"] = ["b" * 64]
+        self.assert_declaration_refused(unread, "openness_evidence_mismatch", {"reading_digests": ["b" * 64]})
+        material = self.search([self.metadata()], captured_at="2026-10-16T12:00:00Z")
+        self.assert_declaration_refused(self.build_finding([exact]), "openness_search_stale",
+                                        {"search_ids": [material["id"]]})
+
+    def test_a_false_declaration_is_reported_before_the_evidence_checks(self):
+        gap = self.search(gaps=["The captured enumeration leaves a source gap."])
+        other = self.search(formulation="A different mathematical question.")
+        finding = self.build_finding([gap, other])
+        finding["minimum"]["searches"][1]["formulation"] = self.selected["statement"]
+        # Release 0.67.0 reported the coverage gap of the first binding (openness_search_gap) here.
+        self.assert_error("openness_statement_mismatch", lambda: self.audit(finding))
 
     def test_minimum_schema_keeps_the_native_invalid_record_refusals(self):
         baseline = self.build_finding([self.search()])

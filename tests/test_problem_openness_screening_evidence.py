@@ -87,15 +87,19 @@ class ScreeningEvidenceTests(unittest.TestCase):
     def test_invalid_empty_duplicate_or_unknown_bindings_are_rejected(self):
         for bindings in (None, [], [self.binding, self.binding], [{"source_id": "absent", "reason": "Inspect."}],
                          [dict(self.binding, reason="")], [dict(self.binding, locator=None)]):
-            with self.subTest(bindings=bindings), self.assertRaises(ResearchError):
-                # Explicitly test malformed null through the public exporter.
+            with self.subTest(bindings=bindings):
+                with self.assertRaises(ResearchError) as caught:
+                    # Explicitly test malformed null through the public exporter, with a valid search binding.
+                    if bindings is None:
+                        f = self.case
+                        binding = {"formulation": f.selected["statement"], "search_id": f.search["id"]}
+                        problem_openness.export_openness(f.store, {"assignment_id": "null", "reviewer_id": "reviewer",
+                            "minimum": {"searches": [binding], "settling_work_id": None, "duplicate_resolutions": []},
+                            "source_evidence": None}, f.root / "null")
+                    else:
+                        self.export(bindings=bindings)
                 if bindings is None:
-                    f = self.case
-                    problem_openness.export_openness(f.store, {"assignment_id": "null", "reviewer_id": "reviewer",
-                        "minimum": {"searches": [], "settling_work_id": None, "duplicate_resolutions": []},
-                        "source_evidence": None}, f.root / "null")
-                else:
-                    self.export(bindings=bindings)
+                    self.assertEqual(caught.exception.code, "openness_screening_evidence_mismatch")
 
     def test_mismatched_and_out_of_range_locators_are_rejected(self):
         for locator in (dict(self.locator, end=50), dict(self.locator, sha256="0" * 64),

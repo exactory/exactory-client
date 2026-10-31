@@ -69,7 +69,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
-| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. A run interrupted during the call, or whose write is still refused after that wait, stays pending (`review_invocation_pending`). After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last `store_busy` or `stale_revision`. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
@@ -221,8 +221,11 @@ its delivery and a note. [Problem creation](#problem-creation) states which
 records, readings and artifact bytes each result reviewer's actual request must
 deliver for the post gate's result coverage check, and how that check treats a
 body that step 6 withholds. A request that still does not fit is refused before
-the reviewer CLI starts and recorded as a failed attempt with
-`review_input_too_large`, whose message names the route's limit; the CLI
+the reviewer CLI starts and recorded as a failed attempt with the code
+`review_input_too_large`. The record keeps the code, not the message. The limit
+is 1,300,000 characters on `claude_cli_v1` and 1,048,576 on `codex_cli_v1` and
+`codex_cli_framed_v1` (the
+[route instructions](research-decisions.md#commands-and-shared-state)). The CLI
 receives nothing. The harness also keeps the earlier
 reduction orders of 0.56.0, of 0.56.1 and 0.57.0, and of the two repaired
 copies of 0.56.0 that the extremal-graph-stability and Sidorenko girth-six
@@ -260,7 +263,10 @@ and its limit, for example `normalized_characters: 18` with
 passage, `items` with `minimum_items` for a final turn without a passage
 request, and `page` with `minimum_page` for an inventory page, plus
 `maximum_page`, `page_size` and `total` for a page out of range; a closed object
-adds `expected_type`, `received_type`, `missing_fields` and `unexpected_fields`;
+that the shared field check refuses, for example a passage request or an
+excerpt, adds `expected_type`, `received_type`, `missing_fields` and
+`unexpected_fields`, while a closed object of a native review and the top level
+of a reading response carry only `path` and `message`;
 and the checks of bars, work items, objections and candidates keep the
 identities they gave before. A check that runs on the items of a list names the
 item by its index or by its valid id, and the first failed check is the one
@@ -280,11 +286,15 @@ the refusal record (check `native.output`) at once, and the receipt of
 from the receipt without opening the output artifact. A check that
 depends on the store (a pending source request, a reading that is not current, a
 conflict with a stored review) writes no record. An output whose provenance does
-not authenticate is never refused. An answer that the route cannot read as one
-JSON object is a failed attempt (`review_transport_failure`), not an output
-refusal. On the Claude route this includes an answer that the marked-block form
-does not cover. It writes no refusal record and keeps the bounded operational
-retry of a failed call. While every completed attempt of an
+not authenticate is never refused. An answer that does not parse as JSON is a
+failed attempt with the code `review_transport_failure`. Parsed JSON that is
+not one object, or a response that is not complete, is a failed attempt with
+the code `review_incomplete`. Neither is an output refusal. On the Claude route
+this includes an answer that the `RETRACTED` correction form of the
+[reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement)
+does not cover: the whole answer is then read as one object. A failed attempt
+writes no refusal record and keeps the bounded operational retry of a failed
+call. While every completed attempt of an
 assignment is refused, and each refused output still fails its check,
 `review-run` invokes the assignment again with the same packet, prompt, route
 and request, and the reviewer receives nothing about the refusal. A refused
@@ -480,7 +490,7 @@ The recurring types are:
 | JSON locator | `{ "kind": "json", "pointer": string, "value": any JSON value }`, naming an exact value in the saved JSON. |
 | Objective | `{ "kind": "objective", "id": string, "statement": string, "title"?: string, "category"?: string }`, preserving the complete original research objective. `title` is the working title of the paper and `category` its arXiv category. Each is optional nonblank text (`invalid_target` otherwise). Entering `write` records the draft workspace from them when no draft record and no `.exactory/draft.json` entry exist (see "Milestone transitions and preparation presets"). Give them when the objective is committed: added to a committed objective, they are a change of it, which `target` refuses with `objective_locked`. |
 | Verification target | `{ "kind": "work", "id": string, "source_id": string or null, "sha256": string or null }`. The two nullable fields are both null during incomplete preparation or both identify the available original main body. |
-| Result evidence | `{ "kind": "result", "execution_id": string, "output_id": string, "artifact": ArtifactRef, "locator": Locator }`. The artifact must equal the output descriptor that the execution recorded (`result_evidence_mismatch` otherwise), and the stored bytes must match its hash and size. The locator is a span, text or JSON locator into a text or JSON output, an artifact locator, or a result PDF locator. |
+| Result evidence | `{ "kind": "result", "execution_id": string, "output_id": string, "artifact": ArtifactRef, "locator": Locator }`. The artifact must equal the output descriptor that the execution recorded (`result_evidence_mismatch` otherwise), and the stored bytes must match its hash and size. `exactory-lab run` and `reconcile-run` print these values for a managed run: `execution_id` is their `execution_id`, and `output_id` and `artifact` are the `id` and the `artifact` of one entry of their `outputs` (see "Actual execution"). The locator is a span, text or JSON locator into a text or JSON output, an artifact locator, or a result PDF locator. |
 | Artifact locator | `{ "kind": "artifact" }`, with no other field, in result evidence only. It cites a whole output of any media type, for example a PNG, SVG or PDF file. It cannot cite a source. A reviewer packet delivers the cited output under the media type that `bind-run` declared for it: as text when its bytes are UTF-8; as a native file or image input on the `openai_responses_v1` route when it is a PDF or an image; and otherwise, on that route, as an evidence entry with `delivery: "inline-result-bytes"`, the exact bytes in base64 inside the JSON packet. The harness checks that the request carried those exact bytes; the entry is no native attachment, and what the reviewer reports about such bytes rests on the reviewer's own decoding. The text-only routes (`claude_cli_v1`, `codex_cli_v1` and `codex_cli_framed_v1`) omit the bytes of a PDF, an image and such an output, with `encoding: "omitted"`, `delivery: "bytes-omitted-on-text-route"` and a note that says so. An artifact that is not UTF-8 text, a PDF, an image or a recorded result output is refused with `review_evidence_unreadable`. |
 | Result PDF locator | `{ "kind": "pdf", "page_index": integer, "printed_page": string or null, "region": [x, y, width, height] }` in result evidence. The output must be `application/pdf` and start with the PDF signature. The page count comes from `pdfinfo` on the output bytes, with a 30-second deadline and a 64 KiB output limit, and `pdfinfo` must print exactly one positive `Pages:` line. A missing `pdfinfo`, a failed run or another page count is `invalid_locator`. `page_index` counts from zero and lies inside the output; the region is normalized to the page, as for a source PDF locator. A source PDF locator still needs the acquired original and its page map. |
 | Source evidence | `{ "kind": "source", "link": Link }`. Consequential synthesis, development and round evidence requires the applicable full reading. |
@@ -518,7 +528,7 @@ progress. For managed research:
 
 Entering `write` also records the draft workspace, in the same mutation as the
 study state, and so does every later `exactory-lab state set` that succeeds
-while the study is at `write`. The mutation records the draft only when the
+and keeps the study at `write`. The mutation records the draft only when the
 objective carries both `title` and `category`, no draft record exists, and no
 entry exists at `.exactory/draft.json`: a regular file, a symbolic link
 (dangling included) and a directory each prevent it. The record is `{title,
@@ -601,7 +611,7 @@ The example for each operation contains all its required keys and shows the comp
 | `defer-source` | `id`, `profile`, `version_id`, `reason`, `authorization`, `acquisition_evidence`, `dependent_claims`, `continuing_work` | Research only. Names one registered exact version with a current missing full-text requirement. `authorization` is a checked, nonempty artifact reference; `acquisition_evidence` is a nonempty array of checked, nonempty artifact references. The last two fields are nonempty string arrays recording claims that cannot use the source and work that can continue. Roots and verification targets cannot be deferred. |
 | `resume-source` | `id`, `profile`, `version_id`, `deferral_id`, `reason` | Restores ordinary obligations for the selected active or stale research deferral. Names its exact `deferral_id`; all earlier decisions and receipts remain immutable. |
 | `select-cohort-abstract` | `collection_id`, `work_id`, `unresolved_assertion_id`, `selected_assertion_id`, `reason` | Resolves a retained versionless family member to same-family exact abstract evidence. It cannot replace a known v1 obligation with v2. |
-| `visual` | `link`, `url` | Optional `max_requests`. `link` is the link of a visual unit (a figure, table or equation) into the acquired original HTML, with an `html` locator `{"kind": "html", "anchor": <span or text locator into the saved HTML>}`, plus `assets` once images are acquired. `url` must be an image that the markup of that unit references, such as the `src` of an `img`; a hyperlink inside the unit, such as a link to a figure page or to a supplementary archive, and an image elsewhere on the page are not resources of the unit, and `visual` refuses such a URL with `invalid_visual_asset` before it sends or records anything. A complete result returns `asset_link`: put it in the `assets` array of the unit's locator in a new `bundle` and give the reading's inspection that locator; an inspection without it leaves the unit `required_unit_uninspected`. |
+| `visual` | `link`, `url` | Optional `max_requests`. `link` is the link of a visual unit (a figure, table or equation) into the acquired original HTML, with an `html` locator `{"kind": "html", "anchor": <span or text locator into the saved HTML>}`, plus `assets` once images are acquired. `url` must be an image that the markup of that unit references, such as the `src` of an `img`; a hyperlink inside the unit, such as a link to a figure page or to a supplementary archive, and an image elsewhere on the page are not resources of the unit, and `visual` refuses such a URL with `invalid_visual_asset` before it sends or records anything. A complete result returns `asset_link`: put it in the `assets` array of the unit's locator in a new `bundle` and give the reading's inspection that locator; an inspection without it leaves the unit `required_unit_uninspected`. Every HTML visual unit also carries one `visual_document_style_unsupported` item for each `style` element and each stylesheet link of the whole page, because the harness has no CSS cascade evaluator. A full reading of a page that has one stays `partial` after the image is acquired, linked and inspected. A figure unit of a PDF capture of the same version, with a `pdf` locator into the acquired original and its page map, carries no such item, so its reading can complete. |
 | `standards` | `id`, `profile`, `scope`, `field`, `article_type`, `venue`, `cohort_doctrine`, `methodology`, `reporting`, `citation`, `presentation`, `applicability_questions` | `article_type` and `venue` may be null; evidence claims retain scientific status, timing, assumptions, and uncertainties. |
 | `rationale` | `id`, `profile`, `scope`, `and`, `but`, `therefore`, `value` | Research only. The established context in `and` must be supported as scoped; a proposed or refuted context is retained but pending. |
 | `innovation` | `id`, `profile`, `scope`, `cases` | Research only. Optional `origin_collection: {id, version}` and `depth`. The depth-plan section gives the current and historical case bounds. Cases separately describe original constraint, conceptual change, validation, adoption, and tested transfer limits. |
@@ -610,7 +620,7 @@ The example for each operation contains all its required keys and shows the comp
 | `cycle` | `id`, `author`, `objective`, `scope`, `hypothesis`, `question`, `strategy`, `predecessor`, `inheritance`, `reopening`, `distinguishing_test`, `expected_outcomes`, `failure_signals`, `evidence_requirements`, `literature`, `resource_limits` | The full nested example includes a first cycle. Successors retain checkpoint lineage and account limits. Optional `prior_knowledge`, `{program, program_path, probe_ids, account}`, discloses the runs of the plan's program that probes recorded before the plan (see "Planning a successor"). |
 | `admit` | `id`, `cycle_id`, `plan_digest`, `command`, `reserved_units` | Command has `argv`, `program`, `inputs`, `versions`, `seed`, `seed_reason`. This reserves resources; it does not launch. Optional `format_only_of` names the id of a completed, assessed, managed execution of the same plan and declares that the new run changes only the format of its outputs (see "Actual execution"). The program must be the program that the plan's `prior_knowledge` froze (`preplan_program_mismatch`), and a plan without that account cannot admit a program that a disclosed probe ran before the plan was recorded (`preplan_probe_missing`; see "Planning a successor"). |
 | `bind-run` | `admission_id`, `script`, `backend`, `timeout_seconds`, `inputs`, `outputs`, `usage_unit` | Backend is `local` or `colab`; usage is planned `execution` or `wall_seconds`. Inputs map each admitted artifact to a relative path. |
-| `reconcile-run` | `admission_id` | Optional `resolution`, `reason`: `interrupted` for a confirmed dead local owner, or `not_released` for a Colab claim with no durable release. Unknown released remote work remains pending. Some runs that an earlier release claimed or admitted fail with `invalid_input` (see "Actual execution"). Their metric or seed exceeds the store bounds in a new record or result. |
+| `reconcile-run` | `admission_id` | Optional `resolution`, `reason`: `interrupted` for a confirmed dead local owner, or `not_released` for a Colab claim with no durable release. Unknown released remote work remains pending. The result is the run summary, as before, with `execution_id` and `outputs` of the execution that the store records for the admission after the command, or null for both when it records none (see "Actual execution"). The receipt of the request holds the summary alone. Some runs that an earlier release claimed or admitted fail with `invalid_input` (see "Actual execution"). Their metric or seed exceeds the store bounds in a new record or result. |
 | `result` | `id`, `cycle_id`, `origin`, `command`, `status`, `exit_code`, `usage`, `outputs`, `notes` | Public JSON permits imported history only. Its exact `origin.original`, `reason`, and `deduction` fields are shown in the example. Managed outcomes come from run/reconcile. |
 | `assess` | `id`, `cycle_id`, `author`, `scope`, `execution_ids`, `result`, `validity_checks`, `outcomes`, `failures`, `findings`, `assumptions`, `remaining_obligations`, `objective_status`, `disposition`, `development` | Full nested example includes outcome judgments, distinct validity checks, and development/branch assessments. Optional `inheritance_refresh` explicitly binds current reassessments of the same ancestors without changing the prospective plan. A validity check with `status: passed` cites a completed output of a planned `validation` requirement; otherwise `assess` records nothing and fails with `validity_evidence_missing`, whose `check_ids` list every such check. A `failed` or `unresolved` check is recorded with the `validity_unresolved` obligation. |
 | `checkpoint` | `id`, `cycle_id`, `assessment_id`, `reason`, `next_hypothesis`, `select_for_readiness` | An unassessed unresolved checkpoint may have null assessment; it supplies no validated-result credit. |
@@ -776,8 +786,14 @@ different payload under its ID is refused.
 
 ```sh
 exactory-lab probe --id completion-check-1 --question "Does the program run to completion?" \
-  --script check.py --input data.json --timeout 60 --cycle-id cycle-2 --program-path experiment/code/check.py
+  --script experiment/code/check.py --input experiment/data.json --timeout 60 \
+  --cycle-id cycle-2 --program-path experiment/code/check.py
 ```
+
+The example runs from the workspace root. `--script` and `--input` are read
+relative to the current directory, and `--program-path` is recorded as given: a
+canonical workspace-relative path (`unsafe_path` otherwise) that the harness does
+not compare with the script.
 
 The script receives `[current_python, copied_script, copied_input, ...]`, with
 closed stdin and a fresh cwd under `research/probes/ID/`. `--output-dir` is
@@ -1049,7 +1065,7 @@ exactory-lab run code/program.py --admission run-1 --backend local --timeout 30 
   --expected-revision 42 --request-id actual-run-001
 ```
 
-Backend, timeout, and seed must match the binding and admission. A null seed needs its declared reason; a seed is passed as `EXACTORY_LAB_SEED`. The run's metric comes from the first of three sources that gives one. A line or file gives a metric only when its JSON is finite and within two bounds. It nests at most 32 levels, the same depth as a command input (see "Inputs and receipts"). It holds no integer of more than 4300 digits, so that every supported Python reads the metric back from the store. The first source is the last stdout line that gives a metric and has a `metric` key. The second is the conventional fallback file `results/SCRIPT_STEM.json` inside the private working directory. The third is the first declared `application/json` or `+json` output of a `validation` requirement, which the run configuration records as `metric_output`. The process runs in a private copy of the pinned script and inputs. The launcher claims the admission once and rechecks current preparation before releasing its token. Before publishing its terminal outcome, the worker seals the presence or absence, SHA-256, and size of every declared output, both streams, and the fallback metric file. Reconciliation rejects changed, removed, or newly inserted bytes and saves the complete sealed inventory as immutable artifacts. Current author readiness checks the saved result, log, and metric against that original seal. The familiar result/log paths are disposable projections.
+Backend, timeout, and seed must match the binding and admission. A null seed needs its declared reason; a seed is passed as `EXACTORY_LAB_SEED`. The run's metric comes from the first of three sources that gives one. A line or file gives a metric only when its JSON is finite and within two bounds. It nests at most 32 levels, the same depth as a command input (see "Inputs and receipts"). It holds no integer of more than 4300 digits, so that every supported Python reads the metric back from the store. The first source is the last stdout line that gives a metric and has a `metric` key. The second is the conventional fallback file `results/SCRIPT_STEM.json` inside the private working directory. The third is the first declared `application/json` or `+json` output of a `validation` requirement, which the run configuration records as `metric_output`. The process runs in a private copy of the pinned script and inputs. The launcher claims the admission once and rechecks current preparation before releasing its token. Before publishing its terminal outcome, the worker seals the presence or absence, SHA-256, and size of every declared output, both streams, and the fallback metric file. Reconciliation rejects changed, removed, or newly inserted bytes and saves the complete sealed inventory as immutable artifacts. Current author readiness checks the saved result, log, and metric against that original seal. The familiar result/log paths are disposable projections. `exactory-lab run` prints the run summary of the observation, unchanged (`admission_id`, `cycle_id`, `node`, `ok`, `is_buggy`, `returncode`, `timed_out`, `duration_s`, `metric`, `seed`, `log`, `stderr_tail`, `backend`, `program_sha256`, `timeout_seconds` and `scientific_validation`), and beside it `execution_id` and `outputs` of the execution that the store records for the admission after the launch: the id of that record, and its `outputs` list unchanged, one entry `{id, requirement_id, artifact}` for each declared output that the run produced, where `artifact` is the output descriptor that the execution recorded. Both are null when the store holds no execution for the admission after the command. `reconcile-run` returns the same object. The two fields are printed only: the stored receipt, the run's `summary.json` under `research/runs/` and `experiment/results/<node>.json` hold the summary alone. A retry of `exactory-lab run` or `reconcile-run` with the original request ID prints the same values, because the execution record is immutable. A launch whose recording fails prints `{"error": ...}` on stderr and nothing on stdout, as before. To find the execution, both commands read the store once more after the command; the time of that read grows with the store.
 
 The metric bound does not apply to a run that exactory-client 0.47.0 or earlier claimed, so a metric that such a run recorded stays valid. The store bounds in "Inputs and receipts" still apply to each new record and result that holds such a metric. If the interpreter reads the metric, these operations fail with `invalid_input`:
 
@@ -1609,18 +1625,41 @@ neighbours, searches: [{formulation, search_digest}], reading_digests,
 settling_work_id}`. `statement` is the exact claim; each declared formulation
 needs an actual common `literature_search` record with dated `captured_at` and
 per-query `coverage` of kind `complete`, `top_k` or `bounded_unordered`, including
-`inspected_count`. Every relevant or contradictory result needs fulltext coverage
-from the pinned common `reading` records. Unresolved or potentially relevant hits,
-unavailable required source units and active or stale deferrals remain gaps.
-`already_solved` binds its fully read settling result via `settling_work_id`;
-`supported_open` uses null. All search/reading hashes must be in both the finding's
-`evidence` and the observed packet. Export the declaration in the optional
-`openness` field of `search review-packet --spec FILE --json`; the reviewer echoes
-it as `findings.openness.minimum`. The exporter delivers records and captured
-source bytes from the associated common workspace. An object that a completion
-check sealed is described without its bytes. Other material searches for
-the same formulations must be included on fresh resolved review. The exact
-schemas and `openness_*` refusal codes are in the math-solver `SEARCH.md`.
+`inspected_count`. A search addresses a formulation when its `question` is the
+formulation's exact text, character for character, or when that text is one of
+its `queries`. Each formulation, the exact claim and each declared neighbour,
+needs at least one bound search that addresses it. A material search is one that
+addresses a formulation and has a `relevant`, `contradictory`,
+`potentially_relevant`, `unresolved` or `duplicate` result, or nonempty `gaps`.
+Every material search must be bound as well. Every relevant or contradictory
+result needs fulltext coverage from the pinned common `reading` records.
+Unresolved or potentially relevant hits, unavailable required source units and
+active or stale deferrals remain gaps. `already_solved` binds its fully read
+settling result via `settling_work_id`; `supported_open` uses null. All
+search/reading hashes must be in both the finding's `evidence` and the observed
+packet. Export the declaration in the optional `openness` field of
+`search review-packet --spec FILE --json`; the reviewer echoes it as
+`findings.openness.minimum`. Before it writes the packet, the export checks the
+declaration against the common store, in this order: the minimum's schema
+(`invalid_record`); `statement` equal to the statement of the claim that
+`claim_digest` names (`openness_statement_mismatch`); every material search of
+the declared formulations bound (`openness_search_stale`, details
+`search_ids`); every entry of `reading_digests` the digest of a `reading` record
+(`openness_evidence_mismatch`, details `reading_digests`); each binding, in the
+order of `searches`, with a `search_digest` that names a `literature_search`
+record (`openness_search_missing`, details `formulation` and `search_digest`),
+a formulation that is the claim or a declared neighbour
+(`openness_search_missing`, details `formulation`, `search_id` and
+`search_digest`) and a search that addresses it (`openness_statement_mismatch`,
+the same details); and every formulation bound (`openness_search_missing`,
+details `formulations`). When `claim_digest` names no claim of the subject or
+the native state, the export refuses with `claim_mismatch` before these checks.
+A refused export writes no evidence object. `accept` and `complete` make the
+same checks again on the returned minimum, with the evidence checks. The
+exporter delivers records and captured source bytes from the associated common
+workspace. An object that a completion check sealed is described without its
+bytes. The exact schemas and `openness_*` refusal codes are in the math-solver
+`SEARCH.md`.
 Retain earlier uncertain hits and their explicit later `resolved` judgments.
 `out_of_scope` removes the uncertain hit's reading obligation. A `duplicate`
 needs `minimum.duplicate_resolutions: [{search_digest, work_id, canonical_work_id}]`;
@@ -1820,9 +1859,21 @@ that formulation even when the statement digest is unchanged. The openness
 minimum uses this store's own searches, readings and deferrals. It requires a
 dated search with bounded or complete coverage for the exact statement and each
 declared neighbour, and full readings of all decisive prior or settling works.
+A search addresses a formulation when its `question` is the formulation's exact
+text, character for character, or when that text is one of its `queries`. The
+statement's text is the whole `statement` field, with its `---` line and
+details when present; a neighbour's text is the one declared in `neighbours`.
+Each formulation needs at least one bound search that addresses it. A material
+search is one that addresses a formulation and has a `relevant`,
+`contradictory`, `potentially_relevant`, `unresolved` or `duplicate` result, or
+nonempty `gaps`. Every material search must be bound as well. A new search
+record can reuse the captured responses of an earlier search and carry the new
+`question`, without a new capture.
 An unavailable source remains a gap. Shared `openness_*` audit codes describe
-missing, incomplete, stale or undelivered evidence;
-`openness_statement_mismatch` identifies a finding for another exact claim.
+missing, incomplete, stale or undelivered evidence.
+`openness_statement_mismatch` marks a finding for another exact claim, a
+minimum whose statement or neighbours are not the current ones, or a bound
+search that does not address its formulation.
 
 Prepare the native openness packet with:
 
@@ -1833,13 +1884,28 @@ exactory-research export --kind problem-openness --spec openness-spec.json --des
 The spec is `{assignment_id, reviewer_id, minimum: {searches:
 [{formulation, search_id}], settling_work_id, duplicate_resolutions}}`. The
 export pins the current statement, statement digest, native reviewer assignment
-identity, search records and the captured bytes of required full readings. Use
-the exported packet in the `context` of a `review-assignment` payload with that
+identity, search records and the captured bytes of required full readings.
+Before it writes anything, the export resolves each `search_id` and refuses an
+unknown one with `openness_search_missing` and the binding as details. Then it
+builds the minimum from the current statement and the resolved searches and
+checks it against the store, in this order: the minimum's schema
+(`invalid_record`, for example a neighbour equal to the statement or a
+malformed `duplicate_resolutions` entry); every material search of the
+statement and the declared neighbours bound (`openness_search_stale`, details
+`search_ids`); each binding, in the order of the spec, with a formulation that
+is the statement or a declared neighbour (`openness_search_missing`, details
+`formulation`, `search_id` and `search_digest`) and a search that addresses it
+(`openness_statement_mismatch`, the same details); and every formulation bound
+(`openness_search_missing`, details `formulations`). A refusal of these checks
+writes nothing, so the same assignment id can be exported again. Use the
+exported packet in the `context` of a `review-assignment` payload with that
 assignment id, reviewer id, `role: "native_math"`, `dossier_id: null`, a verified
 route and an author from the marker, then invoke `review-run`. Record the
-observed result through `problem-openness`. A new unbound material search,
-changed bound reading/search or missing current formulation makes the finding
-stale (`problem_openness_stale`).
+observed result through `problem-openness`. For `supported_open` and
+`already_solved` it makes the same checks again on the returned minimum, with
+the evidence checks. A new unbound material search, changed bound
+reading/search or missing current formulation makes the finding stale
+(`problem_openness_stale`).
 
 On a text route (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1`) the
 packet's full-text bodies count against the route's input limit. The optional
@@ -2095,14 +2161,15 @@ minimum. The turn packets, the reading record, the budget, the parts, the
 excerpt and passage rules and the final turn are those of the problem chain.
 The final turn withholds the full texts largest first, then the captured
 responses, the reading records and the search records, each kind largest first,
-and then the earliest notes. Two rules are added. A reading answer in a final
-turn must request at least one passage that the harness delivers from a bound
-body within the remaining allowance. An answer whose requests are all not
-found, name no single stored body or exceed the allowance is refused with
-`invalid_reading_response` (`details.path` `/passage_requests`),
-`review-assignment` does not continue from it, and the same assignment runs
-again under a new `review-run` invocation. The chain is also verified at the
-controller, not by `problem-openness`. `exactory-math search accept` and
+and then the earliest notes. Two rules are added. The first is the passage rule
+of a final turn. A reading answer in a final turn must request at least one
+passage that the harness delivers from a bound body within the remaining
+allowance. An answer whose requests are all not found, name no single stored
+body or exceed the allowance is refused with `invalid_reading_response`
+(`details.path` `/passage_requests`), `review-assignment` does not continue
+from it, and the same assignment runs again under a new `review-run`
+invocation. The second is the verification of the chain at the controller, not
+by `problem-openness`. `exactory-math search accept` and
 `search complete` resolve the review's attestation, which names the first turn,
 to the effective terminal turn: a turn that ended without output and was
 replaced is history, and a second live continuation is
@@ -2135,8 +2202,9 @@ Refusal codes of a reading chain:
   reviewer, route or author, or a turn that is not part of a reading chain.
 - `review_source_continuation_fork`: another turn already continues the named
   turn, and that turn has a completed output or has not run. At `search accept`
-  or `search complete` of a math chain, one turn has more than one live
-  continuation.
+  or `search complete` of a math chain, and in every audit of the acceptance or
+  closure, one turn has more than one live continuation. The controller reports
+  it as the `cause` of `review_context_unverified`.
 - `review_assignment_replaced`: the named turn ended without output and a later
   turn of the same parent replaced it; it can be neither run nor continued.
 - `review_source_continuation_unverified`: the named turn has no observed,
@@ -2144,7 +2212,12 @@ Refusal codes of a reading chain:
 - `review_resampling_forbidden`: the named final turn returned the native result,
   which ends the chain.
 - `review_context_unverified`: `problem-openness` finds a turn of the chain
-  without an observed, authenticated output in a verified context.
+  without an observed, authenticated output in a verified context. For a math
+  chain, `search accept`, `search complete` and every audit of the acceptance
+  or closure give it for any failed chain check, with `details.cause` set to
+  the code of that check: `review_context_unverified` for a turn that is not
+  ready, `review_source_continuation_fork`, `invalid_reading_response` or
+  `openness_reading_incomplete`.
 - `openness_reading_incomplete`: `problem-openness` names a turn without a
   native result, a unit of the packet that reached neither a reading turn nor
   the final turn's request complete (`details.units` lists each by kind and
@@ -2716,10 +2789,15 @@ intent, dossier, synthesis or direction decision. The `cycle`, `admit`,
 `bind-run`, `reconcile-run` and `assess` route uses `{id: statement_id,
 statement}` as its objective and requires the current statement and adopted
 constitution. Its records retain nonmanaged dependency composition and
-empirical meaning. `exactory-lab run` launches the admitted computation from
-the record's root or a directory under it, with the same bound script,
-backend, timeout, seed and request identity as in a study; `reconcile-run` and
-`assess` follow as there, and no study is created. `exactory-lab decide`
+empirical meaning. A plan's `literature` comparison carries the
+`literature_digest` that the record's `status` reports (see below); `cycle`
+refuses a plan whose `literature.literature_digest` differs from it with
+`literature_comparison_stale`. `exactory-lab run` launches the admitted
+computation from the record's root or a directory under it, with the same
+bound script, backend, timeout, seed and request identity as in a study, and
+prints the run summary with `execution_id` and `outputs` as there (see "Actual
+execution"); `reconcile-run` and `assess` follow as there, and no study is
+created. `exactory-lab decide`
 appends an operational entry to the record's decision log when `--stage` names
 the stage; without `--stage` it refuses with `invalid_input`, because the
 record has no study stage to default to. Such an entry records a choice, for
@@ -2783,7 +2861,13 @@ tool order. `status` also reports
 `candidates: {current, selected, deferred, rejected}`, the number of current
 candidates and the lengths of the latest slate's lists, and `slate_id`, the
 latest slate or null. It lists the current depth plan under `limits` and no
-cohort policy counts; those belong to ai-science.
+cohort policy counts; those belong to ai-science. The full `status` and `next`
+reports also carry `literature_digest`, the digest of the record's current
+literature scope, frontier, search judgments and requirements. `cycle` compares
+it with a plan's `literature.literature_digest` and refuses another value with
+`literature_comparison_stale`; a plan that carries the reported value passes
+`cycle --check`. `status --summary` and `next --summary` do not carry it. In a
+study, `status` keeps the digest at `preparation.literature_digest`, as before.
 
 After `gate post` reports ready, run:
 
@@ -3005,7 +3089,7 @@ actual source bytes and an `inputs.json` manifest.
 
 ## Status, projections, and recovery
 
-`status` and `next` expose the current revision, study, preparation, actionable obligations, pending admissions, remote intents/observations, retained adoptions, the `round` (number, active, assessed, decision, whether the selected bundle has its contribution analysis, the count of round gate obligations, progress counts, the measurement's medians and spreads, the admitted round's limits, the `development` budget line and the usage since admission), and the `runtime` that produced the report (plugin version, source commit, dirty flag, package digest, constitution digest). `status` also carries `grand_challenge`, the payload of the current Grand Challenge record; `status --summary` reduces it to the record id, the number of `ultimate` and `near_term` challenges, the first six criterion ids and a count of the rest, each id cut at 32 characters. `next` in managed research is the current milestone's first missing condition:
+`status` and `next` expose the current revision, study, preparation, actionable obligations, pending admissions, remote intents/observations, retained adoptions, the `round` (number, active, assessed, decision, whether the selected bundle has its contribution analysis, the count of round gate obligations, progress counts, the measurement's medians and spreads, the admitted round's limits, the `development` budget line and the usage since admission), and the `runtime` that produced the report (plugin version, source commit, dirty flag, package digest, constitution digest). `status` also carries `grand_challenge`, the payload of the current Grand Challenge record; `status --summary` reduces it to the record id, the number of `ultimate` and `near_term` challenges, the first six criterion ids and a count of the rest, each id cut at 32 characters. In a problem workspace, the full `status` and `next` reports also carry `literature_digest` (see "Problem creation"). `next` in managed research is the current milestone's first missing condition:
 at `initiate`, `cohort` and `literature` it follows `direction`, and at `ideate`
 it follows `execution`. The preparation report stays under `preparation`
 with `advisory: true` (`preparation.advisory`); its backlog is available for
@@ -3017,7 +3101,7 @@ stores retain preparation ordering and the next unread cohort abstract. At the `
 
 `status` in the research profile also carries `bundle_drift`: null, or `{bundle_id, bundle_digest, files: [{path, code}]}` for the selected bundle while its measurement is incomplete (fewer than three assessors with both a review and a prediction on it), with every pinned file whose working copy differs. `code` is `publication_artifact_changed` for other bytes, `artifact_missing` for a missing file, and `unsafe_path` for a symlink, a directory or a path under a symlinked directory. The field is null when every file equals its pinned bytes, when the measurement is complete, when no bundle is selected, and outside the research profile. Reading it writes nothing. `restore --bundle DIGEST` puts the pinned bytes back (see "Review, publication, and verification"). `status --summary` carries the same drift in a bounded form: `bundle_id` cut at 64 characters with `bundle_id_truncated`, `bundle_digest` whole, and for each file its `path` cut at 128 characters with `path_truncated` and its `code` whole. When the summary still exceeds 16 KiB, it first omits Grand Challenge criterion ids (counted in `omitted_criterion_ids`), then cuts the longest path by 16 characters at a time while that path is longer than 32 characters, marking each cut path, then cuts `waiting` to no fewer than 32 characters and the `next_hint` fields `explanation` to no fewer than 32 and `version_id`, `work_id`, `collection_id` and `unit_id` to no fewer than 16, listing each cut hint field in `next_hint.truncated_fields`. `waiting` carries no mark of its own beyond `display_strings_may_be_truncated`. Every file entry stays in the summary. The default `status` keeps the full names.
 
-At stage `write`, `status` and `next` also carry one `draft_marker_missing` obligation while no draft record exists, or while `.exactory/draft.json` (the marker) is not a regular file that holds the JSON of the draft record. The comparison is of parsed JSON, not of bytes, and it applies no default: a record that holds `version` differs from a file without it. The full list appends the obligation after the other obligations, and both commands select it as `next`, so `status --summary` and `next --summary` carry it as `next_hint`. `by_code` of the summaries orders codes by count and then by name, not by `next`. The obligation carries `stage` (`write`), `path` (`.exactory/draft.json`) and `missing_fields`: the objective fields among `title` and `category` that are absent while neither record nor entry exists, and an empty list otherwise. The hint carries neither `path` nor `missing_fields`, only `code` and the first 120 characters of `explanation`, and a summary that exceeds its size bound can cut the explanation shorter and then lists it in `next_hint.truncated_fields`. Every explanation names the step of its state within 120 characters. The states and their steps: (1) A draft record exists, and the marker is missing, holds other or invalid JSON, or is a symbolic link: `export` (its default `--kind workspace`) writes the marker from the record again. It replaces a link and leaves the link's target alone. (2) A draft record exists, and the entry is a directory or another type: move the entry to an unused name in `.exactory/`, then `export`. (3) No draft record exists, and the marker is a regular file that holds a JSON object whose `version` is absent, 1 or 2: `adopt` records that object as the draft, as it is and without adding `version`. Its payload, sent with the usual `--expected-revision` and `--request-id`, names `.exactory/draft.json` in `files` and gives an `id`, a `reason` and the current `profile` and `target` exactly (`configuration_conflict` otherwise). `exactory-draft init` refuses the directory while the file exists. (4) No draft record exists, and the entry is a symbolic link (dangling included), a directory, or a regular file that is not such an object (`adopt` answers `invalid_json` or `migration_required`): move the entry to an unused name in `.exactory/`, for example `mv -n .exactory/draft.json .exactory/draft.json.saved`, with no trailing slash on either path and a name that no entry holds yet (`-n` does not overwrite an existing file of that name, and the entry then stays in place), then run `status` again and take the step of the state it reports. The saved entry is not an input of `adopt`. (5) Neither record nor entry exists, and `missing_fields` is not empty: `exactory-draft init --title TITLE --category CATEGORY` in the workspace root records the draft from its own values and writes the marker. The objective does not change. (6) Neither exists, `missing_fields` is empty, and the study status is not `done`: `exactory-lab state set --stage write` records the draft from the objective. (7) Neither exists, `missing_fields` is empty, and the status is `done`: `exactory-draft init` with the objective's `title` and `category`. The status stays `done`, whereas a same-stage update whose status stays `done` checks the `manuscript` gate and the `readiness` gate (or the selected `manuscript-readiness` gate) first. Reading `status` writes nothing and never reads the target of a link.
+At stage `write`, `status` and `next` also carry one `draft_marker_missing` obligation while no draft record exists, or while `.exactory/draft.json` (the marker) is not a regular file that holds the JSON of the draft record. The comparison is of parsed JSON, not of bytes, and it applies no default: a record that holds `version` differs from a file without it. The full list appends the obligation after the other obligations, and both commands select it as `next`, so `status --summary` and `next --summary` carry it as `next_hint`. `by_code` of the summaries orders codes by count and then by name, not by `next`. The obligation carries `stage` (`write`), `path` (`.exactory/draft.json`) and `missing_fields`: the objective fields among `title` and `category` that are absent while neither record nor entry exists, and an empty list otherwise. The hint carries the fixed hint keys `code`, `version_id`, `work_id`, `collection_id`, `unit_id` and `explanation`, with the four identifiers null for this obligation and the explanation cut at 120 characters, and `truncated_fields` and `details_required: true`. It carries no `path`, `stage` or `missing_fields`. A summary that exceeds its size bound can cut the explanation shorter and then lists it in `next_hint.truncated_fields`. Every explanation names the step of its state within 120 characters. The states and their steps: (1) A draft record exists, and the marker is missing, holds other or invalid JSON, or is a symbolic link: `export` (its default `--kind workspace`) writes the marker from the record again. It replaces a link and leaves the link's target alone. (2) A draft record exists, and the entry is a directory or another type: move the entry to an unused name in `.exactory/`, then `export`. (3) No draft record exists, and the marker is a regular file that holds a JSON object whose `version` is absent, 1 or 2: `adopt` records that object as the draft, as it is and without adding `version`. Its payload, sent with the usual `--expected-revision` and `--request-id`, names `.exactory/draft.json` in `files` and gives an `id`, a `reason` and the current `profile` and `target` exactly (`configuration_conflict` otherwise). `exactory-draft init` refuses the directory while the file exists. (4) No draft record exists, and the entry is a symbolic link (dangling included), a directory, or a regular file that is not such an object (`adopt` answers `invalid_json` or `migration_required`): move the entry to an unused name in `.exactory/`, for example `mv -n .exactory/draft.json .exactory/draft.json.saved`, with no trailing slash on either path and a name that no entry holds yet (`-n` does not overwrite an existing file of that name, and the entry then stays in place), then run `status` again and take the step of the state it reports. The saved entry is not an input of `adopt`. (5) Neither record nor entry exists, and `missing_fields` is not empty: `exactory-draft init --title TITLE --category CATEGORY` in the workspace root records the draft from its own values and writes the marker. The objective does not change. (6) Neither exists, `missing_fields` is empty, and the study status is not `done`: `exactory-lab state set --stage write` records the draft from the objective. (7) Neither exists, `missing_fields` is empty, and the status is `done`: `exactory-draft init` with the objective's `title` and `category`. The status stays `done`, whereas a same-stage update whose status stays `done` checks the `manuscript` gate and the `readiness` gate (or the selected `manuscript-readiness` gate) first. Reading `status` writes nothing and never reads the target of a link.
 
 The optional `--summary` flag on `status` and `next` returns a bounded advisory view. It runs the same current-state evaluation as the default command. It does not change research obligations, authorize a transition, or reduce required reading. `status --summary` is limited to 16 KiB and `next --summary` to 4 KiB of UTF-8 JSON. Counts distinguish displayed and omitted obligations. Hints can omit or truncate details and must not be used directly as mutation payloads. `status --summary` also reports `evaluation` counters (objects verified, readings assessed, graph builds, elapsed seconds); they describe this invocation and are never stored. Full reports retain the exact current data; summaries remain advisory views.
 

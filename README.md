@@ -35,13 +35,24 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version [0.67.0](docs/releases/0.67.0.md) resolves the open harness-improvement records: a review observation
-survives a busy store, a disabled Codex `exec` call that ran nothing is a notice, every recorded result output
-reaches its reviewer, a refused review output names the failed rule and item, new reviewer prompts carry a
-versioned common text that forbids tool calls and states the `RETRACTED` form, every writing command has a check
-mode, the draft-marker obligation names a step that works in every state, `exactory-lab run` works in a problem
-record, and a math-solver result review with an oversized openness minimum reaches its reviewer as a reading
-chain. The agent-facing texts of 0.62.0 to 0.66.0 are written.
+Version [0.67.1](docs/releases/0.67.1.md) checks the declaration of an openness minimum at export with the audit's
+own rules, so a packet that no resolved finding can pass is refused before any review runs. `exactory-lab run` and
+`reconcile-run` print the execution id and the output descriptors that a result reference of `assess` needs, and a
+problem workspace's `status` reports the literature digest that `cycle` compares. The agent-facing texts of 0.67.0
+and 0.62.0 are corrected where an independent review found them false or unclear.
+
+Version [0.67.0](docs/releases/0.67.0.md) ships the work of the harness-improvement records that were open before
+it, except storing each evidence value once, which the owner decides on separately (the release note's known
+limits): a review observation survives a busy store, a disabled Codex `exec` call that ran nothing is a notice,
+every recorded result output reaches its reviewer, a refused review output names the failed rule and item, new
+reviewer prompts carry a versioned common text that forbids tool calls and states the `RETRACTED` form, every
+writing command accepts `--check` and writes nothing under it (many refuse it with `check_unsupported`), the
+draft-marker obligation names a step that works in every state, `exactory-lab run` works in a problem record, and
+a math-solver result review with an oversized openness minimum reaches its reviewer as a reading chain. The
+release also places the agent-facing texts of the math-solver repairs of 0.64.0, of check mode and the Codex
+reviewer routes of 0.66.0, of format-only second runs, the five lanes of 0.65.0 and the problem-record launcher,
+of the draft marker and the lanes of this release, and of the openness reading chain, and it corrects five
+statements that shipped false.
 
 Version [0.66.3](docs/releases/0.66.3.md) bounds the final turn of an openness reading chain: the packet's records
 arrive as reading units after the full texts, the final turn withholds delivered bodies and then the oldest notes

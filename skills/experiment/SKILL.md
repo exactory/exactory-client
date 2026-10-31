@@ -160,9 +160,15 @@ A result reference cites a whole output of any media type with
 `{"kind": "artifact"}` as its locator, and a page of a PDF output with
 `{"kind": "pdf", "page_index": 0, "printed_page": null, "region": [0, 0, 1, 1]}`,
 where the page count comes from `pdfinfo` on the output bytes. The reference's
-`artifact` must equal the output descriptor that the execution recorded. A
-locator alone grants nothing: `validated_result` still follows from the
-assessment's validity checks, which cite text or JSON `validation` outputs.
+`artifact` must equal the output descriptor that the execution recorded. Take
+the three values from the object that `exactory-lab run` or `reconcile-run`
+printed for the run: `execution_id` from its `execution_id`, and `output_id`
+and `artifact` from the `id` and the `artifact` of the entry of its `outputs`
+list, unchanged. Both fields are null when the store holds no execution for
+the admission after the command; a launch whose recording fails prints an
+error and no summary. A locator alone grants nothing: `validated_result` still
+follows from the assessment's validity checks, which cite text or JSON
+`validation` outputs.
 
 Save a durable `checkpoint` with its stable ID, exact claim, evidence, verification
 status, unresolved obligations, and next hypothesis. Deepen promising branches
