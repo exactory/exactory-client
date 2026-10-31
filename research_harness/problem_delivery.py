@@ -44,6 +44,7 @@ def assess_minimum(records, artifacts):
 
 def assess_source_requests(records, artifacts):
     from .review_protocol import assignment_state
+    from . import review_problem_parts
     parents = {parent for row in records.get("review_assignment", {}).values()
                for parent in (row.get("history_assignment_id"), row.get("context", {}).get("prior_assignment_id"),
                               (row.get("context", {}).get("context_repair") or {}).get("assignment_id"))
@@ -53,6 +54,12 @@ def assess_source_requests(records, artifacts):
         if identifier in parents:
             continue
         state = assignment_state(records, artifacts, identifier)
+        if state.get('output') is not None and state.get(review_problem_parts.KEY, {}).get('stage') == 'part':
+            assignment = records['review_assignment'][identifier]
+            packet = json.loads(artifacts.read(assignment['packet']))
+            plan = packet[review_problem_parts.KEY]
+            pending.append(obligation('problem_evidence_part_pending', 'Continue the observed problem evidence part.',
+                                      assignment_id=identifier, turn=plan['turn'], remaining=plan['remaining']))
         if state.get("pending_source_requests"):
             pending.append(obligation("review_sources_pending", "Deliver the sources requested by the observed reviewer.",
                                       assignment_id=identifier, requests=state["pending_source_requests"]))

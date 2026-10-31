@@ -916,3 +916,83 @@ This workflow preserves scientific support, source provenance and user authority
 It does not guarantee an important discovery. Report software correctness,
 operational usefulness and scientific efficacy separately. Higher manuscript
 scores or fewer written papers alone do not establish more scientific knowledge.
+
+## Problem result evidence in parts
+
+A result review of a problem record receives the whole current problem
+evidence in its packet, and the post gate checks that the reviewer's actual
+request delivered it. On 2026-10-31 the first result assignment of the
+unknotting record failed in 0.017 s with `review_input_too_large`, and the CLI
+received nothing. Its packet measured 4,731,060 characters as canonical JSON,
+against the input limit of 1,300,000 characters of the Claude route. The
+`evidence` bodies, which the reductions withhold, were 2,423,099 characters in
+14 bodies. The `problem_evidence`, which no reduction touches, was 2,196,840:
+`passages` 1,085,104 (333 inline passages of 23 readings, 15 per reading; the
+15 passages of one reading alone 272,258), `assessment_evidence` 366,613,
+`readings` 363,234, `openness_searches` 313,287, and the frame (claim,
+openness, value, assessment, attempt, results, citations and delivery) about
+68,400. The bars and own bars added 105,450. The KMP record is behind it: its
+`describe_evidence` gave 876,908 characters before its openness finding
+(passages 314,320), and the 29 searches that its openness minimum binds have
+1,462,365 characters, so its `openness_searches` alone will exceed the limit
+once the finding is recorded; the largest search with its source records has
+239,152 characters. Its `computations` was not measured. From the record sizes
+it is estimated at about 400,000 characters, because the value cites one
+execution four times and each citation lists the admission, the execution and
+the 93,640-character cycle assessment.
+
+A shorter projection of the large keys cannot make the packet fit. `passages`
+and `readings` together are 1,448,338 characters, above the limit before the
+frame, the bars and the history are added, and each is the inspected text or
+the reading record that the coverage check is about. The inspected spans
+barely overlap: their text is 1,016,870 characters and their union per version
+1,016,769, so removing overlap saves nothing. Of `assessment_evidence`, 279,665
+characters repeat the six `literature_search` records that `openness_searches`
+carries; removing them saves part of one turn. A projection also changes the
+expected value of every projected record, so every recorded result review then
+needs a rule for its earlier projection, and a compact search record loses the
+disposition of every found work that `openness_searches` promises.
+
+The reductions withhold evidence bodies and replayed history, and none of them
+reduces `problem_evidence`. The modules that fit and send a request are pinned
+by every route's runtime, so a new reduction step or a higher limit makes every
+recorded route stale and needs a new probe of each. The planner therefore
+works at assignment time and outside those modules. It builds the request that
+the transport sends, measures it with the route adapter's own `packet_text`,
+and freezes in each turn's packet what that turn delivers. A part packet is an
+ordinary saved packet, its request is built and authenticated by the unchanged
+transport, and, while a session is not a series, a packet that fits is built
+as before, byte for byte. A part turn delivers at most 800,000 characters of
+items and owned bodies, inside the input that the longest verified turns of
+the openness reading chain used, about 650,000 tokens. On the unknotting
+record's openness chain, 34 Opus runs on a 3,600-second route took 394 to
+1,090 seconds each; wall time followed the output tokens (correlation 0.93),
+not the input tokens (-0.02). The 2026-10-28 evidence above, a
+956,141-character reading turn stopped at the 600-second limit, concerns the
+Codex routes. The notes of a part turn have at most 60,000 characters, where a
+reading turn of the openness chain has 20,000 for 120,000 new characters.
+
+The coverage of a review of a series counts an item of the current evidence
+when an equal item reached the reviewer under the same index in the
+authenticated actual request of a valid turn of the same series, a reading
+range when the inline passages of those requests cover it, and an owned
+artifact when one of them attached its complete bytes; the final turn's
+receipt must name exactly those turns. This guarantees that the reviewer
+received the current value of every item in an authenticated turn of the same
+session. It does not guarantee what the model call that wrote the review held.
+That call holds the items of the earlier turns only through the reviewer's
+own notes, its verified excerpts and the earlier packets that the replayed
+history still holds. This is the standard of the openness reading chain, whose
+chain check counts a unit delivered complete in an observed reading turn, and
+it applies only to a session that is a series. A session becomes a series when
+a first packet does not fit one input, and it stays in parts after a changed
+evidence digest or a refresh, also when the new evidence fits. A session that
+is not a series delivers the whole evidence in one request, as before.
+
+Three parts are deferred. The problem adjudicator's packet carries the full
+problem evidence and is not delivered in parts; an adjudication of either
+record needs the same mechanism in a later release. A context repair of a
+part series is refused (`review_context_repair_history_unrecorded`). Repeated
+records inside a series, for example the search records that both
+`openness_searches` and `assessment_evidence` carry, are delivered under each
+index.
