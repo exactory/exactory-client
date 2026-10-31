@@ -35,6 +35,12 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.68.0](docs/releases/0.68.0.md) separates the outputs of math-solver, ai-science and math-conjecturer into
+two folders that the harness generates in the workspace root. `final/` holds the current result of each step, with
+the superseded results in `final/history/`, and `intermediate/` holds every other output, item by item, with its
+status. Each reviewer series gets one folder with a `series.json` that lists every turn and run. The problem export
+and the review packets go into these folders by default, and the guard hook refuses direct edits there.
+
 Version [0.67.1](docs/releases/0.67.1.md) checks the declaration of an openness minimum at export with the audit's
 own rules, so a packet that no resolved finding can pass is refused before any review runs. `exactory-lab run` and
 `reconcile-run` print the execution id and the output descriptors that a result reference of `assess` needs, and a
