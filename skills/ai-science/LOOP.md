@@ -101,7 +101,7 @@ block is not an advance; the hook then lets the session stop until the next
 user turn. The review routes of the harness start their reviewers with hooks
 disabled, so the Stop hook never runs in them, wherever their working directory
 is. A session that a study script or a person starts inside the study for one
-assignment, such as a code review in `reviews/<name>/`, needs the environment
+assignment, such as a code review in `work/<name>/`, needs the environment
 variable `EXACTORY_ASSIGNED_SESSION` set to any nonempty value when its CLI is
 started: the hook then lets that session stop and leaves the advance count
 unchanged. Setting the variable from a command inside the session does not
@@ -227,7 +227,9 @@ converts an unmet scientific target into success.
 
 On resume, read `status --summary`, `next --summary`, the named obligations,
 current decision, checkpoint lineage, pending executions/reviews/remote intents
-and user context. Preserve completed historical states, uncommitted work, original
+and user context; the harness shows the current decision, checkpoints and
+recorded reviews in `final/` and the pending turns and runs in `intermediate/`
+(STUDY.md). Preserve completed historical states, uncommitted work, original
 evidence, failures and resource history. Repair exposed reviewer routes and
 reassess affected current findings before consuming their approval. Continue
 authorized independent work while a dependency is pending.

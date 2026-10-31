@@ -1063,6 +1063,11 @@ The result is `{workspace, native_packet, subject_digest, claim_digest}`.
 `workspace` is the workspace derived from foundation references or recorded by
 `review_workspace` on a foundationless proposal. Use that returned path for the shared commands. Export
 writes immutable common evidence objects and does not append a native event.
+The turns and runs of the `native_math` assignment that reads the packet are
+shown in `intermediate/reviews/native_math/<root assignment id>/series.json` of
+the workspace root, with the output of each completed run beside it, and the
+controller's adoption of the review in `final/math/<rel>/index.json` under
+`adoptions`.
 For normalized JSON evidence, including native problem snapshots, its exported artifact reference carries
 `raw_identities: [ArtifactRef]` for the checked original bytes. Before publishing
 canonical bytes, export records each binding in the associated common store as
@@ -2070,7 +2075,13 @@ checker, Lean, shell script or mathematical job.
 `status` also derives `closure_blocking_node_ids`: the sorted IDs of the standalone
 nodes admitted through a proposal that are neither finished nor retreated. On
 resolved history the list is empty. `next` carries the same list only when it is
-nonempty. Neither is a persisted event field.
+nonempty. Neither is a persisted event field. Both carry `advisories` only while
+the output views ([Locked command construction and recoverable
+projections](#locked-command-construction-and-recoverable-projections)) do not
+show the current revision under the installed plugin version: a list with one
+entry `{code: "output_views_stale", action: "exactory-math search render", path,
+error, rendered_revision, revision}`. The key is absent when the views are
+current. No gate reads it, and the action `kind` of `next` is unchanged.
 
 ### Workspace discovery and session ownership
 
@@ -2255,7 +2266,10 @@ recorded `review_workspace`, otherwise the associated foundation root, otherwise
 the canonical attack root. The store must already exist. To deliver to a research
 workspace above the attack root, associate it through the proposal's
 `review_workspace` (for example `".."`). These records provide the common-store
-boundary for consumers; the research harness reads no native store.
+boundary for consumers; the research harness reads no native store. It shows each
+delivered record in the workspace root's `final/math/deliveries/`: the attempt
+that the current pointer names in `attempts/`, every closure in `closures/`, and
+the earlier attempts in `final/history/math/deliveries/attempts/`.
 
 Delivery holds the native writer lock and appends no native event. Before a common
 write, `audit_state(..., common_guard=<common snapshot>, fresh=True)` must pass for
@@ -2605,6 +2619,43 @@ the original command or `search render` recovers without rerunning math or
 granting another admission. Conflicting preexisting bytes cause `recovery_conflict`.
 Projection writes serialize against the current event document to avoid stale
 SEARCH_TREE/LINEAGE output from concurrent commands.
+
+The output views are a second projection, outside the attack root. The workspace
+root is the controller root's parent, and `<rel>` is the controller root's path
+relative to it (`attack` in the default layout). `search_controller/output_views.py`
+is the only owner of `final/math/<rel>/` (the results that the controller
+currently relies on: `index.json`, `objective.json`, `admissions/`,
+`reassessments/`, `results/<acceptance id>/`, `closure/`, `imports/`),
+`final/history/math/<rel>/` (earlier reassessments and reopened closures) and
+`intermediate/math/<rel>/` (`proposals/` not admitted, `checkpoints/`,
+`invalidated/<acceptance id>/`, `replans/`, `retreats/`, `amendments/`,
+`runs/<run id>/`, `nodes/<slug>/index.json`). A render runs once per command,
+after its last commit and outside every controller lock: at the end of the
+mutating path of `Controller.command`, after `deliver-attempt` and
+`deliver-closure`, and at the end of every managed native `attack.py` command.
+Read-only commands and check mode render nothing. The render skips when the
+marker `.search/output-views.json` already shows the document's last event under
+the installed plugin version; otherwise it builds the whole model from the
+replayed state, writes only the files whose bytes differ, and removes the owned
+files that the model no longer produces, under the lock
+`.search/output-views.lock`. An artifact of at most 1 MiB is copied; a larger,
+missing or corrupt one is listed by digest with its reason. A failed render never
+changes the command's result: it prints one stderr line, `Output views were not
+rendered (<code>: <message>); the command's result stands. Run exactory-math
+search render after fixing the cause.`, records the failure in the marker, and
+`status` and `next` report `output_views_stale` under `advisories`. `search
+render` goes through the mutating path and renders the views too. A file in the
+way that the renderer does not own, with other bytes, stops the render with
+`output_view_conflict` until it is moved. A controller root named `deliveries`
+directly under the workspace root would share `final/math/deliveries/` with the
+research harness's deliveries, so the renderer writes nothing for it and the
+advisory carries the reason `reserved_controller_root_name`; give the controller
+root another name. `final/math/<rel>/index.json` lists the
+files of both final trees with their kind, id and status, the unowned files, and
+`adoptions`: `{review_id, assignment_id, adopting_record}` for every native
+review whose attestation is an observed assignment. The research harness renders
+the common store's own views into the same `final/` and `intermediate/` beside
+these trees (`docs/research-cli.md`, "Final and intermediate outputs").
 
 Task 4 wires managed legacy preflight for admission, imported/finished terminality,
 safe paths, and refusal of unmanaged verifier entry within a registered controller.

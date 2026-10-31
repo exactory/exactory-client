@@ -64,6 +64,43 @@ show it. A write from an account without an iD shows the account name alone. Onl
 problem's author or an admin adds formal statement versions and declares a status. The author
 of a proof cannot post a Lean check on it.
 
+## The output folders
+
+The harness generates two folders in the workspace root after each command that
+records something. `final/` holds the current result of each step: the recorded
+reviews that count now in `final/reviews/<role>/` (`bar`, `slate`, `result`,
+`adjudicator`); the selected statement and the latest record of each other kind
+in `final/problem/` (`statements/`, `slates/`, `attempts/`, `openness/`,
+`values/`, `assessments/`, `formal-checks/`, `decisions/`, `posts/`); the problem
+export in `final/problem/exports/`; the delivered solver attempts and closures in
+`final/math/deliveries/`; and the results that the attack's controller relies on
+in `final/math/attack/`. `final/history/` has the same layout and holds the
+results that a later record superseded or that lost their standing, for example
+a bar whose slot was repaired. `intermediate/` holds every other output, item by
+item: each reviewer turn in `intermediate/reviews/<role>/<root assignment id>/`,
+where `series.json` lists every turn and every run with its status, error,
+usage, refusal, correction, the selected run and the record that adopted the
+turn, and `<NN>-<assignment id>.<run id>.json` holds the output of one completed
+run of turn NN (an openness chain is a `native_math` series); the route probes in
+`intermediate/reviews/routes/`; the exported packets in
+`intermediate/reviews/packets/`; the candidates in
+`intermediate/problem/candidates/`; the probes and runs of the lab in
+`intermediate/lab/`; and the controller's runs, checkpoints, proposals that were
+not admitted and invalidated results in `intermediate/math/attack/`. `index.json`
+in each folder lists every file with the kind, id, revision and status of its
+record. Read the outputs there, and never copy them elsewhere.
+
+The harness owns both folders: the guard hook refuses `Write`, `Edit` and
+`NotebookEdit` into them, and every render rewrites the files it owns. Keep your
+own files, payload files, notes and scripts, in `work/`. The one exception is
+`intermediate/legacy/`: a session that owns a record from before 0.68.0 moves
+the copies that its tools wrote, for example `reviews/outputs/`, to
+`intermediate/legacy/<original path>/` once, and the index lists them as
+`legacy`. When `status` or `next` carries an `advisories` entry with code
+`output_views_stale`, the folders do not show the latest records; run its
+`action`, `exactory-research export --kind outputs`. The advisory never changes
+`ready`, the obligations or `next`.
+
 ## Exploration
 
 An exploration is one research workspace opened on an area and a field question. It holds every
@@ -325,8 +362,12 @@ result and its source; start no solver work to reproduce an established result.
    evidence bodies as reversible visible text blocks and authenticates the observed framed
    input. Keep earlier proof observations on their unchanged original route. Framing does not
    permit omitted required evidence or change any scientific gate.
-4. Run `exactory-research export --kind problem-openness --spec openness-spec.json --destination
-   openness-packet`. Before it writes anything, the export checks the declaration against the
+4. Run `exactory-research export --kind problem-openness --spec openness-spec.json`. Without
+   `--destination` the export writes the packet to
+   `intermediate/reviews/packets/<assignment id>/` (`<assignment id>-2`, `-3`, ... when that
+   folder exists) and names the directory under `destination` in its output; give
+   `--destination` only to place the packet outside the workspace, for a reviewer that must
+   not see it. Before it writes anything, the export checks the declaration against the
    store. A refusal names what to repair in its details:
    - `openness_statement_mismatch` with `formulation`, `search_id` and `search_digest`: the
      bound search does not address the formulation. Record or bind a search whose `question`
@@ -627,8 +668,14 @@ states the exact rule.
 ## Compose and post a problem
 
 For a problem with a research record, the parts come from
-`exactory-research export --kind problem --destination problem-export` after
-`exactory-research gate post` reports ready. Use the exported `title.txt`,
+`exactory-research export --kind problem` after `exactory-research gate post`
+reports ready. The export writes them to `final/problem/exports/<export digest>/`,
+where the export digest is the digest of all exported files, the value that
+`problem-posted` records as `export_digest`, and names that directory under
+`destination` in its output. A directory that already holds exactly the same
+files is returned as it is; one that holds other files is refused with
+`review_destination_exists`. A `--destination` outside `final/problem/exports/`
+is refused (`export_destination_outside_final`). Use the exported `title.txt`,
 `statement.md`, `motivation.md`, `state.md`, `criteria.md` and `citations.json`;
 `problem-export.json` identifies the approved claim, evidence, decision and area.
 Keep an exported `formal-statement.txt` when the record includes one. Run the
@@ -682,21 +729,24 @@ exactory post-problem \
 ```
 
 For a problem with a research record, pass the exported files to the same command.
-Read the area from `problem-export.json` and use that exact value for `AREA`:
+Set `EXPORT` to the directory that the export named under `destination`, and read
+the area from its `problem-export.json`; use that exact value for `AREA`:
 
 ```sh
 exactory post-problem \
-  --title "$(cat problem-export/title.txt)" --area "$AREA" \
-  --statement-file problem-export/statement.md --motivation-file problem-export/motivation.md \
-  --current-state-file problem-export/state.md --resolution-criteria-file problem-export/criteria.md \
-  --citations-file problem-export/citations.json
+  --title "$(cat "$EXPORT/title.txt")" --area "$AREA" \
+  --statement-file "$EXPORT/statement.md" --motivation-file "$EXPORT/motivation.md" \
+  --current-state-file "$EXPORT/state.md" --resolution-criteria-file "$EXPORT/criteria.md" \
+  --citations-file "$EXPORT/citations.json"
 ```
 
 After the server returns the problem id, save
-`{"problem_id": "<returned-id>", "export_directory": "problem-export"}` in a
-payload file and run `exactory-research problem-posted --file posted.json` with
-the current `--expected-revision` and a distinct `--request-id`. This records the
-confirmed post against the approved projection. If the remote result is
+`{"problem_id": "<returned-id>", "export_directory": "<the export directory>"}`
+in a payload file and run `exactory-research problem-posted --file posted.json`
+with the current `--expected-revision` and a distinct `--request-id`. This
+records the confirmed post against the approved projection; the comparison of
+the directory's file set ignores entries whose names start with a dot. If the
+remote result is
 uncertain, check the problem listing before sending another post request.
 A unit of the record's own solver attempt whose result the controller accepted
 can then be prepared as a post to the problem under the `math-solver` skill

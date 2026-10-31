@@ -83,9 +83,9 @@ observations for research leads. Preserve each lead's original identity, source,
 verification status and relation to the question; do not claim inherited knowledge
 as a new result. For an unselected lead, record the reason and reopening condition.
 
-In a development round, read the admitted goal in the saved `round-admit` output
-(`reviews/round-00N/admission.json`), the carried developments it pursues, and the
-`downstream` and `next_step` records before forming hypotheses.
+In a development round, read the admitted goal in the current round admission
+(`final/study/round-admissions/<admission id>.json`), the carried developments it
+pursues, and the `downstream` and `next_step` records before forming hypotheses.
 Every hypothesis of the round names the success criterion it serves. A successor
 cycle may inherit a checkpoint of an earlier round. When the round widened the
 objective, objective lineage keeps the earlier objective as an ancestor, so that

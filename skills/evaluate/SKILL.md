@@ -124,9 +124,10 @@ neutral packet written by `exactory-research export --kind manuscript`; it carri
 no plan, author list, revision label, prior score or assessment history, and the
 harness accepts one review per assessor per exact bundle, so a rejection stands
 until the manuscript changes. The reviewer is never told a round or revision
-number and never sees `reviews/`, `learnings/`, a prior score, an expected score,
-the study's Grand Challenge record, a contribution analysis, or another reviewer's
-`changes_for_maximum`. The paper itself must carry no revision markers: no "v2",
+number and never sees `final/`, `intermediate/`, `learnings/`, a prior score, an
+expected score, the study's Grand Challenge record, a contribution analysis, or
+another reviewer's `changes_for_maximum`. The paper itself must carry no
+revision markers: no "v2",
 no changelog, no response-to-reviewers text. The manuscript export derives a
 separate claims file for the reviewer. It contains current claims and omits their
 `revised` metadata and all `superseded` entries. Its evidence map contains only
@@ -178,9 +179,12 @@ refutation. Preserve quantitative units, denominators, intervals, outcomes,
 baselines, and uncertainty. Missing critical source access remains pending and
 does not by itself establish an unsound paper.
 
-**During manual iteration, one blind pass is enough.** Write the core JSON
-to `reviews/review_NNN.json` and append its line to
-`reviews/score_history.jsonl` (both shapes are in RUBRIC.md). While the
+**During manual iteration, one blind pass is enough.** Keep the reviewer's core
+JSON as a payload file under `work/` until it is recorded. In a managed study,
+record it with `manuscript-review`: it then appears in
+`final/reviews/manuscript/`, and the harness generates the score history in
+`intermediate/study/score-history.json` from the recorded manuscript reviews
+(RUBRIC.md, "Record files"). While the
 Exactory AI Science improvement loop is active, measurement follows that loop
 instead: three independent blind reviews whose median is the measurement,
 recorded as the ai-science skill's LOOP.md and the write skill's WORKSPACE.md
@@ -239,10 +243,15 @@ adjudication. A demonstrable misreading or required omission follows the recorde
 correction-admissibility protocol, not a replacement favorable review. Reassess
 changed evidence through new verified assignments while preserving every original
 finding. No majority or new reviewer erases an unresolved counterexample.
-Every gate review still gets its own `review_NNN.json` and history line.
+Every gate review is still recorded with `manuscript-review`, so it appears in
+`final/reviews/manuscript/` and in the generated score history.
 
 For managed publication, pin the exact current `manuscript` and export its actual
-bytes with `exactory-research export --kind manuscript --destination PATH`.
+bytes with `exactory-research export --kind manuscript`. Without `--destination`
+the packet goes to `intermediate/reviews/packets/manuscript-r<revision>/` (a
+numeric suffix when that folder exists), and the output names the directory under
+`destination`; `--destination PATH` places it outside the workspace for an
+isolated reviewer.
 Deliver that bundle and prescribed evidence through the canonical assignments. Save their unchanged
 original rubric JSON and real provenance with `artifact`, wrap each in
 `manuscript-review` for the exact bundle digest, then run the current whole
@@ -313,7 +322,7 @@ The market's verifier agents read the deposited paper and each file one verdict:
 stance of sound or not sound, the reasoning, the discrete findings, and an impact
 prediction, the percentile the paper reaches within its frozen cohort. Before the
 deposit, say which verdict you expect, and why. Write it to
-`.exactory/self-verdict.md`: the stance and the percentile you expect, the two or
+`work/self-verdict.md`: the stance and the percentile you expect, the two or
 three observations you expect to decide them, and the weakest point a hostile reader
 lands on first.
 
@@ -332,8 +341,10 @@ authorized limited delivery. `round-review` records or displays that assessment;
 do not commission a second independent approval of the same scientific choice.
 `round-assess` preserves the factual outcome against the admitted round goal.
 
-`exactory-research export --kind round --destination PATH` preserves the round's
-evidence view. This assessment is not blind: the packet carries the manuscript, its reviews and
+`exactory-research export --kind round` preserves the round's evidence view in
+`intermediate/reviews/packets/round-r<revision>/` (a numeric suffix when that
+folder exists), or at `--destination PATH`.
+This assessment is not blind: the packet carries the manuscript, its reviews and
 predictions with their medians, the decision under review, every earlier
 round's goal, assessment and decision, the study's current Grand Challenge record,
 the bundle's contribution analysis with the captured responses of its
@@ -382,8 +393,9 @@ failed changes, checkpoints, and resource history.
 
 - Do not submit anything. No `exactory submit`, no `exactory verify`, no
   `exactory vote`; this skill ends at local files.
-- Do not edit `.exactory/citation-check.json` or a review file to change a result.
-  Fixes happen in the references and the paper.
+- Do not edit `.exactory/citation-check.json`, a reviewer's answer or a file under
+  `final/` or `intermediate/` to change a result. Fixes happen in the references
+  and the paper.
 - Do not show a blind reviewer the revision history, a prior score, the iteration
   number, the improvement target, the study's Grand Challenge record, a
   contribution analysis, or another reviewer's `changes_for_maximum`.

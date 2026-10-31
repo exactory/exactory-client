@@ -31,6 +31,9 @@ and inputs and records `probe-intent` before launch, reserving the timeout again
 the `experiment` purpose. The observed `probe` outcome pins outputs, stdout and
 stderr, records exit status and actual elapsed time, charges that usage and
 releases the reservation, including failures, timeouts and output-bound outcomes.
+The harness shows each probe in `intermediate/lab/probes/<probe id>/probe.json`
+with its intent, launch, outcome, recovery and the references of its outputs; the
+probe's directory under `research/probes/` keeps the files themselves.
 Launch ownership is persisted and exclusive. The frozen `supervision.json`
 binds worker/program identities, process group and deadline. An independent
 watchdog enforces the deadline after worker loss even without a retry. It writes
@@ -118,8 +121,13 @@ launcher reads anything, because the launcher runs a program, and
 The worker executes a private copy of pinned inputs and seals the observed output
 inventory. Metrics may be printed as JSON or written to the bound fallback path,
 but a process exit or metric alone is not a scientific assessment. Read the saved
-outputs and original observation before recording conclusions. Keep the human
-`experiment/journal.jsonl` consistent with the authoritative execution history.
+outputs and original observation before recording conclusions: the harness shows
+each admitted run in `intermediate/lab/runs/<admission id>/` as `run.json` (every
+record of the run), `result.json` (the observation's summary) and `log.txt` (the
+observed log), and the run directory under `research/runs/` keeps the pinned
+files. Read them there, and never copy them or write into `intermediate/`. Keep
+the human `experiment/journal.jsonl` consistent with the authoritative execution
+history.
 
 A `result` output takes any media type. Bind a figure, a PDF or another binary
 file to a `result` requirement when the assessment is to cite it. A `validation`
