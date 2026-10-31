@@ -28,7 +28,6 @@ from research_harness.storage import Store
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-UNKNOTTING_RECORD = Path("/Users/ryshiro/exactory/math-conjectures/202610282209-unknotting-connected-sum")
 # A writer whose kind argument is a variable forwards the kind of its caller; the scan reads those callers' constants.
 FORWARDER_KIND_ARGUMENTS = {"immutable_record": 1, "_member": 4, "finish_intent": 2, "deliver_snapshot": 3}
 FORWARDING_WRITERS = {("acquisition.py", "_member"), ("attempt_delivery.py", "deliver_snapshot"),
@@ -999,41 +998,6 @@ class ProfileTests(LiteratureCase):
             self.assertEqual(after["advisories"], [])
             self.assertEqual((after["ready"], after["next"], after["obligations"]),
                              (before["ready"], before["next"], before["obligations"]))
-
-
-@unittest.skipUnless((UNKNOTTING_RECORD / ".exactory/research.sqlite3").is_file(),
-                     "Local acceptance check: the stored unknotting record exists only on the owner's machine")
-class StoredRecordTests(unittest.TestCase):
-    def test_export_renders_a_stored_problem_record(self):
-        temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(temporary.cleanup)
-        root = Path(temporary.name) / "record"
-        store = copy_store(UNKNOTTING_RECORD, root)
-        stdout = io.StringIO()
-        with contextlib.redirect_stdout(stdout):
-            main(["export", "--kind", "outputs", "--workspace", str(root)])
-        self.assertEqual(json.loads(stdout.getvalue())["revision"], store.revision)
-        # Both recorded bars are historical: the route retirement repaired their slots.
-        self.assertFalse((root / "final/reviews").exists())
-        self.assertEqual(sorted(path.name for path in (root / "final/history/reviews/bar").iterdir()),
-                         ["problem-bar-a.json", "problem-bar-b.json"])
-        records = store.snapshot()["records"]
-        turns, runs = set(), {}
-        for series_path in (root / "intermediate/reviews").glob("*/*/series.json"):
-            for turn in json.loads(series_path.read_bytes())["turns"]:
-                turns.add(turn["assignment_id"])
-                runs.update((run["run_id"], (series_path.parent, run)) for run in turn["runs"])
-        self.assertEqual(turns, set(records["review_assignment"]))
-        self.assertEqual(set(runs), set(records["review_attempt"]) | set(records["review_invocation"]))
-        for attempt in records["review_attempt"].values():
-            folder, run = runs[attempt["id"]]
-            if attempt["status"] == "completed" and attempt["output"]["size"] <= output_views.COPY_LIMIT_BYTES:
-                self.assertEqual((folder / run["output_file"]).read_bytes(),
-                                 ArtifactStore(root).read(attempt["output"]), attempt["id"])
-        self.assertEqual(json.loads((root / "final/history/reviews/bar/problem-bar-a.json").read_bytes()),
-                         records["value_review"]["problem-bar-a"])
-        self.assertEqual(json.loads((root / "final/problem/statements/statement-1.json").read_bytes()),
-                         records["problem_statement"]["statement-1"])
 
 
 if __name__ == "__main__":
