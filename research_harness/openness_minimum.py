@@ -128,26 +128,28 @@ def validate_minimum_bindings(minimum, statement, records):
     bound = {item["search_digest"] for item in minimum["searches"]}
     unbound = sorted(search["id"] for search in find_material_searches(records, formulations)
                      if digest(search) not in bound)
-    _require(not unbound, "Bind every search in search_ids: each addresses a declared formulation and has a material "
-             "result or a gap", "openness_search_stale", {"search_ids": unbound})
+    _require(not unbound, "Bind each search in search_ids to the declared formulation it addresses: a search with a "
+             "relevant, contradictory, potentially_relevant, unresolved or duplicate result, or with gaps, can change "
+             "the openness claim", "openness_search_stale", {"search_ids": unbound})
     unknown = sorted(set(minimum["reading_digests"]) - {digest(row) for row in records.get("reading", {}).values()})
     _require(not unknown, "Openness readings must be exact records in the associated common store",
              "openness_evidence_mismatch", {"reading_digests": unknown})
     searches = {digest(row): row for row in records.get("literature_search", {}).values()}
     for item in minimum["searches"]:
         formulation, search = item["formulation"], searches.get(item["search_digest"])
-        _require(search is not None, "This binding's search_digest names no search record in the common store",
+        _require(search is not None, "This binding's search_digest names no literature_search record of the common "
+                 "store: bind the digest of a search recorded there",
                  "openness_search_missing", {"formulation": formulation, "search_digest": item["search_digest"]})
         details = {"formulation": formulation, "search_id": search["id"], "search_digest": item["search_digest"]}
         _require(formulation in formulations,
-                 "This binding's formulation is neither the exact statement nor a declared neighbour",
-                 "openness_search_missing", details)
+                 "This binding's formulation is neither the exact statement nor a declared neighbour: declare it in "
+                 "neighbours or remove the binding", "openness_search_missing", details)
         _require(search.get("question") == formulation or formulation in search["queries"],
-                 "The bound search does not address this formulation: its question must be the exact formulation "
-                 "text, or that text must be one of its queries", "openness_statement_mismatch", details)
+                 "The bound search does not address this formulation: record or bind a search whose question is the "
+                 "exact formulation text, or whose queries contain that text", "openness_statement_mismatch", details)
     unsearched = sorted(formulations.difference(item["formulation"] for item in minimum["searches"]))
-    _require(not unsearched, "Bind a search that addresses each formulation in formulations", "openness_search_missing",
-             {"formulations": unsearched})
+    _require(not unsearched, "Bind a search that addresses each formulation in formulations: its question is that "
+             "exact text, or its queries contain it", "openness_search_missing", {"formulations": unsearched})
 
 
 def audit_minimum(finding, statement, records, artifacts, delivered):

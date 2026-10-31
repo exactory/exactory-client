@@ -1625,18 +1625,41 @@ neighbours, searches: [{formulation, search_digest}], reading_digests,
 settling_work_id}`. `statement` is the exact claim; each declared formulation
 needs an actual common `literature_search` record with dated `captured_at` and
 per-query `coverage` of kind `complete`, `top_k` or `bounded_unordered`, including
-`inspected_count`. Every relevant or contradictory result needs fulltext coverage
-from the pinned common `reading` records. Unresolved or potentially relevant hits,
-unavailable required source units and active or stale deferrals remain gaps.
-`already_solved` binds its fully read settling result via `settling_work_id`;
-`supported_open` uses null. All search/reading hashes must be in both the finding's
-`evidence` and the observed packet. Export the declaration in the optional
-`openness` field of `search review-packet --spec FILE --json`; the reviewer echoes
-it as `findings.openness.minimum`. The exporter delivers records and captured
-source bytes from the associated common workspace. An object that a completion
-check sealed is described without its bytes. Other material searches for
-the same formulations must be included on fresh resolved review. The exact
-schemas and `openness_*` refusal codes are in the math-solver `SEARCH.md`.
+`inspected_count`. A search addresses a formulation when its `question` is the
+formulation's exact text, character for character, or when that text is one of
+its `queries`. Each formulation, the exact claim and each declared neighbour,
+needs at least one bound search that addresses it. A material search is one that
+addresses a formulation and has a `relevant`, `contradictory`,
+`potentially_relevant`, `unresolved` or `duplicate` result, or nonempty `gaps`.
+Every material search must be bound as well. Every relevant or contradictory
+result needs fulltext coverage from the pinned common `reading` records.
+Unresolved or potentially relevant hits, unavailable required source units and
+active or stale deferrals remain gaps. `already_solved` binds its fully read
+settling result via `settling_work_id`; `supported_open` uses null. All
+search/reading hashes must be in both the finding's `evidence` and the observed
+packet. Export the declaration in the optional `openness` field of
+`search review-packet --spec FILE --json`; the reviewer echoes it as
+`findings.openness.minimum`. Before it writes the packet, the export checks the
+declaration against the common store, in this order: the minimum's schema
+(`invalid_record`); `statement` equal to the statement of the claim that
+`claim_digest` names (`openness_statement_mismatch`); every material search of
+the declared formulations bound (`openness_search_stale`, details
+`search_ids`); every entry of `reading_digests` the digest of a `reading` record
+(`openness_evidence_mismatch`, details `reading_digests`); each binding, in the
+order of `searches`, with a `search_digest` that names a `literature_search`
+record (`openness_search_missing`, details `formulation` and `search_digest`),
+a formulation that is the claim or a declared neighbour
+(`openness_search_missing`, details `formulation`, `search_id` and
+`search_digest`) and a search that addresses it (`openness_statement_mismatch`,
+the same details); and every formulation bound (`openness_search_missing`,
+details `formulations`). When `claim_digest` names no claim of the subject or
+the native state, the export refuses with `claim_mismatch` before these checks.
+A refused export writes no evidence object. `accept` and `complete` make the
+same checks again on the returned minimum, with the evidence checks. The
+exporter delivers records and captured source bytes from the associated common
+workspace. An object that a completion check sealed is described without its
+bytes. The exact schemas and `openness_*` refusal codes are in the math-solver
+`SEARCH.md`.
 Retain earlier uncertain hits and their explicit later `resolved` judgments.
 `out_of_scope` removes the uncertain hit's reading obligation. A `duplicate`
 needs `minimum.duplicate_resolutions: [{search_digest, work_id, canonical_work_id}]`;
@@ -1836,9 +1859,21 @@ that formulation even when the statement digest is unchanged. The openness
 minimum uses this store's own searches, readings and deferrals. It requires a
 dated search with bounded or complete coverage for the exact statement and each
 declared neighbour, and full readings of all decisive prior or settling works.
+A search addresses a formulation when its `question` is the formulation's exact
+text, character for character, or when that text is one of its `queries`. The
+statement's text is the whole `statement` field, with its `---` line and
+details when present; a neighbour's text is the one declared in `neighbours`.
+Each formulation needs at least one bound search that addresses it. A material
+search is one that addresses a formulation and has a `relevant`,
+`contradictory`, `potentially_relevant`, `unresolved` or `duplicate` result, or
+nonempty `gaps`. Every material search must be bound as well. A new search
+record can reuse the captured responses of an earlier search and carry the new
+`question`, without a new capture.
 An unavailable source remains a gap. Shared `openness_*` audit codes describe
-missing, incomplete, stale or undelivered evidence;
-`openness_statement_mismatch` identifies a finding for another exact claim.
+missing, incomplete, stale or undelivered evidence.
+`openness_statement_mismatch` marks a finding for another exact claim, a
+minimum whose statement or neighbours are not the current ones, or a bound
+search that does not address its formulation.
 
 Prepare the native openness packet with:
 
@@ -1849,13 +1884,28 @@ exactory-research export --kind problem-openness --spec openness-spec.json --des
 The spec is `{assignment_id, reviewer_id, minimum: {searches:
 [{formulation, search_id}], settling_work_id, duplicate_resolutions}}`. The
 export pins the current statement, statement digest, native reviewer assignment
-identity, search records and the captured bytes of required full readings. Use
-the exported packet in the `context` of a `review-assignment` payload with that
+identity, search records and the captured bytes of required full readings.
+Before it writes anything, the export resolves each `search_id` and refuses an
+unknown one with `openness_search_missing` and the binding as details. Then it
+builds the minimum from the current statement and the resolved searches and
+checks it against the store, in this order: the minimum's schema
+(`invalid_record`, for example a neighbour equal to the statement or a
+malformed `duplicate_resolutions` entry); every material search of the
+statement and the declared neighbours bound (`openness_search_stale`, details
+`search_ids`); each binding, in the order of the spec, with a formulation that
+is the statement or a declared neighbour (`openness_search_missing`, details
+`formulation`, `search_id` and `search_digest`) and a search that addresses it
+(`openness_statement_mismatch`, the same details); and every formulation bound
+(`openness_search_missing`, details `formulations`). A refusal of these checks
+writes nothing, so the same assignment id can be exported again. Use the
+exported packet in the `context` of a `review-assignment` payload with that
 assignment id, reviewer id, `role: "native_math"`, `dossier_id: null`, a verified
 route and an author from the marker, then invoke `review-run`. Record the
-observed result through `problem-openness`. A new unbound material search,
-changed bound reading/search or missing current formulation makes the finding
-stale (`problem_openness_stale`).
+observed result through `problem-openness`. For `supported_open` and
+`already_solved` it makes the same checks again on the returned minimum, with
+the evidence checks. A new unbound material search, changed bound
+reading/search or missing current formulation makes the finding stale
+(`problem_openness_stale`).
 
 On a text route (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1`) the
 packet's full-text bodies count against the route's input limit. The optional

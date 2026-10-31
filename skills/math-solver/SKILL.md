@@ -175,15 +175,25 @@ For `supported_open` or `already_solved`, prepare the mechanical
 [`OpennessMinimum`](SEARCH.md#checkpoints-and-accepted-results) with the exact `statement`, declared
 `neighbours`, `searches` binding each formulation to its common
 `literature_search` digest, `reading_digests` and `settling_work_id` (null for
-`supported_open`). Use `openness` on `search review-packet --spec FILE --json`;
-the result review returns it as `findings.openness.minimum`. Each search needs
-`coverage` and `captured_at`; every `relevant` or `contradictory` result needs a
-complete bound `fulltext` reading. `potentially_relevant`, `unresolved`, unavailable
-or deferred sources remain gaps. Bind all search/reading digests in `evidence`.
-Fresh resolved reviews must include other material searches for the same
-formulations, including new settling evidence. The packet delivers the actual
-common records, captured responses and source bundles. A proof manifest alone
-cannot establish openness. See `SEARCH.md` for the exact fields and refusal codes.
+`supported_open`). Each formulation needs at least one bound search whose
+`question` is that formulation's exact text, character for character. A search
+whose `queries` contain that text also addresses it. Bind as well every other
+search that addresses a formulation and has a `relevant`, `contradictory`,
+`potentially_relevant`, `unresolved` or `duplicate` result, or nonempty `gaps`.
+Use `openness` on `search review-packet --spec FILE --json`. The export refuses
+a false declaration before it writes the packet (a wrong statement, an unbound
+material search, an unknown search or reading digest, a search that does not
+address its formulation, an undeclared or unbound formulation), with the
+`openness_*` code and details that `accept` and `complete` give for the same
+defect. The result review returns the minimum as `findings.openness.minimum`.
+Each search needs `coverage` and `captured_at`; every `relevant` or
+`contradictory` result needs a complete bound `fulltext` reading.
+`potentially_relevant`, `unresolved`, unavailable or deferred sources remain
+gaps. Bind all search/reading digests in `evidence`. Fresh resolved reviews must
+include other material searches for the same formulations, including new
+settling evidence. The packet delivers the actual common records, captured
+responses and source bundles. A proof manifest alone cannot establish openness.
+See `SEARCH.md` for the exact fields and refusal codes.
 On a text route with a local input limit (`claude_cli_v1`, `codex_cli_v1` or
 `codex_cli_framed_v1`), a packet whose captured responses, full texts and
 records do not fit one input complete, or together exceed 120,000 characters, is

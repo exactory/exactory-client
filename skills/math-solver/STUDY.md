@@ -70,9 +70,14 @@ novelty study and search/read evidence, coverage, date and reasoning. It records
 For a resolved finding, declare `OpennessMinimum` as documented in `SEARCH.md`:
 `schema_version: 1`, exact `statement`, distinct `neighbours`, `searches` entries
 with `formulation` and common `literature_search` `search_digest`, exact common
-`reading_digests`, and `settling_work_id` (null for `supported_open`). Export it
-through the `openness` field of `search review-packet --spec FILE --json`; the
-observed review returns it as `findings.openness.minimum`. Each query's `coverage`
+`reading_digests`, and `settling_work_id` (null for `supported_open`). Each
+formulation needs at least one bound search whose `question` is that
+formulation's exact text, character for character. A search whose `queries`
+contain that text also addresses it. Export the minimum through the `openness`
+field of `search review-packet --spec FILE --json`. The export refuses a false
+declaration before it writes the packet, with the `openness_*` code and details
+that `accept` and `complete` give for the same defect. The observed review
+returns the minimum as `findings.openness.minimum`. Each query's `coverage`
 must record `complete`, `top_k` or `bounded_unordered` and `inspected_count`;
 `captured_at` must be no later than the finding's `searched_at` date. Bind the
 search/reading digests in `evidence`; the packet delivers their captured bytes.

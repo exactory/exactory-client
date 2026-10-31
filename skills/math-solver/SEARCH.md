@@ -1005,6 +1005,28 @@ withholds a body of this packet by priority. It still omits binary originals,
 which a text route never carries. A problem record exports its openness packet
 with `exactory-research export --kind problem-openness` instead.
 
+Before it writes the packet, `review-packet` checks the declaration against the
+records of that store, in this order: the minimum's schema (`invalid_record`);
+`statement` equal to the statement of the claim that `claim_digest` names
+(`openness_statement_mismatch`); every material search of the declared
+formulations bound (`openness_search_stale`, details `search_ids`); every entry
+of `reading_digests` the digest of a `reading` record
+(`openness_evidence_mismatch`, details `reading_digests`); each binding, in the
+order of `searches`, with a `search_digest` that names a `literature_search`
+record (`openness_search_missing`, details `formulation` and `search_digest`),
+a formulation that is the statement or a declared neighbour
+(`openness_search_missing`, details `formulation`, `search_id` and
+`search_digest`) and a search that addresses it, that is, its `question` is the
+formulation's exact text or that text is one of its `queries`
+(`openness_statement_mismatch`, the same details); and every formulation bound
+(`openness_search_missing`, details `formulations`). When `claim_digest` names
+no claim of the subject or the native state, the export refuses with
+`claim_mismatch` before these checks. A `recovery` spec has no claim digest, so
+it cannot carry `openness`. A refused export writes no evidence object. After
+the repair, export again under the same assignment id. `accept` and `complete`
+make the same checks again on the returned minimum, with the evidence checks of
+[Checkpoints and accepted results](#checkpoints-and-accepted-results).
+
 The reviewer reads the whole packet. Its reading units are the captured
 responses of the bound searches, the extracted full texts of the originals that
 the bound readings pin, and the bound search and reading records, each record as
@@ -1445,9 +1467,14 @@ their actual evidence; callers cannot relabel a computation as analytical.
 All findings are nonempty. A fresh `supported_open` or `already_solved` finding,
 including the final root review, requires `minimum`. Its `statement` equals the
 exact claim statement; `neighbours` declares the distinct neighbouring formulations
-from the novelty study. Each formulation needs a bound common `literature_search`
-record. Its `question` or an exact `queries` entry must match the formulation.
-Every query needs recorded `coverage` of kind `complete`, `top_k` or
+from the novelty study. Each formulation needs at least one bound common
+`literature_search` record that addresses it: its `question` is the formulation's
+exact text, character for character, or that text is one of its `queries`. A new
+search record can reuse the captured responses of an earlier search and carry the
+new `question`, without a new capture. `review-packet` makes the declaration
+checks of [Observed native review delivery](#observed-native-review-delivery) at
+export, and `accept` and `complete` make them again, with the evidence checks
+below. Every query needs recorded `coverage` of kind `complete`, `top_k` or
 `bounded_unordered` with `inspected_count`, and the search's `captured_at` date
 cannot follow `searched_at`. Integrity errors, unspecified coverage or search
 `gaps` prevent a resolved finding. Bounded coverage is explicit evidence, not a

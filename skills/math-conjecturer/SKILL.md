@@ -281,11 +281,20 @@ result and its source; start no solver work to reproduce an established result.
 
 ## Openness
 
-1. Search for the exact statement and for each declared neighbour. Give each search a date and
-   bounded or complete coverage.
+1. Search for the exact statement and for each declared neighbour. Each of these formulations
+   needs a search whose `question` is the formulation's exact text, character for character:
+   for the statement, the whole `statement` field, with its `---` line and details when they
+   are present; for a neighbour, the text declared in `neighbours`. A new search record can
+   reuse the captured responses of an earlier search and carry the new `question`, without a
+   new capture. Give each search a date and bounded or complete coverage.
 2. Read every decisive prior or settling work in full. Keep an unavailable source as a gap.
 3. Write the openness spec `{assignment_id, reviewer_id, minimum: {searches: [{formulation,
-   search_id}], settling_work_id, duplicate_resolutions}}`. For a text route, add
+   search_id}], settling_work_id, duplicate_resolutions}}`. Each `searches` entry binds one
+   formulation to a search that addresses it: the search's `question` is the formulation's exact
+   text, or that text is one of its `queries`. Every formulation, the exact statement and each
+   declared neighbour, needs at least one entry. Bind as well every search that addresses a
+   formulation and has a `relevant`, `contradictory`, `potentially_relevant`, `unresolved` or
+   `duplicate` result, or nonempty `gaps`. For a text route, add
    `minimum.text_priority`: the version ids of the read works, the decisive ones first (the works
    that state a formulation open or hold the strongest partial result). While the packet exceeds
    the route's input limit, the route withholds the full-text bodies of the listed versions from
@@ -317,7 +326,23 @@ result and its source; start no solver work to reproduce an established result.
    input. Keep earlier proof observations on their unchanged original route. Framing does not
    permit omitted required evidence or change any scientific gate.
 4. Run `exactory-research export --kind problem-openness --spec openness-spec.json --destination
-   openness-packet`.
+   openness-packet`. Before it writes anything, the export checks the declaration against the
+   store. A refusal names what to repair in its details:
+   - `openness_statement_mismatch` with `formulation`, `search_id` and `search_digest`: the
+     bound search does not address the formulation. Record or bind a search whose `question`
+     is that exact text.
+   - `openness_search_missing` with `formulations`: bind a search for each listed formulation.
+   - `openness_search_missing` with `formulation`, `search_id` and `search_digest`: the
+     formulation is neither the statement nor a declared neighbour. Remove the entry, or
+     declare the neighbour under a new statement id (Formulation, step 4) and search it.
+   - `openness_search_missing` with `formulation` and `search_id` only: no search record of
+     this store has that id.
+   - `openness_search_stale` with `search_ids`: bind the listed searches.
+   - `invalid_record`: the minimum's schema, for example a neighbour equal to the statement or
+     a malformed `duplicate_resolutions` entry.
+   A refusal of these checks writes nothing, so the same assignment id can be exported again.
+   For `supported_open` and `already_solved`, `problem-openness` (step 7) makes the same checks
+   again on the returned minimum, with the evidence checks.
 5. Put the exported packet in the `context` of a `review-assignment` with that assignment id and
    reviewer id, `role: "native_math"`, `dossier_id: null`, a verified route and an author from
    the record. Run it with `review-run`.
