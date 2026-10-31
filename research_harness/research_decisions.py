@@ -237,6 +237,13 @@ def validate_review_contract(records, artifacts, assignment, output):
     """Pure review checks against this assignment's frozen contract and delivered lineage."""
     from . import bar_sources, review_context_repair, review_excerpts, review_supplied_evidence
     from .review_protocol import has_problem_result_rubric, is_previous_prompt, collect_carried_records
+    from . import review_problem_parts
+    if 'evidence_parts' in assignment.get('prompt', {}).get('parameters', {}):
+        frozen = json.loads(artifacts.read(assignment['packet']))
+        if review_problem_parts.find_stage(frozen) == 'part':
+            with contract_check("review.shape"):
+                review_problem_parts.validate_part_output(frozen, output)
+            return
     with contract_check("review.shape"):
         fields(output, ("stage", "support", "value", "objections", "limitations"),
                ("source_requests", "reassessment", "excerpts"), code="invalid_value_review", path='')
@@ -245,7 +252,12 @@ def validate_review_contract(records, artifacts, assignment, output):
     route = records['review_route'][assignment['route_id']]
     visual = route['adapter'] == 'codex_cli_visual_v1'
     frozen = json.loads(artifacts.read(assignment['packet']))
-    if visual:
+    series = review_problem_parts.find_stage(frozen) is not None
+    if series:
+        packets = review_problem_parts.collect_contract_packets(records, artifacts, assignment)
+        if not packets:
+            raise ResearchError('review_invocation_unverified', 'A series review requires its authenticated actual input')
+    elif visual:
         from . import review_transport
         from .review_input_projection import packets_from_visual_request
         request = review_transport.request_body(route, assignment['prompt']['text'], frozen, assignment.get('history', ()))
@@ -340,11 +352,11 @@ def validate_review_contract(records, artifacts, assignment, output):
                                                     evidence_validator=contract_evidence)
     if problem:
         carried = collect_carried_records(records, artifacts, assignment["id"], packets=packets)
-        supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual else
+        supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual or series else
                               review_supplied_evidence.supplied_context(records, artifacts, [assignment["id"]], frozen=True))
         for path, evidence in evidence_arrays(output, with_paths=True):
             missing = review_supplied_evidence.undelivered_references(records, artifacts, evidence, carried, supplied, mappings,
-                                                                     frozen=True, packets=packets if visual else ())
+                                                                     frozen=True, packets=packets if visual or series else ())
             if missing:
                 details = missing[0]
                 description = (details["record_kind"] + " " + details["id"] + " at the cited digest"
@@ -367,6 +379,13 @@ def record_value_review(store, payload, *, expected_revision, request_id):
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
+        from . import review_problem_parts
+        saved = records.get('review_assignment', {}).get(value.get('assignment_id')) if isinstance(value, dict) else None
+        if saved is not None and 'evidence_parts' in saved['prompt'].get('parameters', {}):
+            packet = json.loads(artifacts.read(saved['packet']))
+            if review_problem_parts.find_stage(packet) == 'part':
+                raise ResearchError('problem_evidence_part_pending', 'Continue the evidence part before recording a result review',
+                                    {'assignment_id': saved['id'], 'turn': packet[review_problem_parts.KEY]['turn']})
         fields(value, ("id", "dossier_id", "assignment_id", "stage", "support", "value", "objections", "limitations"),
                ("source_requests", "reassessment", "excerpts"), code="invalid_value_review")
         old = strategy.existing_record(records, "value_review", value)
@@ -682,15 +701,31 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
     from .direction_sources import find_delivered_readings, has_attachment
     from .evaluation import Evaluation
     from .review_protocol import collect_references
+    from . import review_problem_parts
     evaluation = Evaluation.of(records, artifacts)
     readings = [records['reading'][item['id']] for item in expected['readings']]
     obligations = []
     for review in reviews:
         packets = collect_actual_input_packets(records, evaluation, review['assignment_id'])
+        assignment = records.get('review_assignment', {}).get(review['assignment_id'], {})
+        series_review = ('evidence_parts' in assignment.get('prompt', {}).get('parameters', {})
+                         and review_problem_parts.find_stage(read_assignment_packet(
+                             records, evaluation, review['assignment_id'])) is not None)
+        series = []
+        if series_review:
+            series = review_problem_parts.collect_series_packets(records, evaluation, review['assignment_id'])
+            series = review_problem_parts.verified_coverage_packets(records, evaluation, review['assignment_id'], series)
+            packets = [packet for packet in packets if review_problem_parts.KEY not in packet] + series
         current = [packet for packet in packets if packet.get('problem_evidence_digest') == evidence_digest]
         current_evidence = [packet.get('problem_evidence', {}) for packet in current]
-        missing = [key for key in ('claim', 'openness', 'openness_searches', 'value', 'assessment', 'assessment_evidence', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
-                   if not any(key in packet_evidence and packet_evidence[key] == expected[key] for packet_evidence in current_evidence)]
+        keys = ('claim', 'openness', 'openness_searches', 'value', 'assessment', 'assessment_evidence', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
+        if series_review:
+            keys += ('passages',) + (('delivery',) if 'delivery' in expected else ())
+        current_series = [packet for packet in series if packet.get('problem_evidence_digest') == evidence_digest]
+        missing = [key for key in keys if not (
+            bool(current_series) and review_problem_parts.covers_items(current_series, expected, key)
+            if series_review and key in review_problem_parts.SPLIT_KEYS else
+            any(key in packet_evidence and packet_evidence[key] == expected[key] for packet_evidence in current_evidence))]
         delivered = find_delivered_readings(records, evaluation, readings,
             [dict(packet, direction_evidence=packet_evidence) for packet, packet_evidence in zip(current, current_evidence)],
             whole_text=False)
@@ -899,22 +934,27 @@ def find_undelivered_review_references(records, artifacts, review):
     """Audit a recorded problem review against its frozen assignment delivery."""
     from . import review_supplied_evidence
     from .review_protocol import collect_carried_records
+    from . import review_problem_parts
     if review.get('subject', {}).get('kind') != 'problem':
         return []
     assignment_id = review['assignment_id']
     assignment = records['review_assignment'][assignment_id]
     visual = records['review_route'][assignment['route_id']]['adapter'] == 'codex_cli_visual_v1'
-    if visual:
+    series = ('evidence_parts' in assignment.get('prompt', {}).get('parameters', {})
+              and review_problem_parts.find_stage(json.loads(artifacts.read(assignment['packet']))) is not None)
+    if visual or series:
         from .direction_reviews import collect_actual_input_packets
         packets = collect_actual_input_packets(records, artifacts, assignment_id)
+        if series:
+            packets += review_problem_parts.collect_series_packets(records, artifacts, assignment_id)
     else:
         packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id])
     carried = collect_carried_records(records, artifacts, assignment_id, packets=packets)
-    supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual else
+    supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual or series else
                           review_supplied_evidence.supplied_context(records, artifacts, [assignment_id], frozen=True))
     evidence = [reference for array in evidence_arrays(review['payload']) for reference in array]
     return review_supplied_evidence.undelivered_references(
-        records, artifacts, evidence, carried, supplied, mappings, frozen=True, packets=packets if visual else ())
+        records, artifacts, evidence, carried, supplied, mappings, frozen=True, packets=packets if visual or series else ())
 
 
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):

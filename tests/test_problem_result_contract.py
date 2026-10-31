@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import test_research_problem_reviews as fixtures
+from problem_parts_fixtures import KEY as PARTS_KEY, ResultPartsCase
 from research_harness import direction_reviews, review_protocol as protocol
 from research_harness import research_decisions as decisions, review_transport as transport
 from research_harness.errors import ResearchError
@@ -358,3 +359,91 @@ class PromptTerminalBoundaryTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+
+class ProblemResultSeriesCoverageTests(ResultPartsCase):
+    def test_two_series_reviews_deliver_all_current_items(self):
+        self.oversized()
+        reviews = []
+        for reviewer in ('first', 'second'):
+            _, final = self.finish_parts(reviewer=reviewer)
+            reviews.append(self.record_final(final))
+        records = self.case.read_records()
+        self.assertEqual(decisions._assess_problem_coverage(records, self.case.artifacts,
+                         reviews, self.case.expected, digest(self.case.expected)), [])
+        self.assertTrue(decisions.assess_problem_reviews(records, self.case.artifacts)['ready'])
+
+    def test_indexed_duplicate_items_cannot_cover_an_omitted_position(self):
+        self.oversized(count=5, characters=24000)
+        self.case.expected['openness_searches'][1] = copy.deepcopy(self.case.expected['openness_searches'][0])
+        parts, final = self.finish_parts()
+        review = self.record_final(final)
+        self.assertEqual(self.coverage(review), [])
+        from research_harness import review_problem_parts
+        packets = review_problem_parts.collect_series_packets(self.case.read_records(), self.case.artifacts, final['id'])
+        altered = copy.deepcopy(packets)
+        for packet in altered:
+            ranges = packet[PARTS_KEY]['delivered_now']['openness_searches']
+            if ranges and ranges[0][0] == 0:
+                packet['problem_evidence']['openness_searches'] = packet['problem_evidence']['openness_searches'][:1]
+                packet[PARTS_KEY]['delivered_now']['openness_searches'] = [[0, 1]]
+        self.assertFalse(review_problem_parts.covers_items(altered, self.case.expected, 'openness_searches'))
+        with patch.object(review_problem_parts, 'collect_series_packets', return_value=altered):
+            pending = self.coverage(review)
+        self.assertTrue(pending)
+        self.assertIn('openness_searches', pending[0]['missing'])
+
+    def test_an_unverified_or_other_digest_or_other_series_turn_has_no_credit(self):
+        self.oversized()
+        parts, final = self.finish_parts()
+        review = self.record_final(final)
+        from research_harness import review_problem_parts
+        original_state = protocol.assignment_state
+        def unverified(records, artifacts, identifier):
+            state = original_state(records, artifacts, identifier)
+            return dict(state, ready=False) if identifier == parts[0]['id'] else state
+        with patch.object(protocol, 'assignment_state', side_effect=unverified):
+            pending = self.coverage(review)
+        self.assertTrue(pending)
+        packets = review_problem_parts.collect_series_packets(self.case.read_records(), self.case.artifacts, final['id'])
+        for field, value in (('problem_evidence_digest', '0' * 64), ('series_assignment_id', 'other-series')):
+            altered = copy.deepcopy(packets)
+            part = next(p for p in altered if p[PARTS_KEY]['stage'] == 'part')
+            if field == 'series_assignment_id':
+                part[PARTS_KEY][field] = value
+            else:
+                part[field] = value
+            with patch.object(review_problem_parts, 'collect_series_packets', return_value=altered):
+                self.assertTrue(self.coverage(review), field)
+
+    def test_receipt_must_name_the_exact_observed_attempts(self):
+        self.oversized()
+        parts, final = self.finish_parts()
+        review = self.record_final(final)
+        from research_harness import review_problem_parts
+        packets = review_problem_parts.collect_series_packets(self.case.read_records(), self.case.artifacts, final['id'])
+        changed = copy.deepcopy(packets)
+        last = next(packet for packet in changed if packet[PARTS_KEY]['stage'] == 'final')
+        last[PARTS_KEY]['delivered_before'][0]['attempt_id'] = 'not-the-observed-attempt'
+        with patch.object(review_problem_parts, 'collect_series_packets', return_value=changed):
+            self.assertTrue(self.coverage(review))
+
+    def test_reading_ranges_and_owned_artifacts_remain_required(self):
+        self.oversized()
+        self.case.add_reading_and_computation()
+        parts, final = self.finish_parts()
+        review = self.record_final(final)
+        self.assertEqual(self.coverage(review), [])
+        from research_harness import review_problem_parts
+        packets = review_problem_parts.collect_series_packets(self.case.read_records(), self.case.artifacts, final['id'])
+        altered = copy.deepcopy(packets)
+        for packet in altered:
+            packet['problem_evidence']['passages'] = []
+            packet[PARTS_KEY]['delivered_now']['passages'] = []
+            packet['evidence'] = []
+        with patch.object(review_problem_parts, 'collect_series_packets', return_value=altered), \
+                patch.object(direction_reviews, 'collect_actual_input_packets', return_value=[]):
+            pending = self.coverage(review)
+        self.assertEqual(pending[0]['reading_ids'], ['decisive-reading'])
+        self.assertTrue(pending[0]['artifact_digests'])

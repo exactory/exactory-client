@@ -8,6 +8,7 @@ import types
 from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
+from problem_parts_fixtures import ResultPartsCase
 from research_harness import review_protocol as protocol
 from research_harness import problem_rubric, research_decisions as decisions
 from research_harness.errors import ResearchError
@@ -1069,3 +1070,46 @@ class ProblemOpennessReviewTests(ProblemCase):
         self.mutate(decisions.record_value_review, dict(final, id="review-bar-repaired", dossier_id=None, assignment_id="fulfilled"))
         self.assertEqual(assess_source_requests(self.read_records(), self.artifacts), [])
 
+
+
+
+class ProblemSeriesCitationTests(ResultPartsCase):
+    def test_record_citation_from_a_part_is_delivered_but_an_unknown_record_is_not(self):
+        self.oversized()
+        parts, final = self.finish_parts()
+        records = self.case.read_records()
+        search = records['literature_search']['search-0']
+        reference = {'kind': 'record', 'record_kind': 'literature_search', 'id': search['id'], 'digest': digest(search)}
+        output = self.final_output()
+        output['value']['evidence'] = [reference]
+        review = self.record_final(final, output)
+        self.assertEqual(decisions.find_undelivered_review_references(self.case.read_records(), self.case.artifacts, review), [])
+        changed = copy.deepcopy(review)
+        changed['payload']['value']['evidence'][0]['id'] = 'undelivered-search'
+        self.assertTrue(decisions.find_undelivered_review_references(self.case.read_records(), self.case.artifacts, changed))
+
+    def test_part_only_inline_span_is_citable_without_whole_artifact_credit(self):
+        from research_harness import direction_sources, review_problem_parts
+        self.oversized()
+        self.case.add_reading_and_computation()
+        reading = self.case.read_records()['reading']['decisive-reading']
+        self.case.expected['passages'] = [passage for passage, _ in
+            direction_sources.build_inline_passages(self.case.read_records(), self.case.artifacts, [reading])]
+        link = reading['inspections'][2]['link']
+        reference = {'kind': 'source', 'link': copy.deepcopy(link)}
+        real = protocol._evidence
+        def no_original(artifacts, value, **kwargs):
+            return [row for row in real(artifacts, value, **kwargs) if row['artifact'] != link['artifact']]
+        with patch.object(protocol, '_evidence', side_effect=no_original):
+            parts, final = self.finish_parts()
+        output = self.final_output()
+        output['value']['evidence'] = [reference]
+        review = self.record_final(final, output)
+        self.assertEqual(decisions.find_undelivered_review_references(self.case.read_records(), self.case.artifacts, review), [])
+        whole = copy.deepcopy(output)
+        whole['value']['evidence'] = [link['artifact']]
+        self.assert_code('review_evidence_undelivered', lambda: decisions.validate_review_contract(
+            self.case.read_records(), self.case.artifacts, final, whole))
+        changed = copy.deepcopy(review)
+        changed['payload'] = whole
+        self.assertTrue(decisions.find_undelivered_review_references(self.case.read_records(), self.case.artifacts, changed))

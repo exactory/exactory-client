@@ -69,12 +69,12 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
-| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last `store_busy` or `stale_revision`. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last `store_busy` or `stale_revision`. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
 | `review-output-correction` | `{id, assignment_id, route_id}`. For a problem result reassessment whose two completed, authenticated outputs both have recorded refusals, the latest for `review_reassessment_mismatch`: when relabeling the latest output's `confirmed` findings whose content changed as `revised` would satisfy its output contract, ask the same reviewer once for that relabeling. Use a verified route with the original endpoint, model and adapter; a `codex_cli_visual_v1` assignment can use `codex_cli_v1` instead. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. |
-| `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. |
+| `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. A part turn of a problem result series is refused with `problem_evidence_part_pending` and leaves no refusal record. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
 | `source-impact` | Bind an explicit impact classification for the complete source delta since the selected decision. |
 
@@ -186,7 +186,18 @@ session. Assign a new continuation of the same parent, with the same reviewer,
 route and author: it replaces the failed one, which stays in the record and can
 no longer be run or continued (`review_assignment_replaced`). A continuation
 with a completed output, or one that never ran, still blocks a second
-continuation of its parent (`review_source_continuation_fork`).
+continuation of its parent (`review_source_continuation_fork`). An initial
+problem `result` assignment whose recorded attempts all failed with
+`review_input_too_large` before the reviewer CLI started, with no completed
+output and no pending invocation, does not hold its slot either. Assign a new
+initial `result` assignment of the same reviewer, on the same route and with
+the same author, with `dossier_id: null` and an empty context: it takes the
+slot of that reviewer's bar, and the earlier assignment stays in the record and
+can no longer be run or continued (`review_assignment_superseded`). A
+replacement on another route or with another author, and a replacement of an
+initial assignment that has a completed output, a pending invocation or an
+attempt that failed with another code, are refused with
+`review_resampling_forbidden`.
 
 The excerpt rules of 0.64.2 to 0.65.1 (`exactory-review-excerpts-v1`) had no
 reading budget. Assignments recorded under them keep their prompt and stay
@@ -226,13 +237,169 @@ the reviewer CLI starts and recorded as a failed attempt with the code
 is 1,300,000 characters on `claude_cli_v1` and 1,048,576 on `codex_cli_v1` and
 `codex_cli_framed_v1` (the
 [route instructions](research-decisions.md#commands-and-shared-state)). The CLI
-receives nothing. The harness also keeps the earlier
+receives nothing.
+A problem `result` request on these routes is delivered in parts instead
+([Problem evidence in parts](#problem-evidence-in-parts)).
+The harness also keeps the earlier
 reduction orders of 0.56.0, of 0.56.1 and 0.57.0, and of the two repaired
 copies of 0.56.0 that the extremal-graph-stability and Sidorenko girth-six
 problem records ran before 0.58.0, which the
 [0.58.0 release note](releases/0.58.0.md) describes; it rebuilds a recorded
 request with each earlier order, so an attempt recorded under one of them stays
 authenticated.
+
+### Problem evidence in parts
+
+A problem `result` assignment on a route with a local input limit
+(`claude_cli_v1`, `codex_cli_v1` and `codex_cli_framed_v1`) whose request does
+not fit after the reductions above is not refused. The harness delivers the
+problem evidence of that session in parts. This applies to an initial result
+assignment, to a refresh and to a continuation with `prior_assignment_id`. It
+does not apply to a context repair, to a `complete-visible-v1` continuation, to
+a bar or slate packet, which carries no problem evidence, or to the problem
+adjudicator. While a session is not a series, a request that fits is built as
+before, byte for byte, with the same packet and prompt. Once a session is a
+series, its later turns stay in parts, as the rule of the evidence digest below
+states.
+
+A series is the turns of one result session that deliver one problem evidence
+digest in parts; it is named by the id of its first assignment
+(`series_assignment_id`). The frame is the keys `claim`, `openness`, `value`,
+`assessment`, `attempt`, `results`, `citations` and `delivery` of
+`problem_evidence`; every turn of the series carries the frame whole. The units
+are the items of the other six keys, the split keys, in this order: each
+`openness_searches` item, each `assessment_evidence` item, then for each
+reading its `readings` entry followed by its `passages` items, then each
+`computations` item and each `formal_checks` item. A unit is named by its key
+and its index in the full list of that key, and an item that the evidence
+lists under two keys or two indices is a unit under each. A passage is the
+smallest unit and is never split. A unit owns the artifact bodies that the
+coverage check requires for it: the artifact of an `assessment_evidence` item
+that is an artifact descriptor or a `local_artifact` record, and the artifacts
+of a `computations` or `formal_checks` item. Every turn's `problem_evidence`
+keeps the full key set: the frame keys whole, and each split key with only this
+turn's items in index order, an empty list when the turn delivers none. A turn
+that delivers passages of a reading also carries that reading's `readings`
+entry, so that the reviewer has the inspection record next to the passages.
+
+The harness plans each turn when `review-assignment` records it, after the
+turn's history is known. A unit counts as delivered when its exact current item
+appears under the same index in the actual recorded request of an earlier valid
+turn of the series. A valid turn is observed in a verified context, its sent
+packet has the series evidence digest and the same series id, its part response
+passed its check, every body that its units own is attached complete, and its
+turn number and `delivered_before` continue the earlier valid turns. A part
+turn takes the longest prefix of the remaining units, in unit order, that meets
+three conditions: its fitted request, built as the transport builds it, fits
+the route limit; that request attaches every body that those units own
+complete, with none withheld at the limit and none deferred for capacity; and
+the characters of those units, owned bodies included and measured as canonical
+JSON, total at most 800,000 (`PART_UNIT_CHARACTERS`). The search starts at the
+prefix whose summed characters fit the room that the frame-only request leaves,
+at most 800,000, steps down one unit while the request does not fit, and steps
+up one unit while the next prefix still fits. When the frame and the first
+remaining unit cannot meet these conditions, `review-assignment` is refused
+with `review_input_too_large` and the details `{stage, turn, input_characters,
+input_limit_characters, frame_characters, unit}`, where `input_characters`
+measures the request with the frame and that unit and `unit` is `{key, index,
+digest}`; nothing is recorded, and no attempt is written. The final turn is
+the first turn planned after every unit was delivered by an earlier valid turn,
+and it carries no units; when its frame alone does not fit, it is refused the
+same way with `unit: null`.
+
+The packet of a turn is the result packet as built above, with the bars, the
+own bars, the material objections, the historical reviews, the review
+currency, the evidence digest, the source inventory, the deliveries and the
+excerpts, with the reduced `problem_evidence` and one more top-level key,
+`problem_evidence_parts`: `{protocol: "exactory-problem-evidence-parts-v1",
+series_assignment_id, stage, turn, units, delivered_before, delivered_now,
+remaining, note}`. `stage` is `"part"` or `"final"`, and `turn` counts the
+turns of the series from 1. `units` maps each split key to the count of its
+items in the current evidence. `delivered_now` and `remaining` map each split
+key to a list of index ranges `[start, end]`, `start` included and `end`
+excluded, into the full list of that key; this turn's items of a key are
+exactly the items of its `delivered_now` ranges, in index order.
+`delivered_before` lists every earlier valid turn as `{turn, assignment_id,
+attempt_id, units}`, with its selected attempt and the ranges that it
+delivered. `note` is one sentence that tells the reviewer that the evidence of
+this review arrives in parts. A turn whose packet has no `reviewer_excerpts`
+record, an initial assignment, adds an empty one; a turn that continues a
+session, including part turn 1 of a series that a continuation or a refresh
+started, carries the checked excerpts of the session as every continuation
+does. `problem_evidence_digest` and `problem_review_currency` are the same as
+in a single-turn packet, and `evidence` and `digest` are computed for the
+reduced packet. The prompt of a turn keeps the template id
+`exactory-problem-review-v5/result` and the excerpt rules, adds the
+instructions of its stage after them, and records `parameters.evidence_parts`
+as `exactory-problem-evidence-parts-v1/part` or
+`exactory-problem-evidence-parts-v1/final`. The rendered prompt hash differs
+per stage, so each turn is bound to the text of its stage, and a recorded
+attempt of either stage authenticates as every other attempt does.
+
+A part turn returns no review. Its response is exactly `{stage: "result",
+phase: "evidence_part", part, notes, excerpts}`, where `excerpts` is optional
+and `part` equals the packet's `turn`. `notes` holds exactly one entry `{unit:
+{key, index}, note}` for every unit of `delivered_now` except a passage, in any
+order, with no entry for another unit and no second entry for a unit; a
+passage is noted in the entry of its reading. Each `note` is nonblank text, and
+the note texts together have at most 60,000 characters (`NOTES_CHARACTERS`).
+`excerpts` follows the excerpt rules of the session. A part response carries no
+`source_requests` key; the reviewer requests a source or a passage in the final
+turn. When an authenticated run of a part turn completes, `review-run` checks
+the response and, when it fails, writes the output refusal
+`invalid_value_review` under the check `review.shape` and names it in its
+receipt under `output_refusal`, as it does for a `native_math` review. A
+refused part output delivers nothing, and its units stay remaining. The retry
+after a refused output and `review_slot_exhausted` after two refused outputs
+apply as above.
+
+While the latest output of the session has `phase: "evidence_part"`, continue
+it as a source request is continued: a new assignment of the same role,
+reviewer, route and author with `context: {prior_assignment_id}` naming the
+part turn. A part turn whose selected output is not a valid part response
+cannot be continued (`invalid_value_review`). The harness carries the checked
+excerpts of the session and plans the next turn from the valid turns of the
+series: another part turn while units remain, else the final turn. A turn of a
+series that is a continuation and whose run ended without output is replaced
+by a new continuation of the same parent, as above
+(`review_assignment_replaced`); a turn that is an initial assignment keeps the
+bounded operational retry of a failed call. A part turn with an output and no
+continuation is the obligation `problem_evidence_part_pending {assignment_id,
+turn, remaining}` in `next` and in the post gate, beside
+`review_sources_pending`. `value-review` refuses a part turn with
+`problem_evidence_part_pending` and writes no refusal record.
+
+The final turn carries the frame, `delivered_before` with every earlier valid
+turn of the series, and no units: each split key of its `problem_evidence` is
+an empty list, and `delivered_now` and `remaining` list no items. It returns
+the ordinary result review, or `source_requests` under the excerpt rules; the
+continuation that answers them is a final turn again, with the frame, the
+deliveries and no units. Record the turn that returned the review with
+`value-review`. The output contract of a review of a series is checked against
+the authenticated actual requests of the series, and a final turn without an
+authenticated completed attempt is refused with `review_invocation_unverified`.
+[Problem creation](#problem-creation) states how the post gate checks the
+coverage of a review of a series and what that check guarantees.
+
+A series freezes the evidence digest of its first turn. Once a session is a
+series, a continuation whose current evidence digest differs does not continue
+the series: it starts a new series with fresh delivery as part turn 1, also
+when the new evidence fits one input. A refresh of a series, a new assignment
+of the same reviewer after the recorded result review of its final turn, starts
+a new series the same way. A later turn of a refreshed session carries its
+`problem_refresh` marker, and the marker alone starts no new series. Only a
+first turn of a session that never was a series is measured against the route
+limit, and it is delivered in parts when it does not fit. A continuation of a
+series receives the full current problem evidence and never the
+`delivered-in-an-earlier-turn` marker, because the replayed history of a
+series does not carry the evidence whole.
+
+Two packets are not delivered in parts in this release. The problem
+adjudicator's packet carries the full problem evidence; an adjudicator request
+that does not fit is refused before the CLI starts and recorded as a failed
+attempt with `review_input_too_large`, as above. A context repair of a slot
+whose session holds a part turn is refused with
+`review_context_repair_history_unrecorded`.
 
 On the `codex_cli_v1` route, a problem result continuation can set
 `context.source_delivery: "complete-visible-v1"` with `prior_assignment_id`.
@@ -2501,6 +2668,38 @@ bound searches rests on their search records: a text route that withholds the
 bodies of their captured responses at its input limit (reduction step 6) leaves
 the coverage intact, and a route that admits those bodies delivers them.
 
+For a result review whose session delivered the problem evidence in parts (a
+series, [Problem evidence in parts](#problem-evidence-in-parts)), the check
+reads the actual sent packets of the series instead of one request. A packet
+counts when it is the sent packet of the selected authenticated attempt of a
+valid turn of the series: the same series id, the current evidence digest, the
+same reviewer, route, author, slot and session, a part response that passed its
+check, every owned body attached complete, and a turn number and
+`delivered_before` that continue the earlier counted turns. The final turn's
+`delivered_before` must name exactly those turns with their selected attempts
+and their ranges; otherwise no turn of the series counts. The check covers the
+twelve keys above, `passages` and `delivery`. A frame key must equal its
+expected value in a counted packet. Each item of a split key counts when an
+equal item reached the reviewer under the same index in a counted packet, so an
+item that the evidence lists twice is delivered under each index. The inspected
+ranges of a reading are covered by the union of the inline passages of the
+counted packets, and an artifact by its complete bytes in a counted packet. A
+shortfall returns `problem_evidence_unassessed` as above. This rule guarantees
+that the reviewer received the current value of every item in an authenticated
+turn of the same session. It does not guarantee what the model call that wrote
+the review held: that call holds the items of the earlier turns only through
+the reviewer's own notes, its verified excerpts and the earlier packets that
+the replayed history still holds, and reduction step 8 replaces a replayed
+packet by a digest stub while it keeps the reviewer's response of that turn.
+This applies only to a session that is a series: a session becomes a series
+when a first packet does not fit one input, and it stays in parts after a
+changed evidence digest or a refresh. A session that is not a series delivers
+the whole evidence in one request as before. `value-review` and the
+`review_evidence_undelivered` audit read the authenticated actual packets of
+the series for a review of a series, so the review can cite a record or a
+passage that a counted turn delivered; a span inside an inline passage of a
+part turn is a delivered bounded span and gives no whole-artifact credit.
+
 The problem bar uses `exactory-problem-review-v5/bar` and receives `area`,
 `field` and source inventory/deliveries with the statement, title, neighbours and
 value withheld. The selected statement must retain the record's area, so the
@@ -2845,6 +3044,7 @@ example the population of the cohort tool. The post decision is
 | `review_evidence_undelivered` | The named recorded review cites content that its packets did not deliver (`review_id`, `undelivered_references`). Assign the same reviewer and role again with an empty context to refresh it. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
 | `review_sources_pending` | Resolve the reviewers' pending source requests. |
+| `problem_evidence_part_pending` | Continue the named part turn (`assignment_id`, `turn`, `remaining`) with a new assignment of the same reviewer, route and author and `context: {prior_assignment_id}`; the turn after the last part is the final turn, which returns the review. |
 | `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. |
 
 `status` and `next` compute milestones from records: `exploration` before

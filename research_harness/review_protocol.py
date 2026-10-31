@@ -22,6 +22,7 @@ from . import review_transport as transport
 from . import bar_sources
 from . import openness_reading
 from . import review_excerpts
+from . import review_problem_parts
 from . import review_context_repair as context_repair
 from . import review_supplied_evidence as supplied_evidence
 from . import problem_rubric
@@ -669,12 +670,13 @@ def find_common_prompt_version(prompt):
 
 def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestration=None, repair_prompt=None,
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
-                     reading_protocol=None, common_version=None):
+                     reading_protocol=None, common_version=None, evidence_parts=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
     with; a later version uses the current suffix; repair_prompt names a suffix explicitly. excerpts adds the excerpt
     rules of a bar, slate or result session to the current template under its unchanged id; an earlier version only
     replays records made before those rules. excerpt_rules names the protocol of those rules, by default the current
-    one. reading_stage names the reading or final turn of a native openness reading chain, and reading_protocol the
+    one. evidence_parts appends the part or final instructions of a problem result series. reading_stage names the
+    reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
     common_version = COMMON_VERSION if common_version is None else common_version
@@ -687,6 +689,9 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
     if excerpts and role not in bar_sources.ROLES:
         raise ResearchError('invalid_review_context', 'Reviewer excerpts belong to bar, slate and result sessions')
     excerpts = excerpts and version == 6
+    if evidence_parts is not None and (role != 'result' or orchestration != 'problem_creation'
+            or not excerpts or repair or evidence_parts not in review_problem_parts.STAGES):
+        raise ResearchError('invalid_review_context', 'Problem evidence parts require a result session with excerpt rules')
     if reading_stage is not None:
         if role != 'native_math' or reading_stage not in openness_reading.STAGES:
             raise ResearchError('invalid_review_context', 'A reading stage belongs to a native openness reading chain')
@@ -733,6 +738,9 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
             excerpt_rules = excerpt_rules or review_excerpts.PROTOCOL
             prompt += review_excerpts.PHASE_PROMPTS[excerpt_rules]
             parameters['reviewer_excerpts'] = excerpt_rules
+        if evidence_parts is not None:
+            prompt += review_problem_parts.PROMPTS[evidence_parts]
+            parameters['evidence_parts'] = review_problem_parts.PROTOCOL + '/' + evidence_parts
         template = ((_PROBLEM_RESULT_PROTOCOL_V3 if version == 3 else
                      _PROBLEM_RESULT_PROTOCOL_V4 if version == 4 else PROBLEM_RESULT_PROTOCOL)
                     if current_result else _PROBLEM_PROTOCOL_V1 if version == 1 else
@@ -1454,7 +1462,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 bars = add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
                 require_calibrated_bars(records, bars)
                 from .problem_claims import compute_problem_evidence_digest
-                if not refreshed and previous.get('problem_evidence_digest') == compute_problem_evidence_digest(records, artifacts):
+                if (not refreshed and review_problem_parts.find_stage(previous) is None
+                        and previous.get('problem_evidence_digest') == compute_problem_evidence_digest(records, artifacts)):
                     # A source-request turn continues a session whose earlier packet delivered this exact problem
                     # evidence. The replayed history carries it, so this packet names it instead of repeating it.
                     packet['problem_evidence'] = {'delivery': 'delivered-in-an-earlier-turn', 'note': transport.REPEATED_EVIDENCE_NOTE}
@@ -1950,6 +1959,14 @@ def _prompt_matches(assignment):
     if common_version is None:
         return False
     repair = assignment.get('reassessment_required') is True
+    evidence_parts = assignment['prompt'].get('parameters', {}).get('evidence_parts')
+    if evidence_parts is not None:
+        if assignment['role'] != 'result' or assignment.get('subject', {}).get('kind') != 'problem' or repair:
+            return False
+        return any(evidence_parts == review_problem_parts.PROTOCOL + '/' + stage
+                   and assignment['prompt'] == canonical_prompt('result', orchestration='problem_creation',
+                       excerpts=True, evidence_parts=stage, excerpt_rules=rules, common_version=common_version)
+                   for stage in review_problem_parts.STAGES for rules in review_excerpts.PHASE_PROMPTS)
     stage = assignment['prompt'].get('parameters', {}).get('reading_stage')
     if assignment['role'] == 'native_math' and stage in openness_reading.STAGES:
         return any(assignment['prompt'] == canonical_prompt('native_math', reading_stage=stage, reading_protocol=rules,
@@ -2089,7 +2106,10 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     final = any(r['assignment_id'] == identifier for r in records.get('value_review', {}).values())
     refresh = (final and prior.get('subject', {}).get('kind') == 'problem'
                and _is_problem_refresh(records, artifacts, prior, previous))
-    if not refresh and (final or not bar_sources.pending(previous, state['output'])):
+    part = review_problem_parts.find_stage(previous) == 'part'
+    if part:
+        review_problem_parts.validate_part_output(previous, state['output'])
+    if not refresh and (final or not part and not bar_sources.pending(previous, state['output'])):
         raise ResearchError('review_resampling_forbidden', 'A final phase assessment cannot be continued or sampled again')
     if 'source_inventory' not in previous:
         raise ResearchError('review_source_continuation_mismatch', 'A legacy packet has no immutable source-request inventory')
@@ -2127,6 +2147,18 @@ def _find_problem_refresh_parent(records, artifacts, value):
     return prior['id'] if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])) else None
 
 
+def _initial_size_failure(records, prior, value):
+    """A failed initial problem result whose adapter rejected every request before starting its CLI."""
+    if (prior.get('context') or prior['route_id'] != value['route_id']
+            or any(normalized_text(prior[key]) != normalized_text(value[key]) for key in ('reviewer_id', 'author_id'))
+            or not has_ended_without_output(records, prior['id'])):
+        return False
+    attempts = [attempt for attempt in records.get('review_attempt', {}).values() if attempt['assignment_id'] == prior['id']]
+    return all(attempt.get('origin') == 'instrumented' and attempt['status'] == 'failed'
+               and (attempt.get('error') or {}).get('code') == 'review_input_too_large'
+               and attempt.get('response') is None and attempt.get('output') is None for attempt in attempts)
+
+
 def _initial_slot(records, artifacts, value):
     slots = {}
     for prior in records.get('review_assignment', {}).values():
@@ -2138,6 +2170,9 @@ def _initial_slot(records, artifacts, value):
     replaceable = []
     for identifier, members in slots.items():
         if any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id']) for prior in members):
+            if (value['role'] == 'result' and value.get('subject', {}).get('kind') == 'problem'
+                    and all(_initial_size_failure(records, prior, value) for prior in members)):
+                return identifier
             raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; record its observed output, or invoke its assignment again after a refusal')
         replaceable_members = True
         for prior in members:
@@ -2343,6 +2378,14 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                      'author_id': value['author_id'], 'slot_id': slot_identifier, 'subject': value['subject'], 'role': value['role']})
             packet.pop('digest', None)
             packet['digest'] = digest(packet)
+        packet = review_problem_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history)
+        if review_problem_parts.find_stage(packet) is not None:
+            prompt = canonical_prompt(value['role'], orchestration='problem_creation', excerpts=True,
+                                      evidence_parts=review_problem_parts.find_stage(packet))
+            if 'prompt_hash' in packet.get('problem_refresh', {}):
+                packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
+                packet.pop('digest')
+                packet['digest'] = digest(packet)
         record = dict(value, packet=_put_json(artifacts, packet), packet_digest=packet['digest'],
                       prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'], route_digest=digest(route),
                       context_state=route_state(records, artifacts, value['route_id']), assignment_policy=POLICY,
@@ -2443,7 +2486,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
     result = _invoke_once(store, payload, 'review.invoke', start, finish,
                           expected_revision=expected_revision, request_id=request_id, credential=credential)
     assignment = store.snapshot()['records']['review_assignment'][payload['assignment_id']]
-    if assignment['role'] == 'native_math':
+    if (assignment['role'] == 'native_math' or assignment['prompt'].get('parameters', {}).get('evidence_parts')
+            == review_problem_parts.PROTOCOL + '/part'):
         from .review_refusal import record_native_refusal
         record_native_refusal(store, assignment['id'], request_id=request_id)
         refusal = store.snapshot()['records'].get('review_output_refusal', {}).get(payload['id'])
@@ -2522,6 +2566,11 @@ def _assignment_state(records, artifacts, assignment_id):
                  reviewer_id=assignment['reviewer_id'], dossier_id=assignment['dossier_id'], role=assignment['role'],
                  stage=assignment['role'], packet_digest=assignment['packet_digest'], prompt_hash=assignment['prompt_hash'],
                  output=None, output_digest=None, attempt_id=None, refused_attempts=[])
+    if 'evidence_parts' in assignment['prompt'].get('parameters', {}):
+        packet = _read_json(artifacts, assignment['packet'])
+        if review_problem_parts.find_stage(packet) is not None:
+            state[review_problem_parts.KEY] = {key: packet[review_problem_parts.KEY][key]
+                                             for key in ('series_assignment_id', 'stage', 'turn')}
     events = [event for event in records.get('review_context_event', {}).values()
               if event['assignment_id'] == assignment_id and event['kind'] == 'contamination']
     if assignment['context_state']['context_status'] != 'verified_for_route':

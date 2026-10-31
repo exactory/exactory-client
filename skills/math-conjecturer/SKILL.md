@@ -606,8 +606,14 @@ states the exact rule.
    assessment with its references resolved, the attempt and the cited results, the citations,
    the readings with their inline passages, the computations, the formal checks, and every
    applicable objection. Run the assignment with `review-run` and record the observed review
-   with `value-review`. Replace a recorded version 1 result review, which has no rubric grades,
-   before the post (`problem_rubric_review_required`). When the gate or `next` lists
+   with `value-review`. When the result packet does not fit one input of the route, the harness
+   delivers the problem evidence in parts: the assignment becomes part turn 1 of a series, and
+   its run returns notes with `phase: "evidence_part"` instead of a review. Continue each part
+   turn with a new assignment of the same role, route and reviewer and
+   `context: {prior_assignment_id}`, as in step 4, until a turn returns the review; `next` lists
+   `problem_evidence_part_pending` while a part turn waits, and `value-review` records only the
+   turn that returned the review. Replace a recorded version 1 result review, which has no rubric
+   grades, before the post (`problem_rubric_review_required`). When the gate or `next` lists
    `problem_rubric_regrade_required`, the self-assessment named in `assessment_id` or the result
    reviews named in `review_ids` were graded without A7: record a new self-assessment that
    grades A7 when one is named, and assign the result role again to the reviewer of each named
