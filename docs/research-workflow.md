@@ -128,8 +128,14 @@ A render never changes a command's result. When it fails or falls behind,
 `output_views_stale`: its `reason`, the failing `path` and `error` when known,
 and the `action` `exactory-research export --kind outputs`, which renders both
 folders again. `search status` and `search next` of the math-solver controller
-carry the same advisory with the action `exactory-math search render`. No gate
-reads it, and it never replaces the scientific next action.
+carry the same advisory with the action `exactory-math search render` and the
+controller's own reasons ([Filesystem service and
+CLI](../skills/math-solver/SEARCH.md#filesystem-service-and-cli)). One of them,
+`reserved_controller_root_name`, is not repaired by the action: the controller
+root is named `deliveries`, the name of the folder of the delivered attempts and
+closures, so the harness renders nothing for that root; create the controller
+root under another name. No gate reads it, and it never replaces the scientific
+next action.
 
 ## Problem creation milestones
 

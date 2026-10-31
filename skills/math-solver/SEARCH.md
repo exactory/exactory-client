@@ -2079,9 +2079,21 @@ nonempty. Neither is a persisted event field. Both carry `advisories` only while
 the output views ([Locked command construction and recoverable
 projections](#locked-command-construction-and-recoverable-projections)) do not
 show the current revision under the installed plugin version: a list with one
-entry `{code: "output_views_stale", action: "exactory-math search render", path,
-error, rendered_revision, revision}`. The key is absent when the views are
-current. No gate reads it, and the action `kind` of `next` is unchanged.
+entry `{code: "output_views_stale", action: "exactory-math search render",
+reason, path, error, rendered_revision, revision}`, the fields of the research
+harness's advisory without its `explanation`; a field that does not apply to the
+reason is null. The `reason` is the first of these that applies:
+`reserved_controller_root_name` (the controller root is named `deliveries`, and
+nothing is rendered for it; `path` is the controller root), `render_failed` (the
+last render failed; `path` and `error` are those of that render),
+`not_rendered` (no render has succeeded, or the marker is missing or
+unreadable), `plugin_changed` (the views were rendered under another plugin
+version), `history_changed` (the event document no longer holds the event that
+the marker recorded at the rendered revision) or `behind` (the rendered revision
+is lower than the current one). `rendered_revision` is the marker's revision (0
+for `not_rendered`), null for the reserved name; `path` and `error` are null for
+the last four reasons. The key is absent when the views are current. No gate
+reads it, and the action `kind` of `next` is unchanged.
 
 ### Workspace discovery and session ownership
 
@@ -2643,14 +2655,19 @@ missing or corrupt one is listed by digest with its reason. A failed render neve
 changes the command's result: it prints one stderr line, `Output views were not
 rendered (<code>: <message>); the command's result stands. Run exactory-math
 search render after fixing the cause.`, records the failure in the marker, and
-`status` and `next` report `output_views_stale` under `advisories`. `search
-render` goes through the mutating path and renders the views too. A file in the
-way that the renderer does not own, with other bytes, stops the render with
-`output_view_conflict` until it is moved. A controller root named `deliveries`
-directly under the workspace root would share `final/math/deliveries/` with the
-research harness's deliveries, so the renderer writes nothing for it and the
-advisory carries the reason `reserved_controller_root_name`; give the controller
-root another name. `final/math/<rel>/index.json` lists the
+`status` and `next` report `output_views_stale` with the reason `render_failed`
+under `advisories` until a render succeeds. `search render` goes through the
+mutating path and renders the views too. A file in the way that the renderer
+does not own, with other bytes, stops the render with `output_view_conflict`
+until it is moved. A controller root named `deliveries` directly under the
+workspace root would share `final/math/deliveries/` with the research harness's
+deliveries, so the renderer writes no view, no marker and no warning for it,
+`search render` included, and the advisory carries the reason
+`reserved_controller_root_name` with the controller root as `path`. The repair is
+another name for the controller root, chosen with `--attack-root DIR` when
+`search init` runs (the default is `attack`); the records of a root with the
+reserved name stay valid, and a controller command still renders the common
+store's own views. `final/math/<rel>/index.json` lists the
 files of both final trees with their kind, id and status, the unowned files, and
 `adoptions`: `{review_id, assignment_id, adopting_record}` for every native
 review whose attestation is an observed assignment. The research harness renders
