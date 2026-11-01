@@ -18,6 +18,15 @@ PROMPT = (
 )
 
 
+def find_scientific_predecessor(assignment):
+    """Follow a fixed scientific slot across continuations, repairs and upgrades."""
+    context = assignment.get('context', {})
+    repair = context.get('context_repair')
+    if isinstance(repair, dict):
+        return repair.get('assignment_id')
+    return context.get('prior_assignment_id') or context.get('staged_upgrade', {}).get('assignment_id')
+
+
 def lineage_packets(records, artifacts, assignment_ids):
     pending, seen, result = list(assignment_ids), set(), []
     while pending:
@@ -28,13 +37,19 @@ def lineage_packets(records, artifacts, assignment_ids):
         assignment = records.get('review_assignment', {}).get(identifier)
         if assignment is None:
             raise ResearchError('review_record_missing', 'The exact evidence-supplying assignment is missing')
+        if assignment.get('staged_review') is not None:
+            from .direction_reviews import collect_selected_task_graph
+            graph = collect_selected_task_graph(records, artifacts, identifier)
+            result.extend(packet for _, packet in graph['packets'])
+            if graph.get('frame_packet') is not None:
+                result.append(graph['frame_packet'])
+            # Replacement reviewers must read independently; predecessor packets
+            # retained as scientific history do not supply fresh reading credit.
+            continue
         from .review_protocol import source_delivery_packet
         packet = source_delivery_packet(records, artifacts, assignment)
         result.append(packet)
-        parent = assignment.get('history_assignment_id') or assignment.get('context', {}).get('prior_assignment_id')
-        repair = assignment.get('context', {}).get('context_repair')
-        if parent is None and isinstance(repair, dict):
-            parent = repair.get('assignment_id')
+        parent = assignment.get('history_assignment_id') or find_scientific_predecessor(assignment)
         if parent is None and assignment['role'] == 'slate' and assignment.get('session_id') != identifier:
             parent = assignment.get('session_id')
         if parent is not None:
@@ -175,6 +190,8 @@ def is_received(records, reference, references, mappings, *, artifacts, frozen=F
     by offsets; another kind equal to the passage's). A raw descriptor of an artifact delivered only as passages names
     those passages, without widening their bounds."""
     artifact = reference['link']['artifact'] if reference.get('kind') == 'source' else reference
+    if packets and _is_staged_original_received(artifacts, artifact, reference, packets):
+        return True
     if (reference.get('kind') == 'source' and packets
             and _inline_passage_received(records, artifacts, packets, reference['link'])):
         return True
@@ -196,6 +213,32 @@ def is_received(records, reference, references, mappings, *, artifacts, frozen=F
                    and contains_locator(cite_passage(artifacts, mapping)['locator'], reference['link']['locator'])
                    for mapping in passages)
     return any(contains(cite_passage(artifacts, mapping), reference['link'], records) for mapping in passages)
+
+
+def _is_staged_original_received(artifacts, artifact, reference, packets):
+    """Credit the union of exact delivered spans without widening a citation."""
+    from .review_staged import interval_gaps, make_source, materialize_quotation
+    source_id = 'artifact:' + digest(artifact)
+    originals = [row for packet in packets for row in packet.get('staged_review', {}).get('originals', [])
+                 if row.get('span', {}).get('source_id') == source_id]
+    if not originals:
+        return False
+    try:
+        content = artifacts.read(artifact).decode('utf-8')
+        source = make_source(source_id, 'artifact', content, identity={'artifact': artifact}, descriptor=artifact)
+        spans = [row['span'] for row in originals
+                 if materialize_quotation(source, row['span'])['text'] == row.get('text')]
+        locator = reference.get('link', {}).get('locator')
+        if locator is None:
+            required = [[0, len(content)]]
+        elif locator.get('kind') in ('text', 'span'):
+            required = [[locator['start'], locator['end']]]
+        else:
+            # Other native locators need their existing full-body or mapping contract.
+            return False
+        return not interval_gaps(required, [[span['start'], span['end']] for span in spans])
+    except (ResearchError, UnicodeError, KeyError, TypeError, ValueError):
+        return False
 
 
 def cite_passage(artifacts, mapping):
@@ -256,10 +299,12 @@ def undelivered_references(records, artifacts, evidence, carried, references, ma
 def adjudicator_undelivered_references(records, artifacts, assignment_id, evidence, *, frozen=False):
     """Check the adjudicator's actual packet delivery, including its focused refresh/correction ancestry."""
     from .review_protocol import collect_carried_records
-    packets = lineage_packets(records, artifacts, [assignment_id]) if frozen else None
+    staged = records['review_assignment'][assignment_id].get('staged_review') is not None
+    packets = lineage_packets(records, artifacts, [assignment_id]) if frozen or staged else None
     carried = collect_carried_records(records, artifacts, assignment_id, packets=packets)
     references, mappings = supplied_context(records, artifacts, [assignment_id], frozen=frozen)
-    return undelivered_references(records, artifacts, evidence, carried, references, mappings, frozen=frozen)
+    return undelivered_references(records, artifacts, evidence, carried, references, mappings, frozen=frozen,
+                                  packets=packets if staged else ())
 
 
 def validate_correction(records, artifacts, evidence, references, mappings):

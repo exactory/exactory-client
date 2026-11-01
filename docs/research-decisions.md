@@ -572,8 +572,8 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-lead` | Versioned discrepancy provenance and research disposition. |
 | `review-route` | Actual route and versioned configuration. |
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
-| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. |
-| `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. |
+| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result or adjudicator packet that does not fit one input opens a staged review when its scale preflight admits the slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
+| `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a staged task: the owned worker's call, its committed capture and its acceptance. |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |
 | `review-adjudication` | Evidence-bound disposition of a specific objection or correction. |
@@ -642,6 +642,16 @@ refused. In a reading chain the turn then counts as ended without output: the
 same assignment can run again, and a turn after the first can be replaced by
 assigning the next turn again with the same `prior_assignment_id`. A blank
 request ID is refused before the call (`invalid_input`).
+
+From 0.70.0, shared store and route capacity counts only calls with a
+`review_pool_membership` that have not been released. Calls started by 0.69.x
+have no membership and do not count, including probes and corrections. An open
+ordinary invocation still blocks its own assignment until a same-ID attempt
+exists; the `review-attempt` procedure above remains available for it. An import
+under an owned invocation ID is refused until termination is confirmed.
+Historical reconciliation with a same-ID attempt records `historical_closed`,
+an unknown outcome and no termination proof. A historical call still running
+during upgrade can temporarily run alongside the configured capacity.
 
 A route pins the adapter runtime it was recorded with: the adapter's controls,
 its input contract and the SHA-256 of its module, and for a Codex route also the
@@ -989,10 +999,212 @@ a first packet does not fit one input, and it stays in parts after a changed
 evidence digest or a refresh, also when the new evidence fits. A session that
 is not a series delivers the whole evidence in one request, as before.
 
-Three parts are deferred. The problem adjudicator's packet carries the full
-problem evidence and is not delivered in parts; an adjudication of either
-record needs the same mechanism in a later release. A context repair of a
-part series is refused (`review_context_repair_history_unrecorded`). Repeated
-records inside a series, for example the search records that both
-`openness_searches` and `assessment_evidence` carry, are delivered under each
-index.
+Since 0.70.0 this delivery serves only a session that is already a series. A
+first result request that does not fit one input, a focused adjudication or a
+context repair that does not fit, and a session that an explicit upgrade
+moves, are staged reviews, described in the next section. A context repair of
+a part series keeps its part turns as intermediate outputs in the scientific
+history. Repeated records inside a series, for example the search records that
+both `openness_searches` and `assessment_evidence` carry, are still delivered
+under each index.
+
+## Staged problem reviews
+
+A problem result review or a focused adjudication whose request does not fit
+one input of a local route, or whose fitted request would withhold an
+evidence body, is performed in stages since 0.70.0. The design, its reviews
+and the owner's direction are recorded in
+`misc/harness-improvement/20261031190348-part-delivery-quality-equivalence` of
+the exactory repository, and the
+[CLI reference](research-cli.md#staged-problem-reviews) states the commands,
+the records and the codes. This section states the contract that the
+reviewer's delivery and the harness's checks keep.
+
+One frozen epoch, fresh inputs. The review is one epoch: a frozen record of
+the subject, the evidence currency, the slot, the reviewer, the route, the
+author and the budgets, with a manifest that names every source (each frame
+field, item and artifact body as text, with its length and the SHA-256 of its
+bytes), every occurrence of the evidence lists with the bodies it owns, every
+claim of the frame with the context it needs, and the inherited material
+objections. The work is tasks: frame, read, combine, original check,
+integrate, answer and final. Each task is one call with an empty history. What
+earlier tasks established reaches a task only as records in its packet, which
+the harness built from accepted outputs: the compact cards, the receipts and
+the findings. The reviewer compresses the sources, not the author: a card
+states what one original establishes, under which conditions, with the
+decisive statements quoted character for character, and the harness binds
+every quotation to its span in the source or gives the record that carries it
+no credit. The originals are read again at an original check and can be
+requested again at integration and at the final, so a summary never replaces
+a reading that a question needs. The reviewer texts of every task type were
+written for this release and are the constants of
+`research_harness/review_staged_prompts.py`.
+
+The harness plans, the operator runs. The harness freezes the frame tasks
+when it records the controller and plans every later task from the accepted
+outputs: it partitions the originals by claims and by spans so that each task
+fits the route's input limit, its output budget and its running time, places
+the compact cards together when they fit and otherwise in blocks that meet
+pairwise, plans one original check per selected combination, the rereads that
+a task requests, the integration, the final and, when the final does not fit,
+the answer pages. The operator follows `next`: a planning command that
+assigns the next task, the run of that task, and at the end the recording of
+the review. No step asks the operator to build a task, and no step repeats a
+call whose outcome the record already holds.
+
+Scale that the task contracts cannot carry. The contracts of this release
+require one full card to judge every claim of the epoch and later tasks to
+carry every claim id and context root. Before an epoch is frozen, the harness
+measures that envelope against the route's input limit and the smallest such
+card against the output allowance (`max_output_tokens` minus the planner's
+margin). A slot that cannot fit is not staged, and nothing is written.
+Automatic entry then keeps the delivery of 0.69.18: a result slot in parts from
+part turn 1, a focused adjudication or a context repair with its ordinary
+packet. An explicit `staged_upgrade` of such a slot is refused with
+`review_staged_scale_unsupported`, whose details carry `claims`, `occurrences`,
+`envelope_characters`, `input_limit`, `card_output_tokens` and
+`output_allowance`, so the operator can see which bound was exceeded and by how
+much. The measured shape that met this limit, 15,389 frame leaves and 106
+occurrences of one record, is in the
+[0.70.0 release note](releases/0.70.0.md#known-limits); the design for that
+scale is section 19 of the design record and is planned for a later release.
+
+Raw observations and effective results. The harness keeps two interfaces
+apart. The raw observation of a task is the exact object that the call
+returned, with the digests of its request, response and output and its
+instrumented provenance; authentication, refusal classification and output
+correction read it and nothing else. The effective result of the review is the
+scientific object assembled from the accepted tasks: the review that an
+ordinary staged final returned beside its staged records, or the pages and the
+terminal of a paged final assembled under their composition root. Recording,
+the independence check, coverage, objection processing, context repair and the
+export read the effective result. `value-review` and `review-adjudication`
+record it exactly and write its binding on the record (`effective_binding`:
+the kind, the effective output digest, the composition version and root, the
+selected observations root, the completion root, the terminal attempt and its
+raw output digest), so a later check can tell whether the effective result
+still selects the same accepted work. An ordinary review is the identity
+case: its raw output is its effective result.
+
+The composition root. When the final does not fit one input, the text fields
+of the review are written in answer pages and its scalar choices in one
+terminal task. Each page owns exact fields or string ranges: one owner per
+field, lists by frozen ordinals and stable keys, string segments joined in
+order without added characters, empty lists explicit, no overlapping or missing
+range, and a revision names the exact page it replaces. The composition root is
+the digest of the ordered page set together with the epoch, the role, the
+subject, the currency, the slot, the schema, the ownership plan, the selected
+observations root, the integration root and the findings. The terminal
+authorizes that root and chooses only the scalar values that the completed
+record permits: the value status, the five assurance statuses and the rubric
+grades of a result review, or the disposition and the correction admissibility
+of an adjudication. The effective result is assembled from the pages and the
+authorized choices. A page or a terminal is never read as the review on its
+own, and a correction of a raw page invalidates the root and needs a new
+authorization. A page's grounds are checked against what its task received:
+a quotation lies inside the delivered spans and matches the source, and a
+record ground is the exact accepted, resolved record that the packet carried.
+When a final task returned a complete review that the route could not carry
+whole, the pages are planned from that observed output, and each page copies
+its owned fragments; the planner synthesizes no scientific text.
+
+Coverage across the task graph. The post gate's result coverage check reads
+the accepted task graph of the epoch: the actual packet of every accepted
+task, authenticated against its frozen request and its committed capture. The
+completion check must be complete, and the frozen packet must carry the
+current evidence digest. The completion report (`exactory-review-completion-v2`)
+states each kind of missing work once: the exact count of its rows, the digest
+of the exact sorted set and at most 20 examples. Completeness is decided from
+the exact set, which `iter_completion_issues` reads row by row, never from the
+examples. An entry of a material objection that no accepted observation has
+delivered yet is `review_objection_evidence_pending`; an entry delivered with
+the wrong digest is `review_objection_evidence_invalid`. Every frame field,
+item and owned body must have reached a task as exact text, and the check
+records that coverage per source.
+The guarantee is this: every item of the current evidence reached the reviewer
+in an authenticated task of the epoch; every claim of the frame was judged
+against every unit in a cell with a grounded reason or an explicit unresolved
+status; every selected combination was checked against its originals; every
+condition and conclusion of a full card was accounted for at integration,
+each resolved from its own grounds and dependencies; a condition the reviewer
+marked unsatisfied blocks every assurance that depends on it; every claim,
+condition and unresolved item that a frame task returned entered the claim
+graph and was answered; and the final's choices agree with that record. The
+limit is this: the checks establish shape, identity, delivery and quotation,
+not scientific truth. Whether a staged review finds what a single-input review
+finds is the subject of the measurement below.
+
+Joint and segmented scope. Every cell and every combination states the scope
+in which it was judged. `joint_original` means that the whole unit, every
+owned body, the claim and its context were in one input together.
+`segmented_original` means a reconciliation over segments read in separate
+tasks; it never counts as joint presence. `joint_card` means that the compact
+cards were in one input together, and `segmented_card` a reconciliation over
+card segments, used for a pair of cards that fit alone but not together.
+`unresolved` means that no input could hold the scope the judgment needs. A
+reviewer makes no statement about the whole of a source it saw in part; the
+question goes to `unresolved` with the segment or the unit that must settle
+it. The record therefore says, for every judgment, what the reviewer had in
+front of it. When a reviewer finds that a claim needs a span it did not have,
+the harness records a new version of that claim's context, plans the work
+again under the current version, and keeps the superseded task in the record
+as history; a judgment made under an older context does not stand for the
+current one.
+
+Completion without dead ends. A staged review ends in one of two outcomes, and
+the harness names the next step in every state between. The complete outcome
+is the effective result. The incomplete outcome, `assessment_incomplete`, is a
+distinct record: it occupies the slot, names the unresolved scope (each entry
+with its claims, units or decision, its cause, the decisions it blocks, the
+tasks that tried it, the scope of the last attempt, and the research or
+recovery work that would finish it), keeps the earlier adverse findings in
+force, and states no status, grade or disposition. It is not a negative
+review, and the gate does not ask for an unrelated second reviewer in its
+place. It has two origins. A reviewer returns it when a required assessment
+cannot be completed from the evidence that reached the epoch and no rereading
+within the bound of two rereads of an unchanged question can complete it. The
+harness records it when the execution is exhausted: two attempts per task,
+one identical retry after a refused output and then a smaller task, a bounded
+number of subdivisions, calls and reread rounds, a day of elapsed time, an
+unknown outcome of a worker that died before its capture, a binary original
+that the route cannot deliver, or a frame that no call can carry. One
+reviewer call runs at a time by default, counted together with the ordinary
+reviewer calls, probes and corrections of the store; a worker has 60 seconds to
+bind its process identity to its reservation, and a handshake that does not
+complete leaves the reservation to be reconciled
+(`review_worker_reconciliation_required`), never a lost call; a worker's
+capture is the committed observation; an acceptance resumes after an
+interruption without a second call; and no result is ever reconstructed from a
+file. `next` lists the
+exact command for executable work and the research that addresses
+incompleteness, and never a repeat of an exhausted call. A new assessment of
+the slot is an authorized successor epoch, which installs a pending slot
+before any call, inherits the adverse findings of the earlier epoch, and is
+bounded to two epochs for one evidence currency, so an earlier favorable
+review cannot keep the slot ready and an exhausted scope cannot be retried
+without new evidence.
+
+What is measured and what is projected. Measured on frozen copies of the two
+records (serialized planner counts, not request lengths): 401 occurrences and
+2,357,491 characters of items and bodies for the unknotting record at revision
+854; 169 occurrences and 4,412,891 characters with bodies counted once for the
+KMP record at revision 745, whose largest unit is 921,500 characters; ten
+reported Opus max part turns lasted 689.8 to 1,099.6 seconds, 885.5 on
+average. Projected under stated assumptions (twenty claims per occurrence,
+500,000 characters of originals per read task, 40,000 output characters and
+600-character compact cards): 18 to 56 calls per slot for the unknotting
+record and 17 to 29 for the KMP record, 7.63 serial hours for an unknotting
+slot at the Opus max mean and 2.71 hours with four concurrent calls. None of
+these projections was run. The sizing profiles of this release are bootstrap
+estimates that the observed usage of each route refines; they carry the
+calibration version `unqualified-planning-v1` and qualify nothing. The
+measurement that would establish equal quality (a paired comparison of the
+same reviewer on evidence that fits one input, once as one input and once
+forced into stages; option A for calibration, then option C with 150 held-out
+fixtures, where a staged incomplete outcome counts as a regression when the
+single-input review reaches a correct required assessment) has not run. Until
+it passes for a configuration, no equal-quality claim is made, and the staged
+mode decides no posting (`review_quality_measurement_pending`). The
+full-history validation of the store on every authoritative read is unchanged,
+measured at 2.041 seconds for the unknotting copy and 1.707 for the KMP copy,
+so no history-independent command latency is claimed.

@@ -25,6 +25,40 @@ def _runtime_fingerprint(records, artifacts):
         return None
 
 
+def _fingerprint_selection(records, identifier, kind):
+    """Bind reuse to this controller's epoch, task generations and selected roots."""
+    if kind == 'adjudication':
+        identifier = records.get('review_adjudication', {}).get(identifier, {}).get('assignment_id', identifier)
+    assignment = records.get('review_assignment', {}).get(identifier, {})
+    binding = assignment.get('staged_review', {})
+    epoch_id = binding.get('epoch_id')
+    controller_id = binding.get('controller_assignment_id', identifier)
+    epoch = records.get('review_epoch', {}).get(epoch_id, {})
+    scope = dict(binding=binding, selection=records.get('review_selection', {}).get(controller_id),
+                 epoch=epoch.get('digest'), head=records.get('review_slot_head', {}).get(epoch.get('slot_id')))
+    if epoch_id is not None:
+        scope['composition_plans'] = [(key, digest(row)) for key, row in
+                                      records.get('review_composition_plan', {}).items()
+                                      if row.get('epoch_id') == epoch_id]
+        scope['tasks'] = [(row['id'], row.get('generation'), row.get('task', {}).get('digest'))
+                          for row in records.get('review_task', {}).values() if row.get('epoch_id') == epoch_id]
+        scope['execution'] = [records.get('review_task_execution', {}).get(row[0]) for row in scope['tasks']]
+        scope['reservations'] = [(row['id'], row.get('generation'), row.get('state'), row.get('released'))
+                                 for row in records.get('review_reservation', {}).values() if row.get('epoch_id') == epoch_id]
+        scope['accepted'] = [(key, digest(row['receipt'])) for key, row in
+                             records.get('review_task_acceptance', {}).items()
+                             if row['receipt'].get('staged_observation', {}).get('epoch_id') == epoch_id]
+        scope['incomplete'] = [row['digest'] for row in records.get('assessment_incomplete', {}).values()
+                               if row.get('epoch_id') == epoch_id]
+        children = {row['id'] for row in records.get('review_assignment', {}).values()
+                    if row.get('staged_review', {}).get('epoch_id') == epoch_id}
+        scope['corrections'] = [digest(row) for row in records.get('review_output_correction', {}).values()
+                                if row.get('assignment_id') in children]
+        scope['context_events'] = [digest(row) for row in records.get('review_context_event', {}).values()
+                                  if row.get('assignment_id') in children]
+    return digest(scope)
+
+
 def evaluate_state(records, artifacts, kind, identifier, compute):
     """Run native checks or return an isolated copy of their exact prior result."""
     evaluation = Evaluation.of(records, artifacts)
@@ -36,6 +70,14 @@ def evaluate_state(records, artifacts, kind, identifier, compute):
     try:
         before = _runtime_fingerprint(evaluation.records, evaluation)
         key = (kind, identifier, before)
+        if kind in ('assignment', 'adjudication'):
+            assignment_id = (evaluation.records.get('review_adjudication', {}).get(identifier, {}).get('assignment_id', identifier)
+                             if kind == 'adjudication' else identifier)
+            assignment = evaluation.records.get('review_assignment', {}).get(assignment_id, {})
+            if (assignment.get('staged_review') or {}).get('epoch_id') is not None:
+                # Mutable selected roots invalidate staged states within one
+                # view; native states retain their original cache key.
+                key += (_fingerprint_selection(evaluation.records, identifier, kind),)
         if before is not None and key in scope['values']:
             return copy.deepcopy(scope['values'][key])
         result = compute(evaluation.records, evaluation, identifier)

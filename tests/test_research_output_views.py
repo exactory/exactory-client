@@ -32,6 +32,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 FORWARDER_KIND_ARGUMENTS = {"immutable_record": 1, "_member": 4, "finish_intent": 2, "deliver_snapshot": 3}
 FORWARDING_WRITERS = {("acquisition.py", "_member"), ("attempt_delivery.py", "deliver_snapshot"),
                       ("attempt_delivery.py", "deliver_snapshot.prepare"), ("operations.py", "prepared_mutation.apply"),
+                      ("operations.py", "prepared_task_mutation.apply"),
                       ("remote.py", "_finish_intent_once.prepare")}
 
 
@@ -194,6 +195,159 @@ class ViewCase(unittest.TestCase):
     def review(self, identifier, assignment_id, stage="bar"):
         self.put(("value_review", identifier, {"id": identifier, "assignment_id": assignment_id, "dossier_id": None,
                   "payload": {"stage": stage}, "recorded_revision": self.store.revision + 1}))
+
+
+class StagedOutputViewTests(ViewCase):
+    def test_each_staged_lifecycle_kind_renders_after_its_commit(self):
+        from test_research_problem_delivery import build_staged_delivery
+        frozen, _, _, outcome = build_staged_delivery()
+        rows = (
+            ("review_epoch", "epoch", frozen),
+            ("review_task", "task", {"id": "task", "epoch_id": frozen["id"]}),
+            ("review_capacity_policy", "store", {"store_limit": 1, "route_limits": {}}),
+            ("review_execution_plan", "plan", {"id": "plan", "task_id": "task"}),
+            ("review_reservation", "reservation", {"id": "reservation", "plan_id": "plan", "state": "captured"}),
+            ("review_pool_membership", "reservation", {"reservation_id": "reservation", "active": True}),
+            ("review_task_execution", "task", {"task_id": "task", "state": "captured"}),
+            ("review_observation", "reservation", {"id": "reservation", "observation": {"status": "completed"}}),
+            ("review_task_acceptance", "reservation", {"reservation_id": "reservation", "receipt": {"accepted": True}}),
+            ("review_task_acceptance_index", "task", {"reservation_id": "reservation"}),
+            ("review_epoch_discoveries", "epoch", {"acceptance_ids": ["reservation"]}),
+            ("review_resource_ledger", "epoch", {"epoch_id": frozen["id"], "calls": 1}),
+            ("review_execution_exhaustion", "limit", {"epoch_id": frozen["id"], "reason": "max_calls"}),
+            ("review_capture_attempt", "attempt", {"reservation_id": "reservation", "attempt_id": "attempt"}),
+            ("review_task_refusal", "reservation", {"reservation_id": "reservation", "task_id": "task",
+                                                    "code": "invalid_review_staged"}),
+            ("review_task_repair", "task", {"task_id": "task", "epoch_id": frozen["id"],
+                                            "child_ids": ["replacement"]}),
+            ("review_slot_head", "A", {"slot_id": "A", "epoch_id": frozen["id"], "state": "incomplete"}),
+            ("review_task_dispatch", "dispatch", {"id": "dispatch", "task_id": "task"}),
+            ("review_composition_plan", "composition", {"id": "composition", "epoch_id": frozen["id"]}),
+            ("assessment_incomplete", "outcome", outcome),
+        )
+        self.put(("configuration", "views", {"enabled": True}))
+        self.render()
+        for kind, key, value in rows:
+            with self.subTest(kind=kind):
+                record = (value if kind in ("review_epoch", "assessment_incomplete")
+                          else dict(value, recorded_revision=self.store.revision + 1))
+                self.put((kind, key, record))
+                result = self.render()
+                folder = "final" if kind == "assessment_incomplete" else "intermediate"
+                tree = "reviews/incomplete/" if folder == "final" else "reviews/staged/" + kind + "/"
+                relative = tree + key + ".json"
+                self.assertEqual(self.read_json(folder + "/" + relative), record)
+                expected = {"path": relative, "type": "view", "kind": kind, "id": key,
+                            "recorded_revision": record.get("recorded_revision")}
+                if folder == "final":
+                    expected["status"] = "incomplete"
+                self.assertEqual(self.find_entry(folder, relative), expected)
+                self.assertEqual(result["errors"], 0)
+                self.assertEqual(output_views.read_rendered_revision(self.store), self.store.revision)
+
+    def test_staged_series_distinguishes_raw_terminal_effective_result_and_incomplete(self):
+        from research_harness import review_protocol
+        from test_research_problem_delivery import build_staged_delivery
+        frozen, assignment, state, outcome = build_staged_delivery()
+        self.put(("review_assignment", assignment["id"], dict(assignment, dossier_id=None)),
+                 ("review_epoch", frozen["id"], frozen), ("assessment_incomplete", outcome["id"], outcome))
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            self.render()
+        folder = "intermediate/reviews/result/assignment-A/"
+        series = self.read_json(folder + "series.json")
+        turn = series["turns"][0]
+        self.assertEqual(turn["effective"]["kind"], "incomplete")
+        self.assertEqual(turn["raw_output_digest"], digest(state["raw_output"]))
+        self.assertNotIn("effective_output", turn["effective"])
+        entry = next(item for item in self.read_json("final/index.json")["files"] if item["kind"] == "assessment_incomplete")
+        self.assertEqual(entry["status"], "incomplete")
+        scientific = {"stage": "result", "value": {"reason": "Only prime inputs are supported."}}
+        state["effective"] = {"kind": "paged", "effective_output": scientific,
+            "effective_output_digest": digest(scientific), "composition_root": "root"}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            output_views.render_all(self.store)
+        turn = self.read_json(folder + "series.json")["turns"][0]
+        self.assertEqual(turn["effective"]["effective_output_digest"], digest(scientific))
+        self.assertEqual(self.read_json(folder + "01-assignment-A.effective.json"), scientific)
+
+    def test_a_pending_staged_successor_moves_the_prior_result_to_history(self):
+        from research_harness import review_protocol
+        from test_research_problem_delivery import build_staged_delivery
+        frozen, assignment, state, _ = build_staged_delivery()
+        self.assign("old", role="result", slot="A")
+        self.review("old-review", "old", stage="result")
+        self.put(("review_assignment", assignment["id"], dict(assignment, dossier_id=None,
+                    context={"prior_assignment_id": "old"}, recorded_revision=self.store.revision + 1)),
+                 ("review_epoch", frozen["id"], frozen))
+        state.update(effective={"kind": "pending"}, raw_output=None)
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            self.render()
+        self.assertFalse((self.root / "final/reviews/result/old-review.json").exists())
+        self.assertTrue((self.root / "final/history/reviews/result/old-review.json").exists())
+
+    def test_staged_tasks_share_the_controller_series_and_old_incomplete_is_historical(self):
+        from research_harness import review_protocol
+        from test_research_problem_delivery import build_staged_delivery
+        frozen, assignment, state, outcome = build_staged_delivery()
+        self.put(("review_assignment", assignment["id"], dict(assignment, dossier_id=None)),
+                 ("review_epoch", frozen["id"], frozen), ("assessment_incomplete", outcome["id"], outcome),
+                 ("review_slot_head", "A", {"slot_id": "A", "epoch_id": "successor", "state": "pending", "outcome": None}))
+        child = dict(assignment, id="child", dossier_id=None, recorded_revision=3,
+                     staged_review={"kind": "task", "controller_assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": "read"})
+        self.put(("review_assignment", "child", child))
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            self.render()
+        series = self.read_json("intermediate/reviews/result/assignment-A/series.json")
+        self.assertEqual([turn["assignment_id"] for turn in series["turns"]], ["assignment-A", "child"])
+        entry = next(item for item in self.read_json("final/index.json")["files"] if item["kind"] == "assessment_incomplete")
+        self.assertEqual(entry["status"], "historical")
+
+    def test_pending_adjudicator_successor_moves_the_old_disposition_to_history(self):
+        from research_harness import review_protocol
+        from test_research_problem_delivery import build_staged_delivery
+        frozen, assignment, state, _ = build_staged_delivery(role="adjudicator")
+        old = dict(assignment, id="old", recorded_revision=1, dossier_id=None)
+        self.put(("review_assignment", "old", old),
+                 ("review_assignment", assignment["id"], dict(assignment, dossier_id=None)),
+                 ("review_epoch", frozen["id"], frozen),
+                 ("review_slot_head", "A", {"slot_id": "A", "epoch_id": frozen["id"], "state": "pending", "outcome": None}),
+                 ("review_adjudication", "old-result", {"id": "old-result", "assignment_id": "old", "disposition": "not_upheld"}))
+        state.update(effective={"kind": "pending"}, raw_output=None)
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            self.render()
+        self.assertFalse((self.root / "final/reviews/adjudicator/old-result.json").exists())
+        self.assertTrue((self.root / "final/history/reviews/adjudicator/old-result.json").exists())
+
+    def test_render_lock_timeout_leaves_durable_work_and_later_render_consumes_it(self):
+        self.put(("problem_statement", "statement", {"id": "statement"}))
+        with output_views._hold_lock(self.store.root), mock.patch.object(output_views, "_RENDER_LOCK_SECONDS", 0.03, create=True):
+            started = time.monotonic()
+            result = self.render()
+            self.assertLess(time.monotonic() - started, 0.5)
+        self.assertTrue(result["deferred"])
+        self.assertEqual(result["reason"], "render_lock_timeout")
+        self.assertTrue((self.root / output_views.DIRTY_PATH).is_file())
+        self.assertEqual(output_views.find_view_advisories(self.store, self.store.revision)[0]["reason"], "render_deferred")
+        with mock.patch.object(output_views, "compute_view_model", wraps=output_views.compute_view_model) as build:
+            self.render()
+            self.render()
+        self.assertEqual(build.call_count, 1)
+        self.assertFalse((self.root / output_views.DIRTY_PATH).exists())
+        self.assertEqual(output_views.read_rendered_revision(self.store), self.store.revision)
+
+    def test_deferral_during_render_is_not_erased_by_that_render(self):
+        self.put(("problem_statement", "statement", {"id": "statement"}))
+        build = output_views.compute_view_model
+        def defer_while_building(*args):
+            with mock.patch.object(output_views, "_RENDER_LOCK_SECONDS", 0.01, create=True):
+                result = self.render()
+            self.assertTrue(result["deferred"])
+            return build(*args)
+        with mock.patch.object(output_views, "compute_view_model", side_effect=defer_while_building):
+            self.render()
+        self.assertTrue((self.root / output_views.DIRTY_PATH).is_file())
+        self.render()
+        self.assertFalse((self.root / output_views.DIRTY_PATH).exists())
 
 
 class RegistryTests(unittest.TestCase):
@@ -717,7 +871,8 @@ class RenderTests(ViewCase):
     def test_a_commit_of_other_kinds_skips_the_model(self):
         seed_journey(self)
         self.render()
-        self.put(("work", "work-1", {"id": "work-1"}), ("literature_operation", "operation-1", {"operation": "x"}))
+        self.put(("resource_account", "account-1", {"id": "account-1"}),
+                 ("literature_operation", "operation-1", {"operation": "x"}))
         with mock.patch.object(Store, "read_kinds", side_effect=AssertionError("the model was read")):
             summary = self.render()
         self.assertEqual(summary["revision"], self.store.revision)

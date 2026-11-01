@@ -80,6 +80,75 @@ class ContextRepairTests(StrategyCase):
             self.store.snapshot()['records'], 'dossier-1', 'bar')
         self.assertEqual([r['id'] for r in reviews], ['bar-a'])
 
+    def test_no_output_predecessor_binds_failed_attempt_and_preserves_prior_history(self):
+        self.probe()
+        records = copy.deepcopy(self.store.snapshot()['records'])
+        original = records['review_assignment']['assignment-bar-a']
+        failed = dict(original, id='failed', recorded_revision=original['recorded_revision'] + 1,
+                      context={'prior_assignment_id': original['id']})
+        records['review_assignment']['failed'] = failed
+        records.setdefault('review_attempt', {})['failed-call'] = dict(
+            id='failed-call', assignment_id='failed', status='failed', recorded_revision=failed['recorded_revision'] + 1,
+            origin='instrumented')
+        payload = self.payload()
+        payload['context']['context_repair']['assignment_id'] = 'failed'
+        real_state = self.protocol.assignment_state
+        def state(values, artifacts, identifier):
+            if identifier == 'failed':
+                return dict(output=None, raw_output=None, effective={'kind': 'pending'}, context_status='contaminated',
+                            attempt_id=None, obligations=[{'code': 'review_output_pending'}])
+            return real_state(values, artifacts, identifier)
+        with patch.object(self.protocol, 'assignment_state', side_effect=state):
+            prepared = self.module('review_context_repair').prepare_repair(records, self.artifacts, payload)
+        self.assertEqual(prepared['predecessor_binding']['attempt_ids'], ['failed-call'])
+        self.assertTrue(prepared['predecessor_binding']['no_output'])
+        self.assertEqual(prepared['scientific_history'][0]['observed_output']['value']['status'], 'insufficient')
+
+    def test_no_output_repair_rejects_pending_invocation(self):
+        self.probe()
+        records = copy.deepcopy(self.store.snapshot()['records'])
+        records.setdefault('review_invocation', {})['pending'] = dict(id='pending', assignment_id='assignment-bar-a')
+        self.error('review_context_repair_pending', lambda: self.module('review_context_repair').prepare_repair(
+            records, self.artifacts, self.payload()))
+
+    def test_incomplete_assessment_repair_keeps_the_occupied_slot_without_scientific_output(self):
+        self.probe()
+        records = copy.deepcopy(self.store.snapshot()['records'])
+        original = records['review_assignment']['assignment-bar-a']
+        unfinished = dict(original, id='unfinished', recorded_revision=original['recorded_revision'] + 1,
+                          context={'prior_assignment_id': original['id']})
+        records['review_assignment'][unfinished['id']] = unfinished
+        payload = self.payload()
+        payload['context']['context_repair']['assignment_id'] = unfinished['id']
+        real_state = self.protocol.assignment_state
+        def state(values, artifacts, identifier):
+            if identifier == unfinished['id']:
+                return dict(output=None, raw_output=None, effective={'kind': 'incomplete'},
+                            context_status='contaminated', attempt_id=None,
+                            obligations=[{'code': 'assessment_incomplete'}])
+            return real_state(values, artifacts, identifier)
+        with patch.object(self.protocol, 'assignment_state', side_effect=state):
+            prepared = self.module('review_context_repair').prepare_repair(records, self.artifacts, payload)
+        self.assertEqual(prepared['slot_id'], 'assignment-bar-a')
+        self.assertTrue(prepared['predecessor_binding']['no_effective_output'])
+        self.assertIsNone(prepared['scientific_history'][-1]['observed_output'])
+
+    def test_partial_series_preserves_intermediate_output_without_recording_a_final(self):
+        from research_harness import review_problem_parts as parts
+        self.probe()
+        records = self.store.snapshot()['records']
+        state = self.protocol.assignment_state(records, self.artifacts, 'assignment-bar-a')
+        notes = {'unit_notes': [{'note': 'A required condition remains unassessed.'}]}
+        state.update(output=notes, raw_output=notes, effective={'kind': 'ordinary', 'effective_output': notes})
+        packet = {parts.KEY: {'protocol': parts.PROTOCOL, 'stage': 'part'}}
+        with patch.object(self.protocol, 'assignment_state', return_value=state), \
+                patch.object(self.protocol, 'source_delivery_packet', return_value=packet):
+            prepared = self.module('review_context_repair').prepare_repair(records, self.artifacts, self.payload())
+        self.assertIsNone(prepared['scientific_history'][0]['observed_output'])
+        self.assertEqual(prepared['scientific_history'][0]['intermediate_output'], notes)
+        self.assertFalse(prepared['predecessor_binding']['no_output'])
+        self.assertTrue(prepared['predecessor_binding']['no_effective_output'])
+
     def test_later_ancestor_exposure_invalidates_the_recorded_repair_binding(self):
         self.probe()
         self.prepare()

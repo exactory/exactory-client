@@ -109,6 +109,73 @@ def _review_probe(store, payload, **identity):
 
 
 def _review_run(store, payload, **identity):
+    fields(payload, (), None)
+    if payload.get("action") == "reconcile" and "invocation_id" in payload:
+        from .review_task_execution import reconcile_call
+        fields(payload, ("action", "operation", "invocation_id"))
+        return reconcile_call(store, {key: payload[key] for key in ("operation", "invocation_id")}, **identity)
+    if "task_id" in payload:
+        records = store.snapshot()["records"]
+        epoch = records.get("review_epoch", {}).get(payload.get("epoch_id"))
+        if epoch is not None:
+            fields(payload, ("assignment_id", "epoch_id", "task_id"), ("id", "action"))
+            if payload["assignment_id"] != epoch["controller_assignment_id"]:
+                raise ResearchError("review_task_dependency_changed", "Run the task through its exact controller.")
+            task = records.get("review_task", {}).get(payload["task_id"])
+            if task is None or task["epoch_id"] != epoch["id"]:
+                raise ResearchError("review_task_dependency_changed", "Run a task of the named frozen epoch.")
+            execution = records.get("review_task_execution", {}).get(payload["task_id"], {})
+            reservation_id = execution.get("reservation_id")
+            action = payload.get("action")
+            previous = store.committed_request(identity["request_id"])
+            if action == "reconcile":
+                from .review_task_execution import reconcile_worker
+                if isinstance(previous, dict) and previous.get("operation") == "review.worker_reconcile":
+                    result = previous["response"]["result"]
+                    if result.get("task_id") == payload["task_id"] and result.get("epoch_id") == epoch["id"]:
+                        reservation_id = previous["payload"]["reservation_id"]
+                if reservation_id is None:
+                    raise ResearchError("review_worker_reconciliation_required", "This task has no owned reservation to reconcile.")
+                result = reconcile_worker(store, {"reservation_id": reservation_id}, **identity)
+                if isinstance(result.get("result"), dict):
+                    from .review_staged_protocol import describe_planning_command
+                    result = dict(result, result=dict(result["result"],
+                        next=[describe_planning_command(epoch["controller_assignment_id"])]))
+                return result
+            if action not in (None, "accept"):
+                raise ResearchError("invalid_input", "Review task action must be accept or reconcile.")
+            if action == "accept" and records.get("review_observation", {}).get(reservation_id, {}).get("observation", {}).get("status") != "completed":
+                raise ResearchError("review_observation_acceptance_pending", "Acceptance requires a committed completed observation.")
+            child = next((assignment for assignment in records.get("review_assignment", {}).values()
+                          if assignment.get("staged_review", {}).get("task_id") == payload["task_id"]), None)
+            if child is None:
+                raise ResearchError("review_task_pending", "Assign this task's child through review-assignment first.")
+            if isinstance(previous, dict) and previous.get("operation") == "review.invoke":
+                original = previous["payload"]
+                if original.get("assignment_id") == child["id"] and payload.get("id", original["id"]) == original["id"]:
+                    return review_protocol.invoke_assignment(store, original, credential=os.environ.get("OPENAI_API_KEY"), **identity)
+            accepted = records.get("review_task_acceptance", {}).get(reservation_id, {}).get("receipt", {}).get("attempt", {})
+            owner = {}
+            reservation = records.get("review_reservation", {}).get(reservation_id, {})
+            captured = (records.get("review_observation", {}).get(reservation_id, {}).get("observation", {}).get("status") == "completed"
+                        and reservation.get("state") != "refused")
+            if reservation_id is not None and (not reservation.get("released", False) or captured):
+                for dispatch_request, candidate in records.get("review_task_dispatch", {}).items():
+                    if candidate.get("task_id") != payload["task_id"] or candidate.get("assignment_id") != child["id"]:
+                        continue
+                    receipt = store.committed_request(dispatch_request + ":reserve")
+                    if isinstance(receipt, dict) and receipt.get("response", {}).get("result", {}).get("id") == reservation_id:
+                        owner = candidate
+                        break
+            if owner and payload.get("id", owner["id"]) != owner["id"]:
+                raise ResearchError("review_resampling_forbidden", "Resume the attempt that owns this captured reservation.")
+            # Replaying acceptance retains its original attempt identity. Before
+            # acceptance, a deterministic identity also survives CLI interruption.
+            dispatch = records.get("review_task_dispatch", {}).get(identity["request_id"], {})
+            identifier = (payload.get("id") or owner.get("id") or dispatch.get("id") or accepted.get("id") or
+                          "task-run:" + digest([epoch["id"], payload["task_id"], identity["request_id"]]))
+            payload = {"id": identifier, "assignment_id": child["id"]}
+    # Capture, acceptance and output authentication stay in the protocol layer.
     return review_protocol.invoke_assignment(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
 
 
@@ -360,14 +427,33 @@ def acquisition_command(store, command, payload, identity, *, preview=False):
 
 def _review_status(records, artifacts):
     from . import review_refusal
+    from .problem_delivery import collect_review_outcomes, collect_staged_slots, describe_review_tasks
     completed = sorted((attempt for attempt in records.get("review_attempt", {}).values()
                         if attempt["status"] == "completed"), key=lambda attempt: attempt["recorded_revision"])
     by_assignment = {}
     for attempt in completed:
         by_assignment.setdefault(attempt["assignment_id"], []).append(attempt)
-    return {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
+    result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
+    # Legacy status remains a cheap refusal listing. Staged science is selected
+    # by assignment_state, never by treating a raw answer page as a final.
+    if not records.get("review_epoch"):
+        return result
+    rows = collect_review_outcomes(records, artifacts)
+    result["slot_outcomes"] = collect_staged_slots(rows)
+    for row in rows:
+        if row["epoch"] is None:
+            continue
+        assignment, state, effective = row["assignment"], row["state"], row["effective"] or {}
+        result["assignments"][assignment["id"]].update(
+            epoch_id=row["epoch"]["id"], kind=effective.get("kind", "pending"),
+            raw_output_digest=None if state.get("raw_output") is None else digest(state["raw_output"]),
+            effective_output_digest=effective.get("effective_output_digest"),
+            composition_root=effective.get("composition_root"),
+            incomplete_outcome=effective.get("incomplete_outcome"),
+            tasks=describe_review_tasks(records, row["epoch"], state))
+    return result
 
 
 def status_report(store, *, counters=False):
@@ -379,6 +465,8 @@ def status_report(store, *, counters=False):
     advisories = find_view_advisories(store, snapshot["revision"])
     if "problem" in records.get("workspace", {}):
         report = gate_state(records, evaluation, "post")
+        if records.get("review_epoch"):
+            report = dict(report, obligations=order_obligations(report["obligations"]))
         slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
         # A stale slate decides nothing; its stale obligation leads the report instead.
         if current_slate is not None and not current_slate["selected"]:

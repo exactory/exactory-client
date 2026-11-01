@@ -31,11 +31,11 @@ def build_codex_response(route, request, output):
     return response
 
 
-def record_codex_route(case, identifier='route'):
+def record_codex_route(case, identifier='route', *, output_tokens=1000, timeout_seconds=5):
     """Register and probe a Codex route in the case's store."""
     install_codex_runtime(case)
     protocol.record_route(case.store, {'id': identifier, 'adapter': 'codex_cli_v1', 'model': 'fixture-model',
-        'endpoint': 'codex://local', 'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}},
+        'endpoint': 'codex://local', 'configuration': {'max_output_tokens': output_tokens, 'timeout_seconds': timeout_seconds}},
         expected_revision=case.store.revision, request_id='codex-route-' + identifier)
     probe_codex_route(case, 'probe-' + identifier, identifier)
 

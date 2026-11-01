@@ -34,13 +34,22 @@ class ResultPartsCase(unittest.TestCase):
         self.case.setUp()
         case = self.case
         case.supporting = case.artifacts.put(b'A captured field standard.', 'text/plain')
-        record_codex_route(case)
+        record_codex_route(case, output_tokens=getattr(self, 'output_tokens',
+                           128000 if getattr(self, 'staged_entry', False) else 1000),
+                           timeout_seconds=getattr(self, 'timeout_seconds', 5))
         for reviewer in ('first', 'second'):
             assignment = case.assign('bar', reviewer, **case.deliver_supporting(reviewer))
             output = case.build_review_output('bar')
             invoke_codex(case, assignment['id'], output)
             case.mutate(decisions.record_value_review, dict(output, id='review-' + assignment['id'],
                         dossier_id=None, assignment_id=assignment['id']))
+        if not getattr(self, 'staged_entry', False):
+            # These fixtures reconstruct assignments recorded by 0.69.x. New
+            # prospective oversized assignments use the separate v2 fixtures.
+            from research_harness import review_problem_parts
+            legacy = patch.object(review_problem_parts, 'allows_staged_entry', return_value=False)
+            legacy.start()
+            self.addCleanup(legacy.stop)
 
     def oversized(self, count=6, characters=24000, limit=110000):
         case = self.case

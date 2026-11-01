@@ -16,7 +16,8 @@ from .storage import _canonical, _PreparedSnapshot, _text
 
 
 def fields(value, required, optional=(), *, code="invalid_input", path=None):
-    if not isinstance(value, dict) or not set(required) <= value.keys() or not value.keys() <= set(required) | set(optional):
+    if (not isinstance(value, dict) or not set(required) <= value.keys()
+            or optional is not None and not value.keys() <= set(required) | set(optional)):
         details = None
         if path is not None:
             received = set(value) if isinstance(value, dict) else set()
@@ -25,7 +26,7 @@ def fields(value, required, optional=(), *, code="invalid_input", path=None):
             details = {"path": path, "expected_type": "object",
                        "received_type": types.get(type(value), type(value).__name__),
                        "missing_fields": sorted(set(required) - received),
-                       "unexpected_fields": sorted(received - set(required) - set(optional))}
+                       "unexpected_fields": sorted(received - set(required) - set(optional)) if optional is not None else []}
         raise ResearchError(code, "Expected fields: " + ", ".join(sorted(required)) +
                             ("; optional: " + ", ".join(sorted(optional)) if optional else ""), details)
 
@@ -98,8 +99,13 @@ def _read_preparation(store, snapshot=None):
     return store._read_preparation()
 
 
-def prepared_mutation(store, operation, payload, prepare, *, expected_revision, request_id, _snapshot=None):
-    """prepare(records, payload) returns ([(kind, key, value), ...], result)."""
+def prepared_mutation(store, operation, payload, prepare, *, expected_revision, request_id, _snapshot=None,
+                      validate_commit=None):
+    """prepare(records, payload) returns ([(kind, key, value), ...], result).
+
+    Optional validate_commit(transaction, result) checks admission in the same
+    serialized write, before applying the prepared patch. It performs no external I/O.
+    """
     text(request_id, "Request ID")
     if not isinstance(payload, dict):
         raise ResearchError("invalid_input", "A domain mutation requires a JSON object")
@@ -120,6 +126,8 @@ def prepared_mutation(store, operation, payload, prepare, *, expected_revision, 
     runtime = runtime_provenance()
 
     def apply(transaction):
+        if validate_commit is not None:
+            validate_commit(transaction, result)
         for kind, key, value in changes:
             transaction.put(kind, key, value)
         transaction.put("literature_operation", request_id, {"operation": operation, "runtime": runtime})
@@ -136,3 +144,44 @@ def immutable_record(records, kind, key, value):
         raise ResearchError("record_conflict", "An evidence record ID cannot replace historical content",
                             {"kind": kind, "id": key})
     return kind, key, value
+
+
+def prepared_task_mutation(store, operation, payload, prepare, *, request_id, expected_revision=None, finalize=None):
+    """Prepare a tracked task patch; finalize(changes, result, commit_revision) may stamp commit fields."""
+    text(request_id, "Request ID")
+    if not isinstance(payload, dict):
+        raise ResearchError("invalid_input", "A domain mutation requires a JSON object")
+    payload = json.loads(_canonical(payload))
+    snapshot = store._read_scoped_preparation()
+    if snapshot.has_request(request_id):
+        return store.mutate_scoped(operation, payload, lambda tx, revision: None,
+                                   request_id=request_id, expected_revision=expected_revision,
+                                   _preparation=snapshot.release_proof())
+    if expected_revision is not None:
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ResearchError("invalid_input", "Expected revision must be a nonnegative integer")
+        if expected_revision != snapshot.revision:
+            raise ResearchError("stale_revision", "Prepare against the expected research revision",
+                                {"expected_revision": expected_revision, "revision": snapshot.revision})
+    changes, result = prepare(snapshot.records, payload)
+    # Own the prepared values and every write target, including blind writes.
+    changes, result = json.loads(_canonical([changes, result]))
+    for kind, key, value in changes:
+        snapshot.bind_record(kind, key)
+    snapshot.bind_record("literature_operation", request_id)
+    write_targets = tuple((kind, key) for kind, key, _ in changes)
+    runtime = runtime_provenance()
+
+    def apply(transaction, revision):
+        current_changes, current_result = changes, result
+        if finalize is not None:
+            current_changes, current_result = finalize(current_changes, current_result, revision)
+            if tuple((kind, key) for kind, key, _ in current_changes) != write_targets:
+                raise ResearchError("invalid_preparation", "Commit finalization cannot change prepared write targets")
+        for kind, key, value in current_changes:
+            transaction.put(kind, key, value)
+        transaction.put("literature_operation", request_id, {"operation": operation, "runtime": runtime})
+        return current_result
+
+    return store.mutate_scoped(operation, payload, apply, request_id=request_id, expected_revision=expected_revision,
+                               _preparation=snapshot.release_proof())

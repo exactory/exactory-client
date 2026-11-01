@@ -586,8 +586,9 @@ evidence that each reviewer's actual request delivers. The post gate's result co
 evidence, deliver every reading and attach the bytes of the artifacts of the assessment
 evidence, the computations and the formal checks. The search records in that evidence satisfy
 the check for the bound searches, so a text route may withhold the bodies of their captured
-responses at its input limit. The [CLI reference](../../docs/research-cli.md#problem-creation)
-states the exact rule.
+responses at its input limit. For a review performed in stages (step 3), the check reads the
+accepted tasks of the epoch instead of one request. The
+[CLI reference](../../docs/research-cli.md#problem-creation) states the exact rule.
 
 1. Keep the two bars of the slate for the result reviews and the decision.
 2. Assign one result review to each of the two bar reviewers. Each result review continues that
@@ -606,13 +607,29 @@ states the exact rule.
    assessment with its references resolved, the attempt and the cited results, the citations,
    the readings with their inline passages, the computations, the formal checks, and every
    applicable objection. Run the assignment with `review-run` and record the observed review
-   with `value-review`. When the result packet does not fit one input of the route, the harness
-   delivers the problem evidence in parts: the assignment becomes part turn 1 of a series, and
-   its run returns notes with `phase: "evidence_part"` instead of a review. Continue each part
-   turn with a new assignment of the same role, route and reviewer and
-   `context: {prior_assignment_id}`, as in step 4, until a turn returns the review; `next` lists
-   `problem_evidence_part_pending` while a part turn waits, and `value-review` records only the
-   turn that returned the review. Replace a recorded version 1 result review, which has no rubric
+   with `value-review`. When the result packet does not fit one input of the route, or its fitted
+   request would withhold an evidence body, the assignment becomes the controller of a staged
+   review: the harness freezes an epoch (the evidence, the claims and the budgets), plans every
+   task itself and performs the review in tasks, each a fresh call. Follow `next`:
+   `review-assignment {controller_assignment_id}` plans and assigns the next task, then
+   `review-run {assignment_id, epoch_id, task_id}` runs it, and the two alternate until `next`
+   is the `value-review` payload; `action: "accept"` resumes an interrupted acceptance and
+   `action: "reconcile"` reconciles a worker, neither with a reviewer call. A refused output
+   gets one retry with the same request and then a smaller task; build no task envelope by
+   hand. The review is the controller's effective result, and `value-review` records it naming
+   the controller's assignment id. An assessment that the reviewer cannot complete, or that the
+   bounded execution cannot finish, is recorded as `assessment_incomplete`: the slot stays
+   occupied, `next` names the research or recovery work, and no second reviewer replaces it.
+   Every staged review also lists
+   `review_quality_measurement_pending`: the measurement of its quality against a single-input
+   review has not run, so the gate stays not ready for a staged review in this release; report
+   that to the user instead of working around it. A session that was already a series in parts
+   under 0.69.x continues in parts: continue each part turn with a new assignment of the same
+   role, route and reviewer and `context: {prior_assignment_id}`, as in step 4, until a turn
+   returns the review; `next` lists `problem_evidence_part_pending` while a part turn waits, and
+   `value-review` records only the turn that returned the review. The
+   [CLI reference](../../docs/research-cli.md#staged-problem-reviews) states the records, the
+   codes and the recovery steps. Replace a recorded version 1 result review, which has no rubric
    grades, before the post (`problem_rubric_review_required`). When the gate or `next` lists
    `problem_rubric_regrade_required`, the self-assessment named in `assessment_id` or the result
    reviews named in `review_ids` were graded without A7: record a new self-assessment that
@@ -649,7 +666,11 @@ states the exact rule.
    `attempt` or `calibration`, and name both original result review ids in
    `context.review_ids`. An adjudication of A7 decides only whether the question is of the
    excluded kind. Run the assignment with `review-run` and record the observed finding with
-   `review-adjudication`.
+   `review-adjudication`. An adjudication whose packet does not fit one input becomes a staged
+   review as in step 3, with the objection's claim, reason, resolution condition and correction
+   request as its claims; the disposition is the terminal choice of its final task, and
+   `review-adjudication` records the controller's effective result. An incomplete adjudication
+   leaves the objection open (`assessment_incomplete`); do the recovery work that `next` names.
 7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
    as a resolution of that one item.
 8. Resolve every material objection of both bars, of the applicable slate reviews and of both
@@ -775,6 +796,8 @@ Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
   the reviews establish the claim.
 - Do not reuse a review, a finding or an attempt of another statement for this one; the harness
   refuses it, and the refusal is right.
+- Do not repeat an exhausted task of a staged review or assign another reviewer while a slot is
+  incomplete; do the research or recovery work that `next` names.
 - Do not edit an exported part before posting; a changed part needs a new statement record and
   a new gate.
 - Do not cite a work in the public text that the record did not read and use; the citation check

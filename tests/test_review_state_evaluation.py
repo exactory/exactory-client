@@ -40,6 +40,18 @@ class StateEvaluationBoundaryTests(unittest.TestCase):
         self.assertEqual(self.compute.call_count, 1)
         self.assertEqual(self.runtime.call_count - before, 3)
 
+    def test_native_cache_reuses_state_without_fingerprinting_staged_selection(self):
+        self.records['review_assignment'] = {'leaf': {'id': 'leaf'},
+            'other': {'id': 'other', 'staged_review': {'kind': 'controller', 'epoch_id': 'unrelated'}}}
+        self.records['review_epoch'] = {'unrelated': {'id': 'unrelated'}}
+        with patch.object(states, '_fingerprint_selection',
+                          side_effect=AssertionError('Native state must retain its original cache path.')):
+            first = self.evaluate()
+            second = self.evaluate()
+        self.assertEqual(first, self.result)
+        self.assertEqual(second, self.result)
+        self.assertEqual(self.compute.call_count, 1)
+
     def test_changed_historical_text_or_separate_correction_runtime_invalidates_leaf(self):
         for adapter in ('historical-text', 'correction'):
             with self.subTest(adapter=adapter):

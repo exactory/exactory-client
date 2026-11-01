@@ -6,6 +6,7 @@ is a pointer to the detailed command, not an executable instruction.
 """
 
 from collections import Counter
+import copy
 import json
 
 from .errors import ResearchError
@@ -30,6 +31,12 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "grand_challenge_missing", "objective_missing", "objective_mismatch",
             "standards_missing", "rationale_missing", "innovation_missing",
             "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing",
+            "review_worker_reconciliation_required", "review_observation_acceptance_pending", "review_capacity_wait",
+            "review_task_dependency_changed", "review_epoch_stale", "review_task_pending",
+            "review_composition_conflict", "review_composition_pending", "review_assurance_dependency_pending",
+            "assessment_incomplete", "problem_assurance_pending",
+            "problem_rubric_below_threshold", "research_objection_unresolved",
+            "review_quality_measurement_pending", "problem_review_pair_required",
             "synthesis_dependencies_stale", "resource_budget_exhausted",
             "publication_bundle_missing", "publication_readiness_stale", "publication_artifact_changed",
             "manuscript_reviews_required", "lineage_citation_missing",
@@ -47,6 +54,8 @@ _SUMMARY_ID_LENGTH = 32
 
 def priority(item):
     code = item.get("code")
+    if code == "review_task_pending" and not item.get("next"):
+        return PRIORITY.index("assessment_incomplete") + 0.5
     return PRIORITY.index(code) if code in PRIORITY else len(PRIORITY)
 
 
@@ -66,6 +75,14 @@ def _hint(value):
     result["truncated_fields"] = [key for key, limit in _HINT_LIMITS.items()
                                   if isinstance(value.get(key), str) and len(value[key]) > limit]
     result["details_required"] = True
+    if "next" in value:
+        actions = value["next"] or []
+        # An executable payload is exact or absent. A clipped id could target
+        # different work, so large actions stay on the detailed obligation page.
+        first = actions[0] if actions else None
+        result["next_step"] = (copy.deepcopy(first) if first is not None and
+            len(json.dumps(first, ensure_ascii=False, indent=2).encode("utf-8")) <= 1024 else None)
+        result["omitted_next_steps"] = len(actions) - (result["next_step"] is not None)
     return result
 
 
@@ -97,6 +114,10 @@ def next_summary(report, *, counters=False):
                        "objective_obligations": _obligations(report["objective_obligations"]),
                        "scope_contract_id": _short(report.get("scope_contract_id"), 64),
                        "scientific_target_digest": report["scientific_target_digest"]})
+    hint = result.get("next_hint") or {}
+    if hint.get("next_step") is not None and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 4096:
+        hint["next_step"] = None
+        hint["omitted_next_steps"] += 1
     if counters:
         result["evaluation"] = report.get("evaluation")
         hint = result.get("next_hint")
@@ -152,6 +173,10 @@ def status_summary(report):
                    "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
     if report.get("orchestration") == "problem_creation":
         result.update(candidates=report["candidates"], slate_id=_short(report["slate_id"], 64))
+    slots = report.get("slot_outcomes") or report.get("review", {}).get("slot_outcomes")
+    if slots:
+        result["review_slots"] = dict(occupied=slots["occupied"],
+            **{key: len(slots[key]) for key in ("complete", "incomplete", "pending")})
     result["source_deferrals"] = dict(Counter(item["status"] for item in report.get("source_deferrals", [])))
     result["deferred_obligations"] = _obligations(report.get("deferred_obligations", []))
     if "probes" in report:

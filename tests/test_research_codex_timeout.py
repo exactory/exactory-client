@@ -11,7 +11,7 @@ import threading
 import unittest
 from unittest.mock import patch
 
-from research_harness import review_codex_transport as transport
+from research_harness import probe_supervision, review_codex_transport as transport
 
 
 PROCESS_FIXTURE = r'''
@@ -78,9 +78,7 @@ class CodexProcessTimeoutTests(unittest.TestCase):
                 pass
 
     def live(self, pid):
-        result = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, check=False)
-        state = result.stdout.strip()
-        return bool(state) and not state.startswith("Z")
+        return probe_supervision.find_process_identity(pid) is not None
 
     def invoke(self):
         with patch.object(transport.shutil, "which", return_value=str(self.program)):

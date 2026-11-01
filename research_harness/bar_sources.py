@@ -177,8 +177,22 @@ def require_exact_version(version_id, code='invalid_review_source_request'):
         raise ResearchError(code, 'Request the canonical exact version, including the arXiv version suffix')
 
 
-def requests(output, *, passages=False):
+def requests(output, *, passages=False, staged=False, manifest=None):
     """The validated source requests of an output. Passage requests belong to a turn under the excerpt rules."""
+    if staged:
+        from .review_staged import validate_retrieval
+        if manifest is None:
+            raise ResearchError('invalid_review_source_request', 'Validate staged retrievals against their frozen manifest')
+        values = output.get('retrievals', []) if isinstance(output, dict) else []
+        if not isinstance(values, list):
+            raise ResearchError('invalid_review_source_request', 'retrievals must be an array')
+        seen = set()
+        for row in values:
+            validate_retrieval(row, manifest)
+            if row['id'] in seen:
+                raise ResearchError('invalid_review_source_request', 'Retrieval IDs must be unique')
+            seen.add(row['id'])
+        return values
     values = output.get('source_requests', []) if isinstance(output, dict) else []
     if not isinstance(values, list):
         raise ResearchError('invalid_review_source_request', 'source_requests must be an array',
@@ -244,7 +258,19 @@ def requests(output, *, passages=False):
     return values
 
 
-def pending(packet, output):
+def pending(packet, output, *, manifest=None):
+    if 'staged_review' in packet:
+        staged = packet['staged_review']
+        manifest = manifest or staged.get('epoch', {}).get('manifest', staged.get('manifest'))
+        inherited = requests({'retrievals': staged.get('pending_retrievals', [])}, staged=True, manifest=manifest)
+        combined = {row['id']: row for row in inherited}
+        for row in requests(output, staged=True, manifest=manifest):
+            earlier = combined.get(row['id'])
+            if earlier is not None and any(earlier[key] != row[key] for key in
+                                          ('question', 'inputs', 'claim_ids', 'context_roots', 'requested_by')):
+                raise ResearchError('invalid_review_source_request', 'A retrieval ID cannot change its question or scope')
+            combined[row['id']] = row
+        return [row for row in combined.values() if row['status'] in ('pending', 'delivered')]
     combined = {request['id']: request for request in packet.get('pending_source_requests', [])}
     for index, request in enumerate(requests(output, passages=review_excerpts.KEY in packet)):
         if request['id'] in combined and combined[request['id']] != request:
@@ -539,6 +565,10 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
     that an earlier turn of this session delivered complete to that turn; a version whose whole text or every part is
     among them is answered as already delivered. A passage request is answered at once. A request stays pending until
     its source or last part has arrived; already delivered and passage answers never stay pending."""
+    if 'staged_review' in previous_packet:
+        epoch = records.get('review_epoch', {}).get(previous_packet['staged_review']['epoch_id'], {})
+        raise ResearchError('review_task_pending', 'Plan staged retrievals as tasks with explicit rereading scope and empty history.',
+                            {'retrievals': pending(previous_packet, output, manifest=epoch.get('manifest'))})
     delivered_bodies = delivered_bodies or {}
     inventory_value = previous_packet['source_inventory']
     rows = validate_inventory(artifacts, inventory_value)

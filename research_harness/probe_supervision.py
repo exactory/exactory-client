@@ -12,6 +12,16 @@ def read_probe_clock():
     return time.clock_gettime(time.CLOCK_MONOTONIC)
 
 
+def find_process_identity(pid):
+    """Read a live kernel identity using the established probe contract."""
+    return find_probe_process_identity(pid)
+
+
+def find_process_group_members(group):
+    """Read live kernel identities for one process group."""
+    return find_probe_group_members(group)
+
+
 def find_probe_process_identity(pid):
     """A PID alone cannot authorize signalling: compare its kernel start identity too."""
     import errno
@@ -78,7 +88,7 @@ def find_probe_group_members(group):
         raise OSError("Probe process groups require Darwin or Linux")
     members = []
     for pid in candidates:
-        identity = find_probe_process_identity(pid)
+        identity = find_process_identity(pid)
         if identity is not None and identity["process_group"] == group:
             members.append(identity)
     return members
@@ -88,13 +98,13 @@ def enforce_probe_deadline(root, directory, supervision):
     """An independent session keeps the frozen bound if the normal worker disappears."""
     from research_harness.workspace import json_projection
     program, worker = supervision["program"], supervision["worker"]
-    if find_probe_process_identity(program["pid"]) != program:
+    if find_process_identity(program["pid"]) != program:
         return
-    identity = find_probe_process_identity(os.getpid())
+    identity = find_process_identity(os.getpid())
     json_projection(root, directory + "/watchdog.json", {"config_sha256": supervision["config_sha256"], "identity": identity})
-    while find_probe_process_identity(program["pid"]) == program:
+    while find_process_identity(program["pid"]) == program:
         remaining = supervision["deadline"] - read_probe_clock()
-        if remaining <= 0 and find_probe_process_identity(worker["pid"]) != worker:
+        if remaining <= 0 and find_process_identity(worker["pid"]) != worker:
             break
         time.sleep(min(0.02, remaining) if remaining > 0 else 0.02)
     else:
@@ -102,12 +112,12 @@ def enforce_probe_deadline(root, directory, supervision):
     terminal = {key: supervision[key] for key in ("config_sha256", "program", "started", "deadline")}
     terminal.update(supervisor=identity, elapsed_seconds=read_probe_clock() - supervision["started"])
     json_projection(root, directory + "/supervisor-timeout.json", terminal)
-    if find_probe_process_identity(program["pid"]) == program:
+    if find_process_identity(program["pid"]) == program:
         try:
             os.killpg(program["process_group"], signal.SIGKILL)
         except ProcessLookupError:
             pass
-    while find_probe_group_members(program["process_group"]):
+    while find_process_group_members(program["process_group"]):
         time.sleep(0.01)
     terminal.update(exit_status="timed_out", elapsed_seconds=read_probe_clock() - supervision["started"])
     json_projection(root, directory + "/supervisor-terminal.json", terminal)

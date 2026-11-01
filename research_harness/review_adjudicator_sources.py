@@ -17,6 +17,12 @@ def _incomplete(details):
         'Supply every required current source and inspected unit completely before focused adjudication.', details)
 
 
+def has_original_context(manifest, source_id):
+    """A shared source retains its original scope through an exact original-context owner."""
+    return any(row.get('evidence_class') == 'original_context' and source_id in row['source_ids']
+               for row in manifest['occurrences'])
+
+
 def prepare(records, artifacts, packet):
     """Validate native acquisitions and bind current sources separately from the original review pair."""
     from . import bar_sources
@@ -51,10 +57,11 @@ def prepare(records, artifacts, packet):
     packet['problem_evidence']['delivery'] = {'protocol': PROTOCOL, 'note': NOTE}
 
 
-def validate(artifacts, packet):
+def validate(artifacts, packet, *, has_delivery=None):
     """Check frozen current requirements against actual complete byte entries, without consulting current records."""
     from .direction_sources import has_attachment
     from .review_protocol import collect_references
+    received = has_delivery or (lambda reference: has_attachment(artifacts, packet, reference))
     manifest = packet.get(MARKER)
     if manifest is None:
         return
@@ -86,7 +93,7 @@ def validate(artifacts, packet):
                 continue
             try:
                 reference = _reference(alternative['extraction_descriptor'])
-                complete_main = reference in source['evidence'] and has_attachment(artifacts, packet, reference)
+                complete_main = reference in source['evidence'] and received(reference)
             except (OSError, ResearchError, KeyError, TypeError, ValueError):
                 complete_main = False
             if complete_main:
@@ -100,13 +107,43 @@ def validate(artifacts, packet):
     missing = []
     for reference in (required[key] for key in sorted(required)):
         try:
-            supplied = reference in packet.get('current_evidence', []) and has_attachment(artifacts, packet, reference)
+            supplied = reference in packet.get('current_evidence', []) and received(reference)
         except (OSError, ResearchError, ValueError):
             supplied = False
         if not supplied:
             missing.append(reference['sha256'])
     if missing:
         _incomplete({'artifact_digests': missing})
+
+
+def validate_staged(records, artifacts, assignment, frozen):
+    """Require current originals across the exact selected focused task graph.
+
+    The certificate supplies current evidence only. It never extends the input
+    scope of either member of the original result-review pair.
+    """
+    from .direction_reviews import collect_selected_task_graph
+    from .direction_sources import has_attachment
+    from .review_staged import interval_gaps
+    graph = collect_selected_task_graph(records, artifacts, assignment['id'])
+    if not graph['completion']['complete']:
+        _incomplete({'epoch_id': graph['epoch']['id'], 'issues': graph['completion']['issues']})
+    observations = graph['selection']['observations']
+    packets = [packet for _, packet in graph['packets']]
+
+    def received(reference):
+        if any(has_attachment(artifacts, packet, reference) for packet in packets):
+            return True
+        for source in graph['epoch']['manifest']['sources']:
+            if source.get('descriptor') != reference or source['kind'] == 'binary':
+                continue
+            intervals = [[span['start'], span['end']] for observation in observations
+                         for span in observation['actual_input']['intervals'] if span['source_id'] == source['id']]
+            if not interval_gaps([[0, source['characters']]], intervals):
+                return True
+        return False
+
+    validate(artifacts, frozen, has_delivery=received)
 
 
 def validate_request(artifacts, frozen, request):
@@ -143,6 +180,9 @@ def validate_observed(records, artifacts, assignment, attempt_id):
     import json
     frozen = json.loads(artifacts.read(assignment['packet']))
     if MARKER not in frozen:
+        return
+    if assignment.get('staged_review') is not None:
+        validate_staged(records, artifacts, assignment, frozen)
         return
     attempt = records.get('review_attempt', {}).get(attempt_id)
     if attempt is None or attempt.get('assignment_id') != assignment['id'] or attempt.get('status') != 'completed':
