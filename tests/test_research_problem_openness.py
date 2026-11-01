@@ -10,6 +10,7 @@ from research_harness.evidence import digest
 from research_harness.acquisition import import_response
 from research_harness.literature import record_search
 from unittest.mock import patch
+import hashlib
 import json
 
 
@@ -203,6 +204,168 @@ class ProblemOpennessExportCheckTests(ProblemCase):
         self.assertEqual({entry["digest"] for entry in packet["evidence"]},
                          {digest(exact), digest(neighbour), digest(reading), digest(self.selected)}
                          | {row["sha256"] for row in collect_reading_artifacts(records, self.artifacts, reading)})
+
+    def read_capture(self, version, capture, identifier):
+        from research_harness.literature import import_bundle
+        from research_harness.reading import record_reading
+        bundle = self.bundle(version, capture, bundle_id=identifier + "-bundle")
+        self.mutate(import_bundle, bundle)
+        return self.mutate(record_reading, self.full_note(bundle, identifier))["result"]
+
+    def priority_spec(self, priority, found=()):
+        exact, neighbour = self.record(self.statement, found=found), self.record(self.neighbour)
+        return self.build_spec((self.statement, exact["id"]), (self.neighbour, neighbour["id"]),
+                               text_priority=priority)
+
+    def export_priority(self, spec):
+        packet = json.loads(self.artifacts.read(self.export(spec)["native_packet"]))
+        priority = packet["scientific_context"]["text_delivery_priority"]
+        self.assertTrue(set(priority) <= {entry["digest"] for entry in packet["evidence"]})
+        return packet, priority
+
+    def pending_capture(self, version, *, pdf=False):
+        from research_fixtures import client
+        from research_harness.acquisition import acquire_fulltext
+        body = b"%PDF-1.4\n%%EOF" if pdf else br"\documentclass{article}\begin{document}Raw TeX.\end{document}"
+        media = "application/pdf" if pdf else "application/x-tex"
+        http, _, _ = client([(200, {"Content-Type": media}, body)])
+        self.sequence += 1
+        result = acquire_fulltext(self.store, version, "https://arxiv.org/pdf/" + version[6:], http=http,
+            extractor=(lambda data: {"status": "extractor_missing", "text": None}) if pdf else None,
+            expected_revision=self.store.revision, request_id="pending-" + str(self.sequence))
+        self.assertEqual(result["capture"]["availability"], "pending")
+        self.assertIsNone(result["capture"]["text"])
+        return result["capture"]
+
+    def test_text_priority_skips_pending_raw_tex_before_extracted_pdf(self):
+        version = self.metadata()
+        self.pending_capture(version)
+        capture = self.capture(version, pdf_text="Complete PDF body. References: none.")
+        self.read_capture(version, capture, "pdf-reading")
+        _, priority = self.export_priority(self.priority_spec([version], [version]))
+        self.assertEqual(priority, [capture["text"]["sha256"]])
+
+    def test_text_priority_only_names_the_carried_second_available_capture(self):
+        version = self.metadata()
+        first = self.capture(version, body="Unread first body. References: none.")
+        second = self.capture(version, pdf_text="Read second body. References: none.")
+        self.read_capture(version, second, "second-reading")
+        packet, priority = self.export_priority(self.priority_spec([version], [version]))
+        self.assertEqual(priority, [second["text"]["sha256"]])
+        self.assertNotIn(first["text"]["sha256"], {entry["digest"] for entry in packet["evidence"]})
+
+    def test_text_priority_expands_versions_in_order_and_carried_texts_in_digest_order(self):
+        versions = [self.metadata(number) for number in (1, 2)]
+        expected = {}
+        for number, version in enumerate(versions):
+            captures = [self.capture(version, body="HTML body %d. References: none." % number),
+                        self.capture(version, pdf_text="PDF body %d. References: none." % number)]
+            # Capture order deliberately opposes digest order.
+            work = self.store.snapshot()["records"]["work"][version]
+            work["fulltexts"] = sorted(captures, key=lambda row: row["text"]["sha256"], reverse=True)
+            self.put("work", version, work)
+            for index, capture in enumerate(captures):
+                self.read_capture(version, capture, "read-%d-%d" % (number, index))
+            expected[version] = sorted(capture["text"]["sha256"] for capture in captures)
+        _, priority = self.export_priority(self.priority_spec(list(reversed(versions)), versions))
+        self.assertEqual(priority, expected[versions[1]] + expected[versions[0]])
+
+    def test_text_priority_deduplicates_a_shared_text_within_one_version(self):
+        version = self.metadata()
+        html = self.capture(version)
+        pdf = self.capture(version, pdf_text=self.artifacts.read(html["text"]).decode())
+        for identifier, capture in (("html", html), ("pdf", pdf)):
+            self.read_capture(version, capture, identifier)
+        _, priority = self.export_priority(self.priority_spec([version], [version]))
+        self.assertEqual(priority, [html["text"]["sha256"]])
+
+    def assert_priority_gap(self, version):
+        spec = self.priority_spec([version])
+        with self.assertRaises(ResearchError) as raised:
+            self.export(spec)
+        self.assertEqual(raised.exception.as_dict(), {"code": "openness_reading_gap", "message":
+            "Text delivery priority requires an extracted main text carried by this packet for a bound reading",
+            "details": {"version_id": version}})
+
+    def test_text_priority_refuses_an_unknown_version(self):
+        self.assert_priority_gap("arxiv:2601.99999v1")
+
+    def test_text_priority_refuses_only_pending_null_captures(self):
+        version = self.metadata()
+        self.pending_capture(version)
+        self.assert_priority_gap(version)
+
+    def test_text_priority_refuses_missing_pdf_extraction(self):
+        version = self.metadata()
+        self.pending_capture(version, pdf=True)
+        self.assert_priority_gap(version)
+
+    def test_text_priority_refuses_a_stored_reading_omitted_from_the_spec(self):
+        version = self.record_full_reading()["version_id"]
+        self.assert_priority_gap(version)
+
+    def test_text_priority_keeps_the_duplicate_version_invalid_input_refusal(self):
+        version = self.record_full_reading()["version_id"]
+        with self.assertRaises(ResearchError) as raised:
+            self.export(self.priority_spec([version, version], [version]))
+        self.assertEqual(raised.exception.code, "invalid_input")
+        self.assertEqual(raised.exception.message, "Text delivery priority cannot contain duplicates")
+
+    def test_text_priority_does_not_translate_artifact_integrity_errors(self):
+        version = self.record_full_reading()["version_id"]
+        spec = self.priority_spec([version], [version])
+        capture = self.store.snapshot()["records"]["work"][version]["fulltexts"][0]
+        reference = capture["text"]
+        path = self.root / reference["path"]
+        path.chmod(0o644)
+        path.write_bytes(b"Corrupted extracted body.")
+        with self.assertRaises(ResearchError) as raised:
+            self.export(spec)
+        self.assertEqual(raised.exception.code, "artifact_corrupt")
+        self.assertEqual(raised.exception.details, {"path": reference["path"]})
+
+    def assert_native_packet_matches_0_69_15(self, spec):
+        from research_harness import problem_openness
+        fixture = Path(__file__).parent / "fixtures/openness_export_0_69_15.py.txt"
+        source = fixture.read_bytes()
+        # Exact export_openness function from 0.69.15 (fddc81a); all other production helpers stay unchanged.
+        self.assertEqual(hashlib.sha256(source).hexdigest(), "5eef5c0aa5da409a4287fa1994405ceacf366d1915df8bba94ae3fa81d512ac7")
+        namespace = vars(problem_openness).copy()
+        exec(compile(source, str(fixture), "exec"), namespace)
+        baseline = namespace["export_openness"](self.store, spec, self.root / "baseline-packet")["native_packet"]
+        actual = self.export(spec)["native_packet"]
+        self.assertEqual(self.artifacts.read(actual), self.artifacts.read(baseline))
+        self.assertEqual(actual["sha256"], baseline["sha256"])
+        return json.loads(self.artifacts.read(actual))
+
+    def test_single_capture_priority_preserves_native_packet_bytes(self):
+        version = self.record_full_reading()["version_id"]
+        self.assert_native_packet_matches_0_69_15(self.priority_spec([version], [version]))
+
+    def test_several_prioritized_versions_preserve_native_packet_bytes(self):
+        versions = [self.metadata(number) for number in (1, 2, 3)]
+        for index, version in enumerate(versions):
+            self.read_capture(version, self.capture(version), "read-%d" % index)
+        self.assert_native_packet_matches_0_69_15(self.priority_spec(list(reversed(versions)), versions))
+
+    def test_shared_text_across_versions_preserves_native_packet_bytes_and_repeated_digests(self):
+        versions = [self.metadata(number) for number in (1, 2)]
+        for index, version in enumerate(versions):
+            self.read_capture(version, self.capture(version, abstract=False), "read-%d" % index)
+        packet = self.assert_native_packet_matches_0_69_15(self.priority_spec(versions, versions))
+        priority = packet["scientific_context"]["text_delivery_priority"]
+        self.assertEqual(len(priority), 2)
+        self.assertEqual(priority[0], priority[1])
+
+    def test_absent_text_priority_preserves_native_packet_bytes(self):
+        version = self.record_full_reading()["version_id"]
+        packet = self.assert_native_packet_matches_0_69_15(self.priority_spec(None, [version]))
+        self.assertNotIn("text_delivery_priority", packet["scientific_context"])
+
+    def test_empty_text_priority_preserves_native_packet_bytes(self):
+        version = self.record_full_reading()["version_id"]
+        packet = self.assert_native_packet_matches_0_69_15(self.priority_spec([], [version]))
+        self.assertNotIn("text_delivery_priority", packet["scientific_context"])
 
     def test_a_binding_to_an_undeclared_formulation_is_refused_before_writing(self):
         undeclared = "An undeclared formulation."

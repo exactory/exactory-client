@@ -1,0 +1,110 @@
+def export_openness(store, spec, destination=None):
+    records = store.snapshot()["records"]
+    marker = require_problem(records)
+    fields(spec, ("assignment_id", "reviewer_id", "minimum"), ("native_reviews", "source_evidence"))
+    text(spec["assignment_id"], "Openness assignment ID")
+    text(spec["reviewer_id"], "Openness reviewer ID")
+    fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"), ("text_priority",))
+    statement = find_current_statement(records)
+    if statement is None:
+        raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
+    artifacts = ArtifactStore(store.root)
+    bound, required, evidence = [], set(), {}
+
+    def include_record(record):
+        data = serialize_record(record)
+        artifact = artifacts.put(data, "application/json")
+        evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "blob", "artifact": artifact}
+
+    for binding in spec["minimum"]["searches"]:
+        fields(binding, ("formulation", "search_id"))
+        search = records.get("literature_search", {}).get(binding["search_id"])
+        if search is None:
+            raise ResearchError("openness_search_missing", "Bind this store's exact search", binding)
+        bound.append((binding["formulation"], search))
+        required.update(row["work_id"] for row in search["dispositions"] if row["disposition"] in {"relevant", "contradictory"})
+    if spec["minimum"]["settling_work_id"] is not None:
+        required.add(spec["minimum"]["settling_work_id"])
+    readings = {}
+    for work in sorted(required):
+        coverage = fulltext_coverage(records, artifacts, work)
+        for reading_id in coverage["readings"]:
+            readings[reading_id] = records["reading"][reading_id]
+    minimum = {"schema_version": 1, "statement": statement["statement"], "neighbours": statement["neighbours"],
+               "searches": [{"formulation": formulation, "search_digest": digest(search)}
+                            for formulation, search in bound],
+               "reading_digests": sorted(digest(row) for row in readings.values()),
+               "settling_work_id": spec["minimum"]["settling_work_id"],
+               "duplicate_resolutions": spec["minimum"]["duplicate_resolutions"]}
+    # The declaration is checked against the store before the export writes anything.
+    from .openness_minimum import validate_minimum_bindings
+    validate_minimum_bindings(minimum, statement["statement"], records)
+    for _, search in bound:
+        include_record(search)
+    for reading in readings.values():
+        include_record(reading)
+        for artifact in collect_reading_artifacts(records, artifacts, reading):
+            evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
+    include_record(statement)
+    scientific_context = {"openness_minimum": minimum}
+    if "source_evidence" in spec:
+        from .problem_openness_screening import resolve_source_evidence
+        source_evidence, source_artifacts = resolve_source_evidence(records, artifacts, spec["source_evidence"], materialize=True)
+        scientific_context["source_evidence"] = source_evidence
+        from .review_verbatim_text import MARKER
+        scientific_context["review_text_encoding"] = MARKER
+        evidence.update(source_artifacts)
+    if "native_reviews" in spec:
+        from .problem_openness_reviews import resolve_native_reviews
+        native_reviews, native_evidence = resolve_native_reviews(records, artifacts, spec["native_reviews"])
+        scientific_context["native_reviews"] = native_reviews
+        evidence.update(native_evidence)
+    if spec["minimum"].get("text_priority"):
+        # The research record declares which decisive full texts a text-limited route delivers first; the transport
+        # applies the route limit to the rest.
+        strings(spec["minimum"]["text_priority"], "Text delivery priority")
+        priority = []
+        for version in spec["minimum"]["text_priority"]:
+            work = records.get("work", {}).get(version)
+            if work is None or not work.get("fulltexts"):
+                raise ResearchError("openness_reading_gap", "Text delivery priority names a work without a captured full text", {"version_id": version})
+            priority.append(work["fulltexts"][0]["text"]["sha256"])
+        scientific_context["text_delivery_priority"] = priority
+        scientific_context["text_delivery_rule"] = (
+            "On a text-limited reviewer route the bodies of the listed full texts are delivered in this order "
+            "while the route input limit allows; a body that does not fit is replaced by an explicit elision "
+            "note, and the reading record of that work (its notes and inspected excerpts) is delivered in full.")
+    packet = {"protocol": PROTOCOL, "kind": "result", "root": str(store.root.resolve()), "objective_id": statement["id"],
+              "contract": {"orchestration": "problem_creation", "area": marker["area"]}, "subject": statement,
+              "subject_digest": digest(statement), "claim_digest": compute_statement_digest(statement),
+              "reviewer": {"source": "host", "actor_id": spec["reviewer_id"], "attestation_id": ATTESTATION_PREFIX + spec["assignment_id"]},
+              "scientific_context": scientific_context, "evidence": [evidence[key] for key in sorted(evidence)],
+              "execution_provenance": [], "unmaterialized_digests": []}
+    if "native_reviews" in scientific_context:
+        from .problem_openness_sources import build_delivery
+        scientific_context["openness_delivery"] = build_delivery(records, artifacts, packet)
+    reference = artifacts.put(json.dumps(packet, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode(), "application/json")
+    load_packet(artifacts, reference, spec["reviewer_id"])
+    from .review_delivery import deliver_packet, find_packet_destination
+    if destination is None:
+        destination = find_packet_destination(store, spec["assignment_id"])
+    delivered = deliver_packet(store, destination, packet, transitive=True)
+    result = dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"])
+    if not spec["minimum"].get("text_priority"):
+        # A lower bound of the reviewer input: the packet and its text evidence bodies as JSON strings. Without a
+        # priority no body gives way, so a route whose limit is below it refuses the run.
+        from . import review_transport
+        estimate = len(json.dumps(packet, ensure_ascii=False)) + sum(
+            len(json.dumps(data.decode("utf-8"), ensure_ascii=False))
+            for data in (artifacts.read(entry["artifact"]) for entry in packet["evidence"]) if _is_utf8(data))
+        routes = sorted(identifier for identifier, route in records.get("review_route", {}).items()
+                        if (review_transport.local_input_limit(route) or estimate) < estimate)
+        if routes:
+            result["warnings"] = [{"code": "review_input_too_large", "message":
+                "The estimated size of this packet exceeds the input limit of the text routes in route_ids, and "
+                "without minimum.text_priority a route withholds no full text by priority. List the version ids of the "
+                "read works in minimum.text_priority, the decisive ones first, so that a route withholds full-text bodies "
+                "from the end of the list. The estimate counts the packet and its UTF-8 evidence as JSON strings, so a "
+                "delivery projection or a framed route can send less.",
+                "details": {"route_ids": routes, "estimated_characters": estimate}}]
+    return result

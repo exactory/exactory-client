@@ -239,27 +239,30 @@ def export_openness(store, spec, destination=None):
         native_reviews, native_evidence = resolve_native_reviews(records, artifacts, spec["native_reviews"])
         scientific_context["native_reviews"] = native_reviews
         evidence.update(native_evidence)
-    if spec["minimum"].get("text_priority"):
-        # The research record declares which decisive full texts a text-limited route delivers first; the transport
-        # applies the route limit to the rest.
-        strings(spec["minimum"]["text_priority"], "Text delivery priority")
-        priority = []
-        for version in spec["minimum"]["text_priority"]:
-            work = records.get("work", {}).get(version)
-            if work is None or not work.get("fulltexts"):
-                raise ResearchError("openness_reading_gap", "Text delivery priority names a work without a captured full text", {"version_id": version})
-            priority.append(work["fulltexts"][0]["text"]["sha256"])
-        scientific_context["text_delivery_priority"] = priority
-        scientific_context["text_delivery_rule"] = (
-            "On a text-limited reviewer route the bodies of the listed full texts are delivered in this order "
-            "while the route input limit allows; a body that does not fit is replaced by an explicit elision "
-            "note, and the reading record of that work (its notes and inspected excerpts) is delivered in full.")
     packet = {"protocol": PROTOCOL, "kind": "result", "root": str(store.root.resolve()), "objective_id": statement["id"],
               "contract": {"orchestration": "problem_creation", "area": marker["area"]}, "subject": statement,
               "subject_digest": digest(statement), "claim_digest": compute_statement_digest(statement),
               "reviewer": {"source": "host", "actor_id": spec["reviewer_id"], "attestation_id": ATTESTATION_PREFIX + spec["assignment_id"]},
               "scientific_context": scientific_context, "evidence": [evidence[key] for key in sorted(evidence)],
               "execution_provenance": [], "unmaterialized_digests": []}
+    if spec["minimum"].get("text_priority"):
+        # The research record declares which decisive full texts a text-limited route delivers first; the transport
+        # applies the route limit to the rest.
+        strings(spec["minimum"]["text_priority"], "Text delivery priority")
+        from .openness_reading import list_reading_texts
+        reading_texts = list_reading_texts(records, packet)
+        priority = []
+        for version in spec["minimum"]["text_priority"]:
+            texts = sorted(row["text_sha256"] for row in reading_texts if row["version_id"] == version)
+            if not texts:
+                raise ResearchError("openness_reading_gap", "Text delivery priority requires an extracted main text "
+                                    "carried by this packet for a bound reading", {"version_id": version})
+            priority.extend(texts)
+        scientific_context["text_delivery_priority"] = priority
+        scientific_context["text_delivery_rule"] = (
+            "On a text-limited reviewer route the bodies of the listed full texts are delivered in this order "
+            "while the route input limit allows; a body that does not fit is replaced by an explicit elision "
+            "note, and the reading record of that work (its notes and inspected excerpts) is delivered in full.")
     if "native_reviews" in scientific_context:
         from .problem_openness_sources import build_delivery
         scientific_context["openness_delivery"] = build_delivery(records, artifacts, packet)
