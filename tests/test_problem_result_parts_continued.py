@@ -1,12 +1,16 @@
 """Owned bodies can arrive across authenticated part turns without losing item coverage."""
 
 import copy
+import json
 from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
 from research_harness import review_problem_parts as parts, review_protocol as protocol
 from research_harness import review_excerpts, review_transport as transport
+from research_harness import research_decisions as decisions, review_supplied_evidence as supplied
+from research_harness import review_objection_evidence as objection_evidence
 from research_harness.direction_sources import has_attachment
+from research_harness.evidence import digest
 
 
 class ProblemResultPartsContinuedTests(ResultPartsCase):
@@ -35,6 +39,340 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
 
     def sent(self, assignment):
         return review_excerpts.read_sent_packet(self.request(assignment))
+
+    def add_material_objection(self, body_characters=60000):
+        body = self.case.artifacts.put(b'o' * body_characters, 'text/plain')
+        alias = dict(body, media_type='text/plain; charset=utf-8')
+        objection = {'id': 'inherited-objection', 'claim': 'A material limitation.',
+                     'material_version': '1' * 64, 'version_evidence': [body,
+                         {'kind': 'record', 'record_kind': 'local_artifact', 'id': 'objection-record',
+                          'record': {}, 'artifacts': [alias]}], 'version_source_mappings': []}
+        self.install_material_objections([objection])
+        return objection, [body, alias]
+
+    def install_material_objections(self, objections):
+        real = protocol.add_problem_objections
+
+        def add_objection(*args):
+            real(*args)
+            args[2]['material_objections'] = copy.deepcopy(objections)
+
+        patcher = patch.object(protocol, 'add_problem_objections', side_effect=add_objection)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def shared_objections(self):
+        body = self.case.artifacts.put(b'Shared objection body.' * 50, 'text/plain')
+        alias = dict(body, media_type='text/plain; charset=utf-8')
+        stored = {'id': 'shared-objection-record', 'artifact': body, 'reason': 'r' * 18000}
+        self.case.put('local_artifact', stored['id'], stored)
+        record = {'kind': 'record', 'record_kind': 'local_artifact', 'id': stored['id'],
+                  'digest': digest(stored), 'record': protocol._reference_templates(stored), 'artifacts': [alias]}
+        link = self.case.supporting_links[self.case.supporting['sha256']]
+        mapping = {'version_id': link['version_id'], 'excerpt': self.case.supporting,
+                   'origin': {'source_id': link['source_id'],
+                              'locator': dict(link['locator'], sha256=self.case.supporting['sha256']),
+                              'artifact_descriptor': protocol._reference_templates(link['artifact'])['artifact_descriptor']}}
+        objections = [{'id': 'shared-' + str(index), 'stated_id': 'shared-' + str(index),
+                       'claim': 'A shared material limitation.', 'material_version': str(index + 1) * 64,
+                       'version_evidence': [body, record, alias], 'version_source_mappings': [mapping]}
+                      for index in range(3)]
+        return objections, [body, alias, self.case.supporting]
+
+    def project_objections(self, objections, stage='final'):
+        records = self.case.read_records()
+        packet = protocol.build_packet(records, self.case.artifacts, None, 'result', 'first')
+        packet['material_objections'] = copy.deepcopy(objections)
+        before = copy.deepcopy(packet)
+        projected = parts._project(records, self.case.artifacts, packet, [], [], [], [], 'series', stage, 1)
+        self.assertEqual(packet, before)
+        return projected
+
+    def test_final_deduplicates_entries_in_objection_and_field_order_before_digest(self):
+        objections, _ = self.shared_objections()
+        # Canonical equality ignores dictionary insertion order. It preserves descriptor aliases.
+        objections[0]['version_evidence'].append(dict(reversed(list(objections[0]['version_evidence'][0].items()))))
+        objections[0]['version_source_mappings'].append(copy.deepcopy(objections[0]['version_evidence'][1]))
+        objections[1]['version_evidence'].append(copy.deepcopy(objections[0]['version_source_mappings'][0]))
+        packet = self.project_objections(objections)
+        note = ('This reference stands in for the full entry, which is in material_objections of this packet under '
+                'the objection that objection_id names, in the list that field names, at the position that index '
+                'gives. The full entry belongs to the evidence of the objection that contains this note. The citation '
+                'rules of the prompt apply to the full entry, and this reference is not a citation.')
+        self.assertEqual(objection_evidence.REPEATED_OBJECTION_EVIDENCE_NOTE, note)
+        first = objections[0]
+
+        def repeated(field, index):
+            return {'delivery': 'repeated-in-material-objections', 'objection_id': 'shared-0',
+                    'field': field, 'index': index, 'digest': digest(first[field][index]), 'note': note}
+
+        body, record, alias = first['version_evidence'][:3]
+        mapping = first['version_source_mappings'][0]
+        body_repeat = repeated('version_evidence', 0)
+        record_repeat = repeated('version_evidence', 1)
+        alias_repeat = repeated('version_evidence', 2)
+        mapping_repeat = repeated('version_source_mappings', 0)
+        expected = [
+            dict(first, version_evidence=[body, record, alias, body_repeat],
+                 version_source_mappings=[mapping, record_repeat]),
+            dict(objections[1], version_evidence=[body_repeat, record_repeat, alias_repeat, mapping_repeat],
+                 version_source_mappings=[mapping_repeat]),
+            dict(objections[2], version_evidence=[body_repeat, record_repeat, alias_repeat],
+                 version_source_mappings=[mapping_repeat])]
+        self.assertEqual(packet['material_objections'], expected)
+        full = [entry for objection in packet['material_objections'] for field in objection_evidence.FIELDS
+                for entry in objection[field] if entry.get('delivery') != objection_evidence.REPEATED]
+        self.assertEqual(full, [body, record, alias, mapping])
+        self.assertEqual(packet['digest'], digest({key: value for key, value in packet.items() if key != 'digest'}))
+
+    def test_part_projection_still_omits_all_objection_evidence(self):
+        objections, references = self.shared_objections()
+        packet = self.project_objections(objections, 'part')
+        stripped = [{key: value for key, value in objection.items() if key not in objection_evidence.FIELDS}
+                    for objection in objections]
+        self.assertEqual(packet['material_objections'], stripped)
+        self.assertEqual(packet, self.project_objections(stripped, 'part'))
+        self.assertFalse(any(has_attachment(self.case.artifacts, packet, ref) for ref in references[:2]))
+
+    def test_objection_readers_resolve_full_records_mappings_and_nested_objections(self):
+        objections, references = self.shared_objections()
+        record, mapping = objections[0]['version_evidence'][1], objections[0]['version_source_mappings'][0]
+        nested = {'id': 'nested-qualified', 'stated_id': 'nested', 'claim': 'A nested claim.'}
+        record['record']['objections'] = [nested]
+        # Put each full entry in the other field so a reader must resolve the later entry to find it.
+        objections[0]['version_evidence'] = [mapping]
+        objections[0]['version_source_mappings'] = [record]
+        objections[1]['version_evidence'] = [copy.deepcopy(record)]
+        objections[1]['version_source_mappings'] = [copy.deepcopy(mapping)]
+        packet = self.project_objections(objections[:2])
+        repeated = packet['material_objections'][1]
+        self.assertEqual(objection_evidence.resolved_objection_entries(packet, repeated, 'version_evidence'), [record])
+        self.assertEqual(objection_evidence.resolved_objection_entries(packet, repeated, 'version_source_mappings'), [mapping])
+        self.assertIn(('local_artifact', record['id'], record['digest'], record['record'], record['artifacts']),
+                      list(protocol._list_packet_records(packet)))
+        self.assertIn(nested, list(supplied.collect_qualified_objections(packet)))
+        with patch.object(supplied, 'lineage_packets', return_value=[packet]):
+            received, mappings = supplied.supplied_context(self.case.read_records(), self.case.artifacts, [], frozen=True)
+            _, current_mappings = supplied.supplied_context(self.case.read_records(), self.case.artifacts, [])
+        self.assertEqual(mappings, [mapping])
+        self.assertEqual(current_mappings, [supplied.deliver_passage(self.case.read_records(), self.case.artifacts, mapping)])
+        self.assertIn(references[1], received.values())
+        self.assertEqual(decisions._visual_supplied_context(self.case.read_records(), self.case.artifacts, [packet])[1], [mapping])
+
+    def test_repeated_objection_entry_rejects_another_digest_or_missing_full_target(self):
+        objections, _ = self.shared_objections()
+        packet = self.project_objections(objections)
+        entry = packet['material_objections'][1]['version_evidence'][0]
+        for change in ({'digest': '0' * 64}, {'objection_id': 'absent'}, {'index': -1},
+                       {'field': 'evidence'}, {'index': 100}, {'objection_id': 'shared-1'}):
+            with self.subTest(change=change):
+                self.assert_code('review_objection_evidence_invalid', lambda: objection_evidence.resolve_objection_entry(
+                    packet, dict(entry, **change)))
+
+    def test_final_fits_only_after_deduplication_and_delivers_distinct_entries_and_bodies(self):
+        self.continued_unit()
+        objections, references = self.shared_objections()
+        self.install_material_objections(objections)
+        last = self.deliver_units()
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            final = self.assign('compact-final', last['id'])
+        self.assertEqual(fit.call_args.args[-1], references[:2])
+        request = self.request(final)
+        route = self.case.read_records()['review_route']['route']
+        uncompressed = self.packet(final)
+        uncompressed['material_objections'] = objections
+        uncompressed['digest'] = digest({key: value for key, value in uncompressed.items() if key != 'digest'})
+        full_size = parts._measure(route, transport.request_body(route, final['prompt']['text'], uncompressed, final['history']))
+        compact_size = parts._measure(route, request)
+        self.assertGreater(full_size, compact_size + 20000)
+        limit = transport.local_input_limit(route)
+        self.assertLessEqual(compact_size, limit)
+        self.assertGreater(full_size, limit)
+        self.assertFalse(parts._fits(self.case.artifacts, route, final['prompt'], uncompressed, final['history'], references)[0])
+        output = self.final_output()
+        output['value']['objection_findings'] = [{'id': objection['id'], 'status': 'continuing',
+            'reason': 'The shared delivered record retains this limitation.', 'evidence': [
+                {key: value for key, value in objections[0]['version_evidence'][1].items()
+                 if key in ('kind', 'record_kind', 'id', 'digest')}, references[1]]} for objection in objections]
+        review = self.record_final(final, output)
+        records = self.case.read_records()
+        actual = json.loads(self.case.artifacts.read(records['review_attempt']['attempt-' + final['id']]['request']))
+        sent = review_excerpts.read_sent_packet(actual)
+        self.assertEqual(sent['material_objections'], self.packet(final)['material_objections'])
+        for original, delivered in zip(objections, sent['material_objections']):
+            for field in objection_evidence.FIELDS:
+                self.assertEqual(objection_evidence.resolved_objection_entries(sent, delivered, field), original[field])
+        self.assertTrue(all(has_attachment(self.case.artifacts, sent, reference) for reference in references))
+        for reference in references:
+            self.assertEqual(sum(entry['artifact'] == reference for entry in sent['evidence']), 1)
+        self.assertLessEqual(parts._measure(route, actual), limit)
+        self.assertEqual(decisions.find_undelivered_review_references(records, self.case.artifacts, review), [])
+        self.assertEqual(self.coverage(review), [])
+
+    def test_final_requires_body_when_full_record_is_in_source_mappings(self):
+        self.continued_unit()
+        objections, _ = self.shared_objections()
+        record = objections[0]['version_evidence'][1]
+        body = self.case.artifacts.put(b'Required cross-field body.' * 3000, 'text/plain')
+        record['artifacts'] = [body]
+        objections[0]['version_evidence'] = []
+        objections[0]['version_source_mappings'] = [record]
+        for objection in objections[1:]:
+            objection['version_evidence'] = [copy.deepcopy(record)]
+            objection['version_source_mappings'] = []
+        self.install_material_objections(objections)
+        last = self.deliver_units()
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            error = self.assert_code('review_input_too_large', lambda: self.assign('final', last['id']))
+        self.assertEqual((error.details['stage'], error.details['unit']), ('final', None))
+        self.assertEqual(fit.call_args.args[-1], [body])
+        artifacts, route, prompt, packet, history, _ = fit.call_args.args
+        sent = review_excerpts.read_sent_packet(transport.request_body(route, prompt['text'], packet, history))
+        self.assertTrue(has_attachment(artifacts, packet, body))
+        self.assertFalse(has_attachment(artifacts, sent, body))
+
+    def test_final_source_reply_deduplicates_objections_and_keeps_required_bodies(self):
+        self.oversized(characters=90000, limit=500000)
+        self.case.add_reading_and_computation()
+        objections, references = self.shared_objections()
+        self.install_material_objections(objections)
+        last = self.deliver_units()
+        final = self.assign('final', last['id'])
+        output = self.case.build_review_output('result')
+        output['value']['status'] = 'unresolved'
+        output['source_requests'] = [{'id': 'read-source', 'kind': 'source', 'depth': 'fulltext',
+                                      'version_id': self.case.expected['readings'][0]['version_id']}]
+        self.invoke(final, output)
+        reply = self.assign('source-reply', final['id'])
+        sent = self.sent(reply)
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertTrue(sent['source_deliveries'])
+        self.assertEqual(sent['pending_source_requests'], [])
+        self.assertEqual(sent['material_objections'], self.packet(final)['material_objections'])
+        self.assertTrue(all(has_attachment(self.case.artifacts, sent, reference) for reference in references))
+
+    def test_recorded_final_with_full_objections_is_not_rewritten(self):
+        self.continued_unit(duplicates=3, limit=150000)
+        for item in self.case.expected['computations']:
+            item['assessment']['reason'] = 'c' * 90000
+        objections, _ = self.shared_objections()
+        self.install_material_objections(objections)
+        last = self.deliver_units()
+        with patch.object(parts, 'deduplicate_material_objections'):
+            final = self.assign('legacy-final', last['id'])
+        frozen = self.case.artifacts.read(final['packet'])
+        output = self.final_output()
+        output['value']['objection_findings'] = [{'id': objection['id'], 'status': 'continuing',
+            'reason': 'This remains a limitation.', 'evidence': [objections[0]['version_evidence'][0]]}
+            for objection in objections]
+        self.invoke(final, output)
+        self.assertTrue(protocol.assignment_state(self.case.read_records(), self.case.artifacts, final['id'])['ready'])
+        self.assertEqual(self.sent(final)['material_objections'], objections)
+        self.assertEqual(self.case.artifacts.read(final['packet']), frozen)
+
+    def deliver_units(self):
+        assignment = self.assign()
+        for turn in range(1, 31):
+            packet = self.packet(assignment)
+            self.assertEqual(packet[KEY]['stage'], 'part')
+            self.invoke(assignment)
+            if not any(packet[KEY]['remaining'].values()):
+                return assignment
+            assignment = self.assign('part-' + str(turn + 1), assignment['id'])
+        self.fail('Each part must advance the finite unit queue')
+
+    def test_final_refuses_when_transport_elides_objection_body(self):
+        self.continued_unit()
+        _, references = self.add_material_objection()
+        last = self.deliver_units()
+        revision = self.case.store.revision
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            error = self.assert_code('review_input_too_large', lambda: self.assign('final', last['id']))
+        self.assertEqual((error.details['stage'], error.details['unit']), ('final', None))
+        self.assertEqual(self.case.store.revision, revision)
+        artifacts, route, prompt, packet, history, _ = fit.call_args.args
+        request = transport.request_body(route, prompt['text'], packet, history)
+        self.assertLessEqual(parts._measure(route, request), transport.local_input_limit(route))
+        self.assertTrue(all(has_attachment(artifacts, packet, reference) for reference in references))
+        self.assertFalse(all(has_attachment(artifacts, review_excerpts.read_sent_packet(request), reference)
+                             for reference in references))
+
+    def test_fitting_final_attaches_every_objection_descriptor_in_the_actual_request(self):
+        self.continued_unit()
+        objection, references = self.add_material_objection(body_characters=6000)
+        last = self.deliver_units()
+        final = self.assign('final', last['id'])
+        self.assertEqual(self.packet(final)['material_objections'], [objection])
+        output = self.final_output()
+        output['value']['objection_findings'] = [{'id': objection['id'], 'status': 'continuing',
+            'reason': 'The delivered evidence retains this limitation.', 'evidence': [references[0]]}]
+        self.invoke(final, output)
+        records = self.case.read_records()
+        self.assertTrue(protocol.assignment_state(records, self.case.artifacts, final['id'])['ready'])
+        request = json.loads(self.case.artifacts.read(records['review_attempt']['attempt-final']['request']))
+        sent = review_excerpts.read_sent_packet(request)
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertTrue(all(has_attachment(self.case.artifacts, sent, reference) for reference in references))
+
+    def test_final_source_reply_requires_objection_bodies_in_the_actual_request(self):
+        self.oversized()
+        self.case.add_reading_and_computation()
+        _, references = self.add_material_objection(body_characters=45000)
+        last = self.deliver_units()
+        final = self.assign('final', last['id'])
+        self.assertTrue(all(has_attachment(self.case.artifacts, self.sent(final), reference) for reference in references))
+        output = self.case.build_review_output('result')
+        output['value']['status'] = 'unresolved'
+        output['source_requests'] = [{'id': 'read-source', 'kind': 'source', 'depth': 'fulltext',
+                                      'version_id': self.case.expected['readings'][0]['version_id']}]
+        self.invoke(final, output)
+        revision = self.case.store.revision
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            error = self.assert_code('review_input_too_large', lambda: self.assign('source-reply', final['id']))
+        self.assertEqual((error.details['stage'], error.details['unit']), ('final', None))
+        self.assertEqual(self.case.store.revision, revision)
+        artifacts, route, prompt, packet, history, _ = fit.call_args.args
+        request = transport.request_body(route, prompt['text'], packet, history)
+        sent = review_excerpts.read_sent_packet(request)
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertTrue(sent['source_deliveries'])
+        self.assertEqual(sent['pending_source_requests'], [])
+        self.assertLessEqual(parts._measure(route, request), transport.local_input_limit(route))
+        # Equal hashes do not supply a missing descriptor: the transport kept only one of the two bodies.
+        self.assertEqual(sum(has_attachment(artifacts, sent, reference) for reference in references), 1)
+
+    def test_fallback_skips_unfittable_body_and_delivers_later_body(self):
+        self.oversized()
+        first = self.assign()
+        small = self.case.artifacts.put(b's' * 4001, 'text/plain')
+        for index in range(32):
+            large = self.case.artifacts.put(str(index).encode().ljust(60000, b'l'), 'text/plain')
+            if digest(large) < digest(small):
+                break
+        self.assertLess(digest(large), digest(small))
+        item = {'execution': {'id': 'unequal-outputs', 'outputs': [
+            {'id': 'large', 'artifact': large}, {'id': 'small', 'artifact': small}]}}
+        self.case.expected['openness_searches'] = []
+        self.case.expected['computations'] = [item]
+        self.assertEqual(parts._owned_artifacts('computations', item), [large, small])
+        records, artifacts = self.case.read_records(), self.case.artifacts
+        packet = protocol.build_packet(records, artifacts, None, 'result', 'first')
+        route = records['review_route']['route']
+        prompt = protocol.canonical_prompt('result', orchestration='problem_creation', excerpts=True,
+                                           evidence_parts='part')
+        value = {'id': 'unequal-part', 'role': 'result', 'context': {'prior_assignment_id': first['id']}}
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 30000):
+            planned = parts.prepare_packet(records, artifacts, value, route, packet, prompt, [])
+            request = transport.request_body(route, prompt['text'], planned)
+        sent = review_excerpts.read_sent_packet(request)
+        self.assertLessEqual(parts._measure(route, request), 30000)
+        self.assertTrue(has_attachment(artifacts, sent, small))
+        entry = next(entry for entry in sent['evidence'] if entry['artifact'] == large)
+        self.assertEqual((entry['encoding'], entry['content'], entry['delivery']),
+                         ('omitted', '', 'delivered-in-a-later-part-turn'))
+        self.assertEqual(sent[KEY]['delivered_now']['computations'], [[0, 1]])
+        self.assertEqual(sent[KEY]['remaining']['computations'], [[0, 1]])
+        self.assertTrue(parts._makes_progress(parts._delivered_units(sent), [small], []))
 
     def test_unit_continues_with_pending_and_earlier_markers_then_passes_post_coverage(self):
         references = self.continued_unit()
@@ -241,10 +579,16 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertEqual(parts.observe_series(records, self.case.artifacts, first['id']), [])
 
     def test_tiny_bodies_can_fit_when_their_pending_markers_do_not(self):
+        self.check_tiny_bodies(lambda index: str(index))
+
+    def test_tiny_unicode_bodies_can_fit_when_their_pending_markers_do_not(self):
+        self.check_tiny_bodies(lambda index: 'Sum: ' + '\u2211' * 50 + str(index))
+
+    def check_tiny_bodies(self, content):
         self.oversized()
         first = self.assign()
         self.case.expected['openness_searches'] = []
-        references = [self.case.artifacts.put(str(i).encode(), 'text/plain') for i in range(24)]
+        references = [self.case.artifacts.put(content(i).encode(), 'text/plain') for i in range(24)]
         self.case.expected['computations'] = [{'execution': {'id': 'tiny-outputs', 'outputs': [
             {'id': str(i), 'artifact': reference} for i, reference in enumerate(references)]},
             'assessment': {'reason': 'c' * 30000}}]

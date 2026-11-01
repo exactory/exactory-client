@@ -5,6 +5,7 @@ import json
 from .errors import ResearchError
 from .evidence import digest
 from .source_links import contains, contains_locator, validate_link
+from .review_objection_evidence import resolved_objection_entries
 
 PROTOCOL = 'exactory-focused-review-evidence-v2'
 PROMPT = (
@@ -49,8 +50,9 @@ def list_delivered_parts(packet):
 
 
 def list_delivered_objections(packet):
-    """The objections that a packet delivers with their evidence: its material objections and the objections of its
-    historical reviews. A first slate or result packet wraps each historical review with its independence."""
+    """The material objections and historical-review objections that a packet carries. A problem evidence part
+    carries material objections without their delivered evidence; the final packet carries that evidence.
+    A first slate or result packet wraps each historical review with its independence."""
     historical = [entry.get('review', entry) for entry in packet.get('historical_reviews', [])]
     return packet.get('material_objections', []) + [objection for entry in historical
         for objection in entry.get('payload', entry).get('objections', [])]
@@ -82,7 +84,8 @@ def collect_qualified_objections(packet):
         if all(isinstance(objection.get(key), str) for key in ('id', 'stated_id', 'claim')):
             yield objection
         pending += objection.get('history', [])
-        pending += [item for entry in objection.get('version_evidence', []) if entry.get('kind') == 'record'
+        pending += [item for entry in resolved_objection_entries(packet, objection, 'version_evidence')
+                    if entry.get('kind') == 'record'
                     for item in _list_review_objections(entry['record'])]
     for turn in packet.get('scientific_history', []):
         yield from collect_qualified_objections(turn['packet'])
@@ -117,8 +120,9 @@ def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
             artifacts.read(reference)
             register_supplied_artifact(references, reference)
         delivered = (packet.get('prior_context', []) + packet.get('version_source_mappings', [])
-                     + packet.get('supplied_source_mappings', [])) + [mapping for objection in list_delivered_objections(packet)
-                                                       for mapping in objection.get('version_source_mappings', [])]
+                     + packet.get('supplied_source_mappings', []))
+        delivered += [mapping for objection in list_delivered_objections(packet)
+                      for mapping in resolved_objection_entries(packet, objection, 'version_source_mappings')]
         delivered += list_delivered_parts(packet)
         for entry in delivered:
             if 'origin' not in entry or 'excerpt' not in entry:

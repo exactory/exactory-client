@@ -214,6 +214,7 @@ def _visual_supplied_context(records, artifacts, packets):
     from .direction_sources import has_attachment
     from .evaluation import Evaluation
     from .review_supplied_evidence import list_delivered_objections, list_delivered_parts, register_supplied_artifact
+    from .review_objection_evidence import resolved_objection_entries
     evaluation = Evaluation.of(records, artifacts)
     references, mappings = {}, []
     for packet in packets:
@@ -224,7 +225,7 @@ def _visual_supplied_context(records, artifacts, packets):
         delivered = (packet.get('prior_context', []) + packet.get('version_source_mappings', [])
                      + packet.get('supplied_source_mappings', []))
         delivered += [mapping for objection in list_delivered_objections(packet)
-                      for mapping in objection.get('version_source_mappings', [])]
+                      for mapping in resolved_objection_entries(packet, objection, 'version_source_mappings')]
         delivered += list_delivered_parts(packet)
         for mapping in delivered:
             if ('origin' in mapping and 'excerpt' in mapping and mapping not in mappings

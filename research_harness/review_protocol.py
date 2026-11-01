@@ -1046,12 +1046,13 @@ def _list_packet_records(packet):
     None takes the stored record's digest. An id of None takes the cited id: the projection is the stored record
     itself, so its own digest binds it. A kind that no problem packet projects is never yielded, so a citation of it
     stays undelivered."""
+    from .review_objection_evidence import resolved_objection_entries
     for kind, identifier, recorded_digest, projection in _list_projected_records(packet):
         yield kind, identifier, recorded_digest, projection, []
     # A record delivered with an objection, as the projection that its stating reviewer received, keeps the artifacts
     # that the delivery supplied with it.
     for objection in [packet] + supplied_evidence.list_delivered_objections(packet):
-        for entry in objection.get('version_evidence', []):
+        for entry in resolved_objection_entries(packet, objection, 'version_evidence'):
             if entry.get('kind') == 'record':
                 yield entry['record_kind'], entry['id'], entry.get('digest'), entry['record'], entry['artifacts']
 
