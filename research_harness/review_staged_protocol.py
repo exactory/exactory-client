@@ -37,12 +37,13 @@ def collect_output_records(observations, names):
     return list(records.values())
 
 
-def collect_valid_records(epoch, observations, name, validator):
+def collect_valid_records(epoch, observations, name, validator, *, contexts=None):
     """Preserve independently valid dependency records beside malformed siblings."""
+    manifest = epoch['manifest'] if contexts is None else dict(epoch['manifest'], contexts=contexts)
     records = []
     for row in collect_output_records(observations, (name,)):
         try:
-            records.append(validator(row, epoch['manifest']))
+            records.append(validator(row, manifest))
         except ResearchError:
             continue
     return records
@@ -73,6 +74,21 @@ def collect_observations(records, artifacts, epoch):
     return observations, terminal, obligations
 
 
+def derive_current_contexts(records, artifacts, epoch):
+    """Expand original claim closure only from authenticated accepted discoveries."""
+    from . import review_staged as staged
+    discoveries = [row['receipt'].get('staged_observation')
+                   for row in records.get('review_task_acceptance', {}).values()]
+    if not any(row is not None and row.get('epoch_id') == epoch['id']
+               and row.get('output', {}).get('new_dependencies') for row in discoveries):
+        return copy.deepcopy(epoch['manifest']['contexts'])
+    observations, _, obligations = collect_observations(records, artifacts, epoch)
+    if obligations:
+        raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
+    return staged.collect_planning_records(epoch, {'observations':observations},
+                                          tasks=list_epoch_tasks(records, epoch))['contexts']
+
+
 def plan_remaining_tasks(records, artifacts, controller, *, profiles, composition_plan=None):
     """Replan from the exact accepted partial work and caller-supplied sizing profiles."""
     from . import review_staged as staged
@@ -83,7 +99,7 @@ def plan_remaining_tasks(records, artifacts, controller, *, profiles, compositio
     observations, _, obligations = collect_observations(records, artifacts, epoch)
     if obligations:
         raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
-    tasks = [row['task'] for row in records.get('review_task', {}).values() if row['epoch_id'] == epoch['id']]
+    tasks = list_epoch_tasks(records, epoch)
     route = protocol._get(records, 'review_route', controller['route_id'])
     selection = {'observations': observations}
     verified = staged.collect_planning_records(epoch, selection, tasks=tasks)
@@ -98,10 +114,25 @@ def plan_remaining_tasks(records, artifacts, controller, *, profiles, compositio
             except ResearchError:
                 # Missing finding bodies block this card's presentation, not valid sibling cells.
                 continue
-    return staged.plan_tasks(epoch, route_limit=transport.local_input_limit(route),
+    planned = staged.plan_tasks(epoch, route_limit=read_input_limit(route),
         output_tokens=route['configuration']['max_output_tokens'], profiles=profiles,
         cards=cards, findings=findings, selected_groups=verified['selected_groups'], contexts=verified['contexts'],
-        tasks=tasks, selection=selection, composition_plan=composition_plan)
+        tasks=tasks, selection=selection, composition_plan=composition_plan,
+        source_sizes={row['id']:row['descriptor']['size'] for row in epoch['manifest']['sources'] if row['kind'] == 'binary'})
+    remapped, bound = {}, []
+    for task in planned['tasks']:
+        dependencies = [remapped.get(key, key) for key in task['dependencies']]
+        if task['type'] == 'combine':
+            dependencies.extend(row['task_id'] for row in observations if any(
+                card['id'] in task['card_ids'] for card in row['output'].get('cards', [])))
+        if task['type'] == 'original_check':
+            dependencies.extend(row['task_id'] for row in observations if any(
+                group['id'] in task['group_ids'] for group in row['output'].get('selected_groups', [])))
+        changed = remake_task(epoch, task, dependencies=sorted(set(dependencies)),
+            segment_task_ids=[remapped.get(key, key) for key in task['segment_task_ids']])
+        remapped[task['id']] = changed['id']
+        bound.append(changed)
+    return staged._seal(dict({key:value for key,value in planned.items() if key != 'digest'}, tasks=bound))
 
 
 def build_request(artifacts, route, prompt, packet):
@@ -109,9 +140,13 @@ def build_request(artifacts, route, prompt, packet):
     request = transport.request_body(route, prompt['text'], packet, [])
     request['history'] = []
     sent = review_excerpts.read_sent_packet(request) or {}
-    if (not review_problem_parts.preserves_ordinary_packet(artifacts, packet, request)
+    preserved = review_problem_parts.preserves_ordinary_packet(artifacts, packet, request)
+    if route['adapter'] == 'codex_cli_visual_v1':
+        from .review_staged_binary import preserves_packet
+        preserved = preserves_packet(artifacts.records, artifacts, packet, request)
+    if (not preserved
             or sent.get('staged_review') != packet.get('staged_review')
-            or review_problem_parts._measure(route, request) > transport.local_input_limit(route)):
+            or review_problem_parts._measure(route, request) > read_input_limit(route)):
         raise ResearchError('review_task_pending', 'Partition the task: fitting removed mandatory staged input')
     return request
 
@@ -122,18 +157,24 @@ def project_card(epoch, card, findings):
     return staged.compact_card(card, manifest=epoch['manifest'], findings=findings)
 
 
-def project_terminal_material(epoch, observations, *, integration_id=None, tasks=()):
+def project_terminal_material(epoch, observations, *, integration_id=None, tasks=(), contexts=None):
     """Deliver assessed grounds and answers without replaying full cards or pages."""
     from . import review_staged as staged
-    outputs = [row['output'] for row in observations]
-    cards = [row for row in collect_valid_records(epoch, observations, 'cards', staged.validate_card) if row['kind'] == 'full']
-    integrations = collect_output_records(observations, ('integrations',))
+    current_contexts = contexts or epoch['manifest']['contexts']
+    current_observations = [row for row in observations if all(
+        key in current_contexts and root == current_contexts[key]['root']
+        for key,root in row['actual_input']['context_roots'].items())]
+    outputs = [row['output'] for row in current_observations]
+    cards = [row for row in collect_valid_records(epoch, current_observations, 'cards', staged.validate_card,
+                                                 contexts=contexts) if row['kind'] == 'full']
+    integrations = collect_output_records(current_observations, ('integrations',))
     if tasks:
         verified = staged.collect_planning_records(epoch, {'observations': observations}, tasks=tasks)
         integrations = verified['integrations']
         cards = verified['cards']
     cells = {row['id']: row for card in cards for row in card['judgments']}
-    cells.update({row['id']: row for output in outputs for row in output.get('cells', [])})
+    cells.update({row['id']:row for row in collect_valid_records(epoch, current_observations, 'cells',
+                                                               staged.validate_cell, contexts=contexts)})
     conclusions = {row['id']: row for card in cards for name in ('conclusions', 'conditions') for row in card[name]}
     for output in outputs:
         for check in output.get('original_checks', []):
@@ -159,7 +200,9 @@ def project_terminal_material(epoch, observations, *, integration_id=None, tasks
     claims = [dict(row, cells=[cell['id'] for cell in cells.values() if cell['claim_id'] == row['id']],
                    statuses=sorted({cell['status'] for cell in cells.values() if cell['claim_id'] == row['id']}))
               for row in epoch['manifest']['claims']]
-    findings = {row['id']: row for output in outputs for row in output.get('findings', [])}
+    finding_records = (verified['findings'] if tasks else
+                       [row for observed in observations for row in observed['output'].get('findings', [])])
+    findings = {row['id']:row for row in finding_records}
     answers = {row['id']: row for output in outputs for row in output.get('answers', [])}
     material = dict(claims=claims, decisions=decisions, cells=list(cells.values()), conclusions=list(conclusions.values()),
                 integrations=integrations, integration_id=integrated['id'] if integrated is not None else None,
@@ -171,7 +214,8 @@ def project_terminal_material(epoch, observations, *, integration_id=None, tasks
     return material
 
 
-def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=None, tasks=(), terminal_observations=None):
+def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=None, tasks=(), terminal_observations=None,
+                 contexts=None):
     """Render exact originals and bounded, explicitly selected dependency records."""
     from . import review_staged as staged
     validate_composition_task(epoch, task, composition_plan)
@@ -184,7 +228,8 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
             projected[key] = copy.deepcopy(task[key])
     originals = [dict(span=span, text=staged.materialize_quotation(sources[span['source_id']], span)['text'])
                  for span in task['inputs']]
-    claims = [dict(claim, context_root=epoch['manifest']['contexts'][claim['id']]['root'])
+    current_contexts = epoch['manifest']['contexts'] if contexts is None else contexts
+    claims = [dict(claim, context_root=current_contexts[claim['id']]['root'])
               for claim in epoch['manifest']['claims'] if claim['id'] in task['claim_ids']]
     units = [dict(row, sources=[dict(source_id=original['span']['source_id'], span=original['span'], original_index=index)
                                for index, original in enumerate(originals) if original['span']['source_id'] in row['source_ids']])
@@ -196,15 +241,19 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
                   for row in observations]
     inherited = []
     assigned_sources = {row['source_id'] for row in task['inputs']}
-    for index, finding in enumerate(epoch['manifest']['inherited_findings']):
+    for finding in epoch['manifest']['inherited_findings']:
+        paths = [(family, index) for family in ('material_objections', 'inherited_review_findings')
+                 for index, row in enumerate(epoch['manifest']['frame'].get(family, []))
+                 if isinstance(row, dict) and row.get('id') == finding['id']]
         original_fields = [row for row in epoch['manifest']['frame_fields']
-                           if row['path'][:2] == ['material_objections', index]]
+                           if any(row['path'][:2] == [family, index] for family, index in paths)]
         if (finding['id'] in task['obligation_ids']
                 or any(row['source_id'] in assigned_sources for row in original_fields)):
-            inherited.append(dict(id=finding['id'], record_digest=digest(finding),
-                                  source_ids=[row['source_id'] for row in original_fields]))
-    if len(_canonical([continuity, inherited])) > 16000:
-        raise ResearchError('review_task_pending', 'Partition the dependency frontier to bound task continuity')
+            entry = dict(id=finding['id'], record_digest=digest(finding),
+                         source_ids=[row['source_id'] for row in original_fields])
+            if finding.get('provenance'):
+                entry.update(provenance=copy.deepcopy(finding['provenance']), accepted=finding['accepted'])
+            inherited.append(entry)
     frame_fields = [dict(source_id=original['span']['source_id'], span=original['span'],
                          path=sources[original['span']['source_id']]['identity'].get('path'), text=original['text'])
                     for original in originals if sources[original['span']['source_id']]['kind'] == 'frame']
@@ -214,9 +263,10 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
                 index=[dict(occurrence_id=row['id'], key=row['key'], index=row['index']) for row in
                        epoch['manifest']['occurrences'] if row['id'] in task['occurrence_ids']],
                 index_root=epoch['manifest']['digest'], inherited=inherited,
-                frame=dict(fields=frame_fields), output_characters=task['measurement']['configured_output_tokens'])
+                frame=dict(fields=frame_fields), output_tokens=task['measurement']['configured_output_tokens'])
     project_task_material(epoch, task, body, observations, terminal_observations, tasks,
-                          composition_plan['role'] if composition_plan is not None else None)
+                          composition_plan['role'] if composition_plan is not None else None,
+                          contexts=current_contexts)
     if composition_plan is not None:
         apply_composition_plan(epoch, task, body, composition_plan, terminal_observations or observations, tasks)
     packet = dict(protocol=staged.PROTOCOL, subject=epoch['subject'], role=epoch['role'], staged_review=body,
@@ -228,22 +278,33 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
         for objection in packet['material_objections']:
             for name in ('version_evidence', 'version_source_mappings'):
                 objection[name] = resolved_objection_entries(epoch, objection, name)
-    if task['binary_sources']:
-        raise ResearchError('review_task_pending', 'Native binary input needs its existing qualified delivery contract')
     if repair is not None:
         packet['context_repair'] = copy.deepcopy(repair)
     packet['digest'] = digest(packet)
     return packet
 
 
-def project_task_material(epoch, task, body, observations, terminal_observations, tasks, composition_role):
+def project_task_material(epoch, task, body, observations, terminal_observations, tasks, composition_role, *, contexts=None):
     """Project only the selected task's scientific dependency material."""
     from . import review_staged as staged
     # Records arrive as explicit task input, never as replayed conversation.
     records = [row['output'] for row in observations]
-    cards = collect_valid_records(epoch, observations, 'cards', staged.validate_card)
+    cards = collect_valid_records(epoch, observations, 'cards', staged.validate_card, contexts=contexts)
     findings = collect_output_records(observations, ('findings',))
     receipts = collect_output_records(observations, ('integrations', 'original_checks', 'combinations'))
+    integration_scope = task['type'] == 'integrate' and not task['occurrence_ids']
+    if integration_scope:
+        obligations = set(task['obligation_ids'])
+        cards = [card for card in cards if not task['child_ids']
+                 and (not task['card_ids'] or card['id'] in task['card_ids'])
+                 and (not obligations or obligations.intersection(staged.card_obligations([card])))]
+        required = {key for card in cards for key in card['dependencies']}
+        receipts = [row for row in receipts if row['id'] in task['child_ids'] or row['id'] in required
+                    or set(row.get('card_ids', [])).intersection(card['id'] for card in cards)]
+        finding_ids = {key for card in cards for key in card['findings']}
+        finding_ids.update(key for row in receipts for key in row.get('findings', []))
+        if task['card_ids'] or task['child_ids'] or obligations:
+            findings = [row for row in findings if row['id'] in finding_ids]
     body['fragments'] = [card for card in cards if card.get('kind') == 'fragment']
     body['combine'] = dict(cards=[project_card(epoch, card, findings) for card in cards if card['id'] in task['card_ids']],
                            presentation='all_cards', blocks=[])
@@ -262,8 +323,11 @@ def project_task_material(epoch, task, body, observations, terminal_observations
     body['retrieval'] = [row for output in records for row in output.get('retrievals', [])]
     conclusions = [row for card in cards for name in ('conclusions', 'conditions', 'judgments') for row in card.get(name, [])]
     conclusion_ids = {row['id'] for row in conclusions}
-    conclusions.extend(row for row in collect_valid_records(epoch, observations, 'cells', staged.validate_cell)
+    conclusions.extend(row for row in collect_valid_records(epoch, observations, 'cells', staged.validate_cell,
+                                                            contexts=contexts)
                        if row['id'] not in conclusion_ids)
+    if integration_scope and (task['obligation_ids'] or task['child_ids']):
+        conclusions = [row for row in conclusions if row['id'] in task['obligation_ids']]
     child_union = sorted({key for receipt in receipts if receipt['id'] in task['child_ids']
                           for key in receipt.get('obligation_ids', [])})
     obligation_ids = sorted(set(task['obligation_ids'] or ([] if task['child_ids'] else staged.card_obligations(cards)))
@@ -273,7 +337,7 @@ def project_task_material(epoch, task, body, observations, terminal_observations
                   child_ids=task['child_ids'], child_union=child_union, obligation_ids=obligation_ids)
     if task['type'] == 'integrate' and not task['occurrence_ids']:
         copied = staged.bind_integration_lists(dict(child_ids=task['child_ids']), epoch=epoch, task=task,
-            cards=cards, children=[row for output in records for row in output.get('integrations', [])], observations=observations)
+            cards=cards, children=[row for row in receipts if row['id'] in task['child_ids']], observations=observations)
     body['integrate'] = dict(conclusions=conclusions, full_cards=cards, receipts=receipts, findings=findings,
                             constraints=body['decisions'], copy=copied)
     body['final'] = dict(composition_root=None, integration_id=receipts[-1]['id'] if receipts else None,
@@ -285,7 +349,7 @@ def project_task_material(epoch, task, body, observations, terminal_observations
             body['final'] = dict(composition_root=None, origin='reviewer', decisions={'/origin': ['reviewer']})
         else:
             body['final'].update(project_terminal_material(epoch, terminal_observations or observations,
-                                  integration_id=body['final']['integration_id'], tasks=tasks))
+                                  integration_id=body['final']['integration_id'], tasks=tasks, contexts=contexts))
     keep = {'frame': ('frame',), 'read': (), 'combine': ('combine',),
             'original_check': ('original_check', 'segments'),
             'integrate': ('integrate', 'fragments', 'segments', 'original_check', 'retrieval'),
@@ -379,8 +443,11 @@ def build_manifest(artifacts, packet, role):
     original_keys = {digest(reference) for reference in original_references}
     represented_originals = set()
     # Frame bodies and focused evidence are independent original obligations too.
+    images = [page['image'] for page in packet.get('visual_source_delivery', {}).get('pages', [])]
     for entry in packet.get('evidence', []):
         reference = entry['artifact']
+        if reference in images:
+            continue
         if digest(reference) in owned:
             continue
         owned.add(digest(reference))
@@ -422,25 +489,129 @@ def build_manifest(artifacts, packet, role):
                                  inherited_findings=packet.get('material_objections', []))
 
 
+def _find_predecessor_assignment_id(record):
+    context = record.get('context', {})
+    return (context.get('prior_assignment_id') or context.get('context_repair', {}).get('assignment_id')
+            or context.get('staged_upgrade', {}).get('assignment_id'))
+
+
+def _collect_successor_ancestry(records, epoch):
+    """Follow the exact frozen predecessor bindings, including earlier successors."""
+    result, visited = [], set()
+    while epoch is not None:
+        if epoch['id'] in visited:
+            raise ResearchError('review_task_dependency_changed', 'A successor ancestry cannot contain a cycle')
+        visited.add(epoch['id'])
+        result.append(epoch)
+        predecessor = epoch.get('predecessor')
+        if predecessor is None:
+            break
+        assignment = protocol._get(records, 'review_assignment', predecessor['assignment_id'])
+        if digest(assignment) != predecessor['assignment_digest']:
+            raise ResearchError('review_task_dependency_changed', 'Retain the exact predecessor assignment')
+        binding = assignment.get('staged_review', {})
+        epoch_id = predecessor.get('epoch_id', binding.get('epoch_id'))
+        if epoch_id is None:
+            break
+        epoch = protocol._get(records, 'review_epoch', epoch_id)
+        if predecessor.get('epoch_digest', epoch['digest']) != epoch['digest']:
+            raise ResearchError('review_task_dependency_changed', 'Retain the exact predecessor epoch')
+    return result
+
+
+def _collect_successor_findings(records, artifacts, predecessor):
+    """Preserve authenticated historical adverse records as inherited obligations."""
+    from . import review_staged as staged
+    binding = predecessor.get('staged_review', {})
+    if 'epoch_id' not in binding:
+        return []
+    previous = protocol._get(records, 'review_epoch', binding['epoch_id'])
+    inherited = {}
+    for epoch in reversed(_collect_successor_ancestry(records, previous)):
+        for finding in epoch['manifest']['inherited_findings']:
+            if isinstance(finding, dict) and finding.get('accepted') and finding.get('provenance'):
+                inherited[finding['id']] = copy.deepcopy(finding)
+        observations, origins = [], {}
+        for acceptance in records.get('review_task_acceptance', {}).values():
+            receipt = acceptance['receipt']
+            observed, attempt = receipt.get('staged_observation'), receipt.get('attempt')
+            if observed is None or observed.get('epoch_id') != epoch['id'] or attempt is None:
+                continue
+            child = records.get('review_assignment', {}).get(attempt['assignment_id'])
+            if child is None or not authenticate_observation(records, artifacts, child, attempt):
+                raise ResearchError('review_invocation_unverified', 'Authenticate inherited accepted task observations')
+            raw = protocol.read_raw_observation(records, artifacts, attempt['id'])
+            bound, _ = staged.bind_quotations(raw['raw_output'], epoch=epoch, sources=epoch['manifest']['sources'])
+            contexts = {key:dict(value, root=child['staged_task']['context_roots'].get(key, value['root']))
+                        for key,value in epoch['manifest']['contexts'].items()}
+            accepted = staged.validate_task_output(child['staged_task'], bound,
+                manifest=dict(epoch['manifest'], contexts=contexts), validate_records=False)
+            if accepted != observed['output'] or digest(accepted) != observed['raw_output_digest']:
+                raise ResearchError('review_invocation_unverified', 'Inherited science must equal its accepted observation')
+            capture = records.get('review_observation', {}).get(attempt.get('reservation_id'))
+            origins[observed['id']] = dict(epoch_id=epoch['id'], epoch_digest=epoch['digest'],
+                task_id=observed['task_id'], task_digest=observed['task_digest'], assignment_id=child['id'],
+                attempt_id=attempt['id'], attempt_digest=digest(attempt),
+                observation_id=capture['id'] if capture is not None else None,
+                observation_digest=digest(capture) if capture is not None else None,
+                raw_output_digest=raw['raw_output_digest'], accepted_output_digest=digest(accepted))
+            observations.append(observed)
+        verified = staged.collect_planning_records(epoch, {'observations':observations},
+                                                   tasks=list_epoch_tasks(records, epoch))
+        for finding in verified['findings']:
+            if not finding.get('adverse'):
+                continue
+            owner = next(row for row in observations if finding in row['output'].get('findings', []))
+            provenance = origins[owner['id']]
+            identifier = 'inherited-finding:' + digest([epoch['id'], owner['id'], finding['id']])
+            inherited[identifier] = dict(id=identifier, text=finding['text'], accepted=True,
+                family='findings', record=copy.deepcopy(finding), provenance=copy.deepcopy(provenance))
+    return list(inherited.values())
+
+
 def build_epoch(records, record, packet, manifest):
     """Freeze the slot identity, predecessor and scientific decision boundary."""
     from . import review_staged as staged
     from .review_composition import PROTOCOL as COMPOSITION_PROTOCOL, list_scalar_fields
-    predecessor_id = (record.get('context', {}).get('prior_assignment_id')
-                      or record.get('context', {}).get('context_repair', {}).get('assignment_id')
-                      or record.get('context', {}).get('staged_upgrade', {}).get('assignment_id'))
+    predecessor_id = _find_predecessor_assignment_id(record)
     predecessor = None
     if predecessor_id:
+        parent = records['review_assignment'][predecessor_id]
+        prior_epoch_id = parent.get('staged_review', {}).get('epoch_id')
+        identifiers = {predecessor_id}
+        if prior_epoch_id is not None:
+            identifiers.update(row['id'] for row in records.get('review_assignment', {}).values()
+                               if row.get('staged_review', {}).get('epoch_id') == prior_epoch_id)
         attempts = [row for row in records.get('review_attempt', {}).values()
-                    if row['assignment_id'] == predecessor_id]
+                    if row['assignment_id'] in identifiers]
+        retained = {row['id']:row for row in attempts}
+        for acceptance in records.get('review_task_acceptance', {}).values():
+            receipt = acceptance['receipt']
+            attempt = receipt.get('attempt')
+            if attempt is not None and attempt['assignment_id'] in identifiers:
+                retained.setdefault(attempt['id'], attempt)
+        attempts = list(retained.values())
         pending = [row for row in records.get('review_invocation', {}).values()
-                   if row['assignment_id'] == predecessor_id and row['id'] not in records.get('review_attempt', {})]
+                   if row['assignment_id'] in identifiers and row['id'] not in records.get('review_attempt', {})]
         if pending:
             raise ResearchError('review_worker_reconciliation_required', 'Reconcile the predecessor before staging')
-        last = max(attempts, key=lambda row: row['recorded_revision'], default=None)
-        predecessor = dict(assignment_id=predecessor_id, assignment_digest=digest(records['review_assignment'][predecessor_id]),
-                           attempt_id=last['id'] if last else None, attempt_digest=digest(last) if last else None,
-                           no_output=not last or not last.get('output'))
+        captures = [row for row in records.get('review_observation', {}).values()
+                    if prior_epoch_id is not None and records.get('review_task', {}).get(row['task_id'], {}).get('epoch_id') == prior_epoch_id]
+        last = max(attempts, key=lambda row: (row.get('recorded_revision', 0), row['id']), default=None)
+        captured = max(captures, key=lambda row: (row.get('recorded_revision', 0), row['id']), default=None)
+        if captured is not None and (last is None or captured.get('recorded_revision', 0) > last.get('recorded_revision', 0)):
+            last = next((row for row in attempts if row.get('reservation_id') == captured['id']), None)
+        elif last is not None:
+            captured = records.get('review_observation', {}).get(last.get('reservation_id'))
+        predecessor = dict(assignment_id=predecessor_id, assignment_digest=digest(parent),
+            attempt_id=last['id'] if last else None, attempt_digest=digest(last) if last else None,
+            attempt_assignment_id=last['assignment_id'] if last else None,
+            observation_id=captured['id'] if captured else None, observation_digest=digest(captured) if captured else None,
+            no_output=not any(row.get('output') for row in attempts)
+                      and not any(row['observation'].get('output') for row in captures))
+        if prior_epoch_id is not None:
+            previous = protocol._get(records, 'review_epoch', prior_epoch_id)
+            predecessor.update(epoch_id=previous['id'], epoch_digest=previous['digest'])
     spec = dict(id='epoch:' + record['id'], controller_assignment_id=record['id'], subject=record['subject'],
                 evidence_currency=packet.get('problem_review_currency', packet.get('problem_evidence_digest', {})),
                 role=record['role'], slot_id=record.get('slot_id', record['id']), reviewer_id=record['reviewer_id'],
@@ -454,6 +625,12 @@ def build_epoch(records, record, packet, manifest):
     if record['role'] == 'result':
         for name in ('objective_adequacy', 'method_adequacy'):
             spec['completion_requirements']['permissible_decisions']['/value/' + name] = ['not_assessed']
+    previous_epochs = [row for row in records.get('review_epoch', {}).values()
+                       if row['slot_id'] == spec['slot_id'] and row['evidence_currency'] == spec['evidence_currency']]
+    if len(previous_epochs) >= spec['budgets']['max_epochs']:
+        raise ResearchError('assessment_incomplete', 'The unchanged scientific scope exhausted its epoch recovery budget',
+                            dict(slot_id=spec['slot_id'], epoch_ids=[row['id'] for row in previous_epochs],
+                                 prerequisite='new_evidence_or_resolved_dependency'))
     if predecessor is not None:
         spec['predecessor'] = predecessor
     if record['role'] == 'adjudicator':
@@ -469,7 +646,16 @@ def prepare_frame_tasks(records, artifacts, controller, epoch, route):
     from . import review_staged as staged
     from collections import deque
     sources_by_id = {row['id']: row for row in epoch['manifest']['sources']}
-    target = min(16000, route['configuration']['max_output_tokens'])
+    profile = build_profiles(records, artifacts, route, epoch)['frame']
+    route_limit = read_input_limit(route)
+    lower, upper = 0, route_limit
+    while lower < upper:
+        middle = (lower + upper + 1) // 2
+        if staged.joint_fit([middle], route_limit, route['configuration']['max_output_tokens'], profile)['fits']:
+            lower = middle
+        else:
+            upper = middle - 1
+    target = max(1, lower)
     groups, group, characters = [], [], 0
     for field in epoch['manifest']['frame_fields']:
         source = sources_by_id[field['source_id']]
@@ -485,7 +671,8 @@ def prepare_frame_tasks(records, artifacts, controller, epoch, route):
     tasks, pending = [], deque(groups)
     while pending:
         spans = pending.popleft()
-        task = staged.make_task(epoch, 'frame', inputs=spans)
+        task = staged.make_task(epoch, 'frame', inputs=spans, measurement=staged.joint_fit(
+            [row['end']-row['start'] for row in spans], route_limit, route['configuration']['max_output_tokens'], profile))
         try:
             tasks.append(prepare_task_plan(records, artifacts, controller, epoch, task))
         except ResearchError as error:
@@ -509,30 +696,65 @@ def prepare_frame_tasks(records, artifacts, controller, epoch, route):
 def prepare_controller(records, artifacts, record, packet, route):
     """Install a frozen epoch and pending slot before any child can run."""
     from . import review_staged as staged
+    import time
+    record['staged_started_at'] = time.time()
+    predecessor_id = _find_predecessor_assignment_id(record)
+    inherited = (_collect_successor_findings(records, artifacts,
+        protocol._get(records, 'review_assignment', predecessor_id)) if predecessor_id is not None else [])
+    if inherited:
+        packet = dict(packet, inherited_review_findings=inherited)
     manifest = build_manifest(artifacts, packet, record['role'])
+    if inherited:
+        manifest = staged._seal(dict({key:value for key,value in manifest.items() if key != 'digest'},
+                                     inherited_findings=manifest['inherited_findings'] + inherited))
     epoch = build_epoch(records, record, packet, manifest)
-    tasks = prepare_frame_tasks(records, artifacts, record, epoch, route)
+    frame_failure = None
+    try:
+        tasks = prepare_frame_tasks(records, artifacts, record, epoch, route)
+    except ResearchError as error:
+        if error.code != 'review_task_pending':
+            raise
+        task = staged.make_task(epoch, 'frame', inputs=[row['span'] for row in manifest['frame_fields']], scope='unresolved')
+        tasks = [dict(id=task['id'], epoch_id=epoch['id'], generation=1, task=task,
+                      controller_assignment_id=record['id'])]
+        frame_failure = dict(code=error.code, message=str(error), details=error.details)
     binding = dict(protocol=staged.PROTOCOL, kind='controller', epoch_id=epoch['id'],
                    task_ids=[row['id'] for row in tasks])
     record.update(staged_review=binding, history=[], history_assignment_id=None)
-    slot = dict(slot_id=epoch['slot_id'], epoch_id=epoch['id'], state='pending', outcome=None, role=epoch['role'])
+    previous = records.get('review_slot_head', {}).get(epoch['slot_id'])
+    slot = (staged.transition_outcome(previous, 'successor', epoch_id=epoch['id']) if previous is not None else
+            dict(slot_id=epoch['slot_id'], epoch_id=epoch['id'], state='pending', outcome=None, role=epoch['role']))
     changes = [immutable_record(records, 'review_epoch', epoch['id'], epoch)]
     changes.extend(immutable_record(records, 'review_task', row['id'], row) for row in tasks)
     changes.append(('review_slot_head', slot['slot_id'], slot))
+    if frame_failure is not None:
+        current = dict(records)
+        for kind in ('review_epoch', 'review_task', 'review_slot_head'):
+            current[kind] = dict(records.get(kind, {}))
+            current[kind].update({key:row for changed_kind,key,row in changes if changed_kind == kind})
+        current['review_assignment'] = dict(records.get('review_assignment', {}), **{record['id']:record})
+        incomplete_changes, _ = prepare_execution_incomplete(current, artifacts, epoch, tasks[0]['task'],
+            'exhausted', [tasks[0]['id']], failure=frame_failure)
+        changes.extend(incomplete_changes)
     return changes
 
 
 def prepare_task_plan(records, artifacts, controller, epoch, task, composition_plan=None):
     """Freeze a sealed core envelope and its selected dependency frontier."""
     from . import review_staged as staged
+    from .evaluation import Evaluation
+    artifacts = Evaluation.of(records, artifacts)
     staged._verify_seal(task)
     fields(task, ('id', 'schema', 'protocol', 'epoch_id', 'epoch_digest', 'type', 'scope'), None, code='invalid_review_staged')
     if task['schema'] != staged.TASK_SCHEMA or task['protocol'] != staged.PROTOCOL or task['type'] not in staged.TASK_TYPES or task['scope'] not in staged.SCOPES:
         raise ResearchError('invalid_review_staged', 'Use the frozen core task schema, type and scope')
     if task['epoch_id'] != epoch['id'] or task['epoch_digest'] != epoch['digest']:
         raise ResearchError('review_task_dependency_changed', 'The task must bind this frozen epoch')
+    current_contexts = derive_current_contexts(records, artifacts, epoch)
+    if task['scope'] == 'unresolved' or task['measurement'] is not None and not task['measurement']['fits']:
+        raise ResearchError('review_task_pending', 'Subdivide work that has not passed joint admission')
     for claim_id in task['claim_ids']:
-        context = epoch['manifest']['contexts'].get(claim_id)
+        context = current_contexts.get(claim_id)
         if context is None or task['context_roots'].get(claim_id) != context['root']:
             raise ResearchError('review_task_dependency_changed', 'The task must retain the exact original claim context')
         if task['scope'] not in ('original_segment', 'segmented_original', 'unresolved') and not staged._covers_inputs(context['spans'], task['inputs']):
@@ -561,6 +783,12 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
             terminal_observations[key] = candidates[0]
             pending.extend(candidates[0]['dependencies'])
         terminal_observations = list(terminal_observations.values())
+        # Final science must explicitly receive every retained finding, including
+        # historical adverse records outside the narrowed integration inputs.
+        observed, _, obligations = collect_observations(records, artifacts, epoch)
+        if obligations:
+            raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
+        terminal_observations = observed
     route = protocol._get(records, 'review_route', controller['route_id'])
     repair = protocol._read_json(artifacts, controller['packet']).get('context_repair')
     claim_range = set(task['claim_ids']) != {row['id'] for row in epoch['manifest']['claims']}
@@ -568,22 +796,51 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
                               repair=repair is not None, claim_range=claim_range,
                               composed=composition_plan is not None and task['type'] == 'final')
     config = route['configuration']
-    measurement = task['measurement'] or dict(fits=True, input_fits=True, output_fits=True, duration_fits=True,
-        mandatory_preserved=True, input_characters=0, output_tokens=config['max_output_tokens'],
-        duration_seconds=config['timeout_seconds'], route_limit=transport.local_input_limit(route),
-        configured_output_tokens=config['max_output_tokens'], output_margin_tokens=0,
-        duration_limit_seconds=config['timeout_seconds'])
-    measurement = dict(measurement, route_limit=transport.local_input_limit(route),
-                       configured_output_tokens=config['max_output_tokens'], duration_limit_seconds=config['timeout_seconds'])
+    profile = build_profiles(records, artifacts, route, epoch)[task['type']]
+    payload_size = sum(row['end'] - row['start'] for row in task['inputs'])
+    payload_size += sum(row['end'] - row['start'] for row in task['card_segments'])
+    measurement = task['measurement'] or staged.joint_fit([payload_size], read_input_limit(route),
+        config['max_output_tokens'], profile, claim_count=len(task['claim_ids']))
+    measurement = dict(measurement, route_limit=read_input_limit(route),
+                       configured_output_tokens=config['max_output_tokens'], duration_limit_seconds=min(measurement['duration_limit_seconds'], config['timeout_seconds']))
     task = staged._seal(dict({key: value for key, value in task.items() if key != 'digest'}, measurement=measurement))
     packet = build_packet(epoch, task, observations=dependencies, repair=repair, composition_plan=composition_plan,
-                                  tasks=[row['task'] for row in records.get('review_task', {}).values() if row['epoch_id'] == epoch['id']],
-                                  terminal_observations=terminal_observations)
+                                  tasks=list_epoch_tasks(records, epoch),
+                                  terminal_observations=terminal_observations, contexts=current_contexts)
+    if composition_plan is not None and composition_plan['role'] != 'incomplete' and task['type'] == 'answer':
+        from .review_staged_followups import read_composition_source_fragments
+        sources = read_composition_sources(records, artifacts, composition_plan)
+        packet['staged_review']['answer']['source_fragments'] = read_composition_source_fragments(
+            composition_plan, sources, owners=task['answer_ranges'])
+    from .review_staged_followups import plan_retrieval_tasks
+    observed, _, _ = collect_observations(records, artifacts, epoch)
+    retrieval_plan = plan_retrieval_tasks(epoch, observed, list_epoch_tasks(records, epoch), contexts=current_contexts)
+    retrieval = retrieval_plan['bindings'].get(task['id'])
+    if retrieval is not None:
+        packet['staged_review']['retrieval'] = retrieval['retrievals']
+        packet['staged_review']['retrieval_observations'] = retrieval['observation_ids']
+        packet['staged_review']['reread'] = retrieval['reread']
+    packet['staged_review']['refused_findings'] = collect_refused_findings(records, artifacts, epoch)
+    from .review_staged_binary import prepare_packet
+    packet = prepare_packet(records, artifacts, route, epoch, task, packet,
+                            source_packet=protocol._read_json(artifacts, controller['packet']))
+    packet.pop('digest', None)
+    packet['digest'] = digest(packet)
     request = build_request(artifacts, route, prompt, packet)
-    measurement = dict(measurement, input_characters=review_problem_parts._measure(route, request))
+    measurement = staged.joint_fit([measure_task_payload(task, packet)], read_input_limit(route),
+        config['max_output_tokens'], profile, claim_count=len(task['claim_ids']))
+    measurement['duration_limit_seconds'] = min(measurement['duration_limit_seconds'], config['timeout_seconds'])
+    measurement['duration_fits'] = measurement['duration_seconds'] <= measurement['duration_limit_seconds']
+    measurement['input_characters'] = review_problem_parts._measure(route, request)
+    measurement['input_fits'] = measurement['input_characters'] <= measurement['route_limit']
+    measurement['fits'] = all(measurement[key] for key in
+        ('input_fits', 'output_fits', 'duration_fits', 'mandatory_preserved'))
     task = staged.freeze_task(task, digest(request), staged.SERIALIZATION, measurement=measurement)
-    return dict(id=task['id'], epoch_id=epoch['id'], generation=1, task=task, packet=protocol._put_json(artifacts, packet),
+    result = dict(id=task['id'], epoch_id=epoch['id'], generation=1, task=task, packet=protocol._put_json(artifacts, packet),
                 request=protocol._put_json(artifacts, request), prompt=prompt, controller_assignment_id=controller['id'])
+    if composition_plan is not None:
+        result['composition_plan_id'] = digest(composition_plan)
+    return result
 
 
 def prepare_upgrade(records, value, route, problem):
@@ -592,7 +849,7 @@ def prepare_upgrade(records, value, route, problem):
     fields(value['context'], ('staged_upgrade',), code='invalid_review_context')
     fields(upgrade, ('assignment_id',), code='invalid_review_context')
     upgrade_parent = protocol._get(records, 'review_assignment', upgrade['assignment_id'])
-    if not problem or value['role'] not in ('result', 'adjudicator') or route['adapter'] not in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1'):
+    if not problem or value['role'] not in ('result', 'adjudicator') or route['adapter'] not in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1', 'codex_cli_visual_v1'):
         raise ResearchError('invalid_review_context', 'A staged upgrade requires a supported problem review route')
     for key in ('role', 'reviewer_id', 'author_id', 'route_id', 'subject', 'dossier_id'):
         if upgrade_parent.get(key) != value.get(key):
@@ -695,10 +952,20 @@ def accept_capture(records, artifacts, assignment, captured, attempt_id):
     epoch = protocol._get(records, 'review_epoch', assignment['staged_review']['epoch_id'])
     if not matches_currency(records, artifacts, epoch):
         raise ResearchError('review_task_dependency_changed', 'Capture remains historical after the scientific evidence changes')
+    current_contexts = derive_current_contexts(records, artifacts, epoch)
     sent = review_excerpts.read_sent_packet(protocol._read_json(artifacts, observation['request']))
     actual = read_actual_input(epoch, task, sent)
+    if task['binary_sources']:
+        from .review_staged_binary import read_actual_sources
+        actual['binary_sources'] = read_actual_sources(records, artifacts, epoch, task,
+                                                  protocol._read_json(artifacts, observation['request']))
     bound, unmatched = staged.bind_quotations(raw, epoch=epoch, sources=epoch['manifest']['sources'])
-    output = staged.validate_task_output(task, bound)
+    output = staged.validate_task_output(task, bound, manifest=dict(epoch['manifest'], contexts=current_contexts),
+                                         validate_records=False)
+    if task['type'] == 'final' and 'terminal' in output and 'composition_plan_id' not in assignment:
+        from .review_refusal import _project_staged_final, _validate_staged_final
+        scientific = _project_staged_final(assignment['role'], output)
+        _validate_staged_final(records, artifacts, assignment, sent, epoch, scientific)
     if task['type'] == 'answer':
         validate_answer_pages(task, output, protocol._get(records, 'review_composition_plan', assignment['composition_plan_id']))
     dependencies = {}
@@ -712,6 +979,24 @@ def accept_capture(records, artifacts, assignment, captured, attempt_id):
     selected = dict(id=attempt_id, epoch_id=epoch['id'], epoch_digest=epoch['digest'], task_id=task['id'],
                     task_digest=task['digest'], actual_input=actual, request_digest=digest(protocol._read_json(artifacts, observation['request'])),
                     output=output, raw_output_digest=digest(output), dependencies=dependencies)
+    staged._validate_observation(epoch, task, selected, current_contexts)
+    if 'retrievals' in output:
+        from .review_staged_followups import plan_retrieval_tasks
+        observations, _, _ = collect_observations(records, artifacts, epoch)
+        try:
+            plan_retrieval_tasks(epoch, observations + [selected], list_epoch_tasks(records, epoch),
+                                 contexts=current_contexts)
+        except ResearchError as error:
+            if error.code != 'review_task_dependency_changed':
+                raise
+            raise ResearchError('invalid_review_staged', 'The output retrieval changed its requesting scope',
+                                dict(cause=error.code, details=error.details)) from error
+    if task['type'] == 'final' and 'terminal' in output and 'composition_plan_id' not in assignment:
+        observations, _, _ = collect_observations(records, artifacts, epoch)
+        completion = staged.verify_completion(epoch, {'observations':observations + [selected]}, tasks=list_epoch_tasks(records, epoch))
+        if not completion['complete']:
+            raise ResearchError('invalid_review_staged', 'The terminal leaves required assessment unfinished',
+                                {'issues':completion['issues']})
     return dict(attempt=attempt, staged_observation=selected, raw_output_digest=digest(raw), unmatched=unmatched)
 
 
@@ -750,6 +1035,10 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         raise ResearchError('review_route_retired', 'Repair the slot on an eligible route')
     if not protocol._prompt_matches(assignment) or digest(route) != assignment['route_digest']:
         raise ResearchError('review_task_dependency_changed', 'The frozen route or staged prompt changed')
+    epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
+    contexts = derive_current_contexts(records, store.build_artifact_store(), epoch)
+    if not match_task_contexts(assignment['staged_task'], contexts):
+        raise ResearchError('review_task_dependency_changed', 'Replan this task under the current discovered claim closure')
     protocol._require_route_runtime(route)
     request = protocol.build_assignment_request(records, store.build_artifact_store(), assignment)
     epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
@@ -758,6 +1047,9 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         raise ResearchError('review_epoch_stale', 'The frozen scientific evidence changed before dispatch')
     if head['epoch_id'] != epoch['id']:
         raise ResearchError('review_epoch_stale', 'The current slot has a successor epoch')
+    if head['state'] != 'pending':
+        raise ResearchError('assessment_incomplete' if head['state'] == 'incomplete' else 'review_resampling_forbidden',
+                            'The epoch already selected its immutable slot outcome')
     plan = dict(task_id=binding['task_id'], task_generation=1, epoch_id=epoch['id'], route_id=assignment['route_id'],
                 request=protocol._put_json(store.build_artifact_store(), request), max_attempts=epoch['budgets']['max_retries'] + 1,
                 dependencies=[dict(kind='review_assignment', key=assignment['id'], digest=digest(assignment))],
@@ -774,9 +1066,18 @@ def invoke_task(store, payload, *, expected_revision, request_id):
     reservation = records.get('review_reservation', {}).get(state['reservation_id']) if state else None
     previous_capture = records.get('review_observation', {}).get(reservation['observation_id']) if reservation else None
     retryable = (reservation is not None and reservation['released']
-                 and (previous_capture is None or previous_capture['observation']['status'] != 'completed'))
+                 and (reservation['state'] == 'refused' or previous_capture is None or previous_capture['observation']['status'] != 'completed'))
     if reservation is None or retryable:
-        reserved = execution.reserve_task(store, plan, request_id=request_id + ':reserve')
+        try:
+            reserved = execution.reserve_task(store, plan, request_id=request_id + ':reserve')
+        except ResearchError as error:
+            if error.code != 'assessment_incomplete':
+                raise
+            def prepare_exhaustion(current_records, value):
+                return prepare_execution_incomplete(current_records, store.build_artifact_store(), epoch,
+                    assignment['staged_task'], 'exhausted', [assignment['staged_task']['id']],
+                    failure=dict(code=error.code, message=str(error), details=error.details))
+            return prepared_task_mutation(store, 'review.invoke', payload, prepare_exhaustion, request_id=request_id)
         reservation = reserved['result']
     captured, process, current = wait_for_capture(store, route, reservation, request_id)
     if captured['observation']['status'] != 'completed':
@@ -786,19 +1087,28 @@ def invoke_task(store, payload, *, expected_revision, request_id):
                            reservation_id=captured['reservation_id'], invocation_id=captured['reservation_id'],
                            packet_digest=assignment['packet_digest'], prompt_hash=assignment['prompt_hash'],
                            recorded_revision=captured['recorded_revision'])
-            return [immutable_record(current_records, 'review_attempt', value['id'], attempt)], attempt
+            return [immutable_record(current_records, 'review_attempt', value['id'], attempt)], dict(
+                attempt, next=[describe_planning_command(controller_id)])
         return prepared_task_mutation(store, 'review.invoke', payload, prepare_failure, request_id=request_id)
     try:
         receipt = execution.accept_observation(store, {'reservation_id': current['id']},
              lambda current_records, capture: accept_capture(current_records, store.build_artifact_store(),
                                                                     assignment, capture, payload['id']),
              request_id=request_id + ':accept')['result']
-        if receipt['receipt']['attempt']['id'] != payload['id']:
+        if 'refusal' not in receipt and receipt['receipt']['attempt']['id'] != payload['id']:
             raise ResearchError('review_resampling_forbidden', 'Resume the originally named task attempt')
     finally:
         finish_worker(store, current['id'], process, request_id)
     def prepare(current_records, value):
-        return prepare_attempt(current_records, store.build_artifact_store(), assignment, receipt['receipt'])
+        if 'refusal' in receipt:
+            attempt = dict(captured['observation'], **value, origin='instrumented',
+                reservation_id=captured['reservation_id'], invocation_id=captured['reservation_id'],
+                packet_digest=assignment['packet_digest'], prompt_hash=assignment['prompt_hash'],
+                recorded_revision=captured['recorded_revision'])
+            return [immutable_record(current_records, 'review_attempt', value['id'], attempt)], dict(attempt,
+                refusal=receipt['refusal'], next=[describe_planning_command(controller_id)])
+        changes, attempt = prepare_attempt(current_records, store.build_artifact_store(), assignment, receipt['receipt'])
+        return changes, dict(attempt, next=[describe_planning_command(controller_id)])
     return prepared_task_mutation(store, 'review.invoke', payload, prepare, request_id=request_id)
 
 
@@ -858,7 +1168,7 @@ def prepare_attempt(records, artifacts, assignment, receipt):
     observations, _, obligations = collect_observations(records, artifacts, epoch)
     if obligations:
         raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
-    tasks = [row['task'] for row in records.get('review_task', {}).values() if row['epoch_id'] == epoch['id']]
+    tasks = list_epoch_tasks(records, epoch)
     completion = staged.verify_completion(epoch, {'observations': observations}, tasks=tasks)
     if incomplete is None:
         projected = build_composition(epoch, plan, observations, observed, tasks=tasks)
@@ -901,23 +1211,7 @@ def read_raw_observation(records, artifacts, attempt_id):
         if captured is None:
             raise ResearchError('review_output_unavailable', 'The exact committed observation is absent')
         attempt = dict(captured['observation'], id=attempt_id, origin=captured['origin'])
-    observation = captured['observation'] if captured is not None else attempt
-    result = dict(attempt_id=attempt_id, status=observation['status'],
-                  instrumented=attempt.get('origin') == 'instrumented',
-                  provenance={key: copy.deepcopy(attempt.get(key)) for key in
-                              ('origin', 'runtime', 'route_digest', 'invocation_id', 'recorded_revision')})
-    for name in ('request', 'response', 'output'):
-        reference = observation.get(name)
-        result[name] = copy.deepcopy(reference)
-        value = protocol._read_json(artifacts, reference) if reference is not None else None
-        result[name + '_digest'] = digest(value) if reference is not None else None
-        if name == 'output':
-            result['raw_output'] = value
-            result['raw_output_digest'] = result['output_digest']
-    if captured is not None:
-        result['provenance'].update(reservation_id=captured['reservation_id'], worker=captured['worker'],
-                                    capture_digest=digest(captured), capture_revision=captured['recorded_revision'])
-    return result
+    return protocol._read_raw_observation(artifacts, attempt_id, attempt, captured)
 
 
 def authenticate_observation(records, artifacts, assignment, attempt):
@@ -1021,8 +1315,7 @@ def build_selection(records, artifacts, epoch, controller_id, binding, observati
     """Verify the frozen science selection and preserve distinct incomplete outcomes."""
     from . import review_staged as staged
     # No assignment_state call occurs inside task selection or completion.
-    required_tasks = [row['task'] for row in records.get('review_task', {}).values()
-                      if row.get('epoch_id') == epoch['id']]
+    required_tasks = list_epoch_tasks(records, epoch)
     completion_selection = {'observations': observations}
     completion = staged.verify_completion(epoch, completion_selection, tasks=required_tasks)
     paged = None
@@ -1055,14 +1348,6 @@ def build_selection(records, artifacts, epoch, controller_id, binding, observati
                 output, _ = staged.project_ordinary_final(observed['output'])
                 selection.update(kind='ordinary', output=output, output_digest=digest(output))
     outcomes = [row for row in records.get('assessment_incomplete', {}).values() if row['epoch_id'] == epoch['id']]
-    if terminal is not None:
-        attempt, observed = terminal
-        incomplete = (paged.get('incomplete_output') if paged is not None else None)
-        if incomplete is None:
-            incomplete = observed['output'].get('assessment_incomplete')
-        if incomplete is not None:
-            outcome = build_incomplete_outcome(records, artifacts, epoch, completion, attempt, incomplete)
-            outcomes.append(outcome)
     if outcomes:
         selection.update(kind='incomplete', outcome=outcomes[-1])
         selection.pop('output', None)
@@ -1104,6 +1389,9 @@ def build_state(records, artifacts, assignment):
         selection['context_state'] = 'contaminated'
     state['effective'] = composition.effective_review_output(controller_id, selection)
     if paged is not None and state['effective']['kind'] == 'paged':
+        # The page plan binds the grounding selection before pages exist. The
+        # effective review binds the complete selected graph, including pages.
+        state['effective']['selected_observations_root'] = completion['selected_observations_root']
         state['effective']['terminal_raw_output_digest'] = read_raw_observation(records, artifacts,
             selection['terminal_attempt_id'])['raw_output_digest']
         state['effective']['raw_page_bindings'] = [dict(attempt_id=row['attempt_id'],
@@ -1113,6 +1401,7 @@ def build_state(records, artifacts, assignment):
     if state['effective']['currency_state'] == 'stale':
         state['obligations'].append(obligation('review_epoch_stale', 'The frozen scientific evidence changed.'))
     state['completion'] = completion
+    state['next'] = [describe_planning_command(controller_id)]
     if binding['kind'] == 'controller':
         state.update(output=state['effective'].get('effective_output'),
                      output_digest=state['effective'].get('effective_output_digest'))
@@ -1178,3 +1467,520 @@ def matches_prompt(assignment, common_version):
                     composed=parameters.get('composed', False), claim_range=parameters.get('claim_range', False)))
     except (ResearchError, KeyError, TypeError):
         return False
+
+
+def measure_task_payload(task, packet=None):
+    """Measure original or selected scientific work independently of prompt overhead."""
+    characters = sum(row['end'] - row['start'] for row in task['inputs'])
+    characters += sum(row['end'] - row['start'] for row in task['card_segments'])
+    section = dict(combine='combine', original_check='original_check', integrate='integrate',
+                   answer='answer', final='final').get(task['type'])
+    if packet is not None and section is not None:
+        material = packet.get('staged_review', {}).get(section, {})
+        characters = max(characters, len(_canonical(material)))
+    return characters
+
+
+def build_profiles(records, artifacts, route, epoch=None):
+    """Estimate each work dimension separately, refining bootstrap bounds from captures."""
+    from . import review_staged as staged
+    config = route['configuration']
+    profiles = {}
+    for kind in staged.TASK_TYPES:
+        # Bootstrap estimates are planning bounds, never empirical qualification.
+        prompt = protocol.canonical_prompt('result' if epoch is None else epoch['role'],
+            orchestration='problem_creation', staged_task=dict(type=kind, scope='joint_original',
+                claim_ids=[], occurrence_ids=[], group_ids=[]))
+        profiles[kind] = dict(context_characters=len(prompt['text']), envelope_characters=4000,
+            output_base_tokens=128, output_tokens_per_claim=100, output_tokens_per_character=0.5 if kind == 'frame' else 0.01,
+            seconds_per_character=0.0001, seconds_per_claim=0.1, duration_base_seconds=1,
+            duration_limit_seconds=config['timeout_seconds'], output_margin_tokens=max(1, config['max_output_tokens'] // 10))
+    for captured in records.get('review_observation', {}).values():
+        if epoch is not None and captured.get('task_id') not in records.get('review_task', {}):
+            continue
+        planned = records.get('review_task', {}).get(captured.get('task_id'), {})
+        task = planned.get('task')
+        if task is None or planned.get('controller_assignment_id') is None:
+            continue
+        owner = records.get('review_assignment', {}).get(planned['controller_assignment_id'], {})
+        if owner.get('route_id') != route['id']:
+            continue
+        observed = captured['observation']
+        profile = profiles[task['type']]
+        packet = protocol._read_json(artifacts, planned['packet']) if planned.get('packet') is not None else None
+        work = max(1, measure_task_payload(task, packet))
+        usage = observed.get('usage') or {}
+        tokens = usage.get('output_tokens')
+        if type(tokens) in (int, float) and tokens > 0:
+            profile['output_tokens_per_character'] = max(profile['output_tokens_per_character'], tokens / work)
+        seconds = usage.get('wall_seconds')
+        if type(seconds) in (int, float) and seconds > 0:
+            profile['seconds_per_character'] = max(profile['seconds_per_character'], seconds / work)
+    return profiles
+
+
+def list_epoch_tasks(records, epoch):
+    """Select immutable active envelopes while retaining superseded work in history."""
+    replaced = {row['task_id'] for row in records.get('review_task_repair', {}).values()
+                if row['epoch_id'] == epoch['id']}
+    return [row['task'] for key, row in records.get('review_task', {}).items()
+            if row['epoch_id'] == epoch['id'] and key not in replaced]
+
+
+def describe_planning_command(controller_id):
+    return dict(kind='command', command='review-assignment', payload=dict(controller_assignment_id=controller_id))
+
+
+def split_task(epoch, task, *, cards=(), observations=()):
+    """Partition one failed work dimension without losing its original obligation union."""
+    from . import review_staged as staged
+    options = {key: copy.deepcopy(task[key]) for key in ('inputs', 'claim_ids', 'occurrence_ids', 'dependencies',
+        'binary_sources', 'card_ids', 'card_segments', 'group_ids', 'segment_task_ids', 'obligation_ids', 'child_ids',
+        'answer_ranges', 'objection_entries')}
+    for key in ('reconciliation_id', 'composition_role', 'composition_plan_root'):
+        if key in task:
+            options[key] = task[key]
+    scope = task['scope']
+    options['contexts'] = {key:dict(context, root=task['context_roots'].get(key, context['root']))
+                           for key,context in epoch['manifest']['contexts'].items()}
+    integration_scope = task['type'] == 'integrate' and not task['occurrence_ids']
+    catalog = {card['id']:card for card in cards if card['kind'] == 'full'}
+    if integration_scope and not options['child_ids']:
+        if not options['card_ids']:
+            options['card_ids'] = [key for key, card in catalog.items()
+                                  if not options['obligation_ids'] or
+                                  set(staged.card_obligations([card])).intersection(options['obligation_ids'])]
+        if not options['obligation_ids'] and options['card_ids']:
+            options['obligation_ids'] = staged.card_obligations([catalog[key] for key in options['card_ids'] if key in catalog])
+    preferred = ('child_ids', 'card_ids', 'obligation_ids') if integration_scope else ()
+    dimension = next((key for key in preferred + ('claim_ids', 'answer_ranges', 'inputs', 'card_segments', 'obligation_ids')
+                      if len(options[key]) > 1), None)
+    if dimension is not None:
+        values = options[dimension]
+        middle = len(values) // 2
+        subsets = [values[:middle], values[middle:]]
+    elif task['inputs'] and task['inputs'][0]['end'] - task['inputs'][0]['start'] > 1:
+        dimension = 'inputs'
+        span = task['inputs'][0]
+        source = next(row for row in epoch['manifest']['sources'] if row['id'] == span['source_id'])
+        middle = (span['start'] + span['end']) // 2
+        subsets = [[staged.source_span(source, span['start'], middle)], [staged.source_span(source, middle, span['end'])]]
+    else:
+        return []
+    if dimension == 'inputs' and task['type'] != 'frame':
+        scope = 'original_segment'
+        options['reconciliation_id'] = options.get('reconciliation_id') or 'reconciliation:' + digest(task['id'])
+    children = []
+    for values in subsets:
+        selected = dict(options, **{dimension:values})
+        if integration_scope:
+            if dimension == 'card_ids':
+                owned = set(staged.card_obligations([catalog[key] for key in values if key in catalog]))
+                selected['obligation_ids'] = [key for key in options['obligation_ids'] if key in owned]
+            elif dimension == 'obligation_ids':
+                selected['card_ids'] = [key for key in options['card_ids'] if key not in catalog or
+                                       set(staged.card_obligations([catalog[key]])).intersection(values)]
+            elif dimension == 'child_ids':
+                selected.update(card_ids=[], obligation_ids=[])
+            if observations:
+                selected_cards = [catalog[key] for key in selected['card_ids'] if key in catalog]
+                dependencies = []
+                for observed in observations:
+                    if any(key in task['context_roots'] and root != task['context_roots'][key]
+                           for key,root in observed['actual_input']['context_roots'].items()):
+                        continue
+                    output = observed['output']
+                    if (any(card in output.get('cards', []) for card in selected_cards)
+                            or any(row['id'] in selected['child_ids'] for row in output.get('integrations', []))
+                            or any(set(row.get('card_ids', [])).intersection(selected['card_ids'])
+                                   for row in output.get('combinations', []))
+                            or any(row['id'] in selected['obligation_ids'] for row in output.get('cells', []))):
+                        dependencies.append(observed['task_id'])
+                selected['dependencies'] = sorted(set(dependencies))
+        child = staged.make_task(epoch, task['type'], scope=scope, **selected)
+        children.append(child)
+    return children
+
+
+def prepare_execution_incomplete(records, artifacts, epoch, task, reason, receipts, *, failure=None):
+    """Bind an execution failure to a persisted distinct outcome and pending slot."""
+    from . import review_staged as staged
+    receipt_changes, receipt_ids = [], []
+    for identifier in receipts:
+        if (identifier in records.get('review_reservation', {}) or identifier in records.get('review_task_refusal', {})
+                or identifier in records.get('review_task_repair', {})):
+            receipt_ids.append(identifier)
+        else:
+            receipt_id = 'planning-failure:' + digest([epoch['digest'], task['digest'], reason, failure])
+            receipt = dict(id=receipt_id, epoch_id=epoch['id'], task_id=task['id'], task=task,
+                           route_id=epoch['route_id'], reason=reason, failure=failure)
+            receipt_changes.append(immutable_record(records, 'review_task_refusal', receipt_id, receipt))
+            receipt_ids.append(receipt_id)
+    observations, _, _ = collect_observations(records, artifacts, epoch)
+    completion = staged.verify_completion(epoch, {'observations':observations}, tasks=list_epoch_tasks(records, epoch))
+    scope = dict(task_ids=[task['id']], claim_ids=task['claim_ids'], occurrence_ids=task['occurrence_ids'],
+                 inputs=task['inputs'], binary_sources=task['binary_sources'], remaining_issues=completion['issues'],
+                 refused_findings=collect_refused_findings(records, artifacts, epoch))
+    action = dict(workflow='review-assignment', scope=dict(controller_assignment_id=epoch['controller_assignment_id']),
+                  prerequisite='new_evidence_or_eligible_recovery')
+    controller = records['review_assignment'][epoch['controller_assignment_id']]
+    successor = {key:controller[key] for key in ('role', 'reviewer_id', 'author_id', 'route_id', 'dossier_id')}
+    successor.update(id='recovery:' + epoch['id'], context=dict(staged_upgrade=dict(assignment_id=controller['id'])))
+    recovery = [dict(workflow='review-assignment', command='review-assignment',
+        payload=successor,
+        text='Resolve the named scope with new evidence or an eligible route/context recovery before creating a successor.')]
+    ledger = dict(attempts=sum(row.get('attempts', 0) for key, row in records.get('review_task_execution', {}).items()
+                              if key in records.get('review_task', {}) and records['review_task'][key]['epoch_id'] == epoch['id']),
+                  subdivisions=sum(row['epoch_id'] == epoch['id'] for row in records.get('review_task_repair', {}).values()),
+                  unknown_usage=True)
+    import time
+    ledger['elapsed_seconds'] = max(0, time.time() - controller.get('staged_started_at', time.time()))
+    ledger['retries'] = sum(max(0, row.get('attempts', 0) - 1) for key,row in records.get('review_task_execution', {}).items()
+                            if key in records.get('review_task', {}) and records['review_task'][key]['epoch_id'] == epoch['id'])
+    ledger['epochs'] = sum(row['slot_id'] == epoch['slot_id'] and row['evidence_currency'] == epoch['evidence_currency']
+                           for row in records.get('review_epoch', {}).values())
+    outcome = staged.record_incomplete(epoch, completion, origin='execution',
+        origin_binding=dict(execution_receipts=receipt_ids, reason=reason),
+        unresolved_scope=[dict(id='unresolved:' + task['id'], scope=scope,
+            cause='Required work exhausted its bounded execution or native delivery policy.',
+            affected_decisions=list(epoch['completion_requirements'].get('permissible_decisions', {})),
+            exhausted_tasks=[task['id']], scope_kind='unresolved', next_action=action)],
+        recovery_work=recovery, resource_ledger=ledger)
+    head = records['review_slot_head'][epoch['slot_id']]
+    changes = receipt_changes + [immutable_record(records, 'assessment_incomplete', outcome['id'], outcome),
+               ('review_slot_head', epoch['slot_id'], staged.transition_outcome(head, 'incomplete', outcome=outcome))]
+    return changes, dict(controller_assignment_id=epoch['controller_assignment_id'], outcome=outcome, next=recovery)
+
+
+def plan_frontier(store, payload, *, expected_revision, request_id):
+    """Plan and assign the next ready frontier through the operator's controller handle."""
+    from .operations import prepared_task_mutation
+    from .evaluation import Evaluation
+    from . import review_staged as staged
+    fields(payload, ('controller_assignment_id',))
+    def prepare(records, value):
+        artifacts = Evaluation.of(records, store.build_artifact_store())
+        controller = protocol._get(records, 'review_assignment', value['controller_assignment_id'])
+        binding = controller.get('staged_review', {})
+        if binding.get('kind') != 'controller':
+            raise ResearchError('invalid_review_context', 'Plan through the frozen staged controller')
+        epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
+        head = protocol._get(records, 'review_slot_head', epoch['slot_id'])
+        if head['epoch_id'] != epoch['id'] or not matches_currency(records, artifacts, epoch):
+            raise ResearchError('review_epoch_stale', 'Plan the current scientific epoch')
+        outstanding = next((row for row in records.get('review_reservation', {}).values()
+                            if row['epoch_id'] == epoch['id'] and not row['released']), None)
+        if outstanding is not None:
+            return [], dict(controller_assignment_id=controller['id'], next=[dict(kind='command',
+                command='review-run', payload=dict(assignment_id=controller['id'], epoch_id=epoch['id'],
+                    task_id=outstanding['task_id'], action='reconcile'))])
+        if head['state'] == 'incomplete':
+            outcome = head['outcome']
+            return [], dict(controller_assignment_id=controller['id'], outcome=outcome, next=outcome['recovery_work'])
+        observations, terminal, obligations = collect_observations(records, artifacts, epoch)
+        if obligations:
+            raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
+        if terminal is not None:
+            from .review_composition import effective_review_output
+            state = dict(obligations=[], context_status=controller['context_state']['context_status'])
+            selection, _, _ = build_selection(records, artifacts, epoch, controller['id'], binding,
+                                                observations, terminal, state)
+            effective = effective_review_output(controller['id'], selection)
+            if effective['kind'] in ('ordinary', 'paged'):
+                scientific = effective['effective_output']
+                command = 'value-review' if epoch['role'] == 'result' else 'review-adjudication'
+                recorded = records.get('value_review' if epoch['role'] == 'result' else 'review_adjudication', {})
+                if any(row['assignment_id'] == controller['id'] for row in recorded.values()):
+                    return [], dict(controller_assignment_id=controller['id'], next=[], complete=True)
+                record = dict(scientific, id='review:' + controller['id'], assignment_id=controller['id'])
+                if epoch['role'] == 'result':
+                    record['dossier_id'] = controller['dossier_id']
+                return [], dict(controller_assignment_id=controller['id'], next=[dict(kind='command', command=command, payload=record)])
+        accepted = {row['task_id'] for row in observations}
+        active = list_epoch_tasks(records, epoch)
+        contexts = derive_current_contexts(records, artifacts, epoch)
+        pending = [task for task in active if task['id'] not in accepted and match_task_contexts(task, contexts)]
+        route = protocol._get(records, 'review_route', controller['route_id'])
+        composition_plan = next((plan for plan in records.get('review_composition_plan', {}).values()
+                                 if plan['epoch_id'] == epoch['id']), None)
+        changes, candidates = [], []
+        total = sum(row.get('attempts', 0) for key, row in records.get('review_task_execution', {}).items()
+                    if key in records.get('review_task', {}) and records['review_task'][key]['epoch_id'] == epoch['id'])
+        import time
+        if (total >= epoch['budgets']['max_calls'] or
+                time.time() - controller.get('staged_started_at', time.time()) >= epoch['budgets']['max_elapsed_seconds']):
+            unfinished = pending[0] if pending else active[-1]
+            return prepare_execution_incomplete(records, artifacts, epoch, unfinished, 'exhausted', [unfinished['id']])
+        for task in pending:
+            execution = records.get('review_task_execution', {}).get(task['id'], {})
+            reservation_id = execution.get('reservation_id')
+            reservation = records.get('review_reservation', {}).get(reservation_id, {}) if reservation_id else {}
+            if reservation and not reservation['released']:
+                return [], dict(controller_assignment_id=controller['id'], next=[dict(kind='command', command='review-run',
+                    payload=dict(assignment_id=controller['id'], epoch_id=epoch['id'], task_id=task['id'], action='reconcile'))])
+            if execution.get('attempts', 0) >= epoch['budgets']['max_retries'] + 1 or total >= epoch['budgets']['max_calls']:
+                paged = prepare_paged_recovery(records, artifacts, controller, epoch, task, observations, active)
+                if paged is not None:
+                    page_changes, composition_plan, page_tasks = paged
+                    changes.extend(page_changes)
+                    candidates.extend(row for row in page_tasks if all(key in accepted for key in row['dependencies']))
+                    break
+                children = split_task(epoch, task, observations=observations,
+                    cards=staged.collect_planning_records(epoch, {'observations':observations}, tasks=active)['cards'])
+                repairs = records.get('review_task_repair', {})
+                if not children or total >= epoch['budgets']['max_calls'] or sum(row['epoch_id'] == epoch['id'] for row in repairs.values()) >= epoch['budgets']['max_subdivisions']:
+                    return prepare_execution_incomplete(records, artifacts, epoch, task,
+                        'unknown_outcome' if execution.get('state') == 'unknown' else 'exhausted',
+                        [reservation.get('id', task['id'])])
+                repair = dict(task_id=task['id'], epoch_id=epoch['id'], child_ids=[row['id'] for row in children])
+                changes.append(immutable_record(records, 'review_task_repair', task['id'], repair))
+                for child_task in children:
+                    partition_changes, child_plans, blocked = prepare_partitions(records, artifacts, controller, epoch, child_task)
+                    if blocked is not None:
+                        return prepare_execution_incomplete(records, artifacts, epoch, blocked['task'], 'exhausted', [reservation['id']], failure=blocked)
+                    changes.extend(partition_changes)
+                    changes.extend(immutable_record(records, 'review_task', row['id'], row) for row in child_plans)
+                    candidates.extend(row['task'] for row in child_plans)
+            elif all(key in accepted for key in task['dependencies']):
+                candidates.append(task)
+        if not candidates:
+            from .review_staged_followups import plan_retrieval_tasks
+            retrievals = plan_retrieval_tasks(epoch, observations, active, contexts=contexts)
+            if retrievals['exhausted']:
+                requester = next((task for task in active if task['id'] in accepted), active[0])
+                return prepare_execution_incomplete(records, artifacts, epoch, requester, 'exhausted', [requester['id']],
+                                                    failure=dict(retrievals=retrievals['unresolved']))
+            candidates = [task for task in retrievals['tasks'] if task['id'] not in accepted
+                          and all(key in accepted for key in task['dependencies'])]
+        if not candidates and composition_plan is not None:
+            page_tasks = staged.plan_tasks(epoch, route_limit=read_input_limit(route),
+                output_tokens=route['configuration']['max_output_tokens'], profiles={},
+                tasks=active, selection=dict(observations=observations), composition_plan=composition_plan)['tasks']
+            candidates = [task for task in page_tasks if not any(compare_task_scope(task, prior) and prior['id'] in accepted
+                for prior in active) and all(key in accepted for key in task['dependencies'])]
+        if not candidates:
+            profiles = build_profiles(records, artifacts, route, epoch)
+            planned = plan_remaining_tasks(records, artifacts, controller, profiles=profiles)
+            candidates = [task for task in planned['tasks'] if match_task_contexts(task, contexts) and not any(
+                compare_task_scope(task, previous) and previous['id'] in accepted for previous in active)
+                and all(key in accepted for key in task['dependencies'])]
+            # Only advance after every occurrence has a complete logical card.
+            if not candidates:
+                verified = staged.collect_planning_records(epoch, {'observations':observations}, tasks=active)
+                task_index = {row['id']:row for row in active}
+                current_observations = [row for row in observations if row['task_id'] in task_index
+                                        and match_task_contexts(task_index[row['task_id']], verified['contexts'])]
+                integrations = verified['integrations']
+                roots = {row['id'] for row in integrations} - {key for row in integrations for key in row['child_ids']}
+                if len(roots) > 1:
+                    selected_roots = sorted(roots)
+                    producers = [row['task_id'] for observed in current_observations for row in observed['output'].get('integrations', [])
+                                 if row['id'] in selected_roots]
+                    candidates = [staged.make_task(epoch, 'integrate', dependencies=sorted(set(producers)),
+                        child_ids=selected_roots, scope='segmented_original')]
+                elif not roots:
+                    cards = verified['cards']
+                    obligations = staged.card_obligations(cards)
+                    dependencies = sorted({observed['task_id'] for observed in current_observations
+                        if any(card in observed['output'].get('cards', []) for card in cards)
+                        or any(row['id'] in obligations for row in observed['output'].get('cells', []))
+                        or any(set(row.get('card_ids', [])).intersection(card['id'] for card in cards)
+                               for row in observed['output'].get('combinations', []))})
+                    if not cards:
+                        dependencies = sorted(row['task_id'] for row in current_observations)
+                    candidates = [staged.make_task(epoch, 'integrate', dependencies=dependencies,
+                        card_ids=[card['id'] for card in cards], obligation_ids=obligations,
+                        inputs=[span for context in verified['contexts'].values() for span in context['spans']],
+                        claim_ids=list(verified['contexts']), contexts=verified['contexts'])]
+                else:
+                    candidates = [staged.make_task(epoch, 'final', dependencies=sorted(
+                        row['task_id'] for observed in current_observations for row in observed['output'].get('integrations', []) if row['id'] in roots) + sorted(observed['task_id'] for observed in current_observations
+                        if any(row.get('status') == 'resolved' for row in observed['output'].get('retrievals', []))),
+                        inputs=[span for context in verified['contexts'].values() for span in context['spans']],
+                        claim_ids=list(verified['contexts']), contexts=verified['contexts'])]
+        # Render against this preparation's immutable plan and source binding.
+        for kind in ('review_composition_plan', 'review_task_repair'):
+            added = {key:row for changed_kind,key,row in changes if changed_kind == kind}
+            if added:
+                records = dict(records, **{kind:dict(records.get(kind, {}), **added)})
+        # Freeze one ready task, keeping future siblings unrendered until their exact dependencies exist.
+        task = candidates[0]
+        planned = records.get('review_task', {}).get(task['id'])
+        if planned is None:
+            planned = next((row for kind, key, row in changes if kind == 'review_task' and key == task['id']), None)
+        if planned is None:
+            partition_changes, plans, blocked = prepare_partitions(records, artifacts, controller, epoch, task, composition_plan=composition_plan)
+            if blocked is not None:
+                return prepare_execution_incomplete(records, artifacts, epoch, blocked['task'], 'exhausted', [task['id']], failure=blocked)
+            changes.extend(partition_changes)
+            changes.extend(immutable_record(records, 'review_task', row['id'], row) for row in plans)
+            planned, task = plans[0], plans[0]['task']
+        child = next((row for row in records.get('review_assignment', {}).values()
+                      if row.get('staged_review', {}).get('task_id') == task['id']), None)
+        if child is None:
+            current = dict(records, review_task=dict(records.get('review_task', {}), **{planned['id']:planned}))
+            for kind in ('review_composition_plan', 'review_task_repair'):
+                current[kind] = dict(records.get(kind, {}))
+                current[kind].update({key:row for changed_kind, key, row in changes if changed_kind == kind})
+            child_value = {key:controller[key] for key in ('role', 'reviewer_id', 'author_id', 'route_id', 'dossier_id')}
+            child_value.update(id='task-assignment:' + digest([epoch['id'], task['id']]),
+                context=dict(controller_assignment_id=controller['id'], task_id=task['id']))
+            if composition_plan is not None:
+                child_value['context']['composition_plan'] = composition_plan
+            child_changes, child = prepare_child(current, artifacts, child_value, store.revision + 1)
+            changes.extend(child_changes)
+        return changes, dict(controller_assignment_id=controller['id'], task_ids=[task['id']], next=[dict(kind='command',
+            command='review-run', payload=dict(assignment_id=controller['id'], epoch_id=epoch['id'], task_id=task['id']))])
+    return prepared_task_mutation(store, 'review.frontier', payload, prepare,
+                                  expected_revision=expected_revision, request_id=request_id)
+
+
+
+def read_input_limit(route):
+    """Use the native visual route's existing text limit without changing its adapter."""
+    if route['adapter'] == 'codex_cli_visual_v1':
+        from .review_codex_visual_transport import MAX_USER_TEXT
+        return MAX_USER_TEXT
+    return transport.local_input_limit(route)
+
+
+def remake_task(epoch, task, **changes):
+    """Rebind an unrendered envelope through its single core constructor."""
+    from . import review_staged as staged
+    keys = ('inputs', 'claim_ids', 'occurrence_ids', 'dependencies', 'binary_sources', 'card_ids', 'card_segments',
+            'group_ids', 'scope', 'segment_task_ids', 'measurement', 'required', 'obligation_ids', 'child_ids',
+            'answer_ranges', 'objection_entries', 'reconciliation_id', 'composition_role', 'composition_plan_root')
+    options = {key:copy.deepcopy(task[key]) for key in keys if key in task}
+    options['contexts'] = {key:dict(context, root=task['context_roots'].get(key, context['root']))
+                           for key,context in epoch['manifest']['contexts'].items()}
+    options.update(changes)
+    return staged.make_task(epoch, task['type'], **options)
+
+
+def compare_task_scope(left, right):
+    """Credit accepted work by exact scientific scope despite later profile refinements."""
+    return all(left.get(key) == right.get(key) for key in ('type', 'inputs', 'claim_ids', 'context_roots',
+        'occurrence_ids', 'binary_sources', 'card_ids', 'card_segments', 'group_ids', 'scope',
+        'obligation_ids', 'child_ids', 'answer_ranges', 'objection_entries', 'composition_plan_root'))
+
+
+
+def prepare_partitions(records, artifacts, controller, epoch, task, *, composition_plan=None):
+    """Admit rendered children before declaring a splittable scope exhausted."""
+    pending, changes, plans = [task], [], []
+    existing = sum(row['epoch_id'] == epoch['id'] for row in records.get('review_task_repair', {}).values())
+    observations, cards = [], []
+    if task['type'] == 'integrate' and not task['occurrence_ids']:
+        observations, _, obligations = collect_observations(records, artifacts, epoch)
+        if obligations:
+            raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
+        from . import review_staged as staged
+        cards = staged.collect_planning_records(epoch, {'observations':observations},
+                                                tasks=list_epoch_tasks(records, epoch))['cards']
+    while pending:
+        assigned = pending.pop(0)
+        try:
+            plans.append(prepare_task_plan(records, artifacts, controller, epoch, assigned, composition_plan))
+        except ResearchError as error:
+            if error.code not in ('review_task_pending', 'review_staged_binary_unsupported'):
+                raise
+            children = split_task(epoch, assigned, cards=cards, observations=observations) if error.code == 'review_task_pending' else []
+            if not children or existing >= epoch['budgets']['max_subdivisions']:
+                return changes, plans, dict(task=assigned, code=error.code, message=str(error), details=error.details)
+            existing += 1
+            repair = dict(task_id=assigned['id'], epoch_id=epoch['id'], child_ids=[row['id'] for row in children],
+                          task=assigned, cause=error.code)
+            changes.append(immutable_record(records, 'review_task_repair', assigned['id'], repair))
+            pending[0:0] = children
+    return changes, plans, None
+
+
+
+def collect_refused_findings(records, artifacts, epoch):
+    """Carry recognizable adverse text with its exact refused capture, without credit."""
+    ancestry = {row['id']:row for row in _collect_successor_ancestry(records, epoch)}
+    findings, seen = [], set()
+    for refusal in records.get('review_task_refusal', {}).values():
+        reservation_id = refusal.get('reservation_id')
+        capture = records.get('review_observation', {}).get(reservation_id) if reservation_id else None
+        if capture is None or capture.get('task_id') not in records.get('review_task', {}):
+            continue
+        epoch_id = records['review_task'][capture['task_id']]['epoch_id']
+        if epoch_id not in ancestry:
+            continue
+        reference = capture['observation'].get('output')
+        raw = protocol._read_json(artifacts, reference) if reference is not None else None
+        if not isinstance(raw, dict):
+            continue
+        for family in ('findings', 'objections', 'conditions', 'unresolved'):
+            rows = raw.get(family, [])
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                recognizable = ((isinstance(row, str) and bool(row.strip())) or
+                    isinstance(row, dict) and (family != 'findings' or row.get('adverse')))
+                if recognizable:
+                    identity = (reservation_id, family, digest(row))
+                    if identity in seen:
+                        continue
+                    seen.add(identity)
+                    findings.append(dict(epoch_id=epoch_id, epoch_digest=ancestry[epoch_id]['digest'],
+                        task_id=capture['task_id'], reservation_id=reservation_id, observation_digest=digest(capture),
+                        refusal_id=refusal.get('id'), raw_output_digest=digest(raw),
+                        family=family, record=copy.deepcopy(row), accepted=False))
+    return findings
+
+
+
+def read_composition_sources(records, artifacts, plan):
+    """Read the exact instrumented outputs selected for automatic page recovery."""
+    plan_id = digest(plan)
+    ids = [key for row in records.get('review_task_repair', {}).values() if row.get('composition_plan_id') == plan_id
+           for key in row['composition_observation_ids']]
+    return [dict(id=key, output=protocol._read_json(artifacts, records['review_observation'][key]['observation']['output']))
+            for key in ids]
+
+
+def prepare_paged_recovery(records, artifacts, controller, epoch, task, observations, tasks):
+    """Freeze smaller scientific answer ranges from a refused complete observed object."""
+    if task['type'] != 'final' or task.get('composition_plan_root'):
+        return None
+    from . import review_staged as staged
+    from .review_staged_followups import build_composition_plan
+    captures = [row for row in records.get('review_observation', {}).values() if row['task_id'] == task['id']
+                and row['observation'].get('output') is not None]
+    captures.sort(key=lambda row:row['recorded_revision'], reverse=True)
+    if not captures:
+        return None
+    captured = captures[0]
+    raw = protocol._read_json(artifacts, captured['observation']['output'])
+    if not isinstance(raw, dict) or not ('stage' in raw or 'disposition' in raw):
+        return None
+    route = records['review_route'][epoch['route_id']]
+    bindings = build_composition_bindings(epoch, observations, tasks=tasks)
+    source = dict(id=captured['id'], output=raw)
+    # An observed sample calibrates characters separately from output tokens.
+    tokens = (captured['observation'].get('usage') or {}).get('output_tokens')
+    allowance = max(2, read_input_limit(route) // 8)
+    if type(tokens) in (int, float) and tokens > 0:
+        allowance = min(allowance, max(2, int(len(_canonical(raw)) * route['configuration']['max_output_tokens'] / tokens / 4)))
+    try:
+        plan = build_composition_plan(epoch, bindings, observations + [source], page_characters=allowance)
+    except ResearchError as error:
+        if error.code not in ('review_composition_pending', 'review_composition_conflict'):
+            raise
+        return None
+    page_tasks = staged.plan_tasks(epoch, route_limit=read_input_limit(route),
+        output_tokens=route['configuration']['max_output_tokens'], profiles={}, tasks=tasks,
+        selection=dict(observations=observations), composition_plan=plan)['tasks']
+    plan_id = digest(plan)
+    repair = dict(task_id=task['id'], epoch_id=epoch['id'], child_ids=[row['id'] for row in page_tasks],
+                  composition_plan_id=plan_id, composition_observation_ids=[captured['id']])
+    return [immutable_record(records, 'review_composition_plan', plan_id, plan),
+            immutable_record(records, 'review_task_repair', task['id'], repair)], plan, page_tasks
+
+
+
+def match_task_contexts(task, contexts):
+    """Keep undispatched old-context work out of the current ready frontier."""
+    return all(key in contexts and contexts[key]['root'] == root for key,root in task['context_roots'].items())

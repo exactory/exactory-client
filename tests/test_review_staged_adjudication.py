@@ -64,10 +64,18 @@ class StagedAdjudicationTests(unittest.TestCase):
             packet = dict(self.packet, evidence=[], staged_review={'originals': [dict(span=span,
                 text=staged.materialize_quotation(source, span)['text'])]})
             packets.append((dict(self.assignment, id='selected-child-' + str(index)), packet))
-        self.graph = dict(epoch=dict(id='focused-epoch', controller_assignment_id=self.assignment['id'],
-            role='adjudicator', manifest={'sources': sources}, focused_scope=dict(
+        frozen = epoch(id='focused-epoch', controller_assignment_id=self.assignment['id'], role='adjudicator',
+            subject=self.assignment['subject'], slot_id=self.assignment.get('slot_id', self.assignment['id']),
+            reviewer_id=self.assignment['reviewer_id'], route_id=self.assignment['route_id'],
+            author_id=self.assignment['author_id'], manifest=staged.build_manifest(self.packet, [], sources),
+            focused_scope=dict(
                 review_pair_roots=[digest(self.records['value_review'][key]) for key in self.assignment['context']['review_ids']],
-                objection_id=self.packet['objection']['id'], objection_version=digest(self.packet['objection']))),
+                objection_id=self.packet['objection']['id'], objection_version=digest(self.packet['objection'])))
+        self.case.put('review_epoch', frozen['id'], frozen)
+        self.case.put('review_slot_head', frozen['slot_id'], dict(slot_id=frozen['slot_id'], epoch_id=frozen['id'],
+                                                               state='pending', outcome=None))
+        self.records = self.case.read_records()
+        self.graph = dict(epoch=frozen,
             completion={'complete': True, 'issues': []}, selection={'observations': observations},
             packets=packets, frame_packet=dict(self.packet, evidence=[]))
 
@@ -90,6 +98,10 @@ class StagedAdjudicationTests(unittest.TestCase):
         self.assertEqual(saved['effective_binding'], decisions.bind_effective_result(self.effective))
         self.assertNotEqual(saved['effective_binding']['effective_output_digest'],
                             saved['effective_binding']['terminal_raw_output_digest'])
+        head = self.case.read_records()['review_slot_head'][self.graph['epoch']['slot_id']]
+        self.assertEqual(head['state'], 'complete')
+        self.assertEqual(head['outcome'], dict(kind='review_adjudication', id=saved['id'],
+                                             output_digest=digest(self.output)))
 
     def test_staged_ordinary_final_allows_material_not_binding(self):
         self.prepare_finding(disposition='not_binding', paged=False)
@@ -277,7 +289,7 @@ class IncompleteAdjudicationTests(unittest.TestCase):
         self.assertEqual(slots['incomplete'], [outcome])
         self.assertEqual(slots['complete'], [])
         self.assertFalse(slots['ready'])
-        self.assertIn('review_assessment_incomplete', [row['code'] for row in result['obligations']])
+        self.assertIn('assessment_incomplete', [row['code'] for row in result['obligations']])
         self.assertEqual(records['review_slot_head'][outcome['slot_id']]['outcome'], outcome)
 
     def test_incomplete_outcome_cannot_be_recorded_as_a_scientific_finding(self):
@@ -292,7 +304,39 @@ class IncompleteAdjudicationTests(unittest.TestCase):
                 patch.object(protocol, 'assignment_state', return_value=dict(state, role='adjudicator')):
             with self.assertRaises(ResearchError) as rejected:
                 protocol.record_adjudication(store, output, expected_revision=0, request_id='incomplete')
-        self.assertEqual(rejected.exception.code, 'review_assessment_incomplete')
+        self.assertEqual(rejected.exception.code, 'assessment_incomplete')
+
+    def test_incomplete_result_uses_the_same_code_in_problem_review_obligations(self):
+        _, assignment, state, outcome = self.build_incomplete_finding()
+        assignment = dict(assignment, role='result', dossier_id=None, author_id='author')
+        records = dict(workspace={'problem': {'authors': ['author']}},
+            problem_selection={'current': {'statement_id': 'statement'}},
+            problem_statement={'statement': {'id': 'statement'}},
+            review_assignment={assignment['id']: assignment})
+        with patch.object(protocol, 'assignment_state', return_value=state):
+            result = decisions.assess_problem_reviews(records, object())
+        item = next(row for row in result['obligations'] if row.get('incomplete'))
+        self.assertEqual(item['code'], 'assessment_incomplete')
+        self.assertEqual(item['incomplete'], [outcome])
+        self.assertFalse(result['ready'])
+
+    def test_incomplete_result_cannot_be_recorded_as_a_value_review(self):
+        from unittest.mock import Mock
+        _, assignment, state, _ = self.build_incomplete_finding(origin='reviewer')
+        assignment = dict(assignment, role='result', dossier_id=None, author_id='author', prompt={'parameters': {}})
+        records = dict(workspace={'problem': {'authors': ['author']}},
+                       review_assignment={assignment['id']: assignment})
+        store = Mock()
+        def prepare(store, operation, payload, callback, **kwargs):
+            return callback(records, payload)
+        output = dict(id='fake', dossier_id=None, assignment_id=assignment['id'], stage='result', support=None,
+                      value={}, objections=[], limitations=[])
+        with patch.object(decisions, 'prepared_mutation', side_effect=prepare), \
+                patch.object(protocol, 'validate_assignment_inventories'), \
+                patch.object(protocol, 'assignment_state', return_value=dict(state, stage='result', dossier_id=None)):
+            with self.assertRaises(ResearchError) as rejected:
+                decisions.record_value_review(store, output, expected_revision=0, request_id='incomplete')
+        self.assertEqual(rejected.exception.code, 'assessment_incomplete')
 
 
 if __name__ == '__main__':

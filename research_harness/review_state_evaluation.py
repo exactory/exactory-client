@@ -69,10 +69,15 @@ def evaluate_state(records, artifacts, kind, identifier, compute):
     scope['active'].add(identity)
     try:
         before = _runtime_fingerprint(evaluation.records, evaluation)
-        # These mutable selectors can change while an Evaluation holds immutable
-        # task bodies. A root or task generation change must invalidate its state.
-        dependencies = _fingerprint_selection(evaluation.records, identifier, kind)
-        key = (kind, identifier, before, dependencies)
+        key = (kind, identifier, before)
+        if kind in ('assignment', 'adjudication'):
+            assignment_id = (evaluation.records.get('review_adjudication', {}).get(identifier, {}).get('assignment_id', identifier)
+                             if kind == 'adjudication' else identifier)
+            assignment = evaluation.records.get('review_assignment', {}).get(assignment_id, {})
+            if (assignment.get('staged_review') or {}).get('epoch_id') is not None:
+                # Mutable selected roots invalidate staged states within one
+                # view; native states retain their original cache key.
+                key += (_fingerprint_selection(evaluation.records, identifier, kind),)
         if before is not None and key in scope['values']:
             return copy.deepcopy(scope['values'][key])
         result = compute(evaluation.records, evaluation, identifier)

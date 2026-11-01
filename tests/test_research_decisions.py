@@ -2,9 +2,29 @@
 
 import copy
 import json
+import unittest
 from unittest.mock import patch
 
 from strategy_fixtures import StrategyCase
+
+
+class OrdinaryProblemReviewTests(unittest.TestCase):
+    def test_ordinary_problem_review_pair_does_not_enter_staged_slot_collection(self):
+        from research_harness import research_decisions as decisions
+        ordinary = dict(id='ordinary', dossier_id=None, role='result', context={},
+                        subject={'kind': 'problem', 'statement_id': None})
+        unrelated = dict(ordinary, id='unrelated', subject={'kind': 'problem', 'statement_id': 'other'},
+                         staged_review={'kind': 'controller', 'epoch_id': 'other-epoch'})
+        for assignments in ({}, {ordinary['id']: ordinary}, {unrelated['id']: unrelated}):
+            with self.subTest(assignments=list(assignments)):
+                records = {'workspace': {'problem': {'authors': ['author']}}, 'review_assignment': assignments}
+                with patch('research_harness.review_staged.collect_slot_outcomes',
+                           side_effect=AssertionError('Ordinary reviews must not evaluate staged slots.')):
+                    result = decisions.assess_problem_reviews(records, object())
+                self.assertFalse(result['ready'])
+                self.assertNotIn('slot_outcomes', result)
+                self.assertEqual({row['code'] for row in result['obligations']},
+                                 {'problem_bar_pending', 'problem_review_pair_required'})
 
 
 class DecisionContractTests(StrategyCase):

@@ -147,3 +147,12 @@ except ResearchError as error: print(json.dumps({"error": error.code}), flush=Tr
         results = self.race(("a", "a"))
         self.assertEqual(sum("ok" in item for item in results), 1, results)
         self.assertEqual([r["error"] for r in results if "error" in r], ["review_invocation_pending"])
+
+
+    def test_epoch_call_budget_is_enforced_inside_atomic_admission(self):
+        self.put('review_epoch', 'epoch', dict(id='epoch', generation=1, context='original',
+                                             budgets=dict(max_calls=1)))
+        execution.record_capacity(self.store, dict(store_limit=2, route_limits={}), request_id='two-slots')
+        self.reserve('a')
+        self.refuse('assessment_incomplete', lambda:self.reserve('b'))
+        self.assertEqual(len(self.store.snapshot()['records']['review_reservation']), 1)

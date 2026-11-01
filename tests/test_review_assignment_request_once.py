@@ -16,6 +16,28 @@ from research_harness.storage import Store
 
 
 class AssignmentPreparationEvaluationTests(ResultPartsCase):
+    def test_native_invocation_reuses_preparation_before_committing_its_start(self):
+        assignment = self.assign('native-dispatch')
+        output = self.case.build_review_output('result')
+        snapshot = self.case.store.snapshot
+        prepare = protocol.prepared_mutation
+        started = {'committed': False}
+        def read_after_start():
+            if not started['committed']:
+                raise AssertionError('Native dispatch must not read a full snapshot before its start commits.')
+            return snapshot()
+        def prepare_and_observe_start(*args, **kwargs):
+            result = prepare(*args, **kwargs)
+            if kwargs.get('request_id', '').endswith(':start'):
+                started['committed'] = True
+            return result
+        with patch.object(self.case.store, 'snapshot', side_effect=read_after_start), \
+                patch.object(protocol, 'prepared_mutation', side_effect=prepare_and_observe_start):
+            invoked = self.invoke(assignment, output=output)
+        self.assertEqual(invoked['result']['status'], 'completed')
+        saved = self.case.read_records()['review_attempt']['attempt-native-dispatch']
+        self.assertEqual(protocol._read_json(self.case.artifacts, saved['output']), output)
+
     def test_part_turn_preparation_uses_one_root_evaluation_and_preserves_assignment(self):
         self.oversized()
         first = self.assign()

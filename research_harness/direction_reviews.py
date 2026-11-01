@@ -29,13 +29,13 @@ def _collect_selected_task_graph(records, artifacts, assignment_id):
     from .review_excerpts import read_sent_packet
     from .review_input_projection import collect_attachments, project_evidence
     from .review_transport import logical_messages
-    from .direction_sources import has_attachment
     evaluation = Evaluation.of(records, artifacts)
     assignment = records['review_assignment'][assignment_id]
     binding = assignment['staged_review']
     epoch = records['review_epoch'][binding['epoch_id']]
     controller_id = epoch['controller_assignment_id']
-    tasks = [row['task'] for row in records.get('review_task', {}).values() if row['epoch_id'] == epoch['id']]
+    from .review_staged_protocol import list_epoch_tasks
+    tasks = list_epoch_tasks(records, epoch)
     observations, packets = [], []
     for acceptance in records.get('review_task_acceptance', {}).values():
         receipt = acceptance['receipt']
@@ -57,7 +57,10 @@ def _collect_selected_task_graph(records, artifacts, assignment_id):
         binder = getattr(staged, 'bind_quotations', None)
         bound, _ = (binder(raw['raw_output'], epoch=epoch, sources=epoch['manifest']['sources'])
                     if binder is not None else (raw['raw_output'], []))
-        accepted_output = staged.validate_task_output(child['staged_task'], bound, manifest=epoch['manifest'])
+        contexts = {key:dict(context, root=child['staged_task']['context_roots'].get(key, context['root']))
+                    for key,context in epoch['manifest']['contexts'].items()}
+        accepted_output = staged.validate_task_output(child['staged_task'], bound,
+            manifest=dict(epoch['manifest'], contexts=contexts), validate_records=False)
         if (not raw['instrumented'] or raw['status'] != 'completed'
                 or digest(raw['raw_output']) != raw['raw_output_digest']
                 or accepted_output != observed['output']
@@ -76,9 +79,11 @@ def _collect_selected_task_graph(records, artifacts, assignment_id):
         spans = [row['span'] for row in originals]
         if any(span not in spans for span in observed['actual_input']['intervals']):
             raise ResearchError('review_invocation_unverified', 'Selected source intervals must have reached their task.')
-        if any(not has_attachment(evaluation, packet, row['descriptor'])
-               for row in observed['actual_input']['binary_sources']):
-            raise ResearchError('review_invocation_unverified', 'Selected native bodies must have reached their task.')
+        if observed['actual_input']['binary_sources']:
+            from .review_staged_binary import read_actual_sources
+            delivered = read_actual_sources(records, evaluation, epoch, child['staged_task'], request)
+            if any(row not in delivered for row in observed['actual_input']['binary_sources']):
+                raise ResearchError('review_invocation_unverified', 'Selected native bodies must have reached their task.')
         sources = {source['id']: source for source in epoch['manifest']['sources']}
         for original in originals:
             span = original['span']

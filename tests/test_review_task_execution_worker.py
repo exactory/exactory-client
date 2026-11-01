@@ -157,6 +157,37 @@ class WorkerExecutionTests(TaskExecutionFixture):
         self.assertTrue(self.current(reservation)["released"])
         self.assertEqual((self.root / "calls").read_text().splitlines(), ["call"])
 
+    def test_refused_capture_replay_retains_refusal_and_new_retry_state(self):
+        reservation = self.reserve()["result"]
+        process = self.launch(reservation)
+        self.assertEqual(process.wait(timeout=6), 0)
+        validate = mock.Mock(side_effect=ResearchError('invalid_review_staged', 'The scoped answer is malformed.'))
+        refused = self.accept(reservation, request_id='refuse-first', validate=validate)['result']
+        self.reconcile(reservation)
+        retry = self.reserve(request_id='retry-after-refusal')['result']
+        before = self.store.snapshot()['records']
+        replay_validator = mock.Mock(side_effect=AssertionError('A durable refusal must not be revalidated'))
+        replay = self.accept(reservation, request_id='replay-old-refusal', validate=replay_validator)['result']
+        replay_validator.assert_not_called()
+        self.assertEqual(replay, refused)
+        after = self.store.snapshot()['records']
+        self.assertEqual(after['review_task_execution']['a'], before['review_task_execution']['a'])
+        self.assertEqual(after['review_task_execution']['a']['reservation_id'], retry['id'])
+        self.assertEqual(after['review_task_refusal'], before['review_task_refusal'])
+
+    def test_historical_capture_is_rejected_before_scientific_refusal_validation(self):
+        reservation = self.reserve()["result"]
+        process = self.launch(reservation)
+        self.assertEqual(process.wait(timeout=6), 0)
+        state = self.store.snapshot()['records']['review_task_execution']['a']
+        self.put('review_task_execution', 'a', dict(state, reservation_id='selected-later-reservation'))
+        validate = mock.Mock(side_effect=ResearchError('invalid_review_staged', 'A stale malformed answer.'))
+        self.refuse('review_task_dependency_changed', lambda: self.accept(reservation, validate=validate))
+        validate.assert_not_called()
+        records = self.store.snapshot()['records']
+        self.assertEqual(records['review_task_execution']['a']['reservation_id'], 'selected-later-reservation')
+        self.assertNotIn('review_task_refusal', records)
+
     def test_response_artifact_without_capture_is_unknown_and_never_accepted(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "before-capture")
@@ -350,3 +381,19 @@ time.sleep(20)
             self.reconcile(reservation)
             self.assertEqual(self.current(reservation)["state"], "known_failure")
         self.refuse("review_task_exhausted", lambda: self.reserve(request_id="exhausted"))
+
+    def test_missing_page_fragments_are_refused_and_allow_the_frozen_retry(self):
+        from research_harness import review_composition as composition
+        from test_review_composition import make_fixture
+        plan, pages, _, _ = make_fixture()
+        incomplete = dict(pages[0]['output'], fragments=[])
+        reservation = self.reserve()['result']
+        process = self.launch(reservation)
+        self.assertEqual(process.wait(timeout=6), 0)
+        def validate(records, captured):
+            return composition.validate_page(incomplete, plan)
+        result = self.accept(reservation, validate=validate)['result']
+        self.assertEqual(result['refusal']['code'], 'review_composition_pending')
+        self.assertEqual(self.current(reservation)['state'], 'refused')
+        self.reconcile(reservation)
+        self.assertEqual(self.reserve(request_id='retry-partial-page')['result']['attempt'], 2)

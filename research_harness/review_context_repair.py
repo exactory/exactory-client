@@ -303,7 +303,7 @@ def prepare_repair(records, artifacts, assignment_payload):
                    'review_route_retired'}
         if scientific_output is None:
             allowed.update(('review_output_pending', 'review_output_refused', 'review_task_pending',
-                            'review_assessment_incomplete', 'review_source_coverage_pending', 'review_composition_pending'))
+                            'assessment_incomplete', 'review_source_coverage_pending', 'review_composition_pending'))
         if any(item['code'] not in allowed for item in prior_state['obligations']):
             raise ResearchError('review_context_repair_unverified', 'Preserve only the exact observed scientific history with verified invocation provenance')
         from .bar_sources import pending

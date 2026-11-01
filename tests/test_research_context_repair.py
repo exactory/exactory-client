@@ -111,6 +111,28 @@ class ContextRepairTests(StrategyCase):
         self.error('review_context_repair_pending', lambda: self.module('review_context_repair').prepare_repair(
             records, self.artifacts, self.payload()))
 
+    def test_incomplete_assessment_repair_keeps_the_occupied_slot_without_scientific_output(self):
+        self.probe()
+        records = copy.deepcopy(self.store.snapshot()['records'])
+        original = records['review_assignment']['assignment-bar-a']
+        unfinished = dict(original, id='unfinished', recorded_revision=original['recorded_revision'] + 1,
+                          context={'prior_assignment_id': original['id']})
+        records['review_assignment'][unfinished['id']] = unfinished
+        payload = self.payload()
+        payload['context']['context_repair']['assignment_id'] = unfinished['id']
+        real_state = self.protocol.assignment_state
+        def state(values, artifacts, identifier):
+            if identifier == unfinished['id']:
+                return dict(output=None, raw_output=None, effective={'kind': 'incomplete'},
+                            context_status='contaminated', attempt_id=None,
+                            obligations=[{'code': 'assessment_incomplete'}])
+            return real_state(values, artifacts, identifier)
+        with patch.object(self.protocol, 'assignment_state', side_effect=state):
+            prepared = self.module('review_context_repair').prepare_repair(records, self.artifacts, payload)
+        self.assertEqual(prepared['slot_id'], 'assignment-bar-a')
+        self.assertTrue(prepared['predecessor_binding']['no_effective_output'])
+        self.assertIsNone(prepared['scientific_history'][-1]['observed_output'])
+
     def test_partial_series_preserves_intermediate_output_without_recording_a_final(self):
         from research_harness import review_problem_parts as parts
         self.probe()

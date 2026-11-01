@@ -110,11 +110,20 @@ class EffectiveConsumerTests(unittest.TestCase):
         effective = composition.effective_review_output(identifier, dict(controller_id=identifier, kind='paged',
             plan=plan, observations=pages, root=root, terminal=observe(terminal_for(plan, root, choices), 'terminal'),
             completion_root=digest('completed scientific work')))
-        assignment = dict(records['review_assignment'][identifier], staged_review={'kind': 'controller', 'epoch_id': plan['epoch_id']})
+        from test_review_staged_fixtures import epoch
+        assignment = records['review_assignment'][identifier]
+        frozen = epoch(id=plan['epoch_id'], controller_assignment_id=identifier, slot_id=identifier,
+                       subject=assignment['subject'], reviewer_id=assignment['reviewer_id'],
+                       route_id=assignment['route_id'], author_id=assignment['author_id'])
+        assignment = dict(assignment, slot_id=frozen['slot_id'],
+                          staged_review={'kind': 'controller', 'epoch_id': frozen['id']})
         case.put('review_assignment', identifier, assignment)
+        case.put('review_epoch', frozen['id'], frozen)
+        case.put('review_slot_head', frozen['slot_id'], dict(slot_id=frozen['slot_id'], epoch_id=frozen['id'],
+                                                          state='pending', outcome=None))
         state = dict(original_state, output={'terminal': 'raw authorization'}, effective=effective)
         native_state = protocol.assignment_state
-        graph = dict(completion={'complete': True}, packets=[(assignment, packet) for packet in packets])
+        graph = dict(epoch=frozen, completion={'complete': True}, packets=[(assignment, packet) for packet in packets])
         with patch.object(protocol, 'assignment_state', side_effect=lambda r, a, i:
                           state if i == identifier else native_state(r, a, i)), \
                 patch.object(direction_reviews, 'collect_selected_task_graph', return_value=graph):
@@ -126,6 +135,9 @@ class EffectiveConsumerTests(unittest.TestCase):
             recorded = case.mutate(decisions.record_value_review, payload)['result']
         self.assertEqual(recorded['output_digest'], digest(output))
         self.assertEqual(recorded['effective_binding'], decisions.bind_effective_result(effective))
+        head = case.read_records()['review_slot_head'][frozen['slot_id']]
+        self.assertEqual(head['state'], 'complete')
+        self.assertEqual(head['outcome'], dict(kind='value_review', id=recorded['id'], output_digest=digest(output)))
 
     def test_pending_successor_keeps_its_predecessors_adverse_objection(self):
         from test_review_composition import worked_objection
@@ -199,6 +211,8 @@ class EffectiveConsumerTests(unittest.TestCase):
                          [('/evidence', evidence)])
 
     def test_cache_changes_when_selected_root_changes_in_same_evaluation(self):
+        self.records['review_assignment']['controller'] = {
+            'id': 'controller', 'staged_review': {'kind': 'controller', 'epoch_id': 'epoch'}}
         self.records['review_selection'] = {'controller': {'composition_root': digest('first')}}
         evaluation = Evaluation(self.records, self.artifacts)
         compute = Mock(return_value={'ready': True})

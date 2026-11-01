@@ -1332,7 +1332,7 @@ def validate_original_check(check, *, epoch, task, observations, groups):
     return copy.deepcopy(check)
 
 
-def validate_retrieval(receipt, manifest):
+def validate_retrieval(receipt, manifest, *, requested_context_roots=None):
     """Validate an exact original reread question and its explicitly closed scope."""
     check_fields(receipt, ('id', 'question', 'inputs', 'claim_ids', 'context_roots', 'status', 'answer',
                        'observation_ids', 'requested_by'), code='invalid_review_staged')
@@ -1351,8 +1351,10 @@ def validate_retrieval(receipt, manifest):
         if span['source_id'] not in sources:
             _fail('Retrieval names an original outside the epoch.')
         materialize_quotation(sources[span['source_id']], span)
+    expected = requested_context_roots if requested_context_roots is not None else {
+        key: row['root'] for key, row in manifest['contexts'].items()}
     for key in receipt['claim_ids']:
-        if key not in manifest['contexts'] or receipt['context_roots'].get(key) != manifest['contexts'][key]['root']:
+        if key not in manifest['contexts'] or receipt['context_roots'].get(key) != expected.get(key):
             _fail('Retrieval context changed.', code='review_task_dependency_changed')
     if receipt['status'] == 'resolved':
         check_text(receipt['answer'], 'answer', code='invalid_review_staged')
@@ -1361,6 +1363,28 @@ def validate_retrieval(receipt, manifest):
     elif receipt['status'] == 'pending' and (receipt['answer'] is not None or receipt['observation_ids']):
         _fail('Pending retrievals cannot claim an observed answer.')
     return copy.deepcopy(receipt)
+
+
+def collect_retrieval_inputs(receipt, contexts):
+    """Keep a pending question's provenance while rereading its expanded closure."""
+    inputs = copy.deepcopy(receipt['inputs'])
+    for key in receipt['claim_ids']:
+        if receipt['context_roots'][key] != contexts[key]['root']:
+            inputs.extend(copy.deepcopy(contexts[key]['spans']))
+    return inputs
+
+
+def depends_on_task(observed, task_id, by_task):
+    """Require a later delivery's authenticated dependency path to its question."""
+    pending, seen = list(observed['dependencies']), set()
+    while pending:
+        key = pending.pop()
+        if key == task_id:
+            return True
+        if key not in seen:
+            seen.add(key)
+            pending.extend(by_task.get(key, {}).get('dependencies', {}))
+    return False
 
 
 def card_span(card, start, end, *, manifest=None, findings=()):
@@ -1601,6 +1625,9 @@ def _check_completion_observations(work):
     task_index = work['task_index']
     epoch = work['epoch']
     current_contexts = work['current_contexts']
+    historical = {key for key, task in task_index.items() if any(
+        claim_id in current_contexts and root != current_contexts[claim_id]['root']
+        for claim_id, root in task['context_roots'].items())}
     accepted, by_task = {}, {}
     for row in raw.values():
         if row.get('task_id') not in task_index:
@@ -1608,7 +1635,16 @@ def _check_completion_observations(work):
             continue
         assigned = task_index[row['task_id']]
         try:
-            row = _validate_observation(epoch, assigned, row, current_contexts)
+            observed_contexts = current_contexts
+            if assigned['id'] in historical:
+                # Old captures retain exact provenance and dependency bindings;
+                # their scientific judgments receive no current-context credit.
+                observed_contexts = dict(current_contexts)
+                for claim_id, root in assigned['context_roots'].items():
+                    if claim_id in observed_contexts:
+                        observed_contexts[claim_id] = dict(observed_contexts[claim_id],
+                                                         root=root, spans=assigned['inputs'])
+            row = _validate_observation(epoch, assigned, row, observed_contexts)
             if row['task_id'] in by_task:
                 _fail('Selection contains multiple outputs for one task.')
             accepted[row['id']] = row
@@ -1627,32 +1663,52 @@ def _check_completion_observations(work):
                 del accepted[key]
                 del by_task[row['task_id']]
                 changed = True
+    current_by_task = {key:row for key,row in by_task.items() if key not in historical}
     for assigned in task_index.values():
-        if assigned['required'] and assigned['id'] not in by_task:
+        if assigned['id'] in historical:
+            replacements = [task_index[key] for key in current_by_task
+                            if task_index[key]['type'] == assigned['type']]
+            pairs = [(occurrence, claim) for occurrence in (assigned['occurrence_ids'] or [None])
+                     for claim in assigned['claim_ids']]
+            if not all(any(claim in candidate['claim_ids'] and
+                           (occurrence is None or occurrence in candidate['occurrence_ids'])
+                           for candidate in replacements) for occurrence, claim in pairs):
+                _record_completion_issue(work, 'review_task_dependency_changed', task_id=assigned['id'],
+                                         reason='Reassess historical work under the expanded original context.')
+        elif assigned['required'] and assigned['id'] not in by_task:
             _record_completion_issue(work, 'review_task_pending', task_id=assigned['id'])
-    observed = [accepted[key] for key in sorted(accepted)]
+    observed = [accepted[key] for key in sorted(accepted) if accepted[key]['task_id'] not in historical]
     observations_root = digest(['selected-observations-v1', sorted(
         [(row['id'], row['task_id'], row['task_digest'], row['request_digest'], row['raw_output_digest'],
-          digest(row['actual_input']), row['dependencies']) for row in observed])])
-    work['accepted'] = accepted
-    work['by_task'] = by_task
+          digest(row['actual_input']), row['dependencies']) for row in accepted.values()])])
+    work['accepted'] = {key:row for key,row in accepted.items() if row['task_id'] not in historical}
+    work['by_task'] = current_by_task
+    work['all_by_task'] = by_task
     work['observed'] = observed
+    work['historical_observed'] = [accepted[key] for key in sorted(accepted)
+                                   if accepted[key]['task_id'] in historical]
+    work['historical_tasks'] = historical
     work['observations_root'] = observations_root
 
 
 def _collect_completion_records(work):
-    observed = work['observed']
+    observed = work['observed'] + work['historical_observed']
     grouped = {}
     owners = {}
     for row in observed:
         for key in ('cards', 'cells', 'combinations', 'selected_groups', 'original_checks', 'integrations',
                     'findings', 'answers', 'retrievals', 'assurance_checks', 'decision_checks'):
+            if row['task_id'] in work['historical_tasks'] and key not in ('findings', 'retrievals'):
+                continue
             try:
                 items = _require_array(row['output'].get(key, []), key)
             except ResearchError as error:
                 _record_completion_rejection(work, error, task_id=row['task_id'])
                 continue
             for item in items:
+                if (row['task_id'] in work['historical_tasks'] and key == 'retrievals'
+                        and isinstance(item, dict) and item.get('status') != 'pending'):
+                    continue
                 try:
                     check_fields(item, ('id',), None, code='invalid_review_staged')
                     check_text(item['id'], 'record.id', code='invalid_review_staged')
@@ -1925,19 +1981,32 @@ def _check_completion_retrievals(work):
     retrievals = []
     for retrieval in grouped.get('retrievals', {}).values():
         try:
-            validate_retrieval(retrieval, manifest)
+            requester_id = check_text(retrieval.get('requested_by'), 'requested_by', code='invalid_review_staged')
+            requesting = work['all_by_task'].get(requester_id)
+            if requesting is None or not any(row.get('id') == retrieval['id'] and row.get('status') == 'pending'
+                    for row in requesting['output'].get('retrievals', [])):
+                _fail('A retrieval needs its selected pending request.')
+            validate_retrieval(retrieval, manifest,
+                               requested_context_roots=requesting['actual_input']['context_roots'])
             if retrieval['status'] == 'resolved':
-                requesting = work['by_task'].get(retrieval['requested_by'])
-                if requesting is None or not any(row.get('id') == retrieval['id'] and row.get('status') == 'pending'
-                        for row in requesting['output'].get('retrievals', [])):
-                    _fail('A resolved retrieval needs its selected pending request.')
                 if not set(retrieval['observation_ids']) <= set(accepted):
                     _fail('Retrieval has no selected observed rereading.')
                 if any(accepted[key]['task_id'] == retrieval['requested_by'] for key in retrieval['observation_ids']):
                     _fail('A retrieval answer requires a later delivery than its requesting task.')
+                if any(not depends_on_task(accepted[key], retrieval['requested_by'], work['all_by_task'])
+                       for key in retrieval['observation_ids']):
+                    _fail('A retrieval answer requires a delivery depending on its original question.')
                 spans = [span for key in retrieval['observation_ids'] for span in accepted[key]['actual_input']['intervals']]
-                if not _covers_inputs(retrieval['inputs'], spans):
+                inputs = collect_retrieval_inputs(retrieval, work['current_contexts'])
+                if not _covers_inputs(inputs, spans):
                     _fail('Retrieval did not deliver the requested original scope again.')
+                for claim_id in retrieval['claim_ids']:
+                    current_spans = [span for key in retrieval['observation_ids']
+                        if accepted[key]['actual_input']['context_roots'].get(claim_id) ==
+                           work['current_contexts'][claim_id]['root']
+                        for span in accepted[key]['actual_input']['intervals']]
+                    if not _covers_inputs(inputs, current_spans):
+                        _fail('Retrieval did not reassess its current claim context.')
             else:
                 _record_completion_issue(work, 'review_retrieval_pending', retrieval_id=retrieval['id'])
             retrievals.append(retrieval)

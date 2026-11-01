@@ -446,7 +446,7 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         assignment = assignment_state(records, artifacts, value["assignment_id"])
         effective_output, effective_digest = read_effective_result(assignment)
         if assignment.get('effective', {}).get('kind') == 'incomplete':
-            raise ResearchError('review_assessment_incomplete', 'An incomplete assessment occupies its slot without a scientific review.')
+            raise ResearchError('assessment_incomplete', 'An incomplete assessment occupies its slot without a scientific review.')
         if effective_output is None:
             raise ResearchError("review_output_pending", "Preserve failed attempts; a missing output is neither approval nor a negative scientific result")
         if assignment.get("dossier_id") != value["dossier_id"] or assignment.get("stage") != value["stage"]:
@@ -529,6 +529,12 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         if assignment.get("output_correction_id") is not None:
             record["output_correction_id"] = assignment["output_correction_id"]
         changes.append(immutable_record(records, "value_review", value["id"], record))
+        if saved_assignment.get('staged_review') is not None:
+            from .review_staged import transition_outcome
+            epoch = records['review_epoch'][saved_assignment['staged_review']['epoch_id']]
+            head = records['review_slot_head'][epoch['slot_id']]
+            changes.append(('review_slot_head', epoch['slot_id'], transition_outcome(head, 'complete',
+                outcome=dict(kind='value_review', id=record['id'], output_digest=effective_digest))))
         if support is not None:
             changes.append(immutable_record(records, "research_support", value["id"], {
                 "review_id": value["id"], "readiness_review_id": value["support"]["id"], "candidate_digest": value["support"]["candidate_digest"],
@@ -1143,16 +1149,20 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
     from .problem_claims import describe_problem_evidence, compute_problem_evidence_digest
     from .review_protocol import build_problem_subject, is_version_2_problem_result, validate_problem_bars
     subject = build_problem_subject(records)
-    slot_outcomes = collect_problem_slot_outcomes(records, artifacts, subject)
+    staged_results = any(assignment.get('staged_review')
+                         and assignment['staged_review'].get('kind') != 'task'
+                         and assignment['role'] == 'result' and assignment.get('subject') == subject
+                         for assignment in records.get('review_assignment', {}).values())
+    slot_outcomes = collect_problem_slot_outcomes(records, artifacts, subject) if staged_results else None
     review_ids = _collect_problem_reviews(records, 'result', subject) if review_ids is None else review_ids
     bar_review_ids = _collect_problem_reviews(records, 'bar', subject) if bar_review_ids is None else bar_review_ids
     obligations, pairs = [], {}
     for stage, identifiers, code in (('bar', bar_review_ids, 'problem_bar_pending'),
                                       ('result', review_ids, 'problem_review_pair_required')):
-        if stage == 'result' and (slot_outcomes['incomplete'] or slot_outcomes['pending']):
+        if stage == 'result' and slot_outcomes is not None and (slot_outcomes['incomplete'] or slot_outcomes['pending']):
             # A required assessment is occupied, so it is not a request for an
             # unrelated second reviewer. Its scientific work must be completed.
-            obligations.append(obligation('review_assessment_incomplete' if slot_outcomes['incomplete'] else 'review_task_pending',
+            obligations.append(obligation('assessment_incomplete' if slot_outcomes['incomplete'] else 'review_task_pending',
                 'Complete the current assessment in its existing logical slot.',
                 occupied=slot_outcomes['occupied'], incomplete=slot_outcomes['incomplete'], pending=slot_outcomes['pending']))
             pairs[stage] = [records['value_review'][identifier] for identifier in identifiers
@@ -1222,7 +1232,7 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
     obligations.extend(assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest))
     return {'ready': not obligations, 'obligations': _obligations(obligations),
             'review_ids': review_ids, 'bar_review_ids': bar_review_ids, 'problem_evidence_digest': evidence_digest,
-            'slot_outcomes': slot_outcomes}
+            **({'slot_outcomes': slot_outcomes} if slot_outcomes is not None else {})}
 
 
 def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):

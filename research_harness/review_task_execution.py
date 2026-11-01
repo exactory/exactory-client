@@ -36,7 +36,7 @@ from .workspace import strict_json
 
 
 PROTOCOL = "review-task-execution-v1"
-COVERED_ADAPTERS = ("claude_cli_v1", "codex_cli_v1", "codex_cli_framed_v1")
+COVERED_ADAPTERS = ("claude_cli_v1", "codex_cli_v1", "codex_cli_framed_v1", "codex_cli_visual_v1")
 
 
 def _positive(value, name):
@@ -246,12 +246,22 @@ def reserve_task(store, payload, *, request_id, expected_revision=None):
         if state["reservation_id"] is not None:
             prior = _get(records, "review_reservation", state["reservation_id"])
             observation = records.get("review_observation", {}).get(prior["id"])
-            if prior["state"] == "accepted" or observation is not None and observation["observation"]["status"] == "completed":
+            if prior["state"] == "accepted" or (observation is not None and observation["observation"]["status"] == "completed"
+                    and prior["state"] != "refused"):
                 raise ResearchError("review_resampling_forbidden", "Resume the captured observation instead of repeating its reviewer call")
             if not prior["released"]:
                 raise ResearchError("review_invocation_pending", "Reconcile the task's existing reservation before retrying")
         if state["attempts"] >= plan["max_attempts"]:
             raise ResearchError("review_task_exhausted", "The frozen task exhausted its bounded execution attempts")
+        epoch = _get(records, 'review_epoch', plan['epoch_id'])
+        budgets = epoch.get('budgets', {})
+        used = sum(row['epoch_id'] == epoch['id'] for row in records.get('review_reservation', {}).values())
+        controller = records.get('review_assignment', {}).get(epoch.get('controller_assignment_id'), {}) if epoch.get('controller_assignment_id') else {}
+        import time
+        elapsed = time.time() - controller.get('staged_started_at', time.time())
+        if used >= budgets.get('max_calls', float('inf')) or elapsed >= budgets.get('max_elapsed_seconds', float('inf')):
+            raise ResearchError('assessment_incomplete', 'The epoch exhausted its shared execution budget',
+                                dict(epoch_id=epoch['id'], task_id=plan['task_id'], attempts=used, elapsed_seconds=elapsed))
         active = [r for r in records.get("review_reservation", {}).values() if not r["released"]]
         legacy = _active_legacy(records, policy)
         route_active = [r for r in active + legacy if r["route_id"] == plan["route_id"]]
@@ -334,22 +344,37 @@ def accept_observation(store, payload, validate, *, request_id, expected_revisio
         existing = records.get("review_task_acceptance", {}).get(reservation["id"])
         if existing is not None:
             return [], existing
+        refusal = records.get("review_task_refusal", {}).get(reservation["id"])
+        if refusal is not None:
+            return [], dict(refusal={key:value for key,value in refusal.items() if key != "recorded_revision"},
+                            recorded_revision=refusal["recorded_revision"])
         plan = _get(records, "review_execution_plan", reservation["plan_id"])
         _check_references(records, plan)
+        state = _get(records, "review_task_execution", plan["task_id"])
+        if state["reservation_id"] != reservation["id"]:
+            raise ResearchError("review_task_dependency_changed", "A historical capture cannot replace the task's selected work")
         if captured["observation"]["status"] != "completed":
             raise ResearchError("review_task_failed", "A captured execution failure supplies no scientific completion")
         for name in ("request", "response", "output"):
             reference = captured["observation"].get(name)
             if reference is not None:
                 store.build_artifact_store().read(reference)
-        scientific = validate(records, captured)
+        try:
+            scientific = validate(records, captured)
+        except ResearchError as error:
+            if (error.code not in ('invalid_review_staged', 'review_composition_conflict', 'invalid_value_review',
+                                  'invalid_review_adjudication', 'review_adjudication_mismatch', 'review_composition_pending')
+                    and not (getattr(error, 'contract_check', None) and not getattr(error, 'contract_external', False))):
+                raise
+            refusal = dict(reservation_id=reservation['id'], task_id=plan['task_id'], plan_id=plan['id'],
+                observation_digest=digest(captured), code=error.code, message=str(error), details=error.details)
+            return [('review_task_refusal', reservation['id'], refusal),
+                ('review_reservation', reservation['id'], dict(reservation, state='refused', generation=reservation['generation'] + 1)),
+                ('review_task_execution', plan['task_id'], dict(state, state='refused', generation=state['generation'] + 1))], dict(refusal=refusal)
         if not isinstance(scientific, dict):
             raise ResearchError("invalid_input", "A task validator returns its scientific receipt object")
         accepted = {"reservation_id": reservation["id"], "task_id": plan["task_id"], "plan_id": plan["id"],
                     "task_generation": plan["task_generation"], "observation_digest": digest(captured), "receipt": scientific}
-        state = _get(records, "review_task_execution", plan["task_id"])
-        if state["reservation_id"] != reservation["id"]:
-            raise ResearchError("review_task_dependency_changed", "A historical capture cannot replace the task's selected work")
         return [("review_task_acceptance", reservation["id"], accepted),
                 ("review_reservation", reservation["id"], dict(reservation, state="accepted", generation=reservation["generation"] + 1)),
                 ("review_task_execution", plan["task_id"], dict(state, state="accepted", generation=state["generation"] + 1))], accepted

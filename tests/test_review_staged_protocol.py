@@ -87,11 +87,13 @@ class StagedEntryTests(ResultPartsCase):
             assignment = self.assign('body-omitted')
         self.assertEqual(assignment['staged_review']['kind'], 'controller')
 
-    def test_raw_accessor_preserves_exact_legacy_observation_and_effective_identity(self):
+    def test_raw_accessor_preserves_exact_legacy_observation_and_native_output(self):
         records = self.case.read_records()
         assignment = records['review_assignment']['bar-first']
         attempt = records['review_attempt']['attempt-bar-first']
-        raw = protocol.read_raw_observation(records, self.case.artifacts, attempt['id'])
+        with patch.object(staged_protocol, 'read_raw_observation',
+                          side_effect=AssertionError('Legacy observation must not enter staged resolution.')):
+            raw = protocol.read_raw_observation(records, self.case.artifacts, attempt['id'])
         self.assertEqual(raw['raw_output'], json.loads(self.case.artifacts.read(attempt['output'])))
         self.assertEqual(raw['raw_output_digest'], digest(raw['raw_output']))
         self.assertEqual(raw['request'], attempt['request'])
@@ -99,8 +101,37 @@ class StagedEntryTests(ResultPartsCase):
         self.assertTrue(raw['instrumented'])
         state = protocol.assignment_state(records, self.case.artifacts, assignment['id'])
         self.assertEqual(state['raw_output'], raw['raw_output'])
-        self.assertEqual(state['effective']['effective_output'], state['output'])
-        self.assertEqual(state['effective']['kind'], 'ordinary')
+        self.assertEqual(state['output'], raw['raw_output'])
+        self.assertEqual(state['output_digest'], raw['raw_output_digest'])
+        self.assertNotIn('effective', state)
+
+    def test_ordinary_assignment_state_never_calls_composition_identity(self):
+        from research_harness import review_composition
+        records = self.case.read_records()
+        assignment = records['review_assignment']['bar-first']
+        attempt = records['review_attempt']['attempt-bar-first']
+        with patch.object(review_composition, 'effective_review_output',
+                          side_effect=AssertionError('Ordinary state must use its native scientific output.')):
+            state = protocol._assignment_state(records, self.case.artifacts, assignment['id'])
+        self.assertTrue(state['ready'], state['obligations'])
+        self.assertEqual(state['output'], protocol._read_json(self.case.artifacts, attempt['output']))
+        self.assertEqual(state['raw_output'], state['output'])
+        self.assertNotIn('effective', state)
+
+    def test_ordinary_state_and_outcome_projection_do_not_import_composition(self):
+        from research_harness import problem_delivery
+        records = self.case.read_records()
+        native_import = __import__
+        def import_native(name, globals=None, locals=None, fromlist=(), level=0):
+            if name.rsplit('.', 1)[-1] == 'review_composition' or 'review_composition' in (fromlist or ()):
+                raise AssertionError('Ordinary reads must not load composition code.')
+            return native_import(name, globals, locals, fromlist, level)
+        with patch('builtins.__import__', side_effect=import_native):
+            state = protocol._assignment_state(records, self.case.artifacts, 'bar-first')
+            outcomes = problem_delivery.collect_review_outcomes(records, self.case.artifacts)
+        self.assertTrue(state['ready'], state['obligations'])
+        self.assertTrue(outcomes)
+        self.assertTrue(all(row['effective'] is None for row in outcomes))
 
     def test_controller_pending_and_child_output_never_become_scientific_output(self):
         self.oversized()
@@ -379,7 +410,8 @@ class StagedEntryTests(ResultPartsCase):
             staged_review=dict(kind='controller', protocol=review_staged.PROTOCOL, epoch_id=value['id']))
         records['review_assignment'][controller['id']] = controller
         records['review_epoch'] = {value['id']:value}
-        records['review_slot_head'] = {value['slot_id']:dict(epoch_id=value['id'])}
+        records['review_slot_head'] = {value['slot_id']:dict(slot_id=value['slot_id'], epoch_id=value['id'],
+                                                           state='pending', outcome=None)}
         records['review_task'] = {row['id']:dict(task=row, epoch_id=value['id']) for row in tasks}
         records['review_task_acceptance'] = {}
         for index, observed in enumerate(chosen['observations']):
@@ -392,6 +424,14 @@ class StagedEntryTests(ResultPartsCase):
             records['review_assignment'][child['id']] = child
             records['review_attempt'][attempt['id']] = attempt
             records['review_task_acceptance'][str(index)] = dict(receipt=dict(attempt=attempt, staged_observation=observed))
+        if incomplete:
+            receipt = next(row['receipt'] for row in records['review_task_acceptance'].values()
+                           if 'assessment_incomplete' in row['receipt']['staged_observation']['output'])
+            child = records['review_assignment'][receipt['attempt']['assignment_id']]
+            with patch.object(staged_protocol, 'authenticate_observation', return_value=True):
+                changes, _ = staged_protocol.prepare_attempt(records, self.case.artifacts, child, receipt)
+            for kind, identifier, record in changes:
+                records.setdefault(kind, {})[identifier] = record
         return records, value, role, terminal_observation['output']
 
     def test_completed_controller_exposes_science_and_raw_terminal_separately(self):
@@ -431,15 +471,15 @@ class StagedEntryTests(ResultPartsCase):
         self.assertEqual(packet['staged_review']['inherited'][0]['record_digest'], digest(manifest['inherited_findings'][0]))
 
     def test_composed_terminal_receives_integrated_grounds_and_answers(self):
-        from tests.test_review_staged_fixtures import epoch, task, full_card
+        from tests.test_review_staged_fixtures import epoch, task, full_card, observation
         value = epoch()
         card = full_card(value)
         card['establishes'] = 'x' * 200000
         answer = dict(id='answered', finding_id='finding', disposition='answered', reason='The original settles it.',
                       grounds=[card['conclusions'][0]['id']])
-        observed = dict(id='read', output=dict(cards=[card], answers=[answer], findings=[dict(
+        observed = observation(value, task(value), dict(cards=[card], answers=[answer], findings=[dict(
             id='finding', text='The claim needs a condition.', adverse=True, classification={'decisions':[], 'reason':'scope'},
-            claim_ids=[], grounds=[card['conclusions'][0]['id']])]))
+            claim_ids=[], grounds=[card['conclusions'][0]['id']])]), id='read')
         material = staged_protocol.project_terminal_material(value, [observed])
         self.assertLess(len(json.dumps(material)), 20000)
         self.assertEqual(material['cells'][0]['id'], card['judgments'][0]['id'])
@@ -448,14 +488,15 @@ class StagedEntryTests(ResultPartsCase):
         self.assertTrue(material['claims'][0]['cells'])
 
     def test_final_packet_uses_ancestor_conditions_and_the_integration_root(self):
-        from tests.test_review_staged_fixtures import epoch, task, full_card
+        from tests.test_review_staged_fixtures import epoch, task, full_card, observation
         value = epoch()
         condition = dict(id='condition', text='The original holds under this condition.', grounds=[])
         card = full_card(value, conditions=[condition])
-        ancestor = dict(id='reader', task_id='read', raw_output_digest=digest(card), output={'cards':[card]})
+        ancestor = observation(value, task(value), {'cards':[card]}, id='reader')
         integration = dict(id='integrated', child_ids=[], decision_constraints={})
-        dependency = dict(id='integration-observation', task_id='integration', raw_output_digest=digest(integration),
-            output=dict(integrations=[integration], original_checks=[dict(id='original-check', conclusions=[])]))
+        dependency = observation(value, task(value, 'integrate'),
+            dict(integrations=[integration], original_checks=[dict(id='original-check', conclusions=[])]),
+            id='integration-observation')
         packet = staged_protocol.build_packet(value, task(value, 'final'), observations=[dependency],
                                                terminal_observations=[ancestor, dependency])
         final = packet['staged_review']['final']

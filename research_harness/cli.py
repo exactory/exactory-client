@@ -131,7 +131,12 @@ def _review_run(store, payload, **identity):
                         reservation_id = previous["payload"]["reservation_id"]
                 if reservation_id is None:
                     raise ResearchError("review_worker_reconciliation_required", "This task has no owned reservation to reconcile.")
-                return reconcile_worker(store, {"reservation_id": reservation_id}, **identity)
+                result = reconcile_worker(store, {"reservation_id": reservation_id}, **identity)
+                if isinstance(result.get("result"), dict):
+                    from .review_staged_protocol import describe_planning_command
+                    result = dict(result, result=dict(result["result"],
+                        next=[describe_planning_command(epoch["controller_assignment_id"])]))
+                return result
             if action not in (None, "accept"):
                 raise ResearchError("invalid_input", "Review task action must be accept or reconcile.")
             if action == "accept" and records.get("review_observation", {}).get(reservation_id, {}).get("observation", {}).get("status") != "completed":
@@ -147,7 +152,8 @@ def _review_run(store, payload, **identity):
             accepted = records.get("review_task_acceptance", {}).get(reservation_id, {}).get("receipt", {}).get("attempt", {})
             owner = {}
             reservation = records.get("review_reservation", {}).get(reservation_id, {})
-            captured = records.get("review_observation", {}).get(reservation_id, {}).get("observation", {}).get("status") == "completed"
+            captured = (records.get("review_observation", {}).get(reservation_id, {}).get("observation", {}).get("status") == "completed"
+                        and reservation.get("state") != "refused")
             if reservation_id is not None and (not reservation.get("released", False) or captured):
                 for dispatch_request, candidate in records.get("review_task_dispatch", {}).items():
                     if candidate.get("task_id") != payload["task_id"] or candidate.get("assignment_id") != child["id"]:

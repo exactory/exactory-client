@@ -45,7 +45,6 @@ def assess_minimum(records, artifacts):
 def collect_review_outcomes(records, artifacts):
     """Read current assignment science, keeping staged slots separate from raw outputs."""
     from .review_protocol import assignment_state
-    from .review_composition import effective_review_output
     parents = {parent for row in records.get("review_assignment", {}).values()
                for parent in (row.get("history_assignment_id"), row.get("context", {}).get("prior_assignment_id"),
                               (row.get("context", {}).get("context_repair") or {}).get("assignment_id"))
@@ -64,6 +63,7 @@ def collect_review_outcomes(records, artifacts):
             epoch = epochs[0]
         effective = state.get("effective")
         if effective is None and epoch is not None:
+            from .review_composition import effective_review_output
             effective = effective_review_output(identifier)
         outcome = (effective or {}).get("incomplete_outcome")
         slot = (epoch or outcome or {}).get("slot_id") or assignment.get("slot_id") or identifier
@@ -109,7 +109,8 @@ def describe_incomplete_work(outcome):
 def describe_review_tasks(records, epoch, state):
     """Project the execution frontier through the shared finite task-state policy."""
     from .review_staged import task_state
-    tasks = [row.get("task", row) for row in records.get("review_task", {}).values() if row.get("epoch_id") == epoch["id"]]
+    from .review_staged_protocol import list_epoch_tasks, describe_planning_command
+    tasks = list_epoch_tasks(records, epoch)
     executions = records.get("review_task_execution", {})
     accepted = {identifier for identifier, execution in executions.items() if execution["state"] == "accepted"}
     total = sum(executions.get(task["id"], {}).get("attempts", 0) for task in tasks)
@@ -120,7 +121,8 @@ def describe_review_tasks(records, epoch, state):
         execution = executions.get(task["id"], {})
         reservation_id = execution.get("reservation_id")
         reservation = records.get("review_reservation", {}).get(reservation_id)
-        captured = records.get("review_observation", {}).get(reservation_id, {}).get("observation", {}).get("status") == "completed"
+        captured = (records.get("review_observation", {}).get(reservation_id, {}).get("observation", {}).get("status") == "completed"
+                    and execution.get("state") != "refused")
         attempts = execution.get("attempts", 0)
         failures = attempts if execution.get("state") in ("known_failure", "unknown") else max(0, attempts - 1)
         plan = records.get("review_execution_plan", {}).get(execution.get("plan_id"), {})
@@ -135,6 +137,8 @@ def describe_review_tasks(records, epoch, state):
             current=effective.get("currency_state") not in ("stale", "historical") and
                 not any(item["code"] == "review_epoch_stale" for item in state.get("obligations", [])),
             incomplete=incomplete)
+        if progress["state"] == "exhausted":
+            progress["next"] = [describe_planning_command(epoch["controller_assignment_id"])]
         if progress["state"] == "incomplete":
             progress["next"] = describe_incomplete_work(incomplete)
         child = next((assignment for assignment in records.get("review_assignment", {}).values()

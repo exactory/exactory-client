@@ -458,10 +458,10 @@ def _fits(artifacts, route, prompt, packet, history, attached):
 
 
 def allows_staged_entry(value, route, packet):
-    """Only prospective problem result and focused-review text work enters v2."""
+    """Only prospective problem result and focused-review local work enters v2."""
     return (value['role'] in ('result', 'adjudicator')
             and packet.get('subject', {}).get('kind') == 'problem'
-            and route['adapter'] in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1')
+            and route['adapter'] in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1', 'codex_cli_visual_v1')
             and not value.get('context', {}).get('source_delivery'))
 
 
@@ -474,15 +474,37 @@ def preserves_ordinary_packet(artifacts, packet, request):
                if entry.get('encoding') in ('utf-8', 'base64'))
 
 
+def _read_prospective_input_limit(route):
+    if route['adapter'] == 'codex_cli_visual_v1':
+        from .review_codex_visual_transport import MAX_USER_TEXT
+        return MAX_USER_TEXT
+    return transport.local_input_limit(route)
+
+
+def _preserves_prospective_packet(records, artifacts, route, packet, request, history):
+    if route['adapter'] == 'codex_cli_visual_v1':
+        from .review_source_complete import project
+        from .review_staged_binary import preserves_packet
+        # The existing native contract projects authorized alternative bodies
+        # out of both evidence and source-delivery metadata before rendering.
+        messages, _ = project(packet, list(history))
+        projected = json.loads(messages[-1]['content'][len(transport.PACKET_LABEL):])
+        return preserves_packet(records, artifacts, projected, request)
+    return preserves_ordinary_packet(artifacts, packet, request)
+
+
 def prepare_packet(records, artifacts, value, route, packet, prompt, history):
-    """Leave a fitting ordinary packet untouched, or plan the next bounded part and an eventual empty final."""
+    """Keep ordinary requests complete, enter v2 for new work, or continue the recorded v1 series."""
     from .review_protocol import canonical_prompt, collect_references
     prior_id = value['context'].get('prior_assignment_id')
     previous = _read_packet(artifacts, records['review_assignment'][prior_id]) if prior_id else {}
-    if allows_staged_entry(value, route, packet) and find_stage(previous) is None:
+    refreshed = any(review['assignment_id'] == prior_id for review in records.get('value_review', {}).values())
+    continuing = (find_stage(previous) is not None and not refreshed
+                  and previous.get('problem_evidence_digest') == packet.get('problem_evidence_digest'))
+    if allows_staged_entry(value, route, packet) and not continuing:
         ordinary = transport.request_body(route, prompt['text'], packet, history)
-        if (_measure(route, ordinary) <= transport.local_input_limit(route)
-                and preserves_ordinary_packet(artifacts, packet, ordinary)):
+        if (_measure(route, ordinary) <= _read_prospective_input_limit(route)
+                and _preserves_prospective_packet(records, artifacts, route, packet, ordinary, history)):
             return packet
         from .review_staged import PROTOCOL as STAGED_PROTOCOL
         candidate = copy.deepcopy(packet)
@@ -496,9 +518,6 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history):
             or packet['problem_evidence'].get('delivery') == 'delivered-in-an-earlier-turn'):
         return packet
     artifacts = Evaluation.of(records, artifacts)
-    refreshed = any(review['assignment_id'] == prior_id for review in records.get('value_review', {}).values())
-    continuing = (find_stage(previous) is not None and not refreshed
-                  and previous.get('problem_evidence_digest') == packet['problem_evidence_digest'])
     if find_stage(previous) is None:
         ordinary = transport.request_body(route, prompt['text'], packet, history)
         if (_measure(route, ordinary) <= transport.local_input_limit(route)
