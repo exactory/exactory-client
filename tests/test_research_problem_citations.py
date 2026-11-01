@@ -40,6 +40,18 @@ class RegistryCitationTests(unittest.TestCase):
              "locator": "10.1016/j.topol.2012.01.008"}])
         self.assertEqual(records, before)
 
+    def test_a_plain_arxiv_alias_does_not_merge_a_journal_work_with_its_preprint(self):
+        records = build_citation_records()
+        journal = records["work"].pop("openalex:W7125830766")
+        journal.update(id="doi:10.1000/journal", aliases=["arxiv:2601.18757"])
+        records["work"][journal["id"]] = journal
+        records["reading"]["read-02"]["version_id"] = journal["id"]
+        evidence = records["problem_value"]["value"]["motivation"][0]["evidence"]
+        records["problem_value"]["value"]["motivation"][0]["evidence"] = evidence[:2]
+        self.assertEqual(project_citations(records, None), [
+            {"citation": "A. Author. First recorded paper", "locator": "2601.18757v1"},
+            {"citation": "A. Author. First recorded paper", "locator": "10.1000/journal"}])
+
     def test_author_names_compare_after_whitespace_and_case_normalization(self):
         records = build_citation_records()
         records["work"]["openalex:W7125830766"]["authors"] = [{"name": "  a.\tAUTHOR  "}]

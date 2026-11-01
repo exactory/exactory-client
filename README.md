@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.69.6](docs/releases/0.69.6.md) stops an arXiv id from matching inside an unrelated identifier in the manuscript citation check, and links problem citations only through a work's own id and its DOI aliases.
+
 Version [0.69.5](docs/releases/0.69.5.md) cites a paper once in a problem export when a record read it under both its arXiv id and its DataCite DOI, and corrects one paragraph of the 0.69.4 release note.
 
 Version [0.69.4](docs/releases/0.69.4.md) resolves frozen record citations without a digest when delivered copies identify one known version or have equal projections.

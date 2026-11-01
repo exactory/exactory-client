@@ -35,6 +35,39 @@ class CitationEvidenceTests(unittest.TestCase):
         bibliography = read_bibliography(b"@misc{doi-only, doi={10.48550/arXiv.2609.14520}}")
         self.assertEqual(find_citing_entry(bibliography, [_build_work("arxiv:2609.14520v1")]), (True, "doi-only"))
 
+    def test_arxiv_tokens_do_not_match_inside_unrelated_identifiers(self):
+        for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+            for field in ("doi={10.9999/2609.14520}", "url={https://example.org/2609.14520}",
+                          "note={foo.2609.14520}", "doi={10.9999/x-2609.14520}", "doi={10.9999/x_2609.14520}"):
+                with self.subTest(identifier=identifier, field=field):
+                    data = ("@article{unrelated, " + field + ", title={Another publication}}").encode()
+                    work = _build_work(identifier, title="Recorded paper title")
+                    self.assertEqual(find_citing_entry(read_bibliography(data), [work]), (False, None))
+
+    def test_arxiv_tokens_match_explicit_ids_and_registry_urls(self):
+        for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+            for field in ("note={arXiv:2609.14520}", "eprint={2609.14520}",
+                          "url={https://arxiv.org/abs/2609.14520v2}",
+                          "url={http://export.arxiv.org/abs/2609.14520}",
+                          "url={https://arxiv.org/pdf/2609.14520v2.pdf}",
+                          "url={https://arxiv.org/html/2609.14520v1}",
+                          "url={https://doi.org/10.48550/arXiv.2609.14520}"):
+                with self.subTest(identifier=identifier, field=field):
+                    data = ("@article{cited, " + field + ", title={Another publication}}").encode()
+                    work = _build_work(identifier, title="Recorded paper title")
+                    self.assertEqual(find_citing_entry(read_bibliography(data), [work]), (True, "cited"))
+
+    def test_old_style_arxiv_tokens_require_the_same_start_boundary(self):
+        cases = {"note={arXiv:hep-th/9711200}": True,
+                 "url={https://arxiv.org/abs/hep-th/9711200}": True,
+                 "doi={10.9999/hep-th/9711200}": False}
+        for field, cited in cases.items():
+            with self.subTest(field=field):
+                data = ("@article{entry, " + field + ", title={Another publication}}").encode()
+                self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                   [_build_work("arxiv:hep-th/9711200v2")]),
+                                 (True, "entry") if cited else (False, None))
+
     def test_versioned_or_malformed_datacite_dois_do_not_contribute_arxiv_tokens(self):
         for suffix in ("2609.14520v1", "2609.14520-extra", "not-an-id"):
             with self.subTest(suffix=suffix):
@@ -171,6 +204,16 @@ class AccountCitationsTests(unittest.TestCase):
     def test_a_manuscript_that_cites_every_work_needs_no_items(self):
         records = _build_fulltext_records({"arxiv:2601.00001v1": ([], "One")})
         self.assertEqual(account_citations(records, self.BIBLIOGRAPHY, None)["not_cited"], [])
+
+    def test_a_reason_for_a_work_cited_through_its_datacite_arxiv_doi_is_refused(self):
+        identifier = "doi:10.48550/arxiv.2609.14520"
+        records = _build_fulltext_records({identifier: ([], "Recorded paper title")})
+        bibliography = b"@misc{arxiv-only, note={arXiv:2609.14520}, title={Another publication}}"
+        with self.assertRaises(ResearchError) as raised:
+            account_citations(records, bibliography, [{"work_id": identifier, "reason": "Model choice only."}])
+        self.assertEqual(raised.exception.code, "invalid_citation_accounting")
+        self.assertEqual(raised.exception.details, {"index": 0, "cause": "already_cited",
+                                                    "work_id": identifier, "key": "arxiv-only"})
 
     def test_invalid_items_are_refused(self):
         valid_three = {"work_id": "arxiv:2601.00003", "cited_as": "three"}
