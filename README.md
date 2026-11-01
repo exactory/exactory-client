@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.69.15](docs/releases/0.69.15.md) adds `problem-citation-metadata`, which gives a `url:` work of a problem record its citation title and authors from exact byte spans of retained captures.
+
 Version [0.69.14](docs/releases/0.69.14.md) ends an identifier at the closer of its bracket or quote only outside its braces, skips entry heads inside braced entries, bounds the time of Unicode normalization, and reads quoted plain-text URLs again.
 
 Version [0.69.13](docs/releases/0.69.13.md) reads each BibTeX entry by its top-level fields for titles and identifiers, and reads TeX escapes before percent-decoding; 0.69.14 corrects quotes inside braces and nested entry heads.

@@ -11,9 +11,12 @@ class ProblemCliTests(ProblemCase):
     def test_all_problem_mutations_use_json_file_and_explicit_identity(self):
         parser = cli.build_parser()
         for operation in ("problem-init", "problem-statement", "problem-openness", "problem-value",
-                          "problem-formal-check", "problem-decision", "problem-posted"):
+                          "problem-formal-check", "problem-decision", "problem-posted", "problem-citation-metadata"):
             args = parser.parse_args([operation, "--file", "payload.json", "--expected-revision", "0", "--request-id", "one"])
             self.assertEqual((args.file, args.expected_revision, args.request_id), ("payload.json", 0, "one"))
+        args = parser.parse_args(["problem-citation-metadata", "--file", "payload.json", "--expected-revision", "0",
+                                  "--request-id", "one", "--check"])
+        self.assertTrue(args.check)
 
     def test_problem_gate_and_export_kinds_are_available(self):
         parser = cli.build_parser()
@@ -27,7 +30,7 @@ class ProblemCliTests(ProblemCase):
         for operation, key in (("problem-init", "authors"), ("problem-statement", "statement"),
                                ("problem-openness", "assignment_id"), ("problem-value", "motivation"),
                                ("problem-formal-check", "native_closure_digest"), ("problem-decision", "review_ids"),
-                               ("problem-posted", "export_directory")):
+                               ("problem-posted", "export_directory"), ("problem-citation-metadata", "evidence")):
             payload = cli.run(parser.parse_args(["example", operation]))
             self.assertIn(key, payload)
 
