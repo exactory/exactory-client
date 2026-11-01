@@ -2,13 +2,16 @@
 
 import json
 import time
+import unicodedata
 import unittest
+from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase
 from integration_fixtures import observed_candidate
 from research_fixtures import atom, entry
 from research_harness.acquisition import import_response
-from research_harness.citations import (account_citations, collect_accountable_works, find_citing_entry,
+from research_harness.citations import (_TEX_ACCENT_RE, _TEX_COMMAND_RE, _name_greek_command, _normalize_title,
+                                        account_citations, collect_accountable_works, find_citing_entry,
                                         find_citation_tokens, read_bibliography)
 from research_harness.errors import ResearchError
 from research_harness.publication import prepare_publication
@@ -23,6 +26,86 @@ def _build_fulltext_records(works):
 
 def _build_work(identifier, aliases=(), title=""):
     return {"id": identifier, "aliases": list(aliases), "title": title}
+
+
+def _normalize_title_06914(value):
+    """Keep the 0.69.14 normalization as a compatibility reference."""
+    def limit_combining(value):
+        if value.isascii():
+            return value
+        characters, run = [], 0
+        for character in value:
+            run = run + 1 if unicodedata.combining(character) else 0
+            if run <= 16:
+                characters.append(character)
+        return "".join(characters)
+
+    value = _TEX_COMMAND_RE.sub(_name_greek_command, _TEX_ACCENT_RE.sub("", value))
+    characters = []
+    for character in unicodedata.normalize("NFKD", limit_combining(value.casefold())):
+        name = unicodedata.name(character, "")
+        if unicodedata.combining(character):
+            continue
+        if name.startswith("GREEK") and " LETTER " in name:
+            characters.append(" " + name.rsplit(" ", 1)[-1].casefold() + " ")
+        else:
+            characters.append(character if character.isalnum() else " ")
+    return " ".join("".join(characters).split())
+
+
+class BibtexDirectiveTests(unittest.TestCase):
+    def test_braced_directives_consume_nested_entry_heads_without_a_key(self):
+        fake = '@misc{fake,title={Recorded paper title}}'
+        bodies = {"comment": "Ignored example.\n" + fake + "\n",
+                  "string": 'x = "Ignored example.\n' + fake + '\n"',
+                  "preamble": '"Ignored example.\n' + fake + '\n"',
+                  "misc": "Missing key.\n" + fake + "\n"}
+        for directive, body in bodies.items():
+            data = ("  @" + directive.upper() + "{" + body + "}\n"
+                    "@misc{real,title={Another publication}}\n").encode()
+            bibliography = read_bibliography(data)
+            with self.subTest(directive=directive):
+                self.assertEqual(list(bibliography["entries"]), ["real"])
+                self.assertEqual(find_citing_entry(bibliography,
+                                                   [_build_work("arxiv:2609.14520v1", title="Recorded paper title")]),
+                                 (False, None))
+
+    def test_a_bibliography_with_only_directives_never_falls_back_to_plain_text(self):
+        for directive in ("comment", "string", "preamble", "misc"):
+            for opener, closer in (("{", "}"), ("(", ")")):
+                for body in ("arXiv:2609.14520", "Recorded paper title"):
+                    bibliography = read_bibliography(("@" + directive + opener + body + closer).encode())
+                    for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                        with self.subTest(directive=directive, opener=opener, body=body, identifier=identifier):
+                            self.assertEqual(bibliography["entries"], {})
+                            self.assertEqual(find_citing_entry(bibliography,
+                                                               [_build_work(identifier, title="Recorded paper title")]),
+                                             (False, None))
+
+    def test_every_directive_head_bounds_an_unclosed_preceding_entry(self):
+        for directive in ("comment", "string", "preamble", "misc"):
+            for opener, closer in (("{", "}"), ("(", ")")):
+                data = ("@misc{real,title={Another publication},note={unclosed\n"
+                        "@" + directive + opener + "arXiv:2609.14520" + closer + "\n"
+                        "@misc{after,title={A separate publication}}\n").encode()
+                bibliography = read_bibliography(data)
+                with self.subTest(directive=directive, opener=opener):
+                    self.assertEqual(list(bibliography["entries"]), ["real", "after"])
+                    self.assertEqual(bibliography["entries"]["real"]["text"],
+                                     "title={another publication},note={unclosed\n")
+                    self.assertEqual(find_citing_entry(bibliography, [_build_work("arxiv:2609.14520v1")]),
+                                     (False, None))
+
+    def test_unmatched_directives_end_at_the_next_head(self):
+        for directive in ("comment", "string", "preamble", "misc"):
+            for opener in ("{", "("):
+                data = ("@" + directive + opener + "Ignored example.\n"
+                        "@misc{after,eprint={2609.14520}}\n").encode()
+                bibliography = read_bibliography(data)
+                with self.subTest(directive=directive, opener=opener):
+                    self.assertEqual(list(bibliography["entries"]), ["after"])
+                    self.assertEqual(find_citing_entry(bibliography, [_build_work("arxiv:2609.14520v1")]),
+                                     (True, "after"))
 
 
 class BibtexFieldEvidenceTests(unittest.TestCase):
@@ -257,16 +340,92 @@ class CitationEvidenceTests(unittest.TestCase):
                                                                    [_build_work(identifier, title="Recorded paper title")]),
                                                  (False, None))
 
-    def test_urls_keep_sixteen_combining_marks_per_run(self):
+    def test_urls_preserve_every_combining_mark_in_the_identifier_path(self):
         for count in (8, 9):
             doi = "10.1234/a" + "\u0315\u0300" * count + "b" + "\u0315\u0300" * count
-            expected_doi = "doi:10.1234/a" + "\u0315\u0300" * 8 + "b" + "\u0315\u0300" * 8
             bibliography = read_bibliography(
                 ("@misc{cited,url={https://doi.org/" + doi + "},title={Another publication}}").encode())
             with self.subTest(count=count):
                 self.assertEqual(find_citing_entry(bibliography,
-                                                   [_build_work(expected_doi, title="Recorded journal title")]),
+                                                   [_build_work("doi:" + doi, title="Recorded journal title")]),
                                  (True, "cited"))
+                if count > 8:
+                    shortened = "doi:10.1234/a" + "\u0315\u0300" * 8 + "b" + "\u0315\u0300" * 8
+                    self.assertEqual(find_citing_entry(bibliography, [_build_work(shortened)]), (False, None))
+
+    def test_title_normalization_matches_06914_across_scripts_and_decompositions(self):
+        titles = ("Schrödinger, café and Ångström", r'Schr\"odinger cat states',
+                  "ἄλφα βῆτα Ωμέγα", r"$\alpha$-RuCl$_{3}$ magnets",
+                  "拓扑半金属的输运", "かな カナ", "한글 물리학", "한글 물리학",
+                  "བོད་ཡིག ཱི", "a\u0f73\u0315\u0300b", "a" + "\u0315\u0300" * 32 + " title")
+        for title in titles:
+            with self.subTest(title=title):
+                self.assertEqual(_normalize_title(title), _normalize_title_06914(title))
+
+    def test_non_ascii_authorities_name_nothing_without_calling_urlsplit(self):
+        urls = ("https://éxample.org/?q=arxiv:2609.14520",
+                "https://uſer@arxiv.org/abs/2609.14520",
+                "https://uß@doi.org/10.48550/arxiv.2609.14520",
+                "https://" + "\u0315:\u0300" * 32000 + "/?q=arxiv:2609.14520")
+        for url in urls:
+            data = ("@misc{unrelated,url={" + url + "},title={Another publication}}").encode()
+            with self.subTest(authority_length=len(url)), patch(
+                    "research_harness.citations.urlsplit", side_effect=AssertionError("Non-ASCII authority parsed")):
+                started = time.perf_counter()
+                bibliography = read_bibliography(data)
+                for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                    self.assertEqual(find_citing_entry(bibliography,
+                                                       [_build_work(identifier, title="Recorded paper title")]),
+                                     (False, None))
+                self.assertLess(time.perf_counter() - started, 0.2)
+        for url in ("https://arxiv.org/abs/2609.14520", "https://user@ARXIV.ORG/ABS/2609.14520"):
+            bibliography = read_bibliography(("@misc{cited,url={" + url + "}}").encode())
+            with self.subTest(url=url):
+                self.assertEqual(find_citing_entry(bibliography, [_build_work("arxiv:2609.14520v1")]), (True, "cited"))
+
+    def test_non_ascii_nested_urls_do_not_change_an_ascii_registry_authority(self):
+        for prefix in ("https://", ""):
+            for delimiter in ("?", "#"):
+                url = prefix + "arxiv.org/abs/2609.14520" + delimiter + "u=https://éxample.org/"
+                for bibtex in (False, True):
+                    data = (("@misc{cited,url={" + url + "}}") if bibtex else url).encode()
+                    with self.subTest(prefix=prefix, delimiter=delimiter, bibtex=bibtex):
+                        self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                           [_build_work("arxiv:2609.14520v1")]),
+                                         (True, "cited" if bibtex else None))
+
+    def test_casefold_expansions_preserve_original_identifier_spans(self):
+        references = (("Straße. https://uſer@arxiv.org/abs/2609.14520", False),
+                      ("Straße. https://arxiv.org/abs/2609.14520?source=Straße", True),
+                      ("Straße. 10.1234/Straße arXiv:2609.14520", True))
+        for reference, cited in references:
+            for bibtex in (False, True):
+                data = (("@misc{cited,note={" + reference + "}}") if bibtex else reference).encode()
+                bibliography = read_bibliography(data)
+                with self.subTest(reference=reference, bibtex=bibtex):
+                    self.assertEqual(find_citing_entry(bibliography, [_build_work("arxiv:2609.14520v1")]),
+                                     (cited, "cited" if cited and bibtex else None))
+                    if reference.startswith("Straße. 10."):
+                        self.assertEqual(find_citing_entry(bibliography, [_build_work("doi:10.1234/strasse")]),
+                                         (True, "cited" if bibtex else None))
+
+    def test_tibetan_decompositions_are_checked_against_50_works_in_under_point_two_seconds(self):
+        works = [_build_work(identifier, title="Recorded paper title")
+                 for index in range(25)
+                 for identifier in ("arxiv:2609.%05dv1" % (14520 + index),
+                                    "doi:10.48550/arxiv.2609.%05d" % (14520 + index))]
+        marks = "\u0f73" * 32000
+        cases = (("title", "@misc{unrelated,title={" + marks + "}}"),
+                 ("host", "@misc{unrelated,url={https://" + marks + "/?q=arxiv:2609.14520}}"),
+                 ("plain text", marks))
+        for location, source in cases:
+            data = source.encode()
+            with self.subTest(location=location):
+                started = time.perf_counter()
+                bibliography = read_bibliography(data)
+                for work in works:
+                    self.assertEqual(find_citing_entry(bibliography, [work]), (False, None))
+                self.assertLess(time.perf_counter() - started, 0.2)
 
     def test_combining_runs_are_read_and_checked_against_50_works_in_under_point_two_seconds(self):
         works = [_build_work(identifier, title="Recorded paper title")

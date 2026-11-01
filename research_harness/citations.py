@@ -29,7 +29,8 @@ from .literature import SEARCH_PURPOSES
 from .operations import fields, text
 
 
-_ENTRY_START_RE = re.compile(r"(?m)^[ \t]*@[ \t]*(\w+)[ \t]*([{(])[ \t\r\n]*([^,\s]+)[ \t]*,")
+_DIRECTIVE_HEAD_RE = re.compile(r"(?m)^[ \t]*@[ \t]*(\w+)[ \t]*([{(])")
+_ENTRY_KEY_RE = re.compile(r"[ \t\r\n]*([^,\s]+)[ \t]*,")
 _TEX_ACCENT_RE = re.compile(r"\\(?:[\"'`^~=.]|[vuHckbdrt](?![A-Za-z]))")
 _TEX_COMMAND_RE = re.compile(r"\\([A-Za-z]+)")
 # Scripts without spaces between words: each character is a word of the title.
@@ -89,25 +90,14 @@ def _name_greek_command(match):
     return " " + name + " "
 
 
-def _limit_combining(value):
-    """Keep at most sixteen consecutive characters with a nonzero combining class."""
-    if value.isascii():
-        return value
-    # Bound runs before title or URL normalization can reorder them quadratically.
-    characters, run = [], 0
-    for character in value:
-        run = run + 1 if unicodedata.combining(character) else 0
-        if run <= 16:
-            characters.append(character)
-    return "".join(characters)
-
-
 def _normalize_title(value):
     """The words of a title: casefolded, with accents removed, Greek letters named,
     and other LaTeX commands, braces, math markers and punctuation dropped."""
     value = _TEX_COMMAND_RE.sub(_name_greek_command, _TEX_ACCENT_RE.sub("", value))
+    # Decompose characters separately because discarded marks need no reordering.
+    value = "".join(unicodedata.normalize("NFKD", character) for character in value.casefold())
     characters = []
-    for character in unicodedata.normalize("NFKD", _limit_combining(value.casefold())):
+    for character in value:
         name = unicodedata.name(character, "")
         if unicodedata.combining(character):
             continue
@@ -212,38 +202,42 @@ def _match_braces(source):
 def read_bibliography(data):
     """Read entry text, normalized titles and canonical identifier sets in file order.
     Each entry's text excludes its head, ends at its closing delimiter or the
-    next entry head and is casefolded. Titles and identifiers come from top-level
-    field values. Without entries, identifiers come from the whole bibliography.
+    next directive head and is casefolded. Titles and identifiers come from top-level
+    field values. Without directive heads, evidence comes from the whole bibliography.
     Undecodable bytes become replacement characters."""
     source = data.decode("utf-8", errors="replace")
     entries = {}
     brace_ends = _match_braces(source)
-    starts = list(_ENTRY_START_RE.finditer(source))
+    starts = list(_DIRECTIVE_HEAD_RE.finditer(source))
     end = 0
     for index, start in enumerate(starts):
-        # Matched braced entries consume nested heads; unmatched entries use the next head.
+        # Every directive consumes its group, skipping heads inside matched braces.
         if start.start() < end:
             continue
-        # Even an ignored head bounds the scan of an unclosed preceding entry.
         limit = starts[index + 1].start() if index + 1 < len(starts) else len(source)
         end = (brace_ends.get(start.start(2), limit) if start.group(2) == "{"
                else _find_group_end(source, start.start(2), limit) or limit)
         if start.group(1).casefold() in ("comment", "string", "preamble"):
             continue
+        key = _ENTRY_KEY_RE.match(source, start.end(), end)
+        if key is None:
+            continue
         # A BibTeX key is a label; only the entry body supplies identifiers.
-        entry_source = source[start.end():end].casefold()
+        entry_source = source[key.end():end]
         title, identifiers = None, set()
         for name, value in _read_fields(entry_source):
+            name = name.casefold()
             # Only the first top-level title supplies title evidence, even when empty.
             if name == "title" and title is None:
-                title = value
+                title = value.casefold()
             # A top-level eprint value carries an implicit arXiv label.
             identifiers.update(_read_identifiers("arxiv:" + value if name == "eprint" else value))
-        entries[start.group(3)] = {"text": entry_source, "title": _normalize_title(title or ""),
-                                   "identifiers": identifiers}
-    bibliography = {"entries": entries, "text": source.casefold()}
-    if not entries:
-        bibliography["identifiers"] = _read_identifiers(bibliography["text"])
+        entries[key.group(1)] = {"text": entry_source.casefold(), "title": _normalize_title(title or ""),
+                                 "identifiers": identifiers}
+    # Any directive head selects BibTeX, even when it creates no entries.
+    bibliography = {"entries": entries, "text": source.casefold(), "is_bibtex": bool(starts)}
+    if not bibliography["is_bibtex"]:
+        bibliography["identifiers"] = _read_identifiers(source)
         bibliography["normalized_text"] = _normalize_title(bibliography["text"]).replace(" ", "")
     return bibliography
 
@@ -255,7 +249,11 @@ def _unescape_identifier(value):
 
 def _read_url_identifier(value):
     """Read one registry identifier from a whole URL, ignoring other hosts and paths."""
-    value = _limit_combining(value)
+    # Registry authorities must be ASCII before casefolding or URL normalization.
+    authority = re.match(r"(?:[A-Za-z][A-Za-z0-9+.-]*://)?([^/?#]*)", _unescape_identifier(value))[1]
+    if not authority.isascii():
+        return None
+    value = _unescape_identifier(value.casefold())
     try:
         parts = urlsplit(value)
         if not parts.scheme:
@@ -355,6 +353,10 @@ def _find_identifier_end(source, start):
 
 def _read_identifiers(text_value):
     """Collect whole DOI identifiers and arXiv families once from bibliography text."""
+    source, text_value = text_value, text_value.casefold()
+    source_positions = None
+    if len(source) != len(text_value):
+        source_positions = [index for index, character in enumerate(source) for _ in character.casefold()]
     identifiers = set()
     # One left-to-right pass lets the first span consume all nested identifiers.
     spans, position = [], 0
@@ -362,8 +364,11 @@ def _read_identifiers(text_value):
         position = _find_identifier_end(text_value, start.start())
         spans.append((start.start(), position))
         # Unescape the raw span before URL percent-decoding can introduce backslashes.
-        value = _unescape_identifier(_trim_span(text_value[start.start():position]))
-        identifier = "doi:" + value if start.lastgroup == "doi" else _read_url_identifier(value)
+        span_start = source_positions[start.start()] if source_positions is not None else start.start()
+        span_end = source_positions[position - 1] + 1 if source_positions is not None else position
+        value = _trim_span(source[span_start:span_end])
+        identifier = ("doi:" + _unescape_identifier(value.casefold()) if start.lastgroup == "doi"
+                      else _read_url_identifier(value))
         if identifier is None:
             continue
         if identifier.startswith("doi:"):
@@ -386,7 +391,7 @@ def find_citing_entry(bibliography, works):
                    for work in works for token in find_citation_tokens(work)}
     titles = {title.replace(" ", "") for title in (_normalize_title(work["title"] or "") for work in works)
               if _is_title_evidence(title)}
-    if not bibliography["entries"]:
+    if not bibliography["is_bibtex"]:
         cited = bool(bibliography["identifiers"] & identifiers) or any(
             title in bibliography["normalized_text"] for title in titles)
         return cited, None
