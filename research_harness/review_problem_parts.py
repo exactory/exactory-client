@@ -9,6 +9,7 @@ from .errors import ResearchError, describe_error_at
 from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, normalized_text, text
+from .review_objection_evidence import deduplicate_material_objections, resolved_objection_entries
 
 PROTOCOL = 'exactory-problem-evidence-parts-v1'
 KEY = 'problem_evidence_parts'
@@ -385,6 +386,8 @@ def _project(records, artifacts, packet, units, selected, observations, remainin
         for objection in candidate.get('material_objections', []):
             objection.pop('version_evidence', None)
             objection.pop('version_source_mappings', None)
+    elif stage == 'final':
+        deduplicate_material_objections(candidate)
     candidate[KEY] = {'protocol': PROTOCOL, 'series_assignment_id': series_id, 'stage': stage, 'turn': turn,
         'units': {key: len(packet['problem_evidence'].get(key, [])) for key in SPLIT_KEYS},
         'delivered_before': [row['receipt'] for row in observations], 'delivered_now': _ranges(selected),
@@ -430,7 +433,7 @@ def _fits(artifacts, route, prompt, packet, history, attached):
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history):
     """Leave a fitting ordinary packet untouched, or plan the next bounded part and an eventual empty final."""
-    from .review_protocol import canonical_prompt
+    from .review_protocol import canonical_prompt, collect_references
     if (value['role'] != 'result' or packet.get('subject', {}).get('kind') != 'problem'
             or 'context_repair' in packet or value['context'].get('source_delivery')
             or transport.local_input_limit(route) is None or 'problem_evidence' not in packet
@@ -462,9 +465,13 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history):
         return _project(records, artifacts, packet, units, remaining[:count], observations, remaining,
                         series_id, stage, turn, attached)
     frame = candidate(0)
-    _, frame_characters = _fits(artifacts, route, stage_prompt, frame, history, [])
+    objection_artifacts = list(collect_references([
+        resolved_objection_entries(frame, objection, 'version_evidence')
+        for objection in frame.get('material_objections', [])]))
+    objection_artifacts = list({digest(reference): reference for reference in objection_artifacts}.values())
+    fits, frame_characters = _fits(artifacts, route, stage_prompt, frame, history, objection_artifacts)
     if not remaining:
-        fits, characters = _fits(artifacts, route, stage_prompt, frame, history, [])
+        characters = frame_characters
         if fits:
             return frame
         count = 0
@@ -503,13 +510,20 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history):
         planned = candidate(1, attached)
         fits, characters = _fits(artifacts, route, stage_prompt, planned, history, attached)
         best = planned if fits and _makes_progress(selected, attached, observations) else None
-        # A tiny body can be smaller than its pending marker, so even a failed prefix may later fit.
+        def unfitted_characters(packet):
+            return _measure(route, transport.request_body(route, stage_prompt['text'], packet, history, order=()))
         for reference in _pending_artifacts(selected, earlier):
-            attached.append(reference)
-            larger = candidate(1, attached)
-            fits, characters = _fits(artifacts, route, stage_prompt, larger, history, attached)
-            if fits and _makes_progress(selected, attached, observations):
-                best = larger
+            trial = attached + [reference]
+            larger = candidate(1, trial)
+            fits, characters = _fits(artifacts, route, stage_prompt, larger, history, trial)
+            if fits:
+                attached, planned = trial, larger
+                if _makes_progress(selected, attached, observations):
+                    best = planned
+            elif (best is None and has_attachment(artifacts, larger, reference)
+                  and unfitted_characters(larger) < unfitted_characters(planned)):
+                # Tiny bodies can shrink pending markers enough for a later candidate to fit.
+                attached, planned = trial, larger
         if best is not None:
             return best
     raise ResearchError('review_input_too_large', 'The problem evidence frame and next unit cannot make progress '

@@ -298,6 +298,9 @@ within 800,000 characters (`PART_UNIT_CHARACTERS`), checking the fitted request
 as the transport builds it. When the first remaining unit cannot fit whole,
 it travels alone, bypassing that cap: the planner carries its item and adds
 pending bodies one at a time in owned-artifact order while the request fits.
+It leaves a body pending when it cannot fit with the bodies already selected
+and tries the next body. Tiny bodies that shrink their pending entries can
+collectively make the initial request fit.
 An incomplete carried unit stays in `remaining` and travels first in the next
 turn, with a new note required for its item again. Each owned body not attached
 in this turn has an empty evidence entry with encoding `omitted`: delivery
@@ -315,6 +318,16 @@ the fitted request that could not advance delivery, and `unit` is `{key,
 index, digest}`; nothing is recorded, and no attempt is written. The final turn
 is planned after every unit is complete and carries no units; when its frame
 alone does not fit, it is refused the same way with `unit: null`.
+The fitted final request must attach every artifact body referenced by the
+material objections' `version_evidence`, matched by the full reference. If
+the transport elides any of these bodies, planning refuses the final turn
+with the same error, including a final turn that answers source requests.
+Before its digest is computed, the final packet keeps each distinct material-objection evidence entry once,
+walking objections in order and each one's `version_evidence` then `version_source_mappings`.
+Later entries with the same canonical digest carry `delivery: repeated-in-material-objections`,
+`objection_id`, `field`, a zero-based `index`, `digest` and an explanatory `note` naming the first full entry
+in the same packet. Evidence readers resolve these entries; each required artifact descriptor still needs its
+body once. Part packets still omit both lists, and recorded final packets retain their original representation.
 
 The packet of a turn is the result packet as built above, with the bars, the
 own bars, the material objections, the historical reviews, the review
