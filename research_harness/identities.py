@@ -9,7 +9,8 @@ alias/{identifier} contains assertions [{work_id, source_id, locator, relation}]
 Aliases are provider assertions of `same_work`, never interchangeable versions.
 resolve_family(records, identifier) requires exactly one unambiguous family.
 Conflicting assertions remain stored and raise ambiguous_alias on lookup. No
-title matching or automatic coalescing of different provider families occurs.
+title matching occurs. The registry rule linking DataCite arXiv DOIs to arXiv
+families is the only automatic link between provider families and is used for citations.
 """
 
 import re
@@ -74,6 +75,21 @@ def normalize_identifier(value):
 def family_id(identifier):
     canonical = normalize_identifier(identifier)
     return re.sub(r"v[1-9][0-9]*$", "", canonical) if canonical.startswith("arxiv:") else canonical
+
+
+def resolve_arxiv_family(identifier):
+    """Return the arXiv family of an arXiv identifier or its registered DataCite DOI, else None."""
+    canonical = normalize_identifier(identifier)
+    if canonical.startswith("arxiv:"):
+        return family_id(canonical)
+    prefix = "doi:10.48550/arxiv."
+    if canonical.startswith(prefix):
+        # DOI normalization lowercases old-style subject classes; arXiv uses capitals.
+        suffix = re.sub(r"\.[a-z]{2}/", lambda match: match.group(0).upper(), canonical[len(prefix):])
+        match = _ARXIV.fullmatch(suffix)
+        if match and match.group("version") is None:
+            return family_id("arxiv:" + suffix)
+    return None
 
 
 def version_of(identifier):

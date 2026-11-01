@@ -1,9 +1,129 @@
 """Citation projection uses recorded locators in priority order."""
 
 import copy
+import unittest
 
 from test_research_problem_claims import ProblemCase
+from research_harness.problem_claims import compute_problem_evidence_digest
 from research_harness.problem_evidence import project_citations
+
+
+def build_citation_records():
+    """Six full readings: two registry-linked pairs and two distinct related works."""
+    works = [
+        {"id": "arxiv:2601.18757v1", "aliases": [], "title": "First recorded paper", "authors": ["A. Author"]},
+        {"id": "openalex:W7125830766", "aliases": ["doi:10.48550/arxiv.2601.18757"],
+         "title": "First recorded paper", "authors": [{"name": "A. Author"}]},
+        {"id": "arxiv:2609.14520v1", "aliases": [], "title": "Second recorded paper", "authors": ["B. Author"]},
+        {"id": "openalex:W7213271184", "aliases": ["doi:10.48550/arxiv.2609.14520"],
+         "title": "Second recorded paper", "authors": [{"name": "B. Author"}]},
+        {"id": "arxiv:1012.4131v2", "aliases": [], "title": "A shared topology title",
+         "authors": ["Chuichiro Hayashi", "Miwa Hayashi"]},
+        {"id": "openalex:W1234567890", "aliases": ["doi:10.1016/j.topol.2012.01.008"],
+         "title": "A shared topology title", "authors": ["Chuichiro Hayashi", "Miwa Hayashi", "Tahl Nowik"]}]
+    readings = {"read-%02d" % index: {"id": "read-%02d" % index, "version_id": work["id"], "depth": "fulltext"}
+                for index, work in enumerate(works, 1)}
+    return {"work": {work["id"]: work for work in works}, "reading": readings,
+            "problem_value": {"value": {"motivation": [{"evidence": [
+                {"kind": "reading", "reading_id": reading["id"]} for reading in readings.values()]}], "current_state": []}}}
+
+
+class RegistryCitationTests(unittest.TestCase):
+    def test_registry_pairs_share_a_citation_but_related_works_stay_separate(self):
+        records = build_citation_records()
+        before = copy.deepcopy(records)
+        self.assertEqual(project_citations(records, None), [
+            {"citation": "A. Author. First recorded paper", "locator": "2601.18757v1"},
+            {"citation": "B. Author. Second recorded paper", "locator": "2609.14520v1"},
+            {"citation": "Chuichiro Hayashi, Miwa Hayashi. A shared topology title", "locator": "1012.4131v2"},
+            {"citation": "Chuichiro Hayashi, Miwa Hayashi, Tahl Nowik. A shared topology title",
+             "locator": "10.1016/j.topol.2012.01.008"}])
+        self.assertEqual(records, before)
+
+    def test_author_names_compare_after_whitespace_and_case_normalization(self):
+        records = build_citation_records()
+        records["work"]["openalex:W7125830766"]["authors"] = [{"name": "  a.\tAUTHOR  "}]
+        self.assertEqual(len(project_citations(records, None)), 4)
+
+    def test_different_author_lists_stay_separate(self):
+        for authors in (["Other Author"], ["A. Author", "Other Author"]):
+            with self.subTest(authors=authors):
+                records = build_citation_records()
+                records["work"]["openalex:W7125830766"]["authors"] = authors
+                self.assertEqual(len(project_citations(records, None)), 5)
+
+    def test_author_order_matters(self):
+        records = build_citation_records()
+        records["work"]["arxiv:2601.18757v1"]["authors"] = ["First Author", "Second Author"]
+        records["work"]["openalex:W7125830766"]["authors"] = ["Second Author", "First Author"]
+        self.assertEqual(len(project_citations(records, None)), 5)
+
+    def test_ambiguous_arxiv_aliases_on_either_work_stay_separate(self):
+        for identifier in ("arxiv:2601.18757v1", "openalex:W7125830766"):
+            with self.subTest(identifier=identifier):
+                records = build_citation_records()
+                records["work"][identifier]["aliases"].extend([
+                    "doi:10.48550/arxiv.2601.18757", "doi:10.48550/arxiv.2609.14520"])
+                self.assertEqual(len(project_citations(records, None)), 5)
+
+    def test_missing_authors_on_either_work_stay_separate(self):
+        for identifier in ("arxiv:2601.18757v1", "openalex:W7125830766"):
+            for authors in (None, [], [" "], [{"name": ""}]):
+                with self.subTest(identifier=identifier, authors=authors):
+                    records = build_citation_records()
+                    if authors is None:
+                        records["work"][identifier].pop("authors")
+                    else:
+                        records["work"][identifier]["authors"] = authors
+                    self.assertEqual(len(project_citations(records, None)), 5)
+
+    def test_two_works_without_authors_stay_separate(self):
+        for authors in ([], [" "], [{"name": ""}]):
+            with self.subTest(authors=authors):
+                records = build_citation_records()
+                for identifier in ("arxiv:2601.18757v1", "openalex:W7125830766"):
+                    records["work"][identifier]["authors"] = authors
+                self.assertEqual(len(project_citations(records, None)), 5)
+
+    def test_the_first_reading_supplies_both_text_and_locator(self):
+        records = build_citation_records()
+        first, second = records["reading"]["read-01"], records["reading"]["read-02"]
+        first["version_id"], second["version_id"] = second["version_id"], first["version_id"]
+        records["work"][first["version_id"]].update(title="The first provider title", year=2026)
+        self.assertEqual(project_citations(records, None)[0], {
+            "citation": "A. Author. The first provider title. 2026", "locator": "10.48550/arxiv.2601.18757"})
+
+    def test_arxiv_versions_keep_the_existing_family_skip_despite_author_differences(self):
+        records = build_citation_records()
+        version = "arxiv:2601.18757v2"
+        records["work"][version] = {"id": version, "aliases": [], "title": "Later version", "authors": ["Other Author"]}
+        records["reading"]["read-02"]["version_id"] = version
+        self.assertEqual(len(project_citations(records, None)), 4)
+
+    def test_only_cited_readings_establish_registry_matches(self):
+        records = build_citation_records()
+        version = "arxiv:2601.18757v2"
+        records["work"][version] = {"id": version, "aliases": [], "title": "Later version", "authors": ["Other Author"]}
+        records["reading"]["read-02"]["version_id"] = version
+        records["work"]["openalex:W7213271184"].update(
+            aliases=["doi:10.48550/arxiv.2601.18757"], authors=["Other Author"])
+        self.assertEqual(len(project_citations(records, None)), 5)
+
+    def test_a_record_without_registry_pairs_keeps_its_citations_and_evidence_digest(self):
+        records = build_citation_records()
+        records["work"]["openalex:W7125830766"]["aliases"] = ["doi:10.1234/first"]
+        records["work"]["openalex:W7213271184"]["aliases"] = ["doi:10.1234/second"]
+        self.assertEqual(project_citations(records, None), [
+            {"citation": "A. Author. First recorded paper", "locator": "2601.18757v1"},
+            {"citation": "A. Author. First recorded paper", "locator": "10.1234/first"},
+            {"citation": "B. Author. Second recorded paper", "locator": "2609.14520v1"},
+            {"citation": "B. Author. Second recorded paper", "locator": "10.1234/second"},
+            {"citation": "Chuichiro Hayashi, Miwa Hayashi. A shared topology title", "locator": "1012.4131v2"},
+            {"citation": "Chuichiro Hayashi, Miwa Hayashi, Tahl Nowik. A shared topology title",
+             "locator": "10.1016/j.topol.2012.01.008"}])
+        # The evidence binding before the registry rule was introduced.
+        self.assertEqual(compute_problem_evidence_digest(records, None),
+                         "859688c0f1ec23576a382a5d3c4da804542bed728bebdc8572d12450618ddde5")
 
 
 class ProblemCitationTests(ProblemCase):

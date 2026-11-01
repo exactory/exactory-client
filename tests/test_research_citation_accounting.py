@@ -8,7 +8,7 @@ from integration_fixtures import observed_candidate
 from research_fixtures import atom, entry
 from research_harness.acquisition import import_response
 from research_harness.citations import (account_citations, collect_accountable_works, find_citing_entry,
-                                        read_bibliography)
+                                        find_citation_tokens, read_bibliography)
 from research_harness.errors import ResearchError
 from research_harness.publication import prepare_publication
 
@@ -25,6 +25,22 @@ def _build_work(identifier, aliases=(), title=""):
 
 
 class CitationEvidenceTests(unittest.TestCase):
+    def test_datacite_arxiv_doi_contributes_the_arxiv_family_token(self):
+        work = _build_work("openalex:W7213271184", ["doi:10.48550/arxiv.2609.14520"], "Recorded paper title")
+        self.assertEqual(find_citation_tokens(work), ["10.48550/arxiv.2609.14520", "2609.14520"])
+        bibliography = read_bibliography(b"@misc{arxiv-only, note={arXiv:2609.14520}, title={A different title}}")
+        self.assertEqual(find_citing_entry(bibliography, [work]), (True, "arxiv-only"))
+
+    def test_datacite_doi_in_an_entry_still_cites_an_arxiv_work(self):
+        bibliography = read_bibliography(b"@misc{doi-only, doi={10.48550/arXiv.2609.14520}}")
+        self.assertEqual(find_citing_entry(bibliography, [_build_work("arxiv:2609.14520v1")]), (True, "doi-only"))
+
+    def test_versioned_or_malformed_datacite_dois_do_not_contribute_arxiv_tokens(self):
+        for suffix in ("2609.14520v1", "2609.14520-extra", "not-an-id"):
+            with self.subTest(suffix=suffix):
+                doi = "10.48550/arxiv." + suffix
+                self.assertEqual(find_citation_tokens(_build_work("doi:" + doi)), [doi])
+
     def test_bibtex_entries_keep_file_order_and_their_titles(self):
         bibliography = read_bibliography(
             b"@article{zeta2020, title={A {Nested}  Title}, doi={10.1103/PhysRevB.105.085410}}\n"

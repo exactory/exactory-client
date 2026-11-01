@@ -22,7 +22,7 @@ import re
 import unicodedata
 
 from .errors import ResearchError
-from .identities import family_id
+from .identities import family_id, resolve_arxiv_family
 from .literature import SEARCH_PURPOSES
 from .operations import fields, text
 
@@ -45,7 +45,7 @@ def find_citation_tokens(work):
     or of a provider alias, casefolded. An arXiv identifier contributes its family
     form, because a bibliography that cites one version cites the work. `family_id`
     removes only a validated version suffix, so an old-style subject class ending in
-    V survives."""
+    V survives. A registered DataCite arXiv DOI also contributes its arXiv family."""
     tokens = []
     for identifier in [work["id"], *work["aliases"]]:
         scheme, _, value = identifier.partition(":")
@@ -53,6 +53,9 @@ def find_citation_tokens(work):
             tokens.append(family_id(identifier).partition(":")[2].casefold())
         elif scheme == "doi":
             tokens.append(value.casefold())
+            arxiv_family = resolve_arxiv_family(identifier)
+            if arxiv_family is not None:
+                tokens.append(arxiv_family.partition(":")[2].casefold())
     return tokens
 
 
