@@ -5,7 +5,7 @@ import itertools
 import unittest
 
 from research_harness import review_staged as staged
-from tests.test_review_staged_fixtures import epoch, profile
+from test_review_staged_fixtures import epoch, profile
 
 
 class CombinationPlannerTests(unittest.TestCase):

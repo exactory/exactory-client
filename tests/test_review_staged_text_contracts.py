@@ -8,8 +8,8 @@ from research_harness import review_composition as composition
 from research_harness.artifacts import describe_artifact
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
-from tests.test_review_staged_fixtures import epoch, profile, task, observation, full_card, selection
-from tests.test_review_composition import make_fixture, worked_adjudication, observe
+from test_review_staged_fixtures import epoch, profile, task, observation, full_card, selection
+from test_review_composition import make_fixture, worked_adjudication, observe
 
 
 def incomplete_output():

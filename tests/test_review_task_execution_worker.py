@@ -13,7 +13,7 @@ from research_harness import review_task_execution as execution
 from research_harness import review_worker
 from research_harness.errors import ResearchError
 from research_harness.storage import Store
-from tests.test_review_task_execution import TaskExecutionFixture
+from test_review_task_execution import TaskExecutionFixture
 
 
 class SharedProcessIdentityTests(TaskExecutionFixture):

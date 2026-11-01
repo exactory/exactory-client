@@ -6,7 +6,7 @@ import unittest
 from research_harness import review_staged as staged
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
-from tests.test_review_staged_fixtures import epoch, profile, task, observation, selection
+from test_review_staged_fixtures import epoch, profile, task, observation, selection
 
 
 class StagedReviewTests(unittest.TestCase):

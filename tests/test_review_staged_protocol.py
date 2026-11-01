@@ -270,8 +270,8 @@ class StagedEntryTests(ResultPartsCase):
 
     def test_paged_selection_assembles_science_and_retains_raw_terminal_digest(self):
         from research_harness import review_staged as staged, review_composition as composition
-        from tests.test_review_composition import make_fixture, worked_result
-        from tests.test_review_staged_fixtures import epoch
+        from test_review_composition import make_fixture, worked_result
+        from test_review_staged_fixtures import epoch
         plan, pages, choices, _ = make_fixture()
         value = epoch()
         plan.update(epoch_id=value['id'], slot_id=value['slot_id'], subject=value['subject'])
@@ -303,7 +303,7 @@ class StagedEntryTests(ResultPartsCase):
                 staged_protocol.build_composition(value, dict(plan, **{name:digest('unrelated')}), observations, observations[-1])
 
     def test_actual_input_binds_the_cards_that_reached_the_task(self):
-        from tests.test_review_staged_fixtures import epoch, task, full_card
+        from test_review_staged_fixtures import epoch, task, full_card
         value = epoch()
         card = full_card(value)
         selected = dict(id='read-observation', task_id='read-task', raw_output_digest=digest({'cards':[card]}),
@@ -344,7 +344,7 @@ class StagedEntryTests(ResultPartsCase):
         self.assertEqual(raised.exception.code, 'review_resampling_forbidden')
 
     def test_card_segment_packet_contains_the_segment_and_its_bounded_context(self):
-        from tests.test_review_staged_fixtures import epoch, task, full_card
+        from test_review_staged_fixtures import epoch, task, full_card
         value = epoch()
         card = full_card(value)
         card['establishes'] = 'x' * 200000
@@ -383,8 +383,8 @@ class StagedEntryTests(ResultPartsCase):
         self.assertNotIn('review_reservation', self.case.read_records())
 
     def build_terminal_records(self, incomplete=False):
-        from tests.test_review_staged_fixtures import epoch, selection
-        from tests.test_review_composition import worked_result
+        from test_review_staged_fixtures import epoch, selection
+        from test_review_composition import worked_result
         value = epoch(route_id='route')
         tasks, chosen = selection(value)
         final = tasks[-1]
@@ -458,7 +458,7 @@ class StagedEntryTests(ResultPartsCase):
         self.assertEqual(state['effective']['incomplete_outcome']['origin'], 'reviewer')
 
     def test_frame_continuity_indexes_large_inherited_findings_instead_of_replaying_them(self):
-        from tests.test_review_staged_fixtures import epoch, task
+        from test_review_staged_fixtures import epoch, task
         manifest = review_staged.build_manifest({'material_objections':[{'id':'old', 'text':'x' * 200000}]}, [], [],
                                                 inherited_findings=[{'id':'old', 'text':'x' * 200000}])
         value = epoch(manifest=manifest)
@@ -471,7 +471,7 @@ class StagedEntryTests(ResultPartsCase):
         self.assertEqual(packet['staged_review']['inherited'][0]['record_digest'], digest(manifest['inherited_findings'][0]))
 
     def test_composed_terminal_receives_integrated_grounds_and_answers(self):
-        from tests.test_review_staged_fixtures import epoch, task, full_card, observation
+        from test_review_staged_fixtures import epoch, task, full_card, observation
         value = epoch()
         card = full_card(value)
         card['establishes'] = 'x' * 200000
@@ -488,7 +488,7 @@ class StagedEntryTests(ResultPartsCase):
         self.assertTrue(material['claims'][0]['cells'])
 
     def test_final_packet_uses_ancestor_conditions_and_the_integration_root(self):
-        from tests.test_review_staged_fixtures import epoch, task, full_card, observation
+        from test_review_staged_fixtures import epoch, task, full_card, observation
         value = epoch()
         condition = dict(id='condition', text='The original holds under this condition.', grounds=[])
         card = full_card(value, conditions=[condition])

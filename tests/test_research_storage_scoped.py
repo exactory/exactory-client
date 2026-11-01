@@ -162,7 +162,7 @@ class ScopedStoreTests(unittest.TestCase):
                                  right.execute('SELECT * FROM ' + table).fetchall())
 
     def test_scoped_commit_rolls_back_each_journal_stage(self):
-        from tests.test_research_store_preparation import _InterruptConnection
+        from test_research_store_preparation import _InterruptConnection
         original = self.store._open
         for stage in ('event', 'receipt', 'commit'):
             before = self.store.snapshot()

@@ -109,6 +109,7 @@ def _review_probe(store, payload, **identity):
 
 
 def _review_run(store, payload, **identity):
+    fields(payload, (), None)
     if "task_id" in payload:
         records = store.snapshot()["records"]
         epoch = records.get("review_epoch", {}).get(payload.get("epoch_id"))
