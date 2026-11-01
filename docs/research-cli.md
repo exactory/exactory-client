@@ -68,7 +68,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. |
-| `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. |
+| `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. A problem `result` assignment that the part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series ([Problem evidence in parts](#problem-evidence-in-parts)). |
 | `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last `store_busy` or `stale_revision`. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
@@ -328,6 +328,35 @@ Later entries with the same canonical digest carry `delivery: repeated-in-materi
 `objection_id`, `field`, a zero-based `index`, `digest` and an explanatory `note` naming the first full entry
 in the same packet. Evidence readers resolve these entries; each required artifact descriptor still needs its
 body once. Part packets still omit both lists, and recorded final packets retain their original representation.
+
+After such a refusal, the harness attempts replay reduction when the turn has a
+history parent and that history contains a recorded result review but no
+context repair or `complete-visible-v1` turn. It replans only if the history
+passes validation and the reduction changes at least one response. Otherwise
+the original refusal stands. The harness binds each message to its assignment
+by lineage and replaces two kinds of assistant message with a placeholder: a
+part response of an earlier series of the same slot that closed with an
+authenticated recorded review whose projection is in the packet's
+`historical_reviews`, and the final response of such a series when the history
+holds a later recorded result. This replacement step leaves all bar responses,
+the latest recorded result response, every response of the current series,
+every response of a series without a recorded review and all user messages
+unchanged. A placeholder replaces a response only when it is shorter, and a
+placeholder inherited from the parent is never rewritten. The placeholder is
+the JSON object `{protocol: "exactory-problem-result-history-v1", delivery:
+"output-elided-from-replayed-history", assignment_id, series_assignment_id,
+turn, evidence_stage, output_digest, review_id, note}`: `evidence_stage` is
+`"part"` or `"final"`, `output_digest` is the digest of the omitted output and
+`review_id` is the review that closed that series. A final also carries
+`later_review_id`, the latest recorded result of the history when the
+placeholder was made. When the planner refuses the reduced history too, that
+refusal stands and nothing is recorded. When the planner accepts the original
+history, the fallback leaves the history and request bytes unchanged. The
+assignment stores the reduced history for retries and request rebuilding.
+Later assignments build their histories from the parent's actual request and
+selected output. Existing assignments and requests remain unchanged. The
+omission resets no excerpt, reading or passage allowance and changes no
+full-text delivery accounting.
 
 The packet of a turn is the result packet as built above, with the bars, the
 own bars, the material objections, the historical reviews, the review
@@ -2723,6 +2752,11 @@ the review held: that call holds the items of the earlier turns only through
 the reviewer's own notes, its verified excerpts and the earlier packets that
 the replayed history still holds, and reduction step 8 replaces a replayed
 packet by a digest stub while it keeps the reviewer's response of that turn.
+The responses of the current series stay verbatim. A part response or an
+earlier final response of a completed earlier series can be a placeholder of
+the reduced history ([Problem evidence in parts](#problem-evidence-in-parts)).
+Coverage still comes from the authenticated actual turns of the series, not
+from the replayed history.
 This applies only to a session that is a series: a session becomes a series
 when a first packet does not fit one input, and it stays in parts after a
 changed evidence digest or a refresh. A session that is not a series delivers
