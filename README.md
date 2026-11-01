@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.69.4](docs/releases/0.69.4.md) resolves frozen record citations without a digest when delivered copies identify one known version or have equal projections.
+
 Version [0.69.3](docs/releases/0.69.3.md) requires objection bodies in fitted final requests and lets continued units skip bodies that do not fit.
 
 Version [0.69.2](docs/releases/0.69.2.md) delivers a problem evidence unit's artifact bodies across part turns and reduces objection evidence in part packets.

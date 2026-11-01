@@ -28,20 +28,51 @@ class FrozenRecordEvidenceTests(unittest.TestCase):
 
     def test_distinct_delivered_versions_are_ambiguous_without_an_explicit_digest(self):
         older = ('problem_value', 'value-1', '1' * 64, {'id': 'value-1', 'older': True}, [])
-        for rows in ([self.row, older], [older, self.row]):
+        legacy = ('problem_value', 'value-1', None, self.record, [])
+        for rows in ([self.row, older], [older, self.row], [legacy, self.row, older]):
             self.assertIsNone(self.find(rows))
         reference = dict(self.reference, digest='1' * 64)
         self.assertEqual(self.find([self.row, older], reference), ({'id': 'value-1', 'older': True}, []))
 
+    def test_matching_explicit_digest_selects_the_delivered_version(self):
+        reference = dict(self.reference, digest=self.identity)
+        self.assertEqual(self.find([self.row], reference), (self.projection, []))
+
     def test_wrong_explicit_digest_does_not_match_a_known_delivered_version(self):
         self.assertIsNone(self.find([self.row], dict(self.reference, digest='0' * 64)))
 
-    def test_unknown_legacy_version_cannot_resolve_an_omitted_digest(self):
+    def test_one_known_digest_resolves_despite_digestless_copies_in_any_order(self):
         legacy = ('problem_value', 'value-1', None, {'id': 'value-1'}, [])
-        self.assertIsNone(self.find([legacy]))
-        self.assertIsNone(self.find([self.row, legacy]))
-        # Existing explicit legacy references retain separate record-time qualification.
-        self.assertEqual(self.find([legacy], dict(self.reference, digest=self.identity)), ({'id': 'value-1'}, []))
+        another = ('problem_value', 'value-1', None, self.record, [])
+        for rows in ([legacy, self.row, another], [self.row, legacy, another], [legacy, another, self.row]):
+            with self.subTest(rows=rows):
+                self.assertEqual(self.find(rows), (self.projection, []))
+
+    def test_equal_digestless_projections_resolve_by_content(self):
+        legacy = ('problem_value', 'value-1', None, self.record, [])
+        reordered = dict(reversed(list(self.record.items())))
+        another = ('problem_value', 'value-1', None, reordered, [{'supplied': 'second row'}])
+        for rows in ([legacy], [legacy, another], [another, legacy]):
+            with self.subTest(rows=rows):
+                self.assertEqual(self.find(rows), rows[0][3:])
+
+    def test_different_digestless_projections_are_ambiguous(self):
+        legacy = ('problem_value', 'value-1', None, self.record, [])
+        another = ('problem_value', 'value-1', None, {'id': 'value-1', 'older': True}, [])
+        for rows in ([legacy, another], [another, legacy]):
+            self.assertIsNone(self.find(rows))
+
+    def test_no_matching_carried_record_is_refused(self):
+        for rows in ([], [self.row]):
+            self.assertIsNone(self.find(rows, dict(self.reference, id='not-delivered')))
+        self.assertIsNone(self.find([self.row], dict(self.reference, record_kind='reading')))
+
+    def test_explicit_legacy_digest_keeps_its_existing_record_time_qualification(self):
+        legacy = ('problem_value', 'value-1', None, {'id': 'value-1'}, [])
+        reference = dict(self.reference, digest=self.identity)
+        for rows in ([legacy], [legacy, self.row]):
+            self.assertEqual(self.find(rows, reference), ({'id': 'value-1'}, []))
+        self.assertIsNone(self.find([legacy, self.row], dict(self.reference, digest=None)))
 
     def test_full_search_and_source_rows_bind_their_own_id_instead_of_any_cited_id(self):
         for kind in ('literature_search', 'source'):

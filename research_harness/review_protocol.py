@@ -1104,7 +1104,8 @@ def collect_carried_records(records, artifacts, assignment_id, *, packets=None):
 
 
 def _find_frozen_carried_record(carried, reference):
-    """Resolve only identities and version digests supplied by immutable packet projections."""
+    """Resolve a frozen reference from carried identities without consulting current records.
+    Without a cited digest, require one known digest or, if none is known, equal projections."""
     from .strategy import canonical_record_kind
     kinds = {row[0]: {} for row in carried}
     record_kind = canonical_record_kind(kinds, reference['record_kind'])
@@ -1113,10 +1114,13 @@ def _find_frozen_carried_record(carried, reference):
                if canonical_record_kind(kinds, kind) == record_kind
                and (projection.get('id') if identifier is None else identifier) == reference['id']]
     if 'digest' not in reference:
-        # The reference names the one version that the packets delivered. A legacy projection exposes no digest, so
-        # it names no known version.
-        versions = {recorded_digest for recorded_digest, _, _ in matches}
-        return matches[0][1:] if len(versions) == 1 and None not in versions else None
+        versions = {recorded_digest for recorded_digest, _, _ in matches if recorded_digest is not None}
+        if len(versions) == 1:
+            return next((projection, supplied) for recorded_digest, projection, supplied in matches
+                        if recorded_digest is not None)
+        if not versions and len({digest(projection) for _, projection, _ in matches}) == 1:
+            return matches[0][1:]
+        return None
     wanted = reference['digest']
     if wanted is None:
         return None
@@ -1126,12 +1130,10 @@ def _find_frozen_carried_record(carried, reference):
 
 
 def find_carried_record(records, carried, reference, *, frozen=False):
-    """The (projection, artifacts) that carried rows hold for a record reference at its digest, or None. The stored
-    record is read only for its digest, where a projection exposes none. Frozen validation leaves that legacy
-    digest qualification to record-time evidence checks; it cannot infer non-delivery from a missing record. A
-    reference without a digest names one unambiguous delivered version in frozen validation, or the stored record
-    during current qualification. A hyphenated kind names the underscore kind when only that one exists in the
-    respective delivered or current namespace."""
+    """Return the carried (projection, artifacts) for a matching record reference, or None.
+    Frozen checks use delivered versions or equal projections without digests; current checks use stored digests
+    to qualify references and legacy rows. A hyphenated kind names the underscore kind when only that one exists in
+    the respective delivered or current namespace."""
     if frozen:
         return _find_frozen_carried_record(carried, reference)
     from .strategy import canonical_record_kind
