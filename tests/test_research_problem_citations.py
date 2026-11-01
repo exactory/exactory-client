@@ -52,6 +52,37 @@ class RegistryCitationTests(unittest.TestCase):
             {"citation": "A. Author. First recorded paper", "locator": "2601.18757v1"},
             {"citation": "A. Author. First recorded paper", "locator": "10.1000/journal"}])
 
+    def test_a_journal_work_with_a_datacite_doi_alias_links_to_its_preprint(self):
+        for journal_first in (False, True):
+            with self.subTest(journal_first=journal_first):
+                records = build_citation_records()
+                journal = records["work"].pop("openalex:W7125830766")
+                journal.update(id="doi:10.1000/journal", title="The journal title", year=2026)
+                records["work"][journal["id"]] = journal
+                first, second = records["reading"]["read-01"], records["reading"]["read-02"]
+                second["version_id"] = journal["id"]
+                if journal_first:
+                    first["version_id"], second["version_id"] = second["version_id"], first["version_id"]
+                evidence = records["problem_value"]["value"]["motivation"][0]["evidence"]
+                records["problem_value"]["value"]["motivation"][0]["evidence"] = evidence[:2]
+                expected = {"citation": "A. Author. The journal title. 2026", "locator": "10.1000/journal"} if (
+                    journal_first) else {"citation": "A. Author. First recorded paper", "locator": "2601.18757v1"}
+                self.assertEqual(project_citations(records, None), [expected])
+
+    def test_conflicting_datacite_and_plain_arxiv_aliases_on_either_work_stay_separate(self):
+        for identifier in ("arxiv:2601.18757v1", "openalex:W7125830766"):
+            with self.subTest(identifier=identifier):
+                records = build_citation_records()
+                records["work"][identifier]["aliases"] = [
+                    "doi:10.48550/arxiv.2601.18757", "arxiv:2609.14520"]
+                records["work"]["openalex:W7125830766"]["title"] = "The provider title"
+                evidence = records["problem_value"]["value"]["motivation"][0]["evidence"]
+                records["problem_value"]["value"]["motivation"][0]["evidence"] = evidence[:2]
+                self.assertEqual(project_citations(records, None), [
+                    {"citation": "A. Author. First recorded paper", "locator": (
+                        "10.48550/arxiv.2601.18757" if identifier.startswith("arxiv:") else "2601.18757v1")},
+                    {"citation": "A. Author. The provider title", "locator": "10.48550/arxiv.2601.18757"}])
+
     def test_author_names_compare_after_whitespace_and_case_normalization(self):
         records = build_citation_records()
         records["work"]["openalex:W7125830766"]["authors"] = [{"name": "  a.\tAUTHOR  "}]

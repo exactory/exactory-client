@@ -363,11 +363,14 @@ def project_citations(records, artifacts):
         seen.add(family)
         author_names = [a if isinstance(a, str) else a.get("name", "") for a in work.get("authors", [])]
         normalized_authors = tuple(" ".join(name.split()).casefold() for name in author_names)
-        identifiers = [work["id"]] + [alias for alias in work.get("aliases", []) if alias.startswith("doi:")]
+        identifiers = [work["id"], *work.get("aliases", [])]
         arxiv_families = set(map(resolve_arxiv_family, identifiers)) - {None}
+        linkable_families = {resolve_arxiv_family(identifier) for identifier in identifiers
+                             if identifier == work["id"] or identifier.startswith("doi:")} - {None}
+        # Every alias exposes conflicts, but only the work id or a DOI alias can establish the link.
         # A work known by its arXiv id and one known by its DataCite DOI are cited once when their authors agree.
         arxiv_work_key = (next(iter(arxiv_families)), normalized_authors) if (
-            len(arxiv_families) == 1 and normalized_authors and all(normalized_authors)) else None
+            len(arxiv_families) == 1 and linkable_families and normalized_authors and all(normalized_authors)) else None
         if arxiv_work_key is not None and arxiv_work_key in seen_arxiv_works:
             continue
         bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))

@@ -37,10 +37,14 @@ _CJK_CHARACTER_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
 # continuation, follows; a PDF suffix may close it. 10.1063/1.365928 cites neither
 # 10.1063/1.3659281, 10.1063/1.365928.5 nor 10.1063/1.365928(99).
 _IDENTIFIER_END_PATTERN = r"(?:\.pdf|/pdf)?(?![0-9a-z_]|[-./:;()][0-9a-z])"
-# An arXiv id starts where no letter, digit or identifier separator (. / _ -) precedes it, or right after an arXiv
-# URL path or the DataCite arXiv DOI prefix. 10.9999/2609.14520 and 10.9999/x-2609.14520 cite no arXiv id.
-_ARXIV_START_PATTERN = (r"(?:(?<![0-9a-z./_-])|(?<=arxiv\.org/abs/)|(?<=arxiv\.org/pdf/)"
-                        r"|(?<=arxiv\.org/html/)|(?<=10\.48550/arxiv\.))")
+# An arXiv id follows an arXiv label, an arxiv.org URL (including legacy FTP),
+# the DataCite arXiv DOI prefix, or a braced or quoted BibTeX eprint field.
+_ARXIV_CONTEXT_PATTERN = (
+    r"(?:(?<![0-9a-z])arxiv(?:\s*:\s*|\s+)"
+    r"|(?<![0-9a-z.-])(?:www\.|export\.)?arxiv\.org/"
+    r"(?:(?:abs|pdf|html|format)/|ftp/[^/\s]+/papers/[0-9]{4}/)"
+    r"|(?<![0-9a-z])10\.48550/arxiv\."
+    r'|(?<![0-9a-z])eprint\s*=\s*[{"]\s*)')
 _INVALID_ERR_CODE = "invalid_citation_accounting"
 
 
@@ -132,7 +136,7 @@ def read_bibliography(data):
 
 
 def _has_identifier(text_value, token):
-    start = r"(?<![0-9a-z])" if token.startswith("10.") else _ARXIV_START_PATTERN
+    start = r"(?<![0-9a-z])" if token.startswith("10.") else _ARXIV_CONTEXT_PATTERN
     version = "" if token.startswith("10.") else r"(?:v[0-9]+)?"
     pattern = start + re.escape(token) + version + _IDENTIFIER_END_PATTERN
     return re.search(pattern, text_value) is not None
