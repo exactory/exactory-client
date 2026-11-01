@@ -127,7 +127,7 @@ def list_page_fields(role):
             required['/value/rubric_evidence/' + item] = 'string'
         return required, {'/reassessment': 'object', '/excerpts': 'objects'}
     if role == 'adjudicator':
-        return {'/reason': 'string', '/evidence': 'objects'}, {}
+        return {'/reason': 'string', '/evidence': 'objects'}, {'/reassessment': 'object'}
     if role == 'incomplete':
         return {('/' + field): 'objects' for field in
                 ('known_conclusions', 'unresolved_scope', 'findings', 'recovery_work')}, {}
@@ -320,13 +320,6 @@ def validate_page_grounding(page, *, epoch, selection, tasks, actual_input, deli
     from . import review_staged as staged
     from .review_excerpts import normalize_with_offsets
     work = staged._verify_selection(epoch, selection, tasks=tasks)
-    records = list(work['cells'].values()) + work['checks']
-    records.extend(work['grouped'].get('retrievals', {}).values())
-    for card in work['cards']:
-        records.extend(card['conclusions'] + card['conditions'])
-    for check in work['checks']:
-        records.extend(check['conclusions'])
-    resolved = {row['id']: row for row in records if row['id'] in work['resolved']}
     supplied = set()
     pending = [delivered]
     while pending:
@@ -361,8 +354,10 @@ def validate_page_grounding(page, *, epoch, selection, tasks, actual_input, deli
                 _reject('A scientific page quotation must contain original text.')
         else:
             identifier = ground.get('id')
-            if (not isinstance(identifier, str) or identifier not in resolved
-                    or ground != resolved[identifier] or _digest_json(ground) not in supplied):
+            identity = work['record_identities'].get(identifier) if isinstance(identifier, str) else None
+            if (identity not in work['resolved_records'] or
+                    staged.identify_scientific_record(identity[0], ground) != identity
+                    or _digest_json(ground) not in supplied):
                 _reject('A page ground must be an exact delivered, accepted and resolved scientific record.')
     for fragment in _require_array(page['fragments'], 'fragments'):
         _check_grounds(fragment['grounds'], grounding, 'fragment.grounds')

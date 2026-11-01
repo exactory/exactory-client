@@ -100,6 +100,8 @@ def make_fixture(output=None, role='result'):
     else:
         choices = {('/' + key): output[key] for key in ('objection_id', 'disposition', 'correction_admissible')}
         values = {'/reason': output['reason'], '/evidence': output['evidence']}
+        if 'reassessment' in output:
+            values['/reassessment'] = output['reassessment']
         page_ids = ['A1', 'A2']
     plan = {'protocol': composition.PROTOCOL, 'schema': composition.SCHEMA,
             'epoch_id': 'epoch-' + role, 'role': role, 'slot_id': 'slot-' + role,
@@ -196,6 +198,19 @@ class CompositionTests(unittest.TestCase):
         self.assertEqual(self.assemble(), self.expected)
         self.assertEqual(self.expected['value']['rubric']['significance'], {'B1': 1, 'B2': 1})
         self.assertEqual(self.expected['value']['objection_findings'][0]['id'], 'O7')
+
+    def test_repaired_adjudication_composes_and_projects_reassessment(self):
+        from research_harness import review_staged as staged
+        output = dict(worked_adjudication(), reassessment=dict(assignment_id='contaminated-adjudicator',
+            findings=[dict(review_id='historical-finding', disposition='revised',
+                reason='The original condition remains necessary.', evidence=[SOURCE])]))
+        scientific, sidecar = staged.project_ordinary_final(dict(output, terminal={'visible_conditions': []}))
+        self.assertEqual(scientific, output)
+        self.assertEqual(sidecar, {'terminal': {'visible_conditions': []}})
+        plan, observations, choices, expected = make_fixture(output, 'adjudicator')
+        root = composition.build_root(plan, observations)
+        self.assertEqual(composition.assemble_result(plan, observations, root,
+            terminal_for(plan, root, choices)), expected)
 
     def test_worked_adjudication_preserves_exact_five_fields_and_frozen_scope(self):
         plan, observations, choices, expected = make_fixture(worked_adjudication(), 'adjudicator')

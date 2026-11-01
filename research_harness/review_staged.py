@@ -253,7 +253,7 @@ def project_ordinary_final(output):
         optional = ('reassessment', 'excerpts')
     else:
         required = ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible')
-        optional = ()
+        optional = ('reassessment',)
     staged = ('terminal', 'assurance_checks', 'decision_checks', 'answers', 'findings', 'new_dependencies',
               'cards', 'cells', 'combinations', 'selected_groups', 'original_checks', 'integrations',
               'retrievals', 'segment_readings', 'pages')
@@ -1147,12 +1147,23 @@ def validate_card(card, manifest, *, claim_ids=None):
         _fail('A card must contain one complete judgment per assigned claim.')
     for key in ('findings', 'dependencies', 'fragment_ids'):
         check_ids(card[key], key, code='invalid_review_staged')
-    _require_array(card['unresolved'], 'unresolved')
+    for question in _require_array(card['unresolved'], 'unresolved'):
+        check_fields(question, ('text', 'claim_ids', 'needs'), code='invalid_review_staged')
+        check_text(question['text'], 'question.text', code='invalid_review_staged')
+        check_text(question['needs'], 'question.needs', code='invalid_review_staged')
+        claims = check_ids(question['claim_ids'], 'question.claim_ids', code='invalid_review_staged')
+        if not claims or not set(claims) <= set(manifest['contexts']):
+            _fail('Card question must name its affected claims.')
     return copy.deepcopy(card)
 
 
+def identify_card_question(card, question):
+    """Bind a question obligation to its exact originating card and content."""
+    return 'card-unresolved:' + digest([card['id'], question])
+
+
 def card_obligations(cards):
-    """Return every full-card conclusion, condition and claim judgment identity."""
+    """Return every full-card conclusion, condition, judgment and question identity."""
     result = []
     for card in cards:
         if card['kind'] == 'full':
@@ -1160,6 +1171,11 @@ def card_obligations(cards):
                 if row['id'] in result:
                     _fail('Duplicate full-card obligation identity.', id=row['id'])
                 result.append(row['id'])
+            for question in card['unresolved']:
+                key = identify_card_question(card, question)
+                if key in result:
+                    _fail('Duplicate full-card obligation identity.', id=key)
+                result.append(key)
     return result
 
 
@@ -1193,6 +1209,9 @@ def compact_card(card, *, manifest=None, findings=()):
             result['evidence_class'] = occurrence['evidence_class']
     if card['findings']:
         result['finding_bodies'] = [copy.deepcopy(finding_index[key]) for key in card['findings']]
+    if card['unresolved']:
+        result['question_obligations'] = [dict(id=identify_card_question(card, question),
+                                             question=copy.deepcopy(question)) for question in card['unresolved']]
     return result
 
 
@@ -1521,6 +1540,10 @@ def validate_task_output(task, output, *, manifest=None, validate_records=True):
         _fail('An answer task requires typed answer pages for composition verification.')
     if kind == 'final' and not any(key in output for key in ('terminal', 'assessment_incomplete', 'retrievals')):
         _fail('A final task requires a terminal choice, retrieval or incomplete assessment.')
+    if (kind == 'final' and 'objection_id' in output and manifest is not None
+            and isinstance(manifest['frame'], dict) and manifest['frame'].get('context_repair') is not None
+            and 'reassessment' not in output):
+        _fail('The final adjudication must reassess the retained historical findings.', code='review_reassessment_missing')
     if kind == 'final' and 'assessment_incomplete' in output:
         check_fields(output['assessment_incomplete'], ('unresolved_scope', 'recovery_work'), code='invalid_review_staged')
         validate_incomplete_scope(**output['assessment_incomplete'])
@@ -1880,7 +1903,7 @@ def _collect_completion_records(work):
     owners = {}
     for row in observed:
         for key in ('cards', 'cells', 'combinations', 'selected_groups', 'original_checks', 'integrations',
-                    'findings', 'answers', 'retrievals', 'assurance_checks', 'decision_checks'):
+                    'findings', 'answers', 'retrievals', 'assurance_checks', 'decision_checks', 'segment_readings'):
             if row['task_id'] in work['historical_tasks'] and key not in ('findings', 'retrievals'):
                 continue
             try:
@@ -1911,6 +1934,64 @@ def _collect_completion_records(work):
                     _record_completion_rejection(work, error, task_id=row['task_id'])
     work['grouped'] = grouped
     work['owners'] = owners
+    _check_completion_record_identities(work)
+
+
+def identify_scientific_record(family, record):
+    """Bind resolution to a record family, stable ID and exact canonical content."""
+    return family, record['id'], digest(record)
+
+
+def _check_completion_record_identities(work):
+    identities, conflicts = {}, set()
+
+    def register(family, record):
+        try:
+            check_fields(record, ('id',), None, code='invalid_review_staged')
+            key = check_text(record['id'], 'record.id', code='invalid_review_staged')
+            identity = identify_scientific_record(family, record)
+            if key in identities and identities[key] != identity:
+                conflicts.add(key)
+            else:
+                identities[key] = identity
+        except ResearchError as error:
+            _record_completion_rejection(work, error)
+
+    # Inspect every definition, including nested records hidden by a duplicate
+    # parent. Dispositions and answer targets are references, not definitions.
+    for observed in work['observed'] + work['historical_observed']:
+        for family in work['grouped']:
+            if observed['task_id'] in work['historical_tasks'] and family not in ('findings', 'retrievals'):
+                continue
+            rows = observed['output'].get(family, [])
+            if not isinstance(rows, list):
+                continue
+            for record in rows:
+                if family == 'retrievals' and isinstance(record, dict) and isinstance(record.get('id'), str):
+                    # A verified pending request and its answer share one lifecycle.
+                    selected = work['grouped'][family].get(record.get('id'), record)
+                    stable = ('id', 'question', 'inputs', 'claim_ids', 'context_roots', 'requested_by')
+                    if (record.get('status') == 'pending' and selected.get('status') in ('resolved', 'unresolved')
+                            and all(record.get(key) == selected.get(key) for key in stable)):
+                        record = selected
+                register(family, record)
+                if not isinstance(record, dict):
+                    continue
+                nested = {'cards': (('conclusions', 'card_conclusions'), ('conditions', 'card_conditions'),
+                                    ('judgments', 'cells')),
+                          'original_checks': (('conclusions', 'original_check_conclusions'),)}.get(family, ())
+                for field, kind in nested:
+                    if isinstance(record.get(field), list):
+                        for child in record[field]:
+                            register(kind, child)
+                if family == 'cards' and isinstance(record.get('unresolved'), list):
+                    for question in record['unresolved']:
+                        if isinstance(question, dict):
+                            register('card_questions', dict(question, id=identify_card_question(record, question)))
+    for key in sorted(conflicts):
+        _record_completion_issue(work, 'invalid_review_staged', id=key,
+                                 reason='Conflicting scientific record definitions across the selection.')
+    work['record_identities'] = {key: value for key, value in identities.items() if key not in conflicts}
 
 
 def _check_completion_coverage(work):
@@ -1984,6 +2065,8 @@ def _check_completion_cards(work):
         try:
             owner = work['owners'][('cards', card['id'])]
             assigned = work['task_index'][owner['task_id']]
+            if work['record_identities'].get(card['id']) != identify_scientific_record('cards', card):
+                _fail('A conflicting card definition cannot supply scientific records.', id=card['id'])
             validate_card(card, manifest, claim_ids=assigned['claim_ids'])
             delivered = owner['actual_input']['intervals'][:]
             if assigned['type'] == 'integrate' and assigned['scope'] == 'segmented_original':
@@ -2195,26 +2278,43 @@ def _check_completion_retrievals(work):
             retrievals.append(retrieval)
         except ResearchError as error:
             _record_completion_rejection(work, error, retrieval_id=retrieval['id'])
-    resolved = {row['id'] for row in checks if row['status'] == 'resolved'}
-    resolved.update(row['id'] for row in retrievals if row['status'] == 'resolved')
+    resolved_records, resolved = {}, set()
+
+    def resolve(family, row):
+        identity = identify_scientific_record(family, row)
+        if work['record_identities'].get(row['id']) == identity:
+            resolved_records[identity] = row
+            resolved.add(row['id'])
+
+    for row in checks:
+        if row['status'] == 'resolved':
+            resolve('original_checks', row)
+    for row in retrievals:
+        if row['status'] == 'resolved':
+            resolve('retrievals', row)
     for check in checks:
-        if check['status'] == 'resolved':
-            resolved.update(row['id'] for row in check['conclusions'])
-    pending = [(row, card['dependencies']) for card in work['cards']
-               for row in card['conclusions'] + card['conditions']]
-    pending.extend((row, []) for row in cells.values() if row['status'] != 'unresolved')
+        if identify_scientific_record('original_checks', check) in resolved_records:
+            for row in check['conclusions']:
+                resolve('original_check_conclusions', row)
+    pending = [(family, row, card['dependencies']) for card in work['cards']
+               for family, field in (('card_conclusions', 'conclusions'), ('card_conditions', 'conditions'))
+               for row in card[field]]
+    pending.extend(('cells', row, []) for row in cells.values() if row['status'] != 'unresolved')
     while pending:
         remaining = []
-        for row, parent_dependencies in pending:
+        for family, row, parent_dependencies in pending:
             dependencies = set(parent_dependencies) | set(row.get('dependencies', []))
             premises = {ground for ground in row['grounds'] if isinstance(ground, str)}
             if row['grounds'] and dependencies | premises <= resolved:
-                resolved.add(row['id'])
+                resolve(family, row)
             else:
-                remaining.append((row, parent_dependencies))
+                remaining.append((family, row, parent_dependencies))
         if len(remaining) == len(pending):
             break
         pending = remaining
+    work['resolved_records'] = resolved_records
+    # String references remain compatible, but only unique, exactly bound typed
+    # records can supply those names to downstream validators.
     work['resolved'] = resolved
 
 
@@ -2341,6 +2441,9 @@ def _check_completion_finding_answers(work):
     finding_ids.update(key for card in cards for key in card['findings'])
     frame_pending = {row['id']: row for row in work['context_graph']['unresolved']}
     finding_ids.update(frame_pending)
+    card_pending = {identify_card_question(card, question): (card, question)
+                    for card in cards for question in card['unresolved']}
+    finding_ids.update(card_pending)
     answered = set()
     for answer in grouped.get('answers', {}).values():
         try:
@@ -2358,13 +2461,39 @@ def _check_completion_finding_answers(work):
                 if answer['disposition'] != 'answered' or not depends_on_task(
                         owner, pending['task_id'], work['all_by_task']):
                     _fail('Frame work requires a grounded answer depending on its discovery.')
+            if answer['finding_id'] in card_pending:
+                card, question = card_pending[answer['finding_id']]
+                owner = work['owners'][('answers', answer['id'])]
+                discoveries = [row for row in work['observed'] if card in row['output'].get('cards', [])]
+                if (not answer['grounds'] or not any(depends_on_task(owner, row['task_id'], work['all_by_task'])
+                                                     for row in discoveries)
+                        or not _covers_inputs(_find_quotation_spans(answer), owner['actual_input']['intervals'])):
+                    _fail('Card questions require grounded answers delivered after their discovery.')
+                if answer['disposition'] == 'retained':
+                    terminal = next((row['output']['terminal'] for row in work['observed']
+                                     if 'terminal' in row['output']), {})
+                    claims = set(question['claim_ids'])
+                    relevant = [kind for kind in ASSURANCES
+                                if claims & set(manifest['assurance_dependencies'][kind])] or list(ASSURANCES)
+                    if epoch['role'] == 'result':
+                        adverse = all(terminal.get('assurances', {}).get(kind) in ('failed', 'not_assessed')
+                                      for kind in relevant)
+                        if terminal.get('decisions', {}).get('/value/status', 'insufficient') == 'sufficient':
+                            adverse = False
+                    else:
+                        adverse = terminal.get('disposition') in ('upheld', 'unresolved')
+                    if not adverse:
+                        _fail('Retained card questions require an explicit incomplete or adverse assessment.')
             if answer['disposition'] != 'unresolved':
                 answered.add(answer['finding_id'])
         except ResearchError as error:
             _record_completion_rejection(work, error, answer_id=answer['id'])
     for key in sorted(finding_ids - answered):
-        code = 'review_frame_unresolved' if key in frame_pending else 'review_finding_answer_pending'
-        _record_completion_issue(work, code, finding_id=key)
+        code = ('review_frame_unresolved' if key in frame_pending else
+                'review_card_question_pending' if key in card_pending else 'review_finding_answer_pending')
+        details = (dict(card_id=card_pending[key][0]['id'], question=copy.deepcopy(card_pending[key][1]))
+                   if key in card_pending else {})
+        _record_completion_issue(work, code, finding_id=key, **details)
     work['findings'] = findings
     work['inherited'] = inherited
     work['answered'] = answered

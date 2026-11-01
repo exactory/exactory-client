@@ -119,3 +119,15 @@ def selection(value, cards=None, terminal=None, integration_changes=None, contex
     combined = observation(value, assigned, output,
                            dependencies={reading['id']: read_observation['raw_output_digest']})
     return [reading, assigned], dict(observations=[combined, read_observation])
+
+
+def add_original_check(value, tasks, selected, identifier='original-check', conclusion_id='checked-conclusion'):
+    assigned = task(value, 'integrate', scope='joint_original')
+    check = dict(id=identifier, task_id=assigned['id'], group_ids=[], scope='joint_original',
+                 status='resolved', conclusions=[dict(id=conclusion_id, text='The original restricts the domain.',
+                 grounds=assigned['inputs'][:1])], qualifications=[], conflicts=[], unresolved=[],
+                 segment_ids=[], reconciliation=None)
+    observed = observation(value, assigned, {'original_checks': [check]})
+    tasks.append(assigned)
+    selected['observations'].append(observed)
+    return check

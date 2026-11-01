@@ -13,35 +13,44 @@ from research_harness import review_transport as transport
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
-from test_review_staged_fixtures import epoch, full_card, observation, task
+from test_review_staged_fixtures import add_original_check, epoch, full_card, observation, task
 from test_review_staged_text_contracts import incomplete_output
 
 
 class StagedPageGroundingTests(unittest.TestCase):
     def setUp(self):
+        self.prepare_page()
+
+    def prepare_page(self, collision=None):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.artifacts = ArtifactStore(Path(temporary.name))
         self.epoch = epoch()
         self.card = full_card(self.epoch)
+        if collision:
+            self.card['conclusions'][0]['grounds'] = []
         self.reader = task(self.epoch)
         self.reading = observation(self.epoch, self.reader, {'cards': [self.card]})
-        bindings = producer.build_composition_bindings(self.epoch, [self.reading], tasks=[self.reader])
+        self.readings, self.readers = [self.reading], [self.reader]
+        if collision:
+            add_original_check(self.epoch, self.readers, {'observations': self.readings},
+                **{('conclusion_id' if collision == 'nested' else 'identifier'): self.card['conclusions'][0]['id']})
+        bindings = producer.build_composition_bindings(self.epoch, self.readings, tasks=self.readers)
         self.plan = composition.plan_incomplete_composition(self.epoch, outcome=incomplete_output(),
             known_conclusions=self.card['conclusions'], findings=[], page_characters=10000,
             **{key: bindings[key] for key in ('source_root', 'dependency_root',
                 'selected_observations_root', 'integration_root')})
         self.plan['evidence_obligations'] = bindings['evidence_obligations']
-        self.answer = task(self.epoch, 'answer', dependencies=[self.reader['id']],
+        self.answer = task(self.epoch, 'answer', dependencies=[row['id'] for row in self.readers],
             composition_role='incomplete', composition_plan_root=digest(self.plan),
             answer_ranges=self.plan['ownership'])
-        self.tasks = [self.reader, self.answer]
-        self.packet = producer.build_packet(self.epoch, self.answer, observations=[self.reading],
+        self.tasks = self.readers + [self.answer]
+        self.packet = producer.build_packet(self.epoch, self.answer, observations=self.readings,
             composition_plan=self.plan, tasks=self.tasks)
         self.request = {'input': [{'role': 'user',
             'content': transport.PACKET_LABEL + json.dumps(self.packet)}]}
         self.answer = staged.freeze_task(self.answer, digest(self.request), staged.SERIALIZATION)
-        self.tasks = [self.reader, self.answer]
+        self.tasks = self.readers + [self.answer]
         source = self.packet['staged_review']['answer']
         self.page = {key: copy.deepcopy(source[key]) for key in ('protocol', 'epoch_id', 'role',
             'task_id', 'page_id', 'revision', 'source_root', 'dependency_root', 'ownership', 'replaces')}
@@ -51,8 +60,8 @@ class StagedPageGroundingTests(unittest.TestCase):
         self.records = dict(review_epoch={self.epoch['id']: self.epoch},
             review_task={row['id']: dict(epoch_id=self.epoch['id'], task=row) for row in self.tasks},
             review_composition_plan={digest(self.plan): self.plan},
-            review_task_acceptance={'reading': dict(task_id=self.reader['id'],
-                receipt=dict(staged_observation=self.reading))})
+            review_task_acceptance={row['id']: dict(task_id=row['task_id'],
+                receipt=dict(staged_observation=row)) for row in self.readings})
 
     def replace_ground(self, ground):
         self.page['grounding'] = [ground]
@@ -72,8 +81,19 @@ class StagedPageGroundingTests(unittest.TestCase):
 
     def compose_page(self):
         observed = observation(self.epoch, self.answer, {'pages': [self.page]},
-            dependencies={self.reader['id']: self.reading['raw_output_digest']})
-        return producer.build_composition(self.epoch, self.plan, [self.reading, observed], None, tasks=self.tasks)
+            dependencies={row['task_id']: row['raw_output_digest'] for row in self.readings})
+        return producer.build_composition(self.epoch, self.plan, self.readings + [observed], None, tasks=self.tasks)
+
+    def test_check_identity_collisions_cannot_ground_delivered_answer_pages(self):
+        for collision in ('check', 'nested'):
+            with self.subTest(collision=collision):
+                self.prepare_page(collision)
+                self.assertIn(self.card['conclusions'][0], self.packet['staged_review']['answer']['conclusions'])
+                for boundary in (self.accept_page, self.compose_page):
+                    with self.subTest(boundary=boundary):
+                        with self.assertRaises(ResearchError) as raised:
+                            boundary()
+                        self.assertEqual(raised.exception.code, 'review_composition_conflict')
 
     def test_acceptance_rejects_self_certified_and_invented_grounds(self):
         for ground in ({'invented': True},

@@ -2855,6 +2855,12 @@ def _validate_staged_adjudication_scope(records, artifacts, assignment, packet):
         _read_adjudication_review(records, artifacts, review)
 
 
+def collect_adjudication_evidence(output):
+    """Project citations from the disposition and every reassessed historical finding."""
+    return output['evidence'] + [reference for finding in output.get('reassessment', {}).get('findings', [])
+                                 for reference in finding['evidence']]
+
+
 def validate_adjudication_contract(records, artifacts, assignment, packet, output):
     """Validate only the focused output and the adjudicator's frozen delivery."""
     from .review_refusal import contract_check, validate_evidence_contract
@@ -2869,7 +2875,7 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
         _validate_staged_adjudication_scope(records, artifacts, assignment, packet)
     packets = supplied_evidence.lineage_packets(records, artifacts, [assignment['id']])
     with contract_check('adjudication.shape'):
-        fields(output, ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'))
+        fields(output, ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'), ('reassessment',))
         if packet['objection']['id'] != output['objection_id']:
             raise ResearchError('review_adjudication_mismatch', 'Disposition must concern the assigned objection')
         allowed = ('upheld', 'not_upheld', 'unresolved')
@@ -2890,9 +2896,15 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
             # Artifact availability is still checked by _evidence when recording.
             for reference in collect_references(output['evidence']):
                 validate_reference(reference)
+    repair_packet = context_repair.frozen_reassessment_packet(records, artifacts, assignment)
+    with contract_check('adjudication.reassessment'):
+        context_repair.validate_reassessment(records, artifacts, assignment, output,
+            reading_checks=False, packet=repair_packet,
+            evidence_validator=lambda r, a, values, **kwargs:
+                validate_evidence_contract(r, a, values, packets=packets, **kwargs))
     if packet.get('subject', {}).get('kind') == 'problem':
         missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, assignment['id'],
-                                                                     output['evidence'], frozen=True)
+            collect_adjudication_evidence(output), frozen=True)
         if missing:
             with contract_check('adjudication.evidence_delivery'):
                 raise ResearchError('review_evidence_undelivered',
@@ -2903,7 +2915,8 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
 def record_adjudication(store, payload, *, expected_revision, request_id):
     artifacts = store.build_artifact_store()
     def prepare(records, value):
-        fields(value, ('id', 'assignment_id', 'objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'))
+        fields(value, ('id', 'assignment_id', 'objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'),
+               ('reassessment',))
         state = assignment_state(records, artifacts, value['assignment_id'])
         from .research_decisions import bind_effective_result, read_effective_result
         output, _ = read_effective_result(state)
@@ -2922,8 +2935,8 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
         validate_adjudication_contract(records, artifacts, assignment, packet, response)
         if packet.get('subject', {}).get('kind') == 'problem':
             from .strategy import evidence
-            evidence(records, artifacts, value['evidence'])
-        _evidence(artifacts, value['evidence'], records=records)
+            evidence(records, artifacts, collect_adjudication_evidence(response))
+        _evidence(artifacts, collect_adjudication_evidence(response), records=records)
         record = dict(value, dossier_id=state['dossier_id'], recorded_revision=expected_revision + 1)
         if assignment.get('staged_review') is not None:
             record['effective_binding'] = bind_effective_result(state['effective'])
@@ -2956,6 +2969,8 @@ def adjudication_state(records, artifacts, adjudication_id):
                 'adjudication': None}
     state = assignment_state(records, artifacts, saved['assignment_id'])
     response = {k: saved[k] for k in ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible')}
+    if 'reassessment' in saved:
+        response['reassessment'] = saved['reassessment']
     obligations = list(state['obligations'])
     assignment = records.get('review_assignment', {}).get(saved['assignment_id'], {})
     from .research_decisions import bind_effective_result, read_effective_result
@@ -2975,7 +2990,8 @@ def adjudication_state(records, artifacts, adjudication_id):
         except ResearchError as error:
             obligations.append(obligation(error.code, error.message, **(error.details or {})))
         try:
-            missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, saved['assignment_id'], saved['evidence'])
+            missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, saved['assignment_id'],
+                collect_adjudication_evidence(response))
         except ResearchError as error:
             if assignment.get('staged_review') is None:
                 raise

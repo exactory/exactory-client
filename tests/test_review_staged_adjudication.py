@@ -11,7 +11,7 @@ from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 import test_research_problem_adjudication_contract as contract_fixtures
 from test_review_composition import make_fixture, observe, terminal_for
-from test_review_staged_fixtures import epoch
+from test_review_staged_fixtures import epoch, task
 
 
 class StagedAdjudicationTests(unittest.TestCase):
@@ -82,6 +82,78 @@ class StagedAdjudicationTests(unittest.TestCase):
     def record_finding(self):
         return self.case.mutate(protocol.record_adjudication,
             dict(self.output, id='focused-finding', assignment_id=self.assignment['id']))['result']
+
+    def prepare_reassessment(self, paged=False):
+        self.prepare_finding(paged=paged)
+        self.packet.update(context_repair={'assignment_id': 'contaminated-focused'},
+            historical_reviews=[dict(id='historical-finding', payload=copy.deepcopy(self.output))])
+        self.assignment.update(reassessment_required=True,
+            packet=protocol._put_json(self.artifacts, self.packet))
+        self.case.put('review_assignment', self.assignment['id'], self.assignment)
+        self.records = self.case.read_records()
+        self.output['reassessment'] = dict(assignment_id='contaminated-focused', findings=[dict(
+            review_id='historical-finding', disposition='revised',
+            reason='Recheck the missing hypothesis using the supplied original.', evidence=[self.new_source])])
+
+    def test_repaired_adjudicator_requires_reassessment_in_its_observed_final(self):
+        self.prepare_reassessment()
+        del self.output['reassessment']
+        with patch.object(direction_reviews, 'collect_selected_task_graph', return_value=self.graph):
+            with self.assertRaises(ResearchError) as rejected:
+                protocol.validate_adjudication_contract(self.records, self.artifacts,
+                    self.assignment, self.packet, self.output)
+        self.assertEqual(rejected.exception.code, 'review_reassessment_missing')
+
+    def test_repaired_adjudicator_records_and_revalidates_exact_reassessment(self):
+        self.prepare_reassessment()
+        self.effective = self.compose(self.assignment['id'], self.output)
+        self.state['effective'] = self.effective
+        with patch.object(protocol, 'assignment_state', return_value=self.state), \
+                patch.object(direction_reviews, 'collect_selected_task_graph', return_value=self.graph):
+            saved = self.record_finding()
+            self.assertEqual(saved['reassessment'], self.output['reassessment'])
+            state = protocol.adjudication_state(self.case.read_records(), self.artifacts, saved['id'])
+            self.assertTrue(state['ready'], state['obligations'])
+            records = self.case.read_records()
+            del records['review_adjudication'][saved['id']]['reassessment']
+            state = protocol.adjudication_state(records, self.artifacts, saved['id'])
+            self.assertFalse(state['ready'])
+            self.assertIn('review_reassessment_missing', [row['code'] for row in state['obligations']])
+
+    def test_repaired_ordinary_adjudicator_records_exact_reassessment(self):
+        self.prepare_reassessment()
+        self.state['effective'] = composition.effective_review_output(self.assignment['id'], dict(
+            controller_id=self.assignment['id'], kind='ordinary', output=self.output, output_digest=digest(self.output),
+            terminal_attempt_id='terminal', terminal_raw_output_digest=digest({'terminal': 'raw authorization'})))
+        with patch.object(protocol, 'assignment_state', return_value=self.state), \
+                patch.object(direction_reviews, 'collect_selected_task_graph', return_value=self.graph):
+            saved = self.record_finding()
+            self.assertEqual(saved['reassessment'], self.output['reassessment'])
+            state = protocol.adjudication_state(self.case.read_records(), self.artifacts, saved['id'])
+        self.assertTrue(state['ready'], state['obligations'])
+
+    def test_reassessment_citations_must_be_delivered_to_the_adjudicator(self):
+        self.prepare_reassessment()
+        unseen = self.artifacts.put(b'An original never delivered to this focused review.', 'text/plain')
+        self.output['reassessment']['findings'][0]['evidence'] = [unseen]
+        with patch.object(direction_reviews, 'collect_selected_task_graph', return_value=self.graph):
+            with self.assertRaises(ResearchError) as rejected:
+                protocol.validate_adjudication_contract(self.records, self.artifacts,
+                    self.assignment, self.packet, self.output)
+        self.assertEqual(rejected.exception.code, 'review_evidence_undelivered')
+
+    def test_repaired_adjudicator_rejects_wrong_predecessor_and_omitted_findings(self):
+        self.prepare_reassessment()
+        for changed, code in ((dict(assignment_id='another', findings=self.output['reassessment']['findings']),
+                               'review_reassessment_mismatch'),
+                              (dict(assignment_id='contaminated-focused', findings=[]),
+                               'review_reassessment_incomplete')):
+            with self.subTest(changed=changed), \
+                    patch.object(direction_reviews, 'collect_selected_task_graph', return_value=self.graph):
+                with self.assertRaises(ResearchError) as rejected:
+                    protocol.validate_adjudication_contract(self.records, self.artifacts, self.assignment,
+                        self.packet, dict(self.output, reassessment=changed))
+                self.assertEqual(rejected.exception.code, code)
 
     def test_paged_finding_records_effective_disposition_and_raw_binding(self):
         self.prepare_finding()
@@ -251,6 +323,21 @@ class StagedAdjudicationTests(unittest.TestCase):
 
 
 class IncompleteAdjudicationTests(unittest.TestCase):
+    def test_repaired_adjudicator_final_task_cannot_omit_reassessment(self):
+        manifest = staged.build_manifest(dict(statement='Assess the exact objection.',
+            context_repair={'assignment_id': 'contaminated-focused'}), [], [])
+        value = epoch(role='adjudicator', manifest=manifest,
+            focused_scope=dict(review_pair_roots=['a', 'b'], objection_id='O7', objection_version='v7'))
+        final = task(value, 'final')
+        output = dict(objection_id='O7', disposition='upheld', reason='The original lacks a required hypothesis.',
+            evidence=[], correction_admissible=None, terminal=dict(objection_id='O7', disposition='upheld',
+                correction_admissible=None, visible_conditions=[]))
+        with self.assertRaises(ResearchError) as rejected:
+            staged.validate_task_output(final, output, manifest=manifest)
+        self.assertEqual(rejected.exception.code, 'review_reassessment_missing')
+        output['reassessment'] = dict(assignment_id='contaminated-focused', findings=[])
+        self.assertEqual(staged.validate_task_output(final, output, manifest=manifest), output)
+
     def build_incomplete_finding(self, origin='execution'):
         frozen = epoch(role='adjudicator', subject={'kind': 'problem', 'statement_id': 'statement'},
             focused_scope=dict(review_pair_roots=['review-A', 'review-B'],

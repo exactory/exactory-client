@@ -5,10 +5,104 @@ import unittest
 from research_harness import review_staged as staged
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
-from tests.test_review_staged_fixtures import epoch, full_card, selection
+from test_review_staged_fixtures import add_original_check, epoch, full_card, observation, selection
 
 
 class StagedGroundingTests(unittest.TestCase):
+    def test_original_check_identity_cannot_resolve_an_unsupported_card_conclusion(self):
+        for nested in (False, True):
+            with self.subTest(nested=nested):
+                value = epoch()
+                card = full_card(value)
+                card['conclusions'][0]['grounds'] = []
+                tasks, selected = selection(value, [card])
+                add_original_check(value, tasks, selected,
+                    **{('conclusion_id' if nested else 'identifier'): card['conclusions'][0]['id']})
+                report = staged.verify_completion(value, selected, tasks=tasks)
+                self.assertFalse(report['complete'], report['issues'])
+                self.assertTrue(any(row['code'] == 'invalid_review_staged' for row in report['issues']))
+
+    def test_conflicting_definitions_across_record_families_are_rejected(self):
+        for family in ('assurance_checks', 'decision_checks', 'answers', 'findings',
+                       'retrievals', 'selected_groups', 'segment_readings', 'integrations', 'combinations', 'cards', 'cells'):
+            with self.subTest(family=family):
+                value = epoch()
+                tasks, selected = selection(value)
+                output = selected['observations'][0]['output']
+                if family in ('answers', 'findings', 'retrievals', 'selected_groups', 'decision_checks', 'segment_readings'):
+                    # A conflicting definition is invalid even before its science is eligible.
+                    output[family] = [dict(id='collision', text='Different scientific content.')]
+                else:
+                    output[family][0]['id'] = 'collision'
+                selected['observations'][0]['raw_output_digest'] = digest(output)
+                check = add_original_check(value, tasks, selected, identifier='collision')
+                report = staged.verify_completion(value, selected, tasks=tasks)
+                self.assertTrue(any(row['code'] == 'invalid_review_staged' and
+                    row.get('id') == check['id'] for row in report['issues']), report['issues'])
+
+    def test_nested_record_definitions_cannot_share_resolution_credit(self):
+        for family in ('card_check_conclusion', 'check_conclusion'):
+            with self.subTest(family=family):
+                value = epoch()
+                card = full_card(value)
+                tasks, selected = selection(value, [card])
+                check = add_original_check(value, tasks, selected)
+                if family == 'card_check_conclusion':
+                    check['conclusions'] = [dict(card['conclusions'][0])]
+                else:
+                    check['conclusions'].append(dict(check['conclusions'][0], text='A conflicting conclusion.'))
+                selected['observations'][-1]['output']['original_checks'] = [check]
+                selected['observations'][-1]['raw_output_digest'] = digest(selected['observations'][-1]['output'])
+                report = staged.verify_completion(value, selected, tasks=tasks)
+                self.assertFalse(report['complete'], report['issues'])
+                self.assertTrue(any(row['code'] == 'invalid_review_staged' and
+                    'Conflicting scientific record definitions' in row.get('reason', '') for row in report['issues']))
+
+    def test_card_questions_cannot_disappear_from_completion(self):
+        value = epoch()
+        card = full_card(value)
+        card['unresolved'] = [dict(text='Is a missing hypothesis required?',
+                                  claim_ids=list(value['manifest']['contexts']), needs='A proof of the hypothesis.')]
+        tasks, selected = selection(value, [card])
+        compact = staged.compact_card(card)
+        self.assertEqual(compact['question_obligations'], [dict(
+            id='card-unresolved:' + digest([card['id'], card['unresolved'][0]]), question=card['unresolved'][0])])
+        report = staged.verify_completion(value, selected, tasks=tasks)
+        self.assertFalse(report['complete'], report['issues'])
+        self.assertTrue(any(row['code'] == 'review_card_question_pending' for row in report['issues']))
+
+    def test_card_questions_require_grounded_dependent_answers_or_adverse_assessment(self):
+        for disposition, grounded, dependent, adverse in (
+                ('answered', True, True, False), ('answered', False, True, False),
+                ('answered', True, False, False), ('retained', True, True, False),
+                ('retained', True, True, True), ('unresolved', True, True, True)):
+            with self.subTest(disposition=disposition, grounded=grounded, dependent=dependent, adverse=adverse):
+                value = epoch()
+                card = full_card(value)
+                question = dict(text='Is the missing hypothesis necessary?',
+                    claim_ids=list(value['manifest']['contexts']), needs='Original hypothesis evidence.')
+                card['unresolved'] = [question]
+                terminal = dict(assurances={kind: 'failed' if adverse else 'passed' for kind in staged.ASSURANCES},
+                                visible_conditions=[])
+                tasks, selected = selection(value, [card], terminal=terminal)
+                identifier = 'card-unresolved:' + digest([card['id'], question])
+                output = selected['observations'][0]['output']
+                answer = dict(id='hypothesis-answer', finding_id=identifier, disposition=disposition,
+                              reason='The original specifies exactly this hypothesis.',
+                              grounds=card['critical_spans'] if grounded else [])
+                output['answers'] = [answer]
+                output['integrations'][0]['answers'] = [answer['id']]
+                if not dependent:
+                    output['answers'] = []
+                    output['integrations'][0]['answers'] = []
+                    selected['observations'][1]['output']['answers'] = [answer]
+                    selected['observations'][1]['raw_output_digest'] = digest(selected['observations'][1]['output'])
+                selected['observations'][0] = observation(value, tasks[1], output,
+                    dependencies={tasks[0]['id']: selected['observations'][1]['raw_output_digest']})
+                report = staged.verify_completion(value, selected, tasks=tasks)
+                self.assertEqual(report['complete'], grounded and dependent and
+                    (disposition == 'answered' or (disposition == 'retained' and adverse)), report['issues'])
+
     def test_empty_critical_and_judgment_quotations_cannot_complete(self):
         value = epoch()
         card = full_card(value)
