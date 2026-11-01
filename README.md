@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.69.1](docs/releases/0.69.1.md) makes the planning of a review turn fast on a large store.
+
 Version [0.69.0](docs/releases/0.69.0.md) delivers oversized problem result evidence in validated parts of the same reviewer session.
 
 Version [0.68.0](docs/releases/0.68.0.md) separates the outputs of math-solver, ai-science and math-conjecturer into

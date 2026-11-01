@@ -1354,20 +1354,40 @@ def deliver_historical_review(records, artifacts, review):
     return payload
 
 
-def build_assignment_request(records, artifacts, assignment, packet=None):
+def build_assignment_request(records, artifacts, assignment):
     """The request that the harness builds for an assignment. Where a completed attempt recorded a request that an
     earlier fit order of the transport built, that request: a retry repeats it and the state of the assignment is
-    derived from it. Otherwise the request of the current fit order."""
+    derived from it. Otherwise the request of the current fit order. A text route's request is built once per
+    evaluation of a records view and every caller receives its own copy; a visual route's request is built on every
+    call, because building it checks the current emitter bytes."""
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    records = evaluation.records
     route = records['review_route'][assignment['route_id']]
-    if packet is None:
-        packet = _read_json(artifacts, assignment['packet'])
-    recorded = [_read_json(artifacts, attempt['request']) for attempt in records.get('review_attempt', {}).values()
-                if attempt['assignment_id'] == assignment['id'] and attempt['status'] == 'completed' and attempt.get('request')]
-    built = transport.list_built_requests(route, assignment['prompt']['text'], packet, assignment.get('history', ()))
-    current = next(built)
-    if not recorded or current in recorded:
-        return current
-    return next((request for request in built if request in recorded), current)
+
+    def build_request():
+        def index_attempts_by_assignment():
+            attempts_by_assignment = {}
+            for attempt in records.get('review_attempt', {}).values():
+                attempts_by_assignment.setdefault(attempt['assignment_id'], []).append(attempt)
+            return attempts_by_assignment
+
+        packet = _read_json(evaluation, assignment['packet'])
+        attempts_by_assignment = evaluation.once(('attempts_by_assignment',), index_attempts_by_assignment)
+        recorded = [_read_json(evaluation, attempt['request'])
+                    for attempt in attempts_by_assignment.get(assignment['id'], ())
+                    if attempt['status'] == 'completed' and attempt.get('request')]
+        built = transport.list_built_requests(route, assignment['prompt']['text'], packet,
+                                              assignment.get('history', ()))
+        current = next(built)
+        if not recorded or current in recorded:
+            return current
+        return next((request for request in built if request in recorded), current)
+
+    if route['adapter'] == 'codex_cli_visual_v1':
+        return build_request()
+    return copy.deepcopy(evaluation.once(('assignment_request', assignment['id']),
+                                         lambda: copy.deepcopy(build_request())))
 
 
 def source_delivery_packet(records, artifacts, assignment):
@@ -1382,7 +1402,7 @@ def source_delivery_packet(records, artifacts, assignment):
     from .review_source_complete import MARKER as COMPLETE_MARKER, PROTOCOL as COMPLETE_PROTOCOL
     if assignment['role'] not in bar_sources.ROLES or not (packet.get('continuation') or MARKER in packet or COMPLETE_MARKER in packet):
         return packet
-    request = build_assignment_request(records, artifacts, assignment, packet)
+    request = build_assignment_request(records, artifacts, assignment)
     content = transport.logical_messages(request)[-1].get('content')
     if isinstance(content, str) and content.startswith(transport.PACKET_LABEL):
         actual = json.loads(content[len(transport.PACKET_LABEL):])
@@ -2196,8 +2216,10 @@ def _initial_slot(records, artifacts, value):
 
 
 def record_assignment(store, payload, *, expected_revision, request_id):
-    artifacts = store.build_artifact_store()
+    from .evaluation import Evaluation
+    store_artifacts = store.build_artifact_store()
     def prepare(records, value):
+        artifacts = Evaluation.of(records, store_artifacts)
         fields(value, ('id', 'route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id', 'context'))
         for key in ('id', 'route_id', 'reviewer_id', 'author_id'):
             text(value[key], key)
@@ -2469,7 +2491,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         history_parent = assignment.get('history_assignment_id')
         if history_parent is not None and not assignment_state(records, artifacts, history_parent)['ready']:
             raise ResearchError('review_source_continuation_unverified', 'The exact earlier scientific history must remain verified before dispatch')
-        request = build_assignment_request(records, artifacts, assignment, packet)
+        request = build_assignment_request(records, artifacts, assignment)
         if any(attempt.get('request_digest') != digest(request) for attempt in completed):
             raise ResearchError('review_request_changed', 'A retry must retain the exact request of every completed attempt')
         invocation = dict(value, request=_put_json(artifacts, request), route_id=assignment['route_id'],
