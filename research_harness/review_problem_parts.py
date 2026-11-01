@@ -493,7 +493,7 @@ def _preserves_prospective_packet(records, artifacts, route, packet, request, hi
     return preserves_ordinary_packet(artifacts, packet, request)
 
 
-def prepare_packet(records, artifacts, value, route, packet, prompt, history):
+def prepare_packet(records, artifacts, value, route, packet, prompt, history, *, staged_entry=None):
     """Keep ordinary requests complete, enter v2 for new work, or continue the recorded v1 series."""
     from .review_protocol import canonical_prompt, collect_references
     prior_id = value['context'].get('prior_assignment_id')
@@ -511,7 +511,16 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history):
         candidate.pop('digest', None)
         candidate['staged_review'] = {'protocol': STAGED_PROTOCOL, 'kind': 'controller'}
         candidate['digest'] = digest(candidate)
-        return candidate
+        from .review_staged_protocol import prepare_controller_entry
+        try:
+            prepared = prepare_controller_entry(records, artifacts, value, candidate, route)
+        except ResearchError as error:
+            if error.code != 'review_staged_scale_unsupported':
+                raise
+        else:
+            if staged_entry is not None:
+                staged_entry.update(prepared)
+            return prepared['packet']
     if (value['role'] != 'result' or packet.get('subject', {}).get('kind') != 'problem'
             or 'context_repair' in packet or value['context'].get('source_delivery')
             or transport.local_input_limit(route) is None or 'problem_evidence' not in packet

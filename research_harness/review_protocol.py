@@ -2319,9 +2319,12 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             return prepare_child(records, artifacts, value, expected_revision + 1)
         upgrade = value['context'].get('staged_upgrade')
         upgrade_parent = None
+        controller_artifacts = None
         if upgrade is not None:
-            from .review_staged_protocol import prepare_upgrade
+            from .review_staged_protocol import ControllerArtifacts, prepare_upgrade
             value, upgrade_parent = prepare_upgrade(records, value, route, problem)
+            controller_artifacts = ControllerArtifacts(artifacts)
+            artifacts = Evaluation.of(records, controller_artifacts)
         refresh_parent = _find_problem_refresh_parent(records, artifacts, value) if problem and upgrade is None else None
         if refresh_parent is not None:
             value = dict(value, context={'prior_assignment_id': refresh_parent})
@@ -2488,6 +2491,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                      'author_id': value['author_id'], 'slot_id': slot_identifier, 'subject': value['subject'], 'role': value['role']})
             packet.pop('digest', None)
             packet['digest'] = digest(packet)
+        staged_entry = {}
         if upgrade is not None or staged_repair:
             from .review_staged import PROTOCOL as STAGED_PROTOCOL
             packet.pop('digest', None)
@@ -2496,7 +2500,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             if upgrade is not None:
                 value = dict(value, context=dict(value['context'], staged_upgrade=upgrade))
         else:
-            packet = review_problem_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history)
+            packet = review_problem_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history,
+                                                        staged_entry=staged_entry)
         if review_problem_parts.find_stage(packet) is not None:
             prompt = canonical_prompt(value['role'], orchestration='problem_creation', excerpts=True,
                                       evidence_parts=review_problem_parts.find_stage(packet))
@@ -2504,7 +2509,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
                 packet.pop('digest')
                 packet['digest'] = digest(packet)
-        record = dict(value, packet=_put_json(artifacts, packet), packet_digest=packet['digest'],
+        controller = packet.get('staged_review', {}).get('kind') == 'controller'
+        record = dict(value, packet=None if controller else _put_json(artifacts, packet), packet_digest=packet['digest'],
                       prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'], route_digest=digest(route),
                       context_state=route_state(records, artifacts, value['route_id']), assignment_policy=POLICY,
                       history=history, session_id=session_id, history_assignment_id=history_assignment_id,
@@ -2513,9 +2519,12 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if slot_identifier is not None:
             record['slot_id'] = slot_identifier
         changes = []
-        if packet.get('staged_review', {}).get('kind') == 'controller':
+        if controller:
             from .review_staged_protocol import prepare_controller, describe_planning_command
-            changes = prepare_controller(records, artifacts, record, packet, route)
+            changes = prepare_controller(records, artifacts, record, packet, route,
+                                         prepared_entry=staged_entry or None)
+            if controller_artifacts is not None:
+                controller_artifacts.publish()
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
         return changes + [immutable_record(records, 'review_assignment', value['id'], record)], record

@@ -7,6 +7,7 @@ this module never dispatches an ordinary assignment.
 
 import copy
 
+from .artifacts import _StagedArtifacts
 from . import review_protocol as protocol
 from . import review_transport as transport
 from . import review_excerpts, review_problem_parts
@@ -675,11 +676,12 @@ def check_scale(records, artifacts, route, manifest, role):
     return details
 
 
-def build_epoch(records, record, packet, manifest, *, route, artifacts):
+def build_epoch(records, record, packet, manifest, *, route, artifacts, scale_checked=False):
     """Freeze the slot identity, predecessor and scientific decision boundary."""
     from . import review_staged as staged
     from .review_composition import PROTOCOL as COMPOSITION_PROTOCOL, list_scalar_fields
-    check_scale(records, artifacts, route, manifest, record['role'])
+    if not scale_checked:
+        check_scale(records, artifacts, route, manifest, record['role'])
     predecessor_id = _find_predecessor_assignment_id(record)
     predecessor = None
     if predecessor_id:
@@ -802,20 +804,36 @@ def prepare_frame_tasks(records, artifacts, controller, epoch, route):
     return tasks
 
 
-def prepare_controller(records, artifacts, record, packet, route):
-    """Install a frozen epoch and pending slot before any child can run."""
+class ControllerArtifacts(_StagedArtifacts):
+    """Retain upgrade preparation bytes until its scale preflight succeeds."""
+
+    def __init__(self, artifacts):
+        super().__init__(artifacts.root)
+        self._store = artifacts
+        self._references = {}
+
+    def put(self, data, media_type):
+        reference = super().put(data, media_type)
+        self._references[reference['path']] = reference
+        return reference
+
+    def read(self, reference):
+        if reference.get('path') in self._staged:
+            return super().read(reference)
+        return self._store.read(reference)
+
+    def require_external_effect(self):
+        self._store.require_external_effect()
+
+    def publish(self):
+        for path, reference in self._references.items():
+            self._store.put(self._staged[path], reference['media_type'])
+
+
+def prepare_controller_entry(records, artifacts, record, packet, route):
+    """Prepare and preflight the exact controller manifest without writing it."""
     from . import review_staged as staged
-    import time
-    original_record = record
-    record = copy.deepcopy(record)
-    record['staged_started_at'] = time.time()
     predecessor_id = _find_predecessor_assignment_id(record)
-    if packet.get('context_repair') is not None:
-        record['slot_id'] = packet['context_repair']['slot_id']
-        if record['role'] == 'adjudicator':
-            predecessor = protocol._get(records, 'review_assignment', predecessor_id)
-            record['context'] = dict(predecessor['context'], context_repair=record['context']['context_repair'])
-            record['context'].pop('staged_upgrade', None)
     if record.get('context', {}).get('staged_upgrade') is not None:
         from .review_context_repair import collect_problem_review_history
         historical = collect_problem_review_history(records, record)
@@ -842,7 +860,28 @@ def prepare_controller(records, artifacts, record, packet, route):
     if inherited:
         manifest = staged._seal(dict({key:value for key,value in manifest.items() if key != 'digest'},
                                      inherited_findings=manifest['inherited_findings'] + inherited))
-    epoch = build_epoch(records, record, packet, manifest, route=route, artifacts=artifacts)
+    check_scale(records, artifacts, route, manifest, record['role'])
+    return dict(packet=packet, manifest=manifest)
+
+
+def prepare_controller(records, artifacts, record, packet, route, *, prepared_entry=None):
+    """Install an epoch, reusing only an entry preflighted in this preparation."""
+    from . import review_staged as staged
+    import time
+    original_record = record
+    record = copy.deepcopy(record)
+    record['staged_started_at'] = time.time()
+    predecessor_id = _find_predecessor_assignment_id(record)
+    if packet.get('context_repair') is not None:
+        record['slot_id'] = packet['context_repair']['slot_id']
+        if record['role'] == 'adjudicator':
+            predecessor = protocol._get(records, 'review_assignment', predecessor_id)
+            record['context'] = dict(predecessor['context'], context_repair=record['context']['context_repair'])
+            record['context'].pop('staged_upgrade', None)
+    if prepared_entry is None:
+        prepared_entry = prepare_controller_entry(records, artifacts, record, packet, route)
+    packet, manifest = prepared_entry['packet'], prepared_entry['manifest']
+    epoch = build_epoch(records, record, packet, manifest, route=route, artifacts=artifacts, scale_checked=True)
     record.update(packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'])
     frame_failure = None
     try:
