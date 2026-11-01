@@ -41,6 +41,13 @@ class ResultPartsCase(unittest.TestCase):
             invoke_codex(case, assignment['id'], output)
             case.mutate(decisions.record_value_review, dict(output, id='review-' + assignment['id'],
                         dossier_id=None, assignment_id=assignment['id']))
+        if not getattr(self, 'staged_entry', False):
+            # These fixtures reconstruct assignments recorded by 0.69.x. New
+            # prospective oversized assignments use the separate v2 fixtures.
+            from research_harness import review_problem_parts
+            legacy = patch.object(review_problem_parts, 'allows_staged_entry', return_value=False)
+            legacy.start()
+            self.addCleanup(legacy.stop)
 
     def oversized(self, count=6, characters=24000, limit=110000):
         case = self.case
