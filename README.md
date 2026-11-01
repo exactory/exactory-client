@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.70.0](docs/releases/0.70.0.md) performs a problem result review or adjudication that does not fit one input as staged tasks with fresh inputs, and records an assessment that cannot be completed as an occupied slot.
+
 Version [0.69.20](docs/releases/0.69.20.md) lets a refreshed problem result slot continue when its replayed history no longer fits: after the part planner refuses, the outputs of closed earlier series become short placeholders and the turn is planned again.
 
 Version [0.69.19](docs/releases/0.69.19.md) lets a problem result review in a restarted part series cite records that earlier part series of the same review slot actually delivered.
