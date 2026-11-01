@@ -138,6 +138,44 @@ class ScopedStoreTests(unittest.TestCase):
             self.store.mutate_scoped("interrupt", {}, apply, request_id="interrupt", _preparation=proof)
         self.assertEqual(self.store.snapshot(), before)
 
+    def test_ordinary_and_scoped_commits_keep_identical_event_and_receipt_bytes(self):
+        ordinary = Store(self.root.parent / 'ordinary', create=True)
+        scoped = Store(self.root.parent / 'scoped', create=True)
+        retained = []
+        def apply(tx):
+            retained.append(tx)
+            tx.put('item', 'a', {'text': 'αβ', 'number': 1})
+            tx.put('item', 'a', {'text': '🙂', 'number': 2})
+            return {'values': ('exact', 1), 'unicode': 'β'}
+        first = ordinary.mutate('same', {'payload': '🙂'}, apply, request_id='same', expected_revision=0)
+        proof = scoped._read_scoped_preparation().release_proof()
+        second = scoped.mutate_scoped('same', {'payload': '🙂'}, lambda tx, revision: apply(tx),
+                                      request_id='same', _preparation=proof)
+        self.assertEqual(first, second)
+        self.assertEqual(first, {'revision': 1, 'request_id': 'same',
+                                 'result': {'values': ['exact', 1], 'unicode': 'β'}})
+        for tx in retained:
+            self.refuse('transaction_closed', lambda: tx.put('item', 'b', {}))
+        with sqlite3.connect(str(ordinary._path)) as left, sqlite3.connect(str(scoped._path)) as right:
+            for table in ('events', 'receipts', 'records', 'metadata'):
+                self.assertEqual(left.execute('SELECT * FROM ' + table).fetchall(),
+                                 right.execute('SELECT * FROM ' + table).fetchall())
+
+    def test_scoped_commit_rolls_back_each_journal_stage(self):
+        from tests.test_research_store_preparation import _InterruptConnection
+        original = self.store._open
+        for stage in ('event', 'receipt', 'commit'):
+            before = self.store.snapshot()
+            proof = self.store._read_scoped_preparation().release_proof()
+            def interrupt(path, *, writable):
+                connection = original(path, writable=writable)
+                return _InterruptConnection(connection, stage) if writable else connection
+            with self.subTest(stage=stage), mock.patch.object(self.store, '_open', side_effect=interrupt):
+                with self.assertRaises(KeyboardInterrupt):
+                    self.store.mutate_scoped('interrupt', {}, lambda tx, revision: tx.put('accepted', 'a', {}),
+                                              request_id='interrupt', _preparation=proof)
+            self.assertEqual(self.store.snapshot(), before)
+
     def test_ordinary_prepared_mutation_still_uses_global_cas(self):
         def prepare(records, payload):
             self.put("task", "b", {"generation": 3})

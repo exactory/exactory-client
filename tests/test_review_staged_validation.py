@@ -11,6 +11,36 @@ from tests.test_review_staged_fixtures import epoch, profile, full_card, selecti
 
 
 class ContractValidationTests(unittest.TestCase):
+    def test_frozen_source_identities_are_validated_before_completion_coverage(self):
+        for corruption in ('missing_id', 'conflicting_id'):
+            value = epoch()
+            source = value['manifest']['sources'][0]
+            if corruption == 'missing_id':
+                del source['id']
+            else:
+                value['manifest']['sources'].append(dict(source, text='Conflicting source bytes.'))
+            for record in (value['manifest'], value):
+                record['digest'] = digest({key: item for key, item in record.items() if key != 'digest'})
+            with self.subTest(corruption=corruption):
+                with self.assertRaises(ResearchError) as raised:
+                    staged.verify_completion(value, {'observations': []})
+                self.assertEqual(raised.exception.code, 'invalid_review_staged')
+
+    def test_source_identity_requires_canonical_json_object_keys(self):
+        with self.assertRaises(ResearchError) as raised:
+            staged.make_source('source', 'record', 'text', identity={1: 'invalid key'})
+        self.assertEqual(raised.exception.code, 'invalid_review_staged')
+
+    def test_shared_validation_keeps_staged_error_codes(self):
+        for value in (None, {}, {'source_id': 's', 'start': 0, 'end': 1, 'sha256': 'x', 'extra': True}):
+            with self.subTest(value=value), self.assertRaises(ResearchError) as raised:
+                staged.materialize_quotation(staged.make_source('s', 'record', 'x', identity={'id': 's'}), value)
+            self.assertEqual(raised.exception.code, 'invalid_review_staged')
+        for source_id in ('', '   ', None):
+            with self.subTest(source_id=source_id), self.assertRaises(ResearchError) as raised:
+                staged.make_source(source_id, 'record', 'x', identity={'id': 's'})
+            self.assertEqual(raised.exception.code, 'invalid_review_staged')
+
     def test_unmeasured_reconciliation_is_not_executable(self):
         value = epoch()
         draft = staged.make_task(value, 'integrate', scope='segmented_card')

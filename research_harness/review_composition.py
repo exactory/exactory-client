@@ -5,12 +5,13 @@ checks. Composition never calls assignment_state or reads author files.
 """
 
 import copy
-import math
 import re
 
 from .errors import ResearchError
 from .evidence import digest
-from .problem_rubric import ADMISSION_ITEMS, GROUNDS, ITEMS
+from .operations import fields as check_fields
+from .problem_rubric import ADMISSION_ITEMS, GROUNDS, ITEMS, PROBLEM_CHECKS as ASSURANCES
+from .storage import _canonical
 
 
 # Frozen plan fields appear in PLAN_KEYS below. Findings are stable IDs and
@@ -47,7 +48,6 @@ PROTOCOL = 'exactory-review-composition-v1'
 SCHEMA = 'exactory-problem-review-composition-v1'
 TREE_FANOUT = 16
 MAX_TREE_DEPTH = 8
-ASSURANCES = ('problem_statement', 'problem_openness', 'problem_value', 'problem_citations', 'stop')
 OWNERSHIP_KEYS = ('page_id', 'path', 'type', 'member_key', 'ordinal', 'range')
 PLAN_KEYS = ('protocol', 'schema', 'epoch_id', 'role', 'slot_id', 'subject', 'evidence_currency',
              'source_root', 'dependency_root', 'selected_observations_root', 'integration_root',
@@ -63,12 +63,8 @@ def _reject(message, *, pending=False, **details):
                         message, details or None)
 
 
-def _fields(value, names, label):
-    if not isinstance(value, dict) or set(value) != set(names):
-        _reject('Use exactly the declared fields.', location=label, fields=list(names))
-
-
-def _text(value, label):
+def _check_literal_text(value, label):
+    # Composition identifiers require a nonempty literal, including whitespace.
     if not isinstance(value, str) or not value:
         _reject('Use a nonempty string.', location=label)
 
@@ -90,15 +86,12 @@ def _json_digest(value):
         if depth > 64:
             _reject('JSON nesting exceeds the composition bound.')
         if isinstance(item, dict):
-            if any(not isinstance(key, str) for key in item):
-                _reject('JSON object keys must be strings.')
             stack.extend((child, depth + 1) for child in item.values())
         elif isinstance(item, list):
             stack.extend((child, depth + 1) for child in item)
-        elif item is not None and type(item) not in (str, int, bool, float):
-            _reject('Use JSON values in composition records.')
-        elif type(item) is float and not math.isfinite(item):
-            _reject('JSON numbers must be finite.')
+        elif isinstance(item, tuple):
+            _reject('Use JSON arrays in composition records.')
+    _canonical(value, code='review_composition_conflict')
     return digest(value)
 
 
@@ -112,10 +105,10 @@ def _array(value, label):
     return value
 
 
-def _ids(value, label):
+def _check_ids(value, label):
     rows = _array(value, label)
     for row in rows:
-        _text(row, label)
+        _check_literal_text(row, label)
     if len(set(rows)) != len(rows):
         _reject('Stable identities must be unique.', location=label)
     return rows
@@ -165,7 +158,7 @@ def _scalar_fields(role):
 
 
 def _check_ownership(owner, plan):
-    _fields(owner, OWNERSHIP_KEYS, 'ownership')
+    check_fields(owner, OWNERSHIP_KEYS, code='review_composition_conflict', path='ownership')
     if owner['page_id'] not in plan['required_pages']:
         _reject('Ownership must name a required page.', page_id=owner['page_id'])
     required, optional = _page_fields(plan['role'])
@@ -183,7 +176,7 @@ def _check_ownership(owner, plan):
     if value_type != expected:
         _reject('Fragment type must match the scientific field.', path=owner['path'])
     if list_field:
-        _text(owner['member_key'], 'member_key')
+        _check_literal_text(owner['member_key'], 'member_key')
         if not _integer(owner['ordinal']):
             _reject('List members require frozen nonnegative ordinals.', path=owner['path'])
     elif owner['member_key'] is not None or owner['ordinal'] is not None:
@@ -244,27 +237,27 @@ def _check_partition(owners, plan):
 
 
 def _validate_plan(plan):
-    _fields(plan, PLAN_KEYS, 'plan')
+    check_fields(plan, PLAN_KEYS, code='review_composition_conflict', path='plan')
     _json_digest(plan)
     if plan['protocol'] != PROTOCOL or plan['schema'] != SCHEMA:
         _reject('Use the supported composition protocol and schema.')
     _page_fields(plan['role'])
     for key in ('epoch_id', 'slot_id'):
-        _text(plan[key], key)
+        _check_literal_text(plan[key], key)
     if not isinstance(plan['subject'], dict) or not plan['subject']:
         _reject('Bind the exact scientific subject.')
     for key in ('evidence_currency', 'source_root', 'dependency_root',
                 'selected_observations_root', 'integration_root'):
         _hash(plan[key], key)
-    _ids(plan['findings'], 'findings')
+    _check_ids(plan['findings'], 'findings')
     _array(plan['evidence_obligations'], 'evidence_obligations')
-    if not _ids(plan['required_pages'], 'required_pages'):
+    if not _check_ids(plan['required_pages'], 'required_pages'):
         _reject('A paged composition needs required pages.', pending=True)
     _check_partition(plan['ownership'], plan)
     if set(entry['page_id'] for entry in plan['ownership']) != set(plan['required_pages']):
         _reject('Every required page must own scientific fields.')
     scalar_fields = _scalar_fields(plan['role'])
-    _fields(plan['terminal_choices'], scalar_fields, 'terminal_choices')
+    check_fields(plan['terminal_choices'], scalar_fields, code='review_composition_conflict', path='terminal_choices')
     for path, choices in plan['terminal_choices'].items():
         if not _array(choices, path):
             _reject('Each terminal scalar needs an integrated permissible choice.', pending=True, path=path)
@@ -272,20 +265,20 @@ def _validate_plan(plan):
         if permitted is None:
             if len(choices) != 1:
                 _reject('A focused composition binds one exact objection ID.')
-            _text(choices[0], path)
+            _check_literal_text(choices[0], path)
         elif any(_json_digest(choice) not in {digest(value) for value in permitted} for choice in choices):
             _reject('Terminal choice is outside the scientific schema.', path=path)
     for authorization in _array(plan['revision_authorizations'], 'revision_authorizations'):
-        _fields(authorization, REPLACEMENT_KEYS + ('replacement_raw_output_digest',), 'revision_authorization')
+        check_fields(authorization, REPLACEMENT_KEYS + ('replacement_raw_output_digest',), code='review_composition_conflict', path='revision_authorization')
         _check_replacement(authorization, authorization=True)
     return plan
 
 
 def _check_replacement(value, *, authorization=False):
     if not authorization:
-        _fields(value, REPLACEMENT_KEYS, 'replaces')
+        check_fields(value, REPLACEMENT_KEYS, code='review_composition_conflict', path='replaces')
     for key in ('page_id', 'attempt_id'):
-        _text(value[key], key)
+        _check_literal_text(value[key], key)
     if not _integer(value['revision']):
         _reject('The predecessor revision must be a nonnegative integer.')
     if value['cause'] not in ('observed_reconciliation', 'metadata_correction'):
@@ -309,12 +302,12 @@ def validate_page(page, plan):
 
 
 def _validate_page(page, plan, expected_ownership=None):
-    _fields(page, PAGE_KEYS, 'page')
+    check_fields(page, PAGE_KEYS, code='review_composition_conflict', path='page')
     _json_digest(page)
     for key in ('protocol', 'epoch_id', 'role', 'source_root', 'dependency_root'):
         if page[key] != plan[key]:
             _reject('Page scope differs from its frozen plan.', field=key, page_id=page['page_id'])
-    _text(page['task_id'], 'task_id')
+    _check_literal_text(page['task_id'], 'task_id')
     if page['page_id'] not in plan['required_pages'] or not _integer(page['revision']):
         _reject('Bind a required page and an exact nonnegative revision.')
     expected = ([entry for entry in plan['ownership'] if entry['page_id'] == page['page_id']]
@@ -333,7 +326,7 @@ def _validate_page(page, plan, expected_ownership=None):
     fragments = _array(page['fragments'], 'fragments')
     actual_owners = []
     for fragment in fragments:
-        _fields(fragment, OWNERSHIP_KEYS + ('content', 'grounds'), 'fragment')
+        check_fields(fragment, OWNERSHIP_KEYS + ('content', 'grounds'), code='review_composition_conflict', path='fragment')
         owner = {key: fragment[key] for key in OWNERSHIP_KEYS}
         _check_ownership(owner, plan)
         actual_owners.append(owner)
@@ -352,17 +345,17 @@ def _validate_page(page, plan, expected_ownership=None):
         _check_grounds(fragment['grounds'], grounding, 'fragment.grounds')
     if sorted(map(_json_digest, actual_owners)) != sorted(map(_json_digest, expected)):
         _reject('Every owned fragment must be returned exactly once.', pending=True, page_id=page['page_id'])
-    findings = _ids(page['findings'], 'page.findings')
+    findings = _check_ids(page['findings'], 'page.findings')
     if any(identifier not in plan['findings'] for identifier in findings):
         _reject('Every observed finding must enter the frozen finding inventory.')
     dispositions = _array(page['dispositions'], 'dispositions')
     disposition_ids = []
     for entry in dispositions:
-        _fields(entry, ('finding_id', 'status', 'reason', 'grounds'), 'disposition')
-        _text(entry['finding_id'], 'disposition.finding_id')
+        check_fields(entry, ('finding_id', 'status', 'reason', 'grounds'), code='review_composition_conflict', path='disposition')
+        _check_literal_text(entry['finding_id'], 'disposition.finding_id')
         if entry['status'] not in ('retained', 'answered', 'unresolved', 'revised', 'conflict'):
             _reject('Use an explicit finding disposition.')
-        _text(entry['reason'], 'disposition.reason')
+        _check_literal_text(entry['reason'], 'disposition.reason')
         _check_grounds(entry['grounds'], grounding, 'disposition.grounds')
         disposition_ids.append(entry['finding_id'])
     if sorted(disposition_ids) != sorted(findings):
@@ -377,8 +370,8 @@ def _validate_page(page, plan, expected_ownership=None):
 
 
 def _read_observation(observation):
-    _fields(observation, ('attempt_id', 'raw_output_digest', 'output'), 'observation')
-    _text(observation['attempt_id'], 'attempt_id')
+    check_fields(observation, ('attempt_id', 'raw_output_digest', 'output'), code='review_composition_conflict', path='observation')
+    _check_literal_text(observation['attempt_id'], 'attempt_id')
     _hash(observation['raw_output_digest'], 'raw_output_digest')
     if _json_digest(observation['output']) != observation['raw_output_digest']:
         _reject('Observation output differs from its exact raw digest.', attempt_id=observation['attempt_id'])
@@ -416,7 +409,7 @@ def _select_pages(plan, observations):
         ownership_by_page[owner['page_id']].append(owner)
     for observation in _array(observations, 'observations'):
         page = _read_observation(observation)
-        _fields(page, PAGE_KEYS, 'page')
+        check_fields(page, PAGE_KEYS, code='review_composition_conflict', path='page')
         # Historical accepted revisions retain their original ranges. The current
         # ownership plan applies to the selected head after exact-chain checks.
         _validate_page(page, plan, expected_ownership=page['ownership'])
@@ -516,7 +509,7 @@ def build_root(plan, observations):
 
 
 def _validate_root(root):
-    _fields(root, ('version', 'header', 'page_tree', 'nodes', 'digest'), 'root')
+    check_fields(root, ('version', 'header', 'page_tree', 'nodes', 'digest'), code='review_composition_conflict', path='root')
     _json_digest(root)
     if root['version'] != PROTOCOL or not isinstance(root['header'], dict) or not isinstance(root['nodes'], dict):
         _reject('Use the versioned composition root and node table.')
@@ -536,10 +529,10 @@ def _validate_root(root):
         if not isinstance(node, dict):
             _reject('A referenced page-tree node is missing.')
         if node.get('kind') == 'leaf':
-            _fields(node, ('kind', 'pages'), 'leaf')
+            check_fields(node, ('kind', 'pages'), code='review_composition_conflict', path='leaf')
             rows = _array(node['pages'], 'leaf.pages')
         elif node.get('kind') == 'branch':
-            _fields(node, ('kind', 'children'), 'branch')
+            check_fields(node, ('kind', 'children'), code='review_composition_conflict', path='branch')
             rows = _array(node['children'], 'branch.children')
             stack.extend((child, depth + 1) for child in rows)
         else:
@@ -556,13 +549,13 @@ def validate_terminal_choices(plan, terminal, root):
     _validate_root(root)
     if root['header'].get('plan_digest') != _domain('plan', plan):
         _reject('The terminal root must bind this exact frozen plan.')
-    _fields(terminal, ('protocol', 'epoch_id', 'role', 'composition_root', 'choices'), 'terminal')
+    check_fields(terminal, ('protocol', 'epoch_id', 'role', 'composition_root', 'choices'), code='review_composition_conflict', path='terminal')
     for key in ('protocol', 'epoch_id', 'role'):
         if terminal[key] != plan[key]:
             _reject('Terminal scope differs from its composition.', field=key)
     if terminal['composition_root'] != root['digest']:
         _reject('Terminal must authorize the exact complete composition root.')
-    _fields(terminal['choices'], plan['terminal_choices'], 'terminal.choices')
+    check_fields(terminal['choices'], plan['terminal_choices'], code='review_composition_conflict', path='terminal.choices')
     for path, value in terminal['choices'].items():
         if _json_digest(value) not in {_json_digest(item) for item in plan['terminal_choices'][path]}:
             _reject('Terminal choice conflicts with integrated scientific constraints.', path=path)
@@ -620,7 +613,7 @@ def assemble_result(plan, observations, root, terminal):
 
 def effective_review_output(controller_id, frozen_selection=None):
     """Return an isolated scientific result from an explicit nonrecursive selection."""
-    _text(controller_id, 'controller_id')
+    _check_literal_text(controller_id, 'controller_id')
     if frozen_selection is None:
         frozen_selection = {'controller_id': controller_id, 'kind': 'pending'}
     if not isinstance(frozen_selection, dict) or frozen_selection.get('controller_id') != controller_id:
@@ -648,7 +641,7 @@ def effective_review_output(controller_id, frozen_selection=None):
         output = selection['output']
         if _json_digest(output) != selection.get('output_digest'):
             _reject('Ordinary output must preserve its existing effective digest.')
-        _text(result['terminal_attempt_id'], 'terminal_attempt_id')
+        _check_literal_text(result['terminal_attempt_id'], 'terminal_attempt_id')
         _hash(result['terminal_raw_output_digest'], 'terminal_raw_output_digest')
     else:
         missing = [key for key in ('plan', 'observations', 'root', 'terminal', 'completion_root') if key not in selection]

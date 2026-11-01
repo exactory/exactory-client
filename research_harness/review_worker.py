@@ -7,14 +7,11 @@ lock until it exits. Disposable files never authenticate a reviewer response.
 """
 
 from contextlib import contextmanager, ExitStack
-import ctypes
-import errno
 import fcntl
 import json
 import os
 from pathlib import Path
 import stat
-import struct
 import subprocess
 from subprocess import Popen as _SYSTEM_POPEN
 import sys
@@ -27,6 +24,7 @@ if __package__ in (None, ""):
         main()
     sys.exit(0)
 
+from . import probe_supervision
 from .errors import ResearchError
 from .evidence import digest
 from .finishing import retry_store_write
@@ -63,90 +61,38 @@ def _owner(root, reservation_id, *, worker=False):
         os.close(descriptor)
 
 
-def _darwin_library():
-    library = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
-    library.proc_pidinfo.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_int]
-    library.proc_listpids.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
-    return library
-
-
-def _darwin_process(pid):
-    # proc_bsdinfo, from the system SDK's sys/proc_info.h. Its start timestamp
-    # includes microseconds, unlike ps's second-resolution lstart field.
-    buffer = ctypes.create_string_buffer(136)
-    size = _darwin_library().proc_pidinfo(pid, 3, 0, buffer, len(buffer))
-    if size != len(buffer):
-        if size == 0 and ctypes.get_errno() in (errno.ESRCH, errno.ENOENT):
-            return None
-        raise ResearchError("review_worker_reconciliation_required", "Native process identity is unavailable")
-    values = struct.unpack("=12I16s32s6I2Q", buffer.raw)
-    if values[1] == 5:  # SZOMB: terminated, awaiting reaping.
+def _project_process_identity(identity):
+    if identity is None:
         return None
-    return {"pid": values[3], "parent_pid": values[4], "pgid": values[15],
-            "started": str(values[20]) + ":" + str(values[21])}
-
-
-def _darwin_group(group):
-    library = _darwin_library()
-    # Query only relevant groups, retaining margin for concurrent group growth.
-    for attempt in range(4):
-        ctypes.set_errno(0)
-        size = library.proc_listpids(2, group, None, 0)
-        if size < 0 or size == 0 and ctypes.get_errno():
-            break
-        buffer = (ctypes.c_int * (size // ctypes.sizeof(ctypes.c_int) + 64 * (attempt + 1)))()
-        ctypes.set_errno(0)
-        used = library.proc_listpids(2, group, buffer, ctypes.sizeof(buffer))
-        if 0 <= used < ctypes.sizeof(buffer) and not (used == 0 and ctypes.get_errno()):
-            return [pid for pid in buffer[:used // ctypes.sizeof(ctypes.c_int)] if pid > 0]
-    raise ResearchError("review_worker_reconciliation_required", "Native process group check is unavailable")
+    return {"pid": identity["pid"], "pgid": identity["process_group"],
+            "started": ":".join(str(value) for value in identity["start_identity"])}
 
 
 def _process_table(identities=()):
-    """Read OS process identities; zombies have terminated and cannot execute."""
-    if sys.platform == "darwin":
-        pids = {identity["pid"] for identity in identities}
-        for identity in identities:
-            pids.update(_darwin_group(identity["pgid"]))
-        result = {}
-        for pid in pids:
-            process = _darwin_process(pid)
-            if process is not None:
-                result[pid] = process
-        return result
-    try:
-        process = _SYSTEM_POPEN(["/bin/ps", "-axo", "pid=,ppid=,pgid=,lstart=,stat="],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, env={"LC_ALL": "C", "PATH": "/usr/bin:/bin"})
-        stdout, _ = process.communicate(timeout=2)
-        if process.returncode:
-            raise ResearchError("review_worker_reconciliation_required", "Process identities could not be checked")
-    except subprocess.TimeoutExpired as error:
-        process.kill()
-        process.wait(timeout=2)
-        raise ResearchError("review_worker_reconciliation_required", "Process identity check timed out") from error
-    except OSError as error:
-        raise ResearchError("review_worker_reconciliation_required", "Process identity check is unavailable") from error
+    """Read live identities for the owned leaders and their relevant groups."""
     result = {}
-    for line in stdout.decode("utf-8", "strict").splitlines():
-        parts = line.split()
-        if len(parts) != 9:
-            raise ResearchError("review_worker_reconciliation_required", "Process identity output was incomplete")
-        if parts[8].startswith("Z"):
-            continue
-        try:
-            pid, parent, group = (int(item) for item in parts[:3])
-        except ValueError as error:
-            raise ResearchError("review_worker_reconciliation_required", "Process identity output was malformed") from error
-        result[pid] = {"pid": pid, "parent_pid": parent, "pgid": group, "started": " ".join(parts[3:8])}
+    try:
+        for identity in identities:
+            current = probe_supervision.find_process_identity(identity["pid"])
+            if current is not None:
+                result[current["pid"]] = _project_process_identity(current)
+        for group in {identity["pgid"] for identity in identities}:
+            for current in probe_supervision.find_process_group_members(group):
+                result[current["pid"]] = _project_process_identity(current)
+    except OSError as error:
+        raise ResearchError("review_worker_reconciliation_required", "Process identities could not be checked") from error
     return result
 
 
 def _identity(pid=None):
     pid = os.getpid() if pid is None else pid
-    result = _darwin_process(pid) if sys.platform == "darwin" else _process_table().get(pid)
+    try:
+        result = _project_process_identity(probe_supervision.find_process_identity(pid))
+    except OSError as error:
+        raise ResearchError("review_worker_reconciliation_required", "Process identity check is unavailable") from error
     if result is None:
         raise ResearchError("review_worker_reconciliation_required", "The expected process identity is no longer live")
-    return {key: result[key] for key in ("pid", "pgid", "started")}
+    return result
 
 
 def _same_process(current, identity):

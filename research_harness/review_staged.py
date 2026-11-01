@@ -23,11 +23,13 @@ bound certificate by its separate versioned verifier.
 import copy
 import hashlib
 import itertools
-import json
-import math
 
 from .errors import ResearchError
 from .evidence import digest
+from .operations import fields as check_fields, text as check_text, strings as check_ids, is_finite_number
+from .problem_rubric import PROBLEM_CHECKS as ASSURANCES
+from .review_objection_evidence import resolve_objection_entry, resolved_objection_entries
+from .storage import _canonical
 
 PROTOCOL = 'exactory-review-staged-v2'
 MANIFEST_SCHEMA = 'exactory-review-manifest-v1'
@@ -35,7 +37,6 @@ TASK_SCHEMA = 'exactory-review-task-v1'
 COMPLETION_SCHEMA = 'exactory-review-completion-v1'
 INCOMPLETE_SCHEMA = 'exactory-assessment-incomplete-v1'
 SERIALIZATION = 'canonical-json-utf8-v1'
-ASSURANCES = ('problem_statement', 'problem_openness', 'problem_value', 'problem_citations', 'stop')
 TASK_TYPES = ('frame', 'read', 'combine', 'original_check', 'integrate', 'answer', 'final')
 SCOPES = ('joint_original', 'segmented_original', 'joint_card', 'segmented_card',
           'original_segment', 'card_segment', 'unresolved')
@@ -46,24 +47,8 @@ def _fail(message, code='invalid_review_staged', **details):
     raise ResearchError(code, message, details or None)
 
 
-def _require(value, required, optional=()):
-    if not isinstance(value, dict) or not set(required) <= set(value):
-        _fail('Missing required record fields.', required=list(required))
-    if optional is not None and set(value) - set(required) - set(optional):
-        _fail('Unexpected record fields.', fields=sorted(set(value) - set(required) - set(optional)))
-
-
-def _text(value, name):
-    if not isinstance(value, str) or not value.strip():
-        _fail('Expected nonblank text.', field=name)
-    return value
-
-
 def _number(value, name, positive=False, integer=False):
-    try:
-        valid = type(value) in ((int,) if integer else (int, float)) and math.isfinite(value)
-    except OverflowError:
-        valid = False
+    valid = is_finite_number(value) and (not integer or type(value) is int)
     if not valid or value < 0 or positive and value == 0:
         _fail('Expected a finite nonnegative number.', field=name)
     return value
@@ -75,23 +60,6 @@ def _array(value, name):
     return value
 
 
-def _ids(value, name):
-    _array(value, name)
-    for item in value:
-        _text(item, name)
-    if len(set(value)) != len(value):
-        _fail('Duplicate identity.', field=name)
-    return value
-
-
-def _json(value):
-    try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False,
-                          separators=(',', ':'))
-    except (ValueError, TypeError) as error:
-        _fail('Expected finite JSON data.', reason=str(error))
-
-
 def _seal(value):
     result = copy.deepcopy(value)
     result['digest'] = digest(value)
@@ -99,7 +67,7 @@ def _seal(value):
 
 
 def _verify_seal(value):
-    _require(value, ('digest',), None)
+    check_fields(value, ('digest',), None, code='invalid_review_staged')
     if value['digest'] != digest({k: v for k, v in value.items() if k != 'digest'}):
         _fail('Record digest does not match its content.')
 
@@ -107,8 +75,8 @@ def _verify_seal(value):
 def _index(rows, name):
     result = {}
     for row in _array(rows, name):
-        _require(row, ('id',), None)
-        key = _text(row['id'], name)
+        check_fields(row, ('id',), None, code='invalid_review_staged')
+        key = check_text(row['id'], name, code='invalid_review_staged')
         if key in result and result[key] != row:
             _fail('Conflicting duplicate identity.', field=name, id=key)
         result[key] = row
@@ -155,12 +123,12 @@ def interval_gaps(required, delivered):
 
 def make_source(source_id, kind, text=None, *, identity, descriptor=None, required_intervals=None):
     """Create an exact text source or an opaque native binary obligation."""
-    _text(source_id, 'source_id')
+    check_text(source_id, 'source_id', code='invalid_review_staged')
     if kind not in ('item', 'record', 'passage', 'source_document', 'artifact', 'frame', 'binary'):
         _fail('Unknown source kind.')
     if not isinstance(identity, dict) or not identity:
         _fail('A source needs its original identity.')
-    _json(identity)
+    _canonical(identity, code='invalid_review_staged')
     if kind == 'binary':
         if text is not None or not isinstance(descriptor, dict) or not descriptor:
             _fail('A native binary needs its descriptor and cannot be certified as text.')
@@ -187,7 +155,7 @@ def source_span(source, start, end):
 
 def materialize_quotation(source, span, *, delivered=None, matching_text=None):
     """Materialize original characters, optionally checking normalized matching."""
-    _require(span, ('source_id', 'start', 'end', 'sha256'))
+    check_fields(span, ('source_id', 'start', 'end', 'sha256'), code='invalid_review_staged')
     if span['source_id'] != source['id'] or span != source_span(source, span['start'], span['end']):
         _fail('Quotation span does not match the exact source.')
     if delivered is not None:
@@ -249,11 +217,11 @@ def build_contexts(claims, sources):
 def build_manifest(frame, occurrences, sources, *, claims=None, assurance_dependencies=None,
                    inherited_findings=()):
     """Inventory original fields, occurrence ownership and complete source obligations."""
-    _json(frame)
+    _canonical(frame, code='invalid_review_staged')
     source_rows, source_aliases, source_identities, descriptor_sources = [], {}, {}, {}
     seen_sources = set()
     for raw in sources:
-        _require(raw, ('id', 'kind', 'identity'), ('text', 'descriptor', 'required_intervals', 'characters', 'sha256'))
+        check_fields(raw, ('id', 'kind', 'identity'), ('text', 'descriptor', 'required_intervals', 'characters', 'sha256'), code='invalid_review_staged')
         source = make_source(raw['id'], raw['kind'], raw.get('text'), identity=raw['identity'],
                              descriptor=raw.get('descriptor'), required_intervals=raw.get('required_intervals'))
         if source['id'] in seen_sources:
@@ -275,7 +243,7 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
     fields = []
     for path, value in _frame_leaves(frame):
         key = 'frame:' + digest(path)
-        source = make_source(key, 'frame', value if isinstance(value, str) else _json(value),
+        source = make_source(key, 'frame', value if isinstance(value, str) else _canonical(value, code='invalid_review_staged'),
                              identity={'path': path, 'serialization': SERIALIZATION})
         if key in source_index:
             _fail('Frame source identity collision.')
@@ -285,8 +253,8 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
                            span=source_span(source, 0, source['characters'])))
     bodies, occurrence_rows, positions = {}, [], set()
     for raw in occurrences:
-        _require(raw, ('key', 'index', 'item', 'artifacts', 'source_ids'), ('record_reference',))
-        _text(raw['key'], 'key')
+        check_fields(raw, ('key', 'index', 'item', 'artifacts', 'source_ids'), ('record_reference',), code='invalid_review_staged')
+        check_text(raw['key'], 'key', code='invalid_review_staged')
         _number(raw['index'], 'index', integer=True)
         position = (raw['key'], raw['index'])
         if position in positions:
@@ -298,12 +266,12 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
             _fail('Duplicate owned artifact descriptor.')
         identity = [raw['key'], raw['index'], digest(raw['item']), descriptors]
         key = 'occurrence:' + digest(identity)
-        item_source = make_source('item:' + key, 'item', _json(raw['item']),
+        item_source = make_source('item:' + key, 'item', _canonical(raw['item'], code='invalid_review_staged'),
                                   identity={'occurrence_id': key, 'serialization': SERIALIZATION})
         source_rows.append(item_source)
         source_index[item_source['id']] = item_source
         source_ids = [item_source['id']]
-        for source_id in _ids(raw['source_ids'], 'source_ids'):
+        for source_id in check_ids(raw['source_ids'], 'source_ids', code='invalid_review_staged'):
             canonical = source_aliases.get(source_id, source_id)
             if canonical not in source_ids:
                 source_ids.append(canonical)
@@ -314,7 +282,7 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
             candidates = [source for source in source_rows if source['descriptor'] == descriptor]
             if not candidates:
                 _fail('Owned artifact has no original source.', descriptor=descriptor)
-            signatures = {(source['kind'], source['sha256'], _json(source['required_intervals'])) for source in candidates}
+            signatures = {(source['kind'], source['sha256'], _canonical(source['required_intervals'], code='invalid_review_staged')) for source in candidates}
             if len(signatures) != 1:
                 _fail('Identical descriptors have inconsistent original scope.')
             source_id = candidates[0]['id']
@@ -335,9 +303,9 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
                   for field in fields]
     claim_rows = copy.deepcopy(claims)
     for claim in claim_rows:
-        _require(claim, ('id', 'spans', 'dependencies', 'children'), ('kind',))
-        _ids(claim['dependencies'], 'dependencies')
-        _ids(claim['children'], 'children')
+        check_fields(claim, ('id', 'spans', 'dependencies', 'children'), ('kind',), code='invalid_review_staged')
+        check_ids(claim['dependencies'], 'dependencies', code='invalid_review_staged')
+        check_ids(claim['children'], 'children', code='invalid_review_staged')
         if not claim['spans']:
             _fail('A claim must retain original spans.')
     contexts = build_contexts(claim_rows, source_rows)
@@ -373,7 +341,7 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
     for kind, extra in (assurance_dependencies or {}).items():
         if kind not in ASSURANCES:
             _fail('Unknown assurance kind.')
-        for key in _ids(extra, 'assurance_dependencies'):
+        for key in check_ids(extra, 'assurance_dependencies', code='invalid_review_staged'):
             if key not in contexts:
                 _fail('Assurance names an unknown claim.')
             if key not in dependencies[kind]:
@@ -390,51 +358,33 @@ def freeze_epoch(spec):
     required = ('id', 'controller_assignment_id', 'subject', 'evidence_currency', 'role', 'slot_id',
                 'reviewer_id', 'route_id', 'author_id', 'task_policy_version', 'composition_schema_version',
                 'calibration_profile_version', 'budgets', 'manifest', 'material_objections', 'completion_requirements')
-    _require(spec, required, ('protocol', 'predecessor', 'focused_scope'))
+    check_fields(spec, required, ('protocol', 'predecessor', 'focused_scope'), code='invalid_review_staged')
     for key in ('id', 'controller_assignment_id', 'slot_id', 'reviewer_id', 'route_id', 'author_id',
                 'task_policy_version', 'composition_schema_version', 'calibration_profile_version'):
-        _text(spec[key], key)
+        check_text(spec[key], key, code='invalid_review_staged')
     if spec['role'] not in ('result', 'adjudicator') or spec.get('protocol', PROTOCOL) != PROTOCOL:
         _fail('Unsupported epoch role or protocol.')
     if spec['role'] == 'adjudicator':
-        _require(spec.get('focused_scope'), ('review_pair_roots', 'objection_id', 'objection_version'))
+        check_fields(spec.get('focused_scope'), ('review_pair_roots', 'objection_id', 'objection_version'), code='invalid_review_staged')
         if len(spec['focused_scope']['review_pair_roots']) != 2:
             _fail('Focused scope requires two exact completed review roots.')
     _verify_seal(spec['manifest'])
-    _require(spec['budgets'], ('max_calls', 'max_retries', 'max_rereads', 'max_subdivisions',
-                               'max_epochs', 'max_elapsed_seconds'))
+    check_fields(spec['budgets'], ('max_calls', 'max_retries', 'max_rereads', 'max_subdivisions',
+                               'max_epochs', 'max_elapsed_seconds'), code='invalid_review_staged')
     for key, value in spec['budgets'].items():
         _number(value, key, positive=key in ('max_calls', 'max_elapsed_seconds'),
                 integer=key != 'max_elapsed_seconds')
-    _json(spec)
+    _canonical(spec, code='invalid_review_staged')
     entries = []
     for objection in spec['material_objections']:
-        _require(objection, ('id',), None)
+        check_fields(objection, ('id',), None, code='invalid_review_staged')
         for field in ('version_evidence', 'version_source_mappings'):
-            for index, entry in enumerate(objection.get(field, [])):
-                full = resolve_objection_entry(spec, entry)
+            for entry in objection.get(field, []):
+                check_fields(entry, (), None, code='review_objection_evidence_invalid')
+            for index, full in enumerate(resolved_objection_entries(spec, objection, field)):
                 entries.append(dict(objection_id=objection['id'], field=field, index=index,
                                     digest=digest(full), entry=copy.deepcopy(full)))
     return _seal(dict(copy.deepcopy(spec), protocol=PROTOCOL, material_objection_entries=entries))
-
-
-def resolve_objection_entry(packet, entry):
-    """Resolve a 0.69.3 alias only against a full entry in this actual packet."""
-    if not isinstance(entry, dict):
-        _fail('Objection evidence must be an object.', code='review_objection_evidence_invalid')
-    if entry.get('delivery') != 'repeated-in-material-objections':
-        return copy.deepcopy(entry)
-    try:
-        field, index = entry['field'], entry['index']
-        if field not in ('version_evidence', 'version_source_mappings') or type(index) is not int or index < 0:
-            raise ValueError()
-        objection = next(row for row in packet.get('material_objections', []) if row['id'] == entry['objection_id'])
-        full = objection[field][index]
-        if full.get('delivery') == 'repeated-in-material-objections' or digest(full) != entry['digest']:
-            raise ValueError()
-    except (KeyError, IndexError, StopIteration, TypeError, ValueError):
-        _fail('Repeated evidence requires its full entry in the same packet.', code='review_objection_evidence_invalid')
-    return copy.deepcopy(full)
 
 
 def _epoch(epoch):
@@ -480,7 +430,7 @@ def make_task(epoch, task_type, *, inputs=None, claim_ids=None, occurrence_ids=N
                 rendering_policy=rendering_policy, required=required)
     for field in ('claim_ids', 'occurrence_ids', 'card_ids', 'group_ids', 'dependencies', 'segment_task_ids',
                   'obligation_ids', 'child_ids'):
-        _ids(body[field], field)
+        check_ids(body[field], field, code='invalid_review_staged')
     known = {row['id'] for row in manifest['occurrences']}
     if not set(body['occurrence_ids']) <= known:
         _fail('Task names an unknown occurrence.')
@@ -493,8 +443,8 @@ def make_task(epoch, task_type, *, inputs=None, claim_ids=None, occurrence_ids=N
 def freeze_task(task, planned_request_digest, rendering_policy, *, measurement=None):
     """Bind a measured plan to its exact rendered request before assignment."""
     _verify_seal(task)
-    _text(planned_request_digest, 'planned_request_digest')
-    _text(rendering_policy, 'rendering_policy')
+    check_text(planned_request_digest, 'planned_request_digest', code='invalid_review_staged')
+    check_text(rendering_policy, 'rendering_policy', code='invalid_review_staged')
     body = {key: copy.deepcopy(value) for key, value in task.items() if key != 'digest'}
     if measurement is not None:
         body['measurement'] = copy.deepcopy(measurement)
@@ -510,7 +460,7 @@ def joint_fit(sizes, route_limit, output_tokens, profile, *, claim_count=0, pres
     required = ('context_characters', 'envelope_characters', 'output_base_tokens',
                 'output_tokens_per_claim', 'output_tokens_per_character', 'seconds_per_character',
                 'seconds_per_claim', 'duration_base_seconds', 'duration_limit_seconds', 'output_margin_tokens')
-    _require(profile, required, ('input_character_target',))
+    check_fields(profile, required, ('input_character_target',), code='invalid_review_staged')
     for key, value in profile.items():
         _number(value, key)
     for size in sizes:
@@ -538,7 +488,7 @@ def validate_measurement(measurement):
     required = ('fits', 'input_fits', 'output_fits', 'duration_fits', 'mandatory_preserved', 'input_characters',
                 'output_tokens', 'duration_seconds', 'route_limit', 'configured_output_tokens',
                 'output_margin_tokens', 'duration_limit_seconds')
-    _require(measurement, required)
+    check_fields(measurement, required, code='invalid_review_staged')
     for key in ('fits', 'input_fits', 'output_fits', 'duration_fits', 'mandatory_preserved'):
         if measurement[key] is not True:
             _fail('Task work has not been admitted.', code='review_task_pending')
@@ -802,11 +752,11 @@ def missing_card_pairs(plan, assessments):
 
 def validate_selected_group(group, manifest):
     """Validate a selected original combination, retaining every requesting claim."""
-    _require(group, ('id', 'occurrence_ids', 'claim_ids', 'question', 'requested_by'), ('group_ids',))
-    _text(group['id'], 'group.id')
-    _text(group['question'], 'question')
+    check_fields(group, ('id', 'occurrence_ids', 'claim_ids', 'question', 'requested_by'), ('group_ids',), code='invalid_review_staged')
+    check_text(group['id'], 'group.id', code='invalid_review_staged')
+    check_text(group['question'], 'question', code='invalid_review_staged')
     for key in ('occurrence_ids', 'claim_ids', 'requested_by'):
-        _ids(group[key], key)
+        check_ids(group[key], key, code='invalid_review_staged')
         if not group[key]:
             _fail('A selected group requires original scope and requesting identities.')
     if not set(group['occurrence_ids']) <= {row['id'] for row in manifest['occurrences']}:
@@ -840,10 +790,10 @@ def _ground(grounds, manifest, known_ids=()):
 
 def validate_cell(cell, manifest, *, actual_input=None, checks=()):
     """Validate a claim-occurrence judgment and its exact assessment scope."""
-    _require(cell, ('id', 'occurrence_id', 'claim_id', 'status', 'reason', 'grounds', 'scope', 'context_root'),
-             ('source_subject', 'segment_ids', 'reconciliation_id', 'dependencies'))
-    _text(cell['id'], 'cell.id')
-    _text(cell['reason'], 'reason')
+    check_fields(cell, ('id', 'occurrence_id', 'claim_id', 'status', 'reason', 'grounds', 'scope', 'context_root'),
+             ('source_subject', 'segment_ids', 'reconciliation_id', 'dependencies'), code='invalid_review_staged')
+    check_text(cell['id'], 'cell.id', code='invalid_review_staged')
+    check_text(cell['reason'], 'reason', code='invalid_review_staged')
     occurrences = _index(manifest['occurrences'], 'occurrences')
     if cell['occurrence_id'] not in occurrences or cell['claim_id'] not in manifest['contexts']:
         _fail('Claim cell lies outside the frozen obligation space.')
@@ -853,7 +803,7 @@ def validate_cell(cell, manifest, *, actual_input=None, checks=()):
     if cell['status'] not in ('supported', 'contradicted', 'no_bearing', 'unresolved'):
         _fail('Unknown claim disposition.')
     if cell['status'] == 'no_bearing':
-        _text(cell.get('source_subject'), 'source_subject')
+        check_text(cell.get('source_subject'), 'source_subject', code='invalid_review_staged')
     if cell['status'] != 'unresolved' and not cell['grounds']:
         _fail('A substantive judgment requires grounded support.')
     _ground(cell['grounds'], manifest)
@@ -880,10 +830,10 @@ def validate_card(card, manifest):
     """Validate a grounded fragment or complete logical card."""
     required = ('id', 'occurrence_id', 'kind', 'establishes', 'evidence_type', 'conclusions', 'conditions',
                 'judgments', 'critical_spans', 'findings', 'unresolved', 'dependencies', 'fragment_ids')
-    _require(card, required, ('premises', 'reasoning', 'negative_observation', 'examined_scope',
-                               'no_statement_reason', 'reconciliation_id', 'critical_quotations'))
-    _text(card['id'], 'card.id')
-    _text(card['establishes'], 'establishes')
+    check_fields(card, required, ('premises', 'reasoning', 'negative_observation', 'examined_scope',
+                               'no_statement_reason', 'reconciliation_id', 'critical_quotations'), code='invalid_review_staged')
+    check_text(card['id'], 'card.id', code='invalid_review_staged')
+    check_text(card['establishes'], 'establishes', code='invalid_review_staged')
     if card['kind'] not in ('fragment', 'full'):
         _fail('Unknown card kind.')
     if card['occurrence_id'] not in {row['id'] for row in manifest['occurrences']}:
@@ -895,13 +845,13 @@ def validate_card(card, manifest):
         if not card.get('premises'):
             _fail('Reviewer deductions need grounded premises.')
         _ground(card['premises'], manifest)
-        _text(card.get('reasoning'), 'reasoning')
+        check_text(card.get('reasoning'), 'reasoning', code='invalid_review_staged')
     if card.get('negative_observation'):
         if card['evidence_type'] != 'reviewer_observation':
             _fail('An absence observation is not a quotation proving absence.')
-        _text(card.get('examined_scope'), 'examined_scope')
+        check_text(card.get('examined_scope'), 'examined_scope', code='invalid_review_staged')
     if not card['critical_spans']:
-        _text(card.get('no_statement_reason'), 'no_statement_reason')
+        check_text(card.get('no_statement_reason'), 'no_statement_reason', code='invalid_review_staged')
     _ground(card['critical_spans'], manifest)
     if 'critical_quotations' in card:
         sources = _index(manifest['sources'], 'sources')
@@ -909,16 +859,16 @@ def validate_card(card, manifest):
         if card['critical_quotations'] != exact:
             _fail('Retained critical quotations differ from their exact original characters.')
     for row in card['conclusions'] + card['conditions']:
-        _require(row, ('id', 'text', 'grounds'), ('dependencies', 'satisfied'))
-        _text(row['id'], 'conclusion.id')
-        _text(row['text'], 'text')
+        check_fields(row, ('id', 'text', 'grounds'), ('dependencies', 'satisfied'), code='invalid_review_staged')
+        check_text(row['id'], 'conclusion.id', code='invalid_review_staged')
+        check_text(row['text'], 'text', code='invalid_review_staged')
         _ground(row['grounds'], manifest)
     for cell in card['judgments']:
         validate_cell(cell, manifest)
         if cell['occurrence_id'] != card['occurrence_id']:
             _fail('A card cannot assume another occurrence judgment.')
     for key in ('findings', 'dependencies', 'fragment_ids'):
-        _ids(card[key], key)
+        check_ids(card[key], key, code='invalid_review_staged')
     _array(card['unresolved'], 'unresolved')
     return copy.deepcopy(card)
 
@@ -961,13 +911,13 @@ def validate_integration(receipt, *, epoch, obligations, children=(), original_c
     required = ('id', 'epoch_id', 'task_id', 'selected_observations', 'input_roots', 'context_roots',
                 'child_ids', 'child_union', 'obligation_ids', 'dispositions', 'findings', 'answers',
                 'selected_groups', 'retrievals', 'dependencies', 'unresolved', 'decision_constraints')
-    _require(receipt, required, ('obligation_index_root',))
+    check_fields(receipt, required, ('obligation_index_root',), code='invalid_review_staged')
     if receipt['epoch_id'] != epoch['id']:
         _fail('Integration belongs to another epoch.')
     for key in ('id', 'task_id'):
-        _text(receipt[key], key)
+        check_text(receipt[key], key, code='invalid_review_staged')
     for key in ('selected_observations', 'input_roots', 'child_ids', 'child_union', 'obligation_ids', 'dependencies'):
-        _ids(receipt[key], key)
+        check_ids(receipt[key], key, code='invalid_review_staged')
     child_index = _index(list(children), 'children')
     pending, visited = list(receipt['child_ids']), set()
     while pending:
@@ -991,10 +941,10 @@ def validate_integration(receipt, *, epoch, obligations, children=(), original_c
     checks = _index(list(original_checks), 'original_checks')
     grounds_ids = set(known_ids) | set(checks) | set(obligations) | set(exact_union)
     for row in receipt['dispositions']:
-        _require(row, ('id', 'disposition', 'reason', 'grounds'), ('original_check_ids',))
+        check_fields(row, ('id', 'disposition', 'reason', 'grounds'), ('original_check_ids',), code='invalid_review_staged')
         if row['disposition'] not in ('retained', 'revised', 'conflict', 'irrelevant-to-this-claim'):
             _fail('Unknown integration disposition.')
-        _text(row['reason'], 'reason')
+        check_text(row['reason'], 'reason', code='invalid_review_staged')
         if not row['grounds']:
             _fail('Integration disposition needs supporting references.')
         _ground(row['grounds'], epoch['manifest'], grounds_ids)
@@ -1010,16 +960,16 @@ def validate_integration(receipt, *, epoch, obligations, children=(), original_c
 
 def validate_original_check(check, *, epoch, task, observations, groups):
     """Validate jointly supplied originals or complete segmented rereading."""
-    _require(check, ('id', 'task_id', 'group_ids', 'scope', 'status', 'conclusions', 'qualifications',
-                     'conflicts', 'unresolved', 'segment_ids', 'reconciliation'), ('grounds',))
+    check_fields(check, ('id', 'task_id', 'group_ids', 'scope', 'status', 'conclusions', 'qualifications',
+                     'conflicts', 'unresolved', 'segment_ids', 'reconciliation'), ('grounds',), code='invalid_review_staged')
     for field in ('id', 'task_id'):
-        _text(check[field], field)
+        check_text(check[field], field, code='invalid_review_staged')
     if check['task_id'] != task['id'] or check['scope'] not in ('joint_original', 'segmented_original', 'unresolved'):
         _fail('Original check has the wrong task or scope.')
     if check['status'] not in ('resolved', 'unresolved'):
         _fail('Unknown original-check status.')
     group_index = _index(list(groups), 'groups')
-    _ids(check['group_ids'], 'group_ids')
+    check_ids(check['group_ids'], 'group_ids', code='invalid_review_staged')
     if not check['group_ids'] or not set(check['group_ids']) <= set(group_index):
         _fail('Original check omitted its selected group.')
     observation_index = {row['task_id']: row for row in observations}
@@ -1036,7 +986,7 @@ def validate_original_check(check, *, epoch, task, observations, groups):
         segments = check['segment_ids']
         if not segments or not set(segments) <= set(observation_index):
             _fail('Segmented check is missing a child.')
-        _text(check['reconciliation'], 'reconciliation')
+        check_text(check['reconciliation'], 'reconciliation', code='invalid_review_staged')
         actual = [span for key in segments for span in observation_index[key]['actual_input']['intervals']]
         binaries = [row for key in segments for row in observation_index[key]['actual_input']['binary_sources']]
         for key in check['group_ids']:
@@ -1051,9 +1001,9 @@ def validate_original_check(check, *, epoch, task, observations, groups):
     if not check['conclusions'] and check['status'] == 'resolved':
         _fail('Resolved original checks need substantive conclusions.')
     for conclusion in _array(check['conclusions'], 'conclusions'):
-        _require(conclusion, ('id', 'text', 'grounds'))
-        _text(conclusion['id'], 'conclusion.id')
-        _text(conclusion['text'], 'conclusion.text')
+        check_fields(conclusion, ('id', 'text', 'grounds'), code='invalid_review_staged')
+        check_text(conclusion['id'], 'conclusion.id', code='invalid_review_staged')
+        check_text(conclusion['text'], 'conclusion.text', code='invalid_review_staged')
         if not conclusion['grounds']:
             _fail('An original-check conclusion requires exact grounds.')
         _ground(conclusion['grounds'], epoch['manifest'])
@@ -1066,10 +1016,10 @@ def validate_original_check(check, *, epoch, task, observations, groups):
 
 def validate_retrieval(receipt, manifest):
     """Validate an exact original reread question and its explicitly closed scope."""
-    _require(receipt, ('id', 'question', 'inputs', 'claim_ids', 'context_roots', 'status', 'answer',
-                       'observation_ids', 'requested_by'))
-    _text(receipt['id'], 'retrieval.id')
-    _text(receipt['question'], 'question')
+    check_fields(receipt, ('id', 'question', 'inputs', 'claim_ids', 'context_roots', 'status', 'answer',
+                       'observation_ids', 'requested_by'), code='invalid_review_staged')
+    check_text(receipt['id'], 'retrieval.id', code='invalid_review_staged')
+    check_text(receipt['question'], 'question', code='invalid_review_staged')
     if receipt['status'] not in ('pending', 'resolved', 'unresolved'):
         _fail('Unknown retrieval status.')
     sources = _index(manifest['sources'], 'sources')
@@ -1081,7 +1031,7 @@ def validate_retrieval(receipt, manifest):
         if key not in manifest['contexts'] or receipt['context_roots'].get(key) != manifest['contexts'][key]['root']:
             _fail('Retrieval context changed.', code='review_task_dependency_changed')
     if receipt['status'] == 'resolved':
-        _text(receipt['answer'], 'answer')
+        check_text(receipt['answer'], 'answer', code='invalid_review_staged')
         if not receipt['observation_ids']:
             _fail('A resolved retrieval requires selected observed rereading.')
     return copy.deepcopy(receipt)
@@ -1090,7 +1040,7 @@ def validate_retrieval(receipt, manifest):
 def card_span(card, start, end, *, manifest=None):
     """Bind a segment of the canonical compact card to its complete logical object."""
     compact = compact_card(card, manifest=manifest)
-    text = _json(compact)
+    text = _canonical(compact, code='invalid_review_staged')
     _ranges([[start, end]], len(text))
     return dict(card_id=card['id'], start=start, end=end, card_root=digest(compact),
                 sha256=hashlib.sha256(text[start:end].encode('utf-8')).hexdigest())
@@ -1104,7 +1054,7 @@ def validate_task_output(task, output, *, manifest=None):
     if kind == 'read' and (not output.get('cards') or task['claim_ids'] and not output.get('cells')):
         _fail('A reading output requires grounded cards and assigned judgments.')
     if kind == 'frame':
-        _require(output, ('claims', 'conditions', 'dependencies', 'unresolved'), None)
+        check_fields(output, ('claims', 'conditions', 'dependencies', 'unresolved'), None, code='invalid_review_staged')
         for key in ('claims', 'conditions', 'dependencies', 'unresolved'):
             _array(output[key], key)
     if kind == 'combine':
@@ -1131,9 +1081,9 @@ def validate_task_output(task, output, *, manifest=None):
 
 def _validate_observation(epoch, task, observation, contexts):
     _verify_seal(task)
-    _require(observation, ('id', 'epoch_id', 'epoch_digest', 'task_id', 'task_digest', 'actual_input',
-                           'request_digest', 'output', 'raw_output_digest', 'dependencies'))
-    _text(observation['id'], 'observation.id')
+    check_fields(observation, ('id', 'epoch_id', 'epoch_digest', 'task_id', 'task_digest', 'actual_input',
+                           'request_digest', 'output', 'raw_output_digest', 'dependencies'), code='invalid_review_staged')
+    check_text(observation['id'], 'observation.id', code='invalid_review_staged')
     if (observation['epoch_id'] != epoch['id'] or observation['epoch_digest'] != epoch['digest'] or
             task['epoch_id'] != epoch['id'] or task['epoch_digest'] != epoch['digest'] or
             observation['task_id'] != task['id'] or observation['task_digest'] != task['digest']):
@@ -1143,8 +1093,8 @@ def _validate_observation(epoch, task, observation, contexts):
     if observation['raw_output_digest'] != digest(observation['output']):
         _fail('Selected output digest is not its exact observed output.')
     actual = observation['actual_input']
-    _require(actual, ('history', 'intervals', 'binary_sources', 'claim_ids', 'context_roots', 'complete_cards'),
-             ('complete_card_roots', 'full_card_roots', 'request_measurement', 'card_segments', 'material_objections'))
+    check_fields(actual, ('history', 'intervals', 'binary_sources', 'claim_ids', 'context_roots', 'complete_cards'),
+             ('complete_card_roots', 'full_card_roots', 'request_measurement', 'card_segments', 'material_objections'), code='invalid_review_staged')
     if actual['history'] != []:
         _fail('Staged requests require empty history.')
     sources = _index(epoch['manifest']['sources'], 'sources')
@@ -1153,7 +1103,7 @@ def _validate_observation(epoch, task, observation, contexts):
             _fail('Actual input names a source outside the epoch.')
         materialize_quotation(sources[span['source_id']], span)
     for row in actual['binary_sources']:
-        _require(row, ('source_id', 'descriptor'))
+        check_fields(row, ('source_id', 'descriptor'), code='invalid_review_staged')
         source = sources.get(row['source_id'])
         if source is None or source['kind'] != 'binary' or row['descriptor'] != source['descriptor']:
             _fail('Native binary identity does not match the original.')
@@ -1178,7 +1128,8 @@ def _validate_observation(epoch, task, observation, contexts):
     for objection in actual_objections['material_objections']:
         for field in ('version_evidence', 'version_source_mappings'):
             for entry in objection.get(field, []):
-                resolve_objection_entry(actual_objections, entry)
+                check_fields(entry, (), None, code='review_objection_evidence_invalid')
+            resolved_objection_entries(actual_objections, objection, field)
     for requirement in task['objection_entries']:
         if not _has_objection_entry(actual_objections, requirement):
             _fail('Actual input omitted exact objection evidence.', code='review_objection_evidence_invalid')
@@ -1198,45 +1149,36 @@ def _has_objection_entry(packet, requirement):
     return False
 
 
-def verify_completion(epoch, selection, *, tasks=None, contexts=None):
-    """Verify an explicit authenticated selection; never select from store state.
+def _record_completion_issue(work, code, **details):
+    row = dict(code=code, **details)
+    if row not in work['issues']:
+        work['issues'].append(row)
 
-    Invalid or missing scientific work becomes structured issues and receives no
-    completion credit. Malformed frozen identities raise ResearchError. Returned
-    roots bind the exact selected work, retained conclusions and unfinished scope.
-    Historical authenticity, current currency and reviewer independence are
-    separate caller checks.
-    """
-    _epoch(epoch)
-    _require(selection, ('observations',), ('composition_certificate',))
-    task_index = _index(list(tasks or []), 'tasks')
-    raw = _index(selection['observations'], 'observations')
-    manifest = epoch['manifest']
-    issues = []
 
-    def issue(code, **details):
-        row = dict(code=code, **details)
-        if row not in issues:
-            issues.append(row)
+def _record_completion_rejection(work, error, **details):
+    _record_completion_issue(work, error.code, reason=error.message, **dict(error.details or {}, **details))
 
-    def rejected(error, **details):
-        issue(error.code, reason=error.message, **dict(error.details or {}, **details))
 
+def _expand_completion_contexts(work):
+    contexts = work['contexts']
+    manifest = work['manifest']
+    raw = work['raw']
+    epoch = work['epoch']
     current_contexts = contexts if contexts is not None else manifest['contexts']
     expanded_claims = copy.deepcopy(manifest['claims'])
     claim_index = _index(expanded_claims, 'claims')
     for row in raw.values():
         output = row.get('output')
         if not isinstance(output, dict) or not isinstance(output.get('new_dependencies', []), list):
-            issue('invalid_review_staged', observation_id=row['id'], reason='Invalid task output or dependencies.')
+            _record_completion_issue(work, 'invalid_review_staged', observation_id=row['id'], reason='Invalid task output or dependencies.')
             continue
         for dependency in output.get('new_dependencies', []):
             if not isinstance(dependency, dict) or set(dependency) != {'claim_id', 'depends_on'}:
-                issue('invalid_review_staged', reason='Invalid discovered dependency.')
+                _record_completion_issue(work, 'invalid_review_staged', reason='Invalid discovered dependency.')
                 continue
             key, target = dependency['claim_id'], dependency['depends_on']
             if key not in claim_index or target not in claim_index:
-                issue('review_task_dependency_changed', dependency=dependency)
+                _record_completion_issue(work, 'review_task_dependency_changed', dependency=dependency)
             elif target not in claim_index[key]['dependencies']:
                 claim_index[key]['dependencies'].append(target)
     if expanded_claims != manifest['claims']:
@@ -1247,10 +1189,20 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
         seeds = manifest['assurance_dependencies'][kind]
         manifest['assurance_dependencies'][kind] = sorted({key for seed in seeds for key in current_contexts[seed]['claim_ids']})
     current_epoch = dict(epoch, manifest=manifest)
+    work['manifest'] = manifest
+    work['current_contexts'] = current_contexts
+    work['current_epoch'] = current_epoch
+
+
+def _check_completion_observations(work):
+    raw = work['raw']
+    task_index = work['task_index']
+    epoch = work['epoch']
+    current_contexts = work['current_contexts']
     accepted, by_task = {}, {}
     for row in raw.values():
         if row.get('task_id') not in task_index:
-            issue('review_task_pending', observation_id=row['id'], reason='No frozen task envelope.')
+            _record_completion_issue(work, 'review_task_pending', observation_id=row['id'], reason='No frozen task envelope.')
             continue
         assigned = task_index[row['task_id']]
         try:
@@ -1260,7 +1212,7 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
             accepted[row['id']] = row
             by_task[row['task_id']] = row
         except ResearchError as error:
-            rejected(error, task_id=assigned['id'])
+            _record_completion_rejection(work, error, task_id=assigned['id'])
     # Dependency pruning is monotone and terminates after at most |selection| removals.
     changed = True
     while changed:
@@ -1269,17 +1221,25 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
             assigned = task_index[row['task_id']]
             expected = {dep: by_task[dep]['raw_output_digest'] for dep in assigned['dependencies'] if dep in by_task}
             if set(expected) != set(assigned['dependencies']) or row['dependencies'] != expected:
-                issue('review_task_dependency_changed', task_id=assigned['id'], dependencies=assigned['dependencies'])
+                _record_completion_issue(work, 'review_task_dependency_changed', task_id=assigned['id'], dependencies=assigned['dependencies'])
                 del accepted[key]
                 del by_task[row['task_id']]
                 changed = True
     for assigned in task_index.values():
         if assigned['required'] and assigned['id'] not in by_task:
-            issue('review_task_pending', task_id=assigned['id'])
+            _record_completion_issue(work, 'review_task_pending', task_id=assigned['id'])
     observed = [accepted[key] for key in sorted(accepted)]
     observations_root = digest(['selected-observations-v1', sorted(
         [(row['id'], row['task_id'], row['task_digest'], row['request_digest'], row['raw_output_digest'],
           digest(row['actual_input']), row['dependencies']) for row in observed])])
+    work['accepted'] = accepted
+    work['by_task'] = by_task
+    work['observed'] = observed
+    work['observations_root'] = observations_root
+
+
+def _collect_completion_records(work):
+    observed = work['observed']
     grouped = {}
     owners = {}
     for row in observed:
@@ -1287,16 +1247,22 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
                     'findings', 'answers', 'retrievals', 'assurance_checks', 'decision_checks'):
             try:
                 for item in _array(row['output'].get(key, []), key):
-                    _require(item, ('id',), None)
+                    check_fields(item, ('id',), None, code='invalid_review_staged')
                     previous = grouped.setdefault(key, {}).get(item['id'])
                     if previous is not None and previous != item:
                         _fail('Conflicting selected scientific records.', id=item['id'])
                     grouped[key][item['id']] = item
                     owners[(key, item['id'])] = row
             except ResearchError as error:
-                rejected(error, task_id=row['task_id'])
+                _record_completion_rejection(work, error, task_id=row['task_id'])
+    work['grouped'] = grouped
+    work['owners'] = owners
 
-    sources = _index(manifest['sources'], 'sources')
+
+def _check_completion_coverage(work):
+    manifest = work['manifest']
+    observed = work['observed']
+    _index(manifest['sources'], 'sources')
     coverage, source_characters, binary_count = [], 0, 0
     for source in manifest['sources']:
         if source['kind'] == 'binary':
@@ -1304,7 +1270,7 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
                            for row in observed)
             binary_count += int(complete)
             if not complete:
-                issue('review_source_coverage_pending', source_id=source['id'], native_binary=True)
+                _record_completion_issue(work, 'review_source_coverage_pending', source_id=source['id'], native_binary=True)
             coverage.append(dict(source_id=source['id'], complete=complete))
         else:
             intervals = [[span['start'], span['end']] for row in observed for span in row['actual_input']['intervals']
@@ -1313,15 +1279,32 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
             source_characters += (sum(end - start for start, end in source['required_intervals']) -
                                   sum(end - start for start, end in gaps))
             if gaps:
-                issue('review_source_coverage_pending', source_id=source['id'], intervals=gaps)
+                _record_completion_issue(work, 'review_source_coverage_pending', source_id=source['id'], intervals=gaps)
             coverage.append(dict(source_id=source['id'], missing_intervals=gaps, complete=not gaps))
+    work['coverage'] = coverage
+    work['source_characters'] = source_characters
+    work['binary_count'] = binary_count
 
+
+def _check_completion_groups(work):
+    grouped = work['grouped']
+    manifest = work['manifest']
     groups = []
     for group in grouped.get('selected_groups', {}).values():
         try:
             groups.append(validate_selected_group(group, manifest))
         except ResearchError as error:
-            rejected(error, group_id=group['id'])
+            _record_completion_rejection(work, error, group_id=group['id'])
+    work['groups'] = groups
+
+
+def _check_completion_original_checks(work):
+    grouped = work['grouped']
+    by_task = work['by_task']
+    current_epoch = work['current_epoch']
+    task_index = work['task_index']
+    observed = work['observed']
+    groups = work['groups']
     checks = []
     for check in grouped.get('original_checks', {}).values():
         try:
@@ -1330,20 +1313,37 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
             checks.append(validate_original_check(check, epoch=current_epoch, task=task_index[check['task_id']],
                           observations=observed, groups=groups))
         except ResearchError as error:
-            rejected(error, check_id=check['id'])
+            _record_completion_rejection(work, error, check_id=check['id'])
     closed_groups = {key for check in checks if check['status'] == 'resolved' for key in check['group_ids']}
     for group in groups:
         if group['id'] not in closed_groups:
-            issue('review_original_check_pending', group_id=group['id'])
+            _record_completion_issue(work, 'review_original_check_pending', group_id=group['id'])
+    work['checks'] = checks
+    work['closed_groups'] = closed_groups
 
+
+def _check_completion_cards(work):
+    grouped = work['grouped']
+    manifest = work['manifest']
     cards = []
     for card in grouped.get('cards', {}).values():
         try:
             cards.append(validate_card(card, manifest))
         except ResearchError as error:
-            rejected(error, card_id=card['id'])
+            _record_completion_rejection(work, error, card_id=card['id'])
     full_cards = [row for row in cards if row['kind'] == 'full']
     card_index = _index(cards, 'cards')
+    work['cards'] = cards
+    work['full_cards'] = full_cards
+    work['card_index'] = card_index
+
+
+def _check_completion_cells(work):
+    grouped = work['grouped']
+    cards = work['cards']
+    owners = work['owners']
+    manifest = work['manifest']
+    checks = work['checks']
     cells = {}
     cell_rows = list(grouped.get('cells', {}).values())
     for card in cards:
@@ -1361,37 +1361,56 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
                 _fail('Claim cell has conflicting selected conclusions.')
             cells[pair] = cell
         except ResearchError as error:
-            rejected(error, cell_id=cell.get('id'))
+            _record_completion_rejection(work, error, cell_id=cell.get('id'))
+    work['cells'] = cells
+
+
+def _check_completion_card_reconciliation(work):
+    manifest = work['manifest']
+    full_cards = work['full_cards']
+    cards = work['cards']
+    checks = work['checks']
+    cells = work['cells']
     for occurrence in manifest['occurrences']:
         logical = [card for card in full_cards if card['occurrence_id'] == occurrence['id']]
         if len(logical) != 1:
-            issue('review_card_pending', occurrence_id=occurrence['id'])
+            _record_completion_issue(work, 'review_card_pending', occurrence_id=occurrence['id'])
         else:
             card = logical[0]
             fragments = [fragment['id'] for fragment in cards
                          if fragment['kind'] == 'fragment' and fragment['occurrence_id'] == occurrence['id']]
             if sorted(card['fragment_ids']) != sorted(fragments):
-                issue('review_card_pending', card_id=card['id'], reason='Fragment reconciliation is incomplete.')
+                _record_completion_issue(work, 'review_card_pending', card_id=card['id'], reason='Fragment reconciliation is incomplete.')
             if fragments and not any(check['id'] == card.get('reconciliation_id') and check['status'] == 'resolved'
                                      for check in checks):
-                issue('review_card_pending', card_id=card['id'], reason='Fragment reconciliation has no original check.')
+                _record_completion_issue(work, 'review_card_pending', card_id=card['id'], reason='Fragment reconciliation has no original check.')
             if {cell['claim_id'] for cell in card['judgments']} != set(manifest['contexts']):
-                issue('review_card_pending', card_id=card['id'], reason='Full card omits a claim judgment.')
+                _record_completion_issue(work, 'review_card_pending', card_id=card['id'], reason='Full card omits a claim judgment.')
         for claim in manifest['claims']:
             pair = (claim['id'], occurrence['id'])
             if pair not in cells:
-                issue('review_claim_cell_pending', claim_id=pair[0], occurrence_id=pair[1])
+                _record_completion_issue(work, 'review_claim_cell_pending', claim_id=pair[0], occurrence_id=pair[1])
             elif cells[pair]['status'] == 'unresolved':
-                issue('review_claim_unresolved', claim_id=pair[0], occurrence_id=pair[1])
+                _record_completion_issue(work, 'review_claim_unresolved', claim_id=pair[0], occurrence_id=pair[1])
 
+
+def _check_completion_combinations(work):
+    grouped = work['grouped']
+    card_index = work['card_index']
+    owners = work['owners']
+    task_index = work['task_index']
+    manifest = work['manifest']
+    by_task = work['by_task']
+    groups = work['groups']
+    full_cards = work['full_cards']
     covered_pairs, presented_cards = set(), set()
     valid_combinations = []
     for combination in grouped.get('combinations', {}).values():
         try:
-            _require(combination, ('id', 'task_id', 'card_ids', 'scope', 'synthesis', 'selected_groups',
-                                    'segment_task_ids', 'reconciliation'))
-            _text(combination['synthesis'], 'synthesis')
-            ids = _ids(combination['card_ids'], 'card_ids')
+            check_fields(combination, ('id', 'task_id', 'card_ids', 'scope', 'synthesis', 'selected_groups',
+                                    'segment_task_ids', 'reconciliation'), code='invalid_review_staged')
+            check_text(combination['synthesis'], 'synthesis', code='invalid_review_staged')
+            ids = check_ids(combination['card_ids'], 'card_ids', code='invalid_review_staged')
             if not ids or not set(ids) <= set(card_index):
                 _fail('Combination omitted a complete logical card.')
             owner = owners[('combinations', combination['id'])]
@@ -1407,12 +1426,12 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
                 if any(roots.get(key) != digest(compact_card(card_index[key], manifest=manifest)) for key in ids):
                     _fail('Actual compact-card roots do not bind the complete logical cards.')
             elif combination['scope'] == 'segmented_card':
-                _text(combination['reconciliation'], 'reconciliation')
+                check_text(combination['reconciliation'], 'reconciliation', code='invalid_review_staged')
                 segments = combination['segment_task_ids']
                 if not segments or not set(segments) <= set(by_task):
                     _fail('Segmented-card receipt is missing a child.')
                 for key in ids:
-                    size = len(_json(compact_card(card_index[key], manifest=manifest)))
+                    size = len(_canonical(compact_card(card_index[key], manifest=manifest), code='invalid_review_staged'))
                     portions = []
                     for task_id in segments:
                         for span in by_task[task_id]['actual_input'].get('card_segments', []):
@@ -1430,15 +1449,24 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
             presented_cards.update(ids)
             valid_combinations.append(combination)
         except ResearchError as error:
-            rejected(error, combination_id=combination['id'])
+            _record_completion_rejection(work, error, combination_id=combination['id'])
     full_ids = [row['id'] for row in full_cards]
     for pair in itertools.combinations(full_ids, 2):
         if tuple(sorted(pair)) not in covered_pairs:
-            issue('review_combination_pending', card_ids=list(pair))
+            _record_completion_issue(work, 'review_combination_pending', card_ids=list(pair))
     for key in full_ids:
         if key not in presented_cards:
-            issue('review_combination_pending', card_ids=[key])
+            _record_completion_issue(work, 'review_combination_pending', card_ids=[key])
+    work['covered_pairs'] = covered_pairs
+    work['valid_combinations'] = valid_combinations
 
+
+def _check_completion_retrievals(work):
+    grouped = work['grouped']
+    manifest = work['manifest']
+    accepted = work['accepted']
+    checks = work['checks']
+    cells = work['cells']
     retrievals = []
     for retrieval in grouped.get('retrievals', {}).values():
         try:
@@ -1450,17 +1478,33 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
                 if not _covers_inputs(retrieval['inputs'], spans):
                     _fail('Retrieval did not deliver the requested original scope again.')
             else:
-                issue('review_retrieval_pending', retrieval_id=retrieval['id'])
+                _record_completion_issue(work, 'review_retrieval_pending', retrieval_id=retrieval['id'])
             retrievals.append(retrieval)
         except ResearchError as error:
-            rejected(error, retrieval_id=retrieval['id'])
+            _record_completion_rejection(work, error, retrieval_id=retrieval['id'])
     resolved = {row['id'] for row in checks if row['status'] == 'resolved'}
     resolved.update(row['id'] for row in retrievals if row['status'] == 'resolved')
     resolved.update(row['id'] for row in cells.values() if row['status'] != 'unresolved')
+    work['resolved'] = resolved
+
+
+def _check_completion_integration_accounting(work):
+    full_cards = work['full_cards']
+    grouped = work['grouped']
+    owners = work['owners']
+    task_index = work['task_index']
+    current_epoch = work['current_epoch']
+    checks = work['checks']
+    resolved = work['resolved']
+    accepted = work['accepted']
+    by_task = work['by_task']
+    manifest = work['manifest']
+    current_contexts = work['current_contexts']
+    closed_groups = work['closed_groups']
     try:
         obligations = card_obligations(full_cards)
     except ResearchError as error:
-        rejected(error)
+        _record_completion_rejection(work, error)
         obligations = []
     integrations = list(grouped.get('integrations', {}).values())
     integration_index = _index(integrations, 'integrations')
@@ -1495,7 +1539,7 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
                 if root != current_contexts[key]['root']:
                     _fail('Integration original closure changed.', code='review_task_dependency_changed')
             if receipt['unresolved'] or any(row['disposition'] == 'conflict' for row in receipt['dispositions']):
-                issue('review_integration_unresolved', integration_id=receipt['id'])
+                _record_completion_issue(work, 'review_integration_unresolved', integration_id=receipt['id'])
             for dependency in receipt['dependencies']:
                 if dependency not in resolved and dependency not in integration_index:
                     _fail('Integration omitted an unresolved dependency.', dependency=dependency)
@@ -1504,16 +1548,26 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
             accounted.update(receipt['obligation_ids'])
             valid_integrations.append(receipt)
         except ResearchError as error:
-            rejected(error, integration_id=receipt['id'])
+            _record_completion_rejection(work, error, integration_id=receipt['id'])
     if set(obligations) != accounted:
-        issue('review_integration_pending', obligation_ids=sorted(set(obligations) - accounted))
+        _record_completion_issue(work, 'review_integration_pending', obligation_ids=sorted(set(obligations) - accounted))
     if not valid_integrations:
-        issue('review_integration_pending', reason='No selected integration receipt.')
+        _record_completion_issue(work, 'review_integration_pending', reason='No selected integration receipt.')
     for card in full_cards:
         for dependency in card['dependencies']:
             if dependency not in resolved:
-                issue('review_integration_unresolved', card_id=card['id'], dependency=dependency)
+                _record_completion_issue(work, 'review_integration_unresolved', card_id=card['id'], dependency=dependency)
+    work['obligations'] = obligations
+    work['valid_integrations'] = valid_integrations
+    work['accounted'] = accounted
 
+
+def _check_completion_finding_answers(work):
+    grouped = work['grouped']
+    manifest = work['manifest']
+    epoch = work['epoch']
+    cards = work['cards']
+    resolved = work['resolved']
     findings = list(grouped.get('findings', {}).values())
     inherited = manifest['inherited_findings']
     finding_ids = {row['id'] if isinstance(row, dict) else row for row in inherited}
@@ -1523,140 +1577,234 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
     answered = set()
     for answer in grouped.get('answers', {}).values():
         try:
-            _require(answer, ('id', 'finding_id', 'disposition', 'reason', 'grounds'))
-            _text(answer['reason'], 'reason')
+            check_fields(answer, ('id', 'finding_id', 'disposition', 'reason', 'grounds'), code='invalid_review_staged')
+            check_text(answer['reason'], 'reason', code='invalid_review_staged')
             if answer['finding_id'] not in finding_ids or answer['disposition'] not in ('retained', 'answered', 'unresolved'):
                 _fail('Finding answer has no exact finding or disposition.')
             _ground(answer['grounds'], manifest, resolved)
             if answer['disposition'] != 'unresolved':
                 answered.add(answer['finding_id'])
         except ResearchError as error:
-            rejected(error, answer_id=answer['id'])
+            _record_completion_rejection(work, error, answer_id=answer['id'])
     for key in sorted(finding_ids - answered):
-        issue('review_finding_answer_pending', finding_id=key)
+        _record_completion_issue(work, 'review_finding_answer_pending', finding_id=key)
+    work['findings'] = findings
+    work['inherited'] = inherited
+    work['answered'] = answered
+
+
+def _check_completion_objection_evidence(work):
+    epoch = work['epoch']
+    observed = work['observed']
     for requirement in epoch['material_objection_entries']:
         if not any(_has_objection_entry(dict(material_objections=row['actual_input'].get('material_objections', [])), requirement)
                    for row in observed):
-            issue('review_objection_evidence_invalid', objection_id=requirement['objection_id'],
+            _record_completion_issue(work, 'review_objection_evidence_invalid', objection_id=requirement['objection_id'],
                   field=requirement['field'], index=requirement['index'])
 
-    terminals = [row['output']['terminal'] for row in observed if 'terminal' in row['output']]
+
+def _check_completion_terminal_identity(work):
+    epoch = work['epoch']
+    terminal = work['terminal']
+    grouped = work['grouped']
+    manifest = work['manifest']
+    resolved = work['resolved']
+    if epoch['role'] == 'result':
+        check_fields(terminal, ('assurances', 'visible_conditions'), ('composition_root', 'integration_id', 'decisions'), code='invalid_review_staged')
+        check_fields(terminal['assurances'], ASSURANCES, code='invalid_review_staged')
+    else:
+        check_fields(terminal, ('objection_id', 'disposition', 'correction_admissible', 'visible_conditions'),
+                 ('composition_root', 'integration_id', 'decisions'), code='invalid_review_staged')
+        if terminal['objection_id'] != epoch['focused_scope']['objection_id'] or \
+                terminal['disposition'] not in ('upheld', 'not_upheld', 'not_binding', 'unresolved'):
+            _fail('Adjudication terminal does not bind its exact focused objection.')
+        if terminal['correction_admissible'] is not None and type(terminal['correction_admissible']) is not bool:
+            _fail('Correction admissibility must be null or boolean.')
+        decisions = [row for row in grouped.get('decision_checks', {}).values() if row.get('decision') == 'disposition']
+        if len(decisions) != 1:
+            _record_completion_issue(work, 'review_assurance_dependency_pending', decision='disposition')
+        else:
+            decision = decisions[0]
+            check_fields(decision, ('id', 'decision', 'value', 'claim_ids', 'reason', 'grounds', 'dependencies'), code='invalid_review_staged')
+            check_text(decision['reason'], 'decision.reason', code='invalid_review_staged')
+            _ground(decision['grounds'], manifest, resolved)
+            if decision['value'] != terminal['disposition'] or decision['dependencies'] or \
+                    not decision['grounds'] or not set(manifest['contexts']) <= set(decision['claim_ids']):
+                _record_completion_issue(work, 'review_assurance_dependency_pending', decision='disposition')
+
+
+def _check_completion_terminal_integration(work):
+    terminal = work['terminal']
+    valid_integrations = work['valid_integrations']
+    obligations = work['obligations']
+    selected_integration = terminal.get('integration_id')
+    valid_index = _index(valid_integrations, 'integrations')
+    roots = set(valid_index) - {key for receipt in valid_integrations for key in receipt['child_ids']}
+    if selected_integration is None and len(roots) == 1:
+        selected_integration = next(iter(roots))
+    if selected_integration not in roots:
+        _record_completion_issue(work, 'review_integration_pending', reason='Terminal does not select a unique complete integration root.')
+    else:
+        reachable, pending = set(), [selected_integration]
+        while pending:
+            key = pending.pop()
+            if key not in valid_index:
+                _fail('Integration root has an invalid child.')
+            if key not in reachable:
+                reachable.add(key)
+                pending.extend(valid_index[key]['child_ids'])
+        if reachable != set(valid_index) or set(valid_index[selected_integration]['obligation_ids']) != set(obligations):
+            _record_completion_issue(work, 'review_integration_pending', reason='Terminal root omits required integration work.')
+
+
+def _check_completion_visible_conditions(work):
+    full_cards = work['full_cards']
+    terminal = work['terminal']
+    visible = {row['id'] for card in full_cards for row in card['conditions']}
+    if not visible <= set(terminal['visible_conditions']):
+        _fail('Terminal lost a full-card condition.', missing=sorted(visible - set(terminal['visible_conditions'])))
+
+
+def _check_completion_assurances(work):
+    grouped = work['grouped']
+    epoch = work['epoch']
+    terminal = work['terminal']
+    manifest = work['manifest']
+    cells = work['cells']
+    resolved = work['resolved']
+    findings = work['findings']
+    valid_integrations = work['valid_integrations']
+    assurance_checks = {row.get('assurance'): row for row in grouped.get('assurance_checks', {}).values()}
+    for kind in (ASSURANCES if epoch['role'] == 'result' else ()):
+        status = terminal['assurances'][kind]
+        seeds = set(manifest['assurance_dependencies'][kind])
+        relevant = [cell for cell in cells.values() if cell['claim_id'] in seeds]
+        check = assurance_checks.get(kind)
+        if status not in ('passed', 'failed', 'not_assessed'):
+            _fail('Unknown terminal assurance choice.')
+        if check is None or check.get('status') != status or not seeds <= set(check.get('claim_ids', [])):
+            _record_completion_issue(work, 'review_assurance_dependency_pending', assurance=kind)
+            continue
+        check_fields(check, ('id', 'assurance', 'status', 'claim_ids', 'reason', 'grounds',
+                          'conditions_satisfied', 'dependencies'), code='invalid_review_staged')
+        if type(check['conditions_satisfied']) is not bool:
+            _fail('Assurance condition satisfaction must be explicit boolean data.')
+        check_text(check.get('reason'), 'assurance.reason', code='invalid_review_staged')
+        _ground(check.get('grounds'), manifest, resolved | {cell['id'] for cell in cells.values()})
+        if not check['grounds']:
+            _record_completion_issue(work, 'review_assurance_dependency_pending', assurance=kind)
+        if status == 'not_assessed' or not seeds <= {cell['claim_id'] for cell in relevant}:
+            _record_completion_issue(work, 'review_assurance_dependency_pending', assurance=kind)
+        if status == 'passed':
+            if (any(cell['status'] in ('unresolved', 'contradicted') for cell in relevant) or
+                    not check.get('conditions_satisfied') or check.get('dependencies') or
+                    any(row.get('adverse') and not row.get('classification') for row in findings)):
+                _record_completion_issue(work, 'review_assurance_dependency_pending', assurance=kind)
+        for receipt in valid_integrations:
+            constraints = receipt['decision_constraints']
+            allowed = constraints.get('permissible_assurances', {}).get(kind)
+            if allowed is not None and status not in allowed:
+                _record_completion_issue(work, 'review_assurance_dependency_pending', assurance=kind, permissible=allowed)
+            if status == 'passed' and (receipt['unresolved'] or
+                    any(row['disposition'] == 'conflict' for row in receipt['dispositions'])):
+                _record_completion_issue(work, 'review_assurance_dependency_pending', assurance=kind)
+
+
+def _check_completion_decisions(work):
+    valid_integrations = work['valid_integrations']
+    epoch = work['epoch']
+    terminal = work['terminal']
+    manifest = work['manifest']
+    cells = work['cells']
+    constraints = [receipt['decision_constraints'] for receipt in valid_integrations]
+    constraints.append(epoch['completion_requirements'])
+    for constraint in constraints:
+        for key, allowed in constraint.get('permissible_decisions', {}).items():
+            choice = terminal.get('decisions', {}).get(key, terminal.get(key))
+            if choice not in allowed:
+                _record_completion_issue(work, 'review_assurance_dependency_pending', decision=key, permissible=allowed)
+        for key, required_claims in constraint.get('decision_dependencies', {}).items():
+            for claim_id in required_claims:
+                if claim_id not in manifest['contexts'] or any(
+                        cell['status'] == 'unresolved' for cell in cells.values() if cell['claim_id'] == claim_id):
+                    _record_completion_issue(work, 'review_assurance_dependency_pending', decision=key, claim_id=claim_id)
+
+
+def _check_completion_composition(work):
+    selection = work['selection']
+    terminal = work['terminal']
+    epoch = work['epoch']
+    observations_root = work['observations_root']
+    certificate = selection.get('composition_certificate')
+    if terminal.get('composition_root') is not None:
+        if not certificate or not certificate.get('complete') or certificate.get('epoch_digest') != epoch['digest'] or \
+                certificate.get('composition_root') != terminal['composition_root'] or \
+                certificate.get('selected_observations_root') != observations_root:
+            _record_completion_issue(work, 'review_composition_pending', composition_root=terminal['composition_root'])
+
+
+def _check_completion_terminal(work):
+    terminals = [row['output']['terminal'] for row in work['observed'] if 'terminal' in row['output']]
     terminal = terminals[0] if len(terminals) == 1 else None
     if terminal is None:
-        issue('review_terminal_pending', count=len(terminals))
-    else:
-        try:
-            if epoch['role'] == 'result':
-                _require(terminal, ('assurances', 'visible_conditions'), ('composition_root', 'integration_id', 'decisions'))
-                _require(terminal['assurances'], ASSURANCES)
-            else:
-                _require(terminal, ('objection_id', 'disposition', 'correction_admissible', 'visible_conditions'),
-                         ('composition_root', 'integration_id', 'decisions'))
-                if terminal['objection_id'] != epoch['focused_scope']['objection_id'] or \
-                        terminal['disposition'] not in ('upheld', 'not_upheld', 'not_binding', 'unresolved'):
-                    _fail('Adjudication terminal does not bind its exact focused objection.')
-                if terminal['correction_admissible'] is not None and type(terminal['correction_admissible']) is not bool:
-                    _fail('Correction admissibility must be null or boolean.')
-                decisions = [row for row in grouped.get('decision_checks', {}).values() if row.get('decision') == 'disposition']
-                if len(decisions) != 1:
-                    issue('review_assurance_dependency_pending', decision='disposition')
-                else:
-                    decision = decisions[0]
-                    _require(decision, ('id', 'decision', 'value', 'claim_ids', 'reason', 'grounds', 'dependencies'))
-                    _text(decision['reason'], 'decision.reason')
-                    _ground(decision['grounds'], manifest, resolved)
-                    if decision['value'] != terminal['disposition'] or decision['dependencies'] or \
-                            not decision['grounds'] or not set(manifest['contexts']) <= set(decision['claim_ids']):
-                        issue('review_assurance_dependency_pending', decision='disposition')
-            selected_integration = terminal.get('integration_id')
-            valid_index = _index(valid_integrations, 'integrations')
-            roots = set(valid_index) - {key for receipt in valid_integrations for key in receipt['child_ids']}
-            if selected_integration is None and len(roots) == 1:
-                selected_integration = next(iter(roots))
-            if selected_integration not in roots:
-                issue('review_integration_pending', reason='Terminal does not select a unique complete integration root.')
-            else:
-                reachable, pending = set(), [selected_integration]
-                while pending:
-                    key = pending.pop()
-                    if key not in valid_index:
-                        _fail('Integration root has an invalid child.')
-                    if key not in reachable:
-                        reachable.add(key)
-                        pending.extend(valid_index[key]['child_ids'])
-                if reachable != set(valid_index) or set(valid_index[selected_integration]['obligation_ids']) != set(obligations):
-                    issue('review_integration_pending', reason='Terminal root omits required integration work.')
-            visible = {row['id'] for card in full_cards for row in card['conditions']}
-            if not visible <= set(terminal['visible_conditions']):
-                _fail('Terminal lost a full-card condition.', missing=sorted(visible - set(terminal['visible_conditions'])))
-            assurance_checks = {row.get('assurance'): row for row in grouped.get('assurance_checks', {}).values()}
-            for kind in (ASSURANCES if epoch['role'] == 'result' else ()):
-                status = terminal['assurances'][kind]
-                seeds = set(manifest['assurance_dependencies'][kind])
-                relevant = [cell for cell in cells.values() if cell['claim_id'] in seeds]
-                check = assurance_checks.get(kind)
-                if status not in ('passed', 'failed', 'not_assessed'):
-                    _fail('Unknown terminal assurance choice.')
-                if check is None or check.get('status') != status or not seeds <= set(check.get('claim_ids', [])):
-                    issue('review_assurance_dependency_pending', assurance=kind)
-                    continue
-                _require(check, ('id', 'assurance', 'status', 'claim_ids', 'reason', 'grounds',
-                                  'conditions_satisfied', 'dependencies'))
-                if type(check['conditions_satisfied']) is not bool:
-                    _fail('Assurance condition satisfaction must be explicit boolean data.')
-                _text(check.get('reason'), 'assurance.reason')
-                _ground(check.get('grounds'), manifest, resolved | {cell['id'] for cell in cells.values()})
-                if not check['grounds']:
-                    issue('review_assurance_dependency_pending', assurance=kind)
-                if status == 'not_assessed' or not seeds <= {cell['claim_id'] for cell in relevant}:
-                    issue('review_assurance_dependency_pending', assurance=kind)
-                if status == 'passed':
-                    if (any(cell['status'] in ('unresolved', 'contradicted') for cell in relevant) or
-                            not check.get('conditions_satisfied') or check.get('dependencies') or
-                            any(row.get('adverse') and not row.get('classification') for row in findings)):
-                        issue('review_assurance_dependency_pending', assurance=kind)
-                for receipt in valid_integrations:
-                    constraints = receipt['decision_constraints']
-                    allowed = constraints.get('permissible_assurances', {}).get(kind)
-                    if allowed is not None and status not in allowed:
-                        issue('review_assurance_dependency_pending', assurance=kind, permissible=allowed)
-                    if status == 'passed' and (receipt['unresolved'] or
-                            any(row['disposition'] == 'conflict' for row in receipt['dispositions'])):
-                        issue('review_assurance_dependency_pending', assurance=kind)
-            constraints = [receipt['decision_constraints'] for receipt in valid_integrations]
-            constraints.append(epoch['completion_requirements'])
-            for constraint in constraints:
-                for key, allowed in constraint.get('permissible_decisions', {}).items():
-                    choice = terminal.get('decisions', {}).get(key, terminal.get(key))
-                    if choice not in allowed:
-                        issue('review_assurance_dependency_pending', decision=key, permissible=allowed)
-                for key, required_claims in constraint.get('decision_dependencies', {}).items():
-                    for claim_id in required_claims:
-                        if claim_id not in manifest['contexts'] or any(
-                                cell['status'] == 'unresolved' for cell in cells.values() if cell['claim_id'] == claim_id):
-                            issue('review_assurance_dependency_pending', decision=key, claim_id=claim_id)
-            certificate = selection.get('composition_certificate')
-            if terminal.get('composition_root') is not None:
-                if not certificate or not certificate.get('complete') or certificate.get('epoch_digest') != epoch['digest'] or \
-                        certificate.get('composition_root') != terminal['composition_root'] or \
-                        certificate.get('selected_observations_root') != observations_root:
-                    issue('review_composition_pending', composition_root=terminal['composition_root'])
-        except ResearchError as error:
-            rejected(error)
+        _record_completion_issue(work, 'review_terminal_pending', count=len(terminals))
+        return
+    work['terminal'] = terminal
+    try:
+        _check_completion_terminal_identity(work)
+        _check_completion_terminal_integration(work)
+        _check_completion_visible_conditions(work)
+        _check_completion_assurances(work)
+        _check_completion_decisions(work)
+        _check_completion_composition(work)
+    except ResearchError as error:
+        _record_completion_rejection(work, error)
+
+
+def _check_completion_requirements(work):
+    task_index = work['task_index']
+    epoch = work['epoch']
+    by_task = work['by_task']
+    grouped = work['grouped']
+    closed_groups = work['closed_groups']
+    selection = work['selection']
     if not task_index:
-        issue('review_task_pending', reason='No frozen task envelopes.')
+        _record_completion_issue(work, 'review_task_pending', reason='No frozen task envelopes.')
     requirements = epoch['completion_requirements']
     for kind in requirements.get('required_task_types', []):
         if not any(task_index[key]['type'] == kind for key in by_task):
-            issue('review_task_pending', task_type=kind)
+            _record_completion_issue(work, 'review_task_pending', task_type=kind)
     for key in requirements.get('required_answer_ids', []):
         if key not in grouped.get('answers', {}):
-            issue('review_finding_answer_pending', answer_id=key)
+            _record_completion_issue(work, 'review_finding_answer_pending', answer_id=key)
     for key in requirements.get('required_group_ids', []):
         if key not in closed_groups:
-            issue('review_original_check_pending', group_id=key)
+            _record_completion_issue(work, 'review_original_check_pending', group_id=key)
     if requirements.get('composition_required') and not selection.get('composition_certificate'):
-        issue('review_composition_pending', reason='Frozen completion requires a composition certificate.')
+        _record_completion_issue(work, 'review_composition_pending', reason='Frozen completion requires a composition certificate.')
+
+
+def _build_completion_report(work):
+    source_characters = work['source_characters']
+    binary_count = work['binary_count']
+    cells = work['cells']
+    full_cards = work['full_cards']
+    valid_combinations = work['valid_combinations']
+    covered_pairs = work['covered_pairs']
+    closed_groups = work['closed_groups']
+    accounted = work['accounted']
+    answered = work['answered']
+    resolved = work['resolved']
+    epoch = work['epoch']
+    current_contexts = work['current_contexts']
+    observations_root = work['observations_root']
+    issues = work['issues']
+    coverage = work['coverage']
+    cards = work['cards']
+    checks = work['checks']
+    valid_integrations = work['valid_integrations']
+    findings = work['findings']
+    inherited = work['inherited']
     progress = dict(source_characters=source_characters, binary_sources=binary_count,
                     claim_cells=len(cells), unresolved_cells=sum(row['status'] == 'unresolved' for row in cells.values()),
                     full_cards=len(full_cards), combination_assessments=len(valid_combinations),
@@ -1673,10 +1821,43 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
     return _seal(report)
 
 
+def verify_completion(epoch, selection, *, tasks=None, contexts=None):
+    """Verify an explicit authenticated selection; never select from store state.
+
+    Invalid or missing scientific work becomes structured issues and receives no
+    completion credit. Malformed frozen identities raise ResearchError. Returned
+    roots bind the exact selected work, retained conclusions and unfinished scope.
+    Historical authenticity, current currency and reviewer independence are
+    separate caller checks.
+    """
+    _epoch(epoch)
+    check_fields(selection, ('observations',), ('composition_certificate',), code='invalid_review_staged')
+    work = dict(epoch=epoch, selection=selection, contexts=contexts, manifest=epoch['manifest'],
+                task_index=_index(list(tasks or []), 'tasks'),
+                raw=_index(selection['observations'], 'observations'), issues=[])
+    _expand_completion_contexts(work)
+    _check_completion_observations(work)
+    _collect_completion_records(work)
+    _check_completion_coverage(work)
+    _check_completion_groups(work)
+    _check_completion_original_checks(work)
+    _check_completion_cards(work)
+    _check_completion_cells(work)
+    _check_completion_card_reconciliation(work)
+    _check_completion_combinations(work)
+    _check_completion_retrievals(work)
+    _check_completion_integration_accounting(work)
+    _check_completion_finding_answers(work)
+    _check_completion_objection_evidence(work)
+    _check_completion_terminal(work)
+    _check_completion_requirements(work)
+    return _build_completion_report(work)
+
+
 def _ledger(value):
     source = value or {}
-    _require(source, (), ('attempts', 'retries', 'rereads', 'subdivisions', 'epochs',
-                          'elapsed_seconds', 'unknown_usage'))
+    check_fields(source, (), ('attempts', 'retries', 'rereads', 'subdivisions', 'epochs',
+                          'elapsed_seconds', 'unknown_usage'), code='invalid_review_staged')
     result = {key: source.get(key, 0) for key in ('attempts', 'retries', 'rereads', 'subdivisions', 'epochs',
                                                 'elapsed_seconds')}
     for key, amount in result.items():
@@ -1774,7 +1955,7 @@ def validate_incomplete(record, *, epoch=None):
                 'known_conclusions_root', 'unresolved_scope_root', 'inherited_adverse_findings_root',
                 'resource_ledger', 'recovery_work_root', 'predecessor_outcome_id', 'recorded_revision',
                 'completion_issues', 'unresolved_scope', 'recovery_work')
-    _require(record, required)
+    check_fields(record, required, code='invalid_review_staged')
     _verify_seal(record)
     if record['schema'] != INCOMPLETE_SCHEMA or record['kind'] != 'assessment_incomplete':
         _fail('Unknown incomplete-outcome contract.')
@@ -1784,16 +1965,16 @@ def validate_incomplete(record, *, epoch=None):
     for key in ('controller_assignment_id', 'epoch_id', 'epoch_digest', 'slot_id', 'reviewer_id', 'route_id',
                 'author_id', 'selected_observations_root', 'completion_root', 'known_conclusions_root',
                 'unresolved_scope_root', 'inherited_adverse_findings_root', 'recovery_work_root'):
-        _text(record[key], key)
+        check_text(record[key], key, code='invalid_review_staged')
     if record['role'] not in ('result', 'adjudicator'):
         _fail('Unknown incomplete slot role.')
     if record['origin'] == 'reviewer':
-        _require(record['origin_binding'], ('attempt_id', 'raw_output_digest'))
+        check_fields(record['origin_binding'], ('attempt_id', 'raw_output_digest'), code='invalid_review_staged')
         for key in record['origin_binding']:
-            _text(record['origin_binding'][key], key)
+            check_text(record['origin_binding'][key], key, code='invalid_review_staged')
     elif record['origin'] == 'execution':
-        _require(record['origin_binding'], ('execution_receipts', 'reason'))
-        _ids(record['origin_binding']['execution_receipts'], 'execution_receipts')
+        check_fields(record['origin_binding'], ('execution_receipts', 'reason'), code='invalid_review_staged')
+        check_ids(record['origin_binding']['execution_receipts'], 'execution_receipts', code='invalid_review_staged')
         if not record['origin_binding']['execution_receipts'] or record['origin_binding']['reason'] not in ('exhausted', 'unknown_outcome'):
             _fail('Execution-origin incompleteness needs exhaustion or unknown-outcome receipts.')
     else:
@@ -1803,13 +1984,13 @@ def validate_incomplete(record, *, epoch=None):
         _fail('An incomplete outcome must name unfinished scientific scope.')
     exhausted = set()
     for row in entries:
-        _require(row, ('id', 'scope', 'cause', 'affected_decisions', 'exhausted_tasks', 'scope_kind', 'next_action'))
+        check_fields(row, ('id', 'scope', 'cause', 'affected_decisions', 'exhausted_tasks', 'scope_kind', 'next_action'), code='invalid_review_staged')
         for key in ('id', 'cause'):
-            _text(row[key], key)
+            check_text(row[key], key, code='invalid_review_staged')
         if not isinstance(row['scope'], dict) or not row['scope']:
             _fail('Unresolved scope must identify its scientific obligations.')
-        _ids(row['affected_decisions'], 'affected_decisions')
-        _ids(row['exhausted_tasks'], 'exhausted_tasks')
+        check_ids(row['affected_decisions'], 'affected_decisions', code='invalid_review_staged')
+        check_ids(row['exhausted_tasks'], 'exhausted_tasks', code='invalid_review_staged')
         exhausted.update(row['exhausted_tasks'])
         if row['scope_kind'] not in SCOPES:
             _fail('Unknown unresolved assessment scope.')
@@ -1841,7 +2022,7 @@ def validate_incomplete(record, *, epoch=None):
 
 def transition_outcome(head, event, *, epoch_id=None, outcome=None):
     """Apply a slot transition as data, retaining history and adverse findings."""
-    _require(head, ('slot_id', 'epoch_id', 'state', 'outcome'), ('history', 'inherited_adverse_findings', 'current'))
+    check_fields(head, ('slot_id', 'epoch_id', 'state', 'outcome'), ('history', 'inherited_adverse_findings', 'current'), code='invalid_review_staged')
     if head['state'] not in ('pending', 'complete', 'incomplete'):
         _fail('Unknown slot state.')
     result = copy.deepcopy(head)
@@ -1874,8 +2055,8 @@ def collect_slot_outcomes(heads, *, qualified=False, scientific_ready=False):
     slots, complete, incomplete, pending, adverse = {}, [], [], [], []
     current = True
     for head in heads:
-        _require(head, ('slot_id', 'epoch_id', 'state', 'outcome'),
-                 ('role', 'history', 'inherited_adverse_findings', 'current'))
+        check_fields(head, ('slot_id', 'epoch_id', 'state', 'outcome'),
+                 ('role', 'history', 'inherited_adverse_findings', 'current'), code='invalid_review_staged')
         key = head['slot_id']
         if key in slots:
             _fail('Multiple current heads for one logical slot.', slot_id=key)

@@ -4,6 +4,7 @@ from .errors import ResearchError
 from .operations import fields
 
 
+PROBLEM_CHECKS = ("problem_statement", "problem_openness", "problem_value", "problem_citations", "stop")
 ADMISSION_ITEMS_BEFORE_A7 = ("A1", "A2", "A3", "A4", "A5", "A6")
 ADMISSION_ITEMS = ADMISSION_ITEMS_BEFORE_A7 + ("A7",)
 GROUNDS = ("B1", "B2")

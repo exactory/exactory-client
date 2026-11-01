@@ -13,6 +13,29 @@ CHECKS = ('problem_statement', 'problem_openness', 'problem_value', 'problem_cit
 SOURCE = {'kind': 'record', 'record_kind': 'problem_reading', 'record_id': 'prime-domain-reading'}
 
 
+class SharedCompositionValidationTests(unittest.TestCase):
+    def test_invalid_unicode_json_uses_the_composition_error_code(self):
+        plan, observations, _, _ = make_fixture()
+        plan['subject'] = {'id': '\ud800'}
+        with self.assertRaises(ResearchError) as raised:
+            composition.build_root(plan, observations)
+        self.assertEqual(raised.exception.code, 'review_composition_conflict')
+
+    def test_existing_root_and_literal_nonempty_identifiers_stay_valid(self):
+        plan, observations, _, _ = make_fixture()
+        self.assertEqual(composition.build_root(plan, observations)['digest'],
+                         'fd2237e1eb94132c6a084dbbd82d2b61544833e546b56b47c9d8ecd003a23848')
+        self.assertEqual(composition.effective_review_output('   ')['kind'], 'pending')
+
+    def test_shared_fields_keep_conflict_and_pending_distinct(self):
+        plan, observations, _, _ = make_fixture()
+        for changed, code in ((dict(plan, extra=True), 'review_composition_conflict'),
+                              (plan, 'review_composition_pending')):
+            with self.subTest(code=code), self.assertRaises(ResearchError) as raised:
+                composition.build_root(changed, [] if code.endswith('pending') else observations)
+            self.assertEqual(raised.exception.code, code)
+
+
 def worked_objection():
     return {'id': 'O7', 'claim': 'The motivation supports the broad value claim.',
             'reason': 'The supplied argument applies only to prime p.', 'evidence': [SOURCE],

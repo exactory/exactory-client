@@ -17,6 +17,7 @@ from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
 from . import strategy
 from . import problem_rubric
+from .problem_rubric import PROBLEM_CHECKS
 from .review_refusal import contract_check, evidence_arrays, record_refusal_on_error, validate_evidence_contract
 
 
@@ -24,7 +25,6 @@ CONTINUE_CHECKS_V1 = ("impact", "demand", "novelty_risk", "feasibility", "distin
 CONTINUE_CHECKS = CONTINUE_CHECKS_V1 + ("q1_venue",)
 STOP_CHECKS = ("stop", "demand")
 ALL_CHECKS = CONTINUE_CHECKS + ("stop",)
-PROBLEM_CHECKS = ("problem_statement", "problem_openness", "problem_value", "problem_citations", "stop")
 BOUNDARIES = ("target", "cycle", "write", "publication", "round")
 ARTIFACT_DISPOSITIONS = ("none", "result_report", "prepare_manuscript", "deliver_under_instruction")
 _LIMITS = ("These are mechanical evidence, attribution and transition checks. Scientific truth, importance, "

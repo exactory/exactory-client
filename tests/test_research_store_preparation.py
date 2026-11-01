@@ -44,6 +44,15 @@ class _InterruptConnection:
 
 
 class ResearchStorePreparationTests(unittest.TestCase):
+    def test_shared_fields_support_open_records_without_losing_required_fields(self):
+        operations.fields({'id': 'record', 'extra': 1}, ('id',), optional=None, code='invalid_review_staged')
+        for value in ({'extra': 1}, [], None):
+            with self.subTest(value=value), self.assertRaises(ResearchError) as caught:
+                operations.fields(value, ('id',), optional=None, code='invalid_review_staged', path='/record')
+            self.assertEqual(caught.exception.code, 'invalid_review_staged')
+            self.assertEqual(caught.exception.details['missing_fields'], ['id'])
+            self.assertEqual(caught.exception.details['unexpected_fields'], [])
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

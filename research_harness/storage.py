@@ -231,6 +231,28 @@ def _encode_mutation_input(operation, payload, apply, expected_revision, request
     return _canonical(payload)
 
 
+def _commit_mutation(connection, transaction, operation, encoded_payload, encoded_result, revision, request_id):
+    """Append the event and receipt, then advance the revision in the same transaction."""
+    next_revision = revision + 1
+    response = {"revision": next_revision, "request_id": request_id, "result": json.loads(encoded_result)}
+    event = {"revision": next_revision, "request_id": request_id, "operation": operation,
+             "payload": json.loads(encoded_payload), "changes": transaction._changes,
+             "result": response["result"]}
+    connection.execute(
+        "INSERT INTO events (revision, request_id, operation, payload, changes, result, digest) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (next_revision, request_id, operation, encoded_payload, _canonical(transaction._changes),
+         encoded_result, _digest(_canonical(event))))
+    encoded_response = _canonical(response)
+    connection.execute("INSERT INTO receipts (request_id, revision, response, digest) VALUES (?, ?, ?, ?)",
+                       (request_id, next_revision, encoded_response, _digest(encoded_response)))
+    changed = connection.execute("UPDATE metadata SET revision = ? WHERE id = 1 AND revision = ?",
+                                 (next_revision, revision)).rowcount
+    if changed != 1:
+        raise ResearchError("corrupt_state", "Research revision changed during the transaction")
+    return response
+
+
 def _encode_record_change(key, value):
     _text(key, "Record key")
     if not isinstance(value, dict):
@@ -1114,24 +1136,8 @@ class Store:
                 encoded_result = _canonical(result)
             finally:
                 transaction._active = False
-            next_revision = revision + 1
-            response = {"revision": next_revision, "request_id": request_id, "result": json.loads(encoded_result)}
-            event = {"revision": next_revision, "request_id": request_id, "operation": operation,
-                     "payload": json.loads(encoded_payload), "changes": transaction._changes,
-                     "result": response["result"]}
-            connection.execute(
-                "INSERT INTO events (revision, request_id, operation, payload, changes, result, digest) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (next_revision, request_id, operation, encoded_payload, _canonical(transaction._changes),
-                 encoded_result, _digest(_canonical(event))))
-            encoded_response = _canonical(response)
-            connection.execute("INSERT INTO receipts (request_id, revision, response, digest) VALUES (?, ?, ?, ?)",
-                               (request_id, next_revision, encoded_response, _digest(encoded_response)))
-            changed = connection.execute("UPDATE metadata SET revision = ? WHERE id = 1 AND revision = ?",
-                                         (next_revision, expected_revision)).rowcount
-            if changed != 1:
-                raise ResearchError("corrupt_state", "Research revision changed during the transaction")
-            return response
+            return _commit_mutation(connection, transaction, operation, encoded_payload, encoded_result,
+                                    revision, request_id)
 
     def mutate_scoped(self, operation, payload, apply, *, request_id, _preparation, expected_revision=None):
         """Revalidate an owned task proof, then apply(tx, actual_commit_revision)."""
@@ -1157,19 +1163,5 @@ class Store:
                 encoded_result = _canonical(result)
             finally:
                 transaction._active = False
-            response = {"revision": next_revision, "request_id": request_id, "result": json.loads(encoded_result)}
-            event = {"revision": next_revision, "request_id": request_id, "operation": operation,
-                     "payload": json.loads(encoded_payload), "changes": transaction._changes, "result": response["result"]}
-            connection.execute(
-                "INSERT INTO events (revision, request_id, operation, payload, changes, result, digest) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (next_revision, request_id, operation, encoded_payload, _canonical(transaction._changes),
-                 encoded_result, _digest(_canonical(event))))
-            encoded_response = _canonical(response)
-            connection.execute("INSERT INTO receipts (request_id, revision, response, digest) VALUES (?, ?, ?, ?)",
-                               (request_id, next_revision, encoded_response, _digest(encoded_response)))
-            changed = connection.execute("UPDATE metadata SET revision = ? WHERE id = 1 AND revision = ?",
-                                         (next_revision, revision)).rowcount
-            if changed != 1:
-                raise ResearchError("corrupt_state", "Research revision changed during the transaction")
-            return response
+            return _commit_mutation(connection, transaction, operation, encoded_payload, encoded_result,
+                                    revision, request_id)

@@ -27,6 +27,15 @@ def passing_grades():
 
 
 class ProblemRubricTests(unittest.TestCase):
+    def test_problem_assurance_vocabulary_is_shared_without_import_cycles(self):
+        from research_harness import research_decisions, review_composition, review_staged
+        self.assertTrue(hasattr(rubric, 'PROBLEM_CHECKS'))
+        self.assertEqual(rubric.PROBLEM_CHECKS,
+                         ('problem_statement', 'problem_openness', 'problem_value', 'problem_citations', 'stop'))
+        self.assertIs(research_decisions.PROBLEM_CHECKS, rubric.PROBLEM_CHECKS)
+        self.assertIs(review_composition.ASSURANCES, rubric.PROBLEM_CHECKS)
+        self.assertIs(review_staged.ASSURANCES, rubric.PROBLEM_CHECKS)
+
     def test_full_grades_validate_and_reject_each_bad_value(self):
         grades = passing_grades()
         self.assertEqual(rubric.validate_grades(grades), grades)

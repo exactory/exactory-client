@@ -16,6 +16,38 @@ from research_harness.storage import Store
 from tests.test_review_task_execution import TaskExecutionFixture
 
 
+class SharedProcessIdentityTests(TaskExecutionFixture):
+    def test_worker_uses_neutral_kernel_identity_and_keeps_its_record_shape(self):
+        from research_harness import probe_supervision
+        self.assertTrue(hasattr(probe_supervision, 'find_process_identity'))
+        with mock.patch.object(probe_supervision, 'find_process_identity', return_value={
+                'pid': 123, 'process_group': 120, 'start_identity': [10, 20]}):
+            self.assertEqual(review_worker._identity(123), {'pid': 123, 'pgid': 120, 'started': '10:20'})
+
+    def test_group_survivor_is_retained_when_the_original_leader_is_gone(self):
+        from research_harness import probe_supervision
+        self.assertTrue(hasattr(probe_supervision, 'find_process_group_members'))
+        original = {'pid': 123, 'pgid': 120, 'started': '10:20'}
+        with mock.patch.object(probe_supervision, 'find_process_identity', return_value=None), \
+                mock.patch.object(probe_supervision, 'find_process_group_members', return_value=[
+                    {'pid': 124, 'process_group': 120, 'start_identity': [30, 40]}]):
+            self.assertTrue(review_worker._has_processes(original, review_worker._process_table([original])))
+
+    def test_unreadable_kernel_identity_requires_reconciliation(self):
+        from research_harness import probe_supervision
+        self.assertTrue(hasattr(probe_supervision, 'find_process_identity'))
+        with mock.patch.object(probe_supervision, 'find_process_identity', side_effect=PermissionError('denied')):
+            self.refuse('review_worker_reconciliation_required', lambda: review_worker._identity(123))
+
+    def test_linux_worker_reads_kernel_ticks_without_spawning_ps(self):
+        from research_harness import probe_supervision
+        data = '123 (a command with ) parentheses) S 1 120 ' + '0 ' * 16 + '98765 0'
+        with mock.patch.object(probe_supervision.sys, 'platform', 'linux'), \
+                mock.patch.object(Path, 'read_text', return_value=data), \
+                mock.patch.object(review_worker, '_SYSTEM_POPEN', side_effect=AssertionError('No ps process')):
+            self.assertEqual(review_worker._identity(123), {'pid': 123, 'pgid': 120, 'started': '98765'})
+
+
 # A real external process supplies output through the same subprocess ownership boundary as the CLI adapters.
 _FIXTURE = r'''
 import json, os, subprocess, sys, time

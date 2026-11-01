@@ -10,6 +10,27 @@ from tests.test_review_staged_fixtures import epoch, profile, task, observation,
 
 
 class StagedReviewTests(unittest.TestCase):
+    def test_objection_resolution_uses_the_0693_packet_contract(self):
+        from research_harness.review_objection_evidence import resolve_objection_entry
+        self.assertIs(staged.resolve_objection_entry, resolve_objection_entry)
+        full = {'cite': {'id': 'source'}, 'content': 'Exact original evidence.'}
+        packet = {'material_objections': [{'id': 'O1', 'version_evidence': [full]}]}
+        alias = {'delivery': 'repeated-in-material-objections', 'objection_id': 'O1',
+                 'field': 'version_evidence', 'index': 0, 'digest': digest(full)}
+        before = copy.deepcopy(packet)
+        self.assertEqual(staged.resolve_objection_entry(packet, alias), full)
+        self.assertEqual(packet, before)
+
+    def test_completion_keeps_existing_complete_and_incomplete_roots(self):
+        value = epoch()
+        tasks, selected = selection(value)
+        complete = staged.verify_completion(value, selected, tasks=tasks)
+        incomplete = staged.verify_completion(value, {'observations': []}, tasks=tasks)
+        self.assertTrue(complete['complete'])
+        self.assertFalse(incomplete['complete'])
+        self.assertEqual(complete['digest'], '8023113056fa63830e870842c10a4c79ce662a4a342bd724fe771c52c4edb6a2')
+        self.assertEqual(incomplete['digest'], 'b82bb5c706d02e796dc2107286d224333b3e72ae613ef980e97605dca6a06361')
+
     def test_occurrence_identity_includes_position_and_full_descriptor(self):
         items = [{'key': 'readings', 'index': i, 'item': {'same': True}, 'artifacts': [], 'source_ids': []}
                  for i in range(2)]
