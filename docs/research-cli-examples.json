@@ -72,6 +72,21 @@
       "evidence": [{"kind": "reading", "version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}]
     }]
   },
+  "problem-citation-metadata": {
+    "id": "citation-metadata-1",
+    "version_id": "url:https://example.org/repository/paper.pdf",
+    "title": "Finite bounds",
+    "authors": ["Ada Lovelace", "Grace Hopper"],
+    "year": "2026",
+    "evidence": {
+      "title": {"kind": "fulltext", "source_id": "paper-fulltext-1", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "start": 0, "end": 13},
+      "authors": [
+        {"kind": "response", "source_id": "readme-response-1", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "start": 0, "end": 12},
+        {"kind": "response", "source_id": "readme-response-1", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "start": 13, "end": 25}
+      ],
+      "year": {"kind": "response", "source_id": "readme-response-1", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "start": 26, "end": 30}
+    }
+  },
   "problem-assessment": {
     "id": "problem-assessment-1",
     "statement_id": "statement-1",

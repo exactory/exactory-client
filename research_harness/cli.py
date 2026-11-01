@@ -30,7 +30,7 @@ from .workspace import find_workspace, strict_json
 from . import research_decisions, review_protocol, strategy
 from .depth import record_depth
 from .probe import record_probe_intent, record_probe, summarize_probes
-from . import problem_attempt, problem_candidates, problem_claims
+from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata
 
 
 OPERATIONS = {
@@ -41,6 +41,7 @@ OPERATIONS = {
     "problem-attempt": problem_attempt.record_attempt,
     "problem-openness": problem_claims.record_openness,
     "problem-value": problem_claims.record_value,
+    "problem-citation-metadata": problem_citation_metadata.record_citation_metadata,
     "problem-assessment": problem_claims.record_assessment,
     "problem-formal-check": problem_claims.record_formal_check,
     "problem-decision": problem_claims.record_decision,

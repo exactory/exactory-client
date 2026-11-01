@@ -1,6 +1,7 @@
 """Citation projection uses recorded locators in priority order."""
 
 import copy
+import json
 import unittest
 
 from test_research_problem_claims import ProblemCase
@@ -29,6 +30,17 @@ def build_citation_records():
 
 
 class RegistryCitationTests(unittest.TestCase):
+    def test_registry_legacy_citation_bytes_and_binding_digest_are_unchanged(self):
+        records = build_citation_records()
+        self.assertEqual(json.dumps(project_citations(records, None), sort_keys=True, separators=(",", ":")).encode(),
+            b'[{"citation":"A. Author. First recorded paper","locator":"2601.18757v1"},'
+            b'{"citation":"B. Author. Second recorded paper","locator":"2609.14520v1"},'
+            b'{"citation":"Chuichiro Hayashi, Miwa Hayashi. A shared topology title","locator":"1012.4131v2"},'
+            b'{"citation":"Chuichiro Hayashi, Miwa Hayashi, Tahl Nowik. A shared topology title",'
+            b'"locator":"10.1016/j.topol.2012.01.008"}]')
+        self.assertEqual(compute_problem_evidence_digest(records, None),
+                         "38d9e9d48de0b971a3f9e4e0940b7669403dcd43f012288ca7c3f595844fe075")
+
     def test_registry_pairs_share_a_citation_but_related_works_stay_separate(self):
         records = build_citation_records()
         before = copy.deepcopy(records)

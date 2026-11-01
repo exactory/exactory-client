@@ -1933,6 +1933,7 @@ reviewer adapter.
 | `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
 | `problem-value` | `{id, statement_id, motivation, current_state}` | `problem_value/<id>` contains ordered paragraph arrays, each item `{text, evidence}` with nonempty evidence. |
+| `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
 | `problem-formal-check` | `{evidence: {execution_id, output_id}, native_closure_digest}` | `problem_formal_check/<id>` binds a requested support check to an authenticated native completion in this store. Invalid bindings return `problem_formal_check_unbound`. |
 | `problem-decision` | `{id, action, review_ids, bar_review_ids, reason}` | `problem_decision/<id>` binds the current evidence digest. Action is `post`, `revise` or `withdraw`; `post` requires the minimum and observed review coverage, otherwise `problem_minimum_unmet`. The other actions record the reason. |
@@ -3063,6 +3064,9 @@ example the population of the cohort tool. The post decision is
 | `exploratory_evidence` | Preserve the probe observation and obtain admissible support for the claim. |
 | `problem_formal_check_missing`, `problem_formal_check_stale` | Bind the requested check for the current value evidence to its authenticated native completion. |
 | `problem_citation_locator_missing` | Record a DOI, arXiv id or read-version bundle HTTPS locator for the cited work. In a problem record, `bundle` returns this code as a warning when the bundle's work has none of them, before a full reading binds the bundle. |
+| `problem_citation_work_ineligible` | Record citation metadata only for an existing `url:` work with no DOI and no arXiv identity; the refusal names `version_id`. A work with either identity is cited from its work record. |
+| `problem_citation_evidence_unbound` | Bind each span to a retained object of this store, the `response.sha256` of the named source record or the `text.sha256` of a `fulltext` capture of this exact version with that source, and keep the object retained; `source_id` and `sha256` name the span. Without details, the source record of a span changed after the record was made: record new metadata under a new id. |
+| `problem_citation_span_mismatch` | Make the field value equal the selected bytes exactly, or move `start` and `end` to the bytes that hold it; `source_id` and `sha256` name the span. |
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. |
@@ -3129,6 +3133,30 @@ current literature attempt and the full readings that the self-assessment's sour
 references name, as `{citation, locator}` using metadata citation and DOI, then
 arXiv id, then the read-version bundle's HTTPS URL. Every cited work has a reading
 in this store.
+
+A `url:` work has no registry metadata, so its citation comes from the imported
+work record, whose title can be a file path and whose authors can be absent, for
+example a manuscript PDF in a GitHub repository found through code search. For
+such a work, record the title, the authors and, when a retained capture states
+it, the year with `problem-citation-metadata` (the table under
+[Problem creation](#problem-creation)), each bound to the exact bytes of a
+retained capture: the extracted text of the PDF, or a captured response such as
+the repository's README. Verbatim matching establishes that the text appears in
+that capture; that the README's authors wrote the manuscript stays a reviewer
+judgment. The export and the evidence binding then use the latest record for
+that version: `citation` is the recorded authors joined by `, `, then `. ` and
+the recorded title, then `. ` and the year when one is recorded, and `locator`
+is unchanged. The binding adds `citation_metadata: [{version_id, id, digest}]`
+for every such version among the cited readings, so a changed span changes the
+evidence digest even when the citation text is the same. The result reviewers
+receive the record inside the reading's `readings` entry as `citation_metadata`,
+with the values, the spans, their provenance, the record's `id` and `digest`,
+an excerpt of up to 256 characters on each side of every matched span with its
+byte boundaries, and a `cite` reference of kind `record` and record kind
+`problem_citation_metadata`; the coverage check requires that entry exactly. A
+record that no longer validates, because a retained object or the source
+record's provenance changed, is reported under its refusal code, never
+replaced by the work record.
 
 The math-conjecturer delivery section checks the exported citation locators
 and duplicates, runs `exactory post-problem` on the exported files, then records

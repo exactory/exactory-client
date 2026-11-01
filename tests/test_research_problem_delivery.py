@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from test_research_problem_candidates import build_candidate, build_slate
 from test_research_problem_claims import ProblemCase
@@ -11,6 +12,7 @@ from research_harness.cli import status_report
 from research_harness.errors import ResearchError
 from research_harness.gates import gate_state
 from research_harness.evidence import digest
+from test_research_problem_citation_metadata import CitationMetadataCase
 
 
 class ProblemDeliveryCase(ProblemCase):
@@ -64,6 +66,54 @@ class ProblemDeliveryCase(ProblemCase):
         return self.mutate(self.load_problem_module().record_decision, {"id": identifier, "action": "post",
             "review_ids": ["review-result-first", "review-result-second"],
             "bar_review_ids": ["review-bar-first", "review-bar-second"], "reason": "Both independent findings support the exact evidence."})["result"]
+
+
+class CitationMetadataDeliveryTests(CitationMetadataCase, ProblemDeliveryCase):
+    def test_actual_result_delivery_supports_citing_the_nested_metadata_record(self):
+        from research_harness.problem_evidence import describe_evidence
+        from research_harness.problem_claims import compute_problem_evidence_digest
+        self.record_metadata()
+        self.observe_bars()
+        evidence = describe_evidence(self.store.snapshot()["records"], self.artifacts)
+        metadata = evidence["readings"][0]["citation_metadata"]
+        output = self.build_review_output("result")
+        output["value"]["evidence"] = [metadata["cite"]]
+        review = self.observe("result", "first", output)
+        records = self.store.snapshot()["records"]
+        packet = json.loads(self.artifacts.read(records["review_assignment"][review["assignment_id"]]["packet"]))
+        self.assertEqual(packet["problem_evidence"]["readings"][0]["citation_metadata"], metadata)
+        self.assertEqual(research_decisions.find_undelivered_review_references(records, self.artifacts, review), [])
+        self.assertEqual(research_decisions._assess_problem_coverage(records, self.artifacts, [review], evidence,
+            compute_problem_evidence_digest(records, self.artifacts)), [])
+        # Only the server-derived excerpts travel; the README response stays held.
+        self.assertNotIn(self.response_source["response"]["sha256"],
+                         {row["artifact"]["sha256"] for row in packet["evidence"]})
+
+    def check_incorrect_metadata_delivery(self, omit):
+        from research_harness.problem_evidence import describe_evidence
+        from research_harness.problem_claims import compute_problem_evidence_digest
+        self.record_metadata()
+        self.observe_bars()
+        original = review_protocol.add_problem_evidence
+        def change_metadata(records, artifacts, packet):
+            original(records, artifacts, packet)
+            reading = packet["problem_evidence"]["readings"][0]
+            if omit:
+                reading.pop("citation_metadata")
+            else:
+                reading["citation_metadata"]["evidence"]["title"]["start"] += 1
+        with patch.object(review_protocol, "add_problem_evidence", side_effect=change_metadata):
+            review = self.observe("result", "first")
+        records = self.store.snapshot()["records"]
+        pending = research_decisions._assess_problem_coverage(records, self.artifacts, [review],
+            describe_evidence(records, self.artifacts), compute_problem_evidence_digest(records, self.artifacts))
+        self.assertEqual([row["code"] for row in pending], ["problem_evidence_unassessed"])
+
+    def test_omitted_metadata_does_not_cover_the_current_evidence(self):
+        self.check_incorrect_metadata_delivery(omit=True)
+
+    def test_altered_metadata_does_not_cover_the_current_evidence(self):
+        self.check_incorrect_metadata_delivery(omit=False)
 
 
 class ProblemDeliveryTests(ProblemDeliveryCase):

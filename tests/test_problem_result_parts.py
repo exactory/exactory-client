@@ -11,9 +11,53 @@ from research_harness import review_protocol as protocol, review_transport as tr
 from research_harness import research_decisions as decisions, review_excerpts, review_refusal
 from research_harness import review_codex_transport as codex, review_claude_transport as claude
 from research_harness.evidence import digest
+from research_harness import cli
+from test_research_problem_citation_metadata import CitationMetadataCase
 
 
 class ProblemResultPartsTests(ResultPartsCase):
+    def add_url_citation_reading(self):
+        import sys
+        from research_harness.problem_evidence import describe_evidence
+        source_case = CitationMetadataCase()
+        self.addCleanup(source_case.doCleanups)
+        # This transport fixture substitutes the claim validator. Build the reading
+        # and its metadata with the real operations before delivering their projection.
+        with patch.dict(sys.modules, {"research_harness.problem_claims": cli.problem_claims}):
+            source_case.setUp()
+            source_case.record_metadata()
+            records = source_case.store.snapshot()["records"]
+            evidence = describe_evidence(records, source_case.artifacts)
+        for reference in protocol.collect_references(records):
+            self.assertEqual(self.case.artifacts.put(source_case.artifacts.read(reference), reference['media_type']), reference)
+        for kind in ('work', 'source', 'source_bundle', 'reading', 'problem_citation_metadata'):
+            for identifier, record in records.get(kind, {}).items():
+                self.case.put(kind, identifier, record)
+        for key in ('readings', 'passages', 'citations'):
+            self.case.expected[key] = evidence[key]
+        return evidence['readings'][0]['citation_metadata']
+
+    def test_url_citation_metadata_is_delivered_citable_and_bound_in_multipart_reviews(self):
+        self.oversized()
+        metadata = self.add_url_citation_reading()
+        parts, final = self.finish_parts()
+        carried = [entry['citation_metadata'] for assignment in parts
+                   for entry in self.packet(assignment)['problem_evidence']['readings']]
+        self.assertTrue(carried)
+        self.assertTrue(all(row == metadata for row in carried))
+        output = self.final_output()
+        output['value']['evidence'] = [metadata['cite']]
+        review = self.record_final(final, output)
+        self.assertEqual(decisions.find_undelivered_review_references(self.case.read_records(), self.case.artifacts, review), [])
+        self.assertEqual(self.coverage(review), [])
+        for omit in (True, False):
+            expected = copy.deepcopy(self.case.expected)
+            if omit:
+                expected['readings'][0].pop('citation_metadata')
+            else:
+                expected['readings'][0]['citation_metadata']['evidence']['title']['start'] += 1
+            self.assertTrue(self.coverage(review, expected))
+
     def test_fitting_packet_prompt_and_request_are_unchanged(self):
         records, artifacts = self.case.read_records(), self.case.artifacts
         with transport.text_only_delivery(True):

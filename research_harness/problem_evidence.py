@@ -353,6 +353,7 @@ def find_citation_locator(work, units):
 
 def project_citations(records, artifacts):
     from .identities import family_id, resolve_arxiv_family
+    from .problem_citation_metadata import find_citation_metadata, validate_citation_metadata
     seen, seen_arxiv_works, citations = set(), set(), []
     for reading in collect_readings(records):
         version = reading["version_id"]
@@ -378,8 +379,12 @@ def project_citations(records, artifacts):
         if locator is None:
             raise ResearchError("problem_citation_locator_missing", "Record a DOI, arXiv id or HTTPS locator for the read source",
                                 {"version_id": version, "reading_id": reading["id"]})
-        authors = ", ".join(author_names)
-        citation = ". ".join(part for part in (authors, work["title"], str(work.get("year") or "")) if part)
+        metadata = find_citation_metadata(records, version)
+        if metadata is not None:
+            validate_citation_metadata(records, artifacts, metadata)
+        citation_values = work if metadata is None else metadata
+        authors = ", ".join(author_names if metadata is None else metadata["authors"])
+        citation = ". ".join(part for part in (authors, citation_values["title"], str(citation_values.get("year") or "")) if part)
         citations.append({"citation": citation, "locator": locator})
         if arxiv_work_key is not None:
             seen_arxiv_works.add(arxiv_work_key)
@@ -404,12 +409,13 @@ def describe_openness_searches(records, openness):
 
 def describe_binding(records, artifacts):
     from .problem_attempt import find_current_attempt
+    from .problem_citation_metadata import find_citation_metadata, validate_citation_metadata
     statement = find_current_statement(records)
     attempt = find_current_attempt(records)
     openness, value = find_latest(records, "problem_openness"), find_value(records)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
-    return {"claim": statement, "openness": openness,
+    binding = {"claim": statement, "openness": openness,
             "openness_searches": [{"formulation": row["formulation"], "search_digest": row["search_digest"],
                                    "source_digests": [digest(source) for source in row["sources"]]}
                                   for row in describe_openness_searches(records, openness)],
@@ -426,12 +432,22 @@ def describe_binding(records, artifacts):
             "formal_checks": [{"id": row["id"], "digest": digest(row),
                                "native_closure": digest(records["native_closure"][row["native_closure_digest"]])}
                               for row in find_formal_checks(records)], "citations": project_citations(records, artifacts)}
+    metadata = []
+    for version in sorted({row["version_id"] for row in collect_readings(records)}):
+        record = find_citation_metadata(records, version)
+        if record is not None:
+            validate_citation_metadata(records, artifacts, record)
+            metadata.append({"version_id": version, "id": record["id"], "digest": digest(record)})
+    if metadata:
+        binding["citation_metadata"] = metadata
+    return binding
 
 
 def describe_evidence(records, artifacts):
     from .direction_sources import build_inline_passages
     from .evaluation import Evaluation
     from .problem_attempt import find_current_attempt
+    from .problem_citation_metadata import describe_citation_metadata, find_citation_metadata
     from .review_protocol import _reference_templates
     from .source_links import TEXT_KINDS, covers_text
     statement, value = find_current_statement(records), find_value(records)
@@ -478,6 +494,9 @@ def describe_evidence(records, artifacts):
                                    "depth": row["depth"], "reading": dict(
                                        {key: value for key, value in row.items() if key != "inspections"},
                                        inspections=inspections)})
+        metadata = find_citation_metadata(records, row["version_id"])
+        if metadata is not None:
+            delivered_readings[-1]["citation_metadata"] = describe_citation_metadata(records, artifacts, metadata)
     held = {(row["id"], row["digest"]) for row in delivered_readings}
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
