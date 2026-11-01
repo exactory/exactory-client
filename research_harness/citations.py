@@ -38,10 +38,11 @@ _CJK_CHARACTER_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
 # continuation, follows; a PDF suffix may close it. 10.1063/1.365928 cites neither
 # 10.1063/1.3659281, 10.1063/1.365928.5 nor 10.1063/1.365928(99).
 _IDENTIFIER_END_PATTERN = r"(?:\.pdf|/pdf)?(?![0-9a-z_]|[-./:;()][0-9a-z])"
-_URL_SPAN_RE = re.compile(
-    r'https?://[^\s{}"<>\\]+|(?<![0-9a-z./-])(?:www\.|export\.)?arxiv\.org/[^\s{}"<>\\]*')
-_DOI_SPAN_RE = re.compile(r'(?<![0-9a-z])10\.[0-9]{4,9}/[^\s{}"<>\\]+')
-_SPAN_TRAILING_PUNCTUATION = ".,;:)]"
+_IDENTIFIER_SPAN_RE = re.compile(
+    r'(?P<url>(?:(?<![0-9a-z])[a-z][0-9a-z+.-]*://'
+    r'|(?<![0-9a-z./-])(?:www\.|export\.)?arxiv\.org/)[^\s{}"<>\\\]]*)'
+    r'|(?P<doi>(?<![0-9a-z])10\.[0-9]{4,9}/[^\s{}"\\\]]+)')
+_SPAN_TRAILING_PUNCTUATION = ".,;:)]>"
 _ARXIV_HOSTS = ("arxiv.org", "www.arxiv.org", "export.arxiv.org")
 _DOI_HOSTS = ("doi.org", "dx.doi.org")
 _ARXIV_PATH_RE = re.compile(r"/(?:abs|pdf|html|format)/(.+?)(?:\.pdf)?/?")
@@ -142,14 +143,20 @@ def read_bibliography(data):
 
 
 def _collect_arxiv_evidence(text_value):
-    """Return the arXiv families named by URL/DOI spans and the text with those spans blanked."""
-    identifiers, families, remaining = [], set(), list(text_value)
-    # URLs name identifiers only through a registry host and its supported paths.
-    for span in _URL_SPAN_RE.finditer(text_value):
-        remaining[span.start():span.end()] = " " * len(span[0])
+    """Return the arXiv families named by whole identifier spans and the spans."""
+    identifiers, families = [], set()
+    # The first identifier span consumes every identifier nested inside it.
+    spans = list(_IDENTIFIER_SPAN_RE.finditer(text_value))
+    # Interpret whole spans by registry host and path, or as unversioned DataCite DOIs.
+    for span in spans:
         value = span[0].rstrip(_SPAN_TRAILING_PUNCTUATION)
+        if span.lastgroup == "doi":
+            identifiers.append("doi:" + value)
+            continue
         try:
-            parts = urlsplit(value if value.startswith(("http://", "https://")) else "https://" + value)
+            parts = urlsplit(value)
+            if not parts.scheme:
+                parts = urlsplit("https://" + value)
         except ValueError:
             continue
         if parts.hostname in _ARXIV_HOSTS:
@@ -162,10 +169,6 @@ def _collect_arxiv_evidence(text_value):
                 identifiers.append("arxiv:" + (filename if "." in filename else archive + "/" + filename))
         elif parts.hostname in _DOI_HOSTS:
             identifiers.append("doi:" + parts.path[1:])
-    # Only a valid, unversioned DataCite DOI can name an arXiv family.
-    for span in _DOI_SPAN_RE.finditer("".join(remaining)):
-        remaining[span.start():span.end()] = " " * len(span[0])
-        identifiers.append("doi:" + span[0].rstrip(_SPAN_TRAILING_PUNCTUATION))
     for identifier in identifiers:
         # Restore old-style subject-class capitals after the bibliography's casefold.
         identifier = re.sub(r"\.[a-z]{2}/", lambda match: match[0].upper(), identifier)
@@ -176,20 +179,22 @@ def _collect_arxiv_evidence(text_value):
             continue
         if family is not None and family.startswith("arxiv:"):
             families.add(family.casefold())
-    return families, "".join(remaining)
+    return families, spans
 
 
 def _has_identifier(text_value, token):
     # DOI tokens retain their whole-identifier matching on the scanned text.
     if token.startswith("10."):
         return re.search(r"(?<![0-9a-z])" + re.escape(token) + _IDENTIFIER_END_PATTERN, text_value) is not None
-    families, remaining = _collect_arxiv_evidence(text_value)
-    # Labels and eprint fields name any arXiv token; old-style ids also stand alone.
+    families, spans = _collect_arxiv_evidence(text_value)
+    # Labels, eprint fields and old-style ids must match outside spans in the original text.
     contexts = [_ARXIV_LABEL_PATTERN, _EPRINT_FIELD_PATTERN]
     if "/" in token:
         contexts.append(_OLD_ARXIV_START_PATTERN)
     pattern = "(?:" + "|".join(contexts) + ")" + re.escape(token) + r"(?:v[0-9]+)?" + _IDENTIFIER_END_PATTERN
-    return "arxiv:" + token in families or re.search(pattern, remaining) is not None
+    return "arxiv:" + token in families or any(
+        all(match.end() <= span.start() or match.start() >= span.end() for span in spans)
+        for match in re.finditer(pattern, text_value))
 
 
 def find_citing_entry(bibliography, works):

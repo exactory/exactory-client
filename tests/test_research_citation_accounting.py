@@ -113,6 +113,75 @@ class CitationEvidenceTests(unittest.TestCase):
                     self.assertEqual(find_citing_entry(read_bibliography(data),
                                                        [_build_work(identifier, title="Recorded paper title")]), (False, None))
 
+    def test_nested_identifiers_do_not_cite_arxiv_works(self):
+        fields = ("doi={10.9999/https://arxiv.org/abs/2609.14520}",
+                  "doi={10.9999/<arxiv:2609.14520>}",
+                  "url={ftp://example.org/?q=arxiv:2609.14520}",
+                  "doi={10.9999/x(arxiv:2609.14520)}",
+                  "doi={10.9999/x<https://arxiv.org/abs/2609.14520>}",
+                  "url={https://example.org/?u=https://arxiv.org/abs/2609.14520}")
+        for field in fields:
+            data = ("@article{unrelated, " + field + ", title={Another publication}}").encode()
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                with self.subTest(identifier=identifier, field=field):
+                    self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                       [_build_work(identifier, title="Recorded paper title")]), (False, None))
+
+    def test_identifier_spans_cannot_create_an_arxiv_label_match(self):
+        references = (b"[1] Another publication, arXiv:10.9999/nope 2609.14520",
+                      b"Another publication, arXiv:2609.14520https://example.org/x")
+        for data in references:
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                with self.subTest(identifier=identifier, data=data):
+                    self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                       [_build_work(identifier, title="Recorded paper title")]), (False, None))
+
+    def test_plain_text_arxiv_links_cite_their_work(self):
+        references = (b"Another publication, [https://arxiv.org/abs/2609.14520](https://arxiv.org/abs/2609.14520)",
+                      b"Another publication, <https://arxiv.org/abs/2609.14520>")
+        for data in references:
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                with self.subTest(identifier=identifier, data=data):
+                    self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                       [_build_work(identifier, title="Recorded paper title")]), (True, None))
+
+    def test_a_plain_text_old_style_arxiv_link_cites_its_work(self):
+        data = b"Another publication, [hep-th/9304002](https://arxiv.org/abs/hep-th/9304002)"
+        self.assertEqual(find_citing_entry(read_bibliography(data),
+                                           [_build_work("arxiv:hep-th/9304002v1", title="Recorded archive title")]),
+                         (True, None))
+
+    def test_an_arxiv_label_outside_a_url_still_cites_its_work(self):
+        data = b"@article{cited, note={See arXiv:2609.14520, https://example.org/x}, title={Another publication}}"
+        for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+            with self.subTest(identifier=identifier):
+                self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                   [_build_work(identifier, title="Recorded paper title")]), (True, "cited"))
+
+    def test_arxiv_urls_accept_schemes_and_schemeless_urls_with_nested_queries(self):
+        urls = ("ftp://arxiv.org/abs/2609.14520", "git+ssh://export.arxiv.org/abs/2609.14520",
+                "arxiv.org/abs/2609.14520?u=https://example.org/x",
+                "www.arxiv.org/abs/2609.14520?u=https://example.org/x",
+                "export.arxiv.org/abs/2609.14520?u=https://example.org/x")
+        for url in urls:
+            data = ("@article{cited, url={" + url + "}, title={Another publication}}").encode()
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                with self.subTest(identifier=identifier, url=url):
+                    self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                       [_build_work(identifier, title="Recorded paper title")]), (True, "cited"))
+
+    def test_a_legacy_sici_doi_cites_only_its_own_work(self):
+        data = (b"@article{sici, doi={10.1002/(SiCi)1099-1638(199903/04)15:2<123::AiD-qRe211>3.0.Co;2-f},"
+                b" title={Another publication}}")
+        bibliography = read_bibliography(data)
+        doi = "10.1002/(sici)1099-1638(199903/04)15:2<123::aid-qre211>3.0.co;2-f"
+        self.assertEqual(find_citing_entry(bibliography, [_build_work("doi:" + doi, title="Recorded journal title")]),
+                         (True, "sici"))
+        for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+            with self.subTest(identifier=identifier):
+                self.assertEqual(find_citing_entry(bibliography, [_build_work(identifier, title="Recorded paper title")]),
+                                 (False, None))
+
     def test_arxiv_url_paths_cannot_supply_doi_identifiers(self):
         for path in ("abs", "pdf", "html", "format"):
             for suffix in ("10.48550/arxiv.2609.14520", "doi:10.48550/arxiv.2609.14520"):
