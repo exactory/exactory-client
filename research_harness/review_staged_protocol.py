@@ -1185,6 +1185,9 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         raise ResearchError('review_task_pending', 'Assign and run a child of this staged controller')
     route = protocol._get(records, 'review_route', assignment['route_id'])
     controller_id = binding['controller_assignment_id']
+    from .review_context_repair import validate_repair_binding
+    validate_repair_binding(records, store.build_artifact_store(),
+                            protocol._get(records, 'review_assignment', controller_id))
     if any(row['assignment_id'] in (assignment['id'], controller_id) and row['kind'] == 'contamination'
            for row in records.get('review_context_event', {}).values()):
         raise ResearchError('review_context_contaminated', 'Repair the contaminated epoch before dispatch')
@@ -1215,6 +1218,8 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         current = protocol._get(current_records, 'review_assignment', value['assignment_id'])
         if digest(current) != digest(assignment):
             raise ResearchError('review_task_dependency_changed', 'The task assignment changed before dispatch')
+        validate_repair_binding(current_records, store.build_artifact_store(),
+                                protocol._get(current_records, 'review_assignment', controller_id))
         dispatch = dict(value, task_id=binding['task_id'], request_digest=digest(request))
         return [immutable_record(current_records, 'review_task_dispatch', request_id, dispatch)], dispatch
     prepared_task_mutation(store, 'review.task_dispatch', payload, prepare_dispatch,
@@ -1250,13 +1255,31 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         return [immutable_record(current_records, 'review_attempt', value['id'], attempt),
                 immutable_record(current_records, 'review_capture_attempt', captured['reservation_id'],
                                  dict(attempt_id=value['id']))], attempt
+    def validate_capture(current_records, capture):
+        artifacts = store.build_artifact_store()
+        receipt = accept_capture(current_records, artifacts, assignment, capture, payload['id'])
+        if assignment['staged_task']['type'] == 'final' and 'composition_plan_id' in assignment:
+            from .review_composition import assemble_result
+            from .review_refusal import _validate_staged_final
+            plan = protocol._get(current_records, 'review_composition_plan', assignment['composition_plan_id'])
+            if plan['role'] != 'incomplete':
+                observations, _, obligations = collect_observations(current_records, artifacts, epoch)
+                if obligations:
+                    raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
+                observed = receipt['staged_observation']
+                composed = build_composition(epoch, plan, observations + [observed], observed,
+                                             tasks=list_epoch_tasks(current_records, epoch))
+                scientific = assemble_result(plan, composed['observations'], composed['root'],
+                                               composed['terminal']['output'])
+                sent = review_excerpts.read_sent_packet(protocol._read_json(artifacts, capture['observation']['request']))
+                _validate_staged_final(current_records, artifacts, assignment, sent, epoch, scientific)
+        return receipt
     try:
         prepared_task_mutation(store, 'review.task_attempt', payload, prepare_capture, request_id=request_id + ':attempt')
         if captured['observation']['status'] == 'completed':
             try:
                 receipt = execution.accept_observation(store, {'reservation_id': current['id']},
-                    lambda current_records, capture: accept_capture(current_records, store.build_artifact_store(),
-                                                                   assignment, capture, payload['id']),
+                    validate_capture,
                     request_id=request_id + ':accept')['result']
             except ResearchError as error:
                 if (error.code != 'review_invocation_unverified'
@@ -1575,6 +1598,15 @@ def build_state(records, artifacts, assignment, *, include_contaminated=False):
                  stage=assignment['role'], packet_digest=assignment['packet_digest'], prompt_hash=assignment['prompt_hash'],
                  raw_output=None, raw_output_digest=None, output=None, output_digest=None, attempt_id=None,
                  refused_attempts=[], staged_review=copy.deepcopy(binding))
+    from .review_context_repair import validate_repair_binding
+    repair_obligations = []
+    try:
+        validate_repair_binding(records, artifacts, protocol._get(records, 'review_assignment', controller_id))
+    except ResearchError as error:
+        repair_obligations.append(obligation(error.code, str(error)))
+        state['obligations'].extend(repair_obligations)
+        if error.code == 'review_context_repair_stale':
+            state['context_status'] = 'contaminated'
     observations, terminal, selection_obligations = collect_observations(
         records, artifacts, epoch, include_contaminated=include_contaminated)
     state['obligations'].extend(selection_obligations)
@@ -1593,6 +1625,11 @@ def build_state(records, artifacts, assignment, *, include_contaminated=False):
                          attempt_id=selected['id'])
     selection, completion, paged = build_selection(records, artifacts, epoch, controller_id,
                                                    binding, observations, terminal, state)
+    if repair_obligations:
+        # Preserve the authenticated science while withholding current completion.
+        completion = staged._seal(dict({key: value for key, value in completion.items() if key != 'digest'},
+            complete=False, issues=completion['issues'] + repair_obligations))
+        selection['completion_root'] = completion['digest']
     if any(row['assignment_id'] in (assignment['id'], controller_id) and row['kind'] == 'contamination'
            for row in records.get('review_context_event', {}).values()):
         state['context_status'] = 'contaminated'
@@ -1881,6 +1918,8 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
             return [], dict(controller_assignment_id=controller['id'], next=[dict(kind='command',
                 command='review-run', payload=dict(assignment_id=controller['id'], epoch_id=epoch['id'],
                     task_id=outstanding['task_id'], action='reconcile'))])
+        from .review_context_repair import validate_repair_binding
+        validate_repair_binding(records, artifacts, controller)
         if head['state'] == 'incomplete':
             outcome = head['outcome']
             return [], dict(controller_assignment_id=controller['id'], outcome=outcome, next=outcome['recovery_work'])

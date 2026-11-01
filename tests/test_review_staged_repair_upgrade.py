@@ -52,6 +52,25 @@ class StagedRepairUpgradeTests(ResultPartsCase):
         self.assertEqual(packet['scientific_history'][-1]['observed_output'], None)
         self.assertEqual(successor['staged_review']['kind'], 'controller')
 
+    def test_later_predecessor_contamination_blocks_dispatch_before_reservation(self):
+        controller = self.create_controller()
+        successor = self.repair_controller(controller)
+        planned = self.command('review-assignment', dict(controller_assignment_id=successor['id']))
+        payload = planned['next'][0]['payload']
+        self.case.mutate(protocol.record_context_event, dict(id='later-exposure', assignment_id=controller['id'],
+            kind='contamination', source='foreign_input', reason='New foreign input reached the predecessor.',
+            evidence=[self.case.supporting]))
+        with patch.object(review_worker, '_entry_command', side_effect=AssertionError('Stale work must not launch')):
+            with self.assertRaises(ResearchError) as rejected:
+                self.command('review-run', payload)
+        self.assertEqual(rejected.exception.code, 'review_context_repair_stale')
+        records = self.case.read_records()
+        self.assertFalse(records.get('review_reservation'))
+        self.assertFalse(records.get('review_task_dispatch'))
+        with self.assertRaises(ResearchError) as rejected:
+            self.command('review-assignment', dict(controller_assignment_id=successor['id']))
+        self.assertEqual(rejected.exception.code, 'review_context_repair_stale')
+
     def test_public_repair_retains_authenticated_staged_task_history(self):
         controller = self.create_controller()
         records = self.run_frame(controller)
@@ -217,6 +236,67 @@ class StagedAdjudicatorRepairTests(unittest.TestCase):
         self.addCleanup(self.case.tearDown)
         self.case.prepare_reviews(result_reviewer='first')
         codex.record_codex_route(self.case, 'staged-route')
+
+    def test_composed_adjudicator_refuses_wrong_reassessment_and_retries_the_terminal(self):
+        case = self.case
+        # Freeze a small frame with the real repair binding; dispatch, page
+        # grounding, composition, refusal and retry use their production paths.
+        payload = dict(id='focused', role='adjudicator', route_id='staged-route', dossier_id=None,
+            reviewer_id='focused-third', author_id=case.read_records()['workspace']['problem']['authors'][0], context=dict(
+                review_ids=['review-result-first', 'review-result-second'], objection_id='unsupported-implication'))
+        prior = case.mutate(protocol.record_assignment, payload)['result']
+        manifest = staged.build_manifest(dict(statement='The exact quantifier is unsupported.'),
+            [dict(key='original_context', index=0, item=dict(evidence=[case.supporting]),
+                  evidence_class='original_context', artifacts=[case.supporting], source_ids=[])],
+            [producer.make_artifact_source(case.artifacts, case.supporting)])
+        with patch.object(producer, 'build_manifest', return_value=manifest):
+            controller = case.mutate(protocol.record_assignment, dict(payload, id='focused-controller',
+                context=dict(staged_upgrade=dict(assignment_id=prior['id']))))['result']
+        case.mutate(protocol.record_context_event, dict(id='exposure', assignment_id=controller['id'],
+            kind='contamination', source='foreign_input', reason='Author context reached the focused review.',
+            evidence=[case.supporting]))
+        codex.probe_codex_route(case, 'repair-probe', 'staged-route')
+        frame = dict(statement='The exact quantifier is unsupported.',
+                     context_repair={'assignment_id': controller['id']}, historical_reviews=[])
+        manifest = staged.build_manifest(frame,
+            [dict(key='original_context', index=0, item=dict(evidence=[case.supporting]),
+                  evidence_class='original_context', artifacts=[case.supporting], source_ids=[])],
+            [producer.make_artifact_source(case.artifacts, case.supporting)])
+        with patch.object(producer, 'build_manifest', return_value=manifest):
+            successor = case.mutate(protocol.record_assignment, dict(payload, id='repaired', reviewer_id='replacement',
+                context=dict(context_repair=dict(assignment_id=controller['id'], event_ids=['exposure'],
+                    probe_id='repair-probe', reason='Reassess the exact objection in a fresh context.',
+                    evidence=[case.supporting]))))['result']
+        output = dict(objection_id='unsupported-implication', disposition='upheld', correction_admissible=None,
+            reason='The original comparator does not prove the disputed implication.', evidence=[case.supporting],
+            reassessment=dict(assignment_id='WRONG', findings=[]))
+        (case.root / 'scientific.json').write_text(json.dumps(output))
+        worker = frontier.WORKER.replace('from test_review_staged_frontier import build_output',
+                                        'from test_direction_reviews_paged import build_output')
+        def command(name, value):
+            from research_harness import cli
+            return case.mutate(cli.OPERATIONS[name], value)['result']
+        with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', worker]):
+            for _ in range(35):
+                planned = command('review-assignment', dict(controller_assignment_id=successor['id']))
+                self.assertNotIn('outcome', planned, planned)
+                next_work = planned['next'][0]
+                self.assertEqual(next_work['command'], 'review-run')
+                result = command('review-run', next_work['payload'])
+                records = case.read_records()
+                child = records['review_assignment'][result['assignment_id']]
+                if child['staged_task']['type'] == 'final' and child.get('composition_plan_id'):
+                    break
+            else:
+                self.fail('The composed adjudicator did not reach terminal acceptance')
+        self.assertIn('refusal', result, result)
+        self.assertEqual(result['refusal']['code'], 'review_reassessment_mismatch')
+        self.assertFalse(any(row['task_id'] == child['staged_task']['id']
+                             for row in records['review_task_acceptance'].values()))
+        self.assertTrue(records['review_reservation'][result['reservation_id']]['released'])
+        retry = command('review-assignment', dict(controller_assignment_id=successor['id']))
+        self.assertEqual(retry['next'][0]['command'], 'review-run')
+        self.assertEqual(retry['next'][0]['payload']['task_id'], child['staged_task']['id'])
 
     def test_public_staged_adjudicator_repair_preserves_focused_scope_and_slot(self):
         case = self.case

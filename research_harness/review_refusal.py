@@ -130,6 +130,9 @@ def _validate_staged_final(records, artifacts, assignment, packet, epoch, output
     from .operations import strings, text
     frame = epoch.get('manifest', {}).get('frame', {})
     evidence = partial(validate_evidence_contract, packets=(packet, frame))
+    with contract_check('review.reassessment'):
+        review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False,
+                                                    packet=frame, evidence_validator=evidence)
     if assignment['role'] == 'adjudicator':
         from .review_composition import list_scalar_fields
         with contract_check('adjudication.shape'):
@@ -140,7 +143,9 @@ def _validate_staged_final(records, artifacts, assignment, packet, epoch, output
                                         {'path': path})
             text(output['objection_id'], 'Adjudicated objection ID')
             text(output['reason'], 'Adjudication reason')
-            expected = epoch.get('focused_scope', {}).get('objection_id', frame.get('objection', {}).get('id'))
+            expected = epoch.get('focused_scope', {}).get('objection_id')
+            if expected is None:
+                expected = frame.get('objection', {}).get('id')
             if expected is not None and output['objection_id'] != expected:
                 raise ResearchError('review_adjudication_mismatch', 'Disposition must concern the assigned objection')
             evidence(records, artifacts, output['evidence'])
@@ -157,9 +162,6 @@ def _validate_staged_final(records, artifacts, assignment, packet, epoch, output
                         problem_objections=review_supplied_evidence.list_delivered_objections(frame),
                         evidence_validator=evidence)
         strings(output['limitations'], 'Independent assessment limitations', nonempty=True)
-    with contract_check('review.reassessment'):
-        review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False,
-                                                    packet=frame, evidence_validator=evidence)
     _validate_staged_objections(records, artifacts, output['objections'], evidence)
     with contract_check('review.support'):
         if output['support'] is not None:
