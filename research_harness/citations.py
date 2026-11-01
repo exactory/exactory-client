@@ -89,12 +89,25 @@ def _name_greek_command(match):
     return " " + name + " "
 
 
+def _limit_combining(value):
+    """Keep at most sixteen consecutive characters with a nonzero combining class."""
+    if value.isascii():
+        return value
+    # Bound runs before title or URL normalization can reorder them quadratically.
+    characters, run = [], 0
+    for character in value:
+        run = run + 1 if unicodedata.combining(character) else 0
+        if run <= 16:
+            characters.append(character)
+    return "".join(characters)
+
+
 def _normalize_title(value):
     """The words of a title: casefolded, with accents removed, Greek letters named,
     and other LaTeX commands, braces, math markers and punctuation dropped."""
     value = _TEX_COMMAND_RE.sub(_name_greek_command, _TEX_ACCENT_RE.sub("", value))
     characters = []
-    for character in unicodedata.normalize("NFKD", value.casefold()):
+    for character in unicodedata.normalize("NFKD", _limit_combining(value.casefold())):
         name = unicodedata.name(character, "")
         if unicodedata.combining(character):
             continue
@@ -181,6 +194,21 @@ def _read_fields(source):
         yield name, "".join(parts)
 
 
+def _match_braces(source):
+    """Map each matched unescaped opening brace to the index after its closer."""
+    ends, stack, escaped = {}, [], False
+    for position, character in enumerate(source):
+        if escaped:
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == "{":
+            stack.append(position)
+        elif character == "}" and stack:
+            ends[stack.pop()] = position + 1
+    return ends
+
+
 def read_bibliography(data):
     """Read entry text, normalized titles and canonical identifier sets in file order.
     Each entry's text excludes its head, ends at its closing delimiter or the
@@ -189,15 +217,21 @@ def read_bibliography(data):
     Undecodable bytes become replacement characters."""
     source = data.decode("utf-8", errors="replace")
     entries = {}
+    brace_ends = _match_braces(source)
     starts = list(_ENTRY_START_RE.finditer(source))
+    end = 0
     for index, start in enumerate(starts):
-        if start.group(1).casefold() in ("comment", "string", "preamble"):
+        # Matched braced entries consume nested heads; unmatched entries use the next head.
+        if start.start() < end:
             continue
         # Even an ignored head bounds the scan of an unclosed preceding entry.
         limit = starts[index + 1].start() if index + 1 < len(starts) else len(source)
+        end = (brace_ends.get(start.start(2), limit) if start.group(2) == "{"
+               else _find_group_end(source, start.start(2), limit) or limit)
+        if start.group(1).casefold() in ("comment", "string", "preamble"):
+            continue
         # A BibTeX key is a label; only the entry body supplies identifiers.
-        end = _find_group_end(source, start.start(2), limit)
-        entry_source = source[start.end():end if end is not None else limit].casefold()
+        entry_source = source[start.end():end].casefold()
         title, identifiers = None, set()
         for name, value in _read_fields(entry_source):
             # Only the first top-level title supplies title evidence, even when empty.
@@ -210,6 +244,7 @@ def read_bibliography(data):
     bibliography = {"entries": entries, "text": source.casefold()}
     if not entries:
         bibliography["identifiers"] = _read_identifiers(bibliography["text"])
+        bibliography["normalized_text"] = _normalize_title(bibliography["text"]).replace(" ", "")
     return bibliography
 
 
@@ -220,6 +255,7 @@ def _unescape_identifier(value):
 
 def _read_url_identifier(value):
     """Read one registry identifier from a whole URL, ignoring other hosts and paths."""
+    value = _limit_combining(value)
     try:
         parts = urlsplit(value)
         if not parts.scheme:
@@ -275,6 +311,8 @@ def _trim_span(value):
     # Count once; recounting after each removed character would be quadratic.
     excess = {closer: value.count(closer) - value.count(opener)
               for opener, closer in (("(", ")"), ("[", "]"), ("<", ">"))}
+    # Strip a trailing quote only when it is unpaired within the span.
+    excess.update({quote: value.count(quote) % 2 for quote in ('"', "'")})
     end = len(value)
     while end:
         character = value[end - 1]
@@ -302,7 +340,8 @@ def _find_identifier_end(source, start):
             if position < len(source) and not source[position].isspace():
                 position += 1
             continue
-        if closer and source.startswith(closer, position):
+        # A context closer belongs to the identifier while its braces are open.
+        if depth == 0 and closer and source.startswith(closer, position):
             break
         if character == "{":
             depth += 1
@@ -348,9 +387,8 @@ def find_citing_entry(bibliography, works):
     titles = {title.replace(" ", "") for title in (_normalize_title(work["title"] or "") for work in works)
               if _is_title_evidence(title)}
     if not bibliography["entries"]:
-        compact_text = _normalize_title(bibliography["text"]).replace(" ", "")
         cited = bool(bibliography["identifiers"] & identifiers) or any(
-            title in compact_text for title in titles)
+            title in bibliography["normalized_text"] for title in titles)
         return cited, None
     for key, entry in bibliography["entries"].items():
         compact_title = entry["title"].replace(" ", "")

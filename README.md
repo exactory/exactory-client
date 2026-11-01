@@ -35,7 +35,9 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version [0.69.13](docs/releases/0.69.13.md) reads each BibTeX entry by its top-level fields, so that titles and identifiers come from their own fields, and reads TeX escapes before percent-decoding.
+Version [0.69.14](docs/releases/0.69.14.md) ends an identifier at the closer of its bracket or quote only outside its braces, skips entry heads inside braced entries, bounds the time of Unicode normalization, and reads quoted plain-text URLs again.
+
+Version [0.69.13](docs/releases/0.69.13.md) reads each BibTeX entry by its top-level fields for titles and identifiers, and reads TeX escapes before percent-decoding; 0.69.14 corrects quotes inside braces and nested entry heads.
 
 Version [0.69.12](docs/releases/0.69.12.md) ends a URL or a DOI in a bibliography only at whitespace, at the closer of a bracket or quote that opened it, or at an unmatched closing brace, and reads BibTeX escapes in DOIs; 0.69.13 applies the rule per BibTeX field.
 
