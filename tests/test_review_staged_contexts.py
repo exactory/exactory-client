@@ -189,11 +189,12 @@ class StagedContextTests(unittest.TestCase):
 
         with patch.object(staged, '_check_completion_observations', side_effect=lose_historical_version):
             report = staged.verify_completion(self.epoch, selected, tasks=tasks)
+            rows = list(staged.iter_completion_issues(self.epoch, selected, tasks=tasks))
         self.assertFalse(report['complete'])
         self.assertTrue(any(row['code'] == 'review_task_dependency_changed'
             and row.get('task_id') == self.discovery['task_id']
             and row.get('reason') == 'Historical task has no recorded context version.'
-            for row in report['issues']), report['issues'])
+            for row in rows), report['issues'])
 
     def test_stale_scientific_work_alone_stays_incomplete(self):
         assigned = self.records['review_task'][self.discovery['task_id']]['task']
