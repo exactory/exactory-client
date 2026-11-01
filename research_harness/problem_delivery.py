@@ -332,9 +332,10 @@ def prepare_decision(records, artifacts, value, revision):
             raise ResearchError("problem_minimum_unmet", "Complete the current statement, openness and value evidence first", {"obligations": pending})
         from .research_decisions import assess_problem_reviews
         review = assess_problem_reviews(records, artifacts, value["review_ids"], value["bar_review_ids"])
-        from .report_views import order_obligations
-        pending = order_obligations(review["obligations"] + assess_source_requests(records, artifacts))
+        pending = review["obligations"] + assess_source_requests(records, artifacts)
         if records.get("review_epoch"):
+            from .report_views import order_obligations
+            pending = order_obligations(pending)
             pending = describe_problem_work(records, pending)
         if pending:
             raise ResearchError(pending[0]["code"], pending[0]["explanation"], {"obligations": pending})

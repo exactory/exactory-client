@@ -29,6 +29,38 @@ class EffectiveConsumerTests(unittest.TestCase):
     def save(self, value):
         return self.artifacts.put(json.dumps(value, sort_keys=True).encode(), 'application/json')
 
+    def test_post_decision_preserves_ordinary_error_precedence_and_staged_priorities(self):
+        from research_harness import problem_delivery
+        payload = dict(id='decision', action='post', review_ids=['result-A', 'result-B'],
+                       bar_review_ids=['bar-A', 'bar-B'], reason='Post after the required checks.')
+        cases = [
+            (['artifact_missing', 'research_objection_unresolved'], ['review_output_unavailable'],
+             'research_objection_unresolved'),
+            (['problem_evidence_unassessed', 'research_objection_unresolved'], [],
+             'research_objection_unresolved'),
+            (['problem_evidence_unassessed', 'research_objection_unresolved', 'review_task_pending'], [],
+             'review_task_pending'),
+        ]
+        for staged in (False, True):
+            records = dict(self.records, workspace={'problem': {}})
+            if staged:
+                records['review_epoch'] = {'epoch': {'id': 'epoch'}}
+            for review_codes, source_codes, staged_code in cases:
+                with self.subTest(staged=staged, review_codes=review_codes):
+                    review_pending = [dict(code=code, explanation=code, objection_id='O7') for code in review_codes]
+                    source_pending = [dict(code=code, explanation=code) for code in source_codes]
+                    with patch.object(problem_delivery, 'assess_minimum', return_value=[]), \
+                            patch.object(decisions, 'assess_problem_reviews', return_value={'obligations': review_pending}), \
+                            patch.object(problem_delivery, 'assess_source_requests', return_value=source_pending):
+                        with self.assertRaises(ResearchError) as rejected:
+                            problem_delivery.prepare_decision(records, self.artifacts, payload, 1)
+                    self.assertEqual(rejected.exception.code, staged_code if staged else review_codes[0])
+                    pending = rejected.exception.details['obligations']
+                    self.assertCountEqual([item['code'] for item in pending], review_codes + source_codes)
+                    self.assertEqual(pending[0]['code'], rejected.exception.code)
+                    if not staged:
+                        self.assertEqual(pending, review_pending + source_pending)
+
     def composed(self):
         from research_harness import review_composition as composition
         plan, pages, choices, output = make_fixture()
