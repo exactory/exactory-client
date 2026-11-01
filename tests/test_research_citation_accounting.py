@@ -1,6 +1,7 @@
 """Citation accounting: a manuscript cites, or explains not citing, what the study read and searched."""
 
 import json
+import time
 import unittest
 
 from development_fixtures import DevelopmentCase
@@ -127,6 +128,83 @@ class CitationEvidenceTests(unittest.TestCase):
                     self.assertEqual(find_citing_entry(read_bibliography(data),
                                                        [_build_work(identifier, title="Recorded paper title")]), (False, None))
 
+    def test_brackets_inside_urls_and_dois_do_not_expose_nested_arxiv_labels(self):
+        references = ("url={https://[::1]/?q=arxiv:2609.14520}",
+                      "doi={10.9999/x]arxiv:2609.14520}",
+                      "https://[::1]/?q=arxiv:2609.14520",
+                      "10.9999/x]arxiv:2609.14520")
+        for reference in references:
+            data = ("@article{unrelated, " + reference + ", title={Another publication}}"
+                    if "={" in reference else "Another publication, " + reference).encode()
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                with self.subTest(identifier=identifier, reference=reference):
+                    self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                       [_build_work(identifier, title="Recorded paper title")]),
+                                     (False, None))
+
+    def test_a_doi_nested_inside_another_doi_does_not_cite_its_work(self):
+        cases = (("10.9999/x/10.48550/arxiv.2609.14520", "doi:10.48550/arxiv.2609.14520"),
+                 ("10.9999/10.1234/abc", "doi:10.1234/abc"))
+        for doi, identifier in cases:
+            for reference in ("@article{unrelated, doi={" + doi + "}, title={Another publication}}", doi):
+                with self.subTest(identifier=identifier, reference=reference):
+                    self.assertEqual(find_citing_entry(read_bibliography(reference.encode()),
+                                                       [_build_work(identifier, title="Recorded paper title")]),
+                                     (False, None))
+
+    def test_whole_dois_cite_through_fields_labels_registry_urls_and_markdown(self):
+        references = ("doi={10.1234/abc}", "doi:10.1234/abc", "https://doi.org/10.1234/abc",
+                      "https://dx.doi.org/10.1234%2Fabc", "[10.1234/abc](https://doi.org/10.1234/abc)",
+                      "[https://doi.org/10.1234/abc](https://doi.org/10.1234/abc)")
+        for reference in references:
+            for punctuation in ("", "."):
+                for bibtex in (False, True):
+                    data = (("@article{cited, note={" + reference + punctuation + "}, title={Another publication}}")
+                            if bibtex else "Another publication, " + reference + punctuation).encode()
+                    with self.subTest(reference=reference, punctuation=punctuation, bibtex=bibtex):
+                        self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                           [_build_work("doi:10.1234/abc", title="Recorded paper title")]),
+                                         (True, "cited" if bibtex else None))
+
+    def test_a_doi_only_inside_a_publisher_url_path_no_longer_cites_by_identifier(self):
+        data = (b"@article{unrelated, url={https://link.springer.com/article/10.1007/s00222-019-00895-1},"
+                b" title={Another publication}}")
+        self.assertEqual(find_citing_entry(read_bibliography(data),
+                                           [_build_work("doi:10.1007/s00222-019-00895-1", title="Recorded paper title")]),
+                         (False, None))
+
+    def test_internal_square_brackets_belong_to_the_whole_doi(self):
+        data = b"@article{cited, doi={10.1234/a[b]c}, title={Another publication}}"
+        bibliography = read_bibliography(data)
+        self.assertEqual(find_citing_entry(bibliography, [_build_work("doi:10.1234/a[b]c")]), (True, "cited"))
+        self.assertEqual(find_citing_entry(bibliography, [_build_work("doi:10.1234/a")]), (False, None))
+
+    def test_invalid_arxiv_candidates_are_skipped_without_losing_valid_evidence(self):
+        fields = ("note={arxiv:2613.14520 arxiv:2609.14520}",
+                  "eprint={2609.14520v0}, note={arxiv:2609.14520}",
+                  "note={hep-th/9313002 math.GT/0309136v0 arxiv:2609.14520}",
+                  "url={https://arxiv.org/abs/2613.14520}, note={arxiv:2609.14520}",
+                  "doi={10.48550/arxiv.2613.14520}, note={arxiv:2609.14520}")
+        for field in fields:
+            with self.subTest(field=field):
+                data = ("@article{cited, " + field + ", title={Another publication}}").encode()
+                self.assertEqual(find_citing_entry(read_bibliography(data), [_build_work("arxiv:2609.14520v1")]),
+                                 (True, "cited"))
+
+    def test_adversarial_64kb_fields_are_read_and_checked_against_50_works_in_under_one_second(self):
+        works = [_build_work("arxiv:2609.%05dv1" % (14520 + index),
+                             ["doi:10.1234/recorded-%d" % index], "Recorded paper title")
+                 for index in range(50)]
+        for repeated in ("a-", "10.1234/"):
+            data = ("@article{unrelated, note={" + repeated * (64 * 1024 // len(repeated))
+                    + "}, title={Another publication}}").encode()
+            with self.subTest(repeated=repeated):
+                started = time.perf_counter()
+                bibliography = read_bibliography(data)
+                for work in works:
+                    self.assertEqual(find_citing_entry(bibliography, [work]), (False, None))
+                    self.assertLess(time.perf_counter() - started, 1.0)
+
     def test_identifier_spans_cannot_create_an_arxiv_label_match(self):
         references = (b"[1] Another publication, arXiv:10.9999/nope 2609.14520",
                       b"Another publication, arXiv:2609.14520https://example.org/x")
@@ -188,7 +266,7 @@ class CitationEvidenceTests(unittest.TestCase):
                 data = ("@article{entry, url={https://arxiv.org/" + path + "/" + suffix
                         + "}, title={Another publication}}").encode()
                 for identifier, cited in (("arxiv:2609.14520v1", False),
-                                           ("doi:10.48550/arxiv.2609.14520", True)):
+                                           ("doi:10.48550/arxiv.2609.14520", False)):
                     with self.subTest(path=path, suffix=suffix, identifier=identifier):
                         self.assertEqual(find_citing_entry(read_bibliography(data),
                                                            [_build_work(identifier, title="Recorded paper title")]),
@@ -248,7 +326,7 @@ class CitationEvidenceTests(unittest.TestCase):
         references = ("https://arxiv.org/abs/2609.14520", "arxiv.org/abs/2609.14520",
                       "https://doi.org/10.48550/arxiv.2609.14520", "10.48550/arxiv.2609.14520")
         for reference in references:
-            for punctuation in (".", ",", ";", ":", ")", "]", ")."):
+            for punctuation in (".", ",", ";", ":", ")", "]", ">", ")."):
                 data = ("[3] " + reference + punctuation).encode()
                 for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
                     with self.subTest(identifier=identifier, reference=reference, punctuation=punctuation):
@@ -268,6 +346,23 @@ class CitationEvidenceTests(unittest.TestCase):
             b"@comment{ignored, doi={10.1/ignored}}\n")
         self.assertEqual(list(bibliography["entries"]), ["zeta2020", "alpha2021"])
         self.assertEqual(bibliography["entries"]["zeta2020"]["title"], "a nested title")
+
+    def test_bibliography_entries_store_whole_identifiers_without_their_heads(self):
+        bibliography = read_bibliography(
+            b"@article{arxiv:2601.00001, title={Another publication}, doi={10.1234/AbC},"
+            b" note={arXiv:math.GT/0309136v2}, eprint={2609.14520v3}}\n"
+            b"@article{10.1234/key-only, title={A separate publication}}")
+        self.assertEqual(bibliography["entries"]["arxiv:2601.00001"]["identifiers"],
+                         {"doi:10.1234/abc", "arxiv:math.gt/0309136", "arxiv:2609.14520"})
+        self.assertEqual(bibliography["entries"]["10.1234/key-only"]["identifiers"], set())
+
+    def test_plain_text_bibliographies_store_doi_and_arxiv_family_identifiers(self):
+        bibliography = read_bibliography(
+            b"Another publication, https://dx.doi.org/10.48550%2FarXiv.2609.14520.\n"
+            b"Other publication, math.GT/0309136v2 and doi:10.1234/AbC.")
+        self.assertEqual(bibliography["identifiers"],
+                         {"doi:10.48550/arxiv.2609.14520", "arxiv:2609.14520", "arxiv:math.gt/0309136",
+                          "doi:10.1234/abc"})
 
     def test_identifiers_match_only_as_whole_identifiers(self):
         cases = {"doi prefix": (_build_work("doi:10.1063/1.365928"), b"@article{a, doi={10.1063/1.3659281}}", False),
@@ -318,7 +413,9 @@ class CitationEvidenceTests(unittest.TestCase):
                  "doi then underscore": (b"@article{a, doi={10.1063/1.365928_x}}", False),
                  "doi then colon": (b"@article{a, doi={10.1063/1.365928:x}}", False),
                  "doi in parentheses": (b"@article{a, note={(doi:10.1063/1.365928).}}", True),
-                 "doi then pdf": (b"@article{a, url={https://x.org/10.1063/1.365928/pdf}}", True)}
+                 "doi then pdf in a publisher url no longer cites by identifier":
+                     (b"@article{a, url={https://x.org/10.1063/1.365928/pdf}}", False),
+                 "doi dotted extension": (b"@article{a, doi={10.1063/1.365928.5}}", False)}
         for name, (data, cited) in cases.items():
             with self.subTest(case=name):
                 self.assertEqual(find_citing_entry(read_bibliography(data),
