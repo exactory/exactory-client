@@ -2,6 +2,8 @@
 
 import json
 from pathlib import Path
+import unittest
+from unittest import mock
 from unittest.mock import patch
 
 from test_research_problem_candidates import build_candidate, build_slate
@@ -13,6 +15,126 @@ from research_harness.errors import ResearchError
 from research_harness.gates import gate_state
 from research_harness.evidence import digest
 from test_research_problem_citation_metadata import CitationMetadataCase
+
+
+def build_staged_delivery(origin="execution", role="result", recovery=None):
+    from research_harness import review_composition, review_staged
+    from test_review_staged_fixtures import epoch
+    frozen = epoch(role=role, **({"focused_scope": {"review_pair_roots": ["review-A", "review-B"],
+        "objection_id": "O7", "objection_version": "version-7"}} if role == "adjudicator" else {}))
+    completion = review_staged.verify_completion(frozen, {"observations": []})
+    recovery = recovery or {"workflow": "review-assignment", "text": "Supply a proof for claim c.",
+                "scope": {"claim_ids": ["c"]}, "prerequisite": "new_evidence"}
+    outcome = review_staged.record_incomplete(frozen, completion, origin=origin,
+        origin_binding=({"execution_receipts": ["terminated"], "reason": "exhausted"} if origin == "execution"
+                        else {"attempt_id": "terminal", "raw_output_digest": digest({"unfinished": True})}),
+        unresolved_scope=[{"id": "missing", "scope": {"claim_ids": ["c"]}, "cause": "rereads exhausted",
+                           "affected_decisions": ["problem_value"], "exhausted_tasks": ["exhausted"],
+                           "scope_kind": "unresolved", "next_action": recovery}],
+        recovery_work=[recovery], resource_ledger={"attempts": 20})
+    effective = review_composition.effective_review_output("assignment-A", {
+        "controller_id": "assignment-A", "kind": "incomplete", "outcome": outcome})
+    assignment = {"id": "assignment-A", "role": role, "slot_id": "A", "route_id": "route-A",
+                  "reviewer_id": "reviewer-A", "author_id": "author", "context": {}, "recorded_revision": 2}
+    state = {"ready": False, "output": None, "raw_output": {"assessment_incomplete": {"unfinished": True}},
+             "effective": effective, "epoch_id": frozen["id"], "obligations": [], "refused_attempts": []}
+    return frozen, assignment, state, outcome
+
+
+class StagedDeliveryTests(unittest.TestCase):
+    def test_incomplete_advice_cannot_repeat_exhausted_work_through_a_workflow_alias(self):
+        from research_harness.problem_delivery import assess_source_requests
+        frozen, assignment, state, outcome = build_staged_delivery(recovery={"workflow": "review-run",
+            "payload": {"task_id": "exhausted"}, "text": "Repeat the exhausted task."})
+        records = {"review_assignment": {assignment["id"]: assignment}, "review_epoch": {frozen["id"]: frozen}}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            item = next(row for row in assess_source_requests(records, object()) if row["code"] == "assessment_incomplete")
+        self.assertTrue(item["next"])
+        self.assertFalse(any(action.get("workflow") == "review-run" or action.get("command") == "review-run" for action in item["next"]))
+        self.assertEqual(item["unresolved_scope"], outcome["unresolved_scope"])
+    def test_completed_negative_next_names_the_value_claim_research_and_upheld_objection(self):
+        from research_harness import problem_delivery
+        records = {"value_review": {"R": {"objection_identities": {"O7": "R:O7"}, "payload": {"value": {"assurances": [
+            {"kind": "problem_value", "status": "failed", "reason": "The evidence supports prime inputs only."}]},
+            "objections": [{"id": "O7", "resolution_condition": "Prove the claimed bound for composite inputs."}]}}}}
+        pending = [{"code": "problem_assurance_pending", "review_id": "R", "assurances": ["problem_value"]},
+                   {"code": "research_objection_unresolved", "objection_id": "R:O7"}]
+        work = problem_delivery.describe_problem_work(records, pending)
+        self.assertEqual(work[0]["next"][0]["workflow"], "problem-value")
+        self.assertIn("prime inputs", work[0]["next"][0]["text"])
+        self.assertEqual(work[1]["next"][0]["scope"], {"objection_id": "R:O7"})
+        self.assertIn("composite inputs", work[1]["next"][0]["prerequisite"])
+        self.assertNotIn("review-run", json.dumps(work))
+
+    def test_incomplete_occupies_its_slot_and_names_research_instead_of_another_call(self):
+        from research_harness.problem_delivery import assess_source_requests
+        frozen, assignment, state, outcome = build_staged_delivery()
+        records = {"review_assignment": {assignment["id"]: assignment}, "review_epoch": {frozen["id"]: frozen}}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            pending = assess_source_requests(records, object())
+        incomplete = next(row for row in pending if row["code"] == "assessment_incomplete")
+        self.assertEqual(incomplete["slot_id"], "A")
+        self.assertEqual(incomplete["origin"], "execution")
+        self.assertEqual(incomplete["outcome_id"], outcome["id"])
+        self.assertEqual(incomplete["next"], outcome["recovery_work"])
+        self.assertNotIn("review-run", json.dumps(incomplete["next"]))
+
+    def test_completed_staged_review_still_requires_configuration_measurement(self):
+        from research_harness.problem_delivery import assess_source_requests
+        frozen, assignment, state, _ = build_staged_delivery()
+        state["effective"] = {"kind": "ordinary", "effective_output": {"value": {"status": "sufficient"}},
+                              "completion_root": "completed"}
+        records = {"review_assignment": {assignment["id"]: assignment}, "review_epoch": {frozen["id"]: frozen}}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            pending = assess_source_requests(records, object())
+        qualification = next(row for row in pending if row["code"] == "review_quality_measurement_pending")
+        self.assertEqual(qualification["epoch_id"], frozen["id"])
+        self.assertEqual(qualification["route_id"], frozen["route_id"])
+
+    def test_pending_successor_keeps_earlier_favorable_output_out_of_current_results(self):
+        from research_harness.problem_delivery import assess_source_requests
+        frozen, assignment, state, _ = build_staged_delivery()
+        state.update(effective={"kind": "pending"}, raw_output=None)
+        records = {"review_assignment": {assignment["id"]: assignment}, "review_epoch": {frozen["id"]: frozen}}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            pending = assess_source_requests(records, object())
+        self.assertIn("review_task_pending", {row["code"] for row in pending})
+
+    def test_adjudication_incomplete_has_no_scientific_disposition(self):
+        from research_harness.problem_delivery import assess_source_requests
+        frozen, assignment, state, outcome = build_staged_delivery(origin="reviewer", role="adjudicator")
+        records = {"review_assignment": {assignment["id"]: assignment}, "review_epoch": {frozen["id"]: frozen}}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            pending = assess_source_requests(records, object())
+        incomplete = next(row for row in pending if row["code"] == "assessment_incomplete")
+        self.assertEqual(incomplete["role"], "adjudicator")
+        self.assertNotIn("disposition", incomplete)
+
+    def test_projection_uses_effective_reviews_and_retains_terminal_binding(self):
+        from research_harness import problem_delivery
+        frozen, assignment, state, _ = build_staged_delivery()
+        scientific = {"stage": "result", "value": {"reason": "Only prime inputs are supported."}}
+        state["effective"] = {"kind": "paged", "effective_output": scientific,
+            "effective_output_digest": digest(scientific), "composition_root": "root",
+            "terminal_attempt_id": "terminal", "terminal_raw_output_digest": digest({"terminal": True})}
+        records = {"review_assignment": {assignment["id"]: assignment}, "review_epoch": {frozen["id"]: frozen},
+                   "value_review": {"R": {"id": "R", "assignment_id": assignment["id"],
+                       "payload": dict(scientific, id="R", assignment_id=assignment["id"], dossier_id=None)}}}
+        statement = {"id": "statement", "title": "Problem", "statement": "Exact claim", "resolution_criteria": "Proof",
+                     "area": "math", "formal_statement": None}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state), \
+             mock.patch.object(problem_delivery, "find_current_statement", return_value=statement), \
+             mock.patch.object(problem_delivery, "find_value", return_value={"motivation": [], "current_state": []}), \
+             mock.patch.object(problem_delivery, "find_latest", return_value={"id": "decision", "review_ids": ["R"]}), \
+             mock.patch.object(problem_delivery, "project_citations", return_value=[]), \
+             mock.patch.object(problem_delivery, "compute_statement_digest", return_value="statement-digest"), \
+             mock.patch.object(problem_delivery, "compute_problem_evidence_digest", return_value="evidence"):
+            files, manifest = problem_delivery.build_projection(records, object())
+        exported = json.loads(files["reviews.json"])
+        self.assertEqual(exported[0]["output"], scientific)
+        self.assertEqual(exported[0]["binding"]["composition_root"], "root")
+        self.assertEqual(exported[0]["binding"]["terminal_attempt_id"], "terminal")
+        self.assertIn("reviews.json", manifest["files"])
 
 
 class ProblemDeliveryCase(ProblemCase):

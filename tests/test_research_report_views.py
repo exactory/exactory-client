@@ -52,6 +52,69 @@ def round_view():
 
 
 class ReportViewTests(unittest.TestCase):
+    def test_recovery_precedes_incomplete_research_and_missing_review_pair(self):
+        codes = ["problem_review_pair_required", "review_quality_measurement_pending", "assessment_incomplete",
+                 "review_task_pending", "review_observation_acceptance_pending", "review_worker_reconciliation_required"]
+        ordered = order_obligations([dict(code=code, **({"next": [{"command": "review-run"}]} if code == "review_task_pending" else {}))
+                                     for code in codes])
+        self.assertEqual([row["code"] for row in ordered], list(reversed(codes)))
+
+    def test_dependency_blocked_tasks_do_not_hide_exhausted_scientific_work(self):
+        blocked = {"code": "review_task_pending", "state": "blocked", "next": []}
+        incomplete = {"code": "assessment_incomplete", "next": [{"workflow": "problem-value", "scope": {"claim_id": "c"}}]}
+        self.assertEqual(order_obligations([blocked, incomplete])[0], incomplete)
+
+    def test_aggregate_pending_does_not_hide_a_concrete_ready_task(self):
+        aggregate = {"code": "review_task_pending", "occupied": 2, "pending": [{"slot_id": "A"}]}
+        concrete = {"code": "review_task_pending", "state": "ready", "task_id": "read", "next": [
+            {"command": "review-run", "payload": {"assignment_id": "controller", "task_id": "read", "epoch_id": "epoch"}}]}
+        for number in range(32):
+            concrete["task_id"] = "read-" + str(number)
+            self.assertEqual(order_obligations([aggregate, concrete])[0], concrete)
+
+    def test_completed_scientific_defects_precede_measurement_qualification(self):
+        rows = [{"code": "review_quality_measurement_pending"}, {"code": "problem_assurance_pending"},
+                {"code": "research_objection_unresolved"}]
+        self.assertEqual(order_obligations(rows)[-1]["code"], "review_quality_measurement_pending")
+
+    def test_status_summary_counts_occupied_complete_and_incomplete_slots_separately(self):
+        report = report_fixture()
+        report["review"] = {"slot_outcomes": {"occupied": 2, "complete": [{"id": "R"}],
+                                               "incomplete": [{"id": "I", "unresolved_scope": "PRIVATE"}], "pending": []}}
+        summary = status_summary(report)
+        self.assertEqual(summary["review_slots"], {"occupied": 2, "complete": 1, "incomplete": 1, "pending": 0})
+        self.assertNotIn("PRIVATE", json.dumps(summary))
+
+    def test_next_summary_keeps_a_small_exact_recovery_payload(self):
+        report = report_fixture()
+        action = {"command": "review-run", "payload": {"assignment_id": "controller", "epoch_id": "epoch",
+                                                       "task_id": "task", "action": "accept"}}
+        report["next"] = {"code": "review_observation_acceptance_pending", "assignment_id": "controller", "next": [action]}
+        before = copy.deepcopy(report)
+        hint = next_summary(report)["next_hint"]
+        self.assertEqual(hint["next_step"], action)
+        self.assertEqual(report, before)
+
+    def test_large_recovery_payload_is_omitted_whole_and_available_on_the_obligations_page(self):
+        report = report_fixture()
+        action = {"command": "review-assignment", "payload": {"scope": "x" * 10000}}
+        item = {"code": "assessment_incomplete", "next": [action]}
+        report.update(next=item, obligations=[item], preparation={})
+        hint = next_summary(report)["next_hint"]
+        self.assertIsNone(hint["next_step"])
+        self.assertTrue(hint["details_required"])
+        self.assertEqual(obligations_page(report, "assessment_incomplete", limit=1, cursor=None)["obligations"][0]["next"], [action])
+        self.assertLessEqual(encoded_size(next_summary(report)), 4096)
+
+    def test_exact_action_respects_the_total_next_summary_budget(self):
+        report = report_fixture()
+        report["next"] = {key: "\x01" * 10000 for key in ("code", "version_id", "work_id", "collection_id", "unit_id", "explanation")}
+        report["next"]["next"] = [{"command": "review-run", "payload": {"id": "x" * 900}}]
+        result = next_summary(report)
+        self.assertLessEqual(encoded_size(result), 4096)
+        if result["next_hint"]["next_step"] is not None:
+            self.assertEqual(result["next_hint"]["next_step"], report["next"]["next"][0])
+
     def test_depth_plan_ids_remain_bounded_without_changing_full_status(self):
         report = report_fixture()
         values = {"loop_abstracts": 100, "round_loop_abstracts": 40, "hits_per_query": 10,

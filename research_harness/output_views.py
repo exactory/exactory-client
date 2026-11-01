@@ -17,11 +17,13 @@ import json
 import os
 import re
 import sys
+import time
 from typing import Callable, NamedTuple
 
 from .artifacts import _Workspace, is_sealed_artifact
 from .errors import ResearchError, describe_error_at
 from .evidence import digest
+from .evaluation import Evaluation
 from .graph import obligation
 from .problem_claims import find_current_statement, find_latest
 from .problem_delivery import find_post
@@ -35,6 +37,9 @@ from .workspace import checked_parent, find_entry_kind, find_workspace, read_fil
 
 
 MARKER_PATH = ".exactory/output-views.json"
+DIRTY_PATH = ".exactory/output-views-dirty.json"
+_RENDERING_PATH = ".exactory/output-views-rendering.json"
+_RENDER_LOCK_SECONDS = 1.0
 # The folders that the export commands own, from the workspace root.
 PROBLEM_EXPORTS_FOLDER = "final/problem/exports"
 PACKETS_FOLDER = "intermediate/reviews/packets"
@@ -229,6 +234,24 @@ def _find_selected_bundle_digest(records):
     return None if bundle is None else bundle["digest"]
 
 
+def _has_staged_successor(records, assignment):
+    """A successor installs pending standing before it records a result or disposition."""
+    if assignment is None:
+        return False
+    slot = assignment.get("slot_id") or slot_id(records, assignment)
+    head = records.get("review_slot_head", {}).get(slot)
+    if head and assignment.get("staged_review", {}).get("epoch_id"):
+        if head["epoch_id"] != assignment["staged_review"]["epoch_id"]:
+            return True
+    for epoch in records.get("review_epoch", {}).values():
+        controller = records.get("review_assignment", {}).get(epoch["controller_assignment_id"])
+        if (controller and epoch["role"] == assignment["role"] and epoch["slot_id"] == slot
+                and controller["id"] != assignment["id"]
+                and controller.get("recorded_revision", 0) > assignment.get("recorded_revision", 0)):
+            return True
+    return False
+
+
 def _find_current_value_reviews(records):
     """(current, historical) value review ids. historical_reviews names the reviews whose independence a later
     repair or a contamination ended; of the others, the latest review of each dossier, stage, subject and slot is
@@ -241,14 +264,23 @@ def _find_current_value_reviews(records):
     current = _find_latest_keys(standing, "value_review", lambda review: (
         review.get("dossier_id"), review["payload"]["stage"], digest(review.get("subject")),
         slot_id(records, records["review_assignment"][review["assignment_id"]])))
+    superseded = {identifier for identifier in current if _has_staged_successor(
+        records, records["review_assignment"][reviews[identifier]["assignment_id"]])}
+    current.difference_update(superseded)
+    historical.update(superseded)
     return current, historical
+
+
+def _find_current_adjudications(records):
+    current = _find_latest_keys(records, "review_adjudication", lambda record: record["assignment_id"])
+    return {key for key in current if not _has_staged_successor(
+        records, records.get("review_assignment", {}).get(records["review_adjudication"][key]["assignment_id"]))}
 
 
 # The record kinds whose records are each one file under <tree>/<id>.json, with the rule that names the current ones;
 # a record that the rule does not name is superseded.
 _RECORD_TREES = {
-    "review_adjudication": ("reviews/adjudicator", lambda records: _find_latest_keys(
-        records, "review_adjudication", lambda record: record["assignment_id"])),
+    "review_adjudication": ("reviews/adjudicator", _find_current_adjudications),
     "manuscript_review": ("reviews/manuscript", lambda records: {review["id"] for review in latest_reviews(
         records, _find_selected_bundle_digest(records)).values()}),
     "manuscript_prediction": ("reviews/prediction", lambda records: _find_keys_of(
@@ -324,6 +356,9 @@ def _build_records(records, artifacts, inputs):
         current = find_current(records)
         for key, record in records.get(kind, {}).items():
             status = "current" if key in current else "superseded"
+            if kind == "review_adjudication" and _has_staged_successor(
+                    records, records.get("review_assignment", {}).get(record["assignment_id"])):
+                status = "historical"
             path = _STATUS_FOLDERS[status] + tree + "/" + _format_file_name(key) + ".json"
             entry = _describe(kind, key, record, status)
             files[path] = ViewFile(_encode_record(record, entry), entry)
@@ -428,12 +463,16 @@ def _find_adoptions(records, inputs):
 
 def _find_series_root(records, assignment):
     """The series of an assignment: an adjudicator's session, else the origin of its lineage."""
+    if assignment.get("staged_review", {}).get("kind") == "task":
+        return _find_series_root(records, records["review_assignment"][assignment["staged_review"]["controller_assignment_id"]])
     if assignment["role"] == "adjudicator":
         return assignment.get("session_id") or assignment["id"]
     return _lineage(records, assignment)[0]["id"]
 
 
 def _find_series_parent(assignment):
+    if assignment.get("staged_review", {}).get("kind") == "task":
+        return assignment["staged_review"]["controller_assignment_id"]
     parent = _parent(assignment)
     if parent is None and assignment["role"] == "adjudicator":
         return assignment.get("history_assignment_id")
@@ -516,6 +555,14 @@ def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, r
     binding = ([attempt for attempt in usable if _context_observed(artifacts, attempt)] or usable or [None])[0]
     if binding is not None:
         runs[binding["id"]]["selected"] = True
+    if assignment.get("staged_review") or any(epoch["controller_assignment_id"] == assignment["id"] for epoch in records.get("review_epoch", {}).values()):
+        from .review_protocol import assignment_state
+        state = assignment_state(records, artifacts, assignment["id"])
+        # Raw task selection is distinct from authorization of an effective
+        # final. The protocol selects pages and terminal attempts itself.
+        for run in runs.values():
+            run["raw_output"] = run["output"]
+            run["selected"] = run["run_id"] == state.get("attempt_id")
     for invocation in by_assignment["review_output_correction_invocation"].get(assignment["id"], []):
         result = records.get("review_output_correction", {}).get(invocation["id"]) or {}
         record = result or invocation
@@ -583,6 +630,21 @@ def _build_series(records, artifacts, inputs):
                                                                      "recorded_revision")}
                                    for event in by_assignment["review_context_event"].get(identifier, [])],
                 "adopted_by": adoptions.get(identifier, [])})
+            if assignment.get("staged_review", {}).get("kind") == "task":
+                turns[-1]["task_id"] = assignment["staged_review"]["task_id"]
+            if any(epoch["controller_assignment_id"] == identifier for epoch in records.get("review_epoch", {}).values()):
+                from .review_protocol import assignment_state
+                state = assignment_state(records, artifacts, identifier)
+                effective = state.get("effective") or {"kind": "pending"}
+                turns[-1].update(raw_output_digest=None if state.get("raw_output") is None else digest(state["raw_output"]),
+                    effective={key: value for key, value in effective.items() if key not in ("effective_output", "incomplete_outcome")})
+                if "effective_output" in effective:
+                    entry = _describe("review_assignment", identifier, assignment)
+                    entry["output_kind"] = "effective"
+                    files[stem + ".effective.json"] = ViewFile(_encode_record(effective["effective_output"], entry), entry)
+                    turns[-1]["effective"]["output_file"] = stem.rsplit("/", 1)[1] + ".effective.json"
+                if "incomplete_outcome" in effective:
+                    turns[-1]["effective"]["outcome_id"] = effective["incomplete_outcome"]["id"]
         replacements = sorted((other for other in origins
                                if other["id"] != root_id and slot is not None and other.get("slot_id") == slot
                                and other["recorded_revision"] > root["recorded_revision"]),
@@ -591,6 +653,27 @@ def _build_series(records, artifacts, inputs):
                     "slot_id": slot, "replaced_by_series": replacements[0]["id"] if replacements else None,
                     "turns": turns}
         files[folder + "series.json"] = ViewFile(_encode(document), _describe("review_assignment", root_id, root))
+    return files
+
+
+_STAGED_KINDS = ("review_epoch", "review_task", "assessment_incomplete", "review_execution_plan",
+                 "review_task_execution", "review_reservation", "review_observation", "review_task_acceptance",
+                 "review_pool_membership", "review_capacity_policy", "review_slot_head", "review_task_dispatch",
+                 "review_composition_plan")
+
+
+def _build_staged_records(records, artifacts, inputs):
+    """Keep task observations and lifecycle facts intermediate; incompleteness is a distinct slot outcome."""
+    files = {}
+    for kind in _STAGED_KINDS:
+        for key, record in records.get(kind, {}).items():
+            incomplete = kind == "assessment_incomplete"
+            head = records.get("review_slot_head", {}).get(record.get("slot_id"))
+            status = ("historical" if head and head["epoch_id"] != record["epoch_id"] else "incomplete") if incomplete else None
+            folder = (("final/history/" if status == "historical" else "final/") + "reviews/incomplete/" if incomplete
+                      else "intermediate/reviews/staged/" + kind + "/")
+            entry = _describe(kind, key, record, status)
+            files[folder + _format_file_name(key) + ".json"] = ViewFile(_encode_record(record, entry), entry)
     return files
 
 
@@ -743,10 +826,11 @@ def _build_check_reports(records, artifacts, inputs):
 
 VIEW_GROUPS = (
     ViewGroup("records", tuple(_RECORD_TREES), _RECORD_TREE_READS, _build_records),
-    ViewGroup("value_reviews", ("value_review", "research_support"), _SERIES_KINDS, _build_value_reviews),
+    ViewGroup("value_reviews", ("value_review", "research_support"), _SERIES_KINDS + ("review_epoch",), _build_value_reviews),
     ViewGroup("bundles", ("publication_bundle",), ("publication_selection",) + _DEPOSIT_KINDS, _build_bundles),
     ViewGroup("deposits", _DEPOSIT_KINDS, (), _build_deposits),
-    ViewGroup("review_series", _SERIES_KINDS, _ADOPTING_KINDS, _build_series),
+    ViewGroup("review_series", _SERIES_KINDS, _ADOPTING_KINDS + _STAGED_KINDS, _build_series),
+    ViewGroup("staged_reviews", _STAGED_KINDS, _SERIES_KINDS, _build_staged_records),
     ViewGroup("review_routes", ("review_route", "review_probe_invocation", "review_route_probe"), (), _build_routes),
     ViewGroup("problem_candidates", ("problem_candidate",), (), _build_candidates),
     ViewGroup("lab_probes", _PROBE_KINDS + ("probe_artifact", "probe_artifact_pin", "local_artifact"), (),
@@ -789,6 +873,7 @@ _VIEW_KINDS = frozenset(kind for group in VIEW_GROUPS for kind in group.kinds + 
 
 def compute_view_model(records, artifacts, inputs):
     """{path from the workspace root: ViewFile} of every view file except the README and index of each folder."""
+    artifacts = Evaluation.of(records, artifacts)
     model = {}
     for group in VIEW_GROUPS:
         model.update(group.build(records, artifacts, inputs))
@@ -844,11 +929,20 @@ def _read_inputs(store_root, workspace_root):
 
 @contextmanager
 def _hold_lock(store_root):
-    """Serialize the renderers of every process on this store."""
+    """Serialize renderers with a bounded wait outside the authoritative store lock."""
     with _Workspace(store_root).directory(".exactory") as directory:
         descriptor = os.open(_LOCK_FILE_NAME, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600, dir_fd=directory)
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        deadline = time.monotonic() + _RENDER_LOCK_SECONDS
+        while True:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError as error:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ResearchError("output_view_render_deferred", "The output renderer is busy.") from error
+                time.sleep(min(0.025, remaining))
         yield
     finally:
         os.close(descriptor)
@@ -880,6 +974,8 @@ def find_view_advisories(store, revision):
     except ResearchError as error:
         return advise("marker_unreadable", path=MARKER_PATH, error=error.code)
     rendered = marker["revision"]
+    if any(find_entry_kind(store.root, path) != "absent" for path in (DIRTY_PATH, _RENDERING_PATH)):
+        return advise("render_deferred", rendered, DIRTY_PATH)
     if marker["failure"] is not None:
         return advise("render_failed", rendered, marker["failure"]["path"], marker["failure"]["error"])
     if marker["errors"]:
@@ -941,7 +1037,33 @@ def _record_failure(store_root, failure):
             write_projection(store_root, MARKER_PATH, _encode(dict(_read_marker(store_root), failure=failure)))
     except (ResearchError, OSError):
         # A store whose marker cannot be written still reports its views as behind.
-        pass
+        try:
+            _mark_dirty(store_root)
+        except (ResearchError, OSError):
+            pass
+
+
+def _mark_dirty(store_root):
+    """Durably request a full render without needing the busy rendering lock."""
+    write_projection(store_root, DIRTY_PATH, _encode({"schema": "exactory-output-views-dirty-v1", "render": "full"}))
+
+
+def _claim_dirty(store_root):
+    """Move only work known before this render; concurrent requests keep their own marker."""
+    if find_entry_kind(store_root, DIRTY_PATH) != "absent":
+        with checked_parent(store_root, DIRTY_PATH) as (directory, name):
+            os.replace(name, _RENDERING_PATH.rsplit("/", 1)[1], src_dir_fd=directory, dst_dir_fd=directory)
+            os.fsync(directory)
+    return find_entry_kind(store_root, _RENDERING_PATH) != "absent"
+
+
+def _finish_dirty(store_root):
+    with checked_parent(store_root, _RENDERING_PATH) as (directory, name):
+        try:
+            os.unlink(name, dir_fd=directory)
+            os.fsync(directory)
+        except FileNotFoundError:
+            pass
 
 
 def render_pending(store):
@@ -958,28 +1080,42 @@ def render_all(store):
 def _render(store, *, full):
     if _is_shared_workspace_root(store.root):
         return {"revision": None, "rendered": False, "reason": "shared_workspace_root"}
+    try:
+        with _hold_lock(store.root):
+            return _render_locked(store, full=full)
+    except ResearchError as error:
+        if error.code != "output_view_render_deferred":
+            raise
+        _mark_dirty(store.root)
+        return {"revision": None, "rendered": False, "deferred": True,
+                "reason": "render_lock_timeout", "dirty_marker": DIRTY_PATH}
+
+
+def _render_locked(store, *, full):
     workspace_root = find_workspace_root(store.root)
-    with _hold_lock(store.root):
-        marker = _read_marker(store.root)
-        inputs, input_digests = _read_inputs(store.root, workspace_root)
-        version = plugin_version()
-        if (not full and marker["revision"] > 0 and marker["failure"] is None and marker["plugin_version"] == version
-                and marker["inputs"] == input_digests):
-            revision, digests, kinds = store.read_changes(marker["revision"])
-            if digests[marker["revision"]] == marker["event_digest"] and not kinds & _VIEW_KINDS:
-                if revision != marker["revision"]:
-                    marker = dict(marker, revision=revision, event_digest=digests[revision])
-                    write_projection(store.root, MARKER_PATH, _encode(marker))
-                return _summarize(marker)
-        revision, event_digest, records = store.read_kinds(sorted(_VIEW_KINDS))
-        artifacts = store.build_artifact_store()
-        model = compute_view_model(records, artifacts, inputs)
-        files, errors = _write_views(workspace_root, store.root, marker, model, artifacts)
-        marker = {"schema": _MARKER_SCHEMA_NAME, "revision": revision, "event_digest": event_digest,
-                  "plugin_version": version, "inputs": input_digests, "files": files, "errors": errors,
-                  "failure": None}
-        write_projection(store.root, MARKER_PATH, _encode(marker))
-        return _summarize(marker, model)
+    full = _claim_dirty(store.root) or full
+    marker = _read_marker(store.root)
+    inputs, input_digests = _read_inputs(store.root, workspace_root)
+    version = plugin_version()
+    if (not full and marker["revision"] > 0 and not marker["errors"] and marker["failure"] is None and marker["plugin_version"] == version
+            and marker["inputs"] == input_digests):
+        revision, digests, kinds = store.read_changes(marker["revision"])
+        if digests[marker["revision"]] == marker["event_digest"] and not kinds & _VIEW_KINDS:
+            if revision != marker["revision"]:
+                marker = dict(marker, revision=revision, event_digest=digests[revision])
+                write_projection(store.root, MARKER_PATH, _encode(marker))
+            return _summarize(marker)
+    revision, event_digest, records = store.read_kinds(sorted(_VIEW_KINDS))
+    artifacts = store.build_artifact_store()
+    model = compute_view_model(records, artifacts, inputs)
+    files, errors = _write_views(workspace_root, store.root, marker, model, artifacts)
+    marker = {"schema": _MARKER_SCHEMA_NAME, "revision": revision, "event_digest": event_digest,
+              "plugin_version": version, "inputs": input_digests, "files": files, "errors": errors,
+              "failure": None}
+    write_projection(store.root, MARKER_PATH, _encode(marker))
+    if not errors:
+        _finish_dirty(store.root)
+    return _summarize(marker, model)
 
 
 def _write_views(workspace_root, store_root, marker, model, artifacts):

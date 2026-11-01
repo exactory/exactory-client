@@ -18,6 +18,182 @@ PLUGIN = Path(__file__).resolve().parents[1]
 RESEARCH_RUNS = Path(os.environ.get("EXACTORY_TEST_RESEARCH_RUNS", tempfile.gettempdir()))
 
 
+class StagedReviewCliTests(unittest.TestCase):
+    def build_records(self, execution=None):
+        from test_research_problem_delivery import build_staged_delivery
+        from test_review_staged_fixtures import task
+        frozen, assignment, state, outcome = build_staged_delivery()
+        state.update(effective={"kind": "pending"}, raw_output=None)
+        assigned = task(frozen)
+        records = {"review_assignment": {assignment["id"]: assignment}, "review_epoch": {frozen["id"]: frozen},
+                   "review_task": {assigned["id"]: {"id": assigned["id"], "epoch_id": frozen["id"],
+                                                     "generation": 1, "task": assigned}}}
+        records["review_assignment"]["child"] = dict(assignment, id="child", recorded_revision=3,
+            staged_review={"kind": "task", "controller_assignment_id": "assignment-A", "epoch_id": "epoch-A",
+                           "task_id": assigned["id"]})
+        if execution is not None:
+            records["review_task_execution"] = {assigned["id"]: dict(execution, task_id=assigned["id"], plan_id="plan")}
+            records["review_execution_plan"] = {"plan": {"max_attempts": 2}}
+        return records, state, assigned
+
+    def test_review_status_names_ready_capture_and_reconciliation_commands(self):
+        from research_harness import cli, review_protocol
+        for execution, expected_action in ((None, None),
+                ({"state": "captured", "attempts": 1, "reservation_id": "reservation"}, "accept"),
+                ({"state": "running", "attempts": 1, "reservation_id": "reservation"}, "reconcile")):
+            with self.subTest(action=expected_action):
+                records, state, assigned = self.build_records(execution)
+                if execution:
+                    records["review_reservation"] = {"reservation": {"id": "reservation", "released": expected_action == "accept"}}
+                    if expected_action == "accept":
+                        records["review_observation"] = {"reservation": {"observation": {"status": "completed"}}}
+                with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+                    report = cli._review_status(records, object())
+                item = report["assignments"]["assignment-A"]
+                action = item["tasks"][0]["next"][0]
+                self.assertEqual(action["command"], "review-run")
+                self.assertEqual(action["payload"], dict(assignment_id="assignment-A", epoch_id="epoch-A",
+                    task_id=assigned["id"], **({"action": expected_action} if expected_action else {})))
+
+    def test_exhausted_status_has_research_work_and_no_repeat_invocation(self):
+        from research_harness import cli, review_protocol
+        records, state, assigned = self.build_records({"state": "known_failure", "attempts": 2, "reservation_id": "old"})
+        records["review_reservation"] = {"old": {"released": True}}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            report = cli._review_status(records, object())
+        task = report["assignments"]["assignment-A"]["tasks"][0]
+        self.assertEqual(task["state"], "exhausted")
+        self.assertFalse(any(item.get("command") == "review-run" for item in task["next"]))
+
+    def test_an_incomplete_epoch_never_advertises_its_unfinished_task_as_ready(self):
+        from research_harness import cli, review_protocol
+        from test_research_problem_delivery import build_staged_delivery
+        records, state, assigned = self.build_records()
+        state["effective"] = build_staged_delivery(origin="reviewer")[2]["effective"]
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            task = cli._review_status(records, object())["assignments"]["assignment-A"]["tasks"][0]
+        self.assertEqual(task["state"], "incomplete")
+        self.assertEqual(task["next"], state["effective"]["incomplete_outcome"]["recovery_work"])
+        self.assertFalse(any(item.get("command") == "review-run" for item in task["next"]))
+
+    def test_capacity_wait_names_the_reservation_that_must_be_reconciled(self):
+        from research_harness import cli, review_protocol
+        records, state, assigned = self.build_records()
+        records["review_reservation"] = {"busy": {"id": "busy", "released": False, "route_id": "route-A",
+            "epoch_id": "epoch-A", "task_id": "other-task"}}
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            task = cli._review_status(records, object())["assignments"]["assignment-A"]["tasks"][0]
+        self.assertEqual(task["code"], "review_capacity_wait")
+        self.assertEqual(task["next"][0]["payload"]["task_id"], "other-task")
+        self.assertEqual(task["next"][0]["payload"]["action"], "reconcile")
+
+    def test_review_run_preserves_task_and_resume_payload_for_versioned_protocol_dispatch(self):
+        from research_harness import cli, review_protocol
+        payload = {"assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": "task", "action": "accept"}
+        store = mock.Mock()
+        store.snapshot.return_value = {"records": {}}
+        with mock.patch.object(review_protocol, "invoke_assignment", return_value={"revision": 9}) as invoke:
+            result = cli._review_run(store, payload, expected_revision=8, request_id="accept")
+        self.assertEqual(result["revision"], 9)
+        self.assertEqual(invoke.call_args.args[:2], (store, payload))
+
+    def test_unassigned_frontier_names_the_exact_review_assignment_payload(self):
+        from research_harness import cli, review_protocol
+        records, state, assigned = self.build_records()
+        del records["review_assignment"]["child"]
+        with mock.patch.object(review_protocol, "assignment_state", return_value=state):
+            item = cli._review_status(records, object())["assignments"]["assignment-A"]["tasks"][0]["next"][0]
+        self.assertEqual(item["command"], "review-assignment")
+        self.assertEqual(item["payload"]["context"], {"controller_assignment_id": "assignment-A", "task_id": assigned["id"]})
+        self.assertEqual(item["payload"]["reviewer_id"], "reviewer-A")
+
+    def test_reconcile_dispatch_uses_the_existing_owned_reservation_without_model_io(self):
+        from research_harness import cli, review_protocol, review_task_execution
+        records, state, assigned = self.build_records({"state": "running", "attempts": 1, "reservation_id": "reservation"})
+        store = mock.Mock()
+        store.snapshot.return_value = {"records": records}
+        payload = {"assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": assigned["id"], "action": "reconcile"}
+        with mock.patch.object(review_task_execution, "reconcile_worker", return_value={"result": "reconciled"}) as reconcile, \
+             mock.patch.object(review_protocol, "invoke_assignment") as invoke:
+            self.assertEqual(cli._review_run(store, payload, expected_revision=8, request_id="resume"), {"result": "reconciled"})
+        reconcile.assert_called_once_with(store, {"reservation_id": "reservation"}, expected_revision=8, request_id="resume")
+        invoke.assert_not_called()
+
+    def test_accept_requires_a_committed_capture_and_maps_to_the_child_assignment(self):
+        from research_harness import cli, review_protocol
+        from research_harness.errors import ResearchError
+        records, state, assigned = self.build_records({"state": "captured", "attempts": 1, "reservation_id": "reservation"})
+        store = mock.Mock()
+        store.snapshot.return_value = {"records": records}
+        payload = {"assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": assigned["id"], "action": "accept"}
+        with mock.patch.object(review_protocol, "invoke_assignment", return_value={"revision": 9}) as invoke:
+            with self.assertRaises(ResearchError):
+                cli._review_run(store, payload, expected_revision=8, request_id="resume")
+            invoke.assert_not_called()
+            records["review_observation"] = {"reservation": {"observation": {"status": "completed"}}}
+            cli._review_run(store, payload, expected_revision=8, request_id="resume")
+        mapped = invoke.call_args.args[1]
+        self.assertEqual(mapped["assignment_id"], "child")
+        self.assertEqual(set(mapped), {"id", "assignment_id"})
+
+    def test_interrupted_retry_retains_the_same_default_attempt_id_on_request_replay(self):
+        from research_harness import cli, review_protocol
+        records, state, assigned = self.build_records({"state": "known_failure", "attempts": 1, "reservation_id": "old"})
+        store = mock.Mock()
+        store.snapshot.return_value = {"records": records}
+        payload = {"assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": assigned["id"]}
+        with mock.patch.object(review_protocol, "invoke_assignment", return_value={"revision": 9}) as invoke:
+            cli._review_run(store, payload, expected_revision=8, request_id="retry")
+            first = invoke.call_args.args[1]
+            records["review_task_execution"][assigned["id"]].update(attempts=2, reservation_id="new", state="captured")
+            cli._review_run(store, payload, expected_revision=8, request_id="retry")
+            second = invoke.call_args.args[1]
+        self.assertEqual(first, second)
+
+    def test_accept_under_a_new_request_retains_the_capture_owners_attempt_id(self):
+        from research_harness import cli, review_protocol
+        records, state, assigned = self.build_records({"state": "captured", "attempts": 1, "reservation_id": "reservation"})
+        records["review_observation"] = {"reservation": {"observation": {"status": "completed"}}}
+        records["review_task_dispatch"] = {"original": {"id": "capture-attempt", "assignment_id": "child", "task_id": assigned["id"]}}
+        store = mock.Mock()
+        store.snapshot.return_value = {"records": records}
+        store.committed_request.side_effect = lambda key: {"operation": "review.task_reserve", "payload": {},
+            "response": {"revision": 9, "result": {"id": "reservation"}}} if key == "original:reserve" else None
+        payload = {"assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": assigned["id"], "action": "accept"}
+        with mock.patch.object(review_protocol, "invoke_assignment", return_value={"revision": 9}) as invoke:
+            cli._review_run(store, payload, expected_revision=8, request_id="resume-accept")
+            self.assertEqual(invoke.call_args.args[1]["id"], "capture-attempt")
+            cli._review_run(store, dict(payload, action=None), expected_revision=8, request_id="original")
+            self.assertEqual(invoke.call_args.args[1]["id"], "capture-attempt")
+
+    def test_explicit_retry_after_uncaptured_termination_may_name_a_new_attempt(self):
+        from research_harness import cli, review_protocol
+        records, state, assigned = self.build_records({"state": "unknown", "attempts": 1, "reservation_id": "dead"})
+        records["review_reservation"] = {"dead": {"released": True, "observation_id": None}}
+        records["review_task_dispatch"] = {"first": {"id": "first-attempt", "assignment_id": "child", "task_id": assigned["id"]}}
+        store = mock.Mock()
+        store.snapshot.return_value = {"records": records}
+        store.committed_request.side_effect = lambda key: {"operation": "review.task_reserve", "payload": {},
+            "response": {"revision": 9, "result": {"id": "dead"}}} if key == "first:reserve" else None
+        payload = {"assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": assigned["id"], "id": "retry-attempt"}
+        with mock.patch.object(review_protocol, "invoke_assignment", return_value={"revision": 9}) as invoke:
+            cli._review_run(store, payload, expected_revision=8, request_id="retry")
+        self.assertEqual(invoke.call_args.args[1]["id"], "retry-attempt")
+
+    def test_reconciliation_replay_keeps_the_original_reservation_after_new_work(self):
+        from research_harness import cli, review_task_execution
+        records, state, assigned = self.build_records({"state": "running", "attempts": 2, "reservation_id": "new"})
+        store = mock.Mock()
+        store.snapshot.return_value = {"records": records}
+        store.committed_request.return_value = {"operation": "review.worker_reconcile", "payload": {"reservation_id": "old"},
+            "response": {"result": {"id": "old", "task_id": assigned["id"], "epoch_id": "epoch-A"}}}
+        payload = {"assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": assigned["id"], "action": "reconcile"}
+        with mock.patch.object(review_task_execution, "reconcile_worker", return_value={"revision": 9}) as reconcile:
+            cli._review_run(store, payload, expected_revision=8, request_id="reconcile")
+        self.assertEqual(reconcile.call_args.args[1], {"reservation_id": "old"})
+
+
+
 class ProvisionalStatusTests(LiteratureCase):
     def test_provisional_search_appears_in_status_without_foundation_credit(self):
         from research_harness.cli import status_report
