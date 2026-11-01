@@ -5,12 +5,39 @@ import unittest
 from urllib.parse import parse_qs, urlsplit
 
 from research_harness.errors import ResearchError
+from research_harness import identities
 from research_harness.identities import family_id, normalize_identifier, version_of
 from research_harness.providers import Arxiv, OpenAlex, Crossref
 from research_fixtures import atom, entry, openalex, crossref
 
 
 class ProviderTests(unittest.TestCase):
+    def test_arxiv_family_resolves_arxiv_identifiers_and_registered_datacite_dois(self):
+        cases = [("arxiv:2609.14520", "arxiv:2609.14520"),
+                 ("arXiv:2609.14520v1", "arxiv:2609.14520"),
+                 ("hep-th/9711200", "arxiv:hep-th/9711200"),
+                 ("arxiv:hep-th/9711200v2", "arxiv:hep-th/9711200"),
+                 ("arxiv:math.GT/0309136v2", "arxiv:math.GT/0309136"),
+                 ("DOI:10.48550/arXiv.2609.14520", "arxiv:2609.14520"),
+                 ("10.48550/ARXIV.2601.18757", "arxiv:2601.18757"),
+                 ("doi:10.48550/arXiv.hep-th/9711200", "arxiv:hep-th/9711200"),
+                 ("DoI:10.48550/ArXiV.HEP-TH/9711200", "arxiv:hep-th/9711200"),
+                 ("doi:10.48550/arXiv.math.GT/0309136", "arxiv:math.GT/0309136"),
+                 ("https://doi.org/10.48550/arXiv.2609.14520", "arxiv:2609.14520")]
+        for identifier, expected in cases:
+            with self.subTest(identifier=identifier):
+                self.assertEqual(identities.resolve_arxiv_family(identifier), expected)
+
+    def test_arxiv_family_does_not_resolve_other_or_malformed_identifiers(self):
+        for identifier in ("doi:10.48550/arxiv.2609.14520v1", "doi:10.48550/arxiv.hep-th/9711200v2",
+                           "doi:10.48550/arxiv.2609.14520V1", "doi:10.48550/arxiv.2609.14520v0",
+                           "doi:10.48550/arxiv.2609.14520-extra", "doi:10.48550/arxiv.2600.14520",
+                           "doi:10.48550/arxiv.not-an-id", "doi:10.48550/arxiv.",
+                           "doi:10.48550/other.2609.14520", "doi:10.1016/j.topol.2012.01.008",
+                           "openalex:W7213271184", "url:https://arxiv.org/abs/2609.14520"):
+            with self.subTest(identifier=identifier):
+                self.assertIsNone(identities.resolve_arxiv_family(identifier))
+
     def test_openalex_keeps_works_with_legacy_sici_doi_aliases(self):
         identifiers = [
             "10.1002/(sici)1099-1638(199903/04)15:2<123::aid-qre211>3.0.co;2-f",

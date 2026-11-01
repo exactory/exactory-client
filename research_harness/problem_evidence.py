@@ -352,8 +352,8 @@ def find_citation_locator(work, units):
 
 
 def project_citations(records, artifacts):
-    from .identities import family_id
-    seen, citations = set(), []
+    from .identities import family_id, resolve_arxiv_family
+    seen, seen_arxiv_works, citations = set(), set(), []
     for reading in collect_readings(records):
         version = reading["version_id"]
         work = records["work"][version]
@@ -361,14 +361,24 @@ def project_citations(records, artifacts):
         if family in seen:
             continue
         seen.add(family)
+        author_names = [a if isinstance(a, str) else a.get("name", "") for a in work.get("authors", [])]
+        normalized_authors = tuple(" ".join(name.split()).casefold() for name in author_names)
+        arxiv_families = set(map(resolve_arxiv_family, [work["id"], *work.get("aliases", [])])) - {None}
+        # A work known by its arXiv id and one known by its DataCite DOI are cited once when their authors agree.
+        arxiv_work_key = (next(iter(arxiv_families)), normalized_authors) if (
+            len(arxiv_families) == 1 and normalized_authors and all(normalized_authors)) else None
+        if arxiv_work_key is not None and arxiv_work_key in seen_arxiv_works:
+            continue
         bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
         locator = find_citation_locator(work, (bundle or {}).get("units", []))
         if locator is None:
             raise ResearchError("problem_citation_locator_missing", "Record a DOI, arXiv id or HTTPS locator for the read source",
                                 {"version_id": version, "reading_id": reading["id"]})
-        authors = ", ".join(a if isinstance(a, str) else a.get("name", "") for a in work.get("authors", []))
+        authors = ", ".join(author_names)
         citation = ". ".join(part for part in (authors, work["title"], str(work.get("year") or "")) if part)
         citations.append({"citation": citation, "locator": locator})
+        if arxiv_work_key is not None:
+            seen_arxiv_works.add(arxiv_work_key)
     return citations
 
 
