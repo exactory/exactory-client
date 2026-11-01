@@ -23,6 +23,7 @@ from . import bar_sources
 from . import openness_reading
 from . import review_excerpts
 from . import review_problem_parts
+from . import review_problem_history
 from . import review_context_repair as context_repair
 from . import review_supplied_evidence as supplied_evidence
 from . import problem_rubric
@@ -2400,6 +2401,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             history_assignment_id = prior['id']
             if problem:
                 slot_identifier = context_repair.slot_id(records, prior)
+        history = review_problem_history.bound_history(
+            records, artifacts, value, route, packet, prompt, history, history_assignment_id)
         if route['adapter'] == 'codex_cli_visual_v1':
             from . import review_visual_sources, review_visual_route
             review_visual_sources.prepare_packet(records, artifacts, packet, history=history)
