@@ -136,3 +136,44 @@ def immutable_record(records, kind, key, value):
         raise ResearchError("record_conflict", "An evidence record ID cannot replace historical content",
                             {"kind": kind, "id": key})
     return kind, key, value
+
+
+def prepared_task_mutation(store, operation, payload, prepare, *, request_id, expected_revision=None, finalize=None):
+    """Prepare a tracked task patch; finalize(changes, result, commit_revision) may stamp commit fields."""
+    text(request_id, "Request ID")
+    if not isinstance(payload, dict):
+        raise ResearchError("invalid_input", "A domain mutation requires a JSON object")
+    payload = json.loads(_canonical(payload))
+    snapshot = store._read_scoped_preparation()
+    if snapshot.has_request(request_id):
+        return store.mutate_scoped(operation, payload, lambda tx, revision: None,
+                                   request_id=request_id, expected_revision=expected_revision,
+                                   _preparation=snapshot.release_proof())
+    if expected_revision is not None:
+        if type(expected_revision) is not int or expected_revision < 0:
+            raise ResearchError("invalid_input", "Expected revision must be a nonnegative integer")
+        if expected_revision != snapshot.revision:
+            raise ResearchError("stale_revision", "Prepare against the expected research revision",
+                                {"expected_revision": expected_revision, "revision": snapshot.revision})
+    changes, result = prepare(snapshot.records, payload)
+    # Own the prepared values and every write target, including blind writes.
+    changes, result = json.loads(_canonical([changes, result]))
+    for kind, key, value in changes:
+        snapshot.bind_record(kind, key)
+    snapshot.bind_record("literature_operation", request_id)
+    write_targets = tuple((kind, key) for kind, key, _ in changes)
+    runtime = runtime_provenance()
+
+    def apply(transaction, revision):
+        current_changes, current_result = changes, result
+        if finalize is not None:
+            current_changes, current_result = finalize(current_changes, current_result, revision)
+            if tuple((kind, key) for kind, key, _ in current_changes) != write_targets:
+                raise ResearchError("invalid_preparation", "Commit finalization cannot change prepared write targets")
+        for kind, key, value in current_changes:
+            transaction.put(kind, key, value)
+        transaction.put("literature_operation", request_id, {"operation": operation, "runtime": runtime})
+        return current_result
+
+    return store.mutate_scoped(operation, payload, apply, request_id=request_id, expected_revision=expected_revision,
+                               _preparation=snapshot.release_proof())

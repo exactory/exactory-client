@@ -623,6 +623,164 @@ def _refuse_snapshot_identity(expected_revision, revision):
                           "reason": "snapshot_identity_mismatch"})
 
 
+def _scoped_prefix(connection, revision):
+    fingerprint = hashlib.sha256()
+    for row in connection.execute("SELECT revision, digest FROM events WHERE revision <= ? ORDER BY revision",
+                                  (revision,)):
+        _fingerprint_entry(fingerprint, (row["revision"], row["digest"]))
+    return fingerprint.digest()
+
+
+class _ScopedProof(NamedTuple):
+    """An evaluation's internally issued read and absence predicates."""
+
+    store: object
+    identity: tuple
+    revision: int
+    prefix: bytes
+    reads: tuple
+    memberships: tuple
+    global_revision: bool
+
+
+class _ScopedKind(Mapping):
+    def __init__(self, scope, kind):
+        self._scope, self._kind = scope, kind
+
+    def __getitem__(self, key):
+        self._scope.bind_record(self._kind, key)
+        return copy.deepcopy(self._scope._source.get(self._kind, {})[key])
+
+    def __contains__(self, key):
+        self._scope.bind_record(self._kind, key)
+        return key in self._scope._source.get(self._kind, {})
+
+    def __iter__(self):
+        return iter(self._scope.bind_membership(self._kind))
+
+    def __len__(self):
+        return len(self._scope.bind_membership(self._kind))
+
+
+class _ScopedRecords(Mapping):
+    def __init__(self, scope):
+        self._scope = scope
+
+    def __getitem__(self, kind):
+        self._scope.check_open()
+        if kind not in self._scope._source:
+            self._scope.bind_membership(kind)
+            raise KeyError(kind)
+        return _ScopedKind(self._scope, kind)
+
+    def get(self, kind, default=None):
+        self._scope.check_open()
+        # The ordinary records.get(kind, {}).get(key) idiom must bind a key's
+        # absence even when no sibling has created its kind yet.
+        if kind in self._scope._source or isinstance(default, Mapping) and not default:
+            return _ScopedKind(self._scope, kind)
+        self._scope.bind_membership(kind)
+        return default
+
+    def __contains__(self, kind):
+        self._scope.bind_membership(kind)
+        return kind in self._scope._source
+
+    def __iter__(self):
+        self._scope.check_open()
+        self._scope._global_revision = True
+        return iter(self._scope._source)
+
+    def __len__(self):
+        return sum(1 for _ in self)
+
+    def copy(self):
+        return {kind: dict(self[kind]) for kind in self}
+
+    def read_revision(self):
+        self._scope.check_open()
+        self._scope._global_revision = True
+        return self._scope.revision
+
+
+class _ScopedPreparation:
+    """Track reads from a fresh authenticated snapshot; never trust caller maps."""
+
+    def __init__(self, store):
+        self._store = store
+        requests = set()
+        with store._connection() as connection:
+            self._identity = store._read_database_identity()
+            snapshot = _read_snapshot(connection, requests=requests)
+            self._revision = snapshot["revision"]
+            self._prefix = _scoped_prefix(connection, self._revision)
+            if self._identity != store._read_database_identity():
+                raise _refuse_snapshot_identity(self._revision, self._revision)
+        self._source = snapshot["records"]
+        self._records = _ScopedRecords(self)
+        self._reads, self._memberships = {}, {}
+        self._requests = frozenset(requests)
+        self._global_revision = False
+
+    revision = property(lambda self: self._revision)
+    records = property(lambda self: self._records)
+
+    def check_open(self):
+        if self._records is None:
+            raise ResearchError("invalid_preparation", "Task preparation has already been released")
+
+    def has_request(self, request_id):
+        return request_id in self._requests
+
+    def bind_record(self, kind, key):
+        self.check_open()
+        _text(kind, "Record kind")
+        _text(key, "Record key")
+        identity = (kind, key)
+        if identity not in self._reads:
+            value = self._source.get(kind, {}).get(key)
+            self._reads[identity] = None if value is None else _digest(_canonical(value))
+
+    def bind_membership(self, kind):
+        self.check_open()
+        _text(kind, "Record kind")
+        if kind not in self._memberships:
+            self._memberships[kind] = tuple(sorted(self._source.get(kind, {})))
+        return self._memberships[kind]
+
+    def release_proof(self):
+        self.check_open()
+        proof = _ScopedProof(self._store, self._identity, self.revision, self._prefix,
+                             tuple((kind, key, value) for (kind, key), value in sorted(self._reads.items())),
+                             tuple(sorted(self._memberships.items())), self._global_revision)
+        self._records = self._source = None
+        return proof
+
+
+def _revalidate_scoped(store, connection, proof, revision):
+    if not isinstance(proof, _ScopedProof) or proof.store is not store:
+        raise ResearchError("invalid_preparation", "Scoped writes require this Store's internally owned preparation")
+    if (proof.identity != store._read_database_identity() or revision < proof.revision
+            or proof.prefix != _scoped_prefix(connection, proof.revision)):
+        raise _refuse_snapshot_identity(proof.revision, revision)
+    changed = set()
+    for row in connection.execute("SELECT changes FROM events WHERE revision > ? ORDER BY revision", (proof.revision,)):
+        changed.update((item["kind"], item["key"]) for item in _load(row["changes"], list))
+    invalid = []
+    for kind, key, identity in proof.reads:
+        row = connection.execute("SELECT digest FROM records WHERE kind = ? AND key = ?", (kind, key)).fetchone()
+        if (kind, key) in changed or (None if row is None else row["digest"]) != identity:
+            invalid.append({"kind": kind, "key": key})
+    for kind, keys in proof.memberships:
+        current = tuple(row["key"] for row in connection.execute(
+            "SELECT key FROM records WHERE kind = ? ORDER BY key", (kind,)))
+        if current != keys:
+            invalid.append({"kind": kind, "predicate": "membership"})
+    if invalid or proof.global_revision and proof.revision != revision:
+        raise ResearchError("review_task_dependency_changed", "Task dependencies changed; prepare acceptance again",
+                            {"dependencies": invalid, "prepared_revision": proof.revision, "revision": revision})
+
+
 class _GuardedSnapshot:
     """An isolated snapshot usable only while its read transaction is held."""
 
@@ -879,6 +1037,9 @@ class Store:
     def _read_preparation(self, request_id=None):
         return _PreparedSnapshot(self, request_id)
 
+    def _read_scoped_preparation(self):
+        return _ScopedPreparation(self)
+
     def build_artifact_store(self):
         return ArtifactStore(self.root)
 
@@ -968,6 +1129,47 @@ class Store:
                                (request_id, next_revision, encoded_response, _digest(encoded_response)))
             changed = connection.execute("UPDATE metadata SET revision = ? WHERE id = 1 AND revision = ?",
                                          (next_revision, expected_revision)).rowcount
+            if changed != 1:
+                raise ResearchError("corrupt_state", "Research revision changed during the transaction")
+            return response
+
+    def mutate_scoped(self, operation, payload, apply, *, request_id, _preparation, expected_revision=None):
+        """Revalidate an owned task proof, then apply(tx, actual_commit_revision)."""
+        encoded_payload = _encode_mutation_input(operation, payload, apply,
+                                                 0 if expected_revision is None else expected_revision, request_id)
+        with self._connection(writable=True) as connection:
+            revision = _validate(connection)
+            original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload, request_id)
+            if original is not None:
+                return original
+            _revalidate_scoped(self, connection, _preparation, revision)
+            if expected_revision is not None and expected_revision != _preparation.revision:
+                raise ResearchError("stale_revision", "Prepare against the expected research revision",
+                                    {"expected_revision": expected_revision, "revision": _preparation.revision})
+            if revision >= _MAX_REVISION:
+                raise ResearchError("invalid_input", "Research revision exhausted its SQLite integer range")
+            _check_stored_bounds(payload)
+            next_revision = revision + 1
+            transaction = Transaction(connection)
+            try:
+                result = apply(transaction, next_revision)
+                _check_stored_bounds(result)
+                encoded_result = _canonical(result)
+            finally:
+                transaction._active = False
+            response = {"revision": next_revision, "request_id": request_id, "result": json.loads(encoded_result)}
+            event = {"revision": next_revision, "request_id": request_id, "operation": operation,
+                     "payload": json.loads(encoded_payload), "changes": transaction._changes, "result": response["result"]}
+            connection.execute(
+                "INSERT INTO events (revision, request_id, operation, payload, changes, result, digest) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (next_revision, request_id, operation, encoded_payload, _canonical(transaction._changes),
+                 encoded_result, _digest(_canonical(event))))
+            encoded_response = _canonical(response)
+            connection.execute("INSERT INTO receipts (request_id, revision, response, digest) VALUES (?, ?, ?, ?)",
+                               (request_id, next_revision, encoded_response, _digest(encoded_response)))
+            changed = connection.execute("UPDATE metadata SET revision = ? WHERE id = 1 AND revision = ?",
+                                         (next_revision, revision)).rowcount
             if changed != 1:
                 raise ResearchError("corrupt_state", "Research revision changed during the transaction")
             return response
