@@ -1086,6 +1086,10 @@ def _list_projected_records(packet):
         metadata = entry.get('citation_metadata')
         if metadata is not None:
             yield 'problem_citation_metadata', metadata['id'], metadata['digest'], metadata
+    for unit in packet.get('staged_review', {}).get('units', []):
+        metadata = unit.get('citation_metadata') if unit.get('key') == 'readings' else None
+        if metadata is not None:
+            yield 'problem_citation_metadata', metadata['id'], metadata['digest'], metadata
     for entry in evidence.get('assessment_evidence', []):
         if entry.get('kind') == 'record':
             yield entry['record_kind'], entry['id'], entry['digest'], entry

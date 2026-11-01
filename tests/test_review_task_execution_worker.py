@@ -59,10 +59,12 @@ mode = MODE
 
 def observe(store, route, request):
     command = [sys.executable, '-c', "from pathlib import Path; import sys,time; p=Path(sys.argv[1]); p.open('a').write('call\\n'); time.sleep(float(sys.argv[2])); print('{\\\"answer\\\":42}')", str(store.root / 'calls'), '1.0' if mode in ('slow', 'kill') else '0.01']
+    if mode in ('slow', 'kill'):
+        command = [sys.executable, '-c', "from pathlib import Path; import sys,time; Path(sys.argv[1]).open('a').write('call\\n')\ndeadline=time.monotonic()+120\nwhile not Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)\nprint('{\\\"answer\\\":42}')", str(store.root / 'calls'), str(store.root / 'release-child')]
     if mode == 'lingering-child':
-        command = [sys.executable, '-c', "from pathlib import Path; import subprocess,sys; Path(sys.argv[1]).open('a').write('call\\n'); subprocess.Popen([sys.executable,'-c','import time; time.sleep(2)'], close_fds=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); print('{\\\"answer\\\":42}')", str(store.root / 'calls')]
+        command = [sys.executable, '-c', "from pathlib import Path; import subprocess,sys; Path(sys.argv[1]).open('a').write('call\\n'); subprocess.Popen([sys.executable,'-c','from pathlib import Path; import sys,time\\ndeadline=time.monotonic()+120\\nwhile not Path(sys.argv[1]).exists() and time.monotonic()<deadline: time.sleep(.01)',sys.argv[2]], close_fds=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); print('{\\\"answer\\\":42}')", str(store.root / 'calls'), str(store.root / 'release-child')]
     child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
-    stdout, stderr = child.communicate(timeout=5)
+    stdout, stderr = child.communicate(timeout=60)
     artifacts = store.build_artifact_store()
     output = {'answer': 42}
     response = artifacts.put(stdout, 'application/json')
@@ -96,7 +98,9 @@ def capture(*args, **kwargs):
     if mode == 'after-capture': os._exit(72)
     if mode == 'hold-after-capture':
         (Path(sys.argv[1]) / 'captured-live').touch()
-        time.sleep(2)
+        deadline = time.monotonic() + 120
+        while not (Path(sys.argv[1]) / 'release-worker').exists() and time.monotonic() < deadline:
+            time.sleep(.01)
     return result
 review_worker.capture_observation = capture
 review_worker.run_worker(Path(sys.argv[1]), sys.argv[2], sys.argv[3], int(sys.argv[4]))
@@ -104,25 +108,96 @@ review_worker.run_worker(Path(sys.argv[1]), sys.argv[2], sys.argv[3], int(sys.ar
 
 
 class WorkerExecutionTests(TaskExecutionFixture):
+    def test_worker_death_during_token_release_returns_a_reconcilable_refusal(self):
+        reservation = self.reserve()['result']
+        original = review_worker._authorize_launch
+        processes = []
+        def spawn(*args, **kwargs):
+            process = review_worker._SYSTEM_POPEN(*args, **kwargs)
+            processes.append(process)
+            self.addCleanup(self.stop, process)
+            return process
+        def authorize(store, identifier, identity):
+            result = original(store, identifier, identity)
+            processes[0].kill()
+            processes[0].wait(timeout=60)
+            return result
+        with mock.patch.object(review_worker, '_entry_command', return_value=self.entry('normal')), \
+                mock.patch.object(review_worker.subprocess, 'Popen', side_effect=spawn), \
+                mock.patch.object(review_worker, '_authorize_launch', side_effect=authorize):
+            self.refuse('review_worker_reconciliation_required', lambda: review_worker.launch_worker(
+                self.store, reservation['id']))
+        self.assertFalse((self.root / 'calls').exists())
+        self.reconcile(reservation)
+        self.assertEqual(self.current(reservation)['state'], 'known_failure')
+        self.assertTrue(self.current(reservation)['released'])
+
+    def test_default_handshake_allows_a_healthy_start_slower_than_five_seconds(self):
+        reservation = self.reserve()['result']
+        entry = self.entry('normal')
+        entry[2] = 'import time; time.sleep(6)\n' + entry[2]
+        with mock.patch.object(review_worker, '_entry_command', return_value=entry):
+            process = review_worker.launch_worker(self.store, reservation['id'])
+        self.addCleanup(self.stop, process)
+        self.assertEqual(process.wait(timeout=60), 0)
+        self.assertEqual(self.current(reservation)['state'], 'captured')
+        self.accept(reservation)
+        self.reconcile(reservation)
+        self.assertTrue(self.current(reservation)['released'])
+        self.assertEqual((self.root / 'calls').read_text().splitlines(), ['call'])
+
+    def test_timed_out_handshake_never_calls_reviewer_and_remains_reconcilable(self):
+        reservation = self.reserve()['result']
+        entry = self.entry('normal')
+        entry[2] = ('import sys, time\nfrom pathlib import Path\ndeadline=time.monotonic()+120\n'
+                    'while not Path(sys.argv[1], "release-start").exists() and time.monotonic()<deadline: time.sleep(.01)\n'
+                    + entry[2])
+        processes = []
+        def spawn(*args, **kwargs):
+            process = review_worker._SYSTEM_POPEN(*args, **kwargs)
+            processes.append(process)
+            self.addCleanup(self.stop, process)
+            self.addCleanup((self.root / 'release-start').touch)
+            return process
+        with mock.patch.object(review_worker, '_entry_command', return_value=entry), \
+                mock.patch.object(review_worker.subprocess, 'Popen', side_effect=spawn):
+            self.refuse('review_worker_reconciliation_required', lambda: review_worker.launch_worker(
+                self.store, reservation['id'], handshake_timeout=.05))
+        self.assertEqual(self.current(reservation)['launch'], {'authorized': False})
+        self.assertFalse(self.current(reservation)['released'])
+        self.refuse('review_invocation_pending', lambda: review_worker.launch_worker(self.store, reservation['id']))
+        self.reconcile(reservation)
+        self.assertFalse(self.current(reservation)['released'])
+        (self.root / 'release-start').touch()
+        self.assertEqual(processes[0].wait(timeout=60), 0,
+                         (self.root / review_worker._directory(reservation['id']) / 'worker.log').read_text())
+        self.assertFalse((self.root / 'calls').exists())
+        self.reconcile(reservation)
+        self.assertEqual(self.current(reservation)['state'], 'known_failure')
+        self.assertTrue(self.current(reservation)['released'])
+        self.assertEqual(self.reserve(request_id='retry-after-timeout')['result']['attempt'], 2)
+
     def entry(self, mode):
         return [sys.executable, "-c", _FIXTURE.replace("MODE", repr(mode))]
 
     def launch(self, reservation, mode="normal"):
         with mock.patch.object(review_worker, "_entry_command", return_value=self.entry(mode)):
-            process = review_worker.launch_worker(self.store, reservation["id"], handshake_timeout=4)
+            process = review_worker.launch_worker(self.store, reservation["id"], handshake_timeout=60)
         self.addCleanup(self.stop, process)
+        self.addCleanup((self.root / 'release-child').touch)
+        self.addCleanup((self.root / 'release-worker').touch)
         return process
 
     def stop(self, process):
         if process is not None and process.poll() is None:
             process.kill()
-            process.wait(timeout=4)
+            process.wait(timeout=60)
         if process is not None:
             for stream in (process.stdin, process.stdout, process.stderr):
                 if stream is not None and not stream.closed:
                     stream.close()
 
-    def wait_for(self, condition, seconds=5):
+    def wait_for(self, condition, seconds=60):
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             if condition():
@@ -148,7 +223,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_crash_after_capture_is_resumable_and_does_not_call_again(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "after-capture")
-        self.assertEqual(process.wait(timeout=6), 72)
+        self.assertEqual(process.wait(timeout=60), 72)
         self.assertEqual(self.current(reservation)["state"], "captured")
         result = self.accept(reservation)
         self.assertEqual(self.accept(reservation), result)
@@ -160,7 +235,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_refused_capture_replay_retains_refusal_and_new_retry_state(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation)
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         validate = mock.Mock(side_effect=ResearchError('invalid_review_staged', 'The scoped answer is malformed.'))
         refused = self.accept(reservation, request_id='refuse-first', validate=validate)['result']
         self.reconcile(reservation)
@@ -178,7 +253,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_historical_capture_is_rejected_before_scientific_refusal_validation(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation)
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         state = self.store.snapshot()['records']['review_task_execution']['a']
         self.put('review_task_execution', 'a', dict(state, reservation_id='selected-later-reservation'))
         validate = mock.Mock(side_effect=ResearchError('invalid_review_staged', 'A stale malformed answer.'))
@@ -191,7 +266,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_response_artifact_without_capture_is_unknown_and_never_accepted(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "before-capture")
-        self.assertEqual(process.wait(timeout=6), 71)
+        self.assertEqual(process.wait(timeout=60), 71)
         self.assertTrue((self.root / "response-artifact.json").exists())
         self.reconcile(reservation)
         self.assertEqual(self.current(reservation)["state"], "unknown")
@@ -205,10 +280,11 @@ class WorkerExecutionTests(TaskExecutionFixture):
         process = self.launch(reservation, "kill")
         self.wait_for(lambda: (self.root / "calls").exists())
         process.kill()
-        process.wait(timeout=4)
+        process.wait(timeout=60)
         self.reconcile(reservation)
         self.assertFalse(self.current(reservation)["released"])
         self.refuse("review_capacity_wait", lambda: self.reserve("b"))
+        (self.root / 'release-child').touch()
         self.wait_for(lambda: review_worker.confirm_termination(self.store, reservation["id"]))
         self.reconcile(reservation)
         self.assertEqual(self.current(reservation)["state"], "unknown")
@@ -217,7 +293,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_capture_receipt_recovers_a_lost_commit_acknowledgment(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "lost-ack")
-        self.assertEqual(process.wait(timeout=7), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         self.assertEqual(self.current(reservation)["state"], "captured")
         receipt = self.store.committed_request("review-capture:" + reservation["id"])["response"]
         self.assertEqual(receipt["result"]["recorded_revision"], receipt["revision"])
@@ -234,7 +310,8 @@ class WorkerExecutionTests(TaskExecutionFixture):
         self.assertFalse(self.current(reservation)["released"])
         self.refuse("review_worker_reconciliation_required", lambda: execution.release_reservation(
             self.store, {"reservation_id": reservation["id"]}, request_id="too-early"))
-        process.wait(timeout=5)
+        (self.root / 'release-worker').touch()
+        process.wait(timeout=60)
         self.reconcile(reservation)
         self.assertTrue(self.current(reservation)["released"])
 
@@ -243,7 +320,8 @@ class WorkerExecutionTests(TaskExecutionFixture):
         process = self.launch(reservation, "slow")
         self.wait_for(lambda: (self.root / "calls").exists())
         self.put("review_epoch", "epoch", {"id": "epoch", "generation": 2, "context": "successor"})
-        self.assertEqual(process.wait(timeout=6), 0)
+        (self.root / 'release-child').touch()
+        self.assertEqual(process.wait(timeout=60), 0)
         self.assertEqual(self.current(reservation)["state"], "captured")
         self.refuse("review_task_dependency_changed", lambda: self.accept(reservation))
         self.assertIn(reservation["id"], self.store.snapshot()["records"]["review_observation"])
@@ -251,7 +329,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_sibling_commit_during_acceptance_keeps_preparation(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation)
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         def validate(records, observation):
             self.put("review_task", "b", {"id": "b", "generation": 2})
             return {"answer": 42}
@@ -261,11 +339,12 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_descendant_process_group_blocks_release_after_worker_and_group_leader_exit(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "lingering-child")
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         self.accept(reservation)
         self.assertFalse(review_worker.confirm_termination(self.store, reservation["id"]))
         self.reconcile(reservation)
         self.assertFalse(self.current(reservation)["released"])
+        (self.root / 'release-child').touch()
         self.wait_for(lambda: review_worker.confirm_termination(self.store, reservation["id"]))
         self.reconcile(reservation)
         self.assertTrue(self.current(reservation)["released"])
@@ -273,7 +352,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_existing_instrumented_observer_keeps_raw_provenance(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "instrumented")
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         captured = self.store.snapshot()["records"]["review_observation"][reservation["id"]]
         self.assertEqual(captured["origin"], "instrumented")
         self.assertEqual(captured["observation"]["request_digest"],
@@ -285,7 +364,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
         payload["absence"] = [{"kind": "terminal_selection", "key": "slot"}]
         reservation = execution.reserve_task(self.store, payload, request_id="with-absence")["result"]
         process = self.launch(reservation)
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         def validate(records, observation):
             self.put("terminal_selection", "slot", {"frozen": True})
             return {"answer": 42}
@@ -297,13 +376,14 @@ class WorkerExecutionTests(TaskExecutionFixture):
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "slow")
         self.refuse("review_invocation_pending", lambda: review_worker.launch_worker(self.store, reservation["id"]))
-        self.assertEqual(process.wait(timeout=6), 0)
+        (self.root / 'release-child').touch()
+        self.assertEqual(process.wait(timeout=60), 0)
         self.assertEqual((self.root / "calls").read_text().splitlines(), ["call"])
 
     def test_observed_known_failure_is_captured_and_retry_waits_for_termination(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "known-failure")
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         self.assertEqual(self.current(reservation)["state"], "known_failure")
         self.refuse("review_task_failed", lambda: self.accept(reservation))
         self.refuse("review_invocation_pending", lambda: self.reserve(request_id="early-retry"))
@@ -313,7 +393,7 @@ class WorkerExecutionTests(TaskExecutionFixture):
     def test_selector_change_during_acceptance_does_not_credit_stale_science(self):
         reservation = self.reserve()["result"]
         process = self.launch(reservation)
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         def validate(records, observation):
             self.put("context", "slot", {"version": 2})
             return {"answer": 42}
@@ -331,17 +411,17 @@ original = review_worker._authorize_launch
 def authorize(*args):
     result = original(*args)
     Path(sys.argv[1], 'controller-ready').touch()
-    time.sleep(20)
+    time.sleep(120)
     return result
 with mock.patch.object(review_worker, '_entry_command', return_value=ENTRY), mock.patch.object(review_worker, '_authorize_launch', side_effect=authorize):
-    review_worker.launch_worker(Store(Path(sys.argv[1])), sys.argv[2], handshake_timeout=4)
+    review_worker.launch_worker(Store(Path(sys.argv[1])), sys.argv[2], handshake_timeout=60)
 '''.replace("ENTRY", repr(self.entry("normal")))
         controller = subprocess.Popen([sys.executable, "-c", program, str(self.root), reservation["id"]],
                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         self.addCleanup(self.stop, controller)
         self.wait_for(lambda: (self.root / "controller-ready").exists())
         controller.kill()
-        controller.wait(timeout=4)
+        controller.wait(timeout=60)
         self.wait_for(lambda: review_worker.confirm_termination(self.store, reservation["id"]))
         self.reconcile(reservation)
         self.assertEqual(self.current(reservation)["state"], "known_failure")
@@ -355,17 +435,18 @@ from unittest import mock
 from research_harness.storage import Store
 from research_harness import review_worker
 with mock.patch.object(review_worker, '_entry_command', return_value=ENTRY):
-    process = review_worker.launch_worker(Store(Path(sys.argv[1])), sys.argv[2], handshake_timeout=4)
+    process = review_worker.launch_worker(Store(Path(sys.argv[1])), sys.argv[2], handshake_timeout=60)
 Path(sys.argv[1], 'controller-ready').touch()
-time.sleep(20)
+time.sleep(120)
 '''.replace("ENTRY", repr(self.entry("slow")))
         controller = subprocess.Popen([sys.executable, "-c", program, str(self.root), reservation["id"]],
                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         self.addCleanup(self.stop, controller)
         self.wait_for(lambda: (self.root / "controller-ready").exists())
         controller.kill()
-        controller.wait(timeout=4)
+        controller.wait(timeout=60)
         self.refuse("review_invocation_pending", lambda: self.reserve(request_id="resume"))
+        (self.root / 'release-child').touch()
         self.wait_for(lambda: self.current(reservation)["state"] == "captured")
         self.accept(reservation)
         self.wait_for(lambda: review_worker.confirm_termination(self.store, reservation["id"]))
@@ -389,7 +470,7 @@ time.sleep(20)
         incomplete = dict(pages[0]['output'], fragments=[])
         reservation = self.reserve()['result']
         process = self.launch(reservation)
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         def validate(records, captured):
             return composition.validate_page(incomplete, plan)
         result = self.accept(reservation, validate=validate)['result']

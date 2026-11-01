@@ -300,7 +300,13 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
              for row in epoch['manifest']['occurrences'] if row['id'] in task['occurrence_ids']]
     # The item is an original too: a segment must not accidentally carry the full item.
     for unit in units:
-        unit.pop('item', None)
+        item = unit.pop('item', None)
+        if unit['key'] == 'readings' and isinstance(item, dict) and item.get('citation_metadata') is not None:
+            source = sources[unit['item_source_id']]
+            delivered = [[row['span']['start'], row['span']['end']] for row in originals
+                         if row['span']['source_id'] == source['id']]
+            if not staged.interval_gaps([[0, source['characters']]], delivered):
+                unit['citation_metadata'] = copy.deepcopy(item['citation_metadata'])
     continuity = [dict(id=row['id'], task_id=row['task_id'], raw_output_digest=row['raw_output_digest'])
                   for row in observations]
     inherited = []

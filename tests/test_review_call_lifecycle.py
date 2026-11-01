@@ -28,7 +28,7 @@ codex.NATIVE_DECLARATION_SETS = {()}
 def observe(*args):
     if mode == 'child':
         process = subprocess.Popen([sys.executable, '-c',
-            "import os,sys,time\nfrom pathlib import Path\nPath(sys.argv[1]).write_text(str(os.getpid()))\ndeadline=time.monotonic()+30\nwhile not Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)",
+            "import os,sys,time\nfrom pathlib import Path\nPath(sys.argv[1]).write_text(str(os.getpid()))\ndeadline=time.monotonic()+120\nwhile not Path(sys.argv[2]).exists() and time.monotonic()<deadline: time.sleep(.01)",
             str(root / 'child-pid'), str(root / 'release-child')], start_new_session=True)
         while not (root / 'child-pid').exists(): time.sleep(.01)
     (root / 'in-call').touch()
@@ -61,7 +61,7 @@ class PublicCallLifecycleTests(ResultPartsCase):
                 expected_revision=self.case.store.revision, request_id=request_id)
 
     def wait_file(self, path):
-        deadline = time.monotonic() + 10
+        deadline = time.monotonic() + 60
         while not path.exists() and time.monotonic() < deadline:
             time.sleep(.01)
         self.assertTrue(path.exists(), str(path))
@@ -72,7 +72,7 @@ class PublicCallLifecycleTests(ResultPartsCase):
         def cleanup():
             if process.poll() is None:
                 process.kill()
-            process.communicate(timeout=5)
+            process.communicate(timeout=60)
         self.addCleanup(cleanup)
         self.wait_file(self.case.root / 'in-call')
         return process
@@ -96,7 +96,7 @@ class PublicCallLifecycleTests(ResultPartsCase):
                 marker.unlink(missing_ok=True)
                 payload = self.call_payload(command, identifier=command)
                 process = self.launch(command, payload)
-                self.assertEqual(process.wait(timeout=5), 73)
+                self.assertEqual(process.wait(timeout=60), 73)
                 self.case.store = Store(self.case.root)
                 self.blocked_probe()
                 self.assert_code('review_invocation_pending', lambda: self.command(command, payload, 'interrupted-' + command))
@@ -130,20 +130,20 @@ class PublicCallLifecycleTests(ResultPartsCase):
         self.assert_code('review_worker_reconciliation_required', lambda: self.reconcile('review-probe', payload))
         self.blocked_probe()
         (self.case.root / 'release').touch()
-        self.assertEqual(process.wait(timeout=5), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         self.assertTrue(self.reconcile('review-probe', payload, 'after-exit')['result']['released'])
 
     def test_orphan_transport_child_keeps_capacity_until_its_group_terminates(self):
         payload = self.call_payload('review-probe')
         process = self.launch('review-probe', payload, 'child')
-        self.assertEqual(process.wait(timeout=5), 73)
+        self.assertEqual(process.wait(timeout=60), 73)
         def terminate():
             (self.case.root / 'release-child').touch()
         self.addCleanup(terminate)
         self.assertFalse(self.reconcile('review-probe', payload)['result']['released'])
         self.blocked_probe()
         terminate()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             result = self.reconcile('review-probe', payload, 'child-exit-' + str(self.case.store.revision))
             if result['result']['released']:
@@ -180,7 +180,7 @@ class PublicCallLifecycleTests(ResultPartsCase):
             (self.case.root / 'release-group').touch()
         self.addCleanup(terminate)
         def observe(*args):
-            child = "import sys,time\nfrom pathlib import Path\ndeadline=time.monotonic()+30\nwhile not Path(sys.argv[1]).exists() and time.monotonic()<deadline: time.sleep(.01)"
+            child = "import sys,time\nfrom pathlib import Path\ndeadline=time.monotonic()+120\nwhile not Path(sys.argv[1]).exists() and time.monotonic()<deadline: time.sleep(.01)"
             program = ("import subprocess,sys; subprocess.Popen([sys.executable,'-c',sys.argv[2],sys.argv[1]], "
                        "close_fds=" + repr(not escape) + ", start_new_session=" + repr(escape) +
                        ", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)")
@@ -195,7 +195,7 @@ class PublicCallLifecycleTests(ResultPartsCase):
         self.assertFalse(self.reconcile('review-probe', payload)['result']['released'])
         self.blocked_probe()
         terminate()
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             result = self.reconcile('review-probe', payload, 'group-exit-' + str(self.case.store.revision))
             if result['result']['released']:

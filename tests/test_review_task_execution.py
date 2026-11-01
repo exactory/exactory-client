@@ -127,7 +127,7 @@ except ResearchError as error: print(json.dumps({"error": error.code}), flush=Tr
             gate.touch()
             results = []
             for process in processes:
-                stdout, stderr = process.communicate(timeout=8)
+                stdout, stderr = process.communicate(timeout=60)
                 self.assertEqual(process.returncode, 0, stderr)
                 results.append(json.loads(stdout))
             return results
@@ -135,7 +135,7 @@ except ResearchError as error: print(json.dumps({"error": error.code}), flush=Tr
             for process in processes:
                 if process.poll() is None:
                     process.kill()
-                    process.wait(timeout=3)
+                    process.wait(timeout=60)
 
     def test_two_processes_race_for_last_capacity(self):
         results = self.race(("a", "b"))

@@ -125,7 +125,7 @@ except ResearchError as error: report({'error':error.code})
             for mode in ('ordinary', 'staged')]
         try:
             (self.root / 'race-gate').touch()
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + 60
             paths = [self.root / ('result-' + mode) for mode in ('ordinary', 'staged')]
             while not all(path.exists() for path in paths) and time.monotonic() < deadline:
                 time.sleep(.01)
@@ -138,9 +138,9 @@ except ResearchError as error: report({'error':error.code})
             (self.root / 'race-release').touch()
             for process in processes:
                 try:
-                    _, errors = process.communicate(timeout=10)
+                    _, errors = process.communicate(timeout=60)
                     self.assertEqual(process.returncode, 0, errors)
                 finally:
                     if process.poll() is None:
                         process.kill()
-                        process.communicate(timeout=3)
+                        process.communicate(timeout=60)

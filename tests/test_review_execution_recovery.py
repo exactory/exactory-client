@@ -218,7 +218,7 @@ class IndexRecoveryTests(unittest.TestCase):
         with patch.object(Transaction, 'put', new=write_g2_record):
             reservation = fixture.reserve()['result']
         process = fixture.launch(reservation)
-        self.assertEqual(process.wait(timeout=6), 0)
+        self.assertEqual(process.wait(timeout=60), 0)
         return fixture, reservation
 
     def test_a_completed_g2_capture_can_accept_its_first_context_discovery(self):

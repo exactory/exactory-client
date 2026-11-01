@@ -242,8 +242,8 @@ def _authorize_launch(store, reservation_id, identity):
                            request_id="review-worker-authorize:" + reservation_id)["result"]
 
 
-def launch_worker(store, reservation_id, *, handshake_timeout=5.0):
-    """Launch once and return Popen after the durable identity/token handshake."""
+def launch_worker(store, reservation_id, *, handshake_timeout=60.0):
+    """Allow a loaded worker to start, retaining a reconcilable claim on refusal."""
     if not isinstance(handshake_timeout, (int, float)) or not 0 < handshake_timeout <= 60:
         raise ResearchError("invalid_input", "Worker handshake timeout must be positive and at most 60 seconds")
     with _owner(store.root, reservation_id):
@@ -279,6 +279,8 @@ def launch_worker(store, reservation_id, *, handshake_timeout=5.0):
                         return process
                     time.sleep(.01)
                 raise ResearchError("review_worker_reconciliation_required", "The worker launch handshake did not complete")
+            except OSError as error:
+                raise ResearchError("review_worker_reconciliation_required", "The worker launch handshake was interrupted") from error
             finally:
                 process.stdin.close()
 
