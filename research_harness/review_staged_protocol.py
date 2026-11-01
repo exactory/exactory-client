@@ -300,7 +300,8 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
                 index=[dict(occurrence_id=row['id'], key=row['key'], index=row['index']) for row in
                        epoch['manifest']['occurrences'] if row['id'] in task['occurrence_ids']],
                 index_root=epoch['manifest']['digest'], inherited=inherited,
-                frame=dict(fields=frame_fields), output_tokens=task['measurement']['configured_output_tokens'])
+                frame=dict(fields=frame_fields),
+                output_tokens=task['measurement']['configured_output_tokens'] - task['measurement']['output_margin_tokens'])
     if context_graph is not None:
         body['context_graph_root'] = context_graph['root']
     project_task_material(epoch, task, body, observations, terminal_observations, tasks,

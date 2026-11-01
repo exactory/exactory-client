@@ -10,6 +10,17 @@ import test_review_staged_integration_partitions as fixtures
 
 
 class RenderedSizingTests(unittest.TestCase):
+    def test_packet_output_tokens_exclude_the_reserved_margin(self):
+        case = fixtures.IntegrationPartitionTests()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        task = case.make_leaf(case.cards[:1])
+        measurement = task['measurement']
+        self.assertGreater(measurement['output_margin_tokens'], 0)
+        body = producer.build_packet(case.epoch, task, observations=[case.observed])['staged_review']
+        self.assertEqual(body['output_tokens'],
+                         measurement['configured_output_tokens'] - measurement['output_margin_tokens'])
+
     def test_card_only_integration_partitions_against_output_and_duration(self):
         for dimension in ('output', 'duration'):
             with self.subTest(dimension=dimension):

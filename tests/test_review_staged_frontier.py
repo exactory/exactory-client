@@ -168,7 +168,11 @@ class FrontierTests(ResultPartsCase):
         records = self.case.read_records()
         planned = records['review_task'][controller['staged_review']['task_ids'][0]]
         body = json.loads(self.case.artifacts.read(planned['packet']))['staged_review']
-        self.assertEqual(body.get('output_tokens'), records['review_route']['route']['configuration']['max_output_tokens'])
+        measurement = planned['task']['measurement']
+        self.assertEqual(measurement['configured_output_tokens'],
+                         records['review_route']['route']['configuration']['max_output_tokens'])
+        self.assertEqual(body.get('output_tokens'),
+                         measurement['configured_output_tokens'] - measurement['output_margin_tokens'])
         self.assertNotIn('output_characters', body)
         self.assertIn('output_tokens', planned['prompt']['text'])
         self.assertNotIn('output_characters', planned['prompt']['text'])
