@@ -21,7 +21,7 @@ from research_harness.errors import ResearchError
 
 class StagedRepairUpgradeTests(ResultPartsCase):
     staged_entry = True
-    output_tokens = 4000
+    output_tokens = 128000
     timeout_seconds = 30
     create_controller = frontier.FrontierTests.create_controller
     command = frontier.FrontierTests.command
@@ -40,6 +40,21 @@ class StagedRepairUpgradeTests(ResultPartsCase):
         with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', frontier.WORKER]):
             self.command('review-run', planned['next'][0]['payload'])
         return self.case.read_records()
+
+    def refuse_unsupported_repair(self, controller, context):
+        before = self.case.read_records()
+        value = dict(id='repaired', role=controller['role'], reviewer_id='replacement',
+            route_id=controller['route_id'], dossier_id=controller['dossier_id'], author_id=controller['author_id'],
+            subject=controller['subject'], context=dict(context_repair=context))
+        prepared = repair.prepare_repair(before, self.case.artifacts, value)
+        with self.assertRaises(ResearchError) as caught:
+            self.case.assign(controller['role'], 'replacement', identifier='repaired', context_repair=context)
+        self.assertEqual(caught.exception.code, 'review_staged_scale_unsupported')
+        details = caught.exception.details
+        self.assertTrue(details['envelope_characters'] > details['input_limit'] or
+                        details['card_output_tokens'] > details['output_allowance'])
+        self.assertEqual(self.case.read_records(), before)
+        return prepared
 
     def test_public_repair_of_no_output_controller_uses_its_manifest(self):
         controller = self.create_controller()
@@ -85,7 +100,7 @@ class StagedRepairUpgradeTests(ResultPartsCase):
         self.assertEqual(descriptor['sha256'], attempt['request']['sha256'])
         self.assertEqual(successor['history'], [])
 
-    def test_public_repair_preserves_an_accepted_contaminated_child_graph(self):
+    def test_scale_refusal_preserves_an_accepted_contaminated_child_graph(self):
         from research_harness import direction_reviews
         controller = self.create_controller()
         self.run_frame(controller)
@@ -106,10 +121,10 @@ class StagedRepairUpgradeTests(ResultPartsCase):
             assignment_id=attempt['assignment_id'], kind='contamination', source='foreign_input',
             reason='Foreign input reached the accepted child.', evidence=[self.case.supporting]))
         codex.probe_codex_route(self.case, 'repair-probe')
-        successor = self.case.assign('result', 'replacement', identifier='repaired', context_repair=dict(
+        prepared = self.refuse_unsupported_repair(controller, dict(
             assignment_id=controller['id'], event_ids=['child-exposure'], probe_id='repair-probe',
             reason='Reassess the retained child observations in a fresh context.', evidence=[self.case.supporting]))
-        history = self.packet(successor)['scientific_history']
+        history = prepared['scientific_history']
         parent = next(row for row in history if row['assignment_id'] == controller['id'])
         self.assertEqual(parent['selected_observations'], before['selection']['observations'])
         self.assertEqual([row['id'] for row in parent['intermediate_findings']], ['adverse'])
@@ -145,11 +160,11 @@ class StagedRepairUpgradeTests(ResultPartsCase):
         successor = self.repair_controller(controller)
         history = self.packet(successor)['scientific_history']
         child = next(row for row in history if row['assignment_id'] == failed['assignment_id'])
-        self.assertEqual([row['attempt_id'] for row in child['raw_observations']], [failed['id'], accepted['id']])
+        self.assertCountEqual([row['attempt_id'] for row in child['raw_observations']], [failed['id'], accepted['id']])
         parent = next(row for row in history if row['assignment_id'] == controller['id'])
         self.assertEqual([row['id'] for row in parent['selected_observations']], [accepted['id']])
 
-    def test_public_repair_preserves_a_completed_paged_result_after_child_contamination(self):
+    def test_scale_refusal_preserves_a_completed_paged_result_after_child_contamination(self):
         from test_direction_reviews_paged import PagedRecordingTests
         controller = self.create_controller()
         output = self.case.build_review_output('result')
@@ -162,12 +177,11 @@ class StagedRepairUpgradeTests(ResultPartsCase):
             kind='contamination', source='foreign_input', reason='The accepted reading context was contaminated.',
             evidence=[self.case.supporting]))
         codex.probe_codex_route(self.case, 'repair-probe')
-        successor = self.case.assign('result', 'replacement', identifier='repaired', context_repair=dict(
+        packet = self.refuse_unsupported_repair(controller, dict(
             assignment_id=controller['id'], event_ids=['child-exposure'], probe_id='repair-probe',
             reason='Reassess the retained paged result in a fresh context.', evidence=[self.case.supporting]))
-        packet = self.packet(successor)
         parent = next(row for row in packet['scientific_history'] if row['assignment_id'] == controller['id'])
-        self.assertEqual(parent['observed_output'], protocol._reference_templates(output))
+        self.assertEqual(protocol._reference_templates(parent['observed_output']), protocol._reference_templates(output))
         self.assertEqual(parent['effective_binding'], saved['effective_binding'])
         self.assertEqual([row['id'] for row in packet['historical_reviews']], [saved['id']])
 
@@ -235,7 +249,7 @@ class StagedAdjudicatorRepairTests(unittest.TestCase):
         self.addCleanup(self.case.doCleanups)
         self.addCleanup(self.case.tearDown)
         self.case.prepare_reviews(result_reviewer='first')
-        codex.record_codex_route(self.case, 'staged-route')
+        codex.record_codex_route(self.case, 'staged-route', output_tokens=128000)
 
     def test_composed_adjudicator_refuses_wrong_reassessment_and_retries_the_terminal(self):
         case = self.case
@@ -267,6 +281,11 @@ class StagedAdjudicatorRepairTests(unittest.TestCase):
                 context=dict(context_repair=dict(assignment_id=controller['id'], event_ids=['exposure'],
                     probe_id='repair-probe', reason='Reassess the exact objection in a fresh context.',
                     evidence=[case.supporting]))))['result']
+        records = case.read_records()
+        before = records['review_epoch'][controller['staged_review']['epoch_id']]
+        after = records['review_epoch'][successor['staged_review']['epoch_id']]
+        self.assertEqual(after['focused_scope'], before['focused_scope'])
+        self.assertEqual(after['slot_id'], before['slot_id'])
         output = dict(objection_id='unsupported-implication', disposition='upheld', correction_admissible=None,
             reason='The original comparator does not prove the disputed implication.', evidence=[case.supporting],
             reassessment=dict(assignment_id='WRONG', findings=[]))
@@ -298,7 +317,7 @@ class StagedAdjudicatorRepairTests(unittest.TestCase):
         self.assertEqual(retry['next'][0]['command'], 'review-run')
         self.assertEqual(retry['next'][0]['payload']['task_id'], child['staged_task']['id'])
 
-    def test_public_staged_adjudicator_repair_preserves_focused_scope_and_slot(self):
+    def test_public_adjudicator_refreeze_refuses_unsupported_scale_without_changing_slot(self):
         case = self.case
         payload = dict(id='focused', role='adjudicator', route_id='staged-route', dossier_id=None,
             reviewer_id='focused-third', author_id=case.read_records()['workspace']['problem']['authors'][0], context=dict(
@@ -310,22 +329,19 @@ class StagedAdjudicatorRepairTests(unittest.TestCase):
             kind='contamination', source='foreign_input', reason='Author context reached the focused review.',
             evidence=[case.supporting]))
         codex.probe_codex_route(case, 'repair-probe', 'staged-route')
-        successor = case.mutate(protocol.record_assignment, dict(payload, id='repaired', reviewer_id='replacement',
-            context=dict(context_repair=dict(assignment_id=controller['id'], event_ids=['exposure'],
-                probe_id='repair-probe', reason='Reassess the exact objection in a fresh context.',
-                evidence=[case.supporting]))))['result']
+        before = case.read_records()
+        with self.assertRaises(ResearchError) as caught:
+            case.mutate(protocol.record_assignment, dict(payload, id='repaired', reviewer_id='replacement',
+                context=dict(context_repair=dict(assignment_id=controller['id'], event_ids=['exposure'],
+                    probe_id='repair-probe', reason='Reassess the exact objection in a fresh context.',
+                    evidence=[case.supporting]))))
+        self.assertEqual(caught.exception.code, 'review_staged_scale_unsupported')
+        details = caught.exception.details
+        self.assertTrue(details['envelope_characters'] > details['input_limit'] or
+                        details['card_output_tokens'] > details['output_allowance'])
         records = case.read_records()
-        before = records['review_epoch'][controller['staged_review']['epoch_id']]
-        after = records['review_epoch'][successor['staged_review']['epoch_id']]
-        self.assertEqual(after['focused_scope'], before['focused_scope'])
-        self.assertEqual(after['slot_id'], before['slot_id'])
-        self.assertEqual(after['predecessor']['assignment_id'], controller['id'])
-        self.assertEqual(successor['history'], [])
-        child = case.mutate(protocol.record_assignment, dict(payload, id='repair-child', reviewer_id='replacement',
-            context=dict(controller_assignment_id=successor['id'],
-                         task_id=successor['staged_review']['task_ids'][0])))['result']
-        self.assertTrue(child['prompt']['parameters']['context_repair'])
-        self.assertEqual(protocol.build_assignment_request(records, case.artifacts, child)['history'], [])
+        for kind in ('review_epoch', 'review_task', 'review_slot_head', 'review_assignment'):
+            self.assertEqual(records.get(kind, {}), before.get(kind, {}))
 
 
 class StagedVisualRepairTests(unittest.TestCase):

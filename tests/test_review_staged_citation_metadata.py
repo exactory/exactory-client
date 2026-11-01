@@ -120,7 +120,7 @@ class StagedCitationMetadataTests(CitationMetadataCase):
         completion = staged.verify_completion(graph['epoch'], omitted, tasks=graph['tasks'])
         self.assertFalse(completion['complete'])
         self.assertTrue(any(row['code'] == 'review_source_coverage_pending'
-                            and row.get('source_id') == item['item_source_id'] for row in completion['issues']))
+                            and row.get('source_id') == item['item_source_id'] for row in staged.iter_completion_issues(graph['epoch'], omitted, tasks=graph['tasks'])))
         with patch.object(direction_reviews, 'collect_selected_task_graph', return_value=dict(graph, completion=completion)):
             self.assertEqual(research_decisions._assess_problem_coverage(records, case.artifacts, [saved],
                 case.expected, digest(case.expected))[0]['code'], 'problem_evidence_unassessed')

@@ -21,15 +21,16 @@ class StagedReviewTests(unittest.TestCase):
         self.assertEqual(staged.resolve_objection_entry(packet, alias), full)
         self.assertEqual(packet, before)
 
-    def test_completion_roots_bind_the_expanded_compact_card_contract(self):
+    def test_completion_roots_bind_the_versioned_bounded_diagnostics(self):
         value = epoch()
         tasks, selected = selection(value)
         complete = staged.verify_completion(value, selected, tasks=tasks)
         incomplete = staged.verify_completion(value, {'observations': []}, tasks=tasks)
         self.assertTrue(complete['complete'])
         self.assertFalse(incomplete['complete'])
-        self.assertEqual(complete['digest'], 'b81f759e9621b677b2f04e0d568d77eed2271069a17c345714c10bbadd97b417')
-        self.assertEqual(incomplete['digest'], 'b82bb5c706d02e796dc2107286d224333b3e72ae613ef980e97605dca6a06361')
+        self.assertEqual(complete['schema'], 'exactory-review-completion-v2')
+        self.assertEqual(complete['digest'], '2c607ab81f888dbaa27755cb0251e55d64dba750391a4cb34ec77e3896b27ded')
+        self.assertEqual(incomplete['digest'], '42d68702b97600624b4585e8c60a2af8a41b3d60eda8ad0db83843271d568559')
 
     def test_occurrence_identity_includes_position_and_full_descriptor(self):
         items = [{'key': 'readings', 'index': i, 'item': {'same': True}, 'artifacts': [], 'source_ids': []}

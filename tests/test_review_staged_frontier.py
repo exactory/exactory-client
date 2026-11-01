@@ -286,16 +286,19 @@ class FrontierTests(ResultPartsCase):
         self.assertEqual(planned['outcome']['origin'], 'execution')
         self.assertEqual(self.case.read_records().get('review_reservation', {}), {})
 
-    def test_an_unrenderable_minimal_frame_is_recorded_incomplete_at_creation(self):
+    def test_an_unrenderable_route_refuses_before_epoch_creation(self):
+        from research_harness.errors import ResearchError
+        before = self.case.read_records()
         with patch.object(producer, 'read_input_limit', return_value=1000):
-            controller = self.create_controller()
+            with self.assertRaises(ResearchError) as caught:
+                self.create_controller()
+        self.assertEqual(caught.exception.code, 'review_staged_scale_unsupported')
+        self.assertGreater(caught.exception.details['envelope_characters'], 1000)
+        self.assertLess(caught.exception.details['card_output_tokens'], caught.exception.details['output_allowance'])
         records = self.case.read_records()
-        head = records['review_slot_head'][controller['slot_id']]
-        self.assertEqual(head['state'], 'incomplete')
-        outcome = records['assessment_incomplete'][head['outcome']['id']]
-        self.assertEqual(outcome['origin'], 'execution')
-        for key in outcome['origin_binding']['execution_receipts']:
-            self.assertIn(key, records['review_task_refusal'])
+        for kind in ('review_epoch', 'review_task', 'review_slot_head', 'assessment_incomplete'):
+            self.assertEqual(records.get(kind, {}), before.get(kind, {}))
+        self.assertNotIn('controller', records['review_assignment'])
 
     def test_completed_frontier_cannot_start_a_new_task_after_the_epoch_call_cap(self):
         original = producer.build_epoch

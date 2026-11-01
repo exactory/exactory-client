@@ -38,7 +38,7 @@ class StagedGroundingTests(unittest.TestCase):
                 check = add_original_check(value, tasks, selected, identifier='collision')
                 report = staged.verify_completion(value, selected, tasks=tasks)
                 self.assertTrue(any(row['code'] == 'invalid_review_staged' and
-                    row.get('id') == check['id'] for row in report['issues']), report['issues'])
+                    row.get('id') == check['id'] for row in staged.iter_completion_issues(value, selected, tasks=tasks)), report['issues'])
 
     def test_nested_record_definitions_cannot_share_resolution_credit(self):
         for family in ('card_check_conclusion', 'check_conclusion'):
@@ -56,7 +56,7 @@ class StagedGroundingTests(unittest.TestCase):
                 report = staged.verify_completion(value, selected, tasks=tasks)
                 self.assertFalse(report['complete'], report['issues'])
                 self.assertTrue(any(row['code'] == 'invalid_review_staged' and
-                    'Conflicting scientific record definitions' in row.get('reason', '') for row in report['issues']))
+                    'Conflicting scientific record definitions' in row.get('reason', '') for row in staged.iter_completion_issues(value, selected, tasks=tasks)))
 
     def test_card_questions_cannot_disappear_from_completion(self):
         value = epoch()

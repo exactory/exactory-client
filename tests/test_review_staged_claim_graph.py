@@ -189,7 +189,7 @@ class StagedClaimGraphTests(unittest.TestCase):
         report = staged.verify_completion(value, selected, tasks=tasks, contexts=contexts)
         self.assertFalse(report['complete'], report['issues'])
         self.assertTrue(any(row.get('task_id') == old['id'] and row['code'] == 'review_task_dependency_changed'
-                            for row in report['issues']), report['issues'])
+                            for row in staged.iter_completion_issues(value, selected, tasks=tasks, contexts=contexts)), report['issues'])
 
 
 if __name__ == '__main__':

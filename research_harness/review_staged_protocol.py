@@ -184,7 +184,7 @@ def plan_remaining_tasks(records, artifacts, controller, *, profiles, compositio
                 group['id'] in task['group_ids'] for group in row['output'].get('selected_groups', [])))
         changed = remake_task(epoch, task, dependencies=sorted(set(dependencies)),
             segment_task_ids=[remapped.get(key, key) for key in task['segment_task_ids']],
-            contexts=verified['contexts'])
+            contexts=verified['contexts'], verified_epoch_digest=epoch['digest'])
         remapped[task['id']] = changed['id']
         bound.append(changed)
     result = dict({key:value for key,value in planned.items() if key != 'digest'}, tasks=bound)
@@ -641,10 +641,45 @@ def _collect_successor_findings(records, artifacts, predecessor):
     return list(inherited.values())
 
 
-def build_epoch(records, record, packet, manifest):
+def check_scale(records, artifacts, route, manifest, role):
+    """Refuse structurally impossible full-card tasks before freezing any state."""
+    from . import review_staged as staged
+    profiles = build_profiles(records, artifacts, route, dict(role=role))
+    claims = list(manifest['contexts'])
+    roots = {key: manifest['contexts'][key]['root'] for key in claims}
+    envelope = len(_canonical(dict(claim_ids=claims, context_roots=roots)))
+    occurrences = manifest['occurrences']
+    # Even an unresolved judgment needs these real identities and a reason.
+    # Grounds can be empty only in this deliberately minimal valid record.
+    occurrence_id = occurrences[0]['id'] if occurrences else 'occurrence:' + digest([])
+    characters = sum(len(_canonical(dict(id='cell:' + digest([key, occurrence_id]),
+        claim_id=key, occurrence_id=occurrence_id, context_root=roots[key],
+        status='unresolved', reason='?', grounds=[], scope='unresolved'))) for key in claims)
+    minimal_card = dict(id='card:' + digest(occurrence_id), occurrence_id=occurrence_id, kind='full',
+        establishes='?', evidence_type='assertion', conclusions=[], conditions=[], judgments=[],
+        critical_spans=[], no_statement_reason='?', findings=[], unresolved=[], dependencies=[], fragment_ids=[])
+    characters += len(_canonical(dict(cards=[minimal_card]))) + max(0, len(claims) - 1)
+    input_limit = read_input_limit(route)
+    output_tokens = route['configuration']['max_output_tokens']
+    measurements = [staged.joint_fit([characters], input_limit, output_tokens, profiles[kind], claim_count=len(claims))
+                    for kind in ('read', 'integrate', 'combine', 'final')]
+    card_tokens = max(row['output_tokens'] for row in measurements)
+    allowance = min(output_tokens - row['output_margin_tokens'] for row in measurements)
+    envelope += max(profiles[kind]['context_characters'] + profiles[kind]['envelope_characters']
+                    for kind in ('read', 'integrate', 'combine', 'final'))
+    details = dict(claims=len(claims), occurrences=len(occurrences), envelope_characters=envelope,
+                   input_limit=input_limit, card_output_tokens=card_tokens, output_allowance=allowance)
+    if envelope > input_limit or card_tokens > allowance:
+        raise ResearchError('review_staged_scale_unsupported',
+            'The required all-claim envelope or full-card output cannot fit this route.', details)
+    return details
+
+
+def build_epoch(records, record, packet, manifest, *, route, artifacts):
     """Freeze the slot identity, predecessor and scientific decision boundary."""
     from . import review_staged as staged
     from .review_composition import PROTOCOL as COMPOSITION_PROTOCOL, list_scalar_fields
+    check_scale(records, artifacts, route, manifest, record['role'])
     predecessor_id = _find_predecessor_assignment_id(record)
     predecessor = None
     if predecessor_id:
@@ -717,6 +752,8 @@ def prepare_frame_tasks(records, artifacts, controller, epoch, route):
     """Render initial frame partitions, splitting until mandatory originals fit."""
     from . import review_staged as staged
     from collections import deque
+    staged._validate_epoch(epoch)
+    verified_epoch_digest = epoch['digest']
     sources_by_id = {row['id']: row for row in epoch['manifest']['sources']}
     profile = build_profiles(records, artifacts, route, epoch)['frame']
     route_limit = read_input_limit(route)
@@ -743,7 +780,7 @@ def prepare_frame_tasks(records, artifacts, controller, epoch, route):
     tasks, pending = [], deque(groups)
     while pending:
         spans = pending.popleft()
-        task = staged.make_task(epoch, 'frame', inputs=spans, measurement=staged.joint_fit(
+        task = staged.make_task(epoch, 'frame', inputs=spans, verified_epoch_digest=verified_epoch_digest, measurement=staged.joint_fit(
             [row['end']-row['start'] for row in spans], route_limit, route['configuration']['max_output_tokens'], profile))
         try:
             tasks.append(prepare_task_plan(records, artifacts, controller, epoch, task))
@@ -769,6 +806,8 @@ def prepare_controller(records, artifacts, record, packet, route):
     """Install a frozen epoch and pending slot before any child can run."""
     from . import review_staged as staged
     import time
+    original_record = record
+    record = copy.deepcopy(record)
     record['staged_started_at'] = time.time()
     predecessor_id = _find_predecessor_assignment_id(record)
     if packet.get('context_repair') is not None:
@@ -799,12 +838,12 @@ def prepare_controller(records, artifacts, record, packet, route):
     packet = dict(packet)
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
-    record.update(packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'])
     manifest = build_manifest(artifacts, packet, record['role'])
     if inherited:
         manifest = staged._seal(dict({key:value for key,value in manifest.items() if key != 'digest'},
                                      inherited_findings=manifest['inherited_findings'] + inherited))
-    epoch = build_epoch(records, record, packet, manifest)
+    epoch = build_epoch(records, record, packet, manifest, route=route, artifacts=artifacts)
+    record.update(packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'])
     frame_failure = None
     try:
         tasks = prepare_frame_tasks(records, artifacts, record, epoch, route)
@@ -833,6 +872,7 @@ def prepare_controller(records, artifacts, record, packet, route):
         incomplete_changes, _ = prepare_execution_incomplete(current, artifacts, epoch, tasks[0]['task'],
             'exhausted', [tasks[0]['id']], failure=frame_failure)
         changes.extend(incomplete_changes)
+    original_record.update(record)
     return changes
 
 

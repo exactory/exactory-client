@@ -130,8 +130,9 @@ def _collect_task_graph(records, artifacts, assignment_id, *, historical):
             validate_page_grounding(page, epoch=epoch, selection=selection, tasks=tasks,
                 actual_input=observed['actual_input'], delivered=packet['staged_review'])
     frame_packet = None
-    coverage = {row['source_id']: row['complete'] for row in completion['coverage']}
-    if completion['complete'] and all(coverage.get(row['source_id'], False) for row in epoch['manifest']['frame_fields']):
+    # Complete scientific verification already requires every original interval;
+    # the report's bounded coverage sample cannot authorize frame delivery.
+    if completion['complete']:
         controller = records['review_assignment'][controller_id]
         if controller.get('packet') is not None:
             # The original fields have all reached the selected graph. Their

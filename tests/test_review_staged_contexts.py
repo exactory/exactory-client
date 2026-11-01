@@ -101,7 +101,8 @@ class StagedContextTests(unittest.TestCase):
                     {'observations': [self.discovery, observed]}, tasks=tasks)
                 self.assertFalse(report['complete'])
                 self.assertTrue(any(row['code'] == 'invalid_review_staged'
-                    and row.get('task_id') == observed['task_id'] for row in report['issues']), report['issues'])
+                    and row.get('task_id') == observed['task_id'] for row in staged.iter_completion_issues(
+                        self.epoch, {'observations': [self.discovery, observed]}, tasks=tasks)), report['issues'])
                 self.assertEqual(report['progress']['full_cards'], 1)
 
     def test_malformed_retrieval_cannot_poison_an_accepted_read_frontier(self):
@@ -199,7 +200,7 @@ class StagedContextTests(unittest.TestCase):
         report = staged.verify_completion(self.epoch, selected, tasks=tasks)
         self.assertFalse(report['complete'])
         self.assertTrue(any(row['code'] == 'review_finding_answer_pending' and row.get('finding_id') == finding['id']
-                            for row in report['issues']), report['issues'])
+                            for row in staged.iter_completion_issues(self.epoch, selected, tasks=tasks)), report['issues'])
         verified = staged.collect_planning_records(self.epoch, selected, tasks=tasks)
         self.assertEqual(verified['findings'], [finding])
 
@@ -244,7 +245,8 @@ class StagedContextTests(unittest.TestCase):
                 tasks, selected, identifier = self.recover_card_question(kind=kind)
                 report = staged.verify_completion(self.epoch, selected, tasks=tasks)
                 self.assertFalse(report['complete'], report['issues'])
-                pending = [row for row in report['issues'] if row['code'] == 'review_card_question_pending']
+                pending = [row for row in staged.iter_completion_issues(self.epoch, selected, tasks=tasks,
+                    code='review_card_question_pending')]
                 self.assertEqual([row['finding_id'] for row in pending], [identifier])
                 self.assertEqual(pending[0]['question'], self.discovery['output']['cards'][0]['unresolved'][0])
                 self.assertEqual(report['progress']['full_cards'], 1)
@@ -274,7 +276,7 @@ class StagedContextTests(unittest.TestCase):
         report = staged.verify_completion(self.epoch, selected, tasks=tasks)
         self.assertFalse(report['complete'])
         self.assertTrue(any(row['code'] == 'invalid_review_staged'
-            and row.get('task_id') == assigned['id'] for row in report['issues']), report['issues'])
+            and row.get('task_id') == assigned['id'] for row in staged.iter_completion_issues(self.epoch, selected, tasks=tasks)), report['issues'])
 
     def test_historical_card_questions_reject_ungrounded_unrelated_or_historical_answers(self):
         for changes in (dict(grounded=False), dict(dependent=False), dict(historical_answer=True),
@@ -286,7 +288,7 @@ class StagedContextTests(unittest.TestCase):
                 report = staged.verify_completion(self.epoch, selected, tasks=tasks)
                 self.assertFalse(report['complete'], report['issues'])
                 self.assertTrue(any(row['code'] == 'review_card_question_pending'
-                    and row.get('finding_id') == identifier for row in report['issues']), report['issues'])
+                    and row.get('finding_id') == identifier for row in staged.iter_completion_issues(self.epoch, selected, tasks=tasks)), report['issues'])
 
     def test_retained_historical_card_question_requires_adverse_or_incomplete_assessment(self):
         for assurance in ('passed', 'failed', 'not_assessed'):
@@ -389,7 +391,7 @@ class StagedContextTests(unittest.TestCase):
         report = staged.verify_completion(self.epoch, selected, tasks=tasks)
         self.assertFalse(report['complete'])
         self.assertTrue(any(row['code'] == 'invalid_review_staged' and row.get('retrieval_id') == 'retrieve'
-                            for row in report['issues']), report['issues'])
+                            for row in staged.iter_completion_issues(self.epoch, selected, tasks=tasks)), report['issues'])
 
 
 if __name__ == '__main__':

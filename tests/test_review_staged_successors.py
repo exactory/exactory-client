@@ -56,8 +56,10 @@ class StagedSuccessorTests(unittest.TestCase):
         record.pop('staged_review', None)
         packet = dict(role='result', subject=self.previous['subject'], problem_evidence_digest=currency,
                       statement='The current claim is assessed against newly supplied evidence.')
+        route = dict(id='route', adapter='claude_cli_v1',
+                     configuration=dict(max_output_tokens=128000, timeout_seconds=3600))
         with patch.object(producer, 'prepare_frame_tasks', return_value=[]):
-            changes = producer.prepare_controller(self.records, self.artifacts, record, packet, {})
+            changes = producer.prepare_controller(self.records, self.artifacts, record, packet, route)
         frozen = next(value for kind, _, value in changes if kind == 'review_epoch')
         return record, frozen, changes
 
@@ -103,7 +105,7 @@ class StagedSuccessorTests(unittest.TestCase):
         staged._verify_seal(frozen['manifest'])
         completion = staged.verify_completion(frozen, {'observations': []})
         self.assertTrue(any(row['code'] == 'review_finding_answer_pending' and row.get('finding_id') == inherited['id']
-                            for row in completion['issues']))
+                            for row in staged.iter_completion_issues(frozen, {'observations': []})))
         assigned = staged.make_task(frozen, 'frame', inputs=[row['span'] for row in frozen['manifest']['frame_fields']],
                                     measurement=task(self.previous)['measurement'])
         packet = producer.build_packet(frozen, assigned)

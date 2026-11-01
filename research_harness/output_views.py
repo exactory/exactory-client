@@ -539,7 +539,7 @@ def _copy_output(artifacts, files, path, reference, entry):
     return {"output": reference, "output_file": None if reason else path.rsplit("/", 1)[1], "output_listed": reason}
 
 
-def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, refusals):
+def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, refusals, staged_state=None):
     """The runs of one turn in order, with the selected one marked: the first completed run without a refusal record
     whose context the transport observed, else the first completed run without a refusal record, else the run that an
     accepted correction corrected. This is the binding rule of review_protocol._selected_attempt over the recorded
@@ -557,7 +557,7 @@ def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, r
         runs[binding["id"]]["selected"] = True
     if assignment.get("staged_review") or any(epoch["controller_assignment_id"] == assignment["id"] for epoch in records.get("review_epoch", {}).values()):
         from .review_protocol import assignment_state
-        state = assignment_state(records, artifacts, assignment["id"])
+        state = staged_state if staged_state is not None else assignment_state(records, artifacts, assignment["id"])
         # Raw task selection is distinct from authorization of an effective
         # final. The protocol selects pages and terminal attempts itself.
         for run in runs.values():
@@ -597,6 +597,31 @@ def _build_series(records, artifacts, inputs):
             grouped.setdefault(record["assignment_id"], []).append(record)
     refusals = {refusal["attempt_id"]: refusal for refusal in records.get("review_output_refusal", {}).values()}
     adoptions = _find_adoptions(records, inputs)
+    # A child's raw selection comes from the same authenticated epoch evaluation.
+    # It needs no second scientific verification of its siblings.
+    staged_states = {}
+    controllers = {epoch['controller_assignment_id']: epoch for epoch in records.get('review_epoch', {}).values()}
+    children = {}
+    for assignment in assignments.values():
+        binding = assignment.get('staged_review', {})
+        if binding.get('kind') == 'task':
+            children.setdefault(binding['controller_assignment_id'], []).append(assignment)
+    from .review_protocol import assignment_state
+    from .review_staged_protocol import collect_epoch_acceptances, collect_observations
+    from .evaluation import Evaluation
+    artifacts = Evaluation.of(records, artifacts)
+    for controller_id, epoch in controllers.items():
+        if controller_id not in assignments:
+            continue
+        state = assignment_state(records, artifacts, controller_id)
+        staged_states[controller_id] = state
+        observations, _, _ = collect_observations(records, artifacts, epoch)
+        selected = {row['id'] for row in observations}
+        attempts = {row['receipt']['attempt']['assignment_id']: row['receipt']['attempt']['id']
+                    for row in collect_epoch_acceptances(records, epoch) if row['receipt'].get('attempt') is not None
+                    and row['receipt'].get('staged_observation', {}).get('id') in selected}
+        for assignment in children.get(controller_id, []):
+            staged_states[assignment['id']] = dict(attempt_id=attempts.get(assignment['id']))
     series = {}
     for assignment in assignments.values():
         series.setdefault(_find_series_root(records, assignment), []).append(assignment)
@@ -625,16 +650,16 @@ def _build_series(records, artifacts, inputs):
                 "slot_id": slot_id(records, assignment) if assignment["role"] != "adjudicator" else None,
                 "recorded_revision": assignment["recorded_revision"], "reviewer_id": assignment["reviewer_id"],
                 "route_id": assignment["route_id"], "packet": assignment.get("packet"),
-                "runs": _describe_turn(records, artifacts, files, stem, assignment, by_assignment, refusals),
+                "runs": _describe_turn(records, artifacts, files, stem, assignment, by_assignment, refusals,
+                                       staged_states.get(identifier)),
                 "context_events": [{key: event.get(key) for key in ("id", "kind", "source", "reason",
                                                                      "recorded_revision")}
                                    for event in by_assignment["review_context_event"].get(identifier, [])],
                 "adopted_by": adoptions.get(identifier, [])})
             if assignment.get("staged_review", {}).get("kind") == "task":
                 turns[-1]["task_id"] = assignment["staged_review"]["task_id"]
-            if any(epoch["controller_assignment_id"] == identifier for epoch in records.get("review_epoch", {}).values()):
-                from .review_protocol import assignment_state
-                state = assignment_state(records, artifacts, identifier)
+            if identifier in controllers:
+                state = staged_states[identifier]
                 effective = state.get("effective") or {"kind": "pending"}
                 turns[-1].update(raw_output_digest=None if state.get("raw_output") is None else digest(state["raw_output"]),
                     effective={key: value for key, value in effective.items() if key not in ("effective_output", "incomplete_outcome")})
