@@ -68,7 +68,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. |
-| `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. A problem `result` or `adjudicator` packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, becomes the controller of a staged review; `{controller_assignment_id}` alone plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, `context: {staged_upgrade: {assignment_id}}` opens a staged review in a recorded slot, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A problem `result` assignment that the part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series ([Problem evidence in parts](#problem-evidence-in-parts)). |
+| `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. A problem `result` or `adjudicator` packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, becomes the controller of a staged review when the scale preflight admits the slot; `{controller_assignment_id}` alone plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, `context: {staged_upgrade: {assignment_id}}` opens a staged review in a recorded slot, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A problem `result` assignment that the part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series ([Problem evidence in parts](#problem-evidence-in-parts)). |
 | `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last `store_busy` or `stale_revision`. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
@@ -238,9 +238,10 @@ is 1,300,000 characters on `claude_cli_v1` and 1,048,576 on `codex_cli_v1` and
 `codex_cli_framed_v1` (the
 [route instructions](research-decisions.md#commands-and-shared-state)). The CLI
 receives nothing.
-A problem `result` or `adjudicator` request on these routes is not refused: it
-becomes a staged review ([Staged problem reviews](#staged-problem-reviews)),
-and a session that is already a series stays in parts
+A problem `result` or `adjudicator` request on these routes becomes a staged
+review ([Staged problem reviews](#staged-problem-reviews)) when the scale
+preflight of that section admits the slot; a session that is already a series,
+and a result slot that the preflight refuses, stay in parts
 ([Problem evidence in parts](#problem-evidence-in-parts)).
 The harness also keeps the earlier
 reduction orders of 0.56.0, of 0.56.1 and 0.57.0, and of the two repaired
@@ -271,6 +272,24 @@ to a bar or slate packet, or to a route without a local input limit. The
 protocol is `exactory-review-staged-v2`. The harness plans every task itself
 and names the next command in `next`; the operator runs those commands and
 builds no task envelope.
+
+The scale preflight. The task contracts of this release require one full card
+to judge every claim of the epoch and later tasks to carry every claim id and
+context root. Before the epoch is frozen, the harness measures that envelope
+against the route's input limit, and the estimated output of the smallest full
+card that judges every claim against the output allowance (`max_output_tokens`
+minus the planner's margin). When either does not fit, the slot is not staged
+and nothing is written: no epoch, task, slot head or packet record, and no
+artifact. Automatic entry then builds the packet as 0.69.18 did: a result slot
+is delivered in parts ([Problem evidence in parts](#problem-evidence-in-parts))
+from part turn 1, and a focused adjudication or a context repair keeps its
+ordinary packet under the rules that applied before 0.70.0. An explicit
+`staged_upgrade` of such a slot is refused with
+`review_staged_scale_unsupported`; its details are `claims`, `occurrences`,
+`envelope_characters`, `input_limit`, `card_output_tokens` and
+`output_allowance`, so the refusal shows which bound was exceeded and by how
+much. The measured shape that met this limit, 15,389 frame leaves and 106
+occurrences, is in the [0.70.0 release note](releases/0.70.0.md#known-limits).
 
 The controller and the epoch. `review-assignment` records the controller with
 `staged_review: {protocol, kind: "controller", epoch_id, task_ids}`, an empty
@@ -509,9 +528,10 @@ alone never releases one.
 
 Capture, acceptance and recovery. `review-run` reserves the task
 (`review_reservation/<id>`, `review_task_execution/<task id>` and
-`review_execution_plan/<plan id>`), launches an owned worker process, waits for
-its capture up to the route's timeout plus 15 seconds, accepts the capture and
-reconciles the worker. The worker holds a lock under
+`review_execution_plan/<plan id>`), launches an owned worker process, gives it
+60 seconds to bind its process identity to the reservation (the launch
+handshake), waits for its capture up to the route's timeout plus 15 seconds,
+accepts the capture and reconciles the worker. The worker holds a lock under
 `research/review-workers/`, makes the one reviewer call and commits the
 observation as `review_observation/<reservation id>` through the store. A
 response file that no worker committed is no observation. Capture is that
@@ -531,7 +551,10 @@ a second reviewer call; one interrupted while the worker still runs waits for
 the capture again. When the worker ends without a capture, the reservation is
 reconciled as `unknown` (it was running) or `known_failure` and released,
 `review-run` refuses with `review_worker_reconciliation_required`, and the
-next `review-run` of the task makes the one permitted retry. A capture whose
+next `review-run` of the task makes the one permitted retry. A launch
+handshake that does not complete within its 60 seconds, or that an
+interruption ends, is refused with the same code, and the reservation keeps
+its claim for `action: "reconcile"`. A capture whose
 status is not `completed` is a failed attempt under the same rule, and its
 result names the planning command as `next`. An output that fails its task
 check is refused: the harness records `review_task_refusal/<reservation id>`
@@ -602,6 +625,31 @@ carried; a page whose grounds fail is refused (`review_composition_conflict`)
 at the acceptance of its task, again at composition and when the task graph
 is collected. The checks
 establish shape, identity, delivery and quotation, not scientific truth.
+
+The completion report. The completion check of an epoch writes a report under
+the schema `exactory-review-completion-v2`. `issues` holds one entry per issue
+code, sorted by code, each with `count` (the exact number of its rows),
+`digest` (the SHA-256 of the exact sorted row set as canonical JSON) and
+`sample` (at most 20 rows); `context_roots` and `coverage` carry the same bound
+with `context_roots_count`, `context_roots_digest`, `coverage_count` and
+`coverage_digest`; `complete` is true when `issues` is empty. Completeness is
+decided from the exact set, never from a sample, and the missing claim cells
+are counted without being listed one by one.
+`research_harness.review_staged.iter_completion_issues(epoch, selection,
+code=, offset=, limit=)` reads the exact rows of an authenticated selection.
+The issue codes are `review_task_pending`, `review_source_coverage_pending`,
+`review_claim_cell_pending`, `review_card_pending`,
+`review_card_question_pending`, `review_frame_unresolved`,
+`review_finding_answer_pending`, `review_combination_pending`,
+`review_original_check_pending`, `review_integration_pending`,
+`review_integration_unresolved`, `review_claim_unresolved`,
+`review_retrieval_pending`, `review_composition_pending`,
+`review_assurance_dependency_pending`, `review_terminal_pending`,
+`review_task_dependency_changed`, `review_objection_evidence_pending` (no
+accepted observation has delivered the named entry of a material objection
+yet), `review_objection_evidence_invalid` (the entry was delivered with the
+wrong digest), `invalid_review_staged` (an accepted record is malformed; the
+row names its task) and `assessment_incomplete`.
 
 Incomplete assessments. An incomplete outcome has one of two origins. With
 `origin: "reviewer"`, a final task returned `assessment_incomplete
@@ -700,10 +748,11 @@ Recorded 0.69.x series. A recorded part or final turn authenticates as
 recorded. A turn that continues such a series with the same evidence digest,
 before the result review of its final turn is recorded, continues it under
 the rules of the next section. A continuation whose evidence digest changed
-and a refresh of the series start new work under the entry rule above,
-ordinary or staged, and an explicit `staged_upgrade` moves the recorded slot
-to a staged review at once. No module that a route pins by its bytes changed,
-and the reduction orders do not change.
+and a refresh of the series start new work under the entry rule above
+(ordinary, staged, or in parts when the scale preflight refuses the slot), and
+an explicit `staged_upgrade` moves the recorded slot to a staged review at
+once, under the same preflight. No module that a route pins by its bytes
+changed, and the reduction orders do not change.
 
 Views. `intermediate/reviews/staged/<kind>/<id>.json` holds the epochs, the
 tasks, the execution plans, the task executions, the reservations, the
@@ -721,15 +770,17 @@ adjudication whose slot has a staged successor is `historical`.
 
 ### Problem evidence in parts
 
-Since 0.70.0 this delivery serves only a session that is already a series: a
-turn that continues a series started under 0.69.0 to 0.69.4 with the same
-evidence digest, before the result review of its final turn is recorded,
-continues under these rules. A continuation of a series whose evidence digest
-changed, a refresh of a series and a first turn of a session that never was a
-series are measured against the route limit: a request that fits and delivers
-every body is built as before, byte for byte, with the same packet and prompt,
-and one that does not becomes a staged review
-([Staged problem reviews](#staged-problem-reviews)), not part turn 1. A
+Since 0.70.0 this delivery serves a session that is already a series and a
+result slot that the scale preflight of a staged review refuses. A turn that
+continues a series started under 0.69.0 to 0.69.4 with the same evidence
+digest, before the result review of its final turn is recorded, continues
+under these rules. A continuation of a series whose evidence digest changed, a
+refresh of a series and a first turn of a session that never was a series are
+measured against the route limit: a request that fits and delivers every body
+is built as before, byte for byte, with the same packet and prompt; one that
+does not becomes a staged review
+([Staged problem reviews](#staged-problem-reviews)) when the preflight admits
+the slot, and otherwise starts a series under these rules at part turn 1. A
 `staged_upgrade` assignment moves a recorded slot to a staged review at once.
 The rules below describe the series that continue. They apply
 to a `result` session on a route with a local input limit (`claude_cli_v1`,
@@ -916,7 +967,8 @@ the series, and neither does a refresh of a series, a new assignment of the
 same reviewer after the recorded result review of its final turn. Since
 0.70.0 both start new work under the entry rule of
 [Staged problem reviews](#staged-problem-reviews): ordinary when the request
-fits and delivers every body, staged otherwise, never part turn 1. A later
+fits and delivers every body, staged when the scale preflight admits the slot,
+and otherwise in parts from part turn 1. A later
 turn of a refreshed session carries its `problem_refresh` marker, and the
 marker alone starts no new series. A continuation of a series with the
 unchanged digest receives the full current problem evidence and never the

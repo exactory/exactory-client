@@ -572,7 +572,7 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-lead` | Versioned discrepancy provenance and research disposition. |
 | `review-route` | Actual route and versioned configuration. |
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
-| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result or adjudicator packet that does not fit one input opens a staged review; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
+| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result or adjudicator packet that does not fit one input opens a staged review when its scale preflight admits the slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
 | `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a staged task: the owned worker's call, its committed capture and its acceptance. |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |
@@ -1052,6 +1052,23 @@ assigns the next task, the run of that task, and at the end the recording of
 the review. No step asks the operator to build a task, and no step repeats a
 call whose outcome the record already holds.
 
+Scale that the task contracts cannot carry. The contracts of this release
+require one full card to judge every claim of the epoch and later tasks to
+carry every claim id and context root. Before an epoch is frozen, the harness
+measures that envelope against the route's input limit and the smallest such
+card against the output allowance (`max_output_tokens` minus the planner's
+margin). A slot that cannot fit is not staged, and nothing is written.
+Automatic entry then keeps the delivery of 0.69.18: a result slot in parts from
+part turn 1, a focused adjudication or a context repair with its ordinary
+packet. An explicit `staged_upgrade` of such a slot is refused with
+`review_staged_scale_unsupported`, whose details carry `claims`, `occurrences`,
+`envelope_characters`, `input_limit`, `card_output_tokens` and
+`output_allowance`, so the operator can see which bound was exceeded and by how
+much. The measured shape that met this limit, 15,389 frame leaves and 106
+occurrences of one record, is in the
+[0.70.0 release note](releases/0.70.0.md#known-limits); the design for that
+scale is section 19 of the design record and is planned for a later release.
+
 Raw observations and effective results. The harness keeps two interfaces
 apart. The raw observation of a task is the exact object that the call
 returned, with the digests of its request, response and output and its
@@ -1095,8 +1112,15 @@ Coverage across the task graph. The post gate's result coverage check reads
 the accepted task graph of the epoch: the actual packet of every accepted
 task, authenticated against its frozen request and its committed capture. The
 completion check must be complete, and the frozen packet must carry the
-current evidence digest. Every frame field, item and owned body must have
-reached a task as exact text, and the check records that coverage per source.
+current evidence digest. The completion report (`exactory-review-completion-v2`)
+states each kind of missing work once: the exact count of its rows, the digest
+of the exact sorted set and at most 20 examples. Completeness is decided from
+the exact set, which `iter_completion_issues` reads row by row, never from the
+examples. An entry of a material objection that no accepted observation has
+delivered yet is `review_objection_evidence_pending`; an entry delivered with
+the wrong digest is `review_objection_evidence_invalid`. Every frame field,
+item and owned body must have reached a task as exact text, and the check
+records that coverage per source.
 The guarantee is this: every item of the current evidence reached the reviewer
 in an authenticated task of the epoch; every claim of the frame was judged
 against every unit in a cell with a grounded reason or an explicit unresolved
@@ -1145,9 +1169,13 @@ number of subdivisions, calls and reread rounds, a day of elapsed time, an
 unknown outcome of a worker that died before its capture, a binary original
 that the route cannot deliver, or a frame that no call can carry. One
 reviewer call runs at a time by default, counted together with the ordinary
-reviewer calls, probes and corrections of the store; a worker's capture is the
-committed observation; an acceptance resumes after an interruption without a
-second call; and no result is ever reconstructed from a file. `next` lists the
+reviewer calls, probes and corrections of the store; a worker has 60 seconds to
+bind its process identity to its reservation, and a handshake that does not
+complete leaves the reservation to be reconciled
+(`review_worker_reconciliation_required`), never a lost call; a worker's
+capture is the committed observation; an acceptance resumes after an
+interruption without a second call; and no result is ever reconstructed from a
+file. `next` lists the
 exact command for executable work and the research that addresses
 incompleteness, and never a repeat of an exhausted call. A new assessment of
 the slot is an authorized successor epoch, which installs a pending slot
