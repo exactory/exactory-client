@@ -643,6 +643,16 @@ same assignment can run again, and a turn after the first can be replaced by
 assigning the next turn again with the same `prior_assignment_id`. A blank
 request ID is refused before the call (`invalid_input`).
 
+From 0.70.0, shared store and route capacity counts only calls with a
+`review_pool_membership` that have not been released. Calls started by 0.69.x
+have no membership and do not count, including probes and corrections. An open
+ordinary invocation still blocks its own assignment until a same-ID attempt
+exists; the `review-attempt` procedure above remains available for it. An import
+under an owned invocation ID is refused until termination is confirmed.
+Historical reconciliation with a same-ID attempt records `historical_closed`,
+an unknown outcome and no termination proof. A historical call still running
+during upgrade can temporarily run alongside the configured capacity.
+
 A route pins the adapter runtime it was recorded with: the adapter's controls,
 its input contract and the SHA-256 of its module, and for a Codex route also the
 version and the path of the installed Codex CLI. Verification of probes and

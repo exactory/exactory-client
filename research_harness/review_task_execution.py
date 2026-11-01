@@ -269,18 +269,30 @@ def has_call_terminated(records, operation, invocation_id):
             and completed.get("assignment_id") == invocation.get("assignment_id"))
 
 
+def build_historical_attempt_step(invocation):
+    """Describe the documented 0.69.17 import without claiming observed output."""
+    return dict(command="review-attempt", payload=dict(id=invocation["id"],
+        assignment_id=invocation["assignment_id"], status="failed", output=None,
+        reason="The process stopped during the call.",
+        usage=dict(input_tokens=None, output_tokens=None, cost_usd=None, wall_seconds=None)))
+
+
 def _reconcile_historical_call(records, operation, invocation_id):
     """Retain prior closure or report the exact gap in historical termination evidence."""
     kind, completed = read_call_kinds(operation)
     invocation = _get(records, kind, invocation_id)
     completion = records.get(completed, {}).get(invocation_id)
     evidence = None if completion is None else dict(kind=completed, key=invocation_id, digest=digest(completion))
-    if not has_call_terminated(records, operation, invocation_id):
-        raise ResearchError("review_worker_reconciliation_required",
-            "Historical invocation has no recorded process ownership; termination cannot be established",
-            dict(operation=operation, invocation=dict(kind=kind, key=invocation_id,
-                digest=digest(invocation), fields=sorted(invocation)), completion=evidence,
-                missing=["review_pool_membership", "owner_process_identity", "transport_process_groups"]))
+    if completion is None:
+        details = dict(operation=operation, invocation=dict(kind=kind, key=invocation_id,
+            digest=digest(invocation), fields=sorted(invocation)), completion=evidence,
+            missing=["review_pool_membership", "owner_process_identity", "transport_process_groups"])
+        message = "Historical invocation has no recorded process ownership; termination cannot be established"
+        if operation == "review.invoke":
+            details.update(invocation_id=invocation_id, assignment_id=invocation["assignment_id"],
+                           next=build_historical_attempt_step(invocation))
+            message += "; import its interrupted attempt with review-attempt"
+        raise ResearchError("review_worker_reconciliation_required", message, details)
     # This is administrative compatibility with an already closed call, not a
     # new claim that an unrecorded owner or transport process was observed dead.
     return dict(id=identify_call(operation, invocation_id), operation=operation, invocation_id=invocation_id,
@@ -290,11 +302,13 @@ def _reconcile_historical_call(records, operation, invocation_id):
 
 def _active_legacy(records, policy):
     routes = records.get("review_route", {})
+    memberships = records.get("review_pool_membership", {})
     active = []
     for operation in ("review.invoke", "review.route_probe", "review.output_correction"):
         kind, _ = read_call_kinds(operation)
         for key, invocation in records.get(kind, {}).items():
-            if (not has_call_terminated(records, operation, key)
+            membership = memberships.get(identify_call(operation, key))
+            if (membership is not None and not membership["released"]
                     and routes.get(invocation.get("route_id"), {}).get("adapter") in policy["covered_adapters"]):
                 active.append(invocation)
     return active
@@ -371,7 +385,9 @@ def admit_call(transaction, route_id):
     route = _get(records, "review_route", route_id)
     if route.get("adapter") not in policy["covered_adapters"]:
         return
-    active = [row for row in records.get("review_reservation", {}).values() if not row["released"]]
+    memberships = records.get("review_pool_membership", {})
+    active = [row for row in records.get("review_reservation", {}).values()
+              if row["id"] in memberships and not row["released"]]
     active.extend(_active_legacy(records, policy))
     route_active = [row for row in active if row["route_id"] == route_id]
     if len(active) >= policy["store_limit"] or len(route_active) >= policy["route_limits"].get(

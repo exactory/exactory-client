@@ -51,12 +51,10 @@ class CallAdmissionTests(TaskExecutionFixture):
                 self.invoke(operation, kind, completed, observe, identifier='call-' + str(index))
         self.assertEqual(self.reserve()['result']['state'], 'reserved')
 
-    def test_preexisting_probe_and_correction_invocations_occupy_capacity(self):
+    def test_preexisting_probe_and_correction_invocations_without_membership_do_not_occupy_capacity(self):
         for index, (_, kind, completed) in enumerate(CALLS[1:]):
             identifier = 'pending-' + str(index)
             self.put(kind, identifier, dict(id=identifier, route_id='route'))
-            self.refuse('review_capacity_wait', lambda: self.reserve())
-            self.put(completed, identifier, dict(id=identifier, status='failed'))
         self.assertEqual(self.reserve()['result']['state'], 'reserved')
 
     def test_ordinary_dispatch_and_replay_use_one_preparation_read(self):

@@ -2533,8 +2533,9 @@ def record_attempt(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'))
         _get(records, 'review_assignment', value['assignment_id'])
-        from .review_task_execution import has_call_terminated
+        from .review_task_execution import has_call_terminated, identify_call
         if (value['id'] in records.get('review_invocation', {})
+                and identify_call('review.invoke', value['id']) in records.get('review_pool_membership', {})
                 and not has_call_terminated(records, 'review.invoke', value['id'])):
             raise ResearchError('review_invocation_pending', 'An imported attempt cannot occupy an active instrumented completion ID')
         if value['status'] not in ('failed', 'incomplete', 'completed'):
@@ -2584,12 +2585,21 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
             if len(refused) >= 2:
                 raise ResearchError('review_slot_exhausted', 'Two refused outputs exhaust this assignment; an exhausted initial bar slot takes a new reviewer')
         context_repair.require_current_slot(records, assignment)
-        from .review_task_execution import has_call_terminated
+        from .review_task_execution import build_historical_attempt_step, has_call_terminated, identify_call
+        memberships = records.get('review_pool_membership', {})
         pending = [a for a in records.get('review_invocation', {}).values()
                    if a['assignment_id'] == value['assignment_id']
-                   and not has_call_terminated(records, 'review.invoke', a['id'])]
+                   and (not has_call_terminated(records, 'review.invoke', a['id'])
+                        if identify_call('review.invoke', a['id']) in memberships
+                        else a['id'] not in records.get('review_attempt', {}))]
         if pending:
-            raise ResearchError('review_invocation_pending', 'Reconcile the pending attempt before an explicit retry')
+            invocation = pending[0]
+            details = dict(invocation_id=invocation['id'], assignment_id=invocation['assignment_id'])
+            message = 'Reconcile the pending attempt before an explicit retry'
+            if identify_call('review.invoke', invocation['id']) not in memberships:
+                details['next'] = build_historical_attempt_step(invocation)
+                message = 'Import the interrupted invocation with review-attempt before an explicit retry'
+            raise ResearchError('review_invocation_pending', message, details)
         route = _get(records, 'review_route', assignment['route_id'])
         if digest(route) != assignment['route_digest']:
             raise ResearchError('review_route_changed', 'Reassign after a route change')

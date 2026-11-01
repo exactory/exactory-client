@@ -79,11 +79,14 @@ class TaskExecutionTests(TaskExecutionFixture):
         self.reserve()
         self.refuse("review_capacity_wait", lambda: self.reserve("b"))
 
-    def test_preexisting_pending_legacy_invocation_occupies_capacity(self):
+    def test_preexisting_pending_legacy_invocation_without_membership_does_not_occupy_capacity(self):
         self.put("review_invocation", "legacy", {"id": "legacy", "route_id": "route"})
-        self.refuse("review_capacity_wait", lambda: self.reserve())
-        self.put("review_attempt", "legacy", {"id": "legacy", "status": "failed"})
         self.assertEqual(self.reserve()["result"]["state"], "reserved")
+
+    def test_reservation_without_pool_membership_does_not_occupy_capacity(self):
+        self.put('review_reservation', 'unowned', dict(id='unowned', route_id='route',
+                 epoch_id='historical-epoch', released=False))
+        self.assertEqual(self.reserve()['result']['state'], 'reserved')
 
     def test_task_generation_epoch_selector_and_absence_are_checked(self):
         payload = self.payload()

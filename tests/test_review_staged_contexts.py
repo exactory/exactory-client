@@ -176,6 +176,25 @@ class StagedContextTests(unittest.TestCase):
         self.assertEqual(report['context_roots'], {key:row['root'] for key,row in self.contexts.items()})
         self.assertEqual(self.epoch, self.before)
 
+    def test_missing_historical_card_context_version_returns_completion_rejection(self):
+        tasks, selected = self.recovered_selection()
+        check = staged._check_completion_observations
+
+        def lose_historical_version(work):
+            check(work)
+            self.assertEqual(len(work['historical_observed']), 1)
+            # Exercise the card collection boundary if its version disappears
+            # after the earlier observation validation has consumed it.
+            work['context_graph']['versions'] = work['context_graph']['versions'][1:]
+
+        with patch.object(staged, '_check_completion_observations', side_effect=lose_historical_version):
+            report = staged.verify_completion(self.epoch, selected, tasks=tasks)
+        self.assertFalse(report['complete'])
+        self.assertTrue(any(row['code'] == 'review_task_dependency_changed'
+            and row.get('task_id') == self.discovery['task_id']
+            and row.get('reason') == 'Historical task has no recorded context version.'
+            for row in report['issues']), report['issues'])
+
     def test_stale_scientific_work_alone_stays_incomplete(self):
         assigned = self.records['review_task'][self.discovery['task_id']]['task']
         report = staged.verify_completion(self.epoch, {'observations':[self.discovery]}, tasks=[assigned])

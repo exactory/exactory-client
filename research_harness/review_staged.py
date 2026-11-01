@@ -2033,9 +2033,11 @@ def _collect_completion_records(work):
                     check_text(item['id'], 'record.id', code='invalid_review_staged')
                     if row['task_id'] in work['historical_tasks'] and key == 'cards':
                         assigned = work['task_index'][row['task_id']]
-                        contexts = next(version['contexts'] for version in work['context_graph']['versions'] if all(
+                        contexts = next((version['contexts'] for version in work['context_graph']['versions'] if all(
                             key in version['contexts'] and version['contexts'][key]['root'] == root
-                            for key, root in assigned['context_roots'].items()))
+                            for key, root in assigned['context_roots'].items())), None)
+                        if contexts is None:
+                            _fail('Historical task has no recorded context version.', code='review_task_dependency_changed')
                         historical_cards.append(validate_card(item, dict(work['manifest'], contexts=contexts),
                                                               claim_ids=assigned['claim_ids'], catalog=work.get('catalog')))
                         continue
