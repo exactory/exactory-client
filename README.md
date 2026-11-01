@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.69.18](docs/releases/0.69.18.md) registers the record kind and the command `problem-citation-metadata` in the tables that the registry tests read.
+
 Version [0.69.17](docs/releases/0.69.17.md) makes `minimum.text_priority` of an openness export name the full texts that the packet carries, and refuses a listed version without one.
 
 Version [0.69.16](docs/releases/0.69.16.md) treats every BibTeX directive head as a boundary (so `@comment`, `@string` and `@preamble` text is never evidence) and normalizes titles in linear time without cutting combining marks.
