@@ -40,21 +40,20 @@ SERIALIZATION = 'canonical-json-utf8-v1'
 TASK_TYPES = ('frame', 'read', 'combine', 'original_check', 'integrate', 'answer', 'final')
 SCOPES = ('joint_original', 'segmented_original', 'joint_card', 'segmented_card',
           'original_segment', 'card_segment', 'unresolved')
-REVIEWER_NOTE = 'PLACEHOLDER (Fable writes this text): staged review task instructions.'
 
 
 def _fail(message, code='invalid_review_staged', **details):
     raise ResearchError(code, message, details or None)
 
 
-def _number(value, name, positive=False, integer=False):
+def _check_number(value, name, positive=False, integer=False):
     valid = is_finite_number(value) and (not integer or type(value) is int)
     if not valid or value < 0 or positive and value == 0:
         _fail('Expected a finite nonnegative number.', field=name)
     return value
 
 
-def _array(value, name):
+def _require_array(value, name):
     if not isinstance(value, list):
         _fail('Expected an array.', field=name)
     return value
@@ -74,7 +73,7 @@ def _verify_seal(value):
 
 def _index(rows, name):
     result = {}
-    for row in _array(rows, name):
+    for row in _require_array(rows, name):
         check_fields(row, ('id',), None, code='invalid_review_staged')
         key = check_text(row['id'], name, code='invalid_review_staged')
         if key in result and result[key] != row:
@@ -83,14 +82,14 @@ def _index(rows, name):
     return result
 
 
-def _ranges(intervals, length=None):
+def _merge_ranges(intervals, length=None):
     result = []
-    for interval in _array(intervals, 'intervals'):
+    for interval in _require_array(intervals, 'intervals'):
         if not isinstance(interval, (list, tuple)) or len(interval) != 2:
             _fail('Expected a half-open interval.')
         start, end = interval
-        _number(start, 'start', integer=True)
-        _number(end, 'end', integer=True)
+        _check_number(start, 'start', integer=True)
+        _check_number(end, 'end', integer=True)
         if end < start or length is not None and end > length:
             _fail('Interval lies outside the source.')
         if start != end:
@@ -106,8 +105,8 @@ def _ranges(intervals, length=None):
 
 def interval_gaps(required, delivered):
     """Return the exact uncovered half-open intervals, merging overlaps."""
-    pending = _ranges(required)
-    for left, right in _ranges(delivered):
+    pending = _merge_ranges(required)
+    for left, right in _merge_ranges(delivered):
         remaining = []
         for start, end in pending:
             if right <= start or left >= end:
@@ -137,7 +136,7 @@ def make_source(source_id, kind, text=None, *, identity, descriptor=None, requir
         if not isinstance(text, str):
             _fail('A text source needs exact original characters.')
         characters = len(text)
-        intervals = _ranges(required_intervals if required_intervals is not None else [[0, characters]], characters)
+        intervals = _merge_ranges(required_intervals if required_intervals is not None else [[0, characters]], characters)
         sha256 = hashlib.sha256(text.encode('utf-8')).hexdigest()
     return dict(id=source_id, kind=kind, identity=copy.deepcopy(identity), text=text,
                 descriptor=copy.deepcopy(descriptor), required_intervals=intervals,
@@ -148,7 +147,7 @@ def source_span(source, start, end):
     """Bind a Unicode character interval to the exact original UTF-8 bytes."""
     if source['kind'] == 'binary':
         _fail('Binary originals have no text span.')
-    _ranges([[start, end]], len(source['text']))
+    _merge_ranges([[start, end]], len(source['text']))
     return dict(source_id=source['id'], start=start, end=end,
                 sha256=hashlib.sha256(source['text'][start:end].encode('utf-8')).hexdigest())
 
@@ -260,14 +259,14 @@ def project_ordinary_final(output):
             copy.deepcopy({key: value for key, value in output.items() if key in staged}))
 
 
-def _frame_leaves(value, path=()):
+def _iter_frame_leaves(value, path=()):
     if isinstance(value, dict):
         for key in sorted(value):
-            for leaf in _frame_leaves(value[key], path + (key,)):
+            for leaf in _iter_frame_leaves(value[key], path + (key,)):
                 yield leaf
     elif isinstance(value, list):
         for index, item in enumerate(value):
-            for leaf in _frame_leaves(item, path + (index,)):
+            for leaf in _iter_frame_leaves(item, path + (index,)):
                 yield leaf
     elif type(value) in (str, int, float):
         yield list(path), value
@@ -331,7 +330,7 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
                 descriptor_sources[descriptor_key] = source
     source_index = _index(source_rows, 'sources')
     fields = []
-    for path, value in _frame_leaves(frame):
+    for path, value in _iter_frame_leaves(frame):
         key = 'frame:' + digest(path)
         source = make_source(key, 'frame', value if isinstance(value, str) else _canonical(value, code='invalid_review_staged'),
                              identity={'path': path, 'serialization': SERIALIZATION})
@@ -345,7 +344,7 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
     for raw in occurrences:
         check_fields(raw, ('key', 'index', 'item', 'artifacts', 'source_ids'), ('record_reference', 'evidence_class'), code='invalid_review_staged')
         check_text(raw['key'], 'key', code='invalid_review_staged')
-        _number(raw['index'], 'index', integer=True)
+        _check_number(raw['index'], 'index', integer=True)
         position = (raw['key'], raw['index'])
         if position in positions:
             _fail('Duplicate occurrence position.')
@@ -377,7 +376,7 @@ def build_manifest(frame, occurrences, sources, *, claims=None, assurance_depend
                 _fail('Identical descriptors have inconsistent original scope.')
             source_id = candidates[0]['id']
             source = candidates[0]
-            if source['kind'] != 'binary' and source['required_intervals'] != _ranges([[0, source['characters']]]):
+            if source['kind'] != 'binary' and source['required_intervals'] != _merge_ranges([[0, source['characters']]]):
                 _fail('An owned artifact requires its complete original body.')
             if source_id not in source_ids:
                 source_ids.append(source_id)
@@ -470,7 +469,7 @@ def freeze_epoch(spec):
     check_fields(spec['budgets'], ('max_calls', 'max_retries', 'max_rereads', 'max_subdivisions',
                                'max_epochs', 'max_elapsed_seconds'), code='invalid_review_staged')
     for key, value in spec['budgets'].items():
-        _number(value, key, positive=key in ('max_calls', 'max_elapsed_seconds'),
+        _check_number(value, key, positive=key in ('max_calls', 'max_elapsed_seconds'),
                 integer=key != 'max_elapsed_seconds')
     _canonical(spec, code='invalid_review_staged')
     entries = []
@@ -485,7 +484,7 @@ def freeze_epoch(spec):
     return _seal(dict(copy.deepcopy(spec), protocol=PROTOCOL, material_objection_entries=entries))
 
 
-def _epoch(epoch):
+def _validate_epoch(epoch):
     _verify_seal(epoch)
     _verify_seal(epoch['manifest'])
     if epoch['protocol'] != PROTOCOL:
@@ -493,14 +492,14 @@ def _epoch(epoch):
 
 
 def _check_decision_paths(constraints, role):
-    from .review_composition import _scalar_fields
+    from .review_composition import list_scalar_fields
     check_fields(constraints, (), None, code='invalid_review_staged')
-    allowed = _scalar_fields(role)
+    allowed = list_scalar_fields(role)
     for key in ('permissible_decisions', 'decision_dependencies'):
         if not isinstance(constraints.get(key, {}), dict) or not set(constraints.get(key, {})) <= set(allowed):
             _fail('Decision constraints must use the composition scalar paths.', field=key)
         for path, values in constraints.get(key, {}).items():
-            _array(values, path)
+            _require_array(values, path)
             if key == 'decision_dependencies':
                 check_ids(values, path, code='invalid_review_staged')
             if key == 'permissible_decisions' and allowed[path] is not None and any(
@@ -515,7 +514,7 @@ def make_task(epoch, task_type, *, inputs=None, claim_ids=None, occurrence_ids=N
               answer_ranges=None, objection_entries=None, contexts=None, reconciliation_id=None,
               composition_role=None, composition_plan_root=None):
     """Create an immutable task envelope; freeze the rendered request before dispatch."""
-    _epoch(epoch)
+    _validate_epoch(epoch)
     if task_type not in TASK_TYPES or scope not in SCOPES:
         _fail('Unknown task type or assessment scope.')
     manifest = epoch['manifest']
@@ -577,17 +576,17 @@ def freeze_task(task, planned_request_digest, rendering_policy, *, measurement=N
 
 def joint_fit(sizes, route_limit, output_tokens, profile, *, claim_count=0, preserved=True):
     """Check actual additive input, measured token work and measured duration."""
-    _number(route_limit, 'route_limit', positive=True, integer=True)
-    _number(output_tokens, 'output_tokens', positive=True, integer=True)
+    _check_number(route_limit, 'route_limit', positive=True, integer=True)
+    _check_number(output_tokens, 'output_tokens', positive=True, integer=True)
     required = ('context_characters', 'envelope_characters', 'output_base_tokens',
                 'output_tokens_per_claim', 'output_tokens_per_character', 'seconds_per_character',
                 'seconds_per_claim', 'duration_base_seconds', 'duration_limit_seconds', 'output_margin_tokens')
     check_fields(profile, required, ('input_character_target',), code='invalid_review_staged')
     for key, value in profile.items():
-        _number(value, key)
+        _check_number(value, key)
     for size in sizes:
-        _number(size, 'rendered_characters', integer=True)
-    _number(claim_count, 'claim_count', integer=True)
+        _check_number(size, 'rendered_characters', integer=True)
+    _check_number(claim_count, 'claim_count', integer=True)
     payload = sum(sizes)
     input_characters = payload + profile['context_characters'] + profile['envelope_characters']
     tokens = (profile['output_base_tokens'] + profile['output_tokens_per_claim'] * claim_count +
@@ -615,7 +614,7 @@ def validate_measurement(measurement):
         if measurement[key] is not True:
             _fail('Task work has not been admitted.', code='review_task_pending')
     for key in required[5:]:
-        _number(measurement[key], key)
+        _check_number(measurement[key], key)
     if (measurement['input_characters'] > measurement['route_limit'] or
             measurement['output_tokens'] + measurement['output_margin_tokens'] > measurement['configured_output_tokens'] or
             measurement['duration_seconds'] > measurement['duration_limit_seconds']):
@@ -623,7 +622,7 @@ def validate_measurement(measurement):
     return copy.deepcopy(measurement)
 
 
-def _original_inputs(manifest, occurrence_ids, claim_ids):
+def _collect_original_inputs(manifest, occurrence_ids, claim_ids):
     occurrences = _index(manifest['occurrences'], 'occurrences')
     sources = _index(manifest['sources'], 'sources')
     source_ids = set()
@@ -709,7 +708,7 @@ def _partition_original(epoch, kind, occurrence_ids, claim_ids, route_limit, out
         return [append(spans, binaries, claims, 'unresolved', fit)]
 
     def split_claims(claims):
-        spans, binaries = _original_inputs(manifest, occurrence_ids, claims)
+        spans, binaries = _collect_original_inputs(manifest, occurrence_ids, claims)
         fit = measured(spans, binaries, claims)
         target = profile.get('input_character_target') if kind == 'read' else None
         if fit['fits'] and (target is None or sum(s['end'] - s['start'] for s in spans) <= target):
@@ -733,10 +732,10 @@ def _partition_original(epoch, kind, occurrence_ids, claim_ids, route_limit, out
     return tasks
 
 
-def _card_tasks(epoch, cards, route_limit, output_tokens, profile, contexts=None):
+def _plan_card_tasks(epoch, cards, route_limit, output_tokens, profile, contexts=None, findings=()):
     _index(cards, 'cards')
     for card in cards:
-        _number(card['characters'], 'card.characters', integer=True)
+        _check_number(card['characters'], 'card.characters', integer=True)
     blocks, tasks, exceptions, subdivisions = [], [], 0, [0]
     claim_ids = [row['id'] for row in epoch['manifest']['claims']]
     current_contexts = contexts or epoch['manifest']['contexts']
@@ -776,9 +775,9 @@ def _card_tasks(epoch, cards, route_limit, output_tokens, profile, contexts=None
                     middle = (start + end) // 2
                     pending[0:0] = [(start, middle), (middle, end)]
                     continue
-                assigned = envelope(card_ids=[row['id']],
-                                     card_segments=[dict(card_id=row['id'], start=start, end=end,
-                                                         characters=row['characters'])],
+                span = (card_span(row['record'], start, end, manifest=epoch['manifest'], findings=findings)
+                        if 'record' in row else dict(card_id=row['id'], start=start, end=end, characters=row['characters']))
+                assigned = envelope(card_ids=[row['id']], card_segments=[span],
                                      scope='card_segment' if measured['fits'] else 'unresolved', measurement=measured)
                 segments.append(assigned)
                 tasks.append(assigned)
@@ -823,9 +822,9 @@ def _card_tasks(epoch, cards, route_limit, output_tokens, profile, contexts=None
 
 
 def plan_tasks(epoch, *, route_limit, output_tokens, profiles, cards=None, selected_groups=(), source_sizes=None,
-               contexts=None, tasks=(), selection=None, composition_plan=None):
+               contexts=None, tasks=(), selection=None, composition_plan=None, findings=()):
     """Plan exact two-dimensional original work and measured card presentation."""
-    _epoch(epoch)
+    _validate_epoch(epoch)
     previous_tasks = _index(list(tasks), 'tasks')
     accepted_cards, accepted_cells, completed_scope = [], {}, {}
     if selection is not None:
@@ -857,7 +856,7 @@ def plan_tasks(epoch, *, route_limit, output_tokens, profiles, cards=None, selec
                 scope['binary_sources'].extend(owner['actual_input']['binary_sources'])
                 if owner['task_id'] not in scope['tasks']:
                     scope['tasks'].append(owner['task_id'])
-                required, binaries = _original_inputs(work['manifest'], [pair[0]], [pair[1]])
+                required, binaries = _collect_original_inputs(work['manifest'], [pair[0]], [pair[1]])
                 if _covers_inputs(required, scope['intervals']) and all(row in scope['binary_sources'] for row in binaries):
                     accepted_cells[pair] = cell
             except ResearchError:
@@ -882,7 +881,7 @@ def plan_tasks(epoch, *, route_limit, output_tokens, profiles, cards=None, selec
     if cards is not None:
         if 'combine' not in profiles:
             _fail('Combination planning requires its measured profile.')
-        planned, blocks, exceptional = _card_tasks(epoch, cards, route_limit, output_tokens, profiles['combine'], contexts)
+        planned, blocks, exceptional = _plan_card_tasks(epoch, cards, route_limit, output_tokens, profiles['combine'], contexts, findings)
         tasks.extend(planned)
     groups = {}
     for group in selected_groups:
@@ -900,20 +899,7 @@ def plan_tasks(epoch, *, route_limit, output_tokens, profiles, cards=None, selec
                      route_limit, output_tokens, profiles['original_check'],
                      group_ids=group['group_ids'], source_sizes=source_sizes, contexts=contexts))
     if composition_plan is not None:
-        from .review_composition import _validate_plan
-        _validate_plan(composition_plan)
-        if composition_plan['epoch_id'] != epoch['id']:
-            _fail('Composition plan belongs to another epoch.')
-        if composition_plan['role'] not in (epoch['role'], 'incomplete'):
-            _fail('Composition plan role differs from its epoch.')
-        answers = []
-        for page_id in composition_plan['required_pages']:
-            ranges = [row for row in composition_plan['ownership'] if row['page_id'] == page_id]
-            answers.append(make_task(epoch, 'answer', answer_ranges=ranges, scope='segmented_card',
-                           composition_role=composition_plan['role'], composition_plan_root=digest(composition_plan)))
-        tasks.extend(answers)
-        tasks.append(make_task(epoch, 'final', dependencies=[row['id'] for row in answers], scope='segmented_card',
-                     composition_role=composition_plan['role'], composition_plan_root=digest(composition_plan)))
+        tasks.extend(_plan_composition_tasks(epoch, composition_plan, work['observed'] if selection is not None else ()))
     # Identical segment work can be shared without dropping pair/group ownership.
     tasks = list(_index(tasks, 'tasks').values())
     pairs = [list(pair) for pair in itertools.combinations([row['id'] for row in cards or []], 2)]
@@ -923,6 +909,26 @@ def plan_tasks(epoch, *, route_limit, output_tokens, profiles, cards=None, selec
                       card_sizes={row['id']: row['characters'] for row in cards or []}, required_pairs=pairs,
                       projected_calls=counts, exceeds_call_budget=len(tasks) > epoch['budgets']['max_calls'],
                       unresolved_task_ids=[task['id'] for task in tasks if task['scope'] == 'unresolved']))
+
+
+def _plan_composition_tasks(epoch, composition_plan, observations):
+    """Bind page ownership to the accepted grounding frontier and terminal dependencies."""
+    from .review_composition import _validate_plan
+    _validate_plan(composition_plan)
+    if composition_plan['epoch_id'] != epoch['id']:
+        _fail('Composition plan belongs to another epoch.')
+    if composition_plan['role'] not in (epoch['role'], 'incomplete'):
+        _fail('Composition plan role differs from its epoch.')
+    answers = []
+    grounding_tasks = sorted(row['task_id'] for row in observations if not row['output'].get('pages'))
+    for page_id in composition_plan['required_pages']:
+        ranges = [row for row in composition_plan['ownership'] if row['page_id'] == page_id]
+        answers.append(make_task(epoch, 'answer', answer_ranges=ranges, scope='segmented_card',
+                       dependencies=grounding_tasks,
+                       composition_role=composition_plan['role'], composition_plan_root=digest(composition_plan)))
+    answers.append(make_task(epoch, 'final', dependencies=[row['id'] for row in answers], scope='segmented_card',
+                 composition_role=composition_plan['role'], composition_plan_root=digest(composition_plan)))
+    return answers
 
 
 def missing_card_pairs(plan, assessments):
@@ -973,7 +979,7 @@ def _covers_inputs(required, actual):
 
 def _ground(grounds, manifest, known_ids=()):
     sources = _index(manifest['sources'], 'sources')
-    for ground in _array(grounds, 'grounds'):
+    for ground in _require_array(grounds, 'grounds'):
         if isinstance(ground, str):
             if ground not in known_ids:
                 _fail('Ground names an absent conclusion.', ground=ground)
@@ -987,7 +993,7 @@ def _ground(grounds, manifest, known_ids=()):
 
 def validate_finding(finding, manifest, *, known_ids=()):
     """Validate a finding's scientific content, decision classification and grounds."""
-    from .review_composition import _scalar_fields
+    from .review_composition import list_scalar_fields
     check_fields(finding, ('id', 'text', 'adverse', 'classification', 'claim_ids', 'grounds'), code='invalid_review_staged')
     for key in ('id', 'text'):
         check_text(finding[key], key, code='invalid_review_staged')
@@ -998,7 +1004,7 @@ def validate_finding(finding, manifest, *, known_ids=()):
         check_fields(classification, ('decisions', 'reason'), code='invalid_review_staged')
         check_text(classification['reason'], 'classification.reason', code='invalid_review_staged')
         decisions = check_ids(classification['decisions'], 'classification.decisions', code='invalid_review_staged')
-        if not decisions or not set(decisions) <= set(_scalar_fields('result')) | set(_scalar_fields('adjudicator')):
+        if not decisions or not set(decisions) <= set(list_scalar_fields('result')) | set(list_scalar_fields('adjudicator')):
             _fail('Finding classification must name scientific decision paths.')
     claims = check_ids(finding['claim_ids'], 'claim_ids', code='invalid_review_staged')
     if not set(claims) <= set(manifest['contexts']):
@@ -1040,7 +1046,7 @@ def validate_cell(cell, manifest, *, actual_input=None, checks=()):
         _fail('Cell cites an undelivered quotation.')
     if cell['scope'] == 'joint_original':
         if actual_input is not None:
-            required, binaries = _original_inputs(manifest, [cell['occurrence_id']], [cell['claim_id']])
+            required, binaries = _collect_original_inputs(manifest, [cell['occurrence_id']], [cell['claim_id']])
             if not _covers_inputs(required, actual_input['intervals']):
                 _fail('Joint-original judgment lacks complete original co-presence.')
             if any(row not in actual_input['binary_sources'] for row in binaries):
@@ -1063,6 +1069,8 @@ def validate_card(card, manifest, *, claim_ids=None):
                 'judgments', 'critical_spans', 'findings', 'unresolved', 'dependencies', 'fragment_ids')
     check_fields(card, required, ('premises', 'reasoning', 'negative_observation', 'examined_scope',
                                'no_statement_reason', 'reconciliation_id', 'critical_quotations', 'evidence_class'), code='invalid_review_staged')
+    for key in ('conclusions', 'conditions', 'judgments'):
+        _require_array(card[key], key)
     check_text(card['id'], 'card.id', code='invalid_review_staged')
     check_text(card['establishes'], 'establishes', code='invalid_review_staged')
     if card['kind'] not in ('fragment', 'full'):
@@ -1104,7 +1112,7 @@ def validate_card(card, manifest, *, claim_ids=None):
         _fail('A card must contain one complete judgment per assigned claim.')
     for key in ('findings', 'dependencies', 'fragment_ids'):
         check_ids(card[key], key, code='invalid_review_staged')
-    _array(card['unresolved'], 'unresolved')
+    _require_array(card['unresolved'], 'unresolved')
     return copy.deepcopy(card)
 
 
@@ -1293,7 +1301,7 @@ def validate_original_check(check, *, epoch, task, observations, groups):
             _fail('Original segment receipt has the wrong task scope.')
     if check['scope'] in ('joint_original', 'segmented_original'):
         for group in scopes:
-            required, owned = _original_inputs(epoch['manifest'], group['occurrence_ids'], group['claim_ids'])
+            required, owned = _collect_original_inputs(epoch['manifest'], group['occurrence_ids'], group['claim_ids'])
             if not _covers_inputs(required, delivered) or any(row not in binaries for row in owned):
                 _fail('Original-check traversal is incomplete.')
     if check['status'] == 'resolved' and (check['unresolved'] or check['conflicts']):
@@ -1301,7 +1309,7 @@ def validate_original_check(check, *, epoch, task, observations, groups):
     if not check['conclusions'] and check['status'] == 'resolved':
         _fail('Resolved original checks need substantive conclusions.')
     for collection in ('conclusions', 'qualifications', 'conflicts'):
-        for row in _array(check[collection], collection):
+        for row in _require_array(check[collection], collection):
             required = {'conclusions': ('id', 'text', 'grounds'),
                         'qualifications': ('occurrence_id', 'text', 'grounds'),
                         'conflicts': ('occurrence_ids', 'text', 'grounds', 'resolution')}[collection]
@@ -1320,7 +1328,7 @@ def validate_original_check(check, *, epoch, task, observations, groups):
             _ground(row['grounds'], epoch['manifest'])
             if not _covers_inputs(row['grounds'], delivered):
                 _fail('Original-check record cites an undelivered original span.')
-    _array(check['unresolved'], 'unresolved')
+    _require_array(check['unresolved'], 'unresolved')
     return copy.deepcopy(check)
 
 
@@ -1336,7 +1344,7 @@ def validate_retrieval(receipt, manifest):
         check_ids(receipt[key], key, code='invalid_review_staged')
     check_text(receipt['requested_by'], 'requested_by', code='invalid_review_staged')
     check_fields(receipt['context_roots'], receipt['claim_ids'], code='invalid_review_staged')
-    if not _array(receipt['inputs'], 'inputs'):
+    if not _require_array(receipt['inputs'], 'inputs'):
         _fail('A retrieval needs an explicit original scope.')
     sources = _index(manifest['sources'], 'sources')
     for span in receipt['inputs']:
@@ -1359,7 +1367,7 @@ def card_span(card, start, end, *, manifest=None, findings=()):
     """Bind a segment of the canonical compact card to its complete logical object."""
     compact = compact_card(card, manifest=manifest, findings=findings)
     text = _canonical(compact, code='invalid_review_staged')
-    _ranges([[start, end]], len(text))
+    _merge_ranges([[start, end]], len(text))
     return dict(card_id=card['id'], start=start, end=end, card_root=digest(compact),
                 sha256=hashlib.sha256(text[start:end].encode('utf-8')).hexdigest())
 
@@ -1376,7 +1384,7 @@ def validate_task_output(task, output, *, manifest=None, validate_records=True):
     if kind == 'frame':
         check_fields(output, ('claims', 'conditions', 'dependencies', 'unresolved'), None, code='invalid_review_staged')
         for key in ('claims', 'conditions', 'dependencies', 'unresolved'):
-            _array(output[key], key)
+            _require_array(output[key], key)
         entries = _index(output['claims'] + output['conditions'], 'frame entries')
         if len(entries) != len(output['claims']) + len(output['conditions']):
             _fail('Frame entry identities must be unique.')
@@ -1393,7 +1401,7 @@ def validate_task_output(task, output, *, manifest=None, validate_records=True):
                     check_ids(row[field], field, code='invalid_review_staged')
                     if manifest is not None and not set(row[field]) <= known_ids:
                         _fail('Frame entry names an unknown dependency or child.')
-                if not _array(row['spans'], 'spans'):
+                if not _require_array(row['spans'], 'spans'):
                     _fail('A frame entry requires original spans.')
                 if manifest is not None:
                     _ground(row['spans'], manifest)
@@ -1429,7 +1437,7 @@ def validate_task_output(task, output, *, manifest=None, validate_records=True):
                 check_fields(row, ('id', 'card_id', 'start', 'end', 'reading'), code='invalid_review_staged')
                 check_text(row['card_id'], 'card_id', code='invalid_review_staged')
                 check_text(row['reading'], 'reading', code='invalid_review_staged')
-                _ranges([[row['start'], row['end']]])
+                _merge_ranges([[row['start'], row['end']]])
                 actual_ranges.append((row['card_id'], row['start'], row['end']))
             if len(actual_ranges) != len(assigned_ranges) or set(actual_ranges) != assigned_ranges:
                 _fail('Segment readings must cover exactly the assigned card ranges.')
@@ -1449,11 +1457,11 @@ def validate_task_output(task, output, *, manifest=None, validate_records=True):
         if 'terminal' in output or any(key in output for key in ('stage', 'disposition', 'value')):
             _fail('An incomplete assessment cannot also choose a scientific result.')
     if manifest is not None and validate_records:
-        for card in _array(output.get('cards', []), 'cards'):
+        for card in _require_array(output.get('cards', []), 'cards'):
             validate_card(card, manifest, claim_ids=task['claim_ids'])
-        for cell in _array(output.get('cells', []), 'cells'):
+        for cell in _require_array(output.get('cells', []), 'cells'):
             validate_cell(cell, manifest)
-        for finding in _array(output.get('findings', []), 'findings'):
+        for finding in _require_array(output.get('findings', []), 'findings'):
             validate_finding(finding, manifest)
     return copy.deepcopy(output)
 
@@ -1520,7 +1528,7 @@ def _validate_observation(epoch, task, observation, contexts):
     if task['type'] == 'read':
         valid = False
         for family, validator in (('cards', validate_card), ('cells', validate_cell)):
-            for record in _array(output.get(family, []), family):
+            for record in _require_array(output.get(family, []), family):
                 try:
                     if family == 'cards':
                         validator(record, manifest, claim_ids=task['claim_ids'])
@@ -1640,7 +1648,7 @@ def _collect_completion_records(work):
         for key in ('cards', 'cells', 'combinations', 'selected_groups', 'original_checks', 'integrations',
                     'findings', 'answers', 'retrievals', 'assurance_checks', 'decision_checks'):
             try:
-                items = _array(row['output'].get(key, []), key)
+                items = _require_array(row['output'].get(key, []), key)
             except ResearchError as error:
                 _record_completion_rejection(work, error, task_id=row['task_id'])
                 continue
@@ -2146,6 +2154,7 @@ def _check_completion_terminal_identity(work):
 
 
 def _uses_original_context(grounds, work):
+    from .review_adjudicator_sources import has_original_context
     manifest = work['manifest']
     classes = {row['id']: row.get('evidence_class') for row in manifest['occurrences']}
     records = {}
@@ -2159,8 +2168,7 @@ def _uses_original_context(grounds, work):
 
     def uses_original(ground, visiting):
         if isinstance(ground, dict):
-            owners = [row for row in manifest['occurrences'] if ground['source_id'] in row['source_ids']]
-            return bool(owners) and all(row.get('evidence_class') == 'original_context' for row in owners)
+            return has_original_context(manifest, ground['source_id'])
         if ground in visiting or ground not in records or ground not in work['resolved']:
             return False
         record, evidence_class = records[ground]
@@ -2272,8 +2280,8 @@ def _check_completion_decisions(work):
     cells = work['cells']
     decisions = terminal.get('decisions')
     if decisions is not None:
-        from .review_composition import _scalar_fields
-        scalar_fields = _scalar_fields(epoch['role'])
+        from .review_composition import list_scalar_fields
+        scalar_fields = list_scalar_fields(epoch['role'])
         check_fields(decisions, scalar_fields, code='invalid_review_staged')
         for key, choices in scalar_fields.items():
             if choices is not None and digest(decisions[key]) not in {digest(choice) for choice in choices}:
@@ -2456,7 +2464,19 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
     Historical authenticity, current currency and reviewer independence are
     separate caller checks.
     """
-    _epoch(epoch)
+    return _build_completion_report(_verify_selection(epoch, selection, tasks=tasks, contexts=contexts))
+
+
+def collect_planning_records(epoch, selection, *, tasks=()):
+    """Expose independently verified records while retaining partial reading progress."""
+    work = _verify_selection(epoch, selection, tasks=tasks)
+    return copy.deepcopy(dict(cards=work['full_cards'], findings=work['findings'],
+                              selected_groups=work['groups'], contexts=work['current_contexts'],
+                              integrations=work['valid_integrations']))
+
+
+def _verify_selection(epoch, selection, *, tasks=None, contexts=None):
+    _validate_epoch(epoch)
     check_fields(selection, ('observations',), ('composition_certificate',), code='invalid_review_staged')
     work = dict(epoch=epoch, selection=selection, contexts=contexts, manifest=epoch['manifest'],
                 task_index=_index(list(tasks or []), 'tasks'),
@@ -2477,17 +2497,17 @@ def verify_completion(epoch, selection, *, tasks=None, contexts=None):
     _check_completion_objection_evidence(work)
     _check_completion_terminal(work)
     _check_completion_requirements(work)
-    return _build_completion_report(work)
+    return work
 
 
-def _ledger(value):
+def _build_ledger(value):
     source = value or {}
     check_fields(source, (), ('attempts', 'retries', 'rereads', 'subdivisions', 'epochs',
                           'elapsed_seconds', 'unknown_usage'), code='invalid_review_staged')
     result = {key: source.get(key, 0) for key in ('attempts', 'retries', 'rereads', 'subdivisions', 'epochs',
                                                 'elapsed_seconds')}
     for key, amount in result.items():
-        _number(amount, key, integer=key != 'elapsed_seconds')
+        _check_number(amount, key, integer=key != 'elapsed_seconds')
     result['unknown_usage'] = source.get('unknown_usage', False)
     if type(result['unknown_usage']) is not bool:
         _fail('Unknown usage must be explicit boolean data.')
@@ -2497,12 +2517,12 @@ def _ledger(value):
 def task_state(epoch, task, *, ledger=None, failures=0, captured=False, accepted=False,
                worker_unreconciled=False, dependencies_ready=True, current=True, incomplete=None):
     """Return finite task transitions and exact next-command payloads as data."""
-    _epoch(epoch)
+    _validate_epoch(epoch)
     _verify_seal(task)
     if task['epoch_digest'] != epoch['digest']:
         _fail('Task belongs to another epoch.')
-    _number(failures, 'failures', integer=True)
-    usage = _ledger(ledger)
+    _check_number(failures, 'failures', integer=True)
+    usage = _build_ledger(ledger)
     policy = epoch['budgets']
     payload = dict(assignment_id=epoch['controller_assignment_id'], epoch_id=epoch['id'], task_id=task['id'])
     result = dict(epoch_id=epoch['id'], task_id=task['id'], resource_ledger=usage)
@@ -2549,7 +2569,7 @@ def task_state(epoch, task, *, ledger=None, failures=0, captured=False, accepted
 def record_incomplete(epoch, completion, *, origin, origin_binding, unresolved_scope, recovery_work,
                       resource_ledger, recorded_revision=None, predecessor_outcome_id=None):
     """Construct and validate an incomplete record; perform no recording or writes."""
-    _epoch(epoch)
+    _validate_epoch(epoch)
     _verify_seal(completion)
     if completion['epoch_digest'] != epoch['digest'] or completion['complete']:
         _fail('An incomplete outcome requires the exact unfinished completion assessment.')
@@ -2563,7 +2583,7 @@ def record_incomplete(epoch, completion, *, origin, origin_binding, unresolved_s
                 known_conclusions_root=completion['known_conclusions_root'],
                 unresolved_scope_root=digest(dict(completion_issues=completion['issues'], entries=unresolved_scope)),
                 inherited_adverse_findings_root=completion['inherited_adverse_findings_root'],
-                resource_ledger=_ledger(resource_ledger), recovery_work_root=digest(recovery_work),
+                resource_ledger=_build_ledger(resource_ledger), recovery_work_root=digest(recovery_work),
                 predecessor_outcome_id=predecessor_outcome_id, recorded_revision=recorded_revision,
                 completion_issues=copy.deepcopy(completion['issues']), unresolved_scope=copy.deepcopy(unresolved_scope),
                 recovery_work=copy.deepcopy(recovery_work))
@@ -2575,7 +2595,7 @@ def record_incomplete(epoch, completion, *, origin, origin_binding, unresolved_s
 
 def validate_incomplete_scope(unresolved_scope, recovery_work):
     """Validate reviewer and recorded incomplete scope with one shared contract."""
-    entries = _array(unresolved_scope, 'unresolved_scope')
+    entries = _require_array(unresolved_scope, 'unresolved_scope')
     if not entries:
         _fail('An incomplete outcome must name unfinished scientific scope.')
     exhausted = set()
@@ -2598,7 +2618,7 @@ def validate_incomplete_scope(unresolved_scope, recovery_work):
         if row['next_action']['scope'].get('task_id') in row['exhausted_tasks']:
             _fail('Next action cannot repeat an exhausted task.')
     _index(entries, 'unresolved_scope')
-    for action in _array(recovery_work, 'recovery_work'):
+    for action in _require_array(recovery_work, 'recovery_work'):
         check_fields(action, ('workflow', 'command', 'payload', 'text'), code='invalid_review_staged')
         for key in ('workflow', 'command', 'text'):
             check_text(action[key], key, code='invalid_review_staged')
@@ -2646,11 +2666,11 @@ def validate_incomplete(record, *, epoch=None):
     if record['unresolved_scope_root'] != digest(dict(completion_issues=record['completion_issues'], entries=entries)) or \
             record['recovery_work_root'] != digest(record['recovery_work']):
         _fail('Incomplete scope or recovery root does not match.')
-    _ledger(record['resource_ledger'])
+    _build_ledger(record['resource_ledger'])
     if record['recorded_revision'] is not None:
-        _number(record['recorded_revision'], 'recorded_revision', integer=True)
+        _check_number(record['recorded_revision'], 'recorded_revision', integer=True)
     if epoch is not None:
-        _epoch(epoch)
+        _validate_epoch(epoch)
         for key in ('controller_assignment_id', 'epoch_id', 'epoch_digest', 'slot_id', 'role', 'subject',
                     'evidence_currency', 'reviewer_id', 'route_id', 'author_id'):
             expected = epoch['id'] if key == 'epoch_id' else epoch['digest'] if key == 'epoch_digest' else epoch[key]
@@ -2663,7 +2683,8 @@ def validate_incomplete(record, *, epoch=None):
 
 def transition_outcome(head, event, *, epoch_id=None, outcome=None):
     """Apply a slot transition as data, retaining history and adverse findings."""
-    check_fields(head, ('slot_id', 'epoch_id', 'state', 'outcome'), ('history', 'inherited_adverse_findings', 'current'), code='invalid_review_staged')
+    check_fields(head, ('slot_id', 'epoch_id', 'state', 'outcome'),
+                 ('role', 'history', 'inherited_adverse_findings', 'current'), code='invalid_review_staged')
     if head['state'] not in ('pending', 'complete', 'incomplete'):
         _fail('Unknown slot state.')
     result = copy.deepcopy(head)

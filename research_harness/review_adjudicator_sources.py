@@ -17,6 +17,12 @@ def _incomplete(details):
         'Supply every required current source and inspected unit completely before focused adjudication.', details)
 
 
+def has_original_context(manifest, source_id):
+    """A shared source retains its original scope through an exact original-context owner."""
+    return any(row.get('evidence_class') == 'original_context' and source_id in row['source_ids']
+               for row in manifest['occurrences'])
+
+
 def prepare(records, artifacts, packet):
     """Validate native acquisitions and bind current sources separately from the original review pair."""
     from . import bar_sources

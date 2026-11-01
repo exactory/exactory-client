@@ -5,6 +5,7 @@ import unittest
 
 from research_harness import review_staged as staged
 from research_harness import review_composition as composition
+from research_harness.artifacts import describe_artifact
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from tests.test_review_staged_fixtures import epoch, profile, task, observation, full_card, selection
@@ -342,6 +343,42 @@ class ReviewerTextContracts(unittest.TestCase):
             card['evidence_class'] = 'current' if evidence_class == 'original_context' else 'original_context'
             with self.assertRaises(ResearchError):
                 staged.validate_card(card, value['manifest'])
+
+    def test_shared_body_supports_correction_only_through_its_original_context(self):
+        descriptor = describe_artifact(b'The exact original evidence.', 'text/plain')
+        source = staged.make_source('shared-body', 'artifact', 'The exact original evidence.',
+                                    identity={'artifact': descriptor}, descriptor=descriptor)
+        occurrences = [dict(key=evidence_class, index=0, item={'context': evidence_class},
+                            artifacts=[descriptor], source_ids=[], evidence_class=evidence_class)
+                       for evidence_class in ('original_context', 'current')]
+        manifest = staged.build_manifest({'statement': 'The correction concerns the supplied evidence.'},
+                                         occurrences, [source])
+        value = epoch(role='adjudicator', manifest=manifest, focused_scope=dict(
+            review_pair_roots=['a', 'b'], objection_id='O7', objection_version='version'))
+        cards = [full_card(value, index) for index in range(2)]
+        for card, evidence_class in zip(cards, ('original_context', 'current')):
+            card['evidence_class'] = evidence_class
+            for cell in card['judgments']:
+                cell['evidence_class'] = evidence_class
+        terminal = dict(objection_id='O7', disposition='upheld', correction_admissible=True, visible_conditions=[])
+        original_span = staged.source_span(source, 0, source['characters'])
+        current_item = next(row for row in manifest['sources']
+                            if row['id'] == manifest['occurrences'][1]['item_source_id'])
+        current_span = staged.source_span(current_item, 0, current_item['characters'])
+        cases = [('original conclusion', [cards[0]['judgments'][0]['id']], True),
+                 ('original body', [original_span], True),
+                 ('current conclusion', [cards[1]['judgments'][0]['id']], False),
+                 ('current-only item', [current_span], False)]
+        for label, grounds, expected in cases:
+            with self.subTest(grounds=label):
+                tasks, selected = selection(value, cards, terminal=terminal)
+                output = selected['observations'][0]['output']
+                output['decision_checks'].append(dict(id='correction-check', decision='/correction_admissible',
+                    value=True, claim_ids=list(value['manifest']['contexts']),
+                    reason='The original evidence establishes the omitted condition.', grounds=grounds, dependencies=[]))
+                selected['observations'][0]['raw_output_digest'] = digest(output)
+                report = staged.verify_completion(value, selected, tasks=tasks)
+                self.assertEqual(report['complete'], expected, report['issues'])
 
     def test_incomplete_pages_assemble_with_the_same_terminal_shape(self):
         value = epoch()

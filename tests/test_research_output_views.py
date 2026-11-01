@@ -198,6 +198,44 @@ class ViewCase(unittest.TestCase):
 
 
 class StagedOutputViewTests(ViewCase):
+    def test_each_staged_lifecycle_kind_renders_after_its_commit(self):
+        from test_research_problem_delivery import build_staged_delivery
+        frozen, _, _, outcome = build_staged_delivery()
+        rows = (
+            ("review_epoch", "epoch", frozen),
+            ("review_task", "task", {"id": "task", "epoch_id": frozen["id"]}),
+            ("review_capacity_policy", "store", {"store_limit": 1, "route_limits": {}}),
+            ("review_execution_plan", "plan", {"id": "plan", "task_id": "task"}),
+            ("review_reservation", "reservation", {"id": "reservation", "plan_id": "plan", "state": "captured"}),
+            ("review_pool_membership", "reservation", {"reservation_id": "reservation", "active": True}),
+            ("review_task_execution", "task", {"task_id": "task", "state": "captured"}),
+            ("review_observation", "reservation", {"id": "reservation", "observation": {"status": "completed"}}),
+            ("review_task_acceptance", "reservation", {"reservation_id": "reservation", "receipt": {"accepted": True}}),
+            ("review_slot_head", "A", {"slot_id": "A", "epoch_id": frozen["id"], "state": "incomplete"}),
+            ("review_task_dispatch", "dispatch", {"id": "dispatch", "task_id": "task"}),
+            ("review_composition_plan", "composition", {"id": "composition", "epoch_id": frozen["id"]}),
+            ("assessment_incomplete", "outcome", outcome),
+        )
+        self.put(("configuration", "views", {"enabled": True}))
+        self.render()
+        for kind, key, value in rows:
+            with self.subTest(kind=kind):
+                record = (value if kind in ("review_epoch", "assessment_incomplete")
+                          else dict(value, recorded_revision=self.store.revision + 1))
+                self.put((kind, key, record))
+                result = self.render()
+                folder = "final" if kind == "assessment_incomplete" else "intermediate"
+                tree = "reviews/incomplete/" if folder == "final" else "reviews/staged/" + kind + "/"
+                relative = tree + key + ".json"
+                self.assertEqual(self.read_json(folder + "/" + relative), record)
+                expected = {"path": relative, "type": "view", "kind": kind, "id": key,
+                            "recorded_revision": record.get("recorded_revision")}
+                if folder == "final":
+                    expected["status"] = "incomplete"
+                self.assertEqual(self.find_entry(folder, relative), expected)
+                self.assertEqual(result["errors"], 0)
+                self.assertEqual(output_views.read_rendered_revision(self.store), self.store.revision)
+
     def test_staged_series_distinguishes_raw_terminal_effective_result_and_incomplete(self):
         from research_harness import review_protocol
         from test_research_problem_delivery import build_staged_delivery

@@ -89,6 +89,17 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
                     current.validate(self.artifacts, packet)
                 self.assertEqual(raised.exception.code, "review_current_source_incomplete")
 
+    def test_historical_original_body_cannot_replace_a_required_current_source(self):
+        from research_harness import review_adjudicator_sources as current
+        _, packet = self.prepare_current_comparator()
+        historical = self.artifacts.put(b"The historical source supplied only to the original reviewers.", "text/plain")
+        packet["original_evidence"].append(historical)
+        packet["evidence"].append(dict(artifact=historical, encoding="utf-8",
+                                       content=self.artifacts.read(historical).decode("utf-8")))
+        self.assertNotIn(historical, packet["current_evidence"])
+        packet["evidence"] = [row for row in packet["evidence"] if row["artifact"] != self.new_source]
+        self.assert_error("review_current_source_incomplete", lambda: current.validate(self.artifacts, packet))
+
     def test_descriptors_or_altered_bytes_cannot_satisfy_current_source_delivery(self):
         from research_harness import review_adjudicator_sources as current
         _, packet = self.prepare_current_comparator()

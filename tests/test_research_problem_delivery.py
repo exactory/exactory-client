@@ -23,14 +23,17 @@ def build_staged_delivery(origin="execution", role="result", recovery=None):
     frozen = epoch(role=role, **({"focused_scope": {"review_pair_roots": ["review-A", "review-B"],
         "objection_id": "O7", "objection_version": "version-7"}} if role == "adjudicator" else {}))
     completion = review_staged.verify_completion(frozen, {"observations": []})
-    recovery = recovery or {"workflow": "review-assignment", "text": "Supply a proof for claim c.",
-                "scope": {"claim_ids": ["c"]}, "prerequisite": "new_evidence"}
+    next_action = {"workflow": "review-assignment", "scope": {"claim_ids": ["c"]},
+                   "prerequisite": "new_evidence"}
+    recovery = dict({"workflow": "review-assignment", "command": "review-assignment",
+                     "payload": {"claim_ids": ["c"]}, "text": "Supply a proof for claim c."},
+                    **(recovery or {}))
     outcome = review_staged.record_incomplete(frozen, completion, origin=origin,
         origin_binding=({"execution_receipts": ["terminated"], "reason": "exhausted"} if origin == "execution"
                         else {"attempt_id": "terminal", "raw_output_digest": digest({"unfinished": True})}),
         unresolved_scope=[{"id": "missing", "scope": {"claim_ids": ["c"]}, "cause": "rereads exhausted",
                            "affected_decisions": ["problem_value"], "exhausted_tasks": ["exhausted"],
-                           "scope_kind": "unresolved", "next_action": recovery}],
+                           "scope_kind": "unresolved", "next_action": next_action}],
         recovery_work=[recovery], resource_ledger={"attempts": 20})
     effective = review_composition.effective_review_output("assignment-A", {
         "controller_id": "assignment-A", "kind": "incomplete", "outcome": outcome})

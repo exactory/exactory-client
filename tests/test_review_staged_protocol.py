@@ -8,6 +8,7 @@ from problem_parts_fixtures import ResultPartsCase
 from research_harness import review_problem_parts as parts, review_protocol as protocol
 from research_harness import review_transport as transport, review_excerpts
 from research_harness import review_staged, review_worker, review_task_execution
+from research_harness import review_staged_protocol as staged_protocol
 from research_harness.evidence import digest
 from research_harness.errors import ResearchError
 
@@ -33,17 +34,6 @@ review_worker.run_worker(Path(sys.argv[1]), sys.argv[2], sys.argv[3], int(sys.ar
 
 class StagedEntryTests(ResultPartsCase):
     staged_entry = True
-
-    def setUp(self):
-        super().setUp()
-        from research_harness import review_staged as staged
-        if not hasattr(staged, 'bind_quotations'):
-            # A1 is integrated before A2. Keep the baseline checkout runnable
-            # by mocking only that not-yet-landed pure interface.
-            binding = patch.object(staged, 'bind_quotations', create=True,
-                side_effect=lambda output, **kwargs: (copy.deepcopy(output), []))
-            binding.start()
-            self.addCleanup(binding.stop)
 
     def test_fitting_ordinary_request_retains_packet_prompt_and_history(self):
         records = self.case.read_records()
@@ -258,21 +248,20 @@ class StagedEntryTests(ResultPartsCase):
             page['output']['epoch_id'] = value['id']
             page['raw_output_digest'] = digest(page['output'])
         observations = [dict(id=page['attempt_id'], output={'pages':[page['output']]}) for page in pages]
-        plan.update(protocol._build_staged_composition_bindings(value, observations))
+        plan.update(staged_protocol.build_composition_bindings(value, observations))
         for page in pages:
             page['output'].update(source_root=plan['source_root'], dependency_root=plan['dependency_root'])
             page['raw_output_digest'] = digest(page['output'])
         observations = [dict(id=page['attempt_id'], output={'pages':[page['output']]}) for page in pages]
-        plan.update(protocol._build_staged_composition_bindings(value, observations))
+        plan.update(staged_protocol.build_composition_bindings(value, observations))
         root = composition.build_root(plan, pages)
         terminal = dict(protocol=composition.PROTOCOL, epoch_id=value['id'], role='result',
                         composition_root=root['digest'], choices=choices)
-        raw = dict(terminal=dict(assurances={}, visible_conditions=[], composition_root=root['digest'],
+        raw = dict(terminal=dict(assurances={kind: choices['/value/assurances/' + kind + '/status'] for kind in staged.ASSURANCES}, visible_conditions=[], composition_root=root['digest'],
                                  integration_id='integrated', decisions=terminal['choices']))
         observations = [dict(id=page['attempt_id'], output={'pages':[page['output']]}) for page in pages]
         observations.append(dict(id='terminal-attempt', output=raw))
-        with patch.object(staged, 'derive_composition_terminal', create=True, return_value=terminal):
-            selection = protocol._build_staged_composition(value, plan, observations, observations[-1])
+        selection = staged_protocol.build_composition(value, plan, observations, observations[-1])
         selection.update(controller_id='controller', kind='paged', completion_root=digest('complete'))
         effective = composition.effective_review_output('controller', selection)
         self.assertEqual(effective['effective_output'], worked_result())
@@ -280,7 +269,7 @@ class StagedEntryTests(ResultPartsCase):
         self.assertNotEqual(selection['raw_terminal_digest'], effective['terminal_raw_output_digest'])
         for name in ('evidence_currency', 'source_root', 'selected_observations_root', 'integration_root'):
             with self.subTest(name=name), self.assertRaises(ResearchError):
-                protocol._build_staged_composition(value, dict(plan, **{name:digest('unrelated')}), observations, observations[-1])
+                staged_protocol.build_composition(value, dict(plan, **{name:digest('unrelated')}), observations, observations[-1])
 
     def test_actual_input_binds_the_cards_that_reached_the_task(self):
         from tests.test_review_staged_fixtures import epoch, task, full_card
@@ -289,13 +278,13 @@ class StagedEntryTests(ResultPartsCase):
         selected = dict(id='read-observation', task_id='read-task', raw_output_digest=digest({'cards':[card]}),
                         output={'cards':[card]})
         assigned = task(value, 'combine', card_ids=[card['id']], scope='joint_card')
-        packet = protocol._build_staged_packet(value, assigned, observations=[selected])
-        actual = protocol._read_staged_actual_input(value, assigned, packet)
+        packet = staged_protocol.build_packet(value, assigned, observations=[selected])
+        actual = staged_protocol.read_actual_input(value, assigned, packet)
         self.assertEqual(actual['complete_card_roots'][card['id']],
                          digest(review_staged.compact_card(card, manifest=value['manifest'])))
         assigned = task(value, 'integrate')
-        packet = protocol._build_staged_packet(value, assigned, observations=[selected])
-        self.assertEqual(protocol._read_staged_actual_input(value, assigned, packet)['full_card_roots'][card['id']], digest(card))
+        packet = staged_protocol.build_packet(value, assigned, observations=[selected])
+        self.assertEqual(staged_protocol.read_actual_input(value, assigned, packet)['full_card_roots'][card['id']], digest(card))
 
     def test_failed_capture_is_recorded_and_an_explicit_retry_is_bounded(self):
         import sys
@@ -330,11 +319,11 @@ class StagedEntryTests(ResultPartsCase):
         card['establishes'] = 'x' * 200000
         span = review_staged.card_span(card, 0, 200, manifest=value['manifest'])
         assigned = task(value, 'combine', card_ids=[card['id']], card_segments=[span], scope='card_segment')
-        packet = protocol._build_staged_packet(value, assigned, observations=[dict(
+        packet = staged_protocol.build_packet(value, assigned, observations=[dict(
             id='read', task_id='reader', raw_output_digest=digest(card), output={'cards':[card]})])
         self.assertLess(len(json.dumps(packet)), 20000)
         self.assertNotIn(card['establishes'], json.dumps(packet))
-        self.assertEqual(protocol._read_staged_actual_input(value, assigned, packet)['card_segments'], [span])
+        self.assertEqual(staged_protocol.read_actual_input(value, assigned, packet)['card_segments'], [span])
 
     def test_selected_child_contamination_invalidates_controller_credit(self):
         self.test_owned_dispatch_capture_acceptance_and_replay_make_one_call()
@@ -407,10 +396,8 @@ class StagedEntryTests(ResultPartsCase):
 
     def test_completed_controller_exposes_science_and_raw_terminal_separately(self):
         records, value, role, raw = self.build_terminal_records()
-        project = lambda output: ({key:output[key] for key in ('stage','support','value','objections','limitations')}, {})
-        with patch.object(protocol, '_authenticate_staged_observation', return_value=True), \
-                patch.object(protocol, '_matches_staged_currency', return_value=True), \
-                patch.object(review_staged, 'project_ordinary_final', create=True, side_effect=project):
+        with patch.object(staged_protocol, 'authenticate_observation', return_value=True), \
+                patch.object(staged_protocol, 'matches_currency', return_value=True):
             state = protocol._assignment_state(records, self.case.artifacts, value['controller_assignment_id'])
         self.assertTrue(state['ready'], state['obligations'])
         self.assertEqual(state['output'], role)
@@ -421,8 +408,8 @@ class StagedEntryTests(ResultPartsCase):
 
     def test_reviewer_incomplete_authorization_has_no_scientific_output(self):
         records, value, _, raw = self.build_terminal_records(incomplete=True)
-        with patch.object(protocol, '_authenticate_staged_observation', return_value=True), \
-                patch.object(protocol, '_matches_staged_currency', return_value=True):
+        with patch.object(staged_protocol, 'authenticate_observation', return_value=True), \
+                patch.object(staged_protocol, 'matches_currency', return_value=True):
             state = protocol._assignment_state(records, self.case.artifacts, value['controller_assignment_id'])
         self.assertFalse(state['ready'])
         self.assertIsNone(state['output'])
@@ -438,7 +425,7 @@ class StagedEntryTests(ResultPartsCase):
         source = next(row for row in manifest['sources'] if row['kind'] == 'frame' and row['characters'] > 100)
         assigned = review_staged.make_task(value, 'frame', inputs=[review_staged.source_span(source, 0, 100)],
                                            measurement=task(epoch())['measurement'])
-        packet = protocol._build_staged_packet(value, assigned)
+        packet = staged_protocol.build_packet(value, assigned)
         self.assertLess(len(json.dumps(packet)), 20000)
         self.assertEqual(packet['staged_review']['inherited'][0]['id'], 'old')
         self.assertEqual(packet['staged_review']['inherited'][0]['record_digest'], digest(manifest['inherited_findings'][0]))
@@ -453,7 +440,7 @@ class StagedEntryTests(ResultPartsCase):
         observed = dict(id='read', output=dict(cards=[card], answers=[answer], findings=[dict(
             id='finding', text='The claim needs a condition.', adverse=True, classification={'decisions':[], 'reason':'scope'},
             claim_ids=[], grounds=[card['conclusions'][0]['id']])]))
-        material = protocol._project_staged_terminal_material(value, task(value, 'final'), [observed])
+        material = staged_protocol.project_terminal_material(value, [observed])
         self.assertLess(len(json.dumps(material)), 20000)
         self.assertEqual(material['cells'][0]['id'], card['judgments'][0]['id'])
         self.assertEqual(material['conclusions'][0]['id'], card['conclusions'][0]['id'])
@@ -469,7 +456,7 @@ class StagedEntryTests(ResultPartsCase):
         integration = dict(id='integrated', child_ids=[], decision_constraints={})
         dependency = dict(id='integration-observation', task_id='integration', raw_output_digest=digest(integration),
             output=dict(integrations=[integration], original_checks=[dict(id='original-check', conclusions=[])]))
-        packet = protocol._build_staged_packet(value, task(value, 'final'), observations=[dependency],
+        packet = staged_protocol.build_packet(value, task(value, 'final'), observations=[dependency],
                                                terminal_observations=[ancestor, dependency])
         final = packet['staged_review']['final']
         self.assertEqual(final['integration_id'], 'integrated')
@@ -490,8 +477,8 @@ class StagedEntryTests(ResultPartsCase):
         controller = dict(id='focused-controller', role='adjudicator', subject=packet['subject'], reviewer_id='judge',
             route_id='route', slot_id='focused-slot', author_id='author', context=dict(objection_id='objection',
                 review_ids=['review-bar-first','review-bar-second']), packet=protocol._put_json(self.case.artifacts,packet))
-        changes = protocol._prepare_staged_controller(records, self.case.artifacts, controller, packet,
-                                                       records['review_route']['route'], self.case.store.revision+1)
+        changes = staged_protocol.prepare_controller(records, self.case.artifacts, controller, packet,
+                                                       records['review_route']['route'])
         value = next(row for kind,_,row in changes if kind == 'review_epoch')
         occurrences = value['manifest']['occurrences']
         self.assertEqual({row['evidence_class'] for row in occurrences}, {'original_context','current'})
