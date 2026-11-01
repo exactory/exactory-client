@@ -5,7 +5,8 @@ and its title when the title has at least two words. Titles compare after
 casefolding, removing accents, naming Greek letters and dropping LaTeX commands,
 braces, math markers, punctuation and spaces. In a BibTeX bibliography an entry
 cites a work when it carries one of the identifiers as a whole identifier or
-when its title field is the work's title; text outside entries is not evidence.
+when its first top-level title field is the work's title; text outside entries
+is not evidence.
 Another bibliography format cites a work when its text carries an identifier or
 contains the title, so there a shorter title inside a longer one also counts.
 The lineage gate and the citation accounting read the same evidence.
@@ -29,7 +30,6 @@ from .operations import fields, text
 
 
 _ENTRY_START_RE = re.compile(r"(?m)^[ \t]*@[ \t]*(\w+)[ \t]*([{(])[ \t\r\n]*([^,\s]+)[ \t]*,")
-_TITLE_FIELD_RE = re.compile(r"(?<![a-z])title\s*=\s*(?=[{\"])")
 _TEX_ACCENT_RE = re.compile(r"\\(?:[\"'`^~=.]|[vuHckbdrt](?![A-Za-z]))")
 _TEX_COMMAND_RE = re.compile(r"\\([A-Za-z]+)")
 # Scripts without spaces between words: each character is a word of the title.
@@ -114,10 +114,10 @@ def _is_title_evidence(title):
 def _find_group_end(source, opener_index, limit=None):
     """The index after the group that opens at opener_index: a brace group, a
     parenthesized BibTeX entry, or a quoted value, with unescaped braces balanced inside.
-    Stop at limit when the group has no closing delimiter before that boundary."""
+    Return None when the group has no closing delimiter before limit."""
     if limit is None:
         limit = len(source)
-    opener, depth, escaped = source[opener_index], 0, False
+    opener, depth, escaped, quoted = source[opener_index], 0, False, False
     for position in range(opener_index + 1, limit):
         character = source[position]
         if escaped:
@@ -132,16 +132,61 @@ def _find_group_end(source, opener_index, limit=None):
             depth -= 1
             if opener == "{" and depth < 0:
                 return position + 1
-        elif depth == 0 and character == {"(": ")", '"': '"'}.get(opener):
+        elif opener == "(" and depth == 0 and character == '"':
+            # A parenthesized entry cannot end inside a quoted field value.
+            quoted = not quoted
+        elif depth == 0 and not quoted and character == {"(": ")", '"': '"'}.get(opener):
             return position + 1
-    return limit
+    return None
+
+
+def _read_fields(source):
+    """Yield top-level BibTeX fields in order, joining parts without their wrappers."""
+    position, length = 0, len(source)
+    while position < length:
+        # Whitespace and commas separate fields; malformed field heads end the scan.
+        while position < length and (source[position].isspace() or source[position] == ","):
+            position += 1
+        start = position
+        while position < length and (source[position].isalnum() or source[position] in "_-:"):
+            position += 1
+        name = source[start:position]
+        while position < length and source[position].isspace():
+            position += 1
+        if not name or position == length or source[position] != "=":
+            return
+        position += 1
+        parts = []
+        while position < length:
+            while position < length and source[position].isspace():
+                position += 1
+            if position == length or source[position] in ",})":
+                break
+            start = position
+            if source[position] in '{"':
+                # Quotes close only outside braces; an unclosed part takes the rest.
+                end = _find_group_end(source, position)
+                parts.append(source[position + 1:end - 1] if end is not None else source[position + 1:])
+                position = end if end is not None else length
+            else:
+                # Bare numbers and macro names are literal parts; macros are not expanded.
+                while position < length and not source[position].isspace() and source[position] not in "#,})":
+                    position += 1
+                parts.append(source[start:position])
+            while position < length and source[position].isspace():
+                position += 1
+            if position == length or source[position] != "#":
+                break
+            position += 1
+        yield name, "".join(parts)
 
 
 def read_bibliography(data):
     """Read entry text, normalized titles and canonical identifier sets in file order.
     Each entry's text excludes its head, ends at its closing delimiter or the
-    next entry head and is casefolded. Without entries, identifiers come from the
-    whole bibliography. Undecodable bytes become replacement characters."""
+    next entry head and is casefolded. Titles and identifiers come from top-level
+    field values. Without entries, identifiers come from the whole bibliography.
+    Undecodable bytes become replacement characters."""
     source = data.decode("utf-8", errors="replace")
     entries = {}
     starts = list(_ENTRY_START_RE.finditer(source))
@@ -151,21 +196,26 @@ def read_bibliography(data):
         # Even an ignored head bounds the scan of an unclosed preceding entry.
         limit = starts[index + 1].start() if index + 1 < len(starts) else len(source)
         # A BibTeX key is a label; only the entry body supplies identifiers.
-        entry_source = source[start.end():_find_group_end(source, start.start(2), limit)].casefold()
-        title_field = _TITLE_FIELD_RE.search(entry_source)
-        title = ("" if title_field is None else
-                 entry_source[title_field.end() + 1:_find_group_end(entry_source, title_field.end()) - 1])
-        entries[start.group(3)] = {"text": entry_source, "title": _normalize_title(title),
-                                   "identifiers": _read_identifiers(entry_source)}
+        end = _find_group_end(source, start.start(2), limit)
+        entry_source = source[start.end():end if end is not None else limit].casefold()
+        title, identifiers = None, set()
+        for name, value in _read_fields(entry_source):
+            # Only the first top-level title supplies title evidence, even when empty.
+            if name == "title" and title is None:
+                title = value
+            # A top-level eprint value carries an implicit arXiv label.
+            identifiers.update(_read_identifiers("arxiv:" + value if name == "eprint" else value))
+        entries[start.group(3)] = {"text": entry_source, "title": _normalize_title(title or ""),
+                                   "identifiers": identifiers}
     bibliography = {"entries": entries, "text": source.casefold()}
     if not entries:
         bibliography["identifiers"] = _read_identifiers(bibliography["text"])
     return bibliography
 
 
-def _read_doi_identifier(value):
-    """Read BibTeX escapes of nonalphanumeric characters, retaining letter commands."""
-    return "doi:" + re.sub(r"\\(.)", lambda match: match[0] if match[1].isalnum() else match[1], value).casefold()
+def _unescape_identifier(value):
+    """Remove raw TeX escapes once, retaining letter commands and escaped digits."""
+    return re.sub(r"\\(.)", lambda match: match[0] if match[1].isalnum() else match[1], value)
 
 
 def _read_url_identifier(value):
@@ -178,7 +228,7 @@ def _read_url_identifier(value):
         return None
     # Only DOI registry hosts supply a DOI, with percent-encoded path data decoded.
     if parts.hostname in _DOI_HOSTS:
-        return _read_doi_identifier(unquote(parts.path[1:]))
+        return "doi:" + unquote(parts.path[1:]).casefold()
     if parts.hostname not in _ARXIV_HOSTS:
         return None
     # arXiv hosts supply ids only through recognized modern or legacy FTP paths.
@@ -272,8 +322,9 @@ def _read_identifiers(text_value):
     while (start := _IDENTIFIER_START_RE.search(text_value, position)) is not None:
         position = _find_identifier_end(text_value, start.start())
         spans.append((start.start(), position))
-        value = _trim_span(text_value[start.start():position])
-        identifier = _read_doi_identifier(value) if start.lastgroup == "doi" else _read_url_identifier(value)
+        # Unescape the raw span before URL percent-decoding can introduce backslashes.
+        value = _unescape_identifier(_trim_span(text_value[start.start():position]))
+        identifier = "doi:" + value if start.lastgroup == "doi" else _read_url_identifier(value)
         if identifier is None:
             continue
         if identifier.startswith("doi:"):
