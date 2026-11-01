@@ -35,9 +35,11 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version [0.69.7](docs/releases/0.69.7.md) matches an arXiv id in a bibliography only in an arXiv context (`arXiv:`, an arxiv.org URL, the DataCite DOI or an `eprint` field), and keeps a work whose identifiers name two arXiv papers out of problem citation links.
+Version [0.69.8](docs/releases/0.69.8.md) reads arXiv ids in a bibliography by kind (arxiv.org URLs by host and path, the DataCite DOI, `arXiv:` labels, `eprint` fields and old-style ids), ignores BibTeX keys, and never looks inside other URLs or DOIs.
 
-Version [0.69.6](docs/releases/0.69.6.md) narrows where an arXiv id can match in the manuscript citation check (completed in 0.69.7), and links problem citations only through a work's own id and its DOI aliases.
+Version [0.69.7](docs/releases/0.69.7.md) matches an arXiv id in a bibliography only after an arXiv context (`arXiv:`, an arxiv.org URL, the DataCite DOI or an `eprint` field; read by kind since 0.69.8), and keeps a work whose identifiers name two arXiv papers out of problem citation links.
+
+Version [0.69.6](docs/releases/0.69.6.md) narrows where an arXiv id can match in the manuscript citation check (continued in 0.69.7 and 0.69.8), and links problem citations only through a work's own id and its DOI aliases.
 
 Version [0.69.5](docs/releases/0.69.5.md) cites a paper once in a problem export when a record read it under both its arXiv id and its DataCite DOI, and corrects one paragraph of the 0.69.4 release note.
 
