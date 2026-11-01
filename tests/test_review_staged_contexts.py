@@ -64,14 +64,14 @@ class StagedContextTests(unittest.TestCase):
         self.assertEqual(self.epoch, self.before)
         self.assertEqual(planned['task']['epoch_digest'], self.epoch['digest'])
 
-    def accept_expanded(self):
+    def accept_expanded(self, siblings=()):
         planned = self.plan(self.expanded_task())
         card = full_card(self.epoch)
         for cell in card['judgments']:
             cell['context_root'] = self.contexts[cell['claim_id']]['root']
         captured = dict(reservation_id='expanded-reservation', recorded_revision=2,
             observation=dict(status='completed', request=planned['request'],
-                             output=protocol._put_json(self.artifacts, dict(cards=[card]))))
+                             output=protocol._put_json(self.artifacts, dict(cards=[card] + list(siblings)))))
         assignment = dict(id='expanded-reader', staged_task=planned['task'],
                           packet_digest='packet', prompt_hash='prompt',
                           staged_review=dict(kind='task', epoch_id=self.epoch['id']))
@@ -86,6 +86,23 @@ class StagedContextTests(unittest.TestCase):
         self.assertEqual(receipt['staged_observation']['actual_input']['context_roots'],
                          {key:row['root'] for key,row in self.contexts.items()})
         self.assertEqual(self.epoch, self.before)
+
+    def test_accepted_read_with_malformed_sibling_card_returns_completion_rejection(self):
+        for identity in ({}, {'id': ''}, {'id': None}, {'id': []}):
+            with self.subTest(identity=identity):
+                sibling = dict(identity, unresolved=[dict(text='Was a hypothesis omitted?',
+                    claim_ids=list(self.contexts), needs='The original hypothesis.')])
+                receipt, assignment, card = self.accept_expanded([sibling])
+                observed = receipt['staged_observation']
+                self.assertEqual(observed['output']['cards'], [card, sibling])
+                tasks = [self.records['review_task'][self.discovery['task_id']]['task'],
+                         assignment['staged_task']]
+                report = staged.verify_completion(self.epoch,
+                    {'observations': [self.discovery, observed]}, tasks=tasks)
+                self.assertFalse(report['complete'])
+                self.assertTrue(any(row['code'] == 'invalid_review_staged'
+                    and row.get('task_id') == observed['task_id'] for row in report['issues']), report['issues'])
+                self.assertEqual(report['progress']['full_cards'], 1)
 
     def test_malformed_retrieval_cannot_poison_an_accepted_read_frontier(self):
         from test_review_staged_followups import request
@@ -141,8 +158,9 @@ class StagedContextTests(unittest.TestCase):
                 self.plan(self.expanded_task())
         self.assertEqual(failure.exception.code, 'review_invocation_unverified')
 
-    def recovered_selection(self):
+    def recovered_selection(self, unresolved=()):
         card = full_card(self.epoch)
+        card['unresolved'] = list(unresolved)
         for cell in card['judgments']:
             cell['context_root'] = self.contexts[cell['claim_id']]['root']
         tasks, selected = selection(self.epoch, [card], contexts=self.contexts)
@@ -184,6 +202,98 @@ class StagedContextTests(unittest.TestCase):
                             for row in report['issues']), report['issues'])
         verified = staged.collect_planning_records(self.epoch, selected, tasks=tasks)
         self.assertEqual(verified['findings'], [finding])
+
+    def recover_card_question(self, disposition=None, grounded=True, dependent=True,
+                              assurance='passed', historical_answer=False, kind='full', repeat_question=False):
+        card = self.discovery['output']['cards'][0]
+        card['kind'] = kind
+        question = dict(text='Is the newly discovered premise necessary?',
+                        claim_ids=list(self.contexts), needs='Original evidence for the premise.')
+        card['unresolved'] = [question]
+        identifier = 'card-unresolved:' + digest([card['id'], question])
+        answer = dict(id='premise-answer', finding_id=identifier, disposition=disposition,
+                      reason='The original evidence accounts for the premise.',
+                      grounds=card['critical_spans'] if grounded else [])
+        self.discovery['output'].pop('answers', None)
+        if historical_answer:
+            self.discovery['output']['answers'] = [answer]
+        self.discovery['raw_output_digest'] = digest(self.discovery['output'])
+        tasks, selected = self.recovered_selection([question] if repeat_question else ())
+        reading = task(self.epoch, contexts=self.contexts,
+                       dependencies=[self.discovery['task_id']] if dependent else [])
+        reread = observation(self.epoch, reading, selected['observations'][1]['output'],
+            dependencies={self.discovery['task_id']: self.discovery['raw_output_digest']} if dependent else {})
+        combined = task(self.epoch, 'combine', contexts=self.contexts, card_ids=tasks[1]['card_ids'],
+                        scope='joint_card', dependencies=[reading['id']])
+        output = copy.deepcopy(selected['observations'][0]['output'])
+        output['integrations'][0].update(task_id=combined['id'], selected_observations=[reread['id']])
+        output['combinations'][0]['task_id'] = combined['id']
+        output['terminal']['assurances'] = {key: assurance for key in staged.ASSURANCES}
+        for check in output['assurance_checks']:
+            check['status'] = assurance
+        if disposition is not None and not historical_answer:
+            output['answers'] = [answer]
+            output['integrations'][0]['answers'] = [answer['id']]
+        result = observation(self.epoch, combined, output,
+                             dependencies={reading['id']: reread['raw_output_digest']})
+        return [reading, combined, tasks[-1]], dict(observations=[result, reread, self.discovery]), identifier
+
+    def test_context_expansion_keeps_unanswered_historical_card_questions(self):
+        for kind in ('full', 'fragment'):
+            with self.subTest(kind=kind):
+                tasks, selected, identifier = self.recover_card_question(kind=kind)
+                report = staged.verify_completion(self.epoch, selected, tasks=tasks)
+                self.assertFalse(report['complete'], report['issues'])
+                pending = [row for row in report['issues'] if row['code'] == 'review_card_question_pending']
+                self.assertEqual([row['finding_id'] for row in pending], [identifier])
+                self.assertEqual(pending[0]['question'], self.discovery['output']['cards'][0]['unresolved'][0])
+                self.assertEqual(report['progress']['full_cards'], 1)
+                self.assertEqual(self.epoch, self.before)
+
+    def test_current_grounded_dependent_answer_closes_a_historical_card_question(self):
+        tasks, selected, _ = self.recover_card_question(disposition='answered')
+        report = staged.verify_completion(self.epoch, selected, tasks=tasks)
+        self.assertTrue(report['complete'], report['issues'])
+        self.assertEqual(report['progress']['answered_findings'], 1)
+
+    def test_current_rediscovery_can_supply_the_same_question_identity(self):
+        tasks, selected, _ = self.recover_card_question(disposition='answered', dependent=False,
+                                                       repeat_question=True)
+        report = staged.verify_completion(self.epoch, selected, tasks=tasks)
+        self.assertTrue(report['complete'], report['issues'])
+
+    def test_malformed_historical_card_array_returns_a_completion_rejection(self):
+        tasks, selected, _ = self.recover_card_question(disposition='answered', dependent=False,
+                                                       repeat_question=True)
+        assigned = task(self.epoch, 'final', required=False)
+        historical = observation(self.epoch, assigned, {'terminal': {}})
+        historical['output']['cards'] = None
+        historical['raw_output_digest'] = digest(historical['output'])
+        tasks.append(assigned)
+        selected['observations'].append(historical)
+        report = staged.verify_completion(self.epoch, selected, tasks=tasks)
+        self.assertFalse(report['complete'])
+        self.assertTrue(any(row['code'] == 'invalid_review_staged'
+            and row.get('task_id') == assigned['id'] for row in report['issues']), report['issues'])
+
+    def test_historical_card_questions_reject_ungrounded_unrelated_or_historical_answers(self):
+        for changes in (dict(grounded=False), dict(dependent=False), dict(historical_answer=True),
+                        dict(disposition='unresolved')):
+            with self.subTest(changes=changes):
+                options = dict(disposition='answered')
+                options.update(changes)
+                tasks, selected, identifier = self.recover_card_question(**options)
+                report = staged.verify_completion(self.epoch, selected, tasks=tasks)
+                self.assertFalse(report['complete'], report['issues'])
+                self.assertTrue(any(row['code'] == 'review_card_question_pending'
+                    and row.get('finding_id') == identifier for row in report['issues']), report['issues'])
+
+    def test_retained_historical_card_question_requires_adverse_or_incomplete_assessment(self):
+        for assurance in ('passed', 'failed', 'not_assessed'):
+            with self.subTest(assurance=assurance):
+                tasks, selected, _ = self.recover_card_question(disposition='retained', assurance=assurance)
+                report = staged.verify_completion(self.epoch, selected, tasks=tasks)
+                self.assertEqual(report['complete'], assurance != 'passed', report['issues'])
 
     def test_final_packet_keeps_historical_findings_outside_its_integration_dependencies(self):
         finding = dict(id='historical-adverse-finding', text='The newly required premise may fail.', adverse=True,

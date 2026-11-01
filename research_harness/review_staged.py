@@ -1901,10 +1901,11 @@ def _collect_completion_records(work):
     observed = work['observed'] + work['historical_observed']
     grouped = {}
     owners = {}
+    historical_cards = []
     for row in observed:
         for key in ('cards', 'cells', 'combinations', 'selected_groups', 'original_checks', 'integrations',
                     'findings', 'answers', 'retrievals', 'assurance_checks', 'decision_checks', 'segment_readings'):
-            if row['task_id'] in work['historical_tasks'] and key not in ('findings', 'retrievals'):
+            if row['task_id'] in work['historical_tasks'] and key not in ('cards', 'findings', 'retrievals'):
                 continue
             try:
                 items = _require_array(row['output'].get(key, []), key)
@@ -1918,6 +1919,14 @@ def _collect_completion_records(work):
                 try:
                     check_fields(item, ('id',), None, code='invalid_review_staged')
                     check_text(item['id'], 'record.id', code='invalid_review_staged')
+                    if row['task_id'] in work['historical_tasks'] and key == 'cards':
+                        assigned = work['task_index'][row['task_id']]
+                        contexts = next(version['contexts'] for version in work['context_graph']['versions'] if all(
+                            key in version['contexts'] and version['contexts'][key]['root'] == root
+                            for key, root in assigned['context_roots'].items()))
+                        historical_cards.append(validate_card(item, dict(work['manifest'], contexts=contexts),
+                                                              claim_ids=assigned['claim_ids']))
+                        continue
                     previous = grouped.setdefault(key, {}).get(item['id'])
                     if previous is not None and previous != item:
                         if key != 'retrievals':
@@ -1934,6 +1943,7 @@ def _collect_completion_records(work):
                     _record_completion_rejection(work, error, task_id=row['task_id'])
     work['grouped'] = grouped
     work['owners'] = owners
+    work['historical_cards'] = historical_cards
     _check_completion_record_identities(work)
 
 
@@ -1954,8 +1964,10 @@ def _check_completion_record_identities(work):
                 conflicts.add(key)
             else:
                 identities[key] = identity
+            return True
         except ResearchError as error:
             _record_completion_rejection(work, error)
+            return False
 
     # Inspect every definition, including nested records hidden by a duplicate
     # parent. Dispositions and answer targets are references, not definitions.
@@ -1974,8 +1986,7 @@ def _check_completion_record_identities(work):
                     if (record.get('status') == 'pending' and selected.get('status') in ('resolved', 'unresolved')
                             and all(record.get(key) == selected.get(key) for key in stable)):
                         record = selected
-                register(family, record)
-                if not isinstance(record, dict):
+                if not register(family, record):
                     continue
                 nested = {'cards': (('conclusions', 'card_conclusions'), ('conditions', 'card_conditions'),
                                     ('judgments', 'cells')),
@@ -1988,6 +1999,11 @@ def _check_completion_record_identities(work):
                     for question in record['unresolved']:
                         if isinstance(question, dict):
                             register('card_questions', dict(question, id=identify_card_question(record, question)))
+    # Obsolete cards cannot supply current conclusions, but their questions keep
+    # their original identities until current dependent work accounts for them.
+    for card in work['historical_cards']:
+        for question in card['unresolved']:
+            register('card_questions', dict(question, id=identify_card_question(card, question)))
     for key in sorted(conflicts):
         _record_completion_issue(work, 'invalid_review_staged', id=key,
                                  reason='Conflicting scientific record definitions across the selection.')
@@ -2441,8 +2457,9 @@ def _check_completion_finding_answers(work):
     finding_ids.update(key for card in cards for key in card['findings'])
     frame_pending = {row['id']: row for row in work['context_graph']['unresolved']}
     finding_ids.update(frame_pending)
+    question_cards = cards + work['historical_cards']
     card_pending = {identify_card_question(card, question): (card, question)
-                    for card in cards for question in card['unresolved']}
+                    for card in question_cards for question in card['unresolved']}
     finding_ids.update(card_pending)
     answered = set()
     for answer in grouped.get('answers', {}).values():
@@ -2464,7 +2481,10 @@ def _check_completion_finding_answers(work):
             if answer['finding_id'] in card_pending:
                 card, question = card_pending[answer['finding_id']]
                 owner = work['owners'][('answers', answer['id'])]
-                discoveries = [row for row in work['observed'] if card in row['output'].get('cards', [])]
+                discoveries = [row for row in work['observed'] + work['historical_observed']
+                               if isinstance(row['output'].get('cards', []), list)
+                               and any(candidate in row['output'].get('cards', []) for candidate in question_cards
+                                      if candidate['id'] == card['id'] and question in candidate['unresolved'])]
                 if (not answer['grounds'] or not any(depends_on_task(owner, row['task_id'], work['all_by_task'])
                                                      for row in discoveries)
                         or not _covers_inputs(_find_quotation_spans(answer), owner['actual_input']['intervals'])):
