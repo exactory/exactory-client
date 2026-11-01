@@ -9,6 +9,7 @@ from research_harness import review_problem_parts as parts, review_protocol as p
 from research_harness import review_excerpts, review_transport as transport
 from research_harness import research_decisions as decisions, review_supplied_evidence as supplied
 from research_harness import review_objection_evidence as objection_evidence
+from research_harness.cli import OPERATIONS
 from research_harness.direction_sources import has_attachment
 from research_harness.evidence import digest
 
@@ -206,6 +207,53 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         for reference in references:
             self.assertEqual(sum(entry['artifact'] == reference for entry in sent['evidence']), 1)
         self.assertLessEqual(parts._measure(route, actual), limit)
+        self.assertEqual(decisions.find_undelivered_review_references(records, self.case.artifacts, review), [])
+        self.assertEqual(self.coverage(review), [])
+
+    def test_final_records_digestless_citations_carried_with_material_objections(self):
+        self.continued_unit()
+        openness = copy.deepcopy(self.case.expected['openness'])
+        self.case.put('problem_openness', openness['id'], openness)
+        self.case.expected['openness']['digest'] = digest(openness)
+        value = copy.deepcopy(self.case.expected['value'])
+        self.case.put('problem_value', value['id'], value)
+        references = [{'kind': 'record', 'record_kind': kind, 'id': record['id']}
+                      for kind, record in (('problem_openness', openness), ('problem_value', value))]
+        evidence = [dict(reference, record=record, artifacts=[])
+                    for reference, record in zip(references, (openness, value))]
+        objections = [{'id': 'record-objection-' + str(index), 'claim': 'A delivered record needs qualification.',
+                       'material_version': str(index + 1) * 64, 'version_evidence': copy.deepcopy(evidence),
+                       'version_source_mappings': []} for index in range(2)]
+        self.install_material_objections(objections)
+        turns, final = self.finish_parts()
+        self.assertTrue(turns)
+        packet = self.packet(final)
+        self.assertEqual(packet[KEY]['stage'], 'final')
+        self.assertTrue(all(entry['delivery'] == objection_evidence.REPEATED
+                            for entry in packet['material_objections'][1]['version_evidence']))
+        output = self.final_output()
+        output['value']['evidence'] = copy.deepcopy(references)
+        output['value']['objection_findings'] = [{'id': objection['id'], 'status': 'continuing',
+            'reason': 'The delivered records retain this limitation.', 'evidence': copy.deepcopy(references)}
+            for objection in objections]
+        self.invoke(final, output)
+        records = self.case.read_records()
+        attempt = records['review_attempt']['attempt-' + final['id']]
+        request = json.loads(self.case.artifacts.read(attempt['request']))
+        sent = review_excerpts.read_sent_packet(request)
+        carried = list(protocol._list_packet_records(sent))
+        self.assertEqual({row[2] for row in carried if row[:2] == ('problem_openness', openness['id'])},
+                         {digest(openness), None})
+        value_rows = [row for row in carried if row[:2] == ('problem_value', value['id'])]
+        self.assertGreater(len(value_rows), 1)
+        self.assertEqual({row[2] for row in value_rows}, {None})
+        self.assertEqual(len({digest(row[3]) for row in value_rows}), 1)
+        payload = dict(output, id='review-' + final['id'], dossier_id=None, assignment_id=final['id'])
+        review = self.case.mutate(OPERATIONS['value-review'], payload)['result']
+        self.assertEqual(review['payload'], payload)
+        self.assertTrue(all('digest' not in reference for reference in review['payload']['value']['evidence']))
+        records = self.case.read_records()
+        self.assertEqual(records['value_review'][review['id']], review)
         self.assertEqual(decisions.find_undelivered_review_references(records, self.case.artifacts, review), [])
         self.assertEqual(self.coverage(review), [])
 
