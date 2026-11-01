@@ -129,13 +129,22 @@ class ProblemResultPartsTests(ResultPartsCase):
             assessment={'reason': 'c' * 18000}) for i in range(5)]
         parts, final = self.finish_parts()
         from research_harness.direction_sources import has_attachment
+        sent_parts = [review_excerpts.read_sent_packet(self.request(assignment)) for assignment in parts]
+        computation_parts = [sent for sent in sent_parts if sent['problem_evidence']['computations']]
+        self.assertGreater(len(computation_parts), 1)
+        body_turn = computation_parts[0][KEY]['turn']
+        self.assertEqual([sent[KEY]['turn'] for sent in sent_parts
+                          if has_attachment(self.case.artifacts, sent, body)], [body_turn])
         found = []
-        for assignment in parts:
-            sent = review_excerpts.read_sent_packet(self.request(assignment))
-            rows = sent['problem_evidence']['computations']
-            if rows:
-                found.extend(rows)
-                self.assertTrue(has_attachment(self.case.artifacts, sent, body))
+        for sent in computation_parts:
+            found.extend(sent['problem_evidence']['computations'])
+        for sent in computation_parts[1:]:
+            self.assertEqual([entry for entry in sent['evidence'] if entry['artifact'] == body],
+                             [{'artifact': body, 'content': '', 'encoding': 'omitted',
+                               'delivery': 'delivered-in-an-earlier-part-turn', 'turn': body_turn,
+                               'note': 'This artifact body was delivered in the earlier part turn of this review '
+                                       'that the turn field of this entry names. It is not repeated in this turn. '
+                                       'The notes of that turn hold what the final assessment needs from it.'}])
         self.assertEqual(found, self.case.expected['computations'])
         self.assertEqual(self.coverage(self.record_final(final)), [])
 
@@ -366,15 +375,37 @@ class ProblemResultPartsTests(ResultPartsCase):
         attempt['request'] = self.case.artifacts.put(json.dumps(request).encode(), 'application/json')
         self.assertEqual(review_problem_parts.collect_series_packets(records, self.case.artifacts, first['id']), [])
 
-    def test_owned_assessment_artifact_alone_cannot_exceed_the_unit_cap(self):
+    def test_oversized_owned_artifact_travels_alone_and_an_unfittable_unit_is_refused(self):
         from research_harness import review_problem_parts
+        from research_harness.direction_sources import has_attachment
         self.oversized(count=0, limit=150000)
         artifact = self.case.artifacts.put(b'assessment ' * 8000, 'text/plain')
         self.case.expected['assessment_evidence'] = [artifact, {'kind': 'record', 'record_kind': 'problem_value',
             'id': 'large-assessment-record', 'digest': '1' * 64, 'record': {'reason': 'x' * 200000}}]
         with patch.object(review_problem_parts, 'PART_UNIT_CHARACTERS', 10000):
-            error = self.assert_code('review_input_too_large', self.assign)
+            units = review_problem_parts.list_units(self.case.artifacts, self.case.expected)
+            self.assertGreater(units[0]['characters'], review_problem_parts.PART_UNIT_CHARACTERS)
+            first = self.assign()
+            sent = review_excerpts.read_sent_packet(self.request(first))
+            self.assertEqual((sent[KEY]['stage'], sent[KEY]['turn']), ('part', 1))
+            self.assertEqual({key: sent['problem_evidence'][key] for key in SPLIT_KEYS},
+                             {key: [artifact] if key == 'assessment_evidence' else [] for key in SPLIT_KEYS})
+            self.assertEqual(sent[KEY]['delivered_now'],
+                             {key: [[0, 1]] if key == 'assessment_evidence' else [] for key in SPLIT_KEYS})
+            self.assertEqual(sent[KEY]['remaining']['assessment_evidence'], [[1, 2]])
+            self.assertTrue(has_attachment(self.case.artifacts, sent, artifact))
+            self.assertLessEqual(len(codex.packet_text(self.request(first))), 150000)
+            self.invoke(first)
+            revision = self.case.store.revision
+            error = self.assert_code('review_input_too_large', lambda: self.assign('part-2', first['id']))
         self.assertEqual(error.details['unit']['key'], 'assessment_evidence')
+        self.assertEqual(error.details['unit']['index'], 1)
+        self.assertEqual(error.details['unit']['digest'], digest(self.case.expected['assessment_evidence'][1]))
+        self.assertEqual((error.details['stage'], error.details['turn']), ('part', 2))
+        self.assertEqual(error.details['input_limit_characters'], 150000)
+        self.assertGreater(error.details['input_characters'], error.details['input_limit_characters'])
+        self.assertLessEqual(error.details['frame_characters'], error.details['input_limit_characters'])
+        self.assertEqual(self.case.store.revision, revision)
 
     def test_note_unit_indices_are_integers_not_booleans(self):
         self.oversized()

@@ -670,12 +670,13 @@ def find_common_prompt_version(prompt):
 
 def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestration=None, repair_prompt=None,
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
-                     reading_protocol=None, common_version=None, evidence_parts=None):
+                     reading_protocol=None, common_version=None, evidence_parts=None, part_suffix=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
     with; a later version uses the current suffix; repair_prompt names a suffix explicitly. excerpts adds the excerpt
     rules of a bar, slate or result session to the current template under its unchanged id; an earlier version only
     replays records made before those rules. excerpt_rules names the protocol of those rules, by default the current
-    one. evidence_parts appends the part or final instructions of a problem result series. reading_stage names the
+    one. evidence_parts appends the part or final instructions of a problem result series; part_suffix selects the
+    part text explicitly for recorded prompts, by default the current text. reading_stage names the
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
@@ -739,7 +740,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
             prompt += review_excerpts.PHASE_PROMPTS[excerpt_rules]
             parameters['reviewer_excerpts'] = excerpt_rules
         if evidence_parts is not None:
-            prompt += review_problem_parts.PROMPTS[evidence_parts]
+            prompt += (part_suffix if evidence_parts == 'part' and part_suffix is not None
+                       else review_problem_parts.PROMPTS[evidence_parts])
             parameters['evidence_parts'] = review_problem_parts.PROTOCOL + '/' + evidence_parts
         template = ((_PROBLEM_RESULT_PROTOCOL_V3 if version == 3 else
                      _PROBLEM_RESULT_PROTOCOL_V4 if version == 4 else PROBLEM_RESULT_PROTOCOL)
@@ -1985,8 +1987,10 @@ def _prompt_matches(assignment):
             return False
         return any(evidence_parts == review_problem_parts.PROTOCOL + '/' + stage
                    and assignment['prompt'] == canonical_prompt('result', orchestration='problem_creation',
-                       excerpts=True, evidence_parts=stage, excerpt_rules=rules, common_version=common_version)
-                   for stage in review_problem_parts.STAGES for rules in review_excerpts.PHASE_PROMPTS)
+                       excerpts=True, evidence_parts=stage, excerpt_rules=rules, common_version=common_version,
+                       part_suffix=suffix)
+                   for stage in review_problem_parts.STAGES for rules in review_excerpts.PHASE_PROMPTS
+                   for suffix in ((None, review_problem_parts.PART_PROMPT_0691) if stage == 'part' else (None,)))
     stage = assignment['prompt'].get('parameters', {}).get('reading_stage')
     if assignment['role'] == 'native_math' and stage in openness_reading.STAGES:
         return any(assignment['prompt'] == canonical_prompt('native_math', reading_stage=stage, reading_protocol=rules,

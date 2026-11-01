@@ -63,6 +63,39 @@ PROMPTS = {
         'carries the frame and your deliveries, and again no units.'),
 }
 
+# Recorded turns of 0.69.0 and 0.69.1 keep their exact suffix and prompt hashes.
+PART_PROMPT_0691 = PROMPTS['part']
+PART_EXCEPTION = (
+    'A unit whose artifact bodies do not all fit one turn is carried in consecutive part turns until all its '
+    'bodies arrive, each turn with the bodies that arrive in it. delivered_now lists its index in every turn '
+    'that carries it, and you note it in every turn that carries it. A unit all of whose bodies arrived earlier '
+    'arrives once, and you note it like any unit delivered now. In every unit delivered now, a body that an '
+    'earlier part turn delivered and a body still to come are each replaced by an evidence entry with content '
+    '"" and encoding "omitted". The entry of a body delivered earlier has delivery '
+    '"delivered-in-an-earlier-part-turn"; its turn names the part turn that delivered the body, and your notes '
+    'of that turn hold what the final assessment needs from the body. The entry of a body still to come has '
+    'delivery "delivered-in-a-later-part-turn"; the body arrives in a later part turn, which carries the unit '
+    'again.')
+OBJECTIONS_SENTENCE = (
+    'In a part turn, each entry of material_objections keeps every field except version_evidence and '
+    'version_source_mappings; a part response gives no finding on an objection; the final turn delivers every '
+    'material objection with its evidence.')
+OMITTED_BODY_NOTE = (
+    'This artifact body was delivered in the earlier part turn of this review that the turn field of this '
+    'entry names. It is not repeated in this turn. The notes of that turn hold what the final assessment needs '
+    'from it.')
+PENDING_BODY_NOTE = (
+    'This artifact body is not delivered in this turn. It arrives in a later part turn of this review. That '
+    'turn carries its unit again.')
+PROMPTS['part'] = PART_PROMPT_0691.replace(
+    'with one exception.', 'with two exceptions.').replace(
+    'remaining lists the items still to come',
+    'remaining lists the units whose item or any artifact body is still to come').replace(
+    'so that you have the entry to note those passages under. ',
+    'so that you have the entry to note those passages under. ' + PART_EXCEPTION + ' ').replace(
+    'This is a part turn. Do not assess the problem. ',
+    'This is a part turn. Do not assess the problem. ' + OBJECTIONS_SENTENCE + ' ')
+
 
 def find_stage(packet):
     plan = packet.get(KEY) or {}
@@ -103,13 +136,13 @@ def _owned_artifacts(key, item):
     return [references[key] for key in sorted(references)]
 
 
-def list_units(artifacts, evidence):
-    """The indivisible items, in evidence order, with their original indices and required artifact bodies."""
+def list_units(artifacts, evidence, attached=()):
+    """Items in evidence order, with original indices and the cost of their item and pending owned bodies."""
     from .review_protocol import _evidence
     units = []
     for key, index, item in _ordered_items(evidence):
         references = _owned_artifacts(key, item)
-        bodies = _evidence(artifacts, references)
+        bodies = _evidence(artifacts, [reference for reference in references if digest(reference) not in attached])
         characters = len(json.dumps(item, sort_keys=True)) + sum(len(json.dumps(body, sort_keys=True)) for body in bodies)
         units.append({'key': key, 'index': index, 'digest': digest(item), 'item': item,
                       'artifacts': references, 'characters': characters})
@@ -234,6 +267,41 @@ def _sent_packet(records, artifacts, assignment, attempt):
     return packet
 
 
+def _unit_key(unit):
+    return tuple(unit[key] for key in ('key', 'index', 'digest'))
+
+
+def _artifact_turns(observations):
+    turns = {}
+    for row in observations:
+        for reference in row['artifacts']:
+            turns.setdefault(digest(reference), row['receipt']['turn'])
+    return turns
+
+
+def _pending_artifacts(units, attached):
+    references = {}
+    for unit in units:
+        for reference in _owned_artifacts(unit['key'], unit['item']):
+            if digest(reference) not in attached:
+                references.setdefault(digest(reference), reference)
+    return list(references.values())
+
+
+def _completed_units(units, attached):
+    return {_unit_key(unit) for unit in units
+            if all(digest(reference) in attached for reference in _owned_artifacts(unit['key'], unit['item']))}
+
+
+def _makes_progress(units, attached, observations):
+    earlier = _artifact_turns(observations)
+    owned = {digest(reference) for unit in units for reference in _owned_artifacts(unit['key'], unit['item'])}
+    if any(digest(reference) in owned and digest(reference) not in earlier for reference in attached):
+        return True
+    carried = [unit for row in observations for unit in row['units']]
+    return bool(_completed_units(units, earlier) - _completed_units(carried, earlier))
+
+
 def observe_series(records, artifacts, assignment_id):
     """Observe valid ready turns from their selected authenticated requests, checking each receipt against its past."""
     from .review_protocol import assignment_state
@@ -255,12 +323,14 @@ def observe_series(records, artifacts, assignment_id):
             if find_stage(packet) == 'part':
                 validate_part_output(packet, state['output'])
             units = _delivered_units(packet)
-            if any(not has_attachment(evaluation, packet, reference) for unit in units
-                   for reference in _owned_artifacts(unit['key'], unit['item'])):
+            attached = {digest(entry['artifact']): entry['artifact'] for entry in packet.get('evidence', [])
+                        if has_attachment(evaluation, packet, entry['artifact'])}
+            attached = [attached[key] for key in sorted(attached)]
+            if find_stage(packet) == 'part' and not _makes_progress(units, attached, observations):
                 continue
             receipt = {'turn': plan['turn'], 'assignment_id': assignment['id'], 'attempt_id': attempt['id'],
                        'units': _ranges(units)}
-            observations.append({'packet': packet, 'receipt': receipt, 'units': units})
+            observations.append({'packet': packet, 'receipt': receipt, 'units': units, 'artifacts': attached})
         except (ResearchError, ValueError, TypeError, KeyError, UnicodeError):
             continue
     return observations
@@ -297,13 +367,24 @@ def _with_readings(units, selected):
             or unit['key'] == 'readings' and unit['item']['id'] in reading_ids]
 
 
-def _project(records, artifacts, packet, units, selected, observations, remaining, series_id, stage, turn):
+def _project(records, artifacts, packet, units, selected, observations, remaining, series_id, stage, turn,
+             attached=None):
     from .review_protocol import _evidence
     candidate = {key: copy.deepcopy(value) for key, value in packet.items() if key not in ('evidence', 'digest')}
     evidence = candidate['problem_evidence']
     selected = _with_readings(units, selected)
+    earlier = _artifact_turns(observations)
+    attached = _pending_artifacts(selected, earlier) if attached is None else attached
+    available = set(earlier) | {digest(reference) for reference in attached}
+    carried = [unit for row in observations for unit in row['units']] + selected
+    completed = _completed_units(carried, available)
+    remaining = [unit for unit in remaining if _unit_key(unit) not in completed]
     for key in SPLIT_KEYS:
         evidence[key] = [unit['item'] for unit in sorted(selected, key=lambda unit: unit['index']) if unit['key'] == key]
+    if stage == 'part':
+        for objection in candidate.get('material_objections', []):
+            objection.pop('version_evidence', None)
+            objection.pop('version_source_mappings', None)
     candidate[KEY] = {'protocol': PROTOCOL, 'series_assignment_id': series_id, 'stage': stage, 'turn': turn,
         'units': {key: len(packet['problem_evidence'].get(key, [])) for key in SPLIT_KEYS},
         'delivered_before': [row['receipt'] for row in observations], 'delivered_now': _ranges(selected),
@@ -314,6 +395,19 @@ def _project(records, artifacts, packet, units, selected, observations, remainin
                                         'allowances': review_excerpts.create_allowances()}
     with transport.text_only_delivery(True):
         candidate['evidence'] = _evidence(artifacts, candidate, records=records)
+    attached_keys = {digest(reference) for reference in attached}
+    omitted = {digest(reference) for reference in _pending_artifacts(selected, ())
+               if digest(reference) not in attached_keys}
+    for index, entry in enumerate(candidate['evidence']):
+        identity = digest(entry['artifact'])
+        if identity in omitted:
+            replacement = {'artifact': entry['artifact'], 'content': '', 'encoding': 'omitted'}
+            if identity in earlier:
+                replacement.update(delivery='delivered-in-an-earlier-part-turn', turn=earlier[identity],
+                                   note=OMITTED_BODY_NOTE)
+            else:
+                replacement.update(delivery='delivered-in-a-later-part-turn', note=PENDING_BODY_NOTE)
+            candidate['evidence'][index] = replacement
     candidate['digest'] = digest(candidate)
     return candidate
 
@@ -322,12 +416,12 @@ def _measure(route, request):
     return len(transport._local_adapter(route).packet_text(request))
 
 
-def _fits(artifacts, route, prompt, packet, history, selected):
+def _fits(artifacts, route, prompt, packet, history, attached):
     from .review_source_capacity import MARKER
     request = transport.request_body(route, prompt['text'], packet, history)
     characters = _measure(route, request)
     sent = review_excerpts.read_sent_packet(request) or {}
-    complete = all(has_attachment(artifacts, sent, reference) for unit in selected for reference in unit['artifacts'])
+    complete = all(has_attachment(artifacts, sent, reference) for reference in attached)
     fits = characters <= transport.local_input_limit(route) and complete
     if find_stage(packet) == 'part':
         fits = fits and MARKER not in sent
@@ -354,14 +448,19 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history):
             return packet
     observations = observe_series(records, artifacts, prior_id) if continuing else []
     series_id = previous[KEY]['series_assignment_id'] if continuing else value['id']
-    units = list_units(artifacts, packet['problem_evidence'])
-    delivered = {(unit['key'], unit['index'], unit['digest']) for row in observations for unit in row['units']}
-    remaining = [unit for unit in units if (unit['key'], unit['index'], unit['digest']) not in delivered]
+    earlier = _artifact_turns(observations)
+    units = list_units(artifacts, packet['problem_evidence'], earlier)
+    carried = [unit for row in observations for unit in row['units']]
+    delivered = _completed_units(carried, earlier)
+    carried_keys = {_unit_key(unit) for unit in carried}
+    remaining = [unit for unit in units if _unit_key(unit) not in delivered]
+    remaining = ([unit for unit in remaining if _unit_key(unit) in carried_keys]
+                 + [unit for unit in remaining if _unit_key(unit) not in carried_keys])
     stage, turn = ('part' if remaining else 'final'), len(observations) + 1
     stage_prompt = canonical_prompt('result', orchestration='problem_creation', excerpts=True, evidence_parts=stage)
-    def candidate(count):
-        return _project(records, artifacts, packet, units, remaining[:count], observations, remaining[count:],
-                        series_id, stage, turn)
+    def candidate(count, attached=None):
+        return _project(records, artifacts, packet, units, remaining[:count], observations, remaining,
+                        series_id, stage, turn, attached)
     frame = candidate(0)
     _, frame_characters = _fits(artifacts, route, stage_prompt, frame, history, [])
     if not remaining:
@@ -379,9 +478,11 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history):
         count = max(1, count)
         while count:
             selected = _with_readings(units, remaining[:count])
+            attached = _pending_artifacts(selected, earlier)
             planned = candidate(count)
-            fits, characters = _fits(artifacts, route, stage_prompt, planned, history, selected)
-            if fits and sum(unit['characters'] for unit in selected) <= PART_UNIT_CHARACTERS:
+            fits, characters = _fits(artifacts, route, stage_prompt, planned, history, attached)
+            if (fits and sum(unit['characters'] for unit in selected) <= PART_UNIT_CHARACTERS
+                    and _makes_progress(selected, attached, observations)):
                 break
             count -= 1
         if count:
@@ -390,13 +491,29 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history):
                 if sum(unit['characters'] for unit in selected) > PART_UNIT_CHARACTERS:
                     break
                 larger = candidate(count + 1)
-                fits, _ = _fits(artifacts, route, stage_prompt, larger, history, selected)
+                attached = _pending_artifacts(selected, earlier)
+                fits, _ = _fits(artifacts, route, stage_prompt, larger, history, attached)
                 if not fits:
                     break
                 count, planned = count + 1, larger
             return planned
-    raise ResearchError('review_input_too_large', 'The problem evidence frame and next indivisible unit cannot be '
-                        'delivered complete within this turn\'s input and unit character limits',
+        # An oversized first unit travels alone, with its pending bodies fitted in owned-artifact order.
+        selected = _with_readings(units, remaining[:1])
+        attached = []
+        planned = candidate(1, attached)
+        fits, characters = _fits(artifacts, route, stage_prompt, planned, history, attached)
+        best = planned if fits and _makes_progress(selected, attached, observations) else None
+        # A tiny body can be smaller than its pending marker, so even a failed prefix may later fit.
+        for reference in _pending_artifacts(selected, earlier):
+            attached.append(reference)
+            larger = candidate(1, attached)
+            fits, characters = _fits(artifacts, route, stage_prompt, larger, history, attached)
+            if fits and _makes_progress(selected, attached, observations):
+                best = larger
+        if best is not None:
+            return best
+    raise ResearchError('review_input_too_large', 'The problem evidence frame and next unit cannot make progress '
+                        'within this turn\'s input limit',
                         {'stage': stage, 'turn': turn, 'input_characters': characters,
                          'input_limit_characters': transport.local_input_limit(route),
                          'frame_characters': frame_characters, 'unit': _identity(remaining[0]) if remaining else None})
