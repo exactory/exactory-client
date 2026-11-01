@@ -27,7 +27,7 @@ from .evaluation import Evaluation
 from .graph import obligation
 from .problem_claims import find_current_statement, find_latest
 from .problem_delivery import find_post
-from .problem_evidence import find_formal_checks
+from .problem_evidence import BINDING_RECORD_KINDS, collect_binding_record_kinds, find_formal_checks
 from .provenance import plugin_version
 from .publication import latest_reviews
 from .review_context_repair import _lineage, _parent, historical_reviews, slot_id
@@ -854,7 +854,8 @@ def _build_check_reports(records, artifacts, inputs):
 
 VIEW_GROUPS = (
     ViewGroup("records", tuple(_RECORD_TREES), _RECORD_TREE_READS, _build_records),
-    ViewGroup("value_reviews", ("value_review", "research_support"), _SERIES_KINDS + ("review_epoch",), _build_value_reviews),
+    ViewGroup("value_reviews", ("value_review", "research_support"),
+              _SERIES_KINDS + ("review_epoch",) + BINDING_RECORD_KINDS, _build_value_reviews),
     ViewGroup("bundles", ("publication_bundle",), ("publication_selection",) + _DEPOSIT_KINDS, _build_bundles),
     ViewGroup("deposits", _DEPOSIT_KINDS, (), _build_deposits),
     ViewGroup("review_series", _SERIES_KINDS, _ADOPTING_KINDS + _STAGED_KINDS, _build_series),
@@ -1128,18 +1129,26 @@ def _render_locked(store, *, full):
     if (not full and marker["revision"] > 0 and not marker["errors"] and marker["failure"] is None and marker["plugin_version"] == version
             and marker["inputs"] == input_digests):
         revision, digests, kinds = store.read_changes(marker["revision"])
-        if digests[marker["revision"]] == marker["event_digest"] and not kinds & _VIEW_KINDS:
+        if (digests[marker["revision"]] == marker["event_digest"]
+                and not kinds & (_VIEW_KINDS | set(marker.get("evidence_kinds", [])))):
             if revision != marker["revision"]:
                 marker = dict(marker, revision=revision, event_digest=digests[revision])
                 write_projection(store.root, MARKER_PATH, _encode(marker))
             return _summarize(marker)
     revision, event_digest, records = store.read_kinds(sorted(_VIEW_KINDS))
+    evidence_kinds = set()
+    while records.get("review_epoch"):
+        evidence_kinds = collect_binding_record_kinds(records)
+        if evidence_kinds <= set(records):
+            break
+        # Re-read the complete set at one revision; never merge two snapshots.
+        revision, event_digest, records = store.read_kinds(sorted(set(records) | evidence_kinds))
     artifacts = store.build_artifact_store()
     model = compute_view_model(records, artifacts, inputs)
     files, errors = _write_views(workspace_root, store.root, marker, model, artifacts)
     marker = {"schema": _MARKER_SCHEMA_NAME, "revision": revision, "event_digest": event_digest,
               "plugin_version": version, "inputs": input_digests, "files": files, "errors": errors,
-              "failure": None}
+              "failure": None, "evidence_kinds": sorted(evidence_kinds)}
     write_projection(store.root, MARKER_PATH, _encode(marker))
     if not errors:
         _finish_dirty(store.root)

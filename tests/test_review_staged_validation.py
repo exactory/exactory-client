@@ -101,6 +101,55 @@ class ContractValidationTests(unittest.TestCase):
         report = staged.verify_completion(value, {'observations': [captured]}, tasks=[assigned])
         self.assertIn('review_objection_evidence_invalid', [row['code'] for row in report['issues']])
 
+    def test_objection_evidence_is_pending_until_an_observation_delivers_it(self):
+        full = dict(cite={'id': 'source'}, content='original')
+        value = epoch(material_objections=[dict(id='O1', version_evidence=[full])])
+        expected = [dict(code='review_objection_evidence_pending', objection_id='O1',
+                         field='version_evidence', index=0)]
+        assigned = task(value)
+        captured = observation(value, assigned, dict(cards=[full_card(value)]))
+        for selected, tasks in (({'observations': []}, []), ({'observations': [captured]}, [assigned])):
+            with self.subTest(observations=len(selected['observations'])):
+                report = staged.verify_completion(value, selected, tasks=tasks)
+                self.assertFalse(report['complete'])
+                self.assertNotIn('review_objection_evidence_invalid', [row['code'] for row in report['issues']])
+                self.assertEqual(list(staged.iter_completion_issues(value, selected, tasks=tasks,
+                                 code='review_objection_evidence_pending')), expected)
+
+    def test_objection_evidence_wrong_digest_is_invalid_and_exact_delivery_clears_it(self):
+        full = dict(cite={'id': 'source'}, content='original')
+        value = epoch(material_objections=[dict(id='O1', version_evidence=[full])])
+        assigned = task(value)
+        captured = observation(value, assigned, dict(cards=[full_card(value)]))
+        for content, code in (('changed', 'review_objection_evidence_invalid'), ('original', None)):
+            captured['actual_input']['material_objections'] = [dict(id='O1', version_evidence=[dict(full, content=content)])]
+            report = staged.verify_completion(value, {'observations': [captured]}, tasks=[assigned])
+            evidence = [row['code'] for row in report['issues'] if row['code'].startswith('review_objection_evidence_')]
+            self.assertEqual(evidence, [code] if code else [])
+
+    def test_rejected_objection_delivery_is_invalid_without_becoming_pending(self):
+        full = dict(cite={'id': 'source'}, content='original')
+        value = epoch(material_objections=[dict(id='O1', version_evidence=[full])])
+        assigned = task(value, objection_entries=value['material_objection_entries'])
+        captured = observation(value, assigned, dict(cards=[full_card(value)]))
+        captured['actual_input']['material_objections'] = [dict(id='O1', version_evidence=[dict(full, content='changed')])]
+        report = staged.verify_completion(value, {'observations': [captured]}, tasks=[assigned])
+        self.assertIn('review_objection_evidence_invalid', [row['code'] for row in report['issues']])
+        self.assertNotIn('review_objection_evidence_pending', [row['code'] for row in report['issues']])
+
+    def test_unrun_objection_evidence_report_keeps_all_69_pending_entries(self):
+        entries = [dict(content='Evidence entry %d.' % index) for index in range(69)]
+        value = epoch(material_objections=[dict(id='O1', version_evidence=entries)])
+        selected = {'observations': []}
+        report = staged.verify_completion(value, selected)
+        pending = next(row for row in report['issues'] if row['code'] == 'review_objection_evidence_pending')
+        exact = list(staged.iter_completion_issues(value, selected, code='review_objection_evidence_pending'))
+        self.assertEqual(pending['count'], 69)
+        self.assertEqual(len(pending['sample']), 20)
+        self.assertEqual(len(exact), 69)
+        self.assertEqual({row['index'] for row in exact}, set(range(69)))
+        self.assertNotIn('review_objection_evidence_invalid', [row['code'] for row in report['issues']])
+
     def test_focused_adjudication_uses_its_bound_disposition(self):
         value = epoch(role='adjudicator', focused_scope=dict(review_pair_roots=['review-A', 'review-B'],
                        objection_id='O7', objection_version='version-7'))

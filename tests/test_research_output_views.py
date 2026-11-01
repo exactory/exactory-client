@@ -871,7 +871,8 @@ class RenderTests(ViewCase):
     def test_a_commit_of_other_kinds_skips_the_model(self):
         seed_journey(self)
         self.render()
-        self.put(("work", "work-1", {"id": "work-1"}), ("literature_operation", "operation-1", {"operation": "x"}))
+        self.put(("resource_account", "account-1", {"id": "account-1"}),
+                 ("literature_operation", "operation-1", {"operation": "x"}))
         with mock.patch.object(Store, "read_kinds", side_effect=AssertionError("the model was read")):
             summary = self.render()
         self.assertEqual(summary["revision"], self.store.revision)

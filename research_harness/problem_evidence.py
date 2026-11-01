@@ -7,6 +7,20 @@ from .operations import fields, strings, text
 from .problem_claims import find_current_statement, find_latest, find_value, find_assessment, compute_statement_digest
 from .reading import fulltext_coverage, validate_read_evidence
 
+# Records read by describe_binding, including citation validation, current full
+# readings and deferrals, admitted computations and delivered native results.
+# Full-text captures are embedded in work, with their provenance in source.
+BINDING_RECORD_KINDS = (
+    "problem_selection", "problem_statement", "problem_openness", "problem_value", "problem_assessment",
+    "problem_attempt", "native_attempt", "native_attempt_current", "literature_search", "reading", "work",
+    "source", "source_bundle", "bundle_selection", "work_assertion", "alias", "work_family",
+    "problem_citation_metadata", "visual_asset", "visual_asset_selection", "source_deferral",
+    "source_deferral_selection", "configuration", "literature_scope", "fulltext_requirement", "search_selection",
+    "reference_occurrence", "reference_resolution", "workspace", "execution_admission", "execution_outcome",
+    "execution", "cycle_assessment", "problem_formal_check", "native_closure", "native_import_identity",
+    "probe", "probe_artifact", "probe_launch", "local_artifact",
+)
+
 # The reviewer reads this note with the problem evidence of a result packet.
 INLINE_DELIVERY_NOTE = (
     "Each passage is the exact text of one inspected span of a reading, with the reading id, the inspection index and "
@@ -16,6 +30,14 @@ INLINE_DELIVERY_NOTE = (
     "version_id. Cite a delivered record by copying its cite object, which names the record by kind and id. "
     "A source link is citable only for a full text that a source request delivered to you. "
     "This review is verified only when it calls no tool, so a held text is obtained only through a source request.")
+
+
+def collect_binding_record_kinds(records):
+    """Include the unrestricted record kinds cited by the current self-assessment."""
+    assessment = find_assessment(records)
+    return set(BINDING_RECORD_KINDS) | {
+        reference["record_kind"] for item in (assessment or {}).get("items", {}).values()
+        for reference in item["evidence"] if reference.get("kind") == "record"}
 
 
 def collect_value_items(value):

@@ -2652,7 +2652,12 @@ def _check_completion_objection_evidence(work):
     for requirement in epoch['material_objection_entries']:
         if not any(_has_objection_entry(dict(material_objections=row['actual_input'].get('material_objections', [])), requirement)
                    for row in observed):
-            _record_completion_issue(work, 'review_objection_evidence_invalid', objection_id=requirement['objection_id'],
+            delivered = any(objection['id'] == requirement['objection_id']
+                and len(objection.get(requirement['field'], [])) > requirement['index']
+                for row in work['raw'].values()
+                for objection in row.get('actual_input', {}).get('material_objections', []))
+            code = 'review_objection_evidence_invalid' if delivered else 'review_objection_evidence_pending'
+            _record_completion_issue(work, code, objection_id=requirement['objection_id'],
                   field=requirement['field'], index=requirement['index'])
 
 
