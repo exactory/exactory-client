@@ -344,6 +344,7 @@ REFUSED_OUTCOMES = {
     "manuscript-review": "publication_bundle_missing",
     "probe": "probe_intent_missing",
     "probe-intent": "artifact_missing",
+    "problem-citation-metadata": "problem_citation_work_ineligible",
     "problem-decision": "problem_minimum_unmet",
     "problem-formal-check": "problem_formal_check_unbound",
     "problem-openness": "review_context_unverified",
