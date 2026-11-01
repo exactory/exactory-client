@@ -35,38 +35,80 @@ class CitationEvidenceTests(unittest.TestCase):
         bibliography = read_bibliography(b"@misc{doi-only, doi={10.48550/arXiv.2609.14520}}")
         self.assertEqual(find_citing_entry(bibliography, [_build_work("arxiv:2609.14520v1")]), (True, "doi-only"))
 
-    def test_arxiv_tokens_do_not_match_inside_unrelated_identifiers(self):
-        for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
-            for field in ("doi={10.9999/2609.14520}", "url={https://example.org/2609.14520}",
-                          "note={foo.2609.14520}", "doi={10.9999/x-2609.14520}", "doi={10.9999/x_2609.14520}"):
+    def test_arxiv_tokens_do_not_match_without_an_arxiv_context(self):
+        fields = ("doi={10.9999/2609.14520}", "doi={10.9999/x-2609.14520}", "doi={10.9999/x_2609.14520}",
+                  "doi={10.9999/x:2609.14520}", "doi={10.9999/x;2609.14520}", "doi={10.9999/(2609.14520)}",
+                  "url={https://example.org/2609.14520}", "url={https://notarxiv.org/abs/2609.14520}",
+                  "doi={10.9999/x10.48550/arxiv.2609.14520}", "note={foo.2609.14520}",
+                  "note={2609.14520}", "note={myarxiv:2609.14520}", "note={1arxiv 2609.14520}",
+                  "url={https://other.arxiv.org/abs/2609.14520}", "url={https://x-arxiv.org/abs/2609.14520}",
+                  "url={https://arxiv.org.example/abs/2609.14520}", "myeprint={2609.14520}",
+                  "eprint=2609.14520", "note={110.48550/arxiv.2609.14520}")
+        for index, field in enumerate(fields):
+            data = ("@article{unrelated, " + field + ", title={Unrelated context entry %d}}" % index).encode()
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
                 with self.subTest(identifier=identifier, field=field):
-                    data = ("@article{unrelated, " + field + ", title={Another publication}}").encode()
                     work = _build_work(identifier, title="Recorded paper title")
                     self.assertEqual(find_citing_entry(read_bibliography(data), [work]), (False, None))
 
-    def test_arxiv_tokens_match_explicit_ids_and_registry_urls(self):
+    def test_an_arxiv_token_in_a_bibtex_key_does_not_cite_a_work(self):
+        data = b"@article{ref:2609.14520, title={Unrelated bibliography key}}"
         for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
-            for field in ("note={arXiv:2609.14520}", "eprint={2609.14520}",
-                          "url={https://arxiv.org/abs/2609.14520v2}",
-                          "url={http://export.arxiv.org/abs/2609.14520}",
-                          "url={https://arxiv.org/pdf/2609.14520v2.pdf}",
-                          "url={https://arxiv.org/html/2609.14520v1}",
-                          "url={https://doi.org/10.48550/arXiv.2609.14520}"):
+            with self.subTest(identifier=identifier):
+                self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                   [_build_work(identifier, title="Recorded paper title")]), (False, None))
+
+    def test_arxiv_tokens_match_only_in_explicit_reference_contexts(self):
+        fields = ("note={arXiv:2609.14520}", "note={arXiv: 2609.14520}", "note={arXiv 2609.14520}",
+                  "journal={arXiv preprint arXiv:2609.14520v2}", "eprint={2609.14520}",
+                  'eprint = "2609.14520v1"', "url={https://arxiv.org/abs/2609.14520v2}",
+                  "url={http://export.arxiv.org/abs/2609.14520}", "url={https://www.arxiv.org/abs/2609.14520}",
+                  "url={https://arxiv.org/pdf/2609.14520v2.pdf}", "url={https://arxiv.org/pdf/2609.14520v2}",
+                  "url={https://arxiv.org/html/2609.14520v1}",
+                  "url={https://arxiv.org/ftp/arxiv/papers/2609/2609.14520.pdf}",
+                  "doi={10.48550/arXiv.2609.14520}", "url={https://doi.org/10.48550/arXiv.2609.14520}",
+                  "url={https://arxiv.org/format/2609.14520}", "note={arXiv \t: \t2609.14520}",
+                  "eprint \t= { \t2609.14520}")
+        for index, field in enumerate(fields):
+            data = ("@article{cited, " + field + ", title={Explicit reference entry %d}}" % index).encode()
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
                 with self.subTest(identifier=identifier, field=field):
-                    data = ("@article{cited, " + field + ", title={Another publication}}").encode()
                     work = _build_work(identifier, title="Recorded paper title")
                     self.assertEqual(find_citing_entry(read_bibliography(data), [work]), (True, "cited"))
 
-    def test_old_style_arxiv_tokens_require_the_same_start_boundary(self):
+    def test_old_style_arxiv_tokens_require_the_same_reference_contexts(self):
         cases = {"note={arXiv:hep-th/9711200}": True,
                  "url={https://arxiv.org/abs/hep-th/9711200}": True,
+                 "eprint={hep-th/9711200}": True,
+                 "doi={10.48550/arXiv.hep-th/9711200}": True,
                  "doi={10.9999/hep-th/9711200}": False}
-        for field, cited in cases.items():
+        for index, (field, cited) in enumerate(cases.items()):
             with self.subTest(field=field):
-                data = ("@article{entry, " + field + ", title={Another publication}}").encode()
+                data = ("@article{entry, " + field + ", title={Old archive entry %d}}" % index).encode()
                 self.assertEqual(find_citing_entry(read_bibliography(data),
-                                                   [_build_work("arxiv:hep-th/9711200v2")]),
+                                                   [_build_work("arxiv:hep-th/9711200v2", title="Recorded archive title")]),
                                  (True, "entry") if cited else (False, None))
+
+    def test_subject_class_arxiv_tokens_still_match(self):
+        data = b"@article{subject, note={arXiv:math.GT/0309136}, title={Unrelated subject class entry}}"
+        self.assertEqual(find_citing_entry(read_bibliography(data),
+                                           [_build_work("arxiv:math.GT/0309136v2", title="Recorded subject title")]),
+                         (True, "subject"))
+
+    def test_a_legacy_ftp_url_cites_its_arxiv_work(self):
+        data = (b"@article{legacy, url={https://arxiv.org/ftp/arxiv/papers/2006/2006.11098.pdf},"
+                b" title={Unrelated legacy URL entry}}")
+        self.assertEqual(find_citing_entry(read_bibliography(data),
+                                           [_build_work("arxiv:2006.11098v1", title="Recorded legacy title")]),
+                         (True, "legacy"))
+
+    def test_plain_text_arxiv_tokens_require_an_arxiv_context(self):
+        cases = {b"See arXiv:2609.14520.": True, b"See 10.9999/x:2609.14520.": False}
+        for data, cited in cases.items():
+            with self.subTest(data=data):
+                self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                   [_build_work("arxiv:2609.14520v1", title="Recorded text title")]),
+                                 (cited, None))
 
     def test_versioned_or_malformed_datacite_dois_do_not_contribute_arxiv_tokens(self):
         for suffix in ("2609.14520v1", "2609.14520-extra", "not-an-id"):
