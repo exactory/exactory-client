@@ -115,9 +115,9 @@ class ContractValidationTests(unittest.TestCase):
     def test_rubric_choices_honor_integration_constraints(self):
         value = epoch()
         assigned, selected = selection(value, integration_changes={
-            'decision_constraints': {'visible_conditions': [], 'permissible_decisions': {'calibration': ['fail']}}})
+            'decision_constraints': {'visible_conditions': [], 'permissible_decisions': {'/value/rubric/calibration': ['fail']}}})
         output = selected['observations'][0]['output']
-        output['terminal']['decisions'] = {'calibration': 'pass'}
+        output['terminal']['decisions'] = {'/value/rubric/calibration': 'pass'}
         selected['observations'][0]['raw_output_digest'] = digest(output)
         self.assertFalse(staged.verify_completion(value, selected, tasks=assigned)['complete'])
 
@@ -134,7 +134,7 @@ class ContractValidationTests(unittest.TestCase):
         assigned, observed = [reading], [observed_read]
         for segment in [row for row in plan['tasks'] if row['scope'] == 'card_segment']:
             frozen = staged.freeze_task(segment, digest(segment), staged.SERIALIZATION)
-            output = {'segment_readings': [{'id': 'reading-' + frozen['id'], 'summary': 'Read all assigned critical text.'}]}
+            output = {'segment_readings': [dict(id='reading-' + frozen['id'], card_id=span['card_id'], start=span['start'], end=span['end'], reading='Read all assigned critical text.') for span in frozen['card_segments']]}
             captured = observation(value, frozen, output)
             captured['actual_input']['card_segments'] = [staged.card_span(
                 next(card for card in cards if card['id'] == span['card_id']), span['start'], span['end'])

@@ -21,14 +21,14 @@ class StagedReviewTests(unittest.TestCase):
         self.assertEqual(staged.resolve_objection_entry(packet, alias), full)
         self.assertEqual(packet, before)
 
-    def test_completion_keeps_existing_complete_and_incomplete_roots(self):
+    def test_completion_roots_bind_the_expanded_compact_card_contract(self):
         value = epoch()
         tasks, selected = selection(value)
         complete = staged.verify_completion(value, selected, tasks=tasks)
         incomplete = staged.verify_completion(value, {'observations': []}, tasks=tasks)
         self.assertTrue(complete['complete'])
         self.assertFalse(incomplete['complete'])
-        self.assertEqual(complete['digest'], '8023113056fa63830e870842c10a4c79ce662a4a342bd724fe771c52c4edb6a2')
+        self.assertEqual(complete['digest'], 'b81f759e9621b677b2f04e0d568d77eed2271069a17c345714c10bbadd97b417')
         self.assertEqual(incomplete['digest'], 'b82bb5c706d02e796dc2107286d224333b3e72ae613ef980e97605dca6a06361')
 
     def test_occurrence_identity_includes_position_and_full_descriptor(self):
@@ -152,10 +152,10 @@ class StagedReviewTests(unittest.TestCase):
         report = staged.verify_completion(value, {'observations': []})
         unresolved = [dict(id='missing', scope={'claim_ids': ['c']}, cause='exhausted',
                            affected_decisions=['problem_value'], exhausted_tasks=['read'], scope_kind='unresolved',
-                           next_action={'workflow': 'problem-evidence', 'evidence': 'new source'})]
+                           next_action={'workflow': 'problem-evidence', 'scope': {'evidence': 'new source'}, 'prerequisite': 'new evidence'})]
         outcome = staged.record_incomplete(value, report, origin='execution',
                     origin_binding={'execution_receipts': ['terminated'], 'reason': 'exhausted'},
-                    unresolved_scope=unresolved, recovery_work=[unresolved[0]['next_action']],
+                    unresolved_scope=unresolved, recovery_work=[dict(workflow='problem-evidence', command='problem-evidence', payload={'evidence': 'new source'}, text='Supply the missing source.')],
                     resource_ledger={'attempts': 2}, recorded_revision=4)
         self.assertEqual(outcome['kind'], 'assessment_incomplete')
         self.assertNotIn('value_review', outcome)

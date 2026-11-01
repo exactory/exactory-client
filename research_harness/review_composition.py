@@ -508,6 +508,47 @@ def build_root(plan, observations):
     return copy.deepcopy(_build_root(plan, descriptors, count))
 
 
+def plan_incomplete_composition(epoch, *, outcome, known_conclusions, findings, source_root, dependency_root,
+                                selected_observations_root, integration_root, page_characters):
+    """Freeze bounded page ownership for a reviewer-origin incomplete outcome.
+
+    Object members remain atomic, as required by the composition schema. The
+    caller measures and admits the rendered answer tasks before dispatch.
+    """
+    from .review_staged import validate_incomplete_scope
+    check_fields(outcome, ('unresolved_scope', 'recovery_work'), code='review_composition_conflict')
+    validate_incomplete_scope(**outcome)
+    if not _integer(page_characters) or not page_characters:
+        _reject('Incomplete pages need a positive content allowance.')
+    values = dict(known_conclusions=_array(known_conclusions, 'known_conclusions'),
+                  findings=_array(findings, 'findings'), **outcome)
+    finding_ids = _check_ids([row['id'] for row in findings], 'findings')
+    plan = dict(protocol=PROTOCOL, schema=SCHEMA, epoch_id=epoch['id'], role='incomplete', slot_id=epoch['slot_id'],
+                subject=copy.deepcopy(epoch['subject']), evidence_currency=(epoch['evidence_currency'] if isinstance(epoch['evidence_currency'], str) else digest(epoch['evidence_currency'])),
+                source_root=source_root, dependency_root=dependency_root,
+                selected_observations_root=selected_observations_root, integration_root=integration_root,
+                findings=finding_ids, evidence_obligations=[], required_pages=[], ownership=[],
+                revision_authorizations=[], terminal_choices={'/origin': ['reviewer']})
+    used = page_characters
+    for field in _page_fields('incomplete')[0]:
+        members = values[field[1:]]
+        for ordinal, member in enumerate(members or [None]):
+            if members and not isinstance(member, dict):
+                _reject('Incomplete page members must be objects.', path=field)
+            size = len(_canonical(member, code='review_composition_conflict')) if members else 2
+            if size > page_characters:
+                _reject('An incomplete member needs a smaller scientific scope.', pending=True, path=field, ordinal=ordinal)
+            if used + size > page_characters:
+                plan['required_pages'].append('incomplete-page:' + str(len(plan['required_pages']) + 1))
+                used = 0
+            used += size
+            plan['ownership'].append(dict(page_id=plan['required_pages'][-1], path=field,
+                 type='object' if members else 'empty_list', member_key=(str(member.get('id', field + ':' + str(ordinal))) if members else None),
+                 ordinal=ordinal if members else None, range=None))
+    _validate_plan(plan)
+    return copy.deepcopy(plan)
+
+
 def _validate_root(root):
     check_fields(root, ('version', 'header', 'page_tree', 'nodes', 'digest'), code='review_composition_conflict', path='root')
     _json_digest(root)
@@ -549,6 +590,9 @@ def validate_terminal_choices(plan, terminal, root):
     _validate_root(root)
     if root['header'].get('plan_digest') != _domain('plan', plan):
         _reject('The terminal root must bind this exact frozen plan.')
+    if isinstance(terminal, dict) and 'decisions' in terminal:
+        from .review_staged import derive_composition_terminal
+        terminal = derive_composition_terminal({'id': plan['epoch_id'], 'role': plan['role']}, terminal)
     check_fields(terminal, ('protocol', 'epoch_id', 'role', 'composition_root', 'choices'), code='review_composition_conflict', path='terminal')
     for key in ('protocol', 'epoch_id', 'role'):
         if terminal[key] != plan[key]:
@@ -639,6 +683,10 @@ def effective_review_output(controller_id, frozen_selection=None):
         if not isinstance(selection.get('output'), dict):
             _reject('An ordinary selection needs its exact existing scientific object.')
         output = selection['output']
+        if 'terminal' in output:
+            from .review_staged import project_ordinary_final
+            output, staged_records = project_ordinary_final(output)
+            result['staged_records'] = staged_records
         if _json_digest(output) != selection.get('output_digest'):
             _reject('Ordinary output must preserve its existing effective digest.')
         _check_literal_text(result['terminal_attempt_id'], 'terminal_attempt_id')
@@ -648,6 +696,8 @@ def effective_review_output(controller_id, frozen_selection=None):
         if missing:
             _reject('A paged selection requires complete frozen composition bindings.', pending=True, fields=missing)
         terminal = _read_observation(selection['terminal'])
+        if isinstance(terminal, dict) and 'terminal' in terminal:
+            terminal = terminal['terminal']
         _hash(selection['completion_root'], 'completion_root')
         output = assemble_result(selection['plan'], selection['observations'], selection['root'], terminal)
         if selection['plan']['role'] == 'incomplete':
