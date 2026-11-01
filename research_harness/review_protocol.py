@@ -2090,7 +2090,8 @@ def _repair_packet(records, artifacts, value, repair):
         packet['prior_context'] = [supplied_evidence.deliver_passage(records, artifacts, mapping)
                                    for mapping in packet['prior_context']]
     output = repair['scientific_history'][-1]['observed_output']
-    requested = bar_sources.pending(repair['packet'], output)
+    epoch = records.get('review_epoch', {}).get(repair['predecessor'].get('staged_review', {}).get('epoch_id'), {})
+    requested = bar_sources.pending(repair['packet'], output, manifest=epoch.get('manifest'))
     session = review_excerpts.carry_session(records, artifacts, repair['packet'], output)
     answers, session['allowances'] = review_excerpts.answer_passages(
         records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'])
@@ -2310,7 +2311,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         refresh_parent = _find_problem_refresh_parent(records, artifacts, value) if problem and upgrade is None else None
         if refresh_parent is not None:
             value = dict(value, context={'prior_assignment_id': refresh_parent})
-        repair = context_repair.prepare_repair(records, artifacts, value) if value['role'] in bar_sources.ROLES else None
+        repair = (context_repair.prepare_repair(records, artifacts, value)
+                  if value['role'] in bar_sources.ROLES or
+                  value['role'] == 'adjudicator' and 'context_repair' in value['context'] else None)
         parent = None
         visual_transition = False
         if value['role'] in bar_sources.ROLES and 'prior_assignment_id' in value['context']:
@@ -2336,12 +2339,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     value = dict(value, context=dict(value['context'], source_delivery=MODE))
         if value['context'].get('source_delivery') and route['adapter'] not in ('codex_cli_v1', 'codex_cli_visual_v1'):
             raise ResearchError('review_complete_source_route', 'Complete visible source input retains the existing Codex local route')
-        visual_repair = route['adapter'] == 'codex_cli_visual_v1' and repair is not None
+        staged_repair = repair is not None and repair['predecessor'].get('staged_review') is not None
+        visual_repair = route['adapter'] == 'codex_cli_visual_v1' and repair is not None and not staged_repair
         if route['adapter'] == 'codex_cli_visual_v1':
             if visual_repair:
                 from .review_visual_context_repair import eligible
                 eligible(records, artifacts, value, repair)
-            elif upgrade_parent is None and not (problem and value['role'] == 'result' and parent is not None and value['context'].get('source_delivery')):
+            elif upgrade_parent is None and not staged_repair and not (problem and value['role'] == 'result' and parent is not None and value['context'].get('source_delivery')):
                 raise ResearchError('review_visual_route_mismatch', 'Native visual input continues a complete-source problem result')
         slot_identifier = None
         if upgrade_parent is not None:
@@ -2432,6 +2436,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         reassessment_required = 'context_repair' in packet
         prompt = canonical_prompt(value['role'], repair=reassessment_required,
                                   orchestration='problem_creation' if problem else None,
+                                  staged_task=({'type': 'final'} if repair is not None and
+                                               value['role'] == 'adjudicator' else None),
                                   excerpts=review_excerpts.KEY in packet,
                                   reading_stage=openness_reading.find_stage(packet),
                                   reading_protocol=openness_reading.find_protocol(packet))
@@ -2468,12 +2474,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                      'author_id': value['author_id'], 'slot_id': slot_identifier, 'subject': value['subject'], 'role': value['role']})
             packet.pop('digest', None)
             packet['digest'] = digest(packet)
-        if upgrade is not None:
+        if upgrade is not None or staged_repair:
             from .review_staged import PROTOCOL as STAGED_PROTOCOL
             packet.pop('digest', None)
             packet['staged_review'] = dict(protocol=STAGED_PROTOCOL, kind='controller')
             packet['digest'] = digest(packet)
-            value = dict(value, context=dict(value['context'], staged_upgrade=upgrade))
+            if upgrade is not None:
+                value = dict(value, context=dict(value['context'], staged_upgrade=upgrade))
         else:
             packet = review_problem_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history)
         if review_problem_parts.find_stage(packet) is not None:

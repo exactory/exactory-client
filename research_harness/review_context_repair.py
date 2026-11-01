@@ -10,7 +10,8 @@ import json
 from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, normalized_text, strings, text
-from .review_supplied_evidence import collect_qualified_objections
+from .review_supplied_evidence import collect_qualified_objections, find_scientific_predecessor
+from .review_supplied_evidence import find_scientific_predecessor as _parent
 from . import strategy
 
 ROLES = ('bar', 'slate', 'result')
@@ -106,12 +107,6 @@ def _assignment(records, identifier):
     return saved
 
 
-def _parent(assignment):
-    context = assignment.get('context', {})
-    repair = context.get('context_repair')
-    return repair.get('assignment_id') if isinstance(repair, dict) else context.get('prior_assignment_id')
-
-
 def _lineage(records, assignment):
     chain, seen = [], set()
     while assignment is not None:
@@ -120,7 +115,7 @@ def _lineage(records, assignment):
             raise ResearchError('review_context_repair_mismatch', 'Reviewer lineage must be acyclic')
         seen.add(identifier)
         chain.append(assignment)
-        parent = _parent(assignment)
+        parent = find_scientific_predecessor(assignment)
         assignment = _assignment(records, parent) if parent is not None else None
     return list(reversed(chain))
 
@@ -163,7 +158,7 @@ def _exposure_lineage(records, assignment):
         if identifier in visited:
             return
         active.add(identifier)
-        parents = [_parent(current), current.get('history_assignment_id')]
+        parents = [find_scientific_predecessor(current), current.get('history_assignment_id')]
         for parent in dict.fromkeys(value for value in parents if value is not None):
             visit(_assignment(records, parent))
         active.remove(identifier)
@@ -339,7 +334,12 @@ def prepare_repair(records, artifacts, assignment_payload):
             for attempt in records.get('review_attempt', {}).values():
                 if attempt['assignment_id'] != ancestor['id'] or not attempt.get('output'):
                     continue
-                if not protocol.authenticate_provenance(records, artifacts, ancestor, attempt):
+                if ancestor.get('staged_review') is not None:
+                    from .review_staged_protocol import authenticate_observation
+                    authenticated = authenticate_observation(records, artifacts, ancestor, attempt)
+                else:
+                    authenticated = protocol.authenticate_provenance(records, artifacts, ancestor, attempt)
+                if not authenticated:
                     raise ResearchError('review_context_repair_unverified', 'Preserve the original instrumented observation provenance.')
                 observed.append(protocol.read_raw_observation(records, artifacts, attempt['id']))
             if observed:

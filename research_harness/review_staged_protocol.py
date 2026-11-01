@@ -76,17 +76,24 @@ def collect_observations(records, artifacts, epoch):
 
 def derive_current_contexts(records, artifacts, epoch):
     """Expand original claim closure only from authenticated accepted discoveries."""
+    return collect_current_planning_records(records, artifacts, epoch)['contexts']
+
+
+def collect_current_planning_records(records, artifacts, epoch):
+    """Use the core's versioned claim graph for every accepted discovery family."""
     from . import review_staged as staged
     discoveries = [row['receipt'].get('staged_observation')
                    for row in records.get('review_task_acceptance', {}).values()]
-    if not any(row is not None and row.get('epoch_id') == epoch['id']
-               and row.get('output', {}).get('new_dependencies') for row in discoveries):
-        return copy.deepcopy(epoch['manifest']['contexts'])
+    if not any(row is not None and row.get('epoch_id') == epoch['id'] and
+               (row.get('output', {}).get('new_dependencies') or
+                records.get('review_task', {}).get(row.get('task_id'), {}).get('task', {}).get('type') == 'frame')
+               for row in discoveries):
+        return dict(contexts=copy.deepcopy(epoch['manifest']['contexts']))
     observations, _, obligations = collect_observations(records, artifacts, epoch)
     if obligations:
         raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
     return staged.collect_planning_records(epoch, {'observations':observations},
-                                          tasks=list_epoch_tasks(records, epoch))['contexts']
+                                          tasks=list_epoch_tasks(records, epoch))
 
 
 def plan_remaining_tasks(records, artifacts, controller, *, profiles, composition_plan=None):
@@ -129,10 +136,15 @@ def plan_remaining_tasks(records, artifacts, controller, *, profiles, compositio
             dependencies.extend(row['task_id'] for row in observations if any(
                 group['id'] in task['group_ids'] for group in row['output'].get('selected_groups', [])))
         changed = remake_task(epoch, task, dependencies=sorted(set(dependencies)),
-            segment_task_ids=[remapped.get(key, key) for key in task['segment_task_ids']])
+            segment_task_ids=[remapped.get(key, key) for key in task['segment_task_ids']],
+            contexts=verified['contexts'])
         remapped[task['id']] = changed['id']
         bound.append(changed)
-    return staged._seal(dict({key:value for key,value in planned.items() if key != 'digest'}, tasks=bound))
+    result = dict({key:value for key,value in planned.items() if key != 'digest'}, tasks=bound)
+    if 'task_supersessions' in result:
+        result['task_supersessions'] = [dict(row, replacement_task_ids=[remapped.get(key, key)
+            for key in row['replacement_task_ids']]) for row in result['task_supersessions']]
+    return staged._seal(result)
 
 
 def build_request(artifacts, route, prompt, packet):
@@ -157,10 +169,11 @@ def project_card(epoch, card, findings):
     return staged.compact_card(card, manifest=epoch['manifest'], findings=findings)
 
 
-def project_terminal_material(epoch, observations, *, integration_id=None, tasks=(), contexts=None):
+def project_terminal_material(epoch, observations, *, integration_id=None, tasks=(), contexts=None, context_graph=None):
     """Deliver assessed grounds and answers without replaying full cards or pages."""
     from . import review_staged as staged
-    current_contexts = contexts or epoch['manifest']['contexts']
+    manifest = staged.bind_context_graph(epoch, context_graph) if context_graph is not None else epoch['manifest']
+    current_contexts = contexts or manifest['contexts']
     current_observations = [row for row in observations if all(
         key in current_contexts and root == current_contexts[key]['root']
         for key,root in row['actual_input']['context_roots'].items())]
@@ -192,14 +205,14 @@ def project_terminal_material(epoch, observations, *, integration_id=None, tasks
     for path, values in permitted.items():
         assurance = next((kind for kind in staged.ASSURANCES if path == '/value/assurances/' + kind + '/status'), None)
         required = constraints.get('decision_dependencies', {}).get(path,
-            epoch['manifest']['assurance_dependencies'].get(assurance, list(epoch['manifest']['contexts'])))
+            manifest['assurance_dependencies'].get(assurance, list(manifest['contexts'])))
         related = [row['id'] for row in cells.values() if row['claim_id'] in required]
         decisions[path] = dict(path=path, permitted_values=values, claim_ids=required, cells=related,
             supporting_conclusions=list(conclusions), unresolved=[row['id'] for row in cells.values()
                                                                  if row['id'] in related and row['status'] == 'unresolved'])
     claims = [dict(row, cells=[cell['id'] for cell in cells.values() if cell['claim_id'] == row['id']],
                    statuses=sorted({cell['status'] for cell in cells.values() if cell['claim_id'] == row['id']}))
-              for row in epoch['manifest']['claims']]
+              for row in manifest['claims']]
     finding_records = (verified['findings'] if tasks else
                        [row for observed in observations for row in observed['output'].get('findings', [])])
     findings = {row['id']:row for row in finding_records}
@@ -209,15 +222,17 @@ def project_terminal_material(epoch, observations, *, integration_id=None, tasks
                 conditions=[row['id'] for card in cards for row in card['conditions']],
                 findings=list(findings.values()), answers=list(answers.values()))
     if integrated is not None:
-        bound = staged.bind_terminal_conditions(epoch, {}, cards=cards, integration=integrated)
+        options = dict(context_graph=context_graph) if context_graph is not None else {}
+        bound = staged.bind_terminal_conditions(epoch, {}, cards=cards, integration=integrated, **options)
         material.update(record_root=bound['record_root'], visible_conditions=bound['visible_conditions'])
     return material
 
 
 def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=None, tasks=(), terminal_observations=None,
-                 contexts=None):
+                 contexts=None, context_graph=None):
     """Render exact originals and bounded, explicitly selected dependency records."""
     from . import review_staged as staged
+    manifest = staged.bind_context_graph(epoch, context_graph) if context_graph is not None else epoch['manifest']
     validate_composition_task(epoch, task, composition_plan)
     sources = {row['id']: row for row in epoch['manifest']['sources']}
     projected = {key: copy.deepcopy(task[key]) for key in
@@ -228,9 +243,9 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
             projected[key] = copy.deepcopy(task[key])
     originals = [dict(span=span, text=staged.materialize_quotation(sources[span['source_id']], span)['text'])
                  for span in task['inputs']]
-    current_contexts = epoch['manifest']['contexts'] if contexts is None else contexts
+    current_contexts = manifest['contexts'] if contexts is None else contexts
     claims = [dict(claim, context_root=current_contexts[claim['id']]['root'])
-              for claim in epoch['manifest']['claims'] if claim['id'] in task['claim_ids']]
+              for claim in manifest['claims'] if claim['id'] in task['claim_ids']]
     units = [dict(row, sources=[dict(source_id=original['span']['source_id'], span=original['span'], original_index=index)
                                for index, original in enumerate(originals) if original['span']['source_id'] in row['source_ids']])
              for row in epoch['manifest']['occurrences'] if row['id'] in task['occurrence_ids']]
@@ -264,9 +279,11 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
                        epoch['manifest']['occurrences'] if row['id'] in task['occurrence_ids']],
                 index_root=epoch['manifest']['digest'], inherited=inherited,
                 frame=dict(fields=frame_fields), output_tokens=task['measurement']['configured_output_tokens'])
+    if context_graph is not None:
+        body['context_graph_root'] = context_graph['root']
     project_task_material(epoch, task, body, observations, terminal_observations, tasks,
                           composition_plan['role'] if composition_plan is not None else None,
-                          contexts=current_contexts)
+                          contexts=current_contexts, context_graph=context_graph)
     if composition_plan is not None:
         apply_composition_plan(epoch, task, body, composition_plan, terminal_observations or observations, tasks)
     packet = dict(protocol=staged.PROTOCOL, subject=epoch['subject'], role=epoch['role'], staged_review=body,
@@ -284,7 +301,8 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
     return packet
 
 
-def project_task_material(epoch, task, body, observations, terminal_observations, tasks, composition_role, *, contexts=None):
+def project_task_material(epoch, task, body, observations, terminal_observations, tasks, composition_role, *, contexts=None,
+                          context_graph=None):
     """Project only the selected task's scientific dependency material."""
     from . import review_staged as staged
     # Records arrive as explicit task input, never as replayed conversation.
@@ -349,7 +367,8 @@ def project_task_material(epoch, task, body, observations, terminal_observations
             body['final'] = dict(composition_root=None, origin='reviewer', decisions={'/origin': ['reviewer']})
         else:
             body['final'].update(project_terminal_material(epoch, terminal_observations or observations,
-                                  integration_id=body['final']['integration_id'], tasks=tasks, contexts=contexts))
+                                  integration_id=body['final']['integration_id'], tasks=tasks, contexts=contexts,
+                                  context_graph=context_graph))
     keep = {'frame': ('frame',), 'read': (), 'combine': ('combine',),
             'original_check': ('original_check', 'segments'),
             'integrate': ('integrate', 'fragments', 'segments', 'original_check', 'retrieval'),
@@ -490,9 +509,8 @@ def build_manifest(artifacts, packet, role):
 
 
 def _find_predecessor_assignment_id(record):
-    context = record.get('context', {})
-    return (context.get('prior_assignment_id') or context.get('context_repair', {}).get('assignment_id')
-            or context.get('staged_upgrade', {}).get('assignment_id'))
+    from .review_supplied_evidence import find_scientific_predecessor
+    return find_scientific_predecessor(record)
 
 
 def _collect_successor_ancestry(records, epoch):
@@ -699,10 +717,35 @@ def prepare_controller(records, artifacts, record, packet, route):
     import time
     record['staged_started_at'] = time.time()
     predecessor_id = _find_predecessor_assignment_id(record)
+    if packet.get('context_repair') is not None:
+        record['slot_id'] = packet['context_repair']['slot_id']
+        if record['role'] == 'adjudicator':
+            predecessor = protocol._get(records, 'review_assignment', predecessor_id)
+            record['context'] = dict(predecessor['context'], context_repair=record['context']['context_repair'])
+            record['context'].pop('staged_upgrade', None)
+    if record.get('context', {}).get('staged_upgrade') is not None:
+        from .review_context_repair import collect_problem_review_history
+        historical = collect_problem_review_history(records, record)
+        if historical:
+            packet = copy.deepcopy(packet)
+            retained = {row.get('review', row)['id']: row for row in packet.get('historical_reviews', [])}
+            for review in historical:
+                retained[review['id']] = (protocol.deliver_historical_review(records, artifacts, review)
+                    if 'payload' in review else protocol._reference_templates(review))
+            packet['historical_reviews'] = list(retained.values())
+            from .review_supplied_evidence import list_delivered_objections
+            objections = {row['id']: row for row in list_delivered_objections(
+                dict(historical_reviews=packet['historical_reviews']))}
+            objections.update({row['id']: row for row in packet.get('material_objections', [])})
+            packet['material_objections'] = list(objections.values())
     inherited = (_collect_successor_findings(records, artifacts,
         protocol._get(records, 'review_assignment', predecessor_id)) if predecessor_id is not None else [])
     if inherited:
         packet = dict(packet, inherited_review_findings=inherited)
+    packet = dict(packet)
+    packet.pop('digest', None)
+    packet['digest'] = digest(packet)
+    record.update(packet=protocol._put_json(artifacts, packet), packet_digest=packet['digest'])
     manifest = build_manifest(artifacts, packet, record['role'])
     if inherited:
         manifest = staged._seal(dict({key:value for key,value in manifest.items() if key != 'digest'},
@@ -750,13 +793,14 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
         raise ResearchError('invalid_review_staged', 'Use the frozen core task schema, type and scope')
     if task['epoch_id'] != epoch['id'] or task['epoch_digest'] != epoch['digest']:
         raise ResearchError('review_task_dependency_changed', 'The task must bind this frozen epoch')
-    current_contexts = derive_current_contexts(records, artifacts, epoch)
+    verified = collect_current_planning_records(records, artifacts, epoch)
+    current_contexts = verified['contexts']
     if task['scope'] == 'unresolved' or task['measurement'] is not None and not task['measurement']['fits']:
         raise ResearchError('review_task_pending', 'Subdivide work that has not passed joint admission')
     for claim_id in task['claim_ids']:
         context = current_contexts.get(claim_id)
         if context is None or task['context_roots'].get(claim_id) != context['root']:
-            raise ResearchError('review_task_dependency_changed', 'The task must retain the exact original claim context')
+            raise ResearchError('review_task_dependency_changed', 'The task must bind the current versioned claim context')
         if task['scope'] not in ('original_segment', 'segmented_original', 'unresolved') and not staged._covers_inputs(context['spans'], task['inputs']):
             raise ResearchError('review_task_pending', 'The task input must hold every assigned original claim context')
     if task['resource_policy'] != epoch['budgets'] or task['required'] is not True:
@@ -791,7 +835,7 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
         terminal_observations = observed
     route = protocol._get(records, 'review_route', controller['route_id'])
     repair = protocol._read_json(artifacts, controller['packet']).get('context_repair')
-    claim_range = set(task['claim_ids']) != {row['id'] for row in epoch['manifest']['claims']}
+    claim_range = set(task['claim_ids']) != set(current_contexts)
     prompt = protocol.canonical_prompt(epoch['role'], orchestration='problem_creation', staged_task=task,
                               repair=repair is not None, claim_range=claim_range,
                               composed=composition_plan is not None and task['type'] == 'final')
@@ -806,7 +850,8 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
     task = staged._seal(dict({key: value for key, value in task.items() if key != 'digest'}, measurement=measurement))
     packet = build_packet(epoch, task, observations=dependencies, repair=repair, composition_plan=composition_plan,
                                   tasks=list_epoch_tasks(records, epoch),
-                                  terminal_observations=terminal_observations, contexts=current_contexts)
+                                  terminal_observations=terminal_observations, contexts=current_contexts,
+                                  context_graph=verified.get('context_graph'))
     if composition_plan is not None and composition_plan['role'] != 'incomplete' and task['type'] == 'answer':
         from .review_staged_followups import read_composition_source_fragments
         sources = read_composition_sources(records, artifacts, composition_plan)
@@ -838,6 +883,8 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
     task = staged.freeze_task(task, digest(request), staged.SERIALIZATION, measurement=measurement)
     result = dict(id=task['id'], epoch_id=epoch['id'], generation=1, task=task, packet=protocol._put_json(artifacts, packet),
                 request=protocol._put_json(artifacts, request), prompt=prompt, controller_assignment_id=controller['id'])
+    if verified.get('context_graph') is not None:
+        result['context_graph'] = verified['context_graph']
     if composition_plan is not None:
         result['composition_plan_id'] = digest(composition_plan)
     return result
@@ -894,6 +941,8 @@ def prepare_child(records, artifacts, value, revision):
         raise ResearchError('review_task_pending', 'Name an existing task or supply its sealed core envelope')
     if planned['epoch_id'] != binding['epoch_id']:
         raise ResearchError('review_task_dependency_changed', 'The task belongs to another epoch')
+    if not match_task_contexts(planned['task'], derive_current_contexts(records, artifacts, epoch)):
+        raise ResearchError('review_task_dependency_changed', 'Replan this task against the current context graph')
     if any(row.get('staged_review', {}).get('task_id') == planned['id']
            for row in records.get('review_assignment', {}).values()):
         raise ResearchError('review_resampling_forbidden', 'The immutable task already has its child assignment')
@@ -1531,18 +1580,18 @@ def describe_planning_command(controller_id):
     return dict(kind='command', command='review-assignment', payload=dict(controller_assignment_id=controller_id))
 
 
-def split_task(epoch, task, *, cards=(), observations=()):
+def split_task(epoch, task, *, cards=(), observations=(), contexts=None):
     """Partition one failed work dimension without losing its original obligation union."""
     from . import review_staged as staged
     options = {key: copy.deepcopy(task[key]) for key in ('inputs', 'claim_ids', 'occurrence_ids', 'dependencies',
         'binary_sources', 'card_ids', 'card_segments', 'group_ids', 'segment_task_ids', 'obligation_ids', 'child_ids',
         'answer_ranges', 'objection_entries')}
-    for key in ('reconciliation_id', 'composition_role', 'composition_plan_root'):
+    for key in ('reconciliation_id', 'composition_role', 'composition_plan_root', 'supersedes'):
         if key in task:
             options[key] = task[key]
     scope = task['scope']
     options['contexts'] = {key:dict(context, root=task['context_roots'].get(key, context['root']))
-                           for key,context in epoch['manifest']['contexts'].items()}
+                           for key,context in (epoch['manifest']['contexts'] if contexts is None else contexts).items()}
     integration_scope = task['type'] == 'integrate' and not task['occurrence_ids']
     catalog = {card['id']:card for card in cards if card['kind'] == 'full'}
     if integration_scope and not options['child_ids']:
@@ -1725,7 +1774,7 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
                     changes.extend(page_changes)
                     candidates.extend(row for row in page_tasks if all(key in accepted for key in row['dependencies']))
                     break
-                children = split_task(epoch, task, observations=observations,
+                children = split_task(epoch, task, observations=observations, contexts=contexts,
                     cards=staged.collect_planning_records(epoch, {'observations':observations}, tasks=active)['cards'])
                 repairs = records.get('review_task_repair', {})
                 if not children or total >= epoch['budgets']['max_calls'] or sum(row['epoch_id'] == epoch['id'] for row in repairs.values()) >= epoch['budgets']['max_subdivisions']:
@@ -1849,7 +1898,8 @@ def remake_task(epoch, task, **changes):
     from . import review_staged as staged
     keys = ('inputs', 'claim_ids', 'occurrence_ids', 'dependencies', 'binary_sources', 'card_ids', 'card_segments',
             'group_ids', 'scope', 'segment_task_ids', 'measurement', 'required', 'obligation_ids', 'child_ids',
-            'answer_ranges', 'objection_entries', 'reconciliation_id', 'composition_role', 'composition_plan_root')
+            'answer_ranges', 'objection_entries', 'reconciliation_id', 'composition_role', 'composition_plan_root',
+            'supersedes')
     options = {key:copy.deepcopy(task[key]) for key in keys if key in task}
     options['contexts'] = {key:dict(context, root=task['context_roots'].get(key, context['root']))
                            for key,context in epoch['manifest']['contexts'].items()}
@@ -1884,7 +1934,9 @@ def prepare_partitions(records, artifacts, controller, epoch, task, *, compositi
         except ResearchError as error:
             if error.code not in ('review_task_pending', 'review_staged_binary_unsupported'):
                 raise
-            children = split_task(epoch, assigned, cards=cards, observations=observations) if error.code == 'review_task_pending' else []
+            children = (split_task(epoch, assigned, cards=cards, observations=observations,
+                                  contexts=derive_current_contexts(records, artifacts, epoch))
+                        if error.code == 'review_task_pending' else [])
             if not children or existing >= epoch['budgets']['max_subdivisions']:
                 return changes, plans, dict(task=assigned, code=error.code, message=str(error), details=error.details)
             existing += 1

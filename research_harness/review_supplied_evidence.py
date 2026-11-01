@@ -18,6 +18,15 @@ PROMPT = (
 )
 
 
+def find_scientific_predecessor(assignment):
+    """Follow a fixed scientific slot across continuations, repairs and upgrades."""
+    context = assignment.get('context', {})
+    repair = context.get('context_repair')
+    if isinstance(repair, dict):
+        return repair.get('assignment_id')
+    return context.get('prior_assignment_id') or context.get('staged_upgrade', {}).get('assignment_id')
+
+
 def lineage_packets(records, artifacts, assignment_ids):
     pending, seen, result = list(assignment_ids), set(), []
     while pending:
@@ -40,10 +49,7 @@ def lineage_packets(records, artifacts, assignment_ids):
         from .review_protocol import source_delivery_packet
         packet = source_delivery_packet(records, artifacts, assignment)
         result.append(packet)
-        parent = assignment.get('history_assignment_id') or assignment.get('context', {}).get('prior_assignment_id')
-        repair = assignment.get('context', {}).get('context_repair')
-        if parent is None and isinstance(repair, dict):
-            parent = repair.get('assignment_id')
+        parent = assignment.get('history_assignment_id') or find_scientific_predecessor(assignment)
         if parent is None and assignment['role'] == 'slate' and assignment.get('session_id') != identifier:
             parent = assignment.get('session_id')
         if parent is not None:
