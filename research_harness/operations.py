@@ -99,8 +99,13 @@ def _read_preparation(store, snapshot=None):
     return store._read_preparation()
 
 
-def prepared_mutation(store, operation, payload, prepare, *, expected_revision, request_id, _snapshot=None):
-    """prepare(records, payload) returns ([(kind, key, value), ...], result)."""
+def prepared_mutation(store, operation, payload, prepare, *, expected_revision, request_id, _snapshot=None,
+                      validate_commit=None):
+    """prepare(records, payload) returns ([(kind, key, value), ...], result).
+
+    Optional validate_commit(transaction, result) checks admission in the same
+    serialized write, before applying the prepared patch. It performs no external I/O.
+    """
     text(request_id, "Request ID")
     if not isinstance(payload, dict):
         raise ResearchError("invalid_input", "A domain mutation requires a JSON object")
@@ -121,6 +126,8 @@ def prepared_mutation(store, operation, payload, prepare, *, expected_revision, 
     runtime = runtime_provenance()
 
     def apply(transaction):
+        if validate_commit is not None:
+            validate_commit(transaction, result)
         for kind, key, value in changes:
             transaction.put(kind, key, value)
         transaction.put("literature_operation", request_id, {"operation": operation, "runtime": runtime})

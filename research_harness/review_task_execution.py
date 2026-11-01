@@ -20,10 +20,18 @@ receipt. Capacity policy is review_capacity_policy/store, version 1, scope
 store, with store_limit, route_limits and covered_adapters. All public writes
 return ordinary Store receipts. Scientific acceptance is supplied explicitly
 as validate(records, captured_record) -> JSON receipt, and performs no model I/O.
+
+review_task_acceptance_index/{task_id} selects its reservation receipt;
+review_epoch_discoveries/{epoch_id} indexes context-changing acceptances only.
+review_resource_ledger/{epoch_id} durably charges admission and records the
+review_execution_exhaustion receipt that blocks further dispatch at a limit.
+Ordinary invocations, probes and corrections call admit_call in their start
+transaction; their existing invocation/completion records retain pool ownership.
 """
 
 from collections.abc import Mapping
 import json
+import time
 import uuid
 
 from .artifacts import validate_reference
@@ -225,9 +233,123 @@ def plan_task(store, payload, *, request_id, expected_revision=None):
 
 def _active_legacy(records, policy):
     routes = records.get("review_route", {})
-    attempts = records.get("review_attempt", {})
-    return [invocation for key, invocation in records.get("review_invocation", {}).items()
-            if key not in attempts and routes.get(invocation.get("route_id"), {}).get("adapter") in policy["covered_adapters"]]
+    active = []
+    for kind, finished in (("review_invocation", "review_attempt"),
+                           ("review_probe_invocation", "review_route_probe"),
+                           ("review_output_correction_invocation", "review_output_correction")):
+        completed = records.get(finished, {})
+        active.extend(invocation for key, invocation in records.get(kind, {}).items()
+                      if key not in completed and routes.get(invocation.get("route_id"), {}).get("adapter")
+                      in policy["covered_adapters"])
+    return active
+
+
+def admit_call(transaction, route_id):
+    """Check all covered live calls inside the transaction that records their start."""
+    records = _TransactionRecords(transaction)
+    policy = _policy(records)
+    route = _get(records, "review_route", route_id)
+    if route.get("adapter") not in policy["covered_adapters"]:
+        return
+    active = [row for row in records.get("review_reservation", {}).values() if not row["released"]]
+    active.extend(_active_legacy(records, policy))
+    route_active = [row for row in active if row["route_id"] == route_id]
+    if len(active) >= policy["store_limit"] or len(route_active) >= policy["route_limits"].get(
+            route_id, policy["store_limit"]):
+        raise ResearchError("review_capacity_wait", "Shared reviewer capacity is occupied; reconcile its reservations",
+                            {"reservations": [row["id"] for row in active], "scope": "store"})
+
+
+def _read_reread_rounds(task):
+    if task.get("type") not in ("read", "frame", "original_check"):
+        return []
+    return [key for key in task.get("obligation_ids", [])
+            if key.startswith("retrieval:") and ":reread:" in key
+            and key.rsplit(":reread:", 1)[1].isdigit()]
+
+
+def read_resource_ledger(records, epoch):
+    """Reconstruct old usage once; subsequent admissions retain durable counters."""
+    now = time.time()
+    previous = records.get("review_resource_ledger", {}).get(epoch["id"])
+    if previous is None:
+        reservations = [row for row in records.get("review_reservation", {}).values()
+                        if row["epoch_id"] == epoch["id"]]
+        controller_id = epoch.get("controller_assignment_id")
+        controller = records.get("review_assignment", {}).get(controller_id, {}) if controller_id else {}
+        rounds = {key for row in reservations for key in _read_reread_rounds(
+            _get(records, "review_task", row["task_id"]).get("task", {}))}
+        previous = {"version": 1, "epoch_id": epoch["id"], "started_at": controller.get("staged_started_at", now),
+                    "attempts": len(reservations), "retries": sum(row["attempt"] > 1 for row in reservations),
+                    "rereads": len(rounds), "reread_rounds": sorted(rounds), "elapsed_seconds": 0,
+                    "unknown_usage": True}
+    ledger = dict(previous)
+    ledger["elapsed_seconds"] = max(previous["elapsed_seconds"], now - previous["started_at"], 0)
+    ledger["subdivisions"] = sum(row["epoch_id"] == epoch["id"]
+                                 for row in records.get("review_task_repair", {}).values())
+    ledger["epochs"] = sum(row.get("slot_id") == epoch["slot_id"]
+                            and row.get("evidence_currency") == epoch.get("evidence_currency")
+                            for row in records.get("review_epoch", {}).values()) if "slot_id" in epoch else 1
+    return ledger
+
+
+def project_resource_usage(ledger):
+    """Return the existing incomplete-outcome resource vocabulary."""
+    return {key: ledger[key] for key in ("attempts", "retries", "rereads", "subdivisions", "epochs",
+                                        "elapsed_seconds", "unknown_usage")}
+
+
+def _initialize_acceptance_indexes(transaction, epoch_id):
+    """Upgrade captured G2 work under one serialized write, before tracked validation."""
+    from .review_staged_protocol import has_context_discoveries
+    if transaction.get("review_epoch_discoveries", epoch_id) is not None:
+        return
+    discoveries = []
+    for key, row in transaction.records("review_task_acceptance").items():
+        observed = row["receipt"].get("staged_observation")
+        if observed is None or observed.get("epoch_id") != epoch_id:
+            continue
+        reference = {"reservation_id": key}
+        existing = transaction.get("review_task_acceptance_index", row["task_id"])
+        if existing is not None and existing["reservation_id"] != key:
+            raise ResearchError("review_task_dependency_changed", "The epoch has conflicting task acceptances")
+        if existing is None:
+            transaction.put("review_task_acceptance_index", row["task_id"], reference)
+        if has_context_discoveries(observed["output"]):
+            discoveries.append(key)
+    transaction.put("review_epoch_discoveries", epoch_id, {"acceptance_ids": discoveries})
+
+
+def _consume_resources(transaction, records, plan, state, request_id, revision):
+    epoch = _get(records, "review_epoch", plan["epoch_id"])
+    ledger = read_resource_ledger(records, epoch)
+    rounds = sorted(set(ledger["reread_rounds"]) | set(_read_reread_rounds(
+        _get(records, "review_task", plan["task_id"]).get("task", {}))))
+    proposed = dict(ledger, attempts=ledger["attempts"] + 1,
+                    retries=ledger["retries"] + (state["attempts"] > 0),
+                    rereads=len(rounds), reread_rounds=rounds)
+    budgets = epoch.get("budgets", {})
+    limit = "max_attempts" if state["attempts"] >= plan["max_attempts"] else None
+    for budget, field in (("max_calls", "attempts"), ("max_retries", "retries"), ("max_rereads", "rereads"),
+                          ("max_subdivisions", "subdivisions"), ("max_epochs", "epochs"),
+                          ("max_elapsed_seconds", "elapsed_seconds")):
+        bound = budgets.get(budget)
+        if bound is not None and (proposed[field] > bound or field == "elapsed_seconds" and proposed[field] >= bound):
+            limit = limit or budget
+    if limit is not None or ledger.get("exhaustion_id"):
+        identifier = ledger.get("exhaustion_id", "review-exhaustion:" + digest([plan["id"], request_id]))
+        exhaustion = records.get("review_execution_exhaustion", {}).get(identifier)
+        if exhaustion is None:
+            exhaustion = {"id": identifier, "epoch_id": epoch["id"], "task_id": plan["task_id"],
+                          "limit": limit, "resource_ledger": project_resource_usage(ledger),
+                          "code": "review_task_exhausted" if limit == "max_attempts" else "assessment_incomplete",
+                          "recorded_revision": revision}
+            transaction.put("review_execution_exhaustion", identifier, exhaustion)
+        transaction.put("review_resource_ledger", epoch["id"], dict(ledger, exhaustion_id=identifier,
+                                                                   recorded_revision=revision))
+        return exhaustion
+    transaction.put("review_resource_ledger", epoch["id"], dict(proposed, recorded_revision=revision))
+    return None
 
 
 def reserve_task(store, payload, *, request_id, expected_revision=None):
@@ -251,24 +373,10 @@ def reserve_task(store, payload, *, request_id, expected_revision=None):
                 raise ResearchError("review_resampling_forbidden", "Resume the captured observation instead of repeating its reviewer call")
             if not prior["released"]:
                 raise ResearchError("review_invocation_pending", "Reconcile the task's existing reservation before retrying")
-        if state["attempts"] >= plan["max_attempts"]:
-            raise ResearchError("review_task_exhausted", "The frozen task exhausted its bounded execution attempts")
-        epoch = _get(records, 'review_epoch', plan['epoch_id'])
-        budgets = epoch.get('budgets', {})
-        used = sum(row['epoch_id'] == epoch['id'] for row in records.get('review_reservation', {}).values())
-        controller = records.get('review_assignment', {}).get(epoch.get('controller_assignment_id'), {}) if epoch.get('controller_assignment_id') else {}
-        import time
-        elapsed = time.time() - controller.get('staged_started_at', time.time())
-        if used >= budgets.get('max_calls', float('inf')) or elapsed >= budgets.get('max_elapsed_seconds', float('inf')):
-            raise ResearchError('assessment_incomplete', 'The epoch exhausted its shared execution budget',
-                                dict(epoch_id=epoch['id'], task_id=plan['task_id'], attempts=used, elapsed_seconds=elapsed))
-        active = [r for r in records.get("review_reservation", {}).values() if not r["released"]]
-        legacy = _active_legacy(records, policy)
-        route_active = [r for r in active + legacy if r["route_id"] == plan["route_id"]]
-        if len(active) + len(legacy) >= policy["store_limit"] or len(route_active) >= policy["route_limits"].get(
-                plan["route_id"], policy["store_limit"]):
-            raise ResearchError("review_capacity_wait", "Shared reviewer capacity is occupied; reconcile its reservations",
-                                {"reservations": [r["id"] for r in active + legacy], "scope": "store"})
+        exhaustion = _consume_resources(tx, records, plan, state, request_id, revision)
+        if exhaustion is not None:
+            return {"exhaustion": exhaustion}
+        admit_call(tx, plan["route_id"])
         reservation_id = "review-reservation:" + digest([plan["id"], request_id])
         reservation = {"protocol": PROTOCOL, "id": reservation_id, "plan_id": plan["id"],
                        "task_id": plan["task_id"], "task_generation": plan["task_generation"],
@@ -278,13 +386,18 @@ def reserve_task(store, payload, *, request_id, expected_revision=None):
                        "observation_id": None, "recorded_revision": revision}
         tx.put(*immutable_record(records, "review_execution_plan", plan["id"], plan))
         tx.put(*immutable_record(records, "review_reservation", reservation_id, reservation))
+        _initialize_acceptance_indexes(tx, plan["epoch_id"])
         tx.put("review_pool_membership", reservation_id, {"reservation_id": reservation_id, "store_pool": "store",
                "route_pool": plan["route_id"], "active": True, "recorded_revision": revision})
         tx.put("review_task_execution", plan["task_id"], dict(state, generation=state["generation"] + 1,
                attempts=reservation["attempt"], reservation_id=reservation_id, state="reserved", recorded_revision=revision))
         return reservation
-    return _mutate_current(store, "review.task_reserve", payload, apply,
-                           request_id=request_id, expected_revision=expected_revision)
+    result = _mutate_current(store, "review.task_reserve", payload, apply,
+                             request_id=request_id, expected_revision=expected_revision)
+    exhaustion = result["result"].get("exhaustion")
+    if exhaustion is not None:
+        raise ResearchError(exhaustion["code"], "The epoch exhausted its bounded execution resources", exhaustion)
+    return result
 
 
 def _transition(tx, reservation, revision, **updates):
@@ -349,6 +462,9 @@ def accept_observation(store, payload, validate, *, request_id, expected_revisio
             return [], dict(refusal={key:value for key,value in refusal.items() if key != "recorded_revision"},
                             recorded_revision=refusal["recorded_revision"])
         plan = _get(records, "review_execution_plan", reservation["plan_id"])
+        if records.get("review_epoch_discoveries", {}).get(plan["epoch_id"]) is None:
+            raise ResearchError("review_task_index_required", "Initialize the captured epoch's acceptance indexes",
+                                {"epoch_id": plan["epoch_id"]})
         _check_references(records, plan)
         state = _get(records, "review_task_execution", plan["task_id"])
         if state["reservation_id"] != reservation["id"]:
@@ -375,17 +491,37 @@ def accept_observation(store, payload, validate, *, request_id, expected_revisio
             raise ResearchError("invalid_input", "A task validator returns its scientific receipt object")
         accepted = {"reservation_id": reservation["id"], "task_id": plan["task_id"], "plan_id": plan["id"],
                     "task_generation": plan["task_generation"], "observation_digest": digest(captured), "receipt": scientific}
-        return [("review_task_acceptance", reservation["id"], accepted),
+        changes = [("review_task_acceptance", reservation["id"], accepted),
+                immutable_record(records, "review_task_acceptance_index", plan["task_id"],
+                                 {"reservation_id": reservation["id"]}),
                 ("review_reservation", reservation["id"], dict(reservation, state="accepted", generation=reservation["generation"] + 1)),
-                ("review_task_execution", plan["task_id"], dict(state, state="accepted", generation=state["generation"] + 1))], accepted
+                ("review_task_execution", plan["task_id"], dict(state, state="accepted", generation=state["generation"] + 1))]
+        from .review_staged_protocol import has_context_discoveries
+        if has_context_discoveries(scientific.get("staged_observation", {}).get("output", {})):
+            discoveries = _get(records, "review_epoch_discoveries", plan["epoch_id"])
+            changes.append(("review_epoch_discoveries", plan["epoch_id"],
+                            {"acceptance_ids": discoveries["acceptance_ids"] + [reservation["id"]]}))
+        return changes, accepted
     def finalize(changes, result, revision):
         if changes:
             for _, _, record in changes:
                 record["recorded_revision"] = revision
             result["recorded_revision"] = revision
         return changes, result
+    try:
+        return prepared_task_mutation(store, "review.task_accept", payload, prepare, request_id=request_id,
+                                      expected_revision=expected_revision, finalize=finalize)
+    except ResearchError as error:
+        if error.code != "review_task_index_required":
+            raise
+        epoch_id = error.details["epoch_id"]
+    initialized = _mutate_current(store, "review.task_index", {"epoch_id": epoch_id},
+                                  lambda tx, value, revision: _initialize_acceptance_indexes(tx, value["epoch_id"]),
+                                  request_id="review-task-index:" + epoch_id)
+    if expected_revision is not None:
+        expected_revision = initialized["revision"]
     return prepared_task_mutation(store, "review.task_accept", payload, prepare, request_id=request_id,
-                                   expected_revision=expected_revision, finalize=finalize)
+                                  expected_revision=expected_revision, finalize=finalize)
 
 
 def _release(tx, reservation, revision, termination):

@@ -1827,9 +1827,11 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
         prepared_mutation(store, operation + '_start', payload, lambda r, v: None,
                           expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot)
         raise ResearchError('review_invocation_pending', 'The prior invocation is pending; reconcile it before any explicit retry')
+    from .review_task_execution import admit_call
     invocation = prepared_mutation(store, operation + '_start', payload, start,
                                    expected_revision=expected_revision, request_id=beginning,
-                                   _snapshot=snapshot)['result']
+                                   _snapshot=snapshot,
+                                   validate_commit=lambda tx, result: admit_call(tx, result['route_id']))['result']
     artifacts = store.build_artifact_store()
     route = _get(store.snapshot()['records'], 'review_route', invocation['route_id'])
     request = _read_json(artifacts, invocation['request'])
