@@ -345,8 +345,9 @@ span with its exact text; originals travel as text in the packet, not as
 attachments), `frame` (the frame fields among the originals), `continuity`
 (the id, the task and the raw output digest of each accepted dependency),
 `index`, `index_root`, `inherited`, `refused_findings` (the adverse records of
-refused outputs, below), `output_tokens` (the route's `max_output_tokens`;
-the planner keeps a margin of one tenth of it when it sizes the task),
+refused outputs, below), `output_tokens` (the route's `max_output_tokens`
+minus the planner's margin of one tenth of it; the planner sizes the task
+with the same margin),
 `context_graph_root` once a claim context was expanded, and the section of
 its type: `frame`, `fragments`, `combine`, `segments`, `original_check`,
 `integrate`, `answer` or `final`. A task that reads originals again for a
@@ -598,7 +599,8 @@ entries are checked against what the answer task received: a quotation must
 lie inside the spans the task's packet delivered and match the source, and a
 record ground must be the exact accepted, resolved record that the packet
 carried; a page whose grounds fail is refused (`review_composition_conflict`)
-when the task graph is collected, before any recording. The checks
+at the acceptance of its task, again at composition and when the task graph
+is collected. The checks
 establish shape, identity, delivery and quotation, not scientific truth.
 
 Incomplete assessments. An incomplete outcome has one of two origins. With
@@ -695,10 +697,13 @@ on the visual route opens a fresh epoch instead of replaying the visual
 history. A repair of a 0.69.x series needs no recorded final for a part turn.
 
 Recorded 0.69.x series. A recorded part or final turn authenticates as
-recorded, its series continues under the rules of the next section, and
-nothing moves it to a staged review except an explicit `staged_upgrade`. No
-module that a route pins by its bytes changed, and the reduction orders do not
-change.
+recorded. A turn that continues such a series with the same evidence digest,
+before the result review of its final turn is recorded, continues it under
+the rules of the next section. A continuation whose evidence digest changed
+and a refresh of the series start new work under the entry rule above,
+ordinary or staged, and an explicit `staged_upgrade` moves the recorded slot
+to a staged review at once. No module that a route pins by its bytes changed,
+and the reduction orders do not change.
 
 Views. `intermediate/reviews/staged/<kind>/<id>.json` holds the epochs, the
 tasks, the execution plans, the task executions, the reservations, the
@@ -717,15 +722,16 @@ adjudication whose slot has a staged successor is `historical`.
 ### Problem evidence in parts
 
 Since 0.70.0 this delivery serves only a session that is already a series: a
-series that started under 0.69.0 to 0.69.4 continues under these rules, a
-continuation of a series whose evidence digest changed and a refresh of a
-series start a new series as part turn 1, as the rule of the evidence digest
-below states, and a `staged_upgrade` assignment moves such a slot to a staged
-review instead. A first turn of a session that never was a series is measured
-against the route limit: a request that fits and delivers every body is built
-as before, byte for byte, with the same packet and prompt, and one that does
-not becomes a staged review ([Staged problem reviews](#staged-problem-reviews)),
-not part turn 1. The rules below describe the series that continue. They apply
+turn that continues a series started under 0.69.0 to 0.69.4 with the same
+evidence digest, before the result review of its final turn is recorded,
+continues under these rules. A continuation of a series whose evidence digest
+changed, a refresh of a series and a first turn of a session that never was a
+series are measured against the route limit: a request that fits and delivers
+every body is built as before, byte for byte, with the same packet and prompt,
+and one that does not becomes a staged review
+([Staged problem reviews](#staged-problem-reviews)), not part turn 1. A
+`staged_upgrade` assignment moves a recorded slot to a staged review at once.
+The rules below describe the series that continue. They apply
 to a `result` session on a route with a local input limit (`claude_cli_v1`,
 `codex_cli_v1` and `codex_cli_framed_v1`); a `complete-visible-v1`
 continuation and a bar or slate packet, which carries no problem evidence, are
@@ -848,7 +854,7 @@ carried. `note` is one sentence that tells the reviewer that the evidence of
 this review arrives in parts. A turn whose packet has no `reviewer_excerpts`
 record, an initial assignment, adds an empty one; a turn that continues a
 session, including part turn 1 of a series that a continuation or a refresh
-started, carries the checked excerpts of the session as every continuation
+started under 0.69.x, carries the checked excerpts of the session as every continuation
 does. `problem_evidence_digest` and `problem_review_currency` are the same as
 in a single-turn packet, and `evidence` and `digest` are computed for the
 reduced packet. The prompt of a turn keeps the template id
@@ -906,14 +912,14 @@ coverage of a review of a series and what that check guarantees.
 
 A series freezes the evidence digest of its first turn. Once a session is a
 series, a continuation whose current evidence digest differs does not continue
-the series: it starts a new series with fresh delivery as part turn 1, also
-when the new evidence fits one input. A refresh of a series, a new assignment
-of the same reviewer after the recorded result review of its final turn, starts
-a new series the same way. A later turn of a refreshed session carries its
-`problem_refresh` marker, and the marker alone starts no new series. Only a
-first turn of a session that never was a series is measured against the route
-limit, and it is delivered in parts when it does not fit. A continuation of a
-series receives the full current problem evidence and never the
+the series, and neither does a refresh of a series, a new assignment of the
+same reviewer after the recorded result review of its final turn. Since
+0.70.0 both start new work under the entry rule of
+[Staged problem reviews](#staged-problem-reviews): ordinary when the request
+fits and delivers every body, staged otherwise, never part turn 1. A later
+turn of a refreshed session carries its `problem_refresh` marker, and the
+marker alone starts no new series. A continuation of a series with the
+unchanged digest receives the full current problem evidence and never the
 `delivered-in-an-earlier-turn` marker, because the replayed history of a
 series does not carry the evidence whole.
 
