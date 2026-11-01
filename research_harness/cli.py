@@ -110,6 +110,10 @@ def _review_probe(store, payload, **identity):
 
 def _review_run(store, payload, **identity):
     fields(payload, (), None)
+    if payload.get("action") == "reconcile" and "invocation_id" in payload:
+        from .review_task_execution import reconcile_call
+        fields(payload, ("action", "operation", "invocation_id"))
+        return reconcile_call(store, {key: payload[key] for key in ("operation", "invocation_id")}, **identity)
     if "task_id" in payload:
         records = store.snapshot()["records"]
         epoch = records.get("review_epoch", {}).get(payload.get("epoch_id"))

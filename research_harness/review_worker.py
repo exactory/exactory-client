@@ -16,6 +16,7 @@ import subprocess
 from subprocess import Popen as _SYSTEM_POPEN
 import sys
 import time
+import uuid
 
 if __package__ in (None, ""):
     sys.path[0] = str(Path(__file__).resolve().parents[1])
@@ -129,6 +130,58 @@ def confirm_termination(store, reservation_id):
     with _owner(store.root, reservation_id):
         with _termination_guard(store, reservation_id) as termination:
             return termination is not None
+
+
+@contextmanager
+def _guard_call_termination(store, lifecycle_id):
+    """The controller lock proves inline ownership ended; child groups must also end."""
+    with ExitStack() as stack:
+        try:
+            stack.enter_context(_owner(store.root, lifecycle_id, worker=True))
+            termination = read_call_termination(store, lifecycle_id)
+        except ResearchError as error:
+            if error.code != "review_worker_reconciliation_required":
+                raise
+            termination = None
+        yield termination
+
+
+def read_call_termination(store, lifecycle_id):
+    """Called only while holding controller ownership and the worker lock."""
+    current = _get(store.snapshot()["records"], "review_pool_membership", lifecycle_id)
+    try:
+        table = _process_table(current["children"])
+    except ResearchError as error:
+        if error.code != "review_worker_reconciliation_required":
+            raise
+        return None
+    if any(_has_processes(child, table) for child in current["children"]):
+        return None
+    return {"reservation_id": lifecycle_id, "owner": current["owner"], "children": current["children"], "confirmed": True}
+
+
+class _CallAuthority:
+    """Invocation-local ownership; no response or recovery state lives in files."""
+
+    def __init__(self, store, operation, lifecycle_id, descriptor, ownership):
+        self.root, self.operation, self.reservation_id = store.root, operation, lifecycle_id
+        self.descriptor, self.token, self.identity = descriptor, uuid.uuid4().hex, _identity()
+        self._ownership = ownership
+
+    def finish_transport(self):
+        # Close our inherited descriptor before checking for surviving owners.
+        self._ownership.close()
+
+
+@contextmanager
+def own_call(store, operation, invocation_id):
+    from .review_task_execution import identify_call
+    lifecycle_id = identify_call(operation, invocation_id)
+    with _owner(store.root, lifecycle_id):
+        with ExitStack() as ownership:
+            descriptor = ownership.enter_context(_owner(store.root, lifecycle_id, worker=True))
+            yield _CallAuthority(store, operation, lifecycle_id, descriptor, ownership)
+
 
 
 class _WorkerAuthority:
@@ -256,7 +309,7 @@ def _start_worker(store, authority):
                            request_id="review-worker-running:" + authority.reservation_id)["result"]
 
 
-def _register_child(root, reservation_id, token, descriptor):
+def _register_child(root, reservation_id, token, descriptor, *, call=False):
     """The guardian commits its identity before executing any external command."""
     store = Store(root)
     identity = _identity()
@@ -269,27 +322,38 @@ def _register_child(root, reservation_id, token, descriptor):
     if (lock_info.st_dev, lock_info.st_ino) != (descriptor_info.st_dev, descriptor_info.st_ino):
         raise ResearchError("review_worker_reconciliation_required", "Transport child lost its ownership lock")
     def apply(tx, value, revision):
+        if call:
+            current = _get(_TransactionRecords(tx), "review_pool_membership", reservation_id)
+            if (current["released"] or current["token"] != token
+                    or _identity(current["owner"]["pid"]) != current["owner"]):
+                raise ResearchError("review_worker_reconciliation_required", "The call's owner is no longer live")
+            tx.put("review_pool_membership", reservation_id, dict(current, children=current["children"] + [identity], recorded_revision=revision))
+            return current
         reservation = _get(_TransactionRecords(tx), "review_reservation", reservation_id)
         if (reservation["released"] or reservation["state"] != "running" or reservation["token"] != token
                 or _identity(reservation["worker"]["pid"]) != reservation["worker"]):
             raise ResearchError("review_worker_reconciliation_required", "The transport child's worker is no longer live")
         return _transition(tx, reservation, revision, children=reservation["children"] + [identity])
-    retry_store_write(lambda: _mutate_current(store, "review.worker_child",
+    retry_store_write(lambda: _mutate_current(store, "review.call_child" if call else "review.worker_child",
         {"reservation_id": reservation_id, "child": identity}, apply,
-        request_id="review-worker-child:" + digest([reservation_id, identity])))
+        request_id=("review-call-child:" if call else "review-worker-child:") + digest([reservation_id, identity])))
     return identity
 
 
 @contextmanager
 def _own_transport_processes(authority):
-    """Wrap only the dedicated worker's local transport subprocess launches."""
+    """Guard local transport launches for a detached worker or an owned inline call."""
     original = subprocess.Popen
     def owned_popen(command, *args, **kwargs):
+        if isinstance(authority, _CallAuthority):
+            # Inline visual calls also invoke renderers that omit this option.
+            kwargs.setdefault("start_new_session", True)
         if not isinstance(command, (list, tuple)) or kwargs.get("shell") or not kwargs.get("start_new_session"):
             raise ResearchError("review_worker_reconciliation_required", "Owned transports require an explicit new process group")
         inherited = tuple(kwargs.get("pass_fds", ()))
         kwargs["pass_fds"] = tuple(dict.fromkeys(inherited + (authority.descriptor,)))
-        guardian = [sys.executable, str(Path(__file__).resolve()), "--child", str(authority.root),
+        guardian = [sys.executable, str(Path(__file__).resolve()),
+                    "--call-child" if isinstance(authority, _CallAuthority) else "--child", str(authority.root),
                     authority.reservation_id, authority.token, str(authority.descriptor), "--"] + list(command)
         return original(guardian, *args, **kwargs)
     subprocess.Popen = owned_popen
@@ -331,11 +395,11 @@ def run_worker(root, reservation_id, token, descriptor):
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    if argv and argv[0] == "--child":
+    if argv and argv[0] in ("--child", "--call-child"):
         if len(argv) < 7 or argv[5] != "--":
             raise ResearchError("invalid_input", "Malformed owned transport launch")
         root, reservation_id, token, descriptor = Path(argv[1]), argv[2], argv[3], int(argv[4])
-        _register_child(root, reservation_id, token, descriptor)
+        _register_child(root, reservation_id, token, descriptor, call=argv[0] == "--call-child")
         # The descriptor intentionally remains inherited by the CLI process.
         os.set_inheritable(descriptor, True)
         os.execvpe(argv[6], argv[6:], os.environ)

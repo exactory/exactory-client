@@ -26,7 +26,9 @@ review_epoch_discoveries/{epoch_id} indexes context-changing acceptances only.
 review_resource_ledger/{epoch_id} durably charges admission and records the
 review_execution_exhaustion receipt that blocks further dispatch at a limit.
 Ordinary invocations, probes and corrections call admit_call in their start
-transaction; their existing invocation/completion records retain pool ownership.
+transaction. review_pool_membership retains their inline ownership and guarded
+child groups until checked termination; completion records alone do not release
+these calls. reconcile_call records uncaptured termination as an unknown outcome.
 """
 
 from collections.abc import Mapping
@@ -37,7 +39,7 @@ import uuid
 from .artifacts import validate_reference
 from .errors import ResearchError
 from .evidence import digest
-from .operations import fields, immutable_record, prepared_task_mutation, text
+from .operations import _read_preparation, fields, immutable_record, prepared_mutation, prepared_task_mutation, text
 from .provenance import runtime_provenance
 from .storage import _canonical
 from .workspace import strict_json
@@ -231,17 +233,105 @@ def plan_task(store, payload, *, request_id, expected_revision=None):
                            request_id=request_id, expected_revision=expected_revision)
 
 
+def read_call_kinds(operation):
+    """Keep ordinary, probe and correction lifecycle vocabularies together."""
+    text(operation, "Call operation")
+    kinds = {"review.invoke": ("review_invocation", "review_attempt"),
+             "review.route_probe": ("review_probe_invocation", "review_route_probe"),
+             "review.output_correction": ("review_output_correction_invocation", "review_output_correction")}
+    if operation not in kinds:
+        raise ResearchError("invalid_input", "Reconcile an ordinary, probe or correction invocation")
+    return kinds[operation]
+
+
+def identify_call(operation, invocation_id):
+    read_call_kinds(operation)
+    text(invocation_id, "Invocation ID")
+    return "review-call:" + digest([operation, invocation_id])
+
+
+def has_call_terminated(records, operation, invocation_id):
+    """Owned calls require termination evidence; imported rows cannot finish historical calls."""
+    lifecycle = records.get("review_pool_membership", {}).get(identify_call(operation, invocation_id))
+    if lifecycle is not None:
+        return lifecycle["released"] and (lifecycle.get("termination") or {}).get("confirmed") is True
+    _, finished = read_call_kinds(operation)
+    completed = records.get(finished, {}).get(invocation_id)
+    return completed is not None and completed.get("origin") != "imported"
+
+
 def _active_legacy(records, policy):
     routes = records.get("review_route", {})
     active = []
-    for kind, finished in (("review_invocation", "review_attempt"),
-                           ("review_probe_invocation", "review_route_probe"),
-                           ("review_output_correction_invocation", "review_output_correction")):
-        completed = records.get(finished, {})
-        active.extend(invocation for key, invocation in records.get(kind, {}).items()
-                      if key not in completed and routes.get(invocation.get("route_id"), {}).get("adapter")
-                      in policy["covered_adapters"])
+    for operation in ("review.invoke", "review.route_probe", "review.output_correction"):
+        kind, _ = read_call_kinds(operation)
+        for key, invocation in records.get(kind, {}).items():
+            if (not has_call_terminated(records, operation, key)
+                    and routes.get(invocation.get("route_id"), {}).get("adapter") in policy["covered_adapters"]):
+                active.append(invocation)
     return active
+
+
+def start_call(transaction, operation, invocation, authority, revision):
+    """Bind capacity and live ownership to the invocation's start transaction."""
+    admit_call(transaction, invocation["route_id"])
+    record = {"protocol": PROTOCOL, "id": authority.reservation_id, "operation": operation, "invocation_id": invocation["id"],
+              "route_id": invocation["route_id"], "token": authority.token, "owner": authority.identity,
+              "children": [], "released": False, "termination": None, "state": "running",
+              "store_pool": "store", "route_pool": invocation["route_id"], "active": True, "recorded_revision": revision}
+    transaction.put(*immutable_record(_TransactionRecords(transaction), "review_pool_membership", record["id"], record))
+
+
+def release_call(transaction, lifecycle_id, termination, revision):
+    """Release only the exact owned child set whose termination was checked."""
+    current = transaction.get("review_pool_membership", lifecycle_id)
+    if termination is None or current["released"]:
+        return current
+    if (termination.get("confirmed") is not True or termination.get("reservation_id") != lifecycle_id
+            or termination.get("owner") != current["owner"] or termination.get("children") != current["children"]):
+        raise ResearchError("review_worker_reconciliation_required", "The call's owned lifecycle changed")
+    result = dict(current, released=True, termination=termination, state="terminated",
+                  active=False, recorded_revision=revision)
+    transaction.put("review_pool_membership", lifecycle_id, result)
+    return result
+
+
+def reconcile_call(store, payload, *, request_id, expected_revision=None):
+    """Reconcile a terminated inline call without reconstructing its lost output."""
+    from .review_worker import _owner, _guard_call_termination
+    fields(payload, ("operation", "invocation_id"))
+    snapshot = _read_preparation(store)
+    if snapshot.has_request(request_id):
+        return prepared_mutation(store, "review.call_reconcile", payload, lambda records, value: None,
+                                 request_id=request_id, _snapshot=snapshot,
+                                 expected_revision=snapshot.revision if expected_revision is None else expected_revision)
+    operation, invocation_id = payload["operation"], payload["invocation_id"]
+    lifecycle_id = identify_call(operation, invocation_id)
+    kind, completed = read_call_kinds(operation)
+    with _owner(store.root, lifecycle_id):
+        with _guard_call_termination(store, lifecycle_id) as termination:
+            def apply(tx, value, revision):
+                records = _TransactionRecords(tx)
+                current = _get(records, "review_pool_membership", lifecycle_id)
+                if current["released"] or termination is None:
+                    return current
+                invocation = _get(records, kind, invocation_id)
+                if tx.get(completed, invocation_id) is None:
+                    failure = dict(invocation, origin="execution", status="failed", output=None, response=None,
+                                   usage={}, reason="Owned execution terminated before its observation committed; outcome unknown",
+                                   error={"code": "review_invocation_interrupted", "message": "No committed observation"},
+                                   recorded_revision=revision)
+                    if operation == "review.output_correction":
+                        failure.update(correction_status="failed", correction_error=failure["error"], corrected_output=None)
+                    if operation == "review.invoke":
+                        tx.put("review_attempt", invocation_id, failure)
+                    elif operation == "review.route_probe":
+                        tx.put("review_route_probe", invocation_id, failure)
+                    else:
+                        tx.put("review_output_correction", invocation_id, failure)
+                return release_call(tx, lifecycle_id, termination, revision)
+            return _mutate_current(store, "review.call_reconcile", payload, apply,
+                                   request_id=request_id, expected_revision=expected_revision)
 
 
 def admit_call(transaction, route_id):
@@ -330,7 +420,17 @@ def _consume_resources(transaction, records, plan, state, request_id, revision):
                     rereads=len(rounds), reread_rounds=rounds)
     budgets = epoch.get("budgets", {})
     limit = "max_attempts" if state["attempts"] >= plan["max_attempts"] else None
-    for budget, field in (("max_calls", "attempts"), ("max_retries", "retries"), ("max_rereads", "rereads"),
+    # Retrieval obligation identities already bind the normalized question,
+    # source versions and dependency roots. Fragments share a numbered round.
+    rereads = {}
+    for round_id in rounds:
+        identity = round_id.rsplit(":reread:", 1)[0]
+        rereads[identity] = rereads.get(identity, 0) + 1
+    if state["attempts"] > budgets.get("max_retries", state["attempts"]):
+        limit = limit or "max_retries"
+    if any(count > budgets.get("max_rereads", count) for count in rereads.values()):
+        limit = limit or "max_rereads"
+    for budget, field in (("max_calls", "attempts"),
                           ("max_subdivisions", "subdivisions"), ("max_epochs", "epochs"),
                           ("max_elapsed_seconds", "elapsed_seconds")):
         bound = budgets.get(budget)

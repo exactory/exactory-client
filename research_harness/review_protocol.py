@@ -1812,6 +1812,7 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
     """Reserve before I/O; a retry never repeats an uncertain call. The observation stays in this process: a file in the
     workspace is no evidence of what the reviewer returned, so a pending invocation is never completed from disk."""
     text(request_id, 'Request ID')
+    fields(payload, (), None)
     snapshot = _read_preparation(store)
     if operation == 'review.invoke':
         assignment = snapshot.records.get('review_assignment', {}).get(payload.get('assignment_id'), {})
@@ -1827,22 +1828,29 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
         prepared_mutation(store, operation + '_start', payload, lambda r, v: None,
                           expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot)
         raise ResearchError('review_invocation_pending', 'The prior invocation is pending; reconcile it before any explicit retry')
-    from .review_task_execution import admit_call
-    invocation = prepared_mutation(store, operation + '_start', payload, start,
-                                   expected_revision=expected_revision, request_id=beginning,
-                                   _snapshot=snapshot,
-                                   validate_commit=lambda tx, result: admit_call(tx, result['route_id']))['result']
-    artifacts = store.build_artifact_store()
-    route = _get(store.snapshot()['records'], 'review_route', invocation['route_id'])
-    request = _read_json(artifacts, invocation['request'])
-    observation = _observed(artifacts, route, request, credential)
-    def commit():
-        revision = store.revision
-        def prepare(current, value):
-            return finish(current, value, invocation, observation, revision + 1)
-        return prepared_mutation(store, operation, payload, prepare,
-                                 expected_revision=revision, request_id=request_id)
-    return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS)
+    from .review_task_execution import start_call, release_call
+    from .review_worker import own_call, _own_transport_processes, _guard_call_termination
+    from contextlib import nullcontext
+    with own_call(store, operation, text(payload.get('id'), 'Invocation ID')) as authority:
+        invocation = prepared_mutation(store, operation + '_start', payload, start,
+                                       expected_revision=expected_revision, request_id=beginning,
+                                       _snapshot=snapshot,
+                                       validate_commit=lambda tx, result: start_call(tx, operation, result, authority, expected_revision + 1))['result']
+        artifacts = store.build_artifact_store()
+        route = _get(store.snapshot()['records'], 'review_route', invocation['route_id'])
+        request = _read_json(artifacts, invocation['request'])
+        with _own_transport_processes(authority) if route['adapter'] in transport.LOCAL_ADAPTERS else nullcontext():
+            observation = _observed(artifacts, route, request, credential)
+        authority.finish_transport()
+        def commit():
+            with _guard_call_termination(store, authority.reservation_id) as termination:
+                revision = store.revision
+                def prepare(current, value):
+                    return finish(current, value, invocation, observation, revision + 1)
+                return prepared_mutation(store, operation, payload, prepare,
+                                         expected_revision=revision, request_id=request_id,
+                                         validate_commit=lambda tx, result: release_call(tx, authority.reservation_id, termination, revision + 1))
+        return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS)
 
 
 def probe_route(store, payload, *, expected_revision, request_id, credential=None):
@@ -2521,6 +2529,10 @@ def record_attempt(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'))
         _get(records, 'review_assignment', value['assignment_id'])
+        from .review_task_execution import has_call_terminated
+        if (value['id'] in records.get('review_invocation', {})
+                and not has_call_terminated(records, 'review.invoke', value['id'])):
+            raise ResearchError('review_invocation_pending', 'An imported attempt cannot occupy an active instrumented completion ID')
         if value['status'] not in ('failed', 'incomplete', 'completed'):
             raise ResearchError('invalid_review_attempt', 'An attempt status must be failed, incomplete, or completed')
         text(value['reason'], 'Import reason')
@@ -2568,8 +2580,10 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
             if len(refused) >= 2:
                 raise ResearchError('review_slot_exhausted', 'Two refused outputs exhaust this assignment; an exhausted initial bar slot takes a new reviewer')
         context_repair.require_current_slot(records, assignment)
+        from .review_task_execution import has_call_terminated
         pending = [a for a in records.get('review_invocation', {}).values()
-                   if a['assignment_id'] == value['assignment_id'] and a['id'] not in records.get('review_attempt', {})]
+                   if a['assignment_id'] == value['assignment_id']
+                   and not has_call_terminated(records, 'review.invoke', a['id'])]
         if pending:
             raise ResearchError('review_invocation_pending', 'Reconcile the pending attempt before an explicit retry')
         route = _get(records, 'review_route', assignment['route_id'])
