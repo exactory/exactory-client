@@ -142,6 +142,117 @@ class CitationEvidenceTests(unittest.TestCase):
                                                        [_build_work(identifier, title="Recorded paper title")]),
                                      (False, None))
 
+    def test_braces_quotes_and_escapes_do_not_expose_nested_identifiers(self):
+        references = (("doi", "10.9999/x{arxiv:2609.14520}"),
+                      ("doi", "10.9999/x{10.48550/arxiv.2609.14520}"),
+                      ("doi", r"10.9999/x\{arxiv:2609.14520\}"),
+                      ("doi", '10.9999/x"arxiv:2609.14520"'),
+                      ("doi", r"10.9999/x\arxiv:2609.14520"),
+                      ("doi", '10.9999/x"10.48550/arxiv.2609.14520"'),
+                      ("doi", "10.9999/x{https://arxiv.org/abs/2609.14520}"),
+                      ("url", "https://example.org/x{arxiv:2609.14520}"),
+                      ("url", "https://example.org/x{10.48550/arxiv.2609.14520}"),
+                      ("url", r"https://example.org/x\{arxiv:2609.14520\}"),
+                      ("url", 'https://example.org/x"arxiv:2609.14520"'),
+                      ("url", r"https://example.org/x\arxiv:2609.14520"))
+        for field, reference in references:
+            for bibtex in (False, True):
+                data = (("@article{unrelated, " + field + "={" + reference + "}, title={Another publication}}")
+                        if bibtex else "Another publication, " + reference).encode()
+                bibliography = read_bibliography(data)
+                for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                    with self.subTest(reference=reference, bibtex=bibtex, identifier=identifier):
+                        self.assertEqual(find_citing_entry(bibliography,
+                                                           [_build_work(identifier, title="Recorded paper title")]),
+                                         (False, None))
+
+    def test_tex_wrappers_quotes_and_whitespace_allow_separate_arxiv_evidence(self):
+        fields = (r"howpublished={\url{https://arxiv.org/abs/2609.14520}}",
+                  r"howpublished={\href{https://arxiv.org/abs/2609.14520}{arXiv}}",
+                  'doi = "10.48550/arXiv.2609.14520"',
+                  'url = "https://arxiv.org/abs/2609.14520"',
+                  "note={10.9999/x arXiv:2609.14520}")
+        for field in fields:
+            data = ("@article{cited, " + field + ", title={Another publication}}").encode()
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                with self.subTest(field=field, identifier=identifier):
+                    self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                       [_build_work(identifier, title="Recorded paper title")]),
+                                     (True, "cited"))
+        for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+            with self.subTest(identifier=identifier):
+                self.assertEqual(find_citing_entry(
+                    read_bibliography(b'Another publication, see "https://arxiv.org/abs/2609.14520".'),
+                    [_build_work(identifier, title="Recorded paper title")]), (True, None))
+
+    def test_dois_read_balanced_braces_and_bibtex_escapes_as_whole_identifiers(self):
+        cases = ((r"10.1002/abc\_def", "10.1002/abc_def"),
+                 ("10.1234/a{b}c", "10.1234/a{b}c"),
+                 (r"10.1234/a\{b\}c", "10.1234/a{b}c"),
+                 (r"10.1234/a\}b", "10.1234/a}b"),
+                 (r"10.1234/a\{b", "10.1234/a{b"),
+                 (r'10.1234/a\"b', '10.1234/a"b'),
+                 (r"10.1234/a\%b", "10.1234/a%b"),
+                 (r"10.1234/a\alpha\1", r"10.1234/a\alpha\1"),
+                 (r"10.1234/a\\_b", r"10.1234/a\_b"))
+        for reference, doi in cases:
+            for prefix in ("", "https://doi.org/", "https://dx.doi.org/"):
+                for bibtex in (False, True):
+                    value = prefix + reference
+                    field = "url" if prefix else "doi"
+                    data = (("@article{cited, " + field + "={" + value + "}, title={Another publication}}")
+                            if bibtex else "Another publication, " + value).encode()
+                    with self.subTest(reference=reference, prefix=prefix, bibtex=bibtex):
+                        self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                           [_build_work("doi:" + doi, title="Recorded paper title")]),
+                                         (True, "cited" if bibtex else None))
+
+    def test_unmatched_closing_brace_separates_adjacent_fields(self):
+        data = (b"@article{cited, doi={10.1234/abc},url={https://example.org},"
+                b"note={arXiv:2609.14520}, title={Another publication}}")
+        bibliography = read_bibliography(data)
+        for identifier in ("doi:10.1234/abc", "arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+            with self.subTest(identifier=identifier):
+                self.assertEqual(find_citing_entry(bibliography,
+                                                   [_build_work(identifier, title="Recorded paper title")]),
+                                 (True, "cited"))
+
+    def test_escaped_braces_in_dois_do_not_truncate_later_bibtex_fields(self):
+        for doi in (r"10.1234/a\}b", r"10.1234/a\\\}b"):
+            data = ("@article{cited, doi={" + doi
+                    + "},note={arXiv:2609.14520}, title={Another publication}}\n"
+                    + "@article{other, title={A separate publication}}").encode()
+            for identifier in ("arxiv:2609.14520v1", "doi:10.48550/arxiv.2609.14520"):
+                with self.subTest(doi=doi, identifier=identifier):
+                    self.assertEqual(find_citing_entry(read_bibliography(data),
+                                                       [_build_work(identifier, title="Recorded paper title")]),
+                                     (True, "cited"))
+
+    def test_escaped_context_closers_belong_to_the_identifier(self):
+        cases = (('<10.1234/a\\>b>', "10.1234/a>b"),
+                 ('[10.1234/a\\](b](unrelated)', "10.1234/a](b"),
+                 ('"10.1234/a\\"b"', '10.1234/a"b'))
+        for reference, doi in cases:
+            for prefix in ("", "https://doi.org/"):
+                reference_value = reference[0] + prefix + reference[1:]
+                with self.subTest(reference=reference_value):
+                    self.assertEqual(find_citing_entry(
+                        read_bibliography(("Another publication, " + reference_value).encode()),
+                        [_build_work("doi:" + doi, title="Recorded paper title")]), (True, None))
+
+    def test_labels_eprints_and_old_style_ids_inside_identifiers_are_not_evidence(self):
+        for nested, identifier in (("arxiv:2609.14520", "arxiv:2609.14520v1"),
+                                   ("arxiv:2609.14520", "doi:10.48550/arxiv.2609.14520"),
+                                   ('eprint="2609.14520"', "arxiv:2609.14520v1"),
+                                   ('eprint="2609.14520"', "doi:10.48550/arxiv.2609.14520"),
+                                   ("hep-th/9304002", "arxiv:hep-th/9304002v1")):
+            for prefix in ("10.9999/x{", "https://example.org/x{"):
+                with self.subTest(nested=nested, identifier=identifier, prefix=prefix):
+                    bibliography = read_bibliography(("Another publication, " + prefix + nested + "}").encode())
+                    self.assertEqual(find_citing_entry(bibliography,
+                                                       [_build_work(identifier, title="Recorded paper title")]),
+                                     (False, None))
+
     def test_a_doi_nested_inside_another_doi_does_not_cite_its_work(self):
         cases = (("10.9999/x/10.48550/arxiv.2609.14520", "doi:10.48550/arxiv.2609.14520"),
                  ("10.9999/10.1234/abc", "doi:10.1234/abc"))
@@ -316,6 +427,20 @@ class CitationEvidenceTests(unittest.TestCase):
                 for work in works:
                     self.assertEqual(find_citing_entry(bibliography, [work]), (False, None))
                     self.assertLess(time.perf_counter() - started, 1.0)
+
+    def test_64kb_brace_fields_are_read_and_checked_against_50_works_in_under_one_second(self):
+        works = [_build_work("arxiv:2609.%05dv1" % (14520 + index),
+                             ["doi:10.1234/recorded-%d" % index], "Recorded paper title")
+                 for index in range(50)]
+        for repeated in ("{", r"\{"):
+            data = ("@article{unrelated, note={10.9999/x" + repeated * (64 * 1024 // len(repeated))
+                    + "}, title={Another publication}}").encode()
+            with self.subTest(repeated=repeated):
+                started = time.perf_counter()
+                bibliography = read_bibliography(data)
+                for work in works:
+                    self.assertEqual(find_citing_entry(bibliography, [work]), (False, None))
+                self.assertLess(time.perf_counter() - started, 1.0)
 
     def test_unclosed_entries_are_read_in_under_one_second(self):
         for count in (1000, 10000):

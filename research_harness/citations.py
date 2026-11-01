@@ -36,14 +36,12 @@ _TEX_COMMAND_RE = re.compile(r"\\([A-Za-z]+)")
 _CJK_CHARACTER_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
 # An arXiv candidate ends before any identifier continuation, allowing a PDF suffix.
 _IDENTIFIER_END_PATTERN = r"(?:\.pdf|/pdf)?(?![0-9a-z_]|[-./:;()][0-9a-z])"
-# Only brackets directly before an identifier set its angle or Markdown context.
-_SPAN_CHARACTER_PATTERN = r'(?:(?(angle)(?!>))(?(markdown)(?!\]\())[^\s{}"\\])'
 # Try schemes only at maximal run starts, so even unlimited failed attempts are linear.
-_IDENTIFIER_SPAN_RE = re.compile(
-    r'(?:(?P<angle>(?<=<))|(?P<markdown>(?<=\[))|(?<![<\[]))'
-    r'(?:(?P<url>(?:(?<![0-9a-z+.-])[a-z][a-z0-9+.-]*://'
-    r'|(?<![0-9a-z./-])(?:www\.|export\.)?arxiv\.org/)' + _SPAN_CHARACTER_PATTERN + r'*)'
-    r'|(?P<doi>(?<![0-9a-z])10\.[0-9]{4,9}/' + _SPAN_CHARACTER_PATTERN + r'+))')
+_IDENTIFIER_START_RE = re.compile(
+    r'(?P<url>(?<![0-9a-z+.-])[a-z][a-z0-9+.-]*://'
+    r'|(?<![0-9a-z./-])(?:www\.|export\.)?arxiv\.org/)'
+    r'|(?P<doi>(?<![0-9a-z])10\.[0-9]{4,9}/)')
+_SPAN_CONTEXT_CLOSERS = {"<": ">", "[": "](", '"': '"'}
 _SPAN_TRAILING_PUNCTUATION = ".,;:"
 _ARXIV_HOSTS = ("arxiv.org", "www.arxiv.org", "export.arxiv.org")
 _DOI_HOSTS = ("doi.org", "dx.doi.org")
@@ -115,13 +113,19 @@ def _is_title_evidence(title):
 
 def _find_group_end(source, opener_index, limit=None):
     """The index after the group that opens at opener_index: a brace group, a
-    parenthesized BibTeX entry, or a quoted value, with braces balanced inside.
+    parenthesized BibTeX entry, or a quoted value, with unescaped braces balanced inside.
     Stop at limit when the group has no closing delimiter before that boundary."""
     if limit is None:
         limit = len(source)
-    opener, depth = source[opener_index], 0
+    opener, depth, escaped = source[opener_index], 0, False
     for position in range(opener_index + 1, limit):
         character = source[position]
+        if escaped:
+            escaped = False
+            continue
+        if character == "\\":
+            escaped = True
+            continue
         if character == "{":
             depth += 1
         elif character == "}":
@@ -159,6 +163,11 @@ def read_bibliography(data):
     return bibliography
 
 
+def _read_doi_identifier(value):
+    """Read BibTeX escapes of nonalphanumeric characters, retaining letter commands."""
+    return "doi:" + re.sub(r"\\(.)", lambda match: match[0] if match[1].isalnum() else match[1], value).casefold()
+
+
 def _read_url_identifier(value):
     """Read one registry identifier from a whole URL, ignoring other hosts and paths."""
     try:
@@ -169,7 +178,7 @@ def _read_url_identifier(value):
         return None
     # Only DOI registry hosts supply a DOI, with percent-encoded path data decoded.
     if parts.hostname in _DOI_HOSTS:
-        return "doi:" + unquote(parts.path[1:]).casefold()
+        return _read_doi_identifier(unquote(parts.path[1:]))
     if parts.hostname not in _ARXIV_HOSTS:
         return None
     # arXiv hosts supply ids only through recognized modern or legacy FTP paths.
@@ -201,9 +210,9 @@ def _read_arxiv_references(text_value, spans):
     span_index = 0
     for match in _ARXIV_REFERENCE_RE.finditer(text_value):
         # Advance through ordered spans so overlap checks take linear total time.
-        while span_index < len(spans) and spans[span_index].end() <= match.start():
+        while span_index < len(spans) and spans[span_index][1] <= match.start():
             span_index += 1
-        if span_index < len(spans) and spans[span_index].start() < match.end():
+        if span_index < len(spans) and spans[span_index][0] < match.end():
             continue
         value = (match["explicit"] or match["old"]) + (match["version"] or "")
         family = _read_arxiv_family("arxiv:" + value)
@@ -229,14 +238,42 @@ def _trim_span(value):
     return value[:end]
 
 
+def _find_identifier_end(source, start):
+    """Scan to whitespace, the start's context closer, or an unmatched closing brace."""
+    closer = _SPAN_CONTEXT_CLOSERS.get(source[start - 1]) if start else None
+    position, depth = start, 0
+    while position < len(source):
+        character = source[position]
+        if character.isspace():
+            break
+        if character == "\\":
+            # An escaped character cannot close the context or change brace depth.
+            position += 1
+            if position < len(source) and not source[position].isspace():
+                position += 1
+            continue
+        if closer and source.startswith(closer, position):
+            break
+        if character == "{":
+            depth += 1
+        elif character == "}":
+            if depth == 0:
+                break
+            depth -= 1
+        position += 1
+    return position
+
+
 def _read_identifiers(text_value):
     """Collect whole DOI identifiers and arXiv families once from bibliography text."""
     identifiers = set()
     # One left-to-right pass lets the first span consume all nested identifiers.
-    spans = list(_IDENTIFIER_SPAN_RE.finditer(text_value))
-    for span in spans:
-        value = _trim_span(span[0])
-        identifier = "doi:" + value if span.lastgroup == "doi" else _read_url_identifier(value)
+    spans, position = [], 0
+    while (start := _IDENTIFIER_START_RE.search(text_value, position)) is not None:
+        position = _find_identifier_end(text_value, start.start())
+        spans.append((start.start(), position))
+        value = _trim_span(text_value[start.start():position])
+        identifier = _read_doi_identifier(value) if start.lastgroup == "doi" else _read_url_identifier(value)
         if identifier is None:
             continue
         if identifier.startswith("doi:"):
