@@ -236,6 +236,18 @@ class CompositionTests(unittest.TestCase):
             with self.subTest(key=key):
                 self.assertCode('review_composition_conflict', composition.validate_page, page, self.plan)
 
+    def test_self_certified_page_grounds_cannot_authorize_scientific_content(self):
+        for observation in self.observations:
+            page = observation['output']
+            page['grounding'] = [{'invented': True}]
+            for fragment in page['fragments']:
+                fragment['grounds'] = page['grounding']
+            for disposition in page['dispositions']:
+                disposition['grounds'] = page['grounding']
+            observation.update(observe(page))
+        self.assertCode('review_composition_conflict', composition.build_root,
+                        self.plan, self.observations)
+
     def test_list_order_comes_from_frozen_ordinals_not_input_order(self):
         self.observations.reverse()
         for observation in self.observations:
@@ -590,6 +602,66 @@ class CompositionTests(unittest.TestCase):
             key: altered[key] for key in ('version', 'header', 'page_tree')}})
         self.assertCode('review_composition_conflict', composition.assemble_result,
                         self.plan, self.observations, altered, terminal)
+
+
+class PageGroundingTests(unittest.TestCase):
+    def setUp(self):
+        from test_review_staged_fixtures import epoch, full_card, selection
+        self.epoch = epoch()
+        self.card = full_card(self.epoch)
+        self.tasks, self.selection = selection(self.epoch, [self.card])
+        self.plan, pages, _, _ = make_fixture()
+        self.page = pages[0]['output']
+        self.original = self.card['critical_spans'][0]
+        self.delivered = {'originals': [], 'answer': {'conclusions': self.card['conclusions']}}
+        self.actual_input = {'intervals': [self.original]}
+
+    def validate(self, ground):
+        page = copy.deepcopy(self.page)
+        page['grounding'] = [ground]
+        for fragment in page['fragments']:
+            fragment['grounds'] = [ground]
+        return composition.validate_page_grounding(page, epoch=self.epoch,
+            selection=self.selection, tasks=self.tasks, actual_input=self.actual_input,
+            delivered=self.delivered)
+
+    def test_delivered_resolved_conclusion_is_a_valid_page_ground(self):
+        self.validate(self.card['conclusions'][0])
+
+    def test_fabricated_altered_and_undelivered_records_are_rejected(self):
+        for ground in ({'invented': True}, dict(self.card['conclusions'][0], id='invented'),
+                       dict(self.card['conclusions'][0], text='A different conclusion.')):
+            with self.subTest(ground=ground), self.assertRaises(ResearchError) as raised:
+                self.validate(ground)
+            self.assertEqual(raised.exception.code, 'review_composition_conflict')
+        self.delivered['answer']['conclusions'] = []
+        with self.assertRaises(ResearchError) as raised:
+            self.validate(self.card['conclusions'][0])
+        self.assertEqual(raised.exception.code, 'review_composition_conflict')
+
+    def test_unresolved_record_cannot_ground_a_page_even_when_delivered(self):
+        card = self.card
+        card['dependencies'] = ['missing-original-check']
+        from test_review_staged_fixtures import selection
+        self.tasks, self.selection = selection(self.epoch, [card])
+        with self.assertRaises(ResearchError) as raised:
+            self.validate(card['conclusions'][0])
+        self.assertEqual(raised.exception.code, 'review_composition_conflict')
+
+    def test_quotation_requires_exact_nonempty_delivered_original(self):
+        self.validate(self.original)
+        source = next(row for row in self.epoch['manifest']['sources']
+                      if row['id'] == self.original['source_id'])
+        from research_harness import review_staged as staged
+        for ground in (dict(self.original, sha256=digest('invented')),
+                       staged.source_span(source, 0, 0)):
+            with self.subTest(ground=ground), self.assertRaises(ResearchError) as raised:
+                self.validate(ground)
+            self.assertEqual(raised.exception.code, 'review_composition_conflict')
+        self.actual_input['intervals'] = []
+        with self.assertRaises(ResearchError) as raised:
+            self.validate(self.original)
+        self.assertEqual(raised.exception.code, 'review_composition_conflict')
 
 
 class EffectiveOutputTests(unittest.TestCase):

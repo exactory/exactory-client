@@ -14,7 +14,7 @@ def build_output(body, root):
         source = body['answer']
         page = {key:source[key] for key in ('protocol', 'epoch_id', 'role', 'task_id', 'page_id',
             'revision', 'source_root', 'dependency_root', 'ownership', 'replaces')}
-        ground = dict(kind='reviewer_observation', reason='The fragments were assessed against the supplied original conclusions.')
+        ground = body['answer']['conclusions'][0]
         page.update(fragments=[dict(fragment, grounds=[ground]) for fragment in source['source_fragments']],
                     grounding=[ground], findings=[], dispositions=[])
         return dict(pages=[page])

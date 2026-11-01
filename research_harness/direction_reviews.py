@@ -103,6 +103,11 @@ def _collect_selected_task_graph(records, artifacts, assignment_id):
         raise ResearchError('research_review_binding_stale', 'The effective result selects a different task graph.')
     if effective.get('completion_root') not in (None, completion['digest']):
         raise ResearchError('research_review_binding_stale', 'The effective completion binding has changed.')
+    from .review_composition import validate_page_grounding
+    for observed, (_, packet) in zip(observations, packets):
+        for page in observed['output'].get('pages', []):
+            validate_page_grounding(page, epoch=epoch, selection=selection, tasks=tasks,
+                actual_input=observed['actual_input'], delivered=packet['staged_review'])
     frame_packet = None
     coverage = {row['source_id']: row['complete'] for row in completion['coverage']}
     if completion['complete'] and all(coverage.get(row['source_id'], False) for row in epoch['manifest']['frame_fields']):

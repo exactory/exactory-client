@@ -390,7 +390,8 @@ class ReviewerTextContracts(unittest.TestCase):
                selected_observations_root=digest('observations'), integration_root=digest('integration'), page_characters=1000)
         content = dict(outcome, known_conclusions=[], findings=[])
         observed = []
-        ground = {'conclusion_id': 'retained-conclusion'}
+        source = value['manifest']['sources'][0]
+        ground = staged.source_span(source, 0, source['characters'])
         for page_id in plan['required_pages']:
             owners = [o for o in plan['ownership'] if o['page_id'] == page_id]
             fragments = [dict(o, content=([] if o['type'] == 'empty_list' else content[o['path'][1:]][o['ordinal']]),

@@ -25,7 +25,8 @@ from .storage import _canonical
 # Fragments add content and grounds to the exact ownership descriptor.
 #
 # Page fields appear in PAGE_KEYS. Fragment grounds reference the nonempty page
-# grounding array; the caller verifies their scientific validity. Dispositions
+# grounding array; validate_page_grounding verifies authenticated delivery and
+# the accepted, resolved scientific selection supplied by the caller. Dispositions
 # contain finding_id, status, reason and grounds. Replaces is null for revision
 # zero, otherwise REPLACEMENT_KEYS binds the exact predecessor. A frozen revision
 # authorization adds replacement_raw_output_digest. Scientific reconciliation
@@ -302,8 +303,72 @@ def _check_replacement(value, *, authorization=False):
 def _check_grounds(grounds, grounding, label):
     if not _require_array(grounds, label) or any(not isinstance(row, dict) or not row for row in grounds):
         _reject('Scientific content needs explicit grounding references.', location=label)
+    for row in grounds:
+        if not ('source_id' in row or 'id' in row or row.get('kind') in ('record', 'quotation', 'reviewer_observation')):
+            _reject('Use a quotation or an identified scientific record as a ground.', location=label)
     if any(row not in grounding for row in grounds):
         _reject('Fragment grounds must be declared in the page grounding.', location=label)
+
+
+def validate_page_grounding(page, *, epoch, selection, tasks, actual_input, delivered):
+    """Check page grounds against authenticated delivery and verified resolved science.
+
+    Callers supply the accepted observation closure and the actual answer packet,
+    never a catalog asserted by the page. Partial completion can supply resolved
+    records; an unresolved record cannot acquire credit from page membership.
+    """
+    from . import review_staged as staged
+    from .review_excerpts import normalize_with_offsets
+    work = staged._verify_selection(epoch, selection, tasks=tasks)
+    records = list(work['cells'].values()) + work['checks']
+    records.extend(work['grouped'].get('retrievals', {}).values())
+    for card in work['cards']:
+        records.extend(card['conclusions'] + card['conditions'])
+    for check in work['checks']:
+        records.extend(check['conclusions'])
+    resolved = {row['id']: row for row in records if row['id'] in work['resolved']}
+    supplied = set()
+    pending = [delivered]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            supplied.add(_digest_json(value))
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+    sources = {row['id']: row for row in epoch['manifest']['sources']}
+    grounding = _require_array(page['grounding'], 'grounding')
+    _check_grounds(grounding, grounding, 'grounding')
+    for ground in grounding:
+        span = ground.get('span') if ground.get('kind') == 'quotation' else ground
+        if ground.get('kind') == 'quotation':
+            check_fields(ground, ('kind', 'span', 'text'), code='review_composition_conflict')
+            if not isinstance(ground['text'], str):
+                _reject('A quotation must carry original text.')
+        if isinstance(span, dict) and 'source_id' in span:
+            check_fields(span, ('source_id', 'start', 'end', 'sha256'), code='review_composition_conflict')
+            _check_literal_text(span['source_id'], 'source_id')
+            source = sources.get(span['source_id'])
+            if source is None or source['kind'] == 'binary':
+                _reject('A page quotation must name a frozen text original.')
+            try:
+                quotation = staged.materialize_quotation(source, span,
+                    delivered=actual_input['intervals'],
+                    matching_text=ground.get('text') if ground.get('kind') == 'quotation' else None)
+            except ResearchError as error:
+                _reject('A page quotation must match its delivered original.', cause=error.code)
+            if not normalize_with_offsets(quotation['text'])[0]:
+                _reject('A scientific page quotation must contain original text.')
+        else:
+            identifier = ground.get('id')
+            if (not isinstance(identifier, str) or identifier not in resolved
+                    or ground != resolved[identifier] or _digest_json(ground) not in supplied):
+                _reject('A page ground must be an exact delivered, accepted and resolved scientific record.')
+    for fragment in _require_array(page['fragments'], 'fragments'):
+        _check_grounds(fragment['grounds'], grounding, 'fragment.grounds')
+    for disposition in _require_array(page['dispositions'], 'dispositions'):
+        _check_grounds(disposition['grounds'], grounding, 'disposition.grounds')
+    return copy.deepcopy(page)
 
 
 def validate_page(page, plan):
