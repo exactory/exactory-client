@@ -20,7 +20,7 @@ decision; it does not judge whether the decision is scientifically right.
 
 import re
 import unicodedata
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from .errors import ResearchError
 from .identities import family_id, resolve_arxiv_family
@@ -34,14 +34,13 @@ _TEX_ACCENT_RE = re.compile(r"\\(?:[\"'`^~=.]|[vuHckbdrt](?![A-Za-z]))")
 _TEX_COMMAND_RE = re.compile(r"\\([A-Za-z]+)")
 # Scripts without spaces between words: each character is a word of the title.
 _CJK_CHARACTER_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
-# An identifier ends where no letter, digit or underscore, and no punctuated
-# continuation, follows; a PDF suffix may close it. 10.1063/1.365928 cites neither
-# 10.1063/1.3659281, 10.1063/1.365928.5 nor 10.1063/1.365928(99).
+# An arXiv candidate ends before any identifier continuation, allowing a PDF suffix.
 _IDENTIFIER_END_PATTERN = r"(?:\.pdf|/pdf)?(?![0-9a-z_]|[-./:;()][0-9a-z])"
+# Bound every scheme attempt; brackets stay inside spans except at Markdown ](.
 _IDENTIFIER_SPAN_RE = re.compile(
-    r'(?P<url>(?:(?<![0-9a-z])[a-z][0-9a-z+.-]*://'
-    r'|(?<![0-9a-z./-])(?:www\.|export\.)?arxiv\.org/)[^\s{}"<>\\\]]*)'
-    r'|(?P<doi>(?<![0-9a-z])10\.[0-9]{4,9}/[^\s{}"\\\]]+)')
+    r'(?P<url>(?:(?<![0-9a-z])[a-z][a-z0-9+.-]{0,31}://'
+    r'|(?<![0-9a-z./-])(?:www\.|export\.)?arxiv\.org/)(?:(?!\]\()[^\s{}"<>\\])*)'
+    r'|(?P<doi>(?<![0-9a-z])10\.[0-9]{4,9}/(?:(?!\]\()[^\s{}"\\])+)')
 _SPAN_TRAILING_PUNCTUATION = ".,;:)]>"
 _ARXIV_HOSTS = ("arxiv.org", "www.arxiv.org", "export.arxiv.org")
 _DOI_HOSTS = ("doi.org", "dx.doi.org")
@@ -49,7 +48,13 @@ _ARXIV_PATH_RE = re.compile(r"/(?:abs|pdf|html|format)/(.+?)(?:\.pdf)?/?")
 _ARXIV_FTP_PATH_RE = re.compile(r"/ftp/([^/]+)/papers/[0-9]{4}/([0-9]{4}\.[0-9]{4,5}|[0-9]{7})\.pdf")
 _ARXIV_LABEL_PATTERN = r"(?<![0-9a-z./_-])arxiv(?:\s*:\s*|\s+)"
 _EPRINT_FIELD_PATTERN = r'(?<![0-9a-z_])eprint\s*=\s*[{"]\s*(?:arxiv\s*:\s*)?'
-_OLD_ARXIV_START_PATTERN = r"(?<![0-9a-z./_-])"
+_OLD_ARXIV_ID_PATTERN = r"[a-z]+(?:-[a-z]+)?(?:\.[a-z]{2})?/[0-9]{7}"
+_ARXIV_ID_PATTERN = r"(?:[0-9]{4}\.[0-9]{4,5}|" + _OLD_ARXIV_ID_PATTERN + ")"
+# Labels and eprint fields accept either id style; unlabelled ids require an archive.
+_ARXIV_REFERENCE_RE = re.compile(
+    "(?:(?:" + _ARXIV_LABEL_PATTERN + "|" + _EPRINT_FIELD_PATTERN + ")(?P<explicit>" + _ARXIV_ID_PATTERN + ")"
+    "|(?<![0-9a-z./_-])(?P<old>" + _OLD_ARXIV_ID_PATTERN + "))"
+    r"(?P<version>v[0-9]+)?" + _IDENTIFIER_END_PATTERN)
 _INVALID_ERR_CODE = "invalid_citation_accounting"
 
 
@@ -123,11 +128,10 @@ def _find_group_end(source, opener_index):
 
 
 def read_bibliography(data):
-    """{entries: {key: {text, title}} in file order, text} of a pinned bibliography.
+    """Read entry text, normalized titles and canonical identifier sets in file order.
     Each entry's text excludes its head, ends at its closing delimiter and is
-    casefolded; its title is normalized. The bibliography is read for citation
-    evidence, not validated:
-    undecodable bytes become replacement characters."""
+    casefolded. Without entries, identifiers come from the whole bibliography.
+    Undecodable bytes become replacement characters."""
     source = data.decode("utf-8", errors="replace")
     entries = {}
     for start in _ENTRY_START_RE.finditer(source):
@@ -138,63 +142,84 @@ def read_bibliography(data):
         title_field = _TITLE_FIELD_RE.search(entry_source)
         title = ("" if title_field is None else
                  entry_source[title_field.end() + 1:_find_group_end(entry_source, title_field.end()) - 1])
-        entries[start.group(3)] = {"text": entry_source, "title": _normalize_title(title)}
-    return {"entries": entries, "text": source.casefold()}
+        entries[start.group(3)] = {"text": entry_source, "title": _normalize_title(title),
+                                   "identifiers": _read_identifiers(entry_source)}
+    bibliography = {"entries": entries, "text": source.casefold()}
+    if not entries:
+        bibliography["identifiers"] = _read_identifiers(bibliography["text"])
+    return bibliography
 
 
-def _collect_arxiv_evidence(text_value):
-    """Return the arXiv families named by whole identifier spans and the spans."""
-    identifiers, families = [], set()
-    # The first identifier span consumes every identifier nested inside it.
+def _read_url_identifier(value):
+    """Read one registry identifier from a whole URL, ignoring other hosts and paths."""
+    try:
+        parts = urlsplit(value)
+        if not parts.scheme:
+            parts = urlsplit("https://" + value)
+    except ValueError:
+        return None
+    # Only DOI registry hosts supply a DOI, with percent-encoded path data decoded.
+    if parts.hostname in _DOI_HOSTS:
+        return "doi:" + unquote(parts.path[1:]).casefold()
+    if parts.hostname not in _ARXIV_HOSTS:
+        return None
+    # arXiv hosts supply ids only through recognized modern or legacy FTP paths.
+    path = _ARXIV_PATH_RE.fullmatch(parts.path)
+    if path:
+        return "arxiv:" + path[1]
+    ftp_path = _ARXIV_FTP_PATH_RE.fullmatch(parts.path)
+    if ftp_path:
+        archive, filename = ftp_path.groups()
+        return "arxiv:" + (filename if "." in filename else archive + "/" + filename)
+    return None
+
+
+def _read_arxiv_family(identifier):
+    """Return a validated arXiv family, skipping invalid untrusted candidates."""
+    # Restore old-style subject-class capitals after the bibliography's casefold.
+    if identifier.startswith("arxiv:"):
+        identifier = re.sub(r"\.[a-z]{2}/", lambda match: match[0].upper(), identifier)
+    try:
+        family = (family_id(identifier) if identifier.startswith("arxiv:")
+                  else resolve_arxiv_family(identifier))
+    except ResearchError:
+        return None
+    return family.casefold() if family is not None and family.startswith("arxiv:") else None
+
+
+def _read_arxiv_references(text_value, spans):
+    """Yield validated families from references outside every original identifier span."""
+    span_index = 0
+    for match in _ARXIV_REFERENCE_RE.finditer(text_value):
+        # Advance through ordered spans so overlap checks take linear total time.
+        while span_index < len(spans) and spans[span_index].end() <= match.start():
+            span_index += 1
+        if span_index < len(spans) and spans[span_index].start() < match.end():
+            continue
+        value = (match["explicit"] or match["old"]) + (match["version"] or "")
+        family = _read_arxiv_family("arxiv:" + value)
+        if family is not None:
+            yield family
+
+
+def _read_identifiers(text_value):
+    """Collect whole DOI identifiers and arXiv families once from bibliography text."""
+    identifiers = set()
+    # One left-to-right pass lets the first span consume all nested identifiers.
     spans = list(_IDENTIFIER_SPAN_RE.finditer(text_value))
-    # Interpret whole spans by registry host and path, or as unversioned DataCite DOIs.
     for span in spans:
         value = span[0].rstrip(_SPAN_TRAILING_PUNCTUATION)
-        if span.lastgroup == "doi":
-            identifiers.append("doi:" + value)
+        identifier = "doi:" + value if span.lastgroup == "doi" else _read_url_identifier(value)
+        if identifier is None:
             continue
-        try:
-            parts = urlsplit(value)
-            if not parts.scheme:
-                parts = urlsplit("https://" + value)
-        except ValueError:
-            continue
-        if parts.hostname in _ARXIV_HOSTS:
-            path = _ARXIV_PATH_RE.fullmatch(parts.path)
-            ftp_path = _ARXIV_FTP_PATH_RE.fullmatch(parts.path)
-            if path:
-                identifiers.append("arxiv:" + path[1])
-            elif ftp_path:
-                archive, filename = ftp_path.groups()
-                identifiers.append("arxiv:" + (filename if "." in filename else archive + "/" + filename))
-        elif parts.hostname in _DOI_HOSTS:
-            identifiers.append("doi:" + parts.path[1:])
-    for identifier in identifiers:
-        # Restore old-style subject-class capitals after the bibliography's casefold.
-        identifier = re.sub(r"\.[a-z]{2}/", lambda match: match[0].upper(), identifier)
-        try:
-            family = (family_id(identifier) if identifier.startswith("arxiv:")
-                      else resolve_arxiv_family(identifier))
-        except ResearchError:
-            continue
-        if family is not None and family.startswith("arxiv:"):
-            families.add(family.casefold())
-    return families, spans
-
-
-def _has_identifier(text_value, token):
-    # DOI tokens retain their whole-identifier matching on the scanned text.
-    if token.startswith("10."):
-        return re.search(r"(?<![0-9a-z])" + re.escape(token) + _IDENTIFIER_END_PATTERN, text_value) is not None
-    families, spans = _collect_arxiv_evidence(text_value)
-    # Labels, eprint fields and old-style ids must match outside spans in the original text.
-    contexts = [_ARXIV_LABEL_PATTERN, _EPRINT_FIELD_PATTERN]
-    if "/" in token:
-        contexts.append(_OLD_ARXIV_START_PATTERN)
-    pattern = "(?:" + "|".join(contexts) + ")" + re.escape(token) + r"(?:v[0-9]+)?" + _IDENTIFIER_END_PATTERN
-    return "arxiv:" + token in families or any(
-        all(match.end() <= span.start() or match.start() >= span.end() for span in spans)
-        for match in re.finditer(pattern, text_value))
+        if identifier.startswith("doi:"):
+            identifiers.add(identifier)
+        # Only an unversioned DataCite arXiv DOI contributes an arXiv family.
+        family = _read_arxiv_family(identifier)
+        if family is not None:
+            identifiers.add(family)
+    identifiers.update(_read_arxiv_references(text_value, spans))
+    return identifiers
 
 
 def find_citing_entry(bibliography, works):
@@ -203,17 +228,18 @@ def find_citing_entry(bibliography, works):
     without spaces. The key is the first citing entry in file order. Another format
     cites the work when its text carries an identifier or contains the title; the
     key is then None."""
-    tokens = {token for work in works for token in find_citation_tokens(work)}
+    identifiers = {("doi:" if token.startswith("10.") else "arxiv:") + token
+                   for work in works for token in find_citation_tokens(work)}
     titles = {title.replace(" ", "") for title in (_normalize_title(work["title"] or "") for work in works)
               if _is_title_evidence(title)}
     if not bibliography["entries"]:
         compact_text = _normalize_title(bibliography["text"]).replace(" ", "")
-        cited = any(_has_identifier(bibliography["text"], token) for token in tokens) or any(
+        cited = bool(bibliography["identifiers"] & identifiers) or any(
             title in compact_text for title in titles)
         return cited, None
     for key, entry in bibliography["entries"].items():
         compact_title = entry["title"].replace(" ", "")
-        if compact_title in titles or any(_has_identifier(entry["text"], token) for token in tokens):
+        if compact_title in titles or entry["identifiers"] & identifiers:
             return True, key
     return False, None
 
