@@ -345,6 +345,32 @@ def collect_series_packets(records, artifacts, assignment_id):
         return []
 
 
+def collect_earlier_series_packets(records, artifacts, assignment):
+    """Collect authenticated deliveries across earlier result series of the same slot."""
+    if assignment.get('role') != 'result':
+        return []
+    assignments = records.get('review_assignment', {})
+    packets, seen = [], set()
+    try:
+        series = _list_series(records, artifacts, assignment['id'])
+        while series:
+            seen.update(turn['id'] for turn, _ in series)
+            prior_id = series[0][0].get('context', {}).get('prior_assignment_id')
+            prior = assignments.get(prior_id)
+            if (prior is None or prior_id in seen or prior.get('role') != 'result'
+                    or any(prior.get(key) != assignment.get(key) for key in ('route_id', 'slot_id', 'session_id'))
+                    or any(normalized_text(prior[key]) != normalized_text(assignment[key])
+                           for key in ('reviewer_id', 'author_id'))):
+                break
+            series = _list_series(records, artifacts, prior_id)
+            if not series or any(turn['id'] in seen for turn, _ in series):
+                break
+            packets.extend(collect_series_packets(records, artifacts, prior_id))
+    except (ResearchError, ValueError, TypeError, KeyError, UnicodeError):
+        pass
+    return packets
+
+
 def collect_contract_packets(records, artifacts, assignment):
     """Actual inputs for a series output check, without selecting the current attempt recursively during refusal."""
     from .review_input_projection import packets_from_request

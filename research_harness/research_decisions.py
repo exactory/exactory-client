@@ -234,6 +234,12 @@ def _visual_supplied_context(records, artifacts, packets):
     return references, mappings
 
 
+def collect_delivery_packets(records, artifacts, assignment, packets, series):
+    """The packets whose content a review may cite: its own, and for a part series those of earlier series of its slot."""
+    from . import review_problem_parts
+    return packets + (review_problem_parts.collect_earlier_series_packets(records, artifacts, assignment) if series else [])
+
+
 def validate_review_contract(records, artifacts, assignment, output):
     """Pure review checks against this assignment's frozen contract and delivered lineage."""
     from . import bar_sources, review_context_repair, review_excerpts, review_supplied_evidence
@@ -352,12 +358,13 @@ def validate_review_contract(records, artifacts, assignment, output):
         review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False, packet=repair_packet,
                                                     evidence_validator=contract_evidence)
     if problem:
-        carried = collect_carried_records(records, artifacts, assignment["id"], packets=packets)
-        supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual or series else
+        delivery_packets = collect_delivery_packets(records, artifacts, assignment, packets, series)
+        carried = collect_carried_records(records, artifacts, assignment["id"], packets=delivery_packets)
+        supplied, mappings = (_visual_supplied_context(records, artifacts, delivery_packets) if visual or series else
                               review_supplied_evidence.supplied_context(records, artifacts, [assignment["id"]], frozen=True))
         for path, evidence in evidence_arrays(output, with_paths=True):
             missing = review_supplied_evidence.undelivered_references(records, artifacts, evidence, carried, supplied, mappings,
-                                                                     frozen=True, packets=packets if visual or series else ())
+                                                                     frozen=True, packets=delivery_packets if visual or series else ())
             if missing:
                 details = missing[0]
                 description = (details["record_kind"] + " " + details["id"] + " at the cited digest"
@@ -950,12 +957,13 @@ def find_undelivered_review_references(records, artifacts, review):
             packets += review_problem_parts.collect_series_packets(records, artifacts, assignment_id)
     else:
         packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id])
-    carried = collect_carried_records(records, artifacts, assignment_id, packets=packets)
-    supplied, mappings = (_visual_supplied_context(records, artifacts, packets) if visual or series else
+    delivery_packets = collect_delivery_packets(records, artifacts, assignment, packets, series)
+    carried = collect_carried_records(records, artifacts, assignment_id, packets=delivery_packets)
+    supplied, mappings = (_visual_supplied_context(records, artifacts, delivery_packets) if visual or series else
                           review_supplied_evidence.supplied_context(records, artifacts, [assignment_id], frozen=True))
     evidence = [reference for array in evidence_arrays(review['payload']) for reference in array]
     return review_supplied_evidence.undelivered_references(
-        records, artifacts, evidence, carried, supplied, mappings, frozen=True, packets=packets if visual or series else ())
+        records, artifacts, evidence, carried, supplied, mappings, frozen=True, packets=delivery_packets if visual or series else ())
 
 
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):
