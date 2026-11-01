@@ -1,5 +1,6 @@
 """Scientific acceptance binds its dependency frontier, including context discoveries."""
 
+import copy
 import tempfile
 from pathlib import Path
 import unittest
@@ -25,7 +26,7 @@ class ScopedAcceptanceTests(unittest.TestCase):
         self.records['review_epoch_discoveries'] = {
             self.epoch['id']: dict(acceptance_ids=['discovery'])}
         self.planned = self.fixture.plan(self.fixture.expanded_task())
-        self.card = self.fixture.discovery['output']['cards'][0]
+        self.card = copy.deepcopy(self.fixture.discovery['output']['cards'][0])
         for cell in self.card['judgments']:
             cell['context_root'] = self.fixture.contexts[cell['claim_id']]['root']
         self.captured = dict(reservation_id='current', recorded_revision=2,

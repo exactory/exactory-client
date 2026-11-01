@@ -16,6 +16,11 @@ import test_review_staged_protocol as protocol_fixtures
 
 
 class StagedPacketGapTests(unittest.TestCase):
+    def test_final_authorization_cannot_be_split_into_mutually_pending_terminals(self):
+        value = epoch()
+        assigned = task(value, 'final')
+        self.assertEqual(staged_protocol.split_task(value, assigned), [])
+
     def test_invalid_card_array_does_not_hide_valid_cells_from_reconciliation(self):
         value = epoch()
         cells = full_card(value)['judgments']
@@ -320,6 +325,16 @@ class StagedObservedGapTests(ResultPartsCase):
         plan['evidence_obligations'] = bindings['evidence_obligations']
         planned = staged_protocol.plan_remaining_tasks(records, self.case.artifacts, controller,
                                                        profiles={}, composition_plan=plan)['tasks']
+        remapped, grounded = {}, []
+        source = next(row for row in value['manifest']['sources'] if row['kind'] == 'frame' and row['characters'])
+        for assigned in planned:
+            changes = dict(dependencies=[remapped.get(key, key) for key in assigned['dependencies']])
+            if assigned['type'] == 'answer':
+                changes['inputs'] = [staged.source_span(source, 0, source['characters'])]
+            changed = staged_protocol.remake_task(value, assigned, **changes)
+            remapped[assigned['id']] = changed['id']
+            grounded.append(changed)
+        planned = grounded
         script = '''
 import copy, sys
 from pathlib import Path
@@ -334,7 +349,7 @@ def send(route, request, credential):
     if body['task']['type'] == 'answer':
         source = body['answer']
         page = {key:copy.deepcopy(source[key]) for key in ('protocol','epoch_id','role','task_id','page_id','revision','source_root','dependency_root','ownership','replaces')}
-        ground = {'kind':'reviewer_observation', 'reason':'The named scientific scope remains unresolved.'}
+        ground = body['originals'][0]['span']
         page.update(fragments=[], grounding=[ground], findings=[], dispositions=[])
         for fragment in source['source_fragments']:
             page['fragments'].append(dict(fragment, grounds=[ground]))

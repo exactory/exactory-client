@@ -271,28 +271,34 @@ class StagedEntryTests(ResultPartsCase):
     def test_paged_selection_assembles_science_and_retains_raw_terminal_digest(self):
         from research_harness import review_staged as staged, review_composition as composition
         from test_review_composition import make_fixture, worked_result
-        from test_review_staged_fixtures import epoch
+        from test_review_staged_fixtures import epoch, observation, task
         plan, pages, choices, _ = make_fixture()
         value = epoch()
         plan.update(epoch_id=value['id'], slot_id=value['slot_id'], subject=value['subject'])
+        ground = task(value)['inputs'][0]
         for page in pages:
             page['output']['epoch_id'] = value['id']
-            page['raw_output_digest'] = digest(page['output'])
+            page['output']['grounding'] = [ground]
+            for row in page['output']['fragments'] + page['output']['dispositions']:
+                row['grounds'] = [ground]
         observations = [dict(id=page['attempt_id'], output={'pages':[page['output']]}) for page in pages]
         plan.update(staged_protocol.build_composition_bindings(value, observations))
+        tasks, observations = [], []
         for page in pages:
+            assigned = task(value, 'answer', answer_ranges=page['output']['ownership'],
+                composition_role=plan['role'], composition_plan_root=digest(plan))
+            page['output']['task_id'] = assigned['id']
             page['output'].update(source_root=plan['source_root'], dependency_root=plan['dependency_root'])
             page['raw_output_digest'] = digest(page['output'])
-        observations = [dict(id=page['attempt_id'], output={'pages':[page['output']]}) for page in pages]
-        plan.update(staged_protocol.build_composition_bindings(value, observations))
+            tasks.append(assigned)
+            observations.append(observation(value, assigned, {'pages':[page['output']]}, id=page['attempt_id']))
         root = composition.build_root(plan, pages)
         terminal = dict(protocol=composition.PROTOCOL, epoch_id=value['id'], role='result',
                         composition_root=root['digest'], choices=choices)
         raw = dict(terminal=dict(assurances={kind: choices['/value/assurances/' + kind + '/status'] for kind in staged.ASSURANCES}, visible_conditions=[], composition_root=root['digest'],
                                  integration_id='integrated', decisions=terminal['choices']))
-        observations = [dict(id=page['attempt_id'], output={'pages':[page['output']]}) for page in pages]
         observations.append(dict(id='terminal-attempt', output=raw))
-        selection = staged_protocol.build_composition(value, plan, observations, observations[-1])
+        selection = staged_protocol.build_composition(value, plan, observations, observations[-1], tasks=tasks)
         selection.update(controller_id='controller', kind='paged', completion_root=digest('complete'))
         effective = composition.effective_review_output('controller', selection)
         self.assertEqual(effective['effective_output'], worked_result())
@@ -300,7 +306,7 @@ class StagedEntryTests(ResultPartsCase):
         self.assertNotEqual(selection['raw_terminal_digest'], effective['terminal_raw_output_digest'])
         for name in ('evidence_currency', 'source_root', 'selected_observations_root', 'integration_root'):
             with self.subTest(name=name), self.assertRaises(ResearchError):
-                staged_protocol.build_composition(value, dict(plan, **{name:digest('unrelated')}), observations, observations[-1])
+                staged_protocol.build_composition(value, dict(plan, **{name:digest('unrelated')}), observations, observations[-1], tasks=tasks)
 
     def test_actual_input_binds_the_cards_that_reached_the_task(self):
         from test_review_staged_fixtures import epoch, task, full_card

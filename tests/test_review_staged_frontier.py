@@ -36,8 +36,8 @@ def build_output(body, root):
     task = body['task']
     prefix = task['id']
     if task['type'] == 'frame':
-        return dict(claims=[dict(id=prefix + ':' + str(i), kind='record', spans=[row['span']],
-                    dependencies=[], children=[]) for i, row in enumerate(body['frame']['fields'])],
+        return dict(claims=[dict(id='frame-record:' + digest(row['span']), kind='record', spans=[row['span']],
+                    dependencies=[], children=[]) for row in body['frame']['fields']],
                     conditions=[], dependencies=[], unresolved=[])
     if task['type'] == 'read':
         cards = []
@@ -90,6 +90,8 @@ def build_output(body, root):
 
 class FrontierTests(ResultPartsCase):
     staged_entry = True
+    output_tokens = 4000
+    timeout_seconds = 30
 
     def create_controller(self):
         # Keep the frozen scientific fixture small; inventory construction itself

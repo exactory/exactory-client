@@ -659,6 +659,8 @@ def _build_series(records, artifacts, inputs):
 _STAGED_KINDS = ("review_epoch", "review_task", "assessment_incomplete", "review_execution_plan",
                  "review_task_execution", "review_reservation", "review_observation", "review_task_acceptance",
                  "review_task_refusal", "review_task_repair",
+                 "review_task_acceptance_index", "review_epoch_discoveries", "review_resource_ledger",
+                 "review_execution_exhaustion", "review_capture_attempt",
                  "review_pool_membership", "review_capacity_policy", "review_slot_head", "review_task_dispatch",
                  "review_composition_plan")
 

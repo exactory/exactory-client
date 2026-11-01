@@ -8,7 +8,6 @@ from problem_parts_fixtures import ResultPartsCase
 from codex_route_fixtures import invoke_codex
 from research_harness import direction_reviews, review_protocol as protocol
 from research_harness import review_staged as staged, review_staged_protocol as producer, review_worker
-from research_harness.errors import ResearchError
 import test_review_staged_frontier as frontier
 import test_review_staged_paged_journey as paged
 
@@ -44,6 +43,8 @@ def build_output(body, root):
 
 class PagedRecordingTests(ResultPartsCase):
     staged_entry = True
+    output_tokens = 4000
+    timeout_seconds = 30
     create_controller = frontier.FrontierTests.create_controller
     command = frontier.FrontierTests.command
 
@@ -90,9 +91,25 @@ class PagedRecordingTests(ResultPartsCase):
         output = self.case.build_review_output('result')
         output['value'].update(objective_adequacy='not_assessed', method_adequacy='not_assessed')
         (self.case.root / 'forge-ground').touch()
-        with self.assertRaises(ResearchError) as raised:
-            self.run_controller(controller, output, 'value-review')
-        self.assertEqual(raised.exception.code, 'review_composition_conflict')
+        (self.case.root / 'scientific.json').write_text(json.dumps(output))
+        worker = frontier.WORKER.replace('from test_review_staged_frontier import build_output',
+                                        'from test_direction_reviews_paged import build_output')
+        with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', worker]):
+            for _ in range(35):
+                planned = self.command('review-assignment', {'controller_assignment_id': controller['id']})
+                self.assertNotIn('outcome', planned)
+                next_work = planned['next'][0]
+                self.assertEqual(next_work['command'], 'review-run')
+                result = self.command('review-run', next_work['payload'])
+                records = self.case.read_records()
+                assigned = records['review_task'][next_work['payload']['task_id']]['task']
+                if assigned['type'] == 'answer':
+                    self.assertEqual(result['refusal']['code'], 'review_composition_conflict')
+                    self.assertFalse(any(row['task_id'] == assigned['id']
+                                         for row in records['review_task_acceptance'].values()))
+                    break
+            else:
+                self.fail('The forged page did not reach scientific acceptance')
         records = self.case.read_records()
         self.assertFalse(any(row['assignment_id'] == controller['id']
                              for row in records.get('value_review', {}).values()))

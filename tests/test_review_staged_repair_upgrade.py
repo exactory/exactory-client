@@ -21,6 +21,8 @@ from research_harness.errors import ResearchError
 
 class StagedRepairUpgradeTests(ResultPartsCase):
     staged_entry = True
+    output_tokens = 4000
+    timeout_seconds = 30
     create_controller = frontier.FrontierTests.create_controller
     command = frontier.FrontierTests.command
 

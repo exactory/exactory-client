@@ -92,6 +92,28 @@ class StagedPlanningEntryTests(unittest.TestCase):
             producer.prepare_child(self.records, self.artifacts, value, 2)
         self.assertEqual(caught.exception.code, 'review_task_dependency_changed')
 
+    def test_indexed_discovery_keeps_its_accepted_nondiscovering_ancestor(self):
+        reading = self.records['review_task_acceptance']['discovery']['receipt']['staged_observation']
+        reading['output'].pop('new_dependencies')
+        reading['raw_output_digest'] = digest(reading['output'])
+        reader = self.records['review_task'][reading['task_id']]['task']
+        assigned = task(self.epoch, 'read', dependencies=[reader['id']])
+        claims = self.epoch['manifest']['claims']
+        captured = observation(self.epoch, assigned, dict(cards=copy.deepcopy(reading['output']['cards']), new_dependencies=[
+            dict(claim_id=claims[0]['id'], depends_on=claims[1]['id'])]),
+            dependencies={reader['id']: reading['raw_output_digest']})
+        self.records['review_task'][assigned['id']] = dict(epoch_id=self.epoch['id'], task=assigned)
+        self.records['review_assignment']['followup'] = dict(
+            self.records['review_assignment']['discoverer'], id='followup', staged_task=assigned)
+        self.records['review_task_acceptance']['followup'] = dict(task_id=assigned['id'], receipt=dict(
+            attempt=dict(id=captured['id'], assignment_id='followup', recorded_revision=2),
+            staged_observation=captured))
+        self.records['review_task_acceptance_index'] = {
+            reader['id']: dict(reservation_id='discovery'), assigned['id']: dict(reservation_id='followup')}
+        self.records['review_epoch_discoveries'] = {self.epoch['id']: dict(acceptance_ids=['followup'])}
+        current = producer.derive_current_contexts(self.records, self.artifacts, self.epoch)
+        self.assertEqual(current, self.contexts)
+
 
 if __name__ == '__main__':
     unittest.main()

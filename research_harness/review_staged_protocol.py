@@ -80,10 +80,8 @@ def has_context_discoveries(output):
     """Recognize both dependency output contracts, including frame decomposition."""
     if not isinstance(output, dict):
         return False
-    return bool(output.get('new_dependencies') or output.get('dependencies') or any(
-        row.get('dependencies') or row.get('children')
-        for rows in (output.get('claims'), output.get('conditions')) if isinstance(rows, list)
-        for row in rows if isinstance(row, dict)))
+    return any(output.get(name) for name in
+               ('new_dependencies', 'dependencies', 'claims', 'conditions', 'unresolved'))
 
 
 def derive_current_contexts(records, artifacts, epoch):
@@ -104,8 +102,16 @@ def collect_current_planning_records(records, artifacts, epoch):
             or tasks.get(row.get('task_id'), {}).get('task', {}).get('type') == 'frame')
                for row in discoveries):
         return dict(contexts=copy.deepcopy(epoch['manifest']['contexts']))
+    acceptance_ids = None
+    if index is not None:
+        ancestors = {ancestor['task_id'] for row in discoveries if row is not None
+            and row.get('epoch_id') == epoch['id']
+            for ancestor in collect_dependency_observations(records, tasks[row['task_id']]['task'])}
+        references = [records.get('review_task_acceptance_index', {}).get(key) for key in sorted(ancestors)]
+        if all(reference is not None for reference in references):
+            acceptance_ids = sorted(set(index['acceptance_ids']) | {row['reservation_id'] for row in references})
     observations, _, obligations = collect_observations(
-        records, artifacts, epoch, acceptance_ids=None if index is None else index['acceptance_ids'])
+        records, artifacts, epoch, acceptance_ids=acceptance_ids)
     if obligations:
         raise ResearchError(obligations[0]['code'], obligations[0]['explanation'])
     return staged.collect_planning_records(epoch, {'observations':observations},
@@ -1083,6 +1089,13 @@ def accept_capture(records, artifacts, assignment, captured, attempt_id):
                     task_digest=task['digest'], actual_input=actual, request_digest=digest(protocol._read_json(artifacts, observation['request'])),
                     output=output, raw_output_digest=digest(output), dependencies=dependencies)
     staged._validate_observation(epoch, task, selected, current_contexts)
+    if task['type'] == 'answer':
+        from .review_composition import validate_page_grounding
+        observations = collect_dependency_observations(records, task)
+        tasks = [protocol._get(records, 'review_task', row['task_id'])['task'] for row in observations] + [task]
+        validate_page_grounding(output['pages'][0], epoch=epoch,
+            selection={'observations': observations + [selected]}, tasks=tasks,
+            actual_input=actual, delivered=sent['staged_review'])
     if output.get('retrievals', []) != []:
         from .review_staged_followups import plan_retrieval_tasks
         observations = collect_dependency_observations(records, task)
@@ -1387,13 +1400,20 @@ def build_composition(epoch, plan, observations, terminal_observation, *, tasks=
     pages = []
     raw_bindings = []
     task_index = {task['id']: task for task in tasks}
+    context_graph = staged.derive_context_graph(epoch, {'observations': prior}, tasks=tasks)
     for observation in observations:
-        if observation['output'].get('pages') and observation.get('task_id') is not None:
-            assigned = task_index.get(observation['task_id'])
+        if observation['output'].get('pages'):
+            assigned = task_index.get(observation.get('task_id'))
             if assigned is None or assigned['type'] != 'answer':
                 raise ResearchError('review_composition_conflict', 'Every page must bind its frozen answer task')
             validate_composition_task(epoch, assigned, plan)
             validate_answer_pages(assigned, observation['output'], plan)
+            dependencies = [row for row in observations if row.get('task_id') in assigned['dependencies']]
+            packet = build_packet(epoch, assigned, observations=dependencies, composition_plan=plan,
+                                  tasks=tasks, context_graph=context_graph)
+            composition.validate_page_grounding(observation['output']['pages'][0], epoch=epoch,
+                selection={'observations': observations}, tasks=tasks,
+                actual_input=observation['actual_input'], delivered=packet['staged_review'])
         for page in observation['output'].get('pages', []):
             pages.append(dict(attempt_id=observation['id'], raw_output_digest=digest(page), output=page))
             raw_bindings.append(dict(attempt_id=observation['id'], raw_output_digest=digest(observation['output'])))
@@ -1644,6 +1664,8 @@ def describe_planning_command(controller_id):
 
 def split_task(epoch, task, *, cards=(), observations=(), contexts=None):
     """Partition one failed work dimension without losing its original obligation union."""
+    if task['type'] == 'final':
+        return []
     from . import review_staged as staged
     options = {key: copy.deepcopy(task[key]) for key in ('inputs', 'claim_ids', 'occurrence_ids', 'dependencies',
         'binary_sources', 'card_ids', 'card_segments', 'group_ids', 'segment_task_ids', 'obligation_ids', 'child_ids',

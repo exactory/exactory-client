@@ -34,6 +34,8 @@ def build_output(body, root):
 
 class PagedJourneyTests(ResultPartsCase):
     staged_entry = True
+    output_tokens = 4000
+    timeout_seconds = 30
     create_controller = fixtures.FrontierTests.create_controller
     command = fixtures.FrontierTests.command
 

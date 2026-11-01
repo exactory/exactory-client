@@ -34,7 +34,8 @@ class ResultPartsCase(unittest.TestCase):
         self.case.setUp()
         case = self.case
         case.supporting = case.artifacts.put(b'A captured field standard.', 'text/plain')
-        record_codex_route(case)
+        record_codex_route(case, output_tokens=getattr(self, 'output_tokens', 1000),
+                           timeout_seconds=getattr(self, 'timeout_seconds', 5))
         for reviewer in ('first', 'second'):
             assignment = case.assign('bar', reviewer, **case.deliver_supporting(reviewer))
             output = case.build_review_output('bar')
