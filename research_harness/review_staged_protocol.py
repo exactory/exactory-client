@@ -49,21 +49,48 @@ def collect_valid_records(epoch, observations, name, validator, *, contexts=None
     return records
 
 
-def collect_observations(records, artifacts, epoch, *, acceptance_ids=None):
+def collect_epoch_acceptances(records, epoch, *, acceptance_ids=None):
+    """Resolve this epoch's acceptance index through its immutable task membership.
+
+    The discovery marker certifies initialization of the per-task selectors.
+    Older views retain their cold reconstruction until execution installs them.
+    No indexed view scans another epoch's acceptance records.
+    """
+    acceptances = records.get('review_task_acceptance', {})
+    if acceptance_ids is not None:
+        return [acceptances[key] for key in acceptance_ids]
+    if records.get('review_epoch_discoveries', {}).get(epoch['id']) is None:
+        return [row for row in acceptances.values()
+                if (row['receipt'].get('staged_observation') or {}).get('epoch_id') == epoch['id']]
+    selected = []
+    for task_id, row in records.get('review_task', {}).items():
+        if row['epoch_id'] != epoch['id']:
+            continue
+        reference = read_task_acceptance_reference(records, task_id)
+        if reference is None:
+            continue
+        accepted = protocol._get(records, 'review_task_acceptance', reference['reservation_id'])
+        observed = accepted['receipt'].get('staged_observation')
+        if (accepted['task_id'] != task_id or observed is not None
+                and (observed['epoch_id'] != epoch['id'] or observed['task_id'] != task_id)):
+            raise ResearchError('review_task_dependency_changed', 'The epoch acceptance index names a different task')
+        selected.append(accepted)
+    return selected
+
+
+def collect_observations(records, artifacts, epoch, *, acceptance_ids=None, include_contaminated=False):
     """Select authenticated accepted captures without consulting assignment state."""
     observations, terminal, obligations = [], None, []
-    acceptances = records.get('review_task_acceptance', {})
-    selected = acceptances.values() if acceptance_ids is None else (acceptances[key] for key in acceptance_ids)
-    for acceptance in selected:
+    for acceptance in collect_epoch_acceptances(records, epoch, acceptance_ids=acceptance_ids):
         receipt = acceptance['receipt']
         observed, attempt = receipt.get('staged_observation'), receipt.get('attempt')
         if observed is None or observed.get('epoch_id') != epoch['id'] or attempt is None:
             continue
         child = records.get('review_assignment', {}).get(attempt['assignment_id'])
-        if child is None or not authenticate_observation(records, artifacts, child, attempt):
+        if child is None or not protocol.authenticate_attempt(records, artifacts, child, attempt):
             obligations.append(obligation('review_invocation_unverified', 'Authenticate every selected task capture.'))
             continue
-        if any(row['assignment_id'] == child['id'] and row['kind'] == 'contamination'
+        if not include_contaminated and any(row['assignment_id'] == child['id'] and row['kind'] == 'contamination'
                for row in records.get('review_context_event', {}).values()):
             obligations.append(obligation('review_context_contaminated', 'A selected task received foreign input.',
                                           assignment_id=child['id']))
@@ -805,13 +832,19 @@ def prepare_controller(records, artifacts, record, packet, route):
     return changes
 
 
-def read_task_acceptance(records, task_id):
-    """Read one selected dependency; cold legacy views can reconstruct the index."""
+def read_task_acceptance_reference(records, task_id):
+    """Resolve one task selector, including the accepted execution head of G2."""
     reference = records.get('review_task_acceptance_index', {}).get(task_id)
     if reference is None:
         execution = records.get('review_task_execution', {}).get(task_id, {})
         if execution.get('state') == 'accepted':
             reference = dict(reservation_id=execution['reservation_id'])
+    return reference
+
+
+def read_task_acceptance(records, task_id):
+    """Read one selected dependency; cold legacy views can reconstruct the index."""
+    reference = read_task_acceptance_reference(records, task_id)
     if reference is not None:
         accepted = protocol._get(records, 'review_task_acceptance', reference['reservation_id'])
         if accepted['task_id'] != task_id:
@@ -1059,7 +1092,8 @@ def accept_capture(records, artifacts, assignment, captured, attempt_id):
     observation = captured['observation']
     attempt = build_capture_attempt(assignment, captured, attempt_id)
     if not authenticate_observation(records, artifacts, assignment, attempt):
-        raise ResearchError('review_invocation_unverified', 'Authenticate the exact owned-worker capture before acceptance')
+        raise ResearchError('review_invocation_unverified', 'Authenticate the exact owned-worker capture before acceptance',
+                            dict(capture_verification=captured['reservation_id']))
     raw = protocol._read_json(artifacts, observation['output'])
     epoch = protocol._get(records, 'review_epoch', assignment['staged_review']['epoch_id'])
     if not matches_currency(records, artifacts, epoch):
@@ -1182,7 +1216,8 @@ def invoke_task(store, payload, *, expected_revision, request_id):
     state = records.get('review_task_execution', {}).get(binding['task_id'])
     reservation = records.get('review_reservation', {}).get(state['reservation_id']) if state else None
     previous_capture = records.get('review_observation', {}).get(reservation['observation_id']) if reservation else None
-    retryable = (reservation is not None and reservation['released']
+    retained = records.get('review_capture_attempt', {}).get(reservation['id'], {}) if reservation else {}
+    retryable = (reservation is not None and reservation['released'] and retained.get('attempt_id') != payload['id']
                  and (reservation['state'] == 'refused' or previous_capture is None or previous_capture['observation']['status'] != 'completed'))
     if reservation is None or retryable:
         try:
@@ -1204,30 +1239,41 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         attempt = build_capture_attempt(assignment, captured, value['id'])
         persisted = protocol._get(current_records, 'review_observation', captured['reservation_id'])
         if (digest(persisted) != digest(captured) or captured['origin'] != 'instrumented'
-                or captured['observation']['status'] == 'completed'
-                and not authenticate_observation(current_records, store.build_artifact_store(), assignment, attempt)):
-            raise ResearchError('review_invocation_unverified', 'Authenticate the owned capture before retaining its attempt')
+                or captured['task_id'] != binding['task_id']):
+            raise ResearchError('review_invocation_unverified', 'Retain only the exact owned task capture')
         return [immutable_record(current_records, 'review_attempt', value['id'], attempt),
                 immutable_record(current_records, 'review_capture_attempt', captured['reservation_id'],
                                  dict(attempt_id=value['id']))], attempt
-    prepared_task_mutation(store, 'review.task_attempt', payload, prepare_capture, request_id=request_id + ':attempt')
-    if captured['observation']['status'] != 'completed':
-        finish_worker(store, current['id'], process, request_id)
-        def prepare_failure(current_records, value):
-            attempt = build_capture_attempt(assignment, captured, value['id'])
-            return [immutable_record(current_records, 'review_attempt', value['id'], attempt)], dict(
-                attempt, next=[describe_planning_command(controller_id)])
-        return prepared_task_mutation(store, 'review.invoke', payload, prepare_failure, request_id=request_id)
     try:
-        receipt = execution.accept_observation(store, {'reservation_id': current['id']},
-             lambda current_records, capture: accept_capture(current_records, store.build_artifact_store(),
-                                                                    assignment, capture, payload['id']),
-             request_id=request_id + ':accept')['result']
-        if 'refusal' not in receipt and receipt['receipt']['attempt']['id'] != payload['id']:
-            raise ResearchError('review_resampling_forbidden', 'Resume the originally named task attempt')
+        prepared_task_mutation(store, 'review.task_attempt', payload, prepare_capture, request_id=request_id + ':attempt')
+        if captured['observation']['status'] == 'completed':
+            try:
+                receipt = execution.accept_observation(store, {'reservation_id': current['id']},
+                    lambda current_records, capture: accept_capture(current_records, store.build_artifact_store(),
+                                                                   assignment, capture, payload['id']),
+                    request_id=request_id + ':accept')['result']
+            except ResearchError as error:
+                if (error.code != 'review_invocation_unverified'
+                        or not isinstance(error.details, dict)
+                        or error.details.get('capture_verification') != current['id']):
+                    raise
+                def finalize_recovery(changes, result, revision):
+                    for _, _, record in changes:
+                        record['recorded_revision'] = revision
+                    result['recorded_revision'] = revision
+                    return changes, result
+                receipt = prepared_task_mutation(store, 'review.task_recovery', payload,
+                    lambda current_records, value: prepare_capture_recovery(current_records, captured, error),
+                    request_id=request_id + ':recovery', finalize=finalize_recovery)['result']
+            if 'refusal' not in receipt and receipt['receipt']['attempt']['id'] != payload['id']:
+                raise ResearchError('review_resampling_forbidden', 'Resume the originally named task attempt')
     finally:
         finish_worker(store, current['id'], process, request_id)
     def prepare(current_records, value):
+        if captured['observation']['status'] != 'completed':
+            attempt = build_capture_attempt(assignment, captured, value['id'])
+            return [immutable_record(current_records, 'review_attempt', value['id'], attempt)], dict(
+                attempt, next=[describe_planning_command(controller_id)])
         if 'refusal' in receipt:
             attempt = build_capture_attempt(assignment, captured, value['id'])
             return [immutable_record(current_records, 'review_attempt', value['id'], attempt)], dict(attempt,
@@ -1235,6 +1281,26 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         changes, attempt = prepare_attempt(current_records, store.build_artifact_store(), assignment, receipt['receipt'])
         return changes, dict(attempt, next=[describe_planning_command(controller_id)])
     return prepared_task_mutation(store, 'review.invoke', payload, prepare, request_id=request_id)
+
+
+def prepare_capture_recovery(records, captured, error):
+    """Make a retained unverified capture retryable only after owned termination.
+
+    Refusal is an eligibility outcome, never an alteration of the transport
+    observation. The shared execution layer still requires released capacity.
+    """
+    reservation = protocol._get(records, 'review_reservation', captured['reservation_id'])
+    state = protocol._get(records, 'review_task_execution', captured['task_id'])
+    persisted = protocol._get(records, 'review_observation', captured['reservation_id'])
+    if (digest(persisted) != digest(captured) or state['reservation_id'] != reservation['id']
+            or records.get('review_task_acceptance', {}).get(reservation['id']) is not None):
+        raise ResearchError('review_task_dependency_changed', 'Recover only the current unaccepted capture')
+    refusal = dict(reservation_id=reservation['id'], task_id=captured['task_id'], plan_id=captured['plan_id'],
+        observation_digest=digest(captured), code=error.code, message=str(error), details=error.details,
+        recovery='retry_after_termination')
+    return [immutable_record(records, 'review_task_refusal', reservation['id'], refusal),
+            ('review_reservation', reservation['id'], dict(reservation, state='refused', generation=reservation['generation'] + 1)),
+            ('review_task_execution', captured['task_id'], dict(state, state='refused', generation=state['generation'] + 1))], dict(refusal=refusal)
 
 
 def finish_worker(store, reservation_id, process, request_id):
@@ -1339,8 +1405,13 @@ def read_raw_observation(records, artifacts, attempt_id):
     return protocol._read_raw_observation(artifacts, attempt_id, attempt, captured)
 
 
-def authenticate_observation(records, artifacts, assignment, attempt):
-    """Authenticate fresh request, capture and runtime without scientific selection."""
+def authenticate_capture_provenance(records, artifacts, assignment, attempt):
+    """Authenticate retained capture bytes independently of context eligibility."""
+    return authenticate_observation(records, artifacts, assignment, attempt, require_verified_context=False)
+
+
+def authenticate_observation(records, artifacts, assignment, attempt, *, require_verified_context=True):
+    """Authenticate the frozen capture, requiring eligible context by default."""
     try:
         captured = protocol._get(records, 'review_observation', attempt['reservation_id'])
         observation = captured['observation']
@@ -1349,15 +1420,15 @@ def authenticate_observation(records, artifacts, assignment, attempt):
         response = protocol._read_json(artifacts, observation['response'])
         return (captured['origin'] == 'instrumented' and attempt['origin'] == 'instrumented'
                 and captured['task_id'] == assignment['staged_review']['task_id']
-                and all(attempt.get(name) == observation.get(name) for name in ('request', 'response', 'output'))
-                and observation['status'] == 'completed'
+                and all(attempt.get(name) == observation.get(name) for name in ('status', 'request', 'response', 'output'))
                 and digest(route) == assignment['route_digest'] == observation['route_digest']
                 and observation['runtime'] == route['runtime']
                 and protocol._read_json(artifacts, observation['request']) == request
                 and request.get('history') == [] and len(transport.logical_messages(request)) == 1
                 and digest(request) == assignment['planned_request_digest']
                 and transport.response_output(response) == protocol._read_json(artifacts, observation['output'])
-                and protocol.verify_route_context(artifacts, route, request, response))
+                and (not require_verified_context or observation['status'] == 'completed'
+                     and protocol.verify_route_context(artifacts, route, request, response)))
     except (ResearchError, KeyError, TypeError, ValueError):
         return False
 
@@ -1487,7 +1558,7 @@ def build_selection(records, artifacts, epoch, controller_id, binding, observati
     return selection, completion, paged
 
 
-def build_state(records, artifacts, assignment):
+def build_state(records, artifacts, assignment, *, include_contaminated=False):
     """Select authenticated task receipts before invoking the pure completion boundary."""
     from . import review_staged as staged, review_composition as composition
     binding = assignment['staged_review']
@@ -1498,7 +1569,8 @@ def build_state(records, artifacts, assignment):
                  stage=assignment['role'], packet_digest=assignment['packet_digest'], prompt_hash=assignment['prompt_hash'],
                  raw_output=None, raw_output_digest=None, output=None, output_digest=None, attempt_id=None,
                  refused_attempts=[], staged_review=copy.deepcopy(binding))
-    observations, terminal, selection_obligations = collect_observations(records, artifacts, epoch)
+    observations, terminal, selection_obligations = collect_observations(
+        records, artifacts, epoch, include_contaminated=include_contaminated)
     state['obligations'].extend(selection_obligations)
     if any(row['code'] == 'review_context_contaminated' for row in selection_obligations):
         state['context_status'] = 'contaminated'

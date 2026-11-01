@@ -284,7 +284,22 @@ def prepare_repair(records, artifacts, assignment_payload):
                 raise ResearchError('review_resampling_forbidden', 'Retain the existing repair or source continuation without forking')
     history = []
     for ancestor in chain:
-        prior_state = assignment_state(records, artifacts, ancestor['id'])
+        if ancestor.get('staged_review', {}).get('kind') == 'task':
+            from .review_staged_protocol import build_state
+            prior_state = build_state(records, artifacts, ancestor, include_contaminated=True)
+        else:
+            prior_state = assignment_state(records, artifacts, ancestor['id'])
+        graph = None
+        if ancestor.get('staged_review', {}).get('kind') == 'controller':
+            from .direction_reviews import collect_historical_task_graph
+            try:
+                graph = collect_historical_task_graph(records, artifacts, ancestor['id'])
+            except ResearchError as error:
+                if error.code != 'review_invocation_unverified':
+                    raise
+                raise ResearchError('review_context_repair_unverified',
+                    'Preserve the original instrumented observation provenance.', error.details) from error
+            prior_state = dict(prior_state, effective=graph['effective'], obligations=graph['obligations'])
         from .research_decisions import read_effective_result
         scientific_output, _ = read_effective_result(prior_state)
         packet = source_delivery_packet(records, artifacts, ancestor)
@@ -322,9 +337,7 @@ def prepare_repair(records, artifacts, assignment_payload):
         if ancestor.get('staged_review', {}).get('kind') == 'controller' and prior_state.get('effective') is not None:
             from .research_decisions import bind_effective_result
             item['effective_binding'] = bind_effective_result(prior_state['effective'])
-        if ancestor.get('staged_review', {}).get('kind') == 'controller':
-            from .direction_reviews import collect_selected_task_graph
-            graph = collect_selected_task_graph(records, artifacts, ancestor['id'])
+        if graph is not None:
             item['selected_observations'] = graph['selection']['observations']
             item['intermediate_findings'] = [finding for observation in graph['selection']['observations']
                                              for finding in observation['output'].get('findings', [])]
@@ -335,8 +348,8 @@ def prepare_repair(records, artifacts, assignment_payload):
                 if attempt['assignment_id'] != ancestor['id'] or not attempt.get('output'):
                     continue
                 if ancestor.get('staged_review') is not None:
-                    from .review_staged_protocol import authenticate_observation
-                    authenticated = authenticate_observation(records, artifacts, ancestor, attempt)
+                    from .review_staged_protocol import authenticate_capture_provenance
+                    authenticated = authenticate_capture_provenance(records, artifacts, ancestor, attempt)
                 else:
                     authenticated = protocol.authenticate_provenance(records, artifacts, ancestor, attempt)
                 if not authenticated:

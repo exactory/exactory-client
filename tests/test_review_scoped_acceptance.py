@@ -1,6 +1,8 @@
 """Scientific acceptance binds its dependency frontier, including context discoveries."""
 
 import copy
+import json
+import sys
 import tempfile
 from pathlib import Path
 import unittest
@@ -11,6 +13,8 @@ from research_harness.errors import ResearchError
 from research_harness.operations import prepared_task_mutation
 from research_harness.storage import Store
 import test_review_staged_contexts as fixtures
+import test_review_staged_frontier as frontier
+from research_harness import review_worker
 
 
 class ScopedAcceptanceTests(unittest.TestCase):
@@ -93,6 +97,14 @@ class ScopedAcceptanceTests(unittest.TestCase):
             dict(task_id='unrelated', receipt={})))
         self.assertEqual(result['result']['attempt']['id'], 'attempt')
 
+    def test_cold_legacy_collection_ignores_receipts_without_staged_observations(self):
+        self.records.pop('review_epoch_discoveries')
+        self.records['review_task_acceptance']['non-scientific'] = dict(task_id='generic',
+            receipt=dict(staged_observation=None))
+        observed, _, issues = producer.collect_observations(self.records, self.artifacts, self.epoch)
+        self.assertEqual(observed, [self.fixture.discovery])
+        self.assertEqual(issues, [])
+
     def test_empty_optional_retrievals_do_not_read_sibling_acceptances(self):
         self.captured['observation']['output'] = producer.protocol._put_json(self.artifacts,
             dict(cards=[self.card], retrievals=[]))
@@ -117,3 +129,48 @@ class ScopedAcceptanceTests(unittest.TestCase):
                 with self.assertRaises(ResearchError) as failure:
                     self.accept_during(lambda:None)
                 self.assertEqual(failure.exception.code, 'invalid_review_staged')
+
+
+class EpochFinalAcceptanceTests(unittest.TestCase):
+    def setUp(self):
+        self.fixture = frontier.FrontierTests()
+        self.addCleanup(self.fixture.doCleanups)
+        self.fixture.setUp()
+        controller = self.fixture.create_controller()
+        output = self.fixture.case.build_review_output('result')
+        output['value'].update(objective_adequacy='not_assessed', method_adequacy='not_assessed')
+        (self.fixture.case.root / 'scientific.json').write_text(json.dumps(output))
+        self.worker = patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', frontier.WORKER])
+        self.worker.start()
+        self.addCleanup(self.worker.stop)
+        for _ in range(4):
+            planned = self.fixture.command('review-assignment', controller['next'][0]['payload'])
+            self.fixture.command('review-run', planned['next'][0]['payload'])
+        self.planned = self.fixture.command('review-assignment', controller['next'][0]['payload'])
+        self.assertEqual(self.fixture.case.read_records()['review_task'][self.planned['task_ids'][0]]['task']['type'], 'final')
+
+    def accept_during(self, update):
+        accept = producer.accept_capture
+
+        def accept_and_commit(*args, **kwargs):
+            receipt = accept(*args, **kwargs)
+            update()
+            return receipt
+
+        with patch.object(producer, 'accept_capture', side_effect=accept_and_commit):
+            return self.fixture.command('review-run', self.planned['next'][0]['payload'])
+
+    def test_terminal_validation_does_not_conflict_with_another_epochs_acceptance(self):
+        result = self.accept_during(lambda: self.fixture.case.put('review_task_acceptance', 'other-epoch',
+            dict(task_id='other-task', receipt=dict(staged_observation=dict(epoch_id='other-epoch')))))
+        self.assertNotIn('refusal', result)
+        self.assertTrue(any(row['receipt']['attempt']['id'] == result['id']
+            for row in self.fixture.case.read_records()['review_task_acceptance'].values() if row['task_id'] != 'other-task'))
+
+    def test_terminal_validation_rechecks_its_own_epoch_acceptance_selectors(self):
+        records = self.fixture.case.read_records()
+        task_id = next(row['task_id'] for row in records['review_task_acceptance'].values())
+        with self.assertRaises(ResearchError) as failure:
+            self.accept_during(lambda: self.fixture.case.put('review_task_acceptance_index', task_id,
+                dict(reservation_id='changed-selection')))
+        self.assertEqual(failure.exception.code, 'review_task_dependency_changed')

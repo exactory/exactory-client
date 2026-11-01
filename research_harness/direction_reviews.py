@@ -17,6 +17,20 @@ def collect_selected_task_graph(records, artifacts, assignment_id):
 
 
 def _collect_selected_task_graph(records, artifacts, assignment_id):
+    return _collect_task_graph(records, artifacts, assignment_id, historical=False)
+
+
+def collect_historical_task_graph(records, artifacts, assignment_id):
+    """Authenticate retained observations independently of current context credit."""
+    from .review_state_evaluation import evaluate_state
+    return evaluate_state(records, artifacts, 'historical_task_graph', assignment_id, _collect_historical_task_graph)
+
+
+def _collect_historical_task_graph(records, artifacts, assignment_id):
+    return _collect_task_graph(records, artifacts, assignment_id, historical=True)
+
+
+def _collect_task_graph(records, artifacts, assignment_id, *, historical):
     """Verify the epoch's explicit accepted selection and recover its actual inputs.
 
     Task acceptance receipts bind staged_observation and attempt. This traverses
@@ -34,17 +48,20 @@ def _collect_selected_task_graph(records, artifacts, assignment_id):
     binding = assignment['staged_review']
     epoch = records['review_epoch'][binding['epoch_id']]
     controller_id = epoch['controller_assignment_id']
-    from .review_staged_protocol import list_epoch_tasks
+    from .review_staged_protocol import collect_epoch_acceptances, collect_observations, list_epoch_tasks
     tasks = list_epoch_tasks(records, epoch)
+    selected, _, obligations = collect_observations(records, evaluation, epoch, include_contaminated=historical)
+    for problem in obligations:
+        if problem['code'] != 'review_context_contaminated':
+            raise ResearchError(problem['code'], problem['explanation'])
+    selected_ids = {row['id'] for row in selected}
     observations, packets = [], []
-    for acceptance in records.get('review_task_acceptance', {}).values():
+    for acceptance in collect_epoch_acceptances(records, epoch):
         receipt = acceptance['receipt']
         observed, attempt = receipt.get('staged_observation'), receipt.get('attempt')
-        if observed is None or observed.get('epoch_id') != epoch['id'] or attempt is None:
+        if observed is None or observed['id'] not in selected_ids or attempt is None:
             continue
-        child = records.get('review_assignment', {}).get(attempt['assignment_id'])
-        if child is None or not protocol.authenticate_attempt(records, evaluation, child, attempt):
-            raise ResearchError('review_invocation_unverified', 'Authenticate every selected task observation.')
+        child = records['review_assignment'][attempt['assignment_id']]
         raw = protocol.read_raw_observation(records, evaluation, attempt['id'])
         if any(row['assignment_id'] == child['id'] for row in
                records.get('review_output_correction_invocation', {}).values()):
@@ -92,16 +109,20 @@ def _collect_selected_task_graph(records, artifacts, assignment_id):
         observations.append(observed)
         packets.append((child, packet))
     selection = {'observations': observations}
-    state = protocol.assignment_state(records, evaluation, controller_id)
+    if historical:
+        from .review_staged_protocol import build_state
+        state = build_state(records, evaluation, records['review_assignment'][controller_id], include_contaminated=True)
+    else:
+        state = protocol.assignment_state(records, evaluation, controller_id)
     effective = state.get('effective') or {}
     if effective.get('kind') == 'paged':
         selection['composition_certificate'] = dict(complete=True, epoch_digest=epoch['digest'],
             composition_root=effective['composition_root'],
             selected_observations_root=effective['selected_observations_root'])
     completion = staged.verify_completion(epoch, selection, tasks=tasks)
-    if effective.get('selected_observations_root') not in (None, completion['selected_observations_root']):
+    if not historical and effective.get('selected_observations_root') not in (None, completion['selected_observations_root']):
         raise ResearchError('research_review_binding_stale', 'The effective result selects a different task graph.')
-    if effective.get('completion_root') not in (None, completion['digest']):
+    if not historical and effective.get('completion_root') not in (None, completion['digest']):
         raise ResearchError('research_review_binding_stale', 'The effective completion binding has changed.')
     from .review_composition import validate_page_grounding
     for observed, (_, packet) in zip(observations, packets):
@@ -119,7 +140,7 @@ def _collect_selected_task_graph(records, artifacts, assignment_id):
             frame_packet = copy.deepcopy(json.loads(evaluation.read(controller['packet'])))
             frame_packet['evidence'] = []
     return dict(epoch=epoch, tasks=tasks, selection=selection, completion=completion,
-                effective=effective, packets=packets, frame_packet=frame_packet)
+                effective=effective, packets=packets, frame_packet=frame_packet, obligations=state.get('obligations', []))
 
 
 def collect_observed_packets(records, artifacts, assignment_id):

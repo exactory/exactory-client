@@ -66,6 +66,41 @@ class StagedRepairUpgradeTests(ResultPartsCase):
         self.assertEqual(descriptor['sha256'], attempt['request']['sha256'])
         self.assertEqual(successor['history'], [])
 
+    def test_public_repair_preserves_an_accepted_contaminated_child_graph(self):
+        from research_harness import direction_reviews
+        controller = self.create_controller()
+        self.run_frame(controller)
+        planned = self.command('review-assignment', controller['next'][0]['payload'])
+        adverse_worker = frontier.WORKER.replace(
+            "output = {} if (root / 'refuse').exists() else build_output(body, root)",
+            "output = build_output(body, root)\n"
+            "    output['findings'] = [dict(id='adverse', text='The boundary case remains unsupported.',\n"
+            "        adverse=True, classification=None, claim_ids=body['task']['claim_ids'],\n"
+            "        grounds=[row['span'] for row in body['originals']])]")
+        with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', adverse_worker]):
+            self.command('review-run', planned['next'][0]['payload'])
+        records = self.case.read_records()
+        before = direction_reviews.collect_selected_task_graph(records, self.case.artifacts, controller['id'])
+        attempt = max((row for row in records['review_attempt'].values() if row.get('reservation_id')),
+                      key=lambda row:row['recorded_revision'])
+        self.case.mutate(protocol.record_context_event, dict(id='child-exposure',
+            assignment_id=attempt['assignment_id'], kind='contamination', source='foreign_input',
+            reason='Foreign input reached the accepted child.', evidence=[self.case.supporting]))
+        codex.probe_codex_route(self.case, 'repair-probe')
+        successor = self.case.assign('result', 'replacement', identifier='repaired', context_repair=dict(
+            assignment_id=controller['id'], event_ids=['child-exposure'], probe_id='repair-probe',
+            reason='Reassess the retained child observations in a fresh context.', evidence=[self.case.supporting]))
+        history = self.packet(successor)['scientific_history']
+        parent = next(row for row in history if row['assignment_id'] == controller['id'])
+        self.assertEqual(parent['selected_observations'], before['selection']['observations'])
+        self.assertEqual([row['id'] for row in parent['intermediate_findings']], ['adverse'])
+        self.assertEqual(parent['independence'], 'no_longer_qualified')
+        turn = next(row for row in history if row['assignment_id'] == attempt['assignment_id'])
+        self.assertTrue(turn['raw_observations'])
+        qualified = direction_reviews.collect_selected_task_graph(
+            self.case.read_records(), self.case.artifacts, controller['id'])
+        self.assertNotIn(attempt['id'], [row['id'] for row in qualified['selection']['observations']])
+
     def test_staged_history_with_a_changed_request_cannot_be_repaired(self):
         controller = self.create_controller()
         records = self.run_frame(controller)
@@ -78,6 +113,44 @@ class StagedRepairUpgradeTests(ResultPartsCase):
         with self.assertRaises(ResearchError) as caught:
             self.repair_controller(controller)
         self.assertEqual(caught.exception.code, 'review_context_repair_unverified')
+
+    def test_repair_preserves_unverified_capture_provenance_after_a_successful_retry(self):
+        from test_review_execution_recovery import UNVERIFIED_WORKER
+        controller = self.create_controller()
+        planned = self.command('review-assignment', controller['next'][0]['payload'])
+        with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', UNVERIFIED_WORKER]):
+            failed = self.command('review-run', planned['next'][0]['payload'])
+        retry = self.command('review-assignment', controller['next'][0]['payload'])
+        with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', frontier.WORKER]):
+            accepted = self.command('review-run', retry['next'][0]['payload'])
+        successor = self.repair_controller(controller)
+        history = self.packet(successor)['scientific_history']
+        child = next(row for row in history if row['assignment_id'] == failed['assignment_id'])
+        self.assertEqual([row['attempt_id'] for row in child['raw_observations']], [failed['id'], accepted['id']])
+        parent = next(row for row in history if row['assignment_id'] == controller['id'])
+        self.assertEqual([row['id'] for row in parent['selected_observations']], [accepted['id']])
+
+    def test_public_repair_preserves_a_completed_paged_result_after_child_contamination(self):
+        from test_direction_reviews_paged import PagedRecordingTests
+        controller = self.create_controller()
+        output = self.case.build_review_output('result')
+        output['value'].update(objective_adequacy='not_assessed', method_adequacy='not_assessed')
+        saved = PagedRecordingTests.run_controller(self, controller, output, 'value-review')
+        records = self.case.read_records()
+        child = next(row for row in records['review_assignment'].values()
+                     if row.get('staged_task', {}).get('type') == 'read')
+        self.case.mutate(protocol.record_context_event, dict(id='child-exposure', assignment_id=child['id'],
+            kind='contamination', source='foreign_input', reason='The accepted reading context was contaminated.',
+            evidence=[self.case.supporting]))
+        codex.probe_codex_route(self.case, 'repair-probe')
+        successor = self.case.assign('result', 'replacement', identifier='repaired', context_repair=dict(
+            assignment_id=controller['id'], event_ids=['child-exposure'], probe_id='repair-probe',
+            reason='Reassess the retained paged result in a fresh context.', evidence=[self.case.supporting]))
+        packet = self.packet(successor)
+        parent = next(row for row in packet['scientific_history'] if row['assignment_id'] == controller['id'])
+        self.assertEqual(parent['observed_output'], protocol._reference_templates(output))
+        self.assertEqual(parent['effective_binding'], saved['effective_binding'])
+        self.assertEqual([row['id'] for row in packet['historical_reviews']], [saved['id']])
 
     def test_upgrade_inherits_recorded_reviews_in_its_slot_and_frozen_frame(self):
         original = self.assign('recorded')
