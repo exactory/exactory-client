@@ -609,18 +609,18 @@ accepted tasks of the epoch instead of one request. The
    applicable objection. Run the assignment with `review-run` and record the observed review
    with `value-review`. When the result packet does not fit one input of the route, or its fitted
    request would withhold an evidence body, the assignment becomes the controller of a staged
-   review: the harness freezes an epoch (the evidence, the claims and the budgets) and performs
-   the review in tasks, each a fresh call. Run it from `next`: `review-assignment` with
-   `context: {controller_assignment_id, task_id}` for each ready task, then
-   `review-run {assignment_id, epoch_id, task_id}` for its child; `action: "accept"` resumes an
-   interrupted acceptance and `action: "reconcile"` reconciles a worker, neither with a reviewer
-   call. The harness plans the frame tasks itself; when `next` lists `review_task_pending` with
-   the prerequisite `remaining_required_tasks`, build the next task envelopes from the frozen
-   epoch with `plan_tasks` or `make_task` of `research_harness.review_staged` and pass each in
-   `context.task`. The review is the controller's effective result, and `value-review` records
-   it naming the controller's assignment id. A final task that cannot complete a required
-   assessment returns `assessment_incomplete`: the slot stays occupied, `next` names the research
-   or recovery work, and no second reviewer replaces it. Every staged review also lists
+   review: the harness freezes an epoch (the evidence, the claims and the budgets), plans every
+   task itself and performs the review in tasks, each a fresh call. Follow `next`:
+   `review-assignment {controller_assignment_id}` plans and assigns the next task, then
+   `review-run {assignment_id, epoch_id, task_id}` runs it, and the two alternate until `next`
+   is the `value-review` payload; `action: "accept"` resumes an interrupted acceptance and
+   `action: "reconcile"` reconciles a worker, neither with a reviewer call. A refused output
+   gets one retry with the same request and then a smaller task; build no task envelope by
+   hand. The review is the controller's effective result, and `value-review` records it naming
+   the controller's assignment id. An assessment that the reviewer cannot complete, or that the
+   bounded execution cannot finish, is recorded as `assessment_incomplete`: the slot stays
+   occupied, `next` names the research or recovery work, and no second reviewer replaces it.
+   Every staged review also lists
    `review_quality_measurement_pending`: the measurement of its quality against a single-input
    review has not run, so the gate stays not ready for a staged review in this release; report
    that to the user instead of working around it. A session that was already a series in parts
@@ -669,8 +669,8 @@ accepted tasks of the epoch instead of one request. The
    `review-adjudication`. An adjudication whose packet does not fit one input becomes a staged
    review as in step 3, with the objection's claim, reason, resolution condition and correction
    request as its claims; the disposition is the terminal choice of its final task, and
-   `review-adjudication` records the controller's effective result. That recording path has no
-   test in this release; report a refusal to the user.
+   `review-adjudication` records the controller's effective result. An incomplete adjudication
+   leaves the objection open (`assessment_incomplete`); do the recovery work that `next` names.
 7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
    as a resolution of that one item.
 8. Resolve every material objection of both bars, of the applicable slate reviews and of both

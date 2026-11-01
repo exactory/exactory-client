@@ -572,7 +572,7 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-lead` | Versioned discrepancy provenance and research disposition. |
 | `review-route` | Actual route and versioned configuration. |
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
-| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result or adjudicator packet that does not fit one input opens a staged review, and a child context runs one of its tasks ([Staged problem reviews](#staged-problem-reviews)). |
+| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result or adjudicator packet that does not fit one input opens a staged review; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
 | `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a staged task: the owned worker's call, its committed capture and its acceptance. |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |
@@ -1001,7 +1001,7 @@ under each index.
 ## Staged problem reviews
 
 A problem result review or a focused adjudication whose request does not fit
-one input of a local text route, or whose fitted request would withhold an
+one input of a local route, or whose fitted request would withhold an
 evidence body, is performed in stages since 0.70.0. The design, its reviews
 and the owner's direction are recorded in
 `misc/harness-improvement/20261031190348-part-delivery-quality-equivalence` of
@@ -1030,6 +1030,18 @@ a reading that a question needs. The reviewer texts of every task type were
 written for this release and are the constants of
 `research_harness/review_staged_prompts.py`.
 
+The harness plans, the operator runs. The harness freezes the frame tasks
+when it records the controller and plans every later task from the accepted
+outputs: it partitions the originals by claims and by spans so that each task
+fits the route's input limit, its output budget and its running time, places
+the compact cards together when they fit and otherwise in blocks that meet
+pairwise, plans one original check per selected combination, the rereads that
+a task requests, the integration, the final and, when the final does not fit,
+the answer pages. The operator follows `next`: a planning command that
+assigns the next task, the run of that task, and at the end the recording of
+the review. No step asks the operator to build a task, and no step repeats a
+call whose outcome the record already holds.
+
 Raw observations and effective results. The harness keeps two interfaces
 apart. The raw observation of a task is the exact object that the call
 returned, with the digests of its request, response and output and its
@@ -1039,13 +1051,13 @@ scientific object assembled from the accepted tasks: the review that an
 ordinary staged final returned beside its staged records, or the pages and the
 terminal of a paged final assembled under their composition root. Recording,
 the independence check, coverage, objection processing, context repair and the
-export read the effective result. `value-review` records it exactly and writes
-its binding on the review record (`effective_binding`: the kind, the effective
-output digest, the composition version and root, the selected observations
-root, the completion root, the terminal attempt and its raw output digest), so
-a later check can tell whether the effective result still selects the same
-accepted work. An ordinary review is the identity case: its raw output is its
-effective result.
+export read the effective result. `value-review` and `review-adjudication`
+record it exactly and write its binding on the record (`effective_binding`:
+the kind, the effective output digest, the composition version and root, the
+selected observations root, the completion root, the terminal attempt and its
+raw output digest), so a later check can tell whether the effective result
+still selects the same accepted work. An ordinary review is the identity
+case: its raw output is its effective result.
 
 The composition root. When the final does not fit one input, the text fields
 of the review are written in answer pages and its scalar choices in one
@@ -1062,7 +1074,12 @@ grades of a result review, or the disposition and the correction admissibility
 of an adjudication. The effective result is assembled from the pages and the
 authorized choices. A page or a terminal is never read as the review on its
 own, and a correction of a raw page invalidates the root and needs a new
-authorization.
+authorization. A page's grounds are checked against what its task received:
+a quotation lies inside the delivered spans and matches the source, and a
+record ground is the exact accepted, resolved record that the packet carried.
+When a final task returned a complete review that the route could not carry
+whole, the pages are planned from that observed output, and each page copies
+its owned fragments; the planner synthesizes no scientific text.
 
 Coverage across the task graph. The post gate's result coverage check reads
 the accepted task graph of the epoch: the actual packet of every accepted
@@ -1074,11 +1091,14 @@ The guarantee is this: every item of the current evidence reached the reviewer
 in an authenticated task of the epoch; every claim of the frame was judged
 against every unit in a cell with a grounded reason or an explicit unresolved
 status; every selected combination was checked against its originals; every
-condition and conclusion of a full card was accounted for at integration; and
-the final's choices agree with that record. The limit is this: the checks
-establish shape, identity, delivery and quotation, not scientific truth.
-Whether a staged review finds what a single-input review finds is the subject
-of the measurement below.
+condition and conclusion of a full card was accounted for at integration,
+each resolved from its own grounds and dependencies; a condition the reviewer
+marked unsatisfied blocks every assurance that depends on it; every claim,
+condition and unresolved item that a frame task returned entered the claim
+graph and was answered; and the final's choices agree with that record. The
+limit is this: the checks establish shape, identity, delivery and quotation,
+not scientific truth. Whether a staged review finds what a single-input review
+finds is the subject of the measurement below.
 
 Joint and segmented scope. Every cell and every combination states the scope
 in which it was judged. `joint_original` means that the whole unit, every
@@ -1091,7 +1111,11 @@ card segments, used for a pair of cards that fit alone but not together.
 reviewer makes no statement about the whole of a source it saw in part; the
 question goes to `unresolved` with the segment or the unit that must settle
 it. The record therefore says, for every judgment, what the reviewer had in
-front of it.
+front of it. When a reviewer finds that a claim needs a span it did not have,
+the harness records a new version of that claim's context, plans the work
+again under the current version, and keeps the superseded task in the record
+as history; a judgment made under an older context does not stand for the
+current one.
 
 Completion without dead ends. A staged review ends in one of two outcomes, and
 the harness names the next step in every state between. The complete outcome
@@ -1102,18 +1126,25 @@ tasks that tried it, the scope of the last attempt, and the research or
 recovery work that would finish it), keeps the earlier adverse findings in
 force, and states no status, grade or disposition. It is not a negative
 review, and the gate does not ask for an unrelated second reviewer in its
-place. A reviewer returns it when a required assessment cannot be completed
-from the evidence that reached the epoch and no rereading within the bound of
-two rereads of an unchanged question can complete it. The execution side is
-bounded as well: two attempts per task, one reviewer call at a time by default,
-a worker whose capture is the committed observation, an acceptance that resumes
-after an interruption without a second call, and an unknown outcome when the
-worker dies before the capture, never a result reconstructed from a file.
-`next` lists the exact command for executable work and the research that
-addresses incompleteness, and never a repeat of an exhausted call. A new
-assessment of the slot is an authorized successor epoch, which installs a
-pending slot before any call, so an earlier favorable review cannot keep the
-slot ready.
+place. It has two origins. A reviewer returns it when a required assessment
+cannot be completed from the evidence that reached the epoch and no rereading
+within the bound of two rereads of an unchanged question can complete it. The
+harness records it when the execution is exhausted: two attempts per task,
+one identical retry after a refused output and then a smaller task, a bounded
+number of subdivisions, calls and reread rounds, a day of elapsed time, an
+unknown outcome of a worker that died before its capture, a binary original
+that the route cannot deliver, or a frame that no call can carry. One
+reviewer call runs at a time by default, counted together with the ordinary
+reviewer calls, probes and corrections of the store; a worker's capture is the
+committed observation; an acceptance resumes after an interruption without a
+second call; and no result is ever reconstructed from a file. `next` lists the
+exact command for executable work and the research that addresses
+incompleteness, and never a repeat of an exhausted call. A new assessment of
+the slot is an authorized successor epoch, which installs a pending slot
+before any call, inherits the adverse findings of the earlier epoch, and is
+bounded to two epochs for one evidence currency, so an earlier favorable
+review cannot keep the slot ready and an exhausted scope cannot be retried
+without new evidence.
 
 What is measured and what is projected. Measured on frozen copies of the two
 records (serialized planner counts, not request lengths): 401 occurrences and
@@ -1126,14 +1157,16 @@ average. Projected under stated assumptions (twenty claims per occurrence,
 600-character compact cards): 18 to 56 calls per slot for the unknotting
 record and 17 to 29 for the KMP record, 7.63 serial hours for an unknotting
 slot at the Opus max mean and 2.71 hours with four concurrent calls. None of
-these projections was run. The measurement that would establish equal quality
-(a paired comparison of the same reviewer on evidence that fits one input,
-once as one input and once forced into stages; option A for calibration, then
-option C with 150 held-out fixtures, where a staged incomplete outcome counts
-as a regression when the single-input review reaches a correct required
-assessment) has not run. Until it passes for a configuration, no equal-quality
-claim is made, and the staged mode decides no posting
-(`review_quality_measurement_pending`). The full-history validation of the
-store on every authoritative read is unchanged, measured at 2.041 seconds for
-the unknotting copy and 1.707 for the KMP copy, so no history-independent
-command latency is claimed.
+these projections was run. The sizing profiles of this release are bootstrap
+estimates that the observed usage of each route refines; they carry the
+calibration version `unqualified-planning-v1` and qualify nothing. The
+measurement that would establish equal quality (a paired comparison of the
+same reviewer on evidence that fits one input, once as one input and once
+forced into stages; option A for calibration, then option C with 150 held-out
+fixtures, where a staged incomplete outcome counts as a regression when the
+single-input review reaches a correct required assessment) has not run. Until
+it passes for a configuration, no equal-quality claim is made, and the staged
+mode decides no posting (`review_quality_measurement_pending`). The
+full-history validation of the store on every authoritative read is unchanged,
+measured at 2.041 seconds for the unknotting copy and 1.707 for the KMP copy,
+so no history-independent command latency is claimed.
