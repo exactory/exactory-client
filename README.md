@@ -35,7 +35,9 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
-Version [0.69.12](docs/releases/0.69.12.md) ends a URL or a DOI in a bibliography only at whitespace, at the closer of a bracket or quote that opened it, or at an unmatched closing brace, and reads BibTeX escapes in DOIs.
+Version [0.69.13](docs/releases/0.69.13.md) reads each BibTeX entry by its top-level fields, so that titles and identifiers come from their own fields, and reads TeX escapes before percent-decoding.
+
+Version [0.69.12](docs/releases/0.69.12.md) ends a URL or a DOI in a bibliography only at whitespace, at the closer of a bracket or quote that opened it, or at an unmatched closing brace, and reads BibTeX escapes in DOIs; 0.69.13 applies the rule per BibTeX field.
 
 Version [0.69.11](docs/releases/0.69.11.md) ends URLs and DOIs in a bibliography by their context (angle brackets and Markdown links only where they open the identifier, balanced closing brackets), accepts URL schemes of any length, and reads unclosed entries in linear time; 0.69.12 replaces the ending rule.
 
