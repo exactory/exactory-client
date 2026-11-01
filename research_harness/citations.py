@@ -36,12 +36,15 @@ _TEX_COMMAND_RE = re.compile(r"\\([A-Za-z]+)")
 _CJK_CHARACTER_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
 # An arXiv candidate ends before any identifier continuation, allowing a PDF suffix.
 _IDENTIFIER_END_PATTERN = r"(?:\.pdf|/pdf)?(?![0-9a-z_]|[-./:;()][0-9a-z])"
-# Bound every scheme attempt; brackets stay inside spans except at Markdown ](.
+# Only brackets directly before an identifier set its angle or Markdown context.
+_SPAN_CHARACTER_PATTERN = r'(?:(?(angle)(?!>))(?(markdown)(?!\]\())[^\s{}"\\])'
+# Try schemes only at maximal run starts, so even unlimited failed attempts are linear.
 _IDENTIFIER_SPAN_RE = re.compile(
-    r'(?P<url>(?:(?<![0-9a-z])[a-z][a-z0-9+.-]{0,31}://'
-    r'|(?<![0-9a-z./-])(?:www\.|export\.)?arxiv\.org/)(?:(?!\]\()[^\s{}"<>\\])*)'
-    r'|(?P<doi>(?<![0-9a-z])10\.[0-9]{4,9}/(?:(?!\]\()[^\s{}"\\])+)')
-_SPAN_TRAILING_PUNCTUATION = ".,;:)]>"
+    r'(?:(?P<angle>(?<=<))|(?P<markdown>(?<=\[))|(?<![<\[]))'
+    r'(?:(?P<url>(?:(?<![0-9a-z+.-])[a-z][a-z0-9+.-]*://'
+    r'|(?<![0-9a-z./-])(?:www\.|export\.)?arxiv\.org/)' + _SPAN_CHARACTER_PATTERN + r'*)'
+    r'|(?P<doi>(?<![0-9a-z])10\.[0-9]{4,9}/' + _SPAN_CHARACTER_PATTERN + r'+))')
+_SPAN_TRAILING_PUNCTUATION = ".,;:"
 _ARXIV_HOSTS = ("arxiv.org", "www.arxiv.org", "export.arxiv.org")
 _DOI_HOSTS = ("doi.org", "dx.doi.org")
 _ARXIV_PATH_RE = re.compile(r"/(?:abs|pdf|html|format)/(.+?)(?:\.pdf)?/?")
@@ -110,11 +113,14 @@ def _is_title_evidence(title):
     return len(_CJK_CHARACTER_RE.findall(title)) + len(_CJK_CHARACTER_RE.sub(" ", title).split()) > 1
 
 
-def _find_group_end(source, opener_index):
+def _find_group_end(source, opener_index, limit=None):
     """The index after the group that opens at opener_index: a brace group, a
-    parenthesized BibTeX entry, or a quoted value, with braces balanced inside."""
+    parenthesized BibTeX entry, or a quoted value, with braces balanced inside.
+    Stop at limit when the group has no closing delimiter before that boundary."""
+    if limit is None:
+        limit = len(source)
     opener, depth = source[opener_index], 0
-    for position in range(opener_index + 1, len(source)):
+    for position in range(opener_index + 1, limit):
         character = source[position]
         if character == "{":
             depth += 1
@@ -124,21 +130,24 @@ def _find_group_end(source, opener_index):
                 return position + 1
         elif depth == 0 and character == {"(": ")", '"': '"'}.get(opener):
             return position + 1
-    return len(source)
+    return limit
 
 
 def read_bibliography(data):
     """Read entry text, normalized titles and canonical identifier sets in file order.
-    Each entry's text excludes its head, ends at its closing delimiter and is
-    casefolded. Without entries, identifiers come from the whole bibliography.
-    Undecodable bytes become replacement characters."""
+    Each entry's text excludes its head, ends at its closing delimiter or the
+    next entry head and is casefolded. Without entries, identifiers come from the
+    whole bibliography. Undecodable bytes become replacement characters."""
     source = data.decode("utf-8", errors="replace")
     entries = {}
-    for start in _ENTRY_START_RE.finditer(source):
+    starts = list(_ENTRY_START_RE.finditer(source))
+    for index, start in enumerate(starts):
         if start.group(1).casefold() in ("comment", "string", "preamble"):
             continue
+        # Even an ignored head bounds the scan of an unclosed preceding entry.
+        limit = starts[index + 1].start() if index + 1 < len(starts) else len(source)
         # A BibTeX key is a label; only the entry body supplies identifiers.
-        entry_source = source[start.end():_find_group_end(source, start.start(2))].casefold()
+        entry_source = source[start.end():_find_group_end(source, start.start(2), limit)].casefold()
         title_field = _TITLE_FIELD_RE.search(entry_source)
         title = ("" if title_field is None else
                  entry_source[title_field.end() + 1:_find_group_end(entry_source, title_field.end()) - 1])
@@ -202,13 +211,31 @@ def _read_arxiv_references(text_value, spans):
             yield family
 
 
+def _trim_span(value):
+    """Trim punctuation and excess closing brackets without removing balanced pairs."""
+    # Count once; recounting after each removed character would be quadratic.
+    excess = {closer: value.count(closer) - value.count(opener)
+              for opener, closer in (("(", ")"), ("[", "]"), ("<", ">"))}
+    end = len(value)
+    while end:
+        character = value[end - 1]
+        if character in _SPAN_TRAILING_PUNCTUATION:
+            end -= 1
+        elif excess.get(character, 0) > 0:
+            excess[character] -= 1
+            end -= 1
+        else:
+            break
+    return value[:end]
+
+
 def _read_identifiers(text_value):
     """Collect whole DOI identifiers and arXiv families once from bibliography text."""
     identifiers = set()
     # One left-to-right pass lets the first span consume all nested identifiers.
     spans = list(_IDENTIFIER_SPAN_RE.finditer(text_value))
     for span in spans:
-        value = span[0].rstrip(_SPAN_TRAILING_PUNCTUATION)
+        value = _trim_span(span[0])
         identifier = "doi:" + value if span.lastgroup == "doi" else _read_url_identifier(value)
         if identifier is None:
             continue
