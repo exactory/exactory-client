@@ -8,6 +8,8 @@ from research_harness import openness_reading, review_excerpts, review_protocol 
 from research_harness import review_transport as transport
 from research_harness import review_codex_transport as codex
 from research_harness import review_refusal
+from research_harness.literature import import_bundle
+from research_harness.reading import record_reading
 
 
 class OpennessReadingChainTests(OpennessReadingCase):
@@ -59,13 +61,29 @@ class OpennessReadingChainTests(OpennessReadingCase):
                          sorted(self.texts[version]['sha256'] for version in self.versions[:2]))
 
     def test_batches_follow_the_text_priority_and_deliver_every_body(self):
+        version = self.versions[2]
+        alternate = self.capture(version, body=self.build_text(3))
+        bundle = self.bundle(version, alternate, bundle_id='alternate-bundle')
+        for unit in bundle['units']:
+            quote = unit['link']['locator']['quote']
+            unit['link'] = self.link(version, alternate['source_id'], alternate['text'], quote, kind='span')
+        bundle['inventory']['links'] = [bundle['units'][0]['link']]
+        self.mutate(import_bundle, bundle)
+        self.mutate(record_reading, self.full_note(bundle, 'read-alternate'))
+        prioritized = sorted([self.texts[version]['sha256'], alternate['text']['sha256']])
+        expected = [(version, sha256) for sha256 in prioritized] + [
+            (item, self.texts[item]['sha256']) for item in self.versions[:2]]
         self.limit_input()
         native_packet = self.export(priority=[self.versions[2], self.versions[0]])
+        native = json.loads(self.artifacts.read(native_packet))
+        self.assertEqual(native['scientific_context']['text_delivery_priority'],
+                         prioritized + [self.texts[self.versions[0]]['sha256']])
         assignment = self.assign('turn-1', native_packet)
         plan = self.read_packet('turn-1')['reading_turn']['reading_plan']
-        self.assertEqual([row['version_id'] for row in plan['delivered_now']], [self.versions[2], self.versions[0]])
-        self.assertEqual([row['version_id'] for row in plan['remaining'] if row['kind'] == 'fulltext'],
-                         [self.versions[1]])
+        self.assertEqual([row['version_id'] for row in plan['delivered_now']], [version, version])
+        self.assertEqual([(row['version_id'], row['text_sha256'])
+                          for row in plan['delivered_now'] + plan['remaining'] if row['kind'] == 'fulltext'],
+                         expected)
         records = self.store.snapshot()['records']
         route = records['review_route']['route']
         with transport.text_only_delivery(True):
@@ -73,12 +91,27 @@ class OpennessReadingChainTests(OpennessReadingCase):
                                              native_packet=native_packet)
             rebuilt, _ = openness_reading.prepare_packet(records, self.artifacts, assignment, route, ordinary)
         self.assertEqual(json.dumps(rebuilt, sort_keys=True), json.dumps(self.read_packet('turn-1'), sort_keys=True))
-        self.invoke('turn-1', self.build_reading_response(self.read_packet('turn-1')))
-        request, sent = self.read_sent_packet('turn-1')
-        self.assertLessEqual(len(codex.packet_text(request)), transport.CODEX_INPUT_LIMIT_CHARS)
-        self.assertEqual(self.delivered_versions(sent), sorted([self.versions[2], self.versions[0]]))
-        state = protocol.assignment_state(self.store.snapshot()['records'], self.artifacts, 'turn-1')
-        self.assertTrue(state['ready'], state['obligations'])
+        references = {reference['sha256']: reference for reference in [*self.texts.values(), alternate['text']]}
+        delivered, identifier, turn = [], 'turn-1', 1
+        while 'reading_turn' in self.read_packet(identifier):
+            packet = self.read_packet(identifier)
+            rows = [row for row in packet['reading_turn']['reading_plan']['delivered_now']
+                    if row['kind'] == 'fulltext']
+            delivered.extend((row['version_id'], row['text_sha256']) for row in rows)
+            self.invoke(identifier, self.build_reading_response(packet))
+            request, sent = self.read_sent_packet(identifier)
+            self.assertLessEqual(len(codex.packet_text(request)), transport.CODEX_INPUT_LIMIT_CHARS)
+            entries = {entry['artifact']['sha256']: entry for entry in sent['evidence']}
+            for row in rows:
+                sha256 = row['text_sha256']
+                self.assertEqual(entries[sha256]['content'].encode(), self.artifacts.read(references[sha256]))
+            state = protocol.assignment_state(self.store.snapshot()['records'], self.artifacts, identifier)
+            self.assertTrue(state['ready'], state['obligations'])
+            prior, turn = identifier, turn + 1
+            identifier = 'turn-%d' % turn
+            self.assertLessEqual(turn, 8)
+            self.assign(identifier, native_packet, prior=prior)
+        self.assertEqual(delivered, expected)
 
     def test_a_malformed_reading_response_is_refused_and_the_turn_runs_again(self):
         self.limit_input()

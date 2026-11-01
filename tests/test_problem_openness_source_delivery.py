@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import test_problem_openness_native_reviews as native_fixtures
 import test_research_problem_openness_minimum as minimum_fixtures
-from research_harness import review_transport
+from research_harness import openness_reading, problem_openness, review_transport
 from research_harness.evidence import digest
 from research_harness.errors import ResearchError
 from research_harness.literature import import_bundle
@@ -47,8 +47,16 @@ class SourceDeliveryTests(unittest.TestCase):
         manifest = dict(f.manifest, artifacts=[{"path": "attempt/proof.md", "digest": f.proof["sha256"], "role": "proof"}])
         f.replace_manifest(manifest, identifier="contained-proof")
 
-    def export(self, identifier="source-openness"):
-        return self.case.export(assignment=identifier, support="contained-proof")
+    def export(self, identifier="source-openness", *, support="contained-proof", priority=False):
+        f = self.case
+        if not priority:
+            return f.export(assignment=identifier, support=support)
+        spec = {"assignment_id": identifier, "reviewer_id": "openness-assessor",
+            "minimum": {"searches": [{"formulation": f.selected["statement"], "search_id": f.search["id"]}],
+                        "settling_work_id": None, "duplicate_resolutions": [], "text_priority": [self.work]},
+            "native_reviews": [{"attempt_id": f.attempt["id"], "assignment_id": support}]}
+        exported = problem_openness.export_openness(f.store, spec, f.root / ("packet-" + identifier))
+        return json.loads(f.artifacts.read(exported["native_packet"]))
 
     def delivery(self, packet):
         self.assertIn("openness_delivery", packet["scientific_context"],
@@ -71,8 +79,13 @@ class SourceDeliveryTests(unittest.TestCase):
 
     def test_selects_complete_main_and_preserves_all_readings_and_proof_bytes(self):
         f = self.case
-        packet = self.export()
+        packet = self.export(priority=True)
+        self.assertEqual(packet["scientific_context"]["text_delivery_priority"],
+                         sorted(capture["text"]["sha256"] for capture in (self.html, self.pdf)))
         delivery = self.delivery(packet)
+        self.assertEqual([row["text_sha256"] for row in
+                          openness_reading.list_reading_texts(f.store.snapshot()["records"], packet)],
+                         [self.pdf["text"]["sha256"]])
         self.assertEqual(delivery["schema_version"], 1)
         self.assertEqual(delivery["sources"][0]["selected_source_id"], self.pdf["source_id"])
         self.assertEqual(set(packet["scientific_context"]["openness_minimum"]["reading_digests"]),
@@ -175,12 +188,14 @@ class SourceDeliveryTests(unittest.TestCase):
         f.proof = f.artifacts.put(b"Independent complete required proof.\n", "text/plain")
         f.replace_manifest(dict(f.manifest, artifacts=[{"path": "attempt/proof.md", "digest": f.proof["sha256"], "role": "proof"}]),
                            identifier="standalone-proof")
-        return f.export(assignment=identifier, support="standalone-proof")
+        return self.export(identifier, support="standalone-proof", priority=True)
 
     def test_fitting_never_elides_required_proof_or_selected_standalone_text(self):
         f = self.case
         packet = self.standalone_packet("protected")
-        packet["scientific_context"]["text_delivery_priority"] = [self.pdf["text"]["sha256"], f.proof["sha256"]]
+        self.assertEqual(packet["scientific_context"]["text_delivery_priority"],
+                         sorted(capture["text"]["sha256"] for capture in (self.html, self.pdf)))
+        packet["scientific_context"]["text_delivery_priority"].append(f.proof["sha256"])
         # This fixture uses the Responses route. Exercise the local fitting routine on its actual supplied packet.
         supplied = self.supplied(self.request(packet, "protected"))
         request = review_transport._fit_local_input({"model": "test", "configuration": {"max_output_tokens": 100}},
@@ -188,6 +203,8 @@ class SourceDeliveryTests(unittest.TestCase):
         entries = {row["artifact"]["sha256"]: row for row in self.supplied(request)["evidence"]}
         for reference in (self.pdf["text"], f.proof):
             self.assertEqual(entries[reference["sha256"]]["content"].encode(), f.artifacts.read(reference))
+        for reference in (self.html["original"], self.html["text"]):
+            self.assertEqual(entries[reference["sha256"]]["delivery"], "alternate-main-representation")
 
     def test_actual_selected_standalone_text_tampering_is_rejected(self):
         f = self.case

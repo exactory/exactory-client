@@ -2114,7 +2114,13 @@ While the input exceeds the limit, the route withholds the full-text bodies of
 the listed versions from the end of the list, one at a time. It keeps every
 reading record, with its notes and inspected excerpts, and every protected body
 (required proof bytes, selected source texts and screening evidence), also when
-the body is listed. A listed version needs a captured full text. Without the
+the body is listed. A listed version needs a required full reading that the
+packet pins and at least one extracted text of an available main full-text
+capture of that version carried in the packet's evidence. Each listed version
+expands, in list order, to every distinct such text digest in ascending SHA-256
+order. A listed version with no such text is refused with
+`openness_reading_gap` and details `{version_id}`; a repeated version is refused
+with `invalid_input`. Without the
 field the route withholds no full text by priority; the binary originals that a
 text route never carries and the projection of an `openness_delivery` record
 still apply, and a request that stays above the limit is refused before the
