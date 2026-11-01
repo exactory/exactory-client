@@ -125,7 +125,27 @@ def _historical_sources(records, artifacts, prior):
     return [sources[key] for key in sorted(sources)]
 
 
-def requests_for_lineage(records, artifacts, prior, output):
+def requests_for_lineage(records, artifacts, prior, output, *, graph=None):
+    if prior.get('staged_review') is not None:
+        from .direction_reviews import collect_selected_task_graph
+        graph = graph or collect_selected_task_graph(records, artifacts, prior['id'])
+        manifest = graph['epoch']['manifest']
+        rows = {}
+        for observed in graph['selection']['observations']:
+            for row in bar_sources.requests(observed['output'], staged=True, manifest=manifest):
+                previous = rows.get(row['id'])
+                if previous is not None:
+                    _require(all(previous[key] == row[key] for key in ('question', 'inputs', 'claim_ids', 'context_roots', 'requested_by')),
+                             'A staged retrieval keeps its exact question and source scope')
+                    if previous['status'] in ('resolved', 'unresolved'):
+                        continue
+                rows[row['id']] = row
+        for row in bar_sources.requests(output, staged=True, manifest=manifest):
+            previous = rows.get(row['id'])
+            _require(previous is None or all(previous[key] == row[key] for key in
+                     ('question', 'inputs', 'claim_ids', 'context_roots', 'requested_by')), 'Retrieval identifiers cannot change meaning')
+            rows[row['id']] = row
+        return [rows[key] for key in sorted(rows) if rows[key]['status'] in ('pending', 'delivered')]
     requests = {}
     for packet in _lineage(records, artifacts, prior):
         rows = [row['request'] for row in packet.get('source_deliveries', [])] + packet.get('pending_source_requests', [])
@@ -177,6 +197,17 @@ def _restoration(records, history, deliveries, historical_sources):
 
 def prepare(records, artifacts, prior, state, packet):
     """Derive the prospective contract solely from native source requests and records."""
+    if prior.get('staged_review') is not None:
+        from .direction_reviews import collect_selected_task_graph
+        from .review_staged import PROTOCOL as STAGED_PROTOCOL
+        graph = collect_selected_task_graph(records, artifacts, prior['id'])
+        requested = requests_for_lineage(records, artifacts, prior, {}, graph=graph)
+        _require('staged_review' in packet, 'Staged retrievals continue through fresh task inputs')
+        packet[MARKER] = dict(protocol=STAGED_PROTOCOL, epoch_id=graph['epoch']['id'], source_requests=requested,
+                             selected_observations_root=graph['completion']['selected_observations_root'],
+                             selected_observation_ids=[row['id'] for row in graph['selection']['observations']])
+        packet['staged_review']['pending_retrievals'] = requested
+        return packet[MARKER]
     requested = requests_for_lineage(records, artifacts, prior, state['output'])
     _require(bool(requested), 'Complete-source mode requires an exact full-text request in this result lineage')
     rows = bar_sources.validate_inventory(artifacts, packet['source_inventory'])
@@ -202,6 +233,25 @@ def validate(records, artifacts, assignment, packet):
     value = packet.get(MARKER)
     if value is None:
         _require(assignment.get('context', {}).get('source_delivery') is None, 'A complete-source opt-in needs its native manifest')
+        return
+    if assignment.get('staged_review') is not None:
+        from .review_staged import PROTOCOL as STAGED_PROTOCOL
+        from .review_staged import verify_completion
+        from .direction_reviews import collect_selected_task_graph
+        graph = collect_selected_task_graph(records, artifacts, assignment['id'])
+        _require(value.get('protocol') == STAGED_PROTOCOL and value.get('epoch_id') == graph['epoch']['id'],
+                 'The staged source closure binds its exact epoch')
+        identifiers = value.get('selected_observation_ids', [])
+        observed = [row for row in graph['selection']['observations'] if row['id'] in identifiers]
+        _require(len(identifiers) == len(set(identifiers)) and {row['id'] for row in observed} == set(identifiers),
+                 'Retain every exact observation that supplied this frozen source request')
+        selected = {'observations': observed}
+        completion = verify_completion(graph['epoch'], selected, tasks=graph['tasks'])
+        _require(value.get('selected_observations_root') == completion['selected_observations_root'],
+                 'The staged source closure binds its exact frozen selection')
+        frozen_graph = dict(graph, selection=selected)
+        _require(value.get('source_requests') == requests_for_lineage(records, artifacts, assignment, {}, graph=frozen_graph),
+                 'Retain every unfinished task retrieval and its exact source spans')
         return
     from . import review_visual_context_repair as visual_repair
     repair = visual_repair.MARKER in packet

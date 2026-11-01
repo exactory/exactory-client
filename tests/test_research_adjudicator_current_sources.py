@@ -52,6 +52,28 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
             identifier="invalid-new-correction", review_ids=["review-result-first", "review-result-second"],
             objection_id="unsupported-implication", correction=self.build_correction(self.new_source)))
 
+    def test_staged_current_sources_allow_complete_sibling_union_and_reject_a_gap(self):
+        from research_harness import direction_reviews, review_staged as staged
+        from research_harness import review_adjudicator_sources as current
+        from research_harness.evidence import digest
+        assignment, frozen = self.prepare_current_comparator()
+        sources, intervals = [], []
+        for reference in frozen['current_evidence']:
+            content = self.artifacts.read(reference).decode('utf-8')
+            source = staged.make_source('artifact:' + digest(reference), 'artifact', content,
+                                        identity={'artifact': reference}, descriptor=reference)
+            sources.append(source)
+            middle = max(1, len(content) // 2)
+            intervals.extend([staged.source_span(source, 0, middle), staged.source_span(source, middle, len(content))])
+        graph = dict(epoch={'id': 'epoch', 'manifest': {'sources': sources}},
+                     completion={'complete': True}, packets=[],
+                     selection={'observations': [{'actual_input': {'intervals': intervals}}]})
+        with patch.object(direction_reviews, 'collect_selected_task_graph', return_value=graph):
+            current.validate_staged(self.read_records(), self.artifacts, assignment, frozen)
+            intervals.pop(0)
+            self.assert_error('review_current_source_incomplete', lambda: current.validate_staged(
+                self.read_records(), self.artifacts, assignment, frozen))
+
     def test_each_current_descriptor_is_required_even_when_its_bytes_have_an_alias(self):
         from research_harness import review_adjudicator_sources as current
         _, packet = self.prepare_current_comparator()

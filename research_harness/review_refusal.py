@@ -90,6 +90,10 @@ def validate_evidence_contract(records, artifacts, values, *, required=True, pac
 
 
 def evidence_arrays(output, *, with_paths=False):
+    """Traverse completed scientific fields, never a raw task or page envelope."""
+    if 'objection_id' in output and 'value' not in output:
+        arrays = [('/evidence', output['evidence'])]
+        return arrays if with_paths else [output['evidence']]
     value = output['value']
     arrays = [('/value/evidence', value['evidence'])]
     for path, rows in (('/value/assurances', value['assurances']), ('/value/work_items', value['work_items']),
@@ -101,6 +105,7 @@ def evidence_arrays(output, *, with_paths=False):
 
 def classify_observed_output(records, artifacts, attempt_id):
     """Return the first pure failure of an authenticated attempt's own saved output."""
+    from . import review_protocol as protocol
     from .review_protocol import authenticate_attempt, validate_adjudication_contract
     from .research_decisions import validate_review_contract
     attempt = records.get('review_attempt', {}).get(attempt_id)
@@ -110,8 +115,19 @@ def classify_observed_output(records, artifacts, attempt_id):
     if assignment is None or not authenticate_attempt(records, artifacts, assignment, attempt):
         return None
     try:
-        output = json.loads(artifacts.read(attempt['output']))
-        if assignment['role'] in ('bar', 'slate', 'result'):
+        reader = getattr(protocol, 'read_raw_observation', None)
+        raw = reader(records, artifacts, attempt_id) if reader is not None else None
+        output = raw['raw_output'] if raw is not None else json.loads(artifacts.read(attempt['output']))
+        packet = json.loads(artifacts.read(assignment['packet']))
+        staged = packet.get('staged_review')
+        if staged is not None:
+            from .review_staged import validate_task_output
+            binding = assignment.get('staged_review', {})
+            task = assignment.get('staged_task', staged.get('task'))
+            epoch = records.get('review_epoch', {}).get(binding.get('epoch_id'), staged.get('epoch', {}))
+            with contract_check('review.staged_task'):
+                validate_task_output(task, output, manifest=epoch.get('manifest'))
+        elif assignment['role'] in ('bar', 'slate', 'result'):
             validate_review_contract(records, artifacts, assignment, output)
         elif assignment['role'] == 'adjudicator':
             packet = json.loads(artifacts.read(assignment['packet']))

@@ -169,6 +169,11 @@ def _exposure_lineage(records, assignment):
         active.remove(identifier)
         visited.add(identifier)
         ordered.append(current)
+        if current.get('staged_review', {}).get('kind') == 'controller':
+            for child in sorted(records.get('review_assignment', {}).values(),
+                                key=lambda row: (row.get('recorded_revision', 0), row['id'])):
+                if child.get('staged_review', {}).get('controller_assignment_id') == identifier:
+                    visit(child)
 
     visit(assignment)
     return ordered
@@ -182,7 +187,8 @@ def cause_events(records, identifiers):
 
 
 def _reviews(records, identifiers):
-    return sorted((saved for saved in records.get('value_review', {}).values()
+    return sorted((saved for saved in list(records.get('value_review', {}).values())
+                   + list(records.get('review_adjudication', {}).values())
                    if saved['assignment_id'] in identifiers),
                   key=lambda value: (value.get('recorded_revision', 0), value['id']))
 
@@ -225,13 +231,22 @@ def prepare_repair(records, artifacts, assignment_payload):
     strings(repair['event_ids'], 'Exact contamination event IDs')
     text(repair['probe_id'], 'Current context probe', code='invalid_review_context')
     predecessor = _assignment(records, repair['assignment_id'])
-    if (assignment_payload['role'] not in ROLES or predecessor['role'] != assignment_payload['role']
+    roles = ROLES + (('adjudicator',) if predecessor.get('staged_review') is not None else ())
+    if (assignment_payload['role'] not in roles or predecessor['role'] != assignment_payload['role']
             or predecessor['dossier_id'] != assignment_payload['dossier_id']
             or not is_same_subject(predecessor, assignment_payload)
             or normalized_text(predecessor['author_id']) != normalized_text(assignment_payload['author_id'])):
         raise ResearchError('review_context_repair_mismatch', 'Reassess the exact phase, dossier and author boundary')
     chain = _exposure_lineage(records, predecessor)
     identifiers = {item['id'] for item in chain}
+    epochs = {item.get('staged_review', {}).get('epoch_id') for item in chain} - {None}
+    identifiers.update(item['id'] for item in records.get('review_assignment', {}).values()
+                       if item.get('staged_review', {}).get('epoch_id') in epochs)
+    if (any(item['assignment_id'] in identifiers and item['id'] not in records.get('review_attempt', {})
+            for item in records.get('review_invocation', {}).values())
+            or any(item.get('epoch_id') in epochs and item.get('state') not in ('released', 'terminated')
+                   and not item.get('released') for item in records.get('review_reservation', {}).values())):
+        raise ResearchError('review_context_repair_pending', 'Reconcile pending reviewer workers and invocations before repairing their context.')
     events = cause_events(records, identifiers)
     if not events or set(repair['event_ids']) != {event['id'] for event in events}:
         raise ResearchError('review_context_repair_mismatch', 'Bind every actual contamination or retirement event in the predecessor lineage')
@@ -244,9 +259,9 @@ def prepare_repair(records, artifacts, assignment_payload):
     state = assignment_state(records, artifacts, predecessor['id'])
     dependency_codes = {'review_source_parent_unverified', 'review_context_repair_stale'}
     dependency_lost = any(item['code'] in dependency_codes for item in state['obligations'])
-    if (state['context_status'] != 'contaminated' and not dependency_lost
-            and predecessor['route_id'] not in retired) or state['output'] is None:
-        raise ResearchError('review_context_repair_mismatch', 'Repair an actual contaminated or retired observed assessment')
+    if (state['context_status'] != 'contaminated' and not any(event['kind'] == 'contamination' for event in events) and not dependency_lost
+            and predecessor['route_id'] not in retired):
+        raise ResearchError('review_context_repair_mismatch', 'Repair an actual contaminated or retired reviewer context')
     proof = route_state(records, artifacts, assignment_payload['route_id'])
     probe = records.get('review_route_probe', {}).get(repair['probe_id'])
     if (proof['context_status'] != 'verified_for_route' or proof['probe_id'] != repair['probe_id']
@@ -275,22 +290,80 @@ def prepare_repair(records, artifacts, assignment_payload):
     history = []
     for ancestor in chain:
         prior_state = assignment_state(records, artifacts, ancestor['id'])
+        from .research_decisions import read_effective_result
+        scientific_output, _ = read_effective_result(prior_state)
+        packet = source_delivery_packet(records, artifacts, ancestor)
+        from . import review_problem_parts
+        intermediate_output = None
+        if review_problem_parts.find_stage(packet) == 'part':
+            intermediate_output, scientific_output = scientific_output, None
+        if ancestor.get('staged_review', {}).get('kind') == 'task':
+            intermediate_output, scientific_output = prior_state.get('raw_output'), None
         allowed = {'review_context_contaminated', 'review_source_parent_unverified', 'review_context_repair_stale',
                    'review_route_retired'}
-        if prior_state['output'] is None or any(item['code'] not in allowed for item in prior_state['obligations']):
+        if scientific_output is None:
+            allowed.update(('review_output_pending', 'review_output_refused', 'review_task_pending',
+                            'review_assessment_incomplete', 'review_source_coverage_pending', 'review_composition_pending'))
+        if any(item['code'] not in allowed for item in prior_state['obligations']):
             raise ResearchError('review_context_repair_unverified', 'Preserve only the exact observed scientific history with verified invocation provenance')
-        packet = source_delivery_packet(records, artifacts, ancestor)
         from .bar_sources import pending
-        if ancestor['role'] in ROLES and not pending(packet, prior_state['output']):
+        epoch = records.get('review_epoch', {}).get(ancestor.get('staged_review', {}).get('epoch_id'), {})
+        if (scientific_output is not None and ancestor['role'] in roles
+                and not pending(packet, scientific_output, manifest=epoch.get('manifest'))):
             finals = _reviews(records, {ancestor['id']})
-            if not any({key: value for key, value in saved['payload'].items()
-                        if key not in ('id', 'dossier_id', 'assignment_id')} == prior_state['output'] for saved in finals):
-                raise ResearchError('review_context_repair_history_unrecorded',
-                    'Record the exact observed final as historical scientific content before context reassessment',
-                    {'assignment_id': ancestor['id']})
-        history.append({'assignment_id': ancestor['id'], 'packet': packet,
-                        'observed_output': prior_state['output'], 'independence': 'no_longer_qualified'})
-    return {'predecessor': predecessor, 'slot_id': original_slot, 'packet': history[-1]['packet'],
+            if not any({key: value for key, value in saved.get('payload', saved).items()
+                        if key not in ('id', 'dossier_id', 'assignment_id')} == scientific_output for saved in finals):
+                # Adjudication records also retain protocol and source bindings.
+                if ancestor['role'] == 'adjudicator' and any(_scientific_content(saved) == scientific_output for saved in finals):
+                    pass
+                else:
+                    raise ResearchError('review_context_repair_history_unrecorded',
+                        'Record the exact observed final as historical scientific content before context reassessment',
+                        {'assignment_id': ancestor['id']})
+        item = {'assignment_id': ancestor['id'], 'packet': packet,
+                'observed_output': scientific_output, 'independence': 'no_longer_qualified'}
+        if intermediate_output is not None:
+            item['intermediate_output'] = intermediate_output
+        if ancestor.get('staged_review', {}).get('kind') == 'controller' and prior_state.get('effective') is not None:
+            from .research_decisions import bind_effective_result
+            item['effective_binding'] = bind_effective_result(prior_state['effective'])
+        if ancestor.get('staged_review', {}).get('kind') == 'controller':
+            from .direction_reviews import collect_selected_task_graph
+            graph = collect_selected_task_graph(records, artifacts, ancestor['id'])
+            item['selected_observations'] = graph['selection']['observations']
+            item['intermediate_findings'] = [finding for observation in graph['selection']['observations']
+                                             for finding in observation['output'].get('findings', [])]
+        from . import review_protocol as protocol
+        if (ancestor.get('staged_review') is not None or scientific_output is None) and hasattr(protocol, 'read_raw_observation'):
+            observed = []
+            for attempt in records.get('review_attempt', {}).values():
+                if attempt['assignment_id'] != ancestor['id'] or not attempt.get('output'):
+                    continue
+                if not protocol.authenticate_provenance(records, artifacts, ancestor, attempt):
+                    raise ResearchError('review_context_repair_unverified', 'Preserve the original instrumented observation provenance.')
+                observed.append(protocol.read_raw_observation(records, artifacts, attempt['id']))
+            if observed:
+                item['raw_observations'] = observed
+        history.append(item)
+    attempts = sorted((item for item in records.get('review_attempt', {}).values()
+                       if item['assignment_id'] == predecessor['id']),
+                      key=lambda item: (item.get('recorded_revision', 0), item['id']))
+    predecessor_history = next(item for item in history if item['assignment_id'] == predecessor['id'])
+    return {'predecessor': predecessor, 'slot_id': original_slot, 'packet': predecessor_history['packet'],
+            'predecessor_binding': {'assignment_id': predecessor['id'], 'attempt_ids': [item['id'] for item in attempts],
+                                    'assignment_digest': digest(predecessor),
+                                    'attempt_digests': {item['id']: digest(item) for item in attempts},
+                                    'no_output': not (state.get('raw_output') is not None
+                                        or predecessor_history['observed_output'] is not None
+                                        or predecessor_history.get('intermediate_output') is not None
+                                        or predecessor_history.get('raw_observations')),
+                                    'no_effective_output': predecessor_history['observed_output'] is None,
+                                    'selected_attempt_id': state.get('attempt_id'),
+                                    'raw_output_digest': state.get('raw_output_digest'),
+                                    'last_observed_assignment_id': next((item['assignment_id'] for item in reversed(history)
+                                                                         if item['observed_output'] is not None
+                                                                         or item.get('intermediate_output') is not None
+                                                                         or item.get('raw_observations')), None)},
             'historical_reviews': _reviews(records, {item['id'] for item in chain if item['role'] == predecessor['role']}),
             'scientific_history': history,
             'event_ids': sorted(repair['event_ids']), 'probe_id': repair['probe_id'],
@@ -298,6 +371,8 @@ def prepare_repair(records, artifacts, assignment_payload):
 
 
 def _scientific_content(output):
+    if 'objection_id' in output:
+        return {key: output.get(key) for key in ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible')}
     content = {key: output.get(key) for key in ('stage', 'support', 'value', 'objections', 'limitations')}
     if isinstance(content['support'], dict):
         content['support'] = {key: value for key, value in content['support'].items() if key not in ('id', 'assessor')}
@@ -309,6 +384,8 @@ def _is_unchanged(original, output, identities):
 
     identities maps the stated id and claim of each qualified objection that the frozen repair packet delivers to its
     identity; an output objection with that id and claim is compared under the identity."""
+    if 'objection_id' in original or 'objection_id' in output:
+        return _scientific_content(original) == _scientific_content(output)
     original_objections = [{key: value for key, value in objection.items() if key != 'stated_id'}
                            for objection in original['objections']]
     output_objections = [dict(objection, id=identities.get((objection['id'], objection['claim']), objection['id']))
@@ -329,7 +406,8 @@ def reassessment_reviews(records, assignment):
 
 def collect_problem_review_history(records, assignment):
     """Retain a problem reviewer's earlier final findings of the same phase across refreshes and continuations."""
-    if assignment.get('subject', {}).get('kind') != 'problem' or assignment['role'] not in ROLES:
+    if (assignment.get('subject', {}).get('kind') != 'problem'
+            or assignment['role'] not in ROLES + ('adjudicator',)):
         return []
     return _reviews(records, {item['id'] for item in _lineage(records, assignment)
                               if item['role'] == assignment['role']})

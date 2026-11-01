@@ -33,6 +33,20 @@ def _reject(message):
     raise ResearchError('review_correction_ineligible', message)
 
 
+def _read_raw_target(records, artifacts, attempt):
+    """Bind metadata correction to the captured object, never a composed result."""
+    from . import review_protocol as protocol
+    reader = getattr(protocol, 'read_raw_observation', None)
+    if reader is None:
+        return protocol._read_json(artifacts, attempt['output'])
+    raw = reader(records, artifacts, attempt['id'])
+    if (raw['status'] != 'completed' or not raw['instrumented']
+            or raw['raw_output_digest'] != digest(raw['raw_output'])
+            or raw['request_digest'] != attempt['request_digest']):
+        _reject('Retain the exact instrumented raw correction target and request.')
+    return raw['raw_output']
+
+
 def _route(records, artifacts, assignment, route_id):
     from . import review_protocol as protocol
     original = records['review_route'][assignment['route_id']]
@@ -78,7 +92,7 @@ def _prepare_packet(records, artifacts, assignment_id):
         _reject('Exactly two completed, authenticated, natively refused outputs are required.')
     for attempt in completed:
         certificate = records.get('review_output_refusal', {}).get(attempt['id'])
-        output = protocol._read_json(artifacts, attempt['output'])
+        output = _read_raw_target(records, artifacts, attempt)
         request = protocol._read_json(artifacts, attempt['request'])
         if (certificate is None or certificate.get('protocol') != refusal.PROTOCOL
                 or certificate.get('assignment_id') != assignment_id or certificate.get('attempt_id') != attempt['id']
@@ -130,6 +144,8 @@ def prepare_packet(records, artifacts, assignment_id):
 def validate_output(records, artifacts, assignment, packet, output):
     from .research_decisions import validate_review_contract
     expected = copy.deepcopy(packet['original_output'])
+    if digest(expected) != packet['diagnostic']['original_output_digest']:
+        raise ResearchError('review_correction_invalid', 'The correction packet must retain its exact raw target.')
     fields(output, ('source_output_digest', 'findings'), code='review_correction_invalid')
     if (output['source_output_digest'] != packet['diagnostic']['original_output_digest']
             or not isinstance(output['findings'], list)
@@ -246,6 +262,11 @@ def selected_correction(records, artifacts, assignment_id):
         if (result.get('composition') != 'original-output-plus-observed-metadata-delta'
                 or json.loads(artifacts.read(result['corrected_output'])) != corrected):
             return None
-        return {'id': result['id'], 'attempt_id': packet['diagnostic']['attempt_id'], 'output': corrected}
+        selected = {'id': result['id'], 'attempt_id': packet['diagnostic']['attempt_id'], 'output': corrected,
+                    'source_raw_output_digest': packet['diagnostic']['original_output_digest'],
+                    'corrected_raw_output_digest': digest(corrected)}
+        if assignment.get('staged_review') is not None:
+            selected['requires_reauthorization'] = True
+        return selected
     except (ResearchError, ValueError, TypeError, KeyError):
         return None
