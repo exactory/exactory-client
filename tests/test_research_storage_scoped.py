@@ -182,3 +182,49 @@ class ScopedStoreTests(unittest.TestCase):
             return [], {}
         self.refuse("stale_revision", lambda: operations.prepared_mutation(
             self.store, "ordinary", {}, prepare, request_id="ordinary", expected_revision=self.store.revision))
+
+    def test_epoch_task_read_binds_only_selected_records_and_membership(self):
+        self.put('review_task', 'own', dict(epoch_id='epoch', generation=1))
+        self.put('review_task', 'foreign', dict(epoch_id='other', generation=1))
+
+        def prepare(records, payload):
+            tasks = storage.read_epoch_tasks(records, 'epoch')
+            self.assertEqual(tasks, {'own': dict(epoch_id='epoch', generation=1)})
+            self.put('review_task', 'foreign', dict(epoch_id='other', generation=2))
+            self.put('review_task', 'new-foreign', dict(epoch_id='other', generation=1))
+            return [], {'task_ids': list(tasks)}
+
+        self.assertEqual(self.mutate(prepare)['result']['task_ids'], ['own'])
+
+    def test_epoch_task_read_rechecks_empty_membership(self):
+        def prepare(records, payload):
+            self.assertEqual(storage.read_epoch_tasks(records, 'empty'), {})
+            self.put('review_task', 'new', dict(epoch_id='empty'))
+            return [], {}
+
+        self.refuse('review_task_dependency_changed', lambda: self.mutate(prepare))
+
+    def test_epoch_task_read_rechecks_rows_and_moves_between_epochs(self):
+        self.put('review_task', 'own', dict(epoch_id='epoch', generation=1))
+        self.put('review_task', 'foreign', dict(epoch_id='other', generation=1))
+        for key, value in (('own', dict(epoch_id='epoch', generation=2)),
+                           ('own', dict(epoch_id='other', generation=1)),
+                           ('foreign', dict(epoch_id='epoch', generation=1)),
+                           ('new', dict(epoch_id='epoch', generation=1))):
+            with self.subTest(key=key, value=value):
+                def prepare(records, payload):
+                    storage.read_epoch_tasks(records, 'epoch')
+                    self.put('review_task', key, value)
+                    return [], {}
+                self.refuse('review_task_dependency_changed', lambda: self.mutate(prepare))
+
+    def test_epoch_task_read_preserves_historical_membership(self):
+        self.put('configuration', 'research', dict(profile='research'))
+        self.put('workspace', 'study', dict(stage='literature'))
+        self.put('review_task', 'own', dict(epoch_id='epoch', generation=1))
+        revision = self.store.revision
+        self.put('review_task', 'later', dict(epoch_id='epoch', generation=1))
+        records = self.store.snapshot()['records']
+        historical = records.read_snapshot(revision)
+        self.assertEqual(list(storage.read_epoch_tasks(historical, 'epoch')), ['own'])
+        self.assertEqual(list(storage.read_epoch_tasks(records, 'epoch')), ['later', 'own'])

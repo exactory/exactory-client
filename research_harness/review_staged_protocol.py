@@ -14,7 +14,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
 from .operations import _read_preparation, fields, immutable_record, prepared_mutation, text
-from .storage import _canonical
+from .storage import _canonical, read_epoch_tasks
 
 
 def collect_output_records(observations, names):
@@ -63,9 +63,7 @@ def collect_epoch_acceptances(records, epoch, *, acceptance_ids=None):
         return [row for row in acceptances.values()
                 if (row['receipt'].get('staged_observation') or {}).get('epoch_id') == epoch['id']]
     selected = []
-    for task_id, row in records.get('review_task', {}).items():
-        if row['epoch_id'] != epoch['id']:
-            continue
+    for task_id in read_epoch_tasks(records, epoch['id']):
         reference = read_task_acceptance_reference(records, task_id)
         if reference is None:
             continue
@@ -1770,8 +1768,8 @@ def list_epoch_tasks(records, epoch):
     """Select immutable active envelopes while retaining superseded work in history."""
     replaced = {row['task_id'] for row in records.get('review_task_repair', {}).values()
                 if row['epoch_id'] == epoch['id']}
-    return [row['task'] for key, row in records.get('review_task', {}).items()
-            if row['epoch_id'] == epoch['id'] and key not in replaced]
+    return [row['task'] for key, row in read_epoch_tasks(records, epoch['id']).items()
+            if key not in replaced]
 
 
 def describe_planning_command(controller_id):

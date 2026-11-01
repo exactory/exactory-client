@@ -251,13 +251,41 @@ def identify_call(operation, invocation_id):
 
 
 def has_call_terminated(records, operation, invocation_id):
-    """Owned calls require termination evidence; imported rows cannot finish historical calls."""
+    """Require owned termination while preserving documented historical failure closure."""
     lifecycle = records.get("review_pool_membership", {}).get(identify_call(operation, invocation_id))
     if lifecycle is not None:
         return lifecycle["released"] and (lifecycle.get("termination") or {}).get("confirmed") is True
-    _, finished = read_call_kinds(operation)
+    kind, finished = read_call_kinds(operation)
     completed = records.get(finished, {}).get(invocation_id)
-    return completed is not None and completed.get("origin") != "imported"
+    if completed is None:
+        return False
+    if completed.get("origin") != "imported":
+        return True
+    invocation = records.get(kind, {}).get(invocation_id)
+    # 0.69.x documented review-attempt with a failed, null-output attempt under
+    # the interrupted invocation ID. Preserve that closure, never imported success.
+    return (operation == "review.invoke" and invocation is not None
+            and completed.get("status") == "failed" and completed.get("output") is None
+            and completed.get("assignment_id") == invocation.get("assignment_id"))
+
+
+def _reconcile_historical_call(records, operation, invocation_id):
+    """Retain prior closure or report the exact gap in historical termination evidence."""
+    kind, completed = read_call_kinds(operation)
+    invocation = _get(records, kind, invocation_id)
+    completion = records.get(completed, {}).get(invocation_id)
+    evidence = None if completion is None else dict(kind=completed, key=invocation_id, digest=digest(completion))
+    if not has_call_terminated(records, operation, invocation_id):
+        raise ResearchError("review_worker_reconciliation_required",
+            "Historical invocation has no recorded process ownership; termination cannot be established",
+            dict(operation=operation, invocation=dict(kind=kind, key=invocation_id,
+                digest=digest(invocation), fields=sorted(invocation)), completion=evidence,
+                missing=["review_pool_membership", "owner_process_identity", "transport_process_groups"]))
+    # This is administrative compatibility with an already closed call, not a
+    # new claim that an unrecorded owner or transport process was observed dead.
+    return dict(id=identify_call(operation, invocation_id), operation=operation, invocation_id=invocation_id,
+                route_id=invocation["route_id"], state="historical_closed", released=True, active=False,
+                outcome="unknown", termination=None, evidence=evidence)
 
 
 def _active_legacy(records, policy):
@@ -312,7 +340,9 @@ def reconcile_call(store, payload, *, request_id, expected_revision=None):
         with _guard_call_termination(store, lifecycle_id) as termination:
             def apply(tx, value, revision):
                 records = _TransactionRecords(tx)
-                current = _get(records, "review_pool_membership", lifecycle_id)
+                current = records.get("review_pool_membership", {}).get(lifecycle_id)
+                if current is None:
+                    return _reconcile_historical_call(records, operation, invocation_id)
                 if current["released"] or termination is None:
                     return current
                 invocation = _get(records, kind, invocation_id)

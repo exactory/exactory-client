@@ -148,7 +148,11 @@ def _guard_call_termination(store, lifecycle_id):
 
 def read_call_termination(store, lifecycle_id):
     """Called only while holding controller ownership and the worker lock."""
-    current = _get(store.snapshot()["records"], "review_pool_membership", lifecycle_id)
+    current = store.snapshot()["records"].get("review_pool_membership", {}).get(lifecycle_id)
+    # Historical calls never held these locks or registered their child groups.
+    # Acquiring newly created locks cannot establish that those calls ended.
+    if current is None:
+        return None
     try:
         table = _process_table(current["children"])
     except ResearchError as error:

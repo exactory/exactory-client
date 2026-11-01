@@ -174,3 +174,32 @@ class EpochFinalAcceptanceTests(unittest.TestCase):
             self.accept_during(lambda: self.fixture.case.put('review_task_acceptance_index', task_id,
                 dict(reservation_id='changed-selection')))
         self.assertEqual(failure.exception.code, 'review_task_dependency_changed')
+
+    def test_terminal_acceptance_survives_another_epochs_task_insertion(self):
+        result = self.accept_during(lambda: self.fixture.case.put('review_task', 'other-task',
+            dict(id='other-task', epoch_id='other-epoch', task={})))
+        self.assertNotIn('refusal', result)
+
+    def test_terminal_acceptance_rechecks_its_own_epoch_task_membership(self):
+        epoch_id = self.planned['next'][0]['payload']['epoch_id']
+        with self.assertRaises(ResearchError) as failure:
+            self.accept_during(lambda: self.fixture.case.put('review_task', 'new-own-task',
+                dict(id='new-own-task', epoch_id=epoch_id, task={})))
+        self.assertEqual(failure.exception.code, 'review_task_dependency_changed')
+
+    def test_completion_survives_another_epochs_task_insertion(self):
+        self.fixture.command('review-run', self.planned['next'][0]['payload'])
+        epoch_id = self.planned['next'][0]['payload']['epoch_id']
+
+        def prepare(records, payload):
+            epoch = records['review_epoch'][epoch_id]
+            controller = records['review_assignment'][epoch['controller_assignment_id']]
+            state = producer.build_state(records, self.fixture.case.artifacts, controller)
+            self.assertTrue(state['completion']['complete'])
+            self.fixture.case.put('review_task', 'other-task',
+                dict(id='other-task', epoch_id='other-epoch', task={}))
+            return [('completion_check', epoch_id, state['completion'])], state['completion']
+
+        result = prepared_task_mutation(self.fixture.case.store, 'completion.check', {}, prepare,
+                                        request_id='completion-check')
+        self.assertTrue(result['result']['complete'])

@@ -662,6 +662,7 @@ class _ScopedProof(NamedTuple):
     prefix: bytes
     reads: tuple
     memberships: tuple
+    epoch_tasks: tuple
     global_revision: bool
 
 
@@ -724,6 +725,20 @@ class _ScopedRecords(Mapping):
         self._scope._global_revision = True
         return self._scope.revision
 
+    def read_epoch_tasks(self, epoch_id):
+        keys = self._scope.bind_epoch_tasks(epoch_id)
+        return {key: self['review_task'][key] for key in keys}
+
+
+def read_epoch_tasks(records, epoch_id):
+    """Read one epoch's task index, binding only its membership in scoped views."""
+    _text(epoch_id, "Epoch ID")
+    read = getattr(records, 'read_epoch_tasks', None)
+    if read is not None:
+        return read(epoch_id)
+    return {key: row for key, row in records.get('review_task', {}).items()
+            if row.get('epoch_id') == epoch_id}
+
 
 class _ScopedPreparation:
     """Track reads from a fresh authenticated snapshot; never trust caller maps."""
@@ -740,7 +755,7 @@ class _ScopedPreparation:
                 raise _refuse_snapshot_identity(self._revision, self._revision)
         self._source = snapshot["records"]
         self._records = _ScopedRecords(self)
-        self._reads, self._memberships = {}, {}
+        self._reads, self._memberships, self._epoch_tasks = {}, {}, {}
         self._requests = frozenset(requests)
         self._global_revision = False
 
@@ -770,11 +785,19 @@ class _ScopedPreparation:
             self._memberships[kind] = tuple(sorted(self._source.get(kind, {})))
         return self._memberships[kind]
 
+    def bind_epoch_tasks(self, epoch_id):
+        self.check_open()
+        _text(epoch_id, "Epoch ID")
+        if epoch_id not in self._epoch_tasks:
+            self._epoch_tasks[epoch_id] = tuple(sorted(read_epoch_tasks(self._source, epoch_id)))
+        return self._epoch_tasks[epoch_id]
+
     def release_proof(self):
         self.check_open()
         proof = _ScopedProof(self._store, self._identity, self.revision, self._prefix,
                              tuple((kind, key, value) for (kind, key), value in sorted(self._reads.items())),
-                             tuple(sorted(self._memberships.items())), self._global_revision)
+                             tuple(sorted(self._memberships.items())), tuple(sorted(self._epoch_tasks.items())),
+                             self._global_revision)
         self._records = self._source = None
         return proof
 
@@ -785,9 +808,12 @@ def _revalidate_scoped(store, connection, proof, revision):
     if (proof.identity != store._read_database_identity() or revision < proof.revision
             or proof.prefix != _scoped_prefix(connection, proof.revision)):
         raise _refuse_snapshot_identity(proof.revision, revision)
-    changed = set()
+    changed, task_epochs = set(), {}
     for row in connection.execute("SELECT changes FROM events WHERE revision > ? ORDER BY revision", (proof.revision,)):
-        changed.update((item["kind"], item["key"]) for item in _load(row["changes"], list))
+        for item in _load(row["changes"], list):
+            changed.add((item["kind"], item["key"]))
+            if item['kind'] == 'review_task':
+                task_epochs[item['key']] = item['value'].get('epoch_id')
     invalid = []
     for kind, key, identity in proof.reads:
         row = connection.execute("SELECT digest FROM records WHERE kind = ? AND key = ?", (kind, key)).fetchone()
@@ -798,6 +824,17 @@ def _revalidate_scoped(store, connection, proof, revision):
             "SELECT key FROM records WHERE kind = ? ORDER BY key", (kind,)))
         if current != keys:
             invalid.append({"kind": kind, "predicate": "membership"})
+    for epoch_id, keys in proof.epoch_tasks:
+        # The authenticated append-only suffix contains every membership change.
+        # Apply its task moves without requiring optional SQLite JSON functions.
+        current = set(keys)
+        for key, task_epoch in task_epochs.items():
+            if task_epoch == epoch_id:
+                current.add(key)
+            else:
+                current.discard(key)
+        if current != set(keys):
+            invalid.append({'kind': 'review_task', 'epoch_id': epoch_id, 'predicate': 'membership'})
     if invalid or proof.global_revision and proof.revision != revision:
         raise ResearchError("review_task_dependency_changed", "Task dependencies changed; prepare acceptance again",
                             {"dependencies": invalid, "prepared_revision": proof.revision, "revision": revision})
