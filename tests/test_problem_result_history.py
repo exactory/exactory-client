@@ -828,6 +828,10 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.addCleanup(self.case.doCleanups)
         case = self.case
         case.supporting = case.artifacts.put(b'A captured field standard.', 'text/plain')
+        # This fixture reconstructs series that 0.69.x recorded, as ResultPartsCase.setUp does for its routes.
+        legacy = patch.object(parts, 'allows_staged_entry', return_value=False)
+        legacy.start()
+        self.addCleanup(legacy.stop)
         case.mutate(protocol.record_route, {'id': 'route', 'adapter': 'claude_cli_v1', 'model': 'fixture-model',
             'endpoint': 'claude://local', 'configuration': {'effort': 'xhigh', 'max_output_tokens': 20000, 'timeout_seconds': 5}})
 
