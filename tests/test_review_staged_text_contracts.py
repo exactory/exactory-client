@@ -222,7 +222,9 @@ class ReviewerTextContracts(unittest.TestCase):
 
     def test_record_roots_bind_long_receipt_lists_and_terminal_conditions(self):
         value = epoch()
-        card = full_card(value, conditions=[dict(id='condition', text='Prime inputs only.', grounds=[])])
+        card = full_card(value)
+        card['conditions'] = [dict(id='condition', text='Prime inputs only.',
+                                   grounds=card['critical_spans'], satisfied=True)]
         tasks, selected = selection(value, [card])
         out = selected['observations'][0]['output']
         receipt = out['integrations'][0]

@@ -36,6 +36,7 @@ MANIFEST_SCHEMA = 'exactory-review-manifest-v1'
 TASK_SCHEMA = 'exactory-review-task-v1'
 COMPLETION_SCHEMA = 'exactory-review-completion-v1'
 INCOMPLETE_SCHEMA = 'exactory-assessment-incomplete-v1'
+CONTEXT_GRAPH_SCHEMA = 'exactory-review-context-graph-v1'
 SERIALIZATION = 'canonical-json-utf8-v1'
 TASK_TYPES = ('frame', 'read', 'combine', 'original_check', 'integrate', 'answer', 'final')
 SCOPES = ('joint_original', 'segmented_original', 'joint_card', 'segmented_card',
@@ -152,7 +153,7 @@ def source_span(source, start, end):
                 sha256=hashlib.sha256(source['text'][start:end].encode('utf-8')).hexdigest())
 
 
-def materialize_quotation(source, span, *, delivered=None, matching_text=None):
+def materialize_quotation(source, span, *, delivered=None, matching_text=None, allow_empty=False):
     """Materialize original characters, optionally checking normalized matching."""
     check_fields(span, ('source_id', 'start', 'end', 'sha256'), code='invalid_review_staged')
     if span['source_id'] != source['id'] or span != source_span(source, span['start'], span['end']):
@@ -162,8 +163,10 @@ def materialize_quotation(source, span, *, delivered=None, matching_text=None):
         if interval_gaps([[span['start'], span['end']]], portions):
             _fail('Quotation was not within delivered scope.')
     original = source['text'][span['start']:span['end']]
+    from .review_excerpts import normalize_with_offsets
+    if not allow_empty and not normalize_with_offsets(original)[0]:
+        _fail('Scientific quotations require nonempty original text.')
     if matching_text is not None:
-        from .review_excerpts import normalize_with_offsets
         if normalize_with_offsets(original)[0] != normalize_with_offsets(matching_text)[0]:
             _fail('Quotation text does not match the source normalization.')
     return dict(span=copy.deepcopy(span), text=original, kind='quotation')
@@ -293,7 +296,7 @@ def build_contexts(claims, sources):
             for span in row['spans']:
                 if span['source_id'] not in source_index:
                     _fail('Claim span names an absent original.')
-                materialize_quotation(source_index[span['source_id']], span)
+                materialize_quotation(source_index[span['source_id']], span, allow_empty=True)
                 if span not in spans:
                     spans.append(copy.deepcopy(span))
         body = dict(claim_ids=sorted(closure), spans=spans,
@@ -512,23 +515,23 @@ def make_task(epoch, task_type, *, inputs=None, claim_ids=None, occurrence_ids=N
               segment_task_ids=None, measurement=None, planned_request_digest=None,
               rendering_policy=SERIALIZATION, required=True, obligation_ids=None, child_ids=None,
               answer_ranges=None, objection_entries=None, contexts=None, reconciliation_id=None,
-              composition_role=None, composition_plan_root=None):
+              composition_role=None, composition_plan_root=None, supersedes=(), context_graph=None):
     """Create an immutable task envelope; freeze the rendered request before dispatch."""
     _validate_epoch(epoch)
     if task_type not in TASK_TYPES or scope not in SCOPES:
         _fail('Unknown task type or assessment scope.')
-    manifest = epoch['manifest']
+    manifest = bind_context_graph(epoch, context_graph) if context_graph is not None else epoch['manifest']
     current_contexts = contexts if contexts is not None else manifest['contexts']
     claims = list(claim_ids or [])
     for key in claims:
-        if key not in manifest['contexts']:
+        if key not in current_contexts:
             _fail('Task names an unknown claim.')
     spans = copy.deepcopy(inputs or [])
     sources = _index(manifest['sources'], 'sources')
     for span in spans:
         if span['source_id'] not in sources:
             _fail('Task names an unknown source.')
-        materialize_quotation(sources[span['source_id']], span)
+        materialize_quotation(sources[span['source_id']], span, allow_empty=True)
     context_roots = {key: current_contexts[key]['root'] for key in claims}
     body = dict(schema=TASK_SCHEMA, protocol=PROTOCOL, epoch_id=epoch['id'], epoch_digest=epoch['digest'],
                 type=task_type, inputs=spans, claim_ids=claims, context_roots=context_roots,
@@ -547,6 +550,8 @@ def make_task(epoch, task_type, *, inputs=None, claim_ids=None, occurrence_ids=N
         if value is not None:
             check_text(value, key, code='invalid_review_staged')
             body[key] = value
+    if supersedes:
+        body['supersedes'] = check_ids(list(supersedes), 'supersedes', code='invalid_review_staged')
     if composition_role is not None and composition_role not in (epoch['role'], 'incomplete'):
         _fail('Composition task role differs from its epoch.')
     for field in ('claim_ids', 'occurrence_ids', 'card_ids', 'group_ids', 'dependencies', 'segment_task_ids',
@@ -737,7 +742,7 @@ def _plan_card_tasks(epoch, cards, route_limit, output_tokens, profile, contexts
     for card in cards:
         _check_number(card['characters'], 'card.characters', integer=True)
     blocks, tasks, exceptions, subdivisions = [], [], 0, [0]
-    claim_ids = [row['id'] for row in epoch['manifest']['claims']]
+    claim_ids = list(contexts if contexts is not None else epoch['manifest']['contexts'])
     current_contexts = contexts or epoch['manifest']['contexts']
     claim_inputs = []
     for key in claim_ids:
@@ -863,7 +868,7 @@ def plan_tasks(epoch, *, route_limit, output_tokens, profiles, cards=None, selec
                 pass
     tasks, blocks, exceptional = [], [], 0
     if 'read' in profiles:
-        claim_ids = [row['id'] for row in epoch['manifest']['claims']]
+        claim_ids = list(contexts if contexts is not None else epoch['manifest']['contexts'])
         for occurrence in epoch['manifest']['occurrences']:
             pending = [key for key in claim_ids if (occurrence['id'], key) not in accepted_cells]
             dependencies = sorted({key for pair, scope in completed_scope.items() if pair[0] == occurrence['id']
@@ -885,9 +890,9 @@ def plan_tasks(epoch, *, route_limit, output_tokens, profiles, cards=None, selec
         tasks.extend(planned)
     groups = {}
     for group in selected_groups:
-        validate_selected_group(group, epoch['manifest'])
+        validate_selected_group(group, dict(epoch['manifest'], contexts=contexts or epoch['manifest']['contexts']))
         key = digest([sorted(group['occurrence_ids']), sorted(group['claim_ids']), group['question'],
-                      {key: epoch['manifest']['contexts'][key]['root'] for key in group['claim_ids']}])
+                      {key: (contexts or epoch['manifest']['contexts'])[key]['root'] for key in group['claim_ids']}])
         if key not in groups:
             groups[key] = copy.deepcopy(group)
             groups[key]['group_ids'] = []
@@ -902,10 +907,35 @@ def plan_tasks(epoch, *, route_limit, output_tokens, profiles, cards=None, selec
         tasks.extend(_plan_composition_tasks(epoch, composition_plan, work['observed'] if selection is not None else ()))
     # Identical segment work can be shared without dropping pair/group ownership.
     tasks = list(_index(tasks, 'tasks').values())
+    supersessions = derive_task_supersessions(list(previous_tasks.values()), tasks,
+        contexts=contexts if contexts is not None else epoch['manifest']['contexts'])
+    remapped = {}
+    bound = []
+    for assigned in tasks:
+        supersedes = sorted(row['task_id'] for row in supersessions if assigned['id'] in row['replacement_task_ids'])
+        dependencies = [remapped.get(key, key) for key in assigned['dependencies']]
+        segments = [remapped.get(key, key) for key in assigned['segment_task_ids']]
+        if supersedes or dependencies != assigned['dependencies'] or segments != assigned['segment_task_ids']:
+            body = {key:copy.deepcopy(value) for key,value in assigned.items() if key not in ('id', 'digest')}
+            if supersedes:
+                body['supersedes'] = supersedes
+            body['dependencies'] = dependencies
+            body['segment_task_ids'] = segments
+            body['id'] = 'task:' + digest(body)
+            changed = _seal(body)
+            remapped[assigned['id']] = changed['id']
+            assigned = changed
+        bound.append(assigned)
+    tasks = bound
+    for row in supersessions:
+        row['replacement_task_ids'] = [remapped.get(key, key) for key in row['replacement_task_ids']]
     pairs = [list(pair) for pair in itertools.combinations([row['id'] for row in cards or []], 2)]
     counts = dict(combination=sum(t['type'] == 'combine' for t in tasks), exceptional_pairs=exceptional,
                   total=len(tasks), original_check=sum(t['type'] == 'original_check' for t in tasks))
-    return _seal(dict(protocol=PROTOCOL, epoch_id=epoch['id'], tasks=tasks, blocks=blocks,
+    extra = dict(context_graph=work['context_graph']) if selection is not None else {}
+    if supersessions:
+        extra['task_supersessions'] = supersessions
+    return _seal(dict(protocol=PROTOCOL, epoch_id=epoch['id'], tasks=tasks, blocks=blocks, **extra,
                       card_sizes={row['id']: row['characters'] for row in cards or []}, required_pairs=pairs,
                       projected_calls=counts, exceeds_call_budget=len(tasks) > epoch['budgets']['max_calls'],
                       unresolved_task_ids=[task['id'] for task in tasks if task['scope'] == 'unresolved']))
@@ -1028,6 +1058,7 @@ def validate_cell(cell, manifest, *, actual_input=None, checks=()):
              ('source_subject', 'segment_ids', 'reconciliation_id', 'dependencies', 'evidence_class'), code='invalid_review_staged')
     check_text(cell['id'], 'cell.id', code='invalid_review_staged')
     check_text(cell['reason'], 'reason', code='invalid_review_staged')
+    check_ids(cell.get('dependencies', []), 'dependencies', code='invalid_review_staged')
     occurrences = _index(manifest['occurrences'], 'occurrences')
     if cell['occurrence_id'] not in occurrences or cell['claim_id'] not in manifest['contexts']:
         _fail('Claim cell lies outside the frozen obligation space.')
@@ -1098,11 +1129,15 @@ def validate_card(card, manifest, *, claim_ids=None):
         exact = [materialize_quotation(sources[span['source_id']], span) for span in card['critical_spans']]
         if card['critical_quotations'] != exact:
             _fail('Retained critical quotations differ from their exact original characters.')
+    record_ids = set(_index(card['conclusions'] + card['conditions'] + card['judgments'], 'card records'))
     for row in card['conclusions'] + card['conditions']:
         check_fields(row, ('id', 'text', 'grounds'), ('dependencies', 'satisfied'), code='invalid_review_staged')
         check_text(row['id'], 'conclusion.id', code='invalid_review_staged')
         check_text(row['text'], 'text', code='invalid_review_staged')
-        _ground(row['grounds'], manifest)
+        check_ids(row.get('dependencies', []), 'dependencies', code='invalid_review_staged')
+        if 'satisfied' in row and type(row['satisfied']) is not bool:
+            _fail('Condition satisfaction must be explicit boolean data.')
+        _ground(row['grounds'], manifest, record_ids)
     for cell in card['judgments']:
         validate_cell(cell, manifest)
         if cell['occurrence_id'] != card['occurrence_id']:
@@ -1190,9 +1225,16 @@ def bind_integration_lists(receipt, *, epoch, task, cards, children=(), observat
     return dict(copy.deepcopy(receipt), **copy.deepcopy(values), record_root=root)
 
 
-def bind_terminal_conditions(epoch, terminal, *, cards, integration):
+def collect_condition_ids(manifest, cards):
+    """Retain frame conditions alongside every full-card condition."""
+    return sorted({row['id'] for card in cards if card['kind'] == 'full' for row in card['conditions']} |
+                  {row['id'] for row in manifest['claims'] if row.get('kind') == 'condition'})
+
+
+def bind_terminal_conditions(epoch, terminal, *, cards, integration, context_graph=None):
     """Bind visible conditions to the exact integration authorized by a terminal."""
-    visible = sorted(row['id'] for card in cards if card['kind'] == 'full' for row in card['conditions'])
+    manifest = bind_context_graph(epoch, context_graph) if context_graph is not None else epoch['manifest']
+    visible = collect_condition_ids(manifest, cards)
     root = digest(['terminal-record-v1', dict(epoch_id=epoch['id'], integration_root=digest(integration),
                                              visible_conditions=visible)])
     if terminal.get('record_root', root) != root or terminal.get('visible_conditions', visible) != visible:
@@ -1428,7 +1470,11 @@ def validate_task_output(task, output, *, manifest=None, validate_records=True):
                 if not _require_array(row['spans'], 'spans'):
                     _fail('A frame entry requires original spans.')
                 if manifest is not None:
-                    _ground(row['spans'], manifest)
+                    sources = _index(manifest['sources'], 'sources')
+                    for span in row['spans']:
+                        if not isinstance(span, dict) or span.get('source_id') not in sources:
+                            _fail('Frame entry needs exact original spans.')
+                        materialize_quotation(sources[span['source_id']], span, allow_empty=True)
                     if not _covers_inputs(row['spans'], task['inputs']):
                         _fail('A frame entry cites an unassigned field.')
         for row in output['dependencies']:
@@ -1490,7 +1536,7 @@ def validate_task_output(task, output, *, manifest=None, validate_records=True):
     return copy.deepcopy(output)
 
 
-def _validate_observation(epoch, task, observation, contexts):
+def _validate_observation(epoch, task, observation, contexts, *, manifest=None):
     _verify_seal(task)
     check_fields(observation, ('id', 'epoch_id', 'epoch_digest', 'task_id', 'task_digest', 'actual_input',
                            'request_digest', 'output', 'raw_output_digest', 'dependencies'), code='invalid_review_staged')
@@ -1512,7 +1558,7 @@ def _validate_observation(epoch, task, observation, contexts):
     for span in actual['intervals']:
         if span['source_id'] not in sources:
             _fail('Actual input names a source outside the epoch.')
-        materialize_quotation(sources[span['source_id']], span)
+        materialize_quotation(sources[span['source_id']], span, allow_empty=True)
     for row in actual['binary_sources']:
         check_fields(row, ('source_id', 'descriptor'), code='invalid_review_staged')
         source = sources.get(row['source_id'])
@@ -1547,7 +1593,7 @@ def _validate_observation(epoch, task, observation, contexts):
     if task['scope'] == 'unresolved':
         _fail('Task work was not admitted against measured resource limits.')
     validate_measurement(task['measurement'])
-    manifest = dict(epoch['manifest'], contexts=contexts)
+    manifest = dict(manifest or epoch['manifest'], contexts=contexts)
     output = validate_task_output(task, observation['output'], manifest=manifest, validate_records=False)
     if task['type'] == 'read':
         valid = False
@@ -1585,39 +1631,145 @@ def _record_completion_rejection(work, error, **details):
     _record_completion_issue(work, error.code, reason=error.message, **dict(error.details or {}, **details))
 
 
+def bind_context_graph(epoch, graph):
+    """Project a sealed current graph onto frozen originals for planning and packets.
+
+    The caller authenticates the selected observations, as for verify_completion.
+    Persist this graph alongside its observations; it never replaces the epoch.
+    """
+    _validate_epoch(epoch)
+    _verify_seal(graph)
+    if (graph['schema'] != CONTEXT_GRAPH_SCHEMA or graph['epoch_id'] != epoch['id'] or
+            graph['epoch_digest'] != epoch['digest']):
+        _fail('Context graph belongs to another frozen epoch.')
+    manifest = copy.deepcopy(epoch['manifest'])
+    for key in ('claims', 'contexts', 'assurance_dependencies'):
+        manifest[key] = copy.deepcopy(graph[key])
+    return manifest
+
+
+def derive_context_graph(epoch, selection, *, tasks=(), contexts=None):
+    """Reconstruct the version history from an explicit authenticated selection.
+
+    ``root`` names the current claims and original contexts; ``digest`` also
+    binds the parent-linked versions and retained frame questions. A question's
+    ID is answered by a later dependent observation's grounded ``answers`` entry.
+    ``bind_context_graph`` supplies the matching manifest view for packets.
+    """
+    _validate_epoch(epoch)
+    work = dict(epoch=epoch, selection=selection, contexts=contexts, manifest=epoch['manifest'],
+                task_index=_index(list(tasks), 'tasks'),
+                raw=_index(selection['observations'], 'observations'), issues=[])
+    _expand_completion_contexts(work)
+    return copy.deepcopy(work['context_graph'])
+
+
+def _build_context_version(claims, contexts, *, parent=None, observation_id=None):
+    return dict(root=digest(['context-version-v1', claims, contexts]), parent=parent,
+                observation_id=observation_id, claims=copy.deepcopy(claims), contexts=copy.deepcopy(contexts))
+
+
 def _expand_completion_contexts(work):
-    contexts = work['contexts']
-    manifest = work['manifest']
-    raw = work['raw']
-    epoch = work['epoch']
-    current_contexts = contexts if contexts is not None else manifest['contexts']
-    expanded_claims = copy.deepcopy(manifest['claims'])
-    claim_index = _index(expanded_claims, 'claims')
-    for row in raw.values():
-        output = row.get('output')
-        if not isinstance(output, dict) or not isinstance(output.get('new_dependencies', []), list):
-            _record_completion_issue(work, 'invalid_review_staged', observation_id=row['id'], reason='Invalid task output or dependencies.')
-            continue
-        for dependency in output.get('new_dependencies', []):
-            if not isinstance(dependency, dict) or set(dependency) != {'claim_id', 'depends_on'}:
-                _record_completion_issue(work, 'invalid_review_staged', reason='Invalid discovered dependency.')
+    epoch, original = work['epoch'], work['manifest']
+    manifest = copy.deepcopy(original)
+    supplied_contexts = work['contexts']
+    versions = [_build_context_version(original['claims'], original['contexts'])]
+    pending = sorted(work['raw'].values(), key=lambda row: row['id'])
+    verified, unresolved = {}, {}
+    while pending:
+        remaining = []
+        for raw in pending:
+            assigned = work['task_index'].get(raw.get('task_id'))
+            if assigned is None:
                 continue
-            key, target = dependency['claim_id'], dependency['depends_on']
-            if key not in claim_index or target not in claim_index:
-                _record_completion_issue(work, 'review_task_dependency_changed', dependency=dependency)
-            elif target not in claim_index[key]['dependencies']:
-                claim_index[key]['dependencies'].append(target)
-    if expanded_claims != manifest['claims']:
-        current_contexts = build_contexts(expanded_claims, manifest['sources'])
-    manifest = copy.deepcopy(manifest)
-    manifest['contexts'] = current_contexts
+            expected = {key: verified[key]['raw_output_digest'] for key in assigned['dependencies'] if key in verified}
+            if set(expected) != set(assigned['dependencies']):
+                remaining.append(raw)
+                continue
+            snapshot = next((version for version in reversed(versions) if all(
+                key in version['contexts'] and version['contexts'][key]['root'] == root
+                for key, root in assigned['context_roots'].items())), None)
+            if snapshot is None:
+                remaining.append(raw)
+                continue
+            try:
+                if raw['dependencies'] != expected:
+                    _fail('Discovery does not bind its selected dependency frontier.')
+                row = _validate_observation(epoch, assigned, raw, snapshot['contexts'],
+                    manifest=dict(original, claims=snapshot['claims'], contexts=snapshot['contexts']))
+                output = row['output']
+                claims = copy.deepcopy(manifest['claims'])
+                index = _index(claims, 'claims')
+                entries = output['claims'] + output['conditions'] if assigned['type'] == 'frame' else []
+                for entry in entries:
+                    prior = index.get(entry['id'])
+                    if prior is None:
+                        claims.append(copy.deepcopy(entry))
+                        index[entry['id']] = claims[-1]
+                    else:
+                        if prior['spans'] != entry['spans'] or ('kind' in prior and prior['kind'] != entry['kind']):
+                            _fail('Frame decomposition changes an existing claim identity.', claim_id=entry['id'])
+                        if entry['kind'] != 'claim':
+                            prior['kind'] = entry['kind']
+                        for field in ('dependencies', 'children'):
+                            prior[field] = sorted(set(prior[field]) | set(entry[field]))
+                # Original field seeds remain required and acquire the reviewer
+                # decomposition that interprets the same original characters.
+                for seed in original['claims']:
+                    for entry in entries:
+                        if entry['id'] != seed['id'] and any(
+                            left['source_id'] == right['source_id'] and
+                            (max(left['start'], right['start']) < min(left['end'], right['end']) or
+                             left['start'] == left['end'] == right['start'] == right['end'])
+                            for left in seed['spans'] for right in entry['spans']):
+                            index[seed['id']]['children'] = sorted(set(index[seed['id']]['children']) | {entry['id']})
+                dependencies = _require_array(output.get('new_dependencies', []), 'new_dependencies')
+                if assigned['type'] == 'frame':
+                    dependencies = dependencies + output['dependencies']
+                for dependency in dependencies:
+                    check_fields(dependency, ('claim_id', 'depends_on'), code='invalid_review_staged')
+                    key, target = dependency['claim_id'], dependency['depends_on']
+                    if key not in index or target not in index:
+                        _fail('Discovered dependency names an absent claim.', code='review_task_dependency_changed')
+                    index[key]['dependencies'] = sorted(set(index[key]['dependencies']) | {target})
+                if claims != manifest['claims']:
+                    current = build_contexts(claims, original['sources'])
+                    versions.append(_build_context_version(claims, current,
+                        parent=versions[-1]['root'], observation_id=row['id']))
+                    manifest.update(claims=claims, contexts=current)
+                if assigned['type'] == 'frame':
+                    for obligation in output['unresolved']:
+                        key = 'frame-unresolved:' + digest([assigned['id'], obligation])
+                        unresolved[key] = dict(copy.deepcopy(obligation), id=key,
+                                              task_id=assigned['id'], observation_id=row['id'])
+                verified[assigned['id']] = row
+            except ResearchError as error:
+                _record_completion_rejection(work, error, observation_id=raw['id'])
+        if len(remaining) == len(pending):
+            # Retain the existing explicit-context interface. Prefer replaying
+            # discoveries so passing the current projection creates no extra version.
+            if supplied_contexts is not None and not any(version['contexts'] == supplied_contexts for version in versions):
+                versions.append(_build_context_version(manifest['claims'], supplied_contexts,
+                    parent=versions[-1]['root']))
+                manifest['contexts'] = copy.deepcopy(supplied_contexts)
+                pending = remaining
+                continue
+            break
+        pending = remaining
+    if supplied_contexts is not None and manifest['contexts'] == original['contexts'] and supplied_contexts != manifest['contexts']:
+        versions.append(_build_context_version(manifest['claims'], supplied_contexts, parent=versions[-1]['root']))
+        manifest['contexts'] = copy.deepcopy(supplied_contexts)
     for kind in ASSURANCES:
-        seeds = manifest['assurance_dependencies'][kind]
-        manifest['assurance_dependencies'][kind] = sorted({key for seed in seeds for key in current_contexts[seed]['claim_ids']})
-    current_epoch = dict(epoch, manifest=manifest)
+        seeds = original['assurance_dependencies'][kind]
+        manifest['assurance_dependencies'][kind] = sorted({key for seed in seeds
+            for key in manifest['contexts'][seed]['claim_ids']})
+    work['context_graph'] = _seal(dict(schema=CONTEXT_GRAPH_SCHEMA, epoch_id=epoch['id'],
+        epoch_digest=epoch['digest'], root=versions[-1]['root'], versions=versions,
+        claims=manifest['claims'], contexts=manifest['contexts'],
+        assurance_dependencies=manifest['assurance_dependencies'], unresolved=list(unresolved.values())))
     work['manifest'] = manifest
-    work['current_contexts'] = current_contexts
-    work['current_epoch'] = current_epoch
+    work['current_contexts'] = manifest['contexts']
+    work['current_epoch'] = dict(epoch, manifest=manifest)
 
 
 def _check_completion_observations(work):
@@ -1637,14 +1789,13 @@ def _check_completion_observations(work):
         try:
             observed_contexts = current_contexts
             if assigned['id'] in historical:
-                # Old captures retain exact provenance and dependency bindings;
-                # their scientific judgments receive no current-context credit.
-                observed_contexts = dict(current_contexts)
-                for claim_id, root in assigned['context_roots'].items():
-                    if claim_id in observed_contexts:
-                        observed_contexts[claim_id] = dict(observed_contexts[claim_id],
-                                                         root=root, spans=assigned['inputs'])
-            row = _validate_observation(epoch, assigned, row, observed_contexts)
+                version = next((version for version in work['context_graph']['versions'] if all(
+                    key in version['contexts'] and version['contexts'][key]['root'] == root
+                    for key, root in assigned['context_roots'].items())), None)
+                if version is None:
+                    _fail('Historical task has no recorded context version.', code='review_task_dependency_changed')
+                observed_contexts = version['contexts']
+            row = _validate_observation(epoch, assigned, row, observed_contexts, manifest=work['manifest'])
             if row['task_id'] in by_task:
                 _fail('Selection contains multiple outputs for one task.')
             accepted[row['id']] = row
@@ -1664,15 +1815,15 @@ def _check_completion_observations(work):
                 del by_task[row['task_id']]
                 changed = True
     current_by_task = {key:row for key,row in by_task.items() if key not in historical}
+    supersessions = derive_task_supersessions(list(task_index.values()),
+        [task_index[key] for key in current_by_task], contexts=current_contexts)
+    superseded = {row['task_id'] for row in supersessions}
     for assigned in task_index.values():
         if assigned['id'] in historical:
-            replacements = [task_index[key] for key in current_by_task
-                            if task_index[key]['type'] == assigned['type']]
-            pairs = [(occurrence, claim) for occurrence in (assigned['occurrence_ids'] or [None])
-                     for claim in assigned['claim_ids']]
-            if not all(any(claim in candidate['claim_ids'] and
-                           (occurrence is None or occurrence in candidate['occurrence_ids'])
-                           for candidate in replacements) for occurrence, claim in pairs):
+            if assigned['type'] == 'frame' and assigned['id'] in by_task:
+                supersessions.append(dict(task_id=assigned['id'], replacement_task_ids=[],
+                    context_root=work['context_graph']['root'], reason='frame_decomposition_adopted'))
+            elif assigned['id'] not in superseded and assigned['required']:
                 _record_completion_issue(work, 'review_task_dependency_changed', task_id=assigned['id'],
                                          reason='Reassess historical work under the expanded original context.')
         elif assigned['required'] and assigned['id'] not in by_task:
@@ -1688,7 +1839,39 @@ def _check_completion_observations(work):
     work['historical_observed'] = [accepted[key] for key in sorted(accepted)
                                    if accepted[key]['task_id'] in historical]
     work['historical_tasks'] = historical
+    work['task_supersessions'] = supersessions
     work['observations_root'] = observations_root
+
+
+def derive_task_supersessions(tasks, replacements, *, contexts):
+    """Bind obsolete work to current envelopes covering every original obligation."""
+    result = []
+    for old in tasks:
+        if all(key in contexts and contexts[key]['root'] == root for key, root in old['context_roots'].items()):
+            continue
+        candidates = [row for row in replacements if row['id'] != old['id'] and row['type'] == old['type'] and
+            all(row.get(key) == old.get(key) for key in ('composition_role', 'composition_plan_root')) and
+            all(key in contexts and contexts[key]['root'] == root for key, root in row['context_roots'].items())]
+        pairs = [(occurrence, claim) for occurrence in old['occurrence_ids'] or [None]
+                 for claim in old['claim_ids'] or [None]]
+        covered = bool(candidates)
+        for occurrence, claim in pairs:
+            matching = [row for row in candidates if (claim is None or claim in row['claim_ids']) and
+                        (occurrence is None or occurrence in row['occurrence_ids'])]
+            if not matching or not _covers_inputs(old['inputs'], [span for row in matching for span in row['inputs']]):
+                covered = False
+        if not covered:
+            continue
+        if any(not set(old.get(field, [])) <= {key for row in candidates for key in row.get(field, [])}
+               for field in ('card_ids', 'group_ids', 'obligation_ids', 'child_ids')):
+            continue
+        if any(any(item not in [item for row in candidates for item in row[field]] for item in old[field])
+               for field in ('binary_sources', 'answer_ranges', 'objection_entries', 'card_segments')):
+            continue
+        result.append(dict(task_id=old['id'], replacement_task_ids=sorted(row['id'] for row in candidates),
+                           context_roots={key:contexts[key]['root'] for key in old['claim_ids'] if key in contexts},
+                           reason='context_expanded'))
+    return result
 
 
 def _collect_completion_records(work):
@@ -2014,13 +2197,24 @@ def _check_completion_retrievals(work):
             _record_completion_rejection(work, error, retrieval_id=retrieval['id'])
     resolved = {row['id'] for row in checks if row['status'] == 'resolved'}
     resolved.update(row['id'] for row in retrievals if row['status'] == 'resolved')
-    resolved.update(row['id'] for row in cells.values() if row['status'] != 'unresolved')
-    for card in work['cards']:
-        if not card['dependencies'] or set(card['dependencies']) <= resolved:
-            resolved.update(row['id'] for row in card['conclusions'] + card['conditions'])
     for check in checks:
         if check['status'] == 'resolved':
             resolved.update(row['id'] for row in check['conclusions'])
+    pending = [(row, card['dependencies']) for card in work['cards']
+               for row in card['conclusions'] + card['conditions']]
+    pending.extend((row, []) for row in cells.values() if row['status'] != 'unresolved')
+    while pending:
+        remaining = []
+        for row, parent_dependencies in pending:
+            dependencies = set(parent_dependencies) | set(row.get('dependencies', []))
+            premises = {ground for ground in row['grounds'] if isinstance(ground, str)}
+            if row['grounds'] and dependencies | premises <= resolved:
+                resolved.add(row['id'])
+            else:
+                remaining.append((row, parent_dependencies))
+        if len(remaining) == len(pending):
+            break
+        pending = remaining
     work['resolved'] = resolved
 
 
@@ -2117,6 +2311,9 @@ def _check_completion_integration_accounting(work):
     if not valid_integrations:
         _record_completion_issue(work, 'review_integration_pending', reason='No selected integration receipt.')
     for card in full_cards:
+        for row in card['conclusions'] + card['conditions']:
+            if row['id'] not in resolved:
+                _record_completion_issue(work, 'review_integration_unresolved', card_id=card['id'], record_id=row['id'])
         for dependency in card['dependencies']:
             if dependency not in resolved:
                 _record_completion_issue(work, 'review_integration_unresolved', card_id=card['id'], dependency=dependency)
@@ -2142,6 +2339,8 @@ def _check_completion_finding_answers(work):
     finding_ids.update(row['id'] for row in findings)
     finding_ids.update(row['id'] for row in epoch['material_objections'])
     finding_ids.update(key for card in cards for key in card['findings'])
+    frame_pending = {row['id']: row for row in work['context_graph']['unresolved']}
+    finding_ids.update(frame_pending)
     answered = set()
     for answer in grouped.get('answers', {}).values():
         try:
@@ -2153,12 +2352,19 @@ def _check_completion_finding_answers(work):
             _ground(answer['grounds'], manifest, resolved)
             if answer['disposition'] == 'answered' and not answer['grounds']:
                 _fail('An answered finding requires grounded support.')
+            if answer['finding_id'] in frame_pending:
+                pending = frame_pending[answer['finding_id']]
+                owner = work['owners'][('answers', answer['id'])]
+                if answer['disposition'] != 'answered' or not depends_on_task(
+                        owner, pending['task_id'], work['all_by_task']):
+                    _fail('Frame work requires a grounded answer depending on its discovery.')
             if answer['disposition'] != 'unresolved':
                 answered.add(answer['finding_id'])
         except ResearchError as error:
             _record_completion_rejection(work, error, answer_id=answer['id'])
     for key in sorted(finding_ids - answered):
-        _record_completion_issue(work, 'review_finding_answer_pending', finding_id=key)
+        code = 'review_frame_unresolved' if key in frame_pending else 'review_finding_answer_pending'
+        _record_completion_issue(work, code, finding_id=key)
     work['findings'] = findings
     work['inherited'] = inherited
     work['answered'] = answered
@@ -2277,9 +2483,9 @@ def _check_completion_visible_conditions(work):
     full_cards = work['full_cards']
     terminal = work['terminal']
     check_ids(terminal['visible_conditions'], 'visible_conditions', code='invalid_review_staged')
-    visible = {row['id'] for card in full_cards for row in card['conditions']}
+    visible = set(collect_condition_ids(work['manifest'], full_cards))
     if not visible <= set(terminal['visible_conditions']):
-        _fail('Terminal lost a full-card condition.', missing=sorted(visible - set(terminal['visible_conditions'])))
+        _fail('Terminal lost a required condition.', missing=sorted(visible - set(terminal['visible_conditions'])))
 
 
 def _check_completion_assurances(work):
@@ -2327,7 +2533,11 @@ def _check_completion_assurances(work):
         if not seeds <= {cell['claim_id'] for cell in relevant}:
             _record_completion_issue(work, 'review_assurance_dependency_pending', assurance=kind)
         if status == 'passed':
-            if (any(cell['status'] in ('unresolved', 'contradicted') for cell in relevant) or
+            conditions = [row for card in work['cards']
+                          if any(cell['claim_id'] in seeds for cell in card['judgments'])
+                          for row in card['conditions']]
+            if (any(cell['status'] in ('unresolved', 'contradicted') or cell['id'] not in resolved for cell in relevant) or
+                    any(row.get('satisfied', True) is not True or row['id'] not in resolved for row in conditions) or
                     not check.get('conditions_satisfied') or check.get('dependencies') or
                     any(row.get('adverse') and not row.get('classification') for row in findings)):
                 _record_completion_issue(work, 'review_assurance_dependency_pending', assurance=kind)
@@ -2427,7 +2637,7 @@ def _check_completion_terminal(work):
             integration = next((row for row in integrations if row['id'] == selected), None)
             if integration is None:
                 _fail('Terminal record root has no complete integration.')
-            terminal = bind_terminal_conditions(work['epoch'], terminal, cards=work['full_cards'], integration=integration)
+            terminal = bind_terminal_conditions(work['current_epoch'], terminal, cards=work['full_cards'], integration=integration)
             work['terminal'] = terminal
         _check_completion_terminal_identity(work)
         _check_completion_terminal_integration(work)
@@ -2475,7 +2685,8 @@ def _check_completion_requirements(work):
         _record_completion_issue(work, 'review_task_pending', reason='No frozen task envelopes.')
     requirements = epoch['completion_requirements']
     for kind in requirements.get('required_task_types', []):
-        if not any(task_index[key]['type'] == kind for key in by_task):
+        if not any(task_index[key]['type'] == kind for key in by_task) and not (
+                kind == 'frame' and any(task_index[key]['type'] == kind for key in work['all_by_task'])):
             _record_completion_issue(work, 'review_task_pending', task_type=kind)
     for key in requirements.get('required_answer_ids', []):
         if key not in grouped.get('answers', {}):
@@ -2521,6 +2732,10 @@ def _build_completion_report(work):
                   known_conclusions_root=digest(dict(cards=cards, cells=list(cells.values()), original_checks=checks,
                                                      integrations=valid_integrations, findings=findings)),
                   unresolved_scope_root=digest(issues), inherited_adverse_findings_root=digest(inherited))
+    if len(work['context_graph']['versions']) > 1 or work['context_graph']['unresolved']:
+        report['context_graph_root'] = work['context_graph']['digest']
+    if work['task_supersessions']:
+        report['task_supersessions'] = work['task_supersessions']
     return _seal(report)
 
 
@@ -2541,7 +2756,8 @@ def collect_planning_records(epoch, selection, *, tasks=()):
     work = _verify_selection(epoch, selection, tasks=tasks)
     return copy.deepcopy(dict(cards=work['full_cards'], findings=work['findings'],
                               selected_groups=work['groups'], contexts=work['current_contexts'],
-                              integrations=work['valid_integrations']))
+                              integrations=work['valid_integrations'], context_graph=work['context_graph'],
+                              task_supersessions=work['task_supersessions']))
 
 
 def _verify_selection(epoch, selection, *, tasks=None, contexts=None):
