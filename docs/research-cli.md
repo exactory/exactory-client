@@ -283,29 +283,38 @@ that delivers passages of a reading also carries that reading's `readings`
 entry, so that the reviewer has the inspection record next to the passages.
 
 The harness plans each turn when `review-assignment` records it, after the
-turn's history is known. A unit counts as delivered when its exact current item
-appears under the same index in the actual recorded request of an earlier valid
-turn of the series. A valid turn is observed in a verified context, its sent
-packet has the series evidence digest and the same series id, its part response
-passed its check, every body that its units own is attached complete, and its
-turn number and `delivered_before` continue the earlier valid turns. A part
-turn takes the longest prefix of the remaining units, in unit order, that meets
-three conditions: its fitted request, built as the transport builds it, fits
-the route limit; that request attaches every body that those units own
-complete, with none withheld at the limit and none deferred for capacity; and
-the characters of those units, owned bodies included and measured as canonical
-JSON, total at most 800,000 (`PART_UNIT_CHARACTERS`). The search starts at the
-prefix whose summed characters fit the room that the frame-only request leaves,
-at most 800,000, steps down one unit while the request does not fit, and steps
-up one unit while the next prefix still fits. When the frame and the first
-remaining unit cannot meet these conditions, `review-assignment` is refused
-with `review_input_too_large` and the details `{stage, turn, input_characters,
-input_limit_characters, frame_characters, unit}`, where `input_characters`
-measures the request with the frame and that unit and `unit` is `{key, index,
-digest}`; nothing is recorded, and no attempt is written. The final turn is
-the first turn planned after every unit was delivered by an earlier valid turn,
-and it carries no units; when its frame alone does not fit, it is refused the
-same way with `unit: null`.
+turn's history is known. A unit counts as delivered when a valid turn carried
+its exact current item under the same index and valid turns cumulatively
+attached every artifact body that it owns. A valid turn is observed in a
+verified context, its sent packet has the series evidence digest and the same
+series id, its part response passed its check, and its turn number and
+`delivered_before` continue the earlier valid turns. A part turn must complete
+a unit or attach an owned body that no earlier valid turn attached. Its receipt
+keeps every carried index, including a unit that is still incomplete.
+
+A unit's characters count its item and its pending owned bodies as canonical
+JSON. A part turn takes the longest fitting prefix of the remaining units
+within 800,000 characters (`PART_UNIT_CHARACTERS`), checking the fitted request
+as the transport builds it. When the first remaining unit cannot fit whole,
+it travels alone, bypassing that cap: the planner carries its item and adds
+pending bodies one at a time in owned-artifact order while the request fits.
+An incomplete carried unit stays in `remaining` and travels first in the next
+turn, with a new note required for its item again. Each owned body not attached
+in this turn has an empty evidence entry with encoding `omitted`: delivery
+`delivered-in-an-earlier-part-turn` and `turn` naming its earliest valid
+delivery, or delivery `delivered-in-a-later-part-turn` when it is still pending.
+The entry is matched by the full artifact descriptor, including when two
+descriptors have the same SHA-256. Duplicate units therefore carry their items
+without repeating bodies that earlier valid turns attached.
+
+When the frame and item alone, or the item and its next pending body, cannot
+fit and no selection makes progress, `review-assignment` is refused with
+`review_input_too_large` and the details `{stage, turn, input_characters,
+input_limit_characters, frame_characters, unit}`. `input_characters` measures
+the fitted request that could not advance delivery, and `unit` is `{key,
+index, digest}`; nothing is recorded, and no attempt is written. The final turn
+is planned after every unit is complete and carries no units; when its frame
+alone does not fit, it is refused the same way with `unit: null`.
 
 The packet of a turn is the result packet as built above, with the bars, the
 own bars, the material objections, the historical reviews, the review
@@ -319,9 +328,12 @@ items in the current evidence. `delivered_now` and `remaining` map each split
 key to a list of index ranges `[start, end]`, `start` included and `end`
 excluded, into the full list of that key; this turn's items of a key are
 exactly the items of its `delivered_now` ranges, in index order.
+In a part packet, each material objection omits `version_evidence` and
+`version_source_mappings` and retains every other field. A part response gives
+no finding on objections; the final packet delivers their evidence as usual.
 `delivered_before` lists every earlier valid turn as `{turn, assignment_id,
 attempt_id, units}`, with its selected attempt and the ranges that it
-delivered. `note` is one sentence that tells the reviewer that the evidence of
+carried. `note` is one sentence that tells the reviewer that the evidence of
 this review arrives in parts. A turn whose packet has no `reviewer_excerpts`
 record, an initial assignment, adds an empty one; a turn that continues a
 session, including part turn 1 of a series that a continuation or a refresh

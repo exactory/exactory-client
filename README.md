@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.69.2](docs/releases/0.69.2.md) delivers a problem evidence unit's artifact bodies across part turns and reduces objection evidence in part packets.
+
 Version [0.69.1](docs/releases/0.69.1.md) makes the planning of a review turn fast on a large store.
 
 Version [0.69.0](docs/releases/0.69.0.md) delivers oversized problem result evidence in validated parts of the same reviewer session.
