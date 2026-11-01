@@ -1172,6 +1172,24 @@ def find_carried_record(records, carried, reference, *, frozen=False):
                  and (recorded_digest or stored_digest) == wanted), None)
 
 
+def _read_adjudication_review(records, artifacts, review):
+    """Read a completed source review through its exact recorded effective binding."""
+    assignment = records.get('review_assignment', {}).get(review['assignment_id'], {})
+    if assignment.get('staged_review') is None:
+        return _payload(review)
+    from .research_decisions import _response, bind_effective_result, read_effective_result
+    state = assignment_state(records, artifacts, assignment['id'])
+    output, output_digest = read_effective_result(state)
+    effective = state.get('effective') or {}
+    if (assignment['staged_review'].get('kind') != 'controller'
+            or effective.get('kind') not in ('ordinary', 'paged')
+            or output != _response(review['payload']) or output_digest != review['output_digest']
+            or review.get('effective_binding') != bind_effective_result(effective)):
+        raise ResearchError('research_review_unverified', 'Adjudicate the exact completed effective review history.',
+                            {'review_id': review['id']})
+    return dict(_payload(review), **output)
+
+
 def describe_version_evidence(records, artifacts, version):
     """What an adjudicator receives for one material objection version, apart from the original pair's correction
     evidence, under VERSION_EVIDENCE_KEYS: the review that stated the version, one version_evidence entry for each
@@ -1186,6 +1204,7 @@ def describe_version_evidence(records, artifacts, version):
     supply) is an entry {kind: undelivered, identity, reference}."""
     from .research_decisions import list_stated_objections
     review = _get(records, 'value_review', version['review_id'])
+    payload = _read_adjudication_review(records, artifacts, review)
     supplied, mappings = supplied_evidence.supplied_context(records, artifacts, [review['assignment_id']])
     carried = collect_carried_records(records, artifacts, review['assignment_id'])
     entries, cited = [], set()
@@ -1212,7 +1231,7 @@ def describe_version_evidence(records, artifacts, version):
                 continue
         entries.append({'kind': 'undelivered', 'identity': identity, 'reference': _reference_templates(reference)})
     return dict(zip(VERSION_EVIDENCE_KEYS, (
-        _reference_templates(dict(_payload(review), objections=list_stated_objections(review))), entries,
+        _reference_templates(dict(payload, objections=list_stated_objections(review))), entries,
         [mapping for mapping in mappings if mapping['origin']['artifact_descriptor']['sha256'] in cited])))
 
 
@@ -1220,6 +1239,8 @@ def build_rubric_objection(records, artifacts, saved, context, packet, sources):
     """Build the named problem objection from the latest material version found in the sources' findings and the
     applicable slate objections, or from a rubric shortfall of the named result pair."""
     from .research_decisions import collect_problem_post_objections
+    for review in saved + sources:
+        _read_adjudication_review(records, artifacts, review)
     objections = [objection for objection in collect_problem_post_objections(records, artifacts, sources)
                   if objection['id'] == context.get('objection_id') and 'claim' in objection]
     rubric_id = problem_rubric.parse_rubric_objection_id(context.get('objection_id'))
@@ -1258,20 +1279,22 @@ def add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id
     if len(ids) != 2 or len(set(ids)) != 2:
         raise ResearchError('review_packet_incomplete', 'Adjudication requires both exact original review IDs')
     from .research_decisions import list_stated_objections
-    reviews = [_payload(_get(records, 'value_review', identifier)) for identifier in ids]
+    reviews = [_read_adjudication_review(records, artifacts, _get(records, 'value_review', identifier))
+               for identifier in ids]
     if any(r['dossier_id'] != dossier_id for r in reviews):
         raise ResearchError('review_packet_mismatch', 'Both reviews must concern the adjudicated dossier')
     slates = []
     if problem:
         from .direction_reviews import collect_observed_packets
         from .problem_candidates import collect_bound_slate_reviews, project_slate_objection
-        from .research_decisions import _pair, _response
+        from .research_decisions import _pair, _response, read_effective_result
         saved = _pair(records, ids, packet['subject'], reviews[0]['stage'])
         for review in saved:
             observed = {assignment['id'] for assignment, _ in collect_observed_packets(records, artifacts, review['assignment_id'])}
             state = assignment_state(records, artifacts, review['assignment_id'])
-            if (review['assignment_id'] not in observed or state['output'] != _response(review['payload'])
-                    or state['output_digest'] != review['output_digest']):
+            output, output_digest = read_effective_result(state)
+            if (review['assignment_id'] not in observed or output != _response(review['payload'])
+                    or output_digest != review['output_digest']):
                 raise ResearchError('research_review_unverified', 'Adjudicate the exact observed scientific review history.',
                                     {'review_id': review['id']})
         validate_problem_bars(records, artifacts, [review for review in saved if review['payload']['stage'] == 'bar'])
@@ -3692,9 +3715,35 @@ def record_context_event(store, payload, *, expected_revision, request_id):
     return prepared_mutation(store, 'review.context_event', payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
+def _validate_staged_adjudication_scope(records, artifacts, assignment, packet):
+    """Require completed selected tasks for this exact pair and objection version."""
+    from .direction_reviews import collect_selected_task_graph
+    graph = collect_selected_task_graph(records, artifacts, assignment['id'])
+    if not graph['completion']['complete']:
+        raise ResearchError('review_task_pending', 'Complete every required focused assessment before its disposition.',
+                            {'issues': graph['completion']['issues']})
+    reviews = [_get(records, 'value_review', identifier) for identifier in assignment['context']['review_ids']]
+    scope = dict(review_pair_roots=[digest(review) for review in reviews],
+                 objection_id=packet['objection']['id'], objection_version=digest(packet['objection']))
+    if (graph['epoch']['controller_assignment_id'] != assignment['id']
+            or graph['epoch']['focused_scope'] != scope):
+        raise ResearchError('review_adjudication_mismatch', 'Adjudicate the frozen review pair and exact objection version.')
+    for review in reviews:
+        _read_adjudication_review(records, artifacts, review)
+
+
 def validate_adjudication_contract(records, artifacts, assignment, packet, output):
     """Validate only the focused output and the adjudicator's frozen delivery."""
     from .review_refusal import contract_check, validate_evidence_contract
+    staged = assignment.get('staged_review')
+    if staged is not None:
+        if staged['kind'] == 'task':
+            from .review_staged import validate_task_output
+            epoch = _get(records, 'review_epoch', staged['epoch_id'])
+            with contract_check('review.staged_task'):
+                validate_task_output(assignment['staged_task'], output, manifest=epoch['manifest'])
+            return
+        _validate_staged_adjudication_scope(records, artifacts, assignment, packet)
     packets = supplied_evidence.lineage_packets(records, artifacts, [assignment['id']])
     with contract_check('adjudication.shape'):
         fields(output, ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'))
@@ -3702,12 +3751,14 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
             raise ResearchError('review_adjudication_mismatch', 'Disposition must concern the assigned objection')
         allowed = ('upheld', 'not_upheld', 'unresolved')
         if (packet.get('subject', {}).get('kind') == 'problem' and 'rubric_definition' not in packet
-                and _matches_current_problem_adjudicator_prompt(assignment['prompt'])):
+                and (staged is not None or _matches_current_problem_adjudicator_prompt(assignment['prompt']))):
             allowed += ('not_binding',)
         if output['disposition'] not in allowed:
             raise ResearchError('invalid_review_adjudication', 'Use a focused objection disposition, not a third vote')
         if output['correction_admissible'] is not None and type(output['correction_admissible']) is not bool:
             raise ResearchError('invalid_review_adjudication', 'Correction admissibility must be null or a boolean finding')
+        if staged is not None and packet.get('correction') is None and output['correction_admissible'] is not None:
+            raise ResearchError('invalid_review_adjudication', 'Correction admissibility is null when no correction is assigned')
         text(output['reason'], 'Adjudication reason')
         if packet.get('subject', {}).get('kind') == 'problem':
             validate_evidence_contract(records, artifacts, output['evidence'], packets=packets)
@@ -3731,6 +3782,11 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ('id', 'assignment_id', 'objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'))
         state = assignment_state(records, artifacts, value['assignment_id'])
+        from .research_decisions import bind_effective_result, read_effective_result
+        output, _ = read_effective_result(state)
+        if state.get('effective', {}).get('kind') == 'incomplete':
+            raise ResearchError('review_assessment_incomplete',
+                                'An incomplete focused assessment occupies its slot and leaves the objection open.')
         if not state['ready'] or state['role'] != 'adjudicator':
             raise ResearchError('review_adjudication_unverified', 'A fresh verified focused adjudicator must return the disposition')
         assignment = _get(records, 'review_assignment', value['assignment_id'])
@@ -3738,7 +3794,7 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
         from .review_adjudicator_sources import validate_observed as validate_current_sources
         validate_current_sources(records, artifacts, assignment, state.get('attempt_id'))
         response = {k: v for k, v in value.items() if k not in ('id', 'assignment_id')}
-        if response != state['output']:
+        if response != output:
             raise ResearchError('review_output_mismatch', 'Record the exact observed adjudicator response')
         validate_adjudication_contract(records, artifacts, assignment, packet, response)
         if packet.get('subject', {}).get('kind') == 'problem':
@@ -3746,6 +3802,8 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
             evidence(records, artifacts, value['evidence'])
         _evidence(artifacts, value['evidence'], records=records)
         record = dict(value, dossier_id=state['dossier_id'], recorded_revision=expected_revision + 1)
+        if assignment.get('staged_review') is not None:
+            record['effective_binding'] = bind_effective_result(state['effective'])
         if packet.get('subject', {}).get('kind') == 'problem':
             record.update(subject=packet['subject'], problem_evidence_digest=packet['problem_evidence_digest'])
         return [immutable_record(records, 'review_adjudication', value['id'], record)], record
@@ -3756,26 +3814,50 @@ def adjudication_state(records, artifacts, adjudication_id):
     """A historical focused finding remains readable when its current independence expires."""
     saved = records.get('review_adjudication', {}).get(adjudication_id)
     if saved is None:
+        incomplete = records.get('assessment_incomplete', {}).get(adjudication_id)
+        if incomplete is not None and incomplete['role'] == 'adjudicator':
+            state = assignment_state(records, artifacts, incomplete['controller_assignment_id'])
+            obligations = list(state['obligations']) + [obligation('review_assessment_incomplete',
+                'Complete the unresolved focused assessment; its objection remains open.',
+                outcome_id=incomplete['id'], slot_id=incomplete['slot_id'], epoch_id=incomplete['epoch_id'])]
+            return dict(ready=False, obligations=obligations, adjudication=None, disposition=None,
+                        incomplete_outcome=incomplete, slot_id=incomplete['slot_id'], reviewer_id=incomplete['reviewer_id'])
         return {'ready': False, 'obligations': [obligation('review_adjudication_missing', 'Record the focused adjudication.')],
                 'adjudication': None}
     state = assignment_state(records, artifacts, saved['assignment_id'])
     response = {k: saved[k] for k in ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible')}
     obligations = list(state['obligations'])
     assignment = records.get('review_assignment', {}).get(saved['assignment_id'], {})
+    from .research_decisions import bind_effective_result, read_effective_result
+    output, _ = read_effective_result(state)
+    effective = state.get('effective')
+    if assignment.get('staged_review') is not None:
+        if effective is None or saved.get('effective_binding') != bind_effective_result(effective):
+            obligations.append(obligation('research_review_binding_stale', 'Revalidate the exact recorded focused composition.'))
+        try:
+            validate_adjudication_contract(records, artifacts, assignment, _read_json(artifacts, assignment['packet']), response)
+        except ResearchError as error:
+            obligations.append(obligation(error.code, error.message, **(error.details or {})))
     if assignment.get('subject', {}).get('kind') == 'problem':
         from .review_adjudicator_sources import validate_observed as validate_current_sources
         try:
             validate_current_sources(records, artifacts, assignment, state.get('attempt_id'))
         except ResearchError as error:
             obligations.append(obligation(error.code, error.message, **(error.details or {})))
-        missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, saved['assignment_id'], saved['evidence'])
+        try:
+            missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, saved['assignment_id'], saved['evidence'])
+        except ResearchError as error:
+            if assignment.get('staged_review') is None:
+                raise
+            obligations.append(obligation(error.code, error.message, **(error.details or {})))
+            missing = []
         if missing:
             obligations.append(obligation('review_adjudication_evidence_undelivered',
                 'Reassess the disposition using evidence delivered to the focused adjudicator.', undelivered_references=missing))
     correction = assignment.get('context', {}).get('correction')
     if correction is not None and saved['correction_admissible'] is not True:
         obligations.append(obligation('review_correction_inadmissible', 'A correction cannot change a finding until its material error is admitted.'))
-    if state['role'] != 'adjudicator' or state['output'] != response:
+    if state['role'] != 'adjudicator' or output != response:
         obligations.append(obligation('review_adjudication_mismatch', 'The disposition must equal the observed focused response.'))
     return {'ready': not obligations, 'obligations': obligations, 'adjudication': saved,
             'disposition': saved['disposition'], 'reviewer_id': state['reviewer_id']}
