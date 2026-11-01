@@ -363,7 +363,8 @@ def project_citations(records, artifacts):
         seen.add(family)
         author_names = [a if isinstance(a, str) else a.get("name", "") for a in work.get("authors", [])]
         normalized_authors = tuple(" ".join(name.split()).casefold() for name in author_names)
-        arxiv_families = set(map(resolve_arxiv_family, [work["id"], *work.get("aliases", [])])) - {None}
+        identifiers = [work["id"]] + [alias for alias in work.get("aliases", []) if alias.startswith("doi:")]
+        arxiv_families = set(map(resolve_arxiv_family, identifiers)) - {None}
         # A work known by its arXiv id and one known by its DataCite DOI are cited once when their authors agree.
         arxiv_work_key = (next(iter(arxiv_families)), normalized_authors) if (
             len(arxiv_families) == 1 and normalized_authors and all(normalized_authors)) else None
