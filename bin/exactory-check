@@ -11,9 +11,10 @@ Three commands:
             deposit commands do before they send anything
 
 The good status is verified. The blocking statuses are not_found, unresolved,
-title_mismatch, and author_mismatch. The warning statuses are year_mismatch,
-no_query, and network_error. A network failure is never treated as fabrication,
-and a report where nothing was verified does not pass the gate.
+title_mismatch, and author_mismatch. The warning status is year_mismatch. The
+incomplete statuses are no_query, network_error, and search_incomplete: they
+make the lookup and the gate fail. A network failure is never treated as
+fabrication, and a report where nothing was verified does not pass the gate.
 
 lookup also reads the manuscript next to the bibliography: the main LaTeX file
 (--main, else paper.tex, else the only file with \\documentclass) and the files
@@ -669,8 +670,8 @@ _PUBLISHED_YEAR_TOLERANCE = 1
 
 
 def _is_published_version_of(meta: dict, preprint: dict) -> bool:
-    """A journal, proceedings or chapter record, not an arXiv DOI, whose first author
-    and, when both list two or more, second author match the preprint's."""
+    """A journal, proceedings or chapter record, not an arXiv DOI, whose full author
+    list matches the preprint's in length and order."""
     if meta.get("type") not in _PUBLISHED_WORK_TYPES or not meta.get("doi"):
         return False
     if meta["doi"].lower().startswith("10.48550/"):
