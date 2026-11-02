@@ -29,7 +29,7 @@ def canonical(value):
 
 class ProblemResultHistoryTests(ResultPartsCase):
     fixture_fields = ('input_limit', 'closed', 'current', 'series_evidence', 'owned', 'session',
-                      'part_sizes', 'final_sizes', 'refusal_size', 'claude_respond')
+                      'part_sizes', 'final_sizes', 'refusal_size', 'claude_respond', 'abandoned')
 
     @classmethod
     def setUpClass(cls):
@@ -39,7 +39,8 @@ class ProblemResultHistoryTests(ResultPartsCase):
         # Record every fixture once per class with the existing observed-route helpers; tests copy what they write.
         cls.record_fixtures(directory.name)
         for fixture in cls.fixtures.values():
-            for turns in [row[0] for row in fixture['test'].get('closed', [])] + [fixture['test'].get('current', [])]:
+            for turns in ([row[0] for row in fixture['test'].get('closed', [])] +
+                          fixture['test'].get('abandoned', []) + [fixture['test'].get('current', [])]):
                 for assignment in turns:
                     packet = json.loads(ArtifactStore(fixture['root']).read(assignment['packet']))
                     if parts.find_stage(packet) != 'part':
@@ -54,7 +55,8 @@ class ProblemResultHistoryTests(ResultPartsCase):
             builder.save_fixture('bars')
         finally:
             builder.doCleanups()
-        for name in ('two-series', 'three-series', 'short', 'objections', 'owned', 'ledger', 'legacy'):
+        for name in ('two-series', 'three-series', 'short', 'objections', 'owned', 'ledger', 'legacy',
+                     'superseded', 'many-superseded'):
             builder = cls()
             try:
                 builder.setUp()
@@ -68,9 +70,14 @@ class ProblemResultHistoryTests(ResultPartsCase):
                         builder.case.expected['computations'] = [{'execution': {'id': 'owned-computation',
                             'outputs': [{'id': 'owned-output', 'artifact': builder.owned}]},
                             'assessment': {'reason': 'Checked this body.'}}]
-                    builder.include_objections = name == 'objections'
-                    counts = (2, 2, 2) if name in ('three-series', 'objections') else (2, 2)
-                    builder.record_series(counts, note_size=(1, 2000) if name == 'short' else 2000)
+                    builder.include_objections = name in ('objections', 'superseded')
+                    counts = ((2, 2, 2, 2, 2) if name == 'many-superseded' else
+                              (2, 2, 2) if name in ('three-series', 'objections', 'superseded') else (2, 2))
+                    abandoned = (1, 2) if name == 'many-superseded' else (1,) if name == 'superseded' else ()
+                    builder.record_series(counts, note_size=(1, 2000) if name == 'short' else 2000,
+                                          characters=120000 if name == 'many-superseded' else 50000,
+                                          limit=220000 if name == 'many-superseded' else 105000,
+                                          abandoned=abandoned)
                 builder.save_fixture(name)
             finally:
                 builder.doCleanups()
@@ -119,11 +126,12 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.fixture = fixture
         return self.current[-1] if hasattr(self, 'current') else None
 
-    def record_series(self, counts=(2, 2), characters=50000, note_size=2000, limit=105000, final_size=2000):
+    def record_series(self, counts=(2, 2), characters=50000, note_size=2000, limit=105000, final_size=2000,
+                      abandoned=()):
         """Use the existing authenticated route and part-output fixtures."""
         self.oversized(count=0, limit=limit)
         self.input_limit = limit
-        closed, current = [], []
+        closed, current, self.abandoned = [], [], []
         self.series_evidence = []
         for series, count in enumerate(counts, 1):
             self.case.expected['openness_searches'] = []
@@ -133,7 +141,8 @@ class ProblemResultHistoryTests(ResultPartsCase):
                 self.case.put('literature_search', search['id'], search)
                 self.case.expected['openness_searches'].append({'search': search, 'sources': []})
             self.series_evidence.append(copy.deepcopy(self.case.expected))
-            assignment = self.assign('series-%d' % series)
+            prior = self.abandoned[-1][-1]['id'] if series - 1 in abandoned else None
+            assignment = self.assign('series-%d' % series, prior)
             turns = []
             for turn in range(count):
                 self.assertEqual(self.packet(assignment)[KEY]['stage'], 'part')
@@ -146,7 +155,9 @@ class ProblemResultHistoryTests(ResultPartsCase):
                 turns.append(assignment)
                 if turn + 1 < count:
                     assignment = self.assign('series-%d-part-%d' % (series, turn + 2), assignment['id'])
-            if series == len(counts):
+            if series in abandoned:
+                self.abandoned.append(turns)
+            elif series == len(counts):
                 current = turns
             else:
                 final = self.assign('series-%d-final' % series, assignment['id'])
@@ -154,7 +165,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
                 output['value']['reason'] = 'r' * final_size
                 if getattr(self, 'include_objections', False):
                     reference = output['value']['evidence'][0]
-                    if series == 1:
+                    if not closed:
                         output['objections'] = [{'id': 'earlier-limitation', 'claim': 'The comparator needs a narrower hypothesis.',
                             'reason': 'This source leaves the hypothesis open.', 'evidence': [reference],
                             'resolution_condition': 'Check the hypothesis against the delivered source.'}]
@@ -231,6 +242,127 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.assertEqual((self.packet(final)[KEY]['stage'], self.packet(final)[KEY]['turn']), ('final', 3))
         self.assertEqual(len(self.replacements(final['history'])), 2)
         self.assertLessEqual(parts._measure(self.case.read_records()['review_route']['route'], self.request(final)), self.input_limit)
+
+    def test_superseded_parts_allow_the_third_series_final_to_fit(self):
+        from research_harness import review_problem_history as module
+        prior = self.use_fixture('superseded')
+        self.refusal_size = self.input_limit + 3500
+        inputs = self.refusal_inputs(prior)
+        reduced = self.bound(inputs)
+        # The old fallback can omit only series 2, which still leaves the final too large.
+        old_reduction = copy.deepcopy(reduced)
+        chain = module._walk_ancestors(inputs[0], prior['id'])
+        abandoned_ids = {row['id'] for row in self.abandoned[0]}
+        for index, row in enumerate(chain):
+            if row['id'] in abandoned_ids:
+                old_reduction[2 * index + 1] = inputs[6][2 * index + 1]
+        self.assert_code('review_input_too_large', lambda: self.plan(inputs, old_reduction))
+        planned, _, request = self.plan(inputs, reduced)
+        self.assertEqual((planned[KEY]['stage'], planned[KEY]['series_assignment_id']), ('final', 'series-3'))
+        replaced = {p['assignment_id']: p for p in self.replacements(reduced)}
+        self.assertEqual(set(replaced), abandoned_ids | {row['id'] for row in self.closed[0][0]})
+        for identifier in abandoned_ids:
+            self.assertIs(replaced[identifier]['superseded'], True)
+            self.assertEqual(replaced[identifier]['review_id'], self.closed[0][2]['id'])
+            self.assertEqual(replaced[identifier]['note'], module.SUPERSEDED_PART_OUTPUT_NOTE)
+        for index, row in enumerate(chain):
+            self.assertEqual(reduced[2 * index], inputs[6][2 * index])
+            if row['id'] not in replaced:
+                self.assertEqual(reduced[2 * index + 1], inputs[6][2 * index + 1])
+        self.assertLessEqual(parts._measure(inputs[3], request), self.input_limit)
+        with self.pad_frame(self.frame_size):
+            final = self.assign('superseded-final', prior['id'])
+        self.assertEqual(self.packet(final)[KEY]['stage'], 'final')
+        self.assertEqual(final['history'], reduced)
+        output = self.final_output()
+        output['value']['objection_findings'] = [{'id': 'earlier-limitation', 'status': 'continuing',
+            'reason': 'The changed evidence still leaves this hypothesis open.', 'evidence': output['value']['evidence']}]
+        self.assertEqual(self.coverage(self.record_final(final, output)), [])
+
+    def test_superseded_series_requires_a_later_eligible_final(self):
+        prior = self.use_fixture('superseded')
+        inputs = self.refusal_inputs(prior)
+        self.assertTrue(any(p.get('superseded') for p in self.replacements(self.bound(inputs))))
+        turns, final, review = self.closed[0]
+        for defect in ('no-final', 'missing-delivery', 'altered-delivery', 'failed-final', 'imported-final',
+                       'mismatched-output', 'unobserved-last', 'unobserved-first',
+                       'other-role', 'other-subject', 'other-reviewer', 'other-route', 'other-slot',
+                       'other-session', 'other-author'):
+            with self.subTest(defect=defect):
+                records, packet = copy.deepcopy(inputs[0]), copy.deepcopy(inputs[4])
+                if defect == 'no-final':
+                    del records['value_review'][review['id']]
+                elif defect in ('missing-delivery', 'altered-delivery'):
+                    if defect == 'missing-delivery':
+                        packet['historical_reviews'] = []
+                    else:
+                        packet['historical_reviews'][0]['limitations'] = []
+                elif defect in ('failed-final', 'imported-final'):
+                    attempt = records['review_attempt']['attempt-' + final['id']]
+                    attempt['status' if defect == 'failed-final' else 'origin'] = (
+                        'failed' if defect == 'failed-final' else 'imported')
+                elif defect == 'mismatched-output':
+                    records['value_review'][review['id']]['output_digest'] = '0' * 64
+                elif defect.startswith('unobserved'):
+                    turn = self.abandoned[0][-1 if defect == 'unobserved-last' else 0]
+                    records['review_attempt']['attempt-' + turn['id']]['origin'] = 'imported'
+                else:
+                    field = defect[len('other-'):] + ('_id' if defect not in ('other-role', 'other-subject') else '')
+                    records['review_assignment'][self.abandoned[0][-1]['id']][field] = (
+                        {'kind': 'problem', 'statement_id': 'elsewhere'} if field == 'subject' else 'elsewhere')
+                amended = [records, Evaluation(records, self.case.artifacts), *inputs[2:4], packet, *inputs[5:]]
+                try:
+                    reduced = self.bound(amended)
+                except ResearchError as error:
+                    self.assertEqual(error.code, 'review_input_too_large')
+                    reduced = amended[6]
+                replaced = {p['assignment_id'] for p in self.replacements(reduced)}
+                self.assertFalse(replaced & {row['id'] for row in self.abandoned[0]})
+
+    def test_superseded_parts_require_an_explicit_evidence_change(self):
+        from research_harness import review_problem_history as module
+        prior = self.use_fixture('superseded')
+        records, artifacts, value, _, packet, _, history, _ = self.inputs(prior)
+        chain = module._walk_ancestors(records, prior['id'])
+        mapped = module._map_history(records, artifacts, chain, history)
+        _, recorded = module._find_eligible_reviews(records, artifacts, value, packet, mapped, 'series-3')
+        expected = {row['id'] for row in self.abandoned[0]}
+        self.assertEqual(set(module._find_superseded_parts(
+            records, artifacts, value, packet, mapped, 'series-3', recorded)), expected)
+        # Isolate the boundary from authentication: keep the actual observations and eligible final intact.
+        changed = copy.deepcopy(mapped)
+        following = next(frozen for assignment, frozen, _, _ in changed
+                         if assignment['id'] == self.closed[0][0][0]['id'])
+        following['problem_evidence_digest'] = self.packet(self.abandoned[0][-1])['problem_evidence_digest']
+        self.assertEqual(module._find_superseded_parts(
+            records, artifacts, value, packet, changed, 'series-3', recorded), {})
+
+    def test_multiple_superseded_series_choose_first_eligible_final_in_ancestry_order(self):
+        prior = self.use_fixture('many-superseded')
+        self.assertEqual(self.replacements(prior['history']), [])
+        inputs = self.refusal_inputs(prior)
+        reduced = self.bound(inputs)
+        abandoned_ids = {row['id'] for turns in self.abandoned for row in turns}
+        superseded = [p for p in self.replacements(reduced) if p.get('superseded')]
+        self.assertEqual({p['assignment_id'] for p in superseded}, abandoned_ids)
+        self.assertEqual({p['review_id'] for p in superseded}, {self.closed[0][2]['id']})
+        shuffled = {kind: dict(reversed(list(rows.items()))) for kind, rows in reversed(list(inputs[0].items()))}
+        self.assertEqual(self.bound([shuffled, Evaluation(shuffled, self.case.artifacts), *inputs[2:]]), reduced)
+        amended = list(self.inputs(prior))
+        amended[4]['historical_reviews'] = [r for r in amended[4]['historical_reviews']
+                                           if r['id'] != self.closed[0][2]['id']]
+        later = self.bound(self.refusal_inputs(prior, amended))
+        self.assertEqual({p['review_id'] for p in self.replacements(later) if p.get('superseded')},
+                         {self.closed[1][2]['id']})
+
+    def test_superseded_history_does_not_change_fitting_requests(self):
+        prior = self.use_fixture('superseded')
+        for parent in (self.current[0], prior):
+            with self.subTest(parent=parent['id']):
+                inputs = self.inputs(parent)
+                expected = tuple(canonical(x) for x in self.plan(inputs))
+                self.assertIs(self.bound(inputs), inputs[6])
+                self.assertEqual(tuple(canonical(x) for x in self.plan(inputs)), expected)
 
     def plan(self, inputs, history=None):
         planned = parts.prepare_packet(*inputs[:6], inputs[6] if history is None else history)
@@ -337,13 +469,11 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.assertTrue(self.replacements(valid))
         old_part, old_final, old_review = self.closed[0]
         second_ids = {row['id'] for row in self.closed[1][0]}
-        for defect in ('abandoned', 'unrecorded', 'refused', 'imported', 'other-slot', 'other-subject',
+        for defect in ('refused', 'imported', 'other-slot', 'other-subject',
                        'other-reviewer', 'other-author', 'other-route', 'other-session', 'review-output-mismatch'):
             with self.subTest(defect=defect):
                 changed = copy.deepcopy(inputs[0])
-                if defect in ('abandoned', 'unrecorded'):
-                    del changed['value_review'][old_review['id']]
-                elif defect == 'refused':
+                if defect == 'refused':
                     attempt = changed['review_attempt']['attempt-' + old_final['id']]
                     attempt['status'] = 'failed'
                 elif defect == 'imported':
@@ -697,6 +827,100 @@ class ProblemResultHistoryTests(ResultPartsCase):
         original_bytes = self.case.artifacts.read(old_attempt['output'])
         self.assertTrue(any(file.content == original_bytes for file in files.values()))
 
+    def test_second_fallback_inherits_superseded_placeholders_and_rejects_forgery(self):
+        from research_harness import review_problem_history as module
+        prior = self.use_fixture('superseded')
+        old = self.closed[0][1]
+        old_request = canonical(self.request(old))
+        records = self.case.read_records()
+        attempts = copy.deepcopy(records['review_attempt'])
+        invocations = copy.deepcopy(records['review_invocation'])
+        self.refusal_inputs(prior)
+        with self.pad_frame(self.frame_size):
+            final = self.assign('first-superseded-fallback', prior['id'])
+        inherited = {p['assignment_id']: message['content'] for message in final['history'][1::2]
+                     for p in [json.loads(message['content'])] if p.get('delivery') == module.DELIVERY}
+        self.assertTrue(any(json.loads(content).get('superseded') for content in inherited.values()))
+        request = canonical(self.request(final))
+        output = self.final_output()
+        output['value']['objection_findings'] = [{'id': 'earlier-limitation', 'status': 'continuing',
+            'reason': 'The changed evidence still leaves this hypothesis open.', 'evidence': output['value']['evidence']}]
+        self.record_final(final, output)
+        # Returning to an older evidence digest still starts a distinct current series.
+        self.case.expected = copy.deepcopy(self.series_evidence[0])
+        child = self.assign('after-superseded-fallback')
+        self.assertEqual(self.packet(child)['problem_evidence_digest'],
+                         self.packet(self.abandoned[0][0])['problem_evidence_digest'])
+        while True:
+            self.invoke(child)
+            if not any(self.packet(child)[KEY]['remaining'].values()):
+                break
+            child = self.assign('after-superseded-part-2', child['id'])
+        inputs = self.refusal_inputs(child)
+        with self.pad_frame(self.frame_size):
+            again = self.assign('second-superseded-fallback', child['id'])
+        repeated = {p['assignment_id']: message['content'] for message in again['history'][1::2]
+                    for p in [json.loads(message['content'])] if p.get('delivery') == module.DELIVERY}
+        self.assertGreater(len(repeated), len(inherited))
+        for identifier, content in inherited.items():
+            self.assertEqual(repeated[identifier], content)
+        self.assertEqual(canonical(self.request(old)), old_request)
+        self.assertEqual(canonical(self.request(final)), request)
+        fresh = self.case.read_records()
+        for kind, original in (('review_attempt', attempts), ('review_invocation', invocations)):
+            for identifier, row in original.items():
+                self.assertEqual(fresh[kind][identifier], row)
+        chain = module._walk_ancestors(inputs[0], child['id'])
+        self.assertIsNotNone(module._map_history(inputs[0], inputs[1], chain, inputs[6]))
+        for defect in ('unmarked-cross-series', 'marked-closed-series', 'bar-review', 'unobserved'):
+            with self.subTest(defect=defect):
+                history, changed = copy.deepcopy(inputs[6]), copy.deepcopy(inputs[0])
+                target = self.closed[0][0][0] if defect == 'marked-closed-series' else self.abandoned[0][0]
+                position = 2 * next(i for i, row in enumerate(chain) if row['id'] == target['id']) + 1
+                placeholder = json.loads(history[position]['content'])
+                if defect == 'unmarked-cross-series':
+                    placeholder.pop('superseded')
+                elif defect == 'marked-closed-series':
+                    placeholder.update(superseded=True, review_id='review-first-superseded-fallback')
+                elif defect == 'unobserved':
+                    changed['review_attempt']['attempt-' + self.abandoned[0][-1]['id']]['origin'] = 'imported'
+                else:
+                    placeholder['review_id'] = 'review-bar-first'
+                history[position]['content'] = json.dumps(placeholder, sort_keys=True)
+                self.assertIsNone(module._map_history(changed, Evaluation(changed, self.case.artifacts), chain, history))
+
+    def test_unrecorded_final_is_retained_when_its_parts_are_superseded(self):
+        prior = self.use_fixture('three-series')
+        inputs = self.refusal_inputs(prior)
+        for index in (0, 1):
+            with self.subTest(only_earlier_final=index == 1):
+                records = copy.deepcopy(inputs[0])
+                turns, final, review = self.closed[index]
+                del records['value_review'][review['id']]
+                amended = [records, Evaluation(records, self.case.artifacts), *inputs[2:]]
+                reduced = self.bound(amended)
+                replaced = {p['assignment_id']: p for p in self.replacements(reduced)}
+                for turn in turns:
+                    if index == 0:
+                        self.assertIs(replaced[turn['id']]['superseded'], True)
+                    else:
+                        self.assertNotIn(turn['id'], replaced)
+                self.assertNotIn(final['id'], replaced)
+
+    def test_observed_prefix_without_a_later_final_remains_verbatim(self):
+        self.use_fixture('superseded')
+        prior = self.abandoned[0][-1]
+        inputs = self.inputs(prior)
+        original = copy.deepcopy(inputs[6])
+        self.assertIs(self.bound(inputs), inputs[6])
+        self.assertEqual(inputs[6], original)
+        continued = list(inputs)
+        continued[4] = copy.deepcopy(inputs[4])
+        continued[4]['problem_evidence'] = copy.deepcopy(self.series_evidence[0])
+        continued[4]['problem_evidence_digest'] = self.packet(prior)['problem_evidence_digest']
+        self.assertEqual(self.plan(continued)[0][KEY]['series_assignment_id'], 'series-1')
+        self.assertIs(self.bound(continued), continued[6])
+
     def test_compaction_preserves_coverage_and_refusal_rules(self):
         prior = self.use_fixture('owned')
         owned = self.owned
@@ -797,7 +1021,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
 
 
     def test_missing_required_body_can_trigger_fallback_below_limit(self):
-        prior = self.use_fixture('two-series')
+        prior = self.use_fixture('superseded')
         inputs = list(self.inputs(prior))
         body = self.case.artifacts.put(b'Required final objection body.' * 350, 'text/plain')
         inputs[1] = Evaluation(inputs[0], self.case.artifacts)
@@ -814,6 +1038,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         refusal = self.assert_code('review_input_too_large', lambda: parts.prepare_packet(*inputs[:7]))
         self.assertLessEqual(refusal.details['input_characters'], self.input_limit)
         reduced = self.bound(inputs)
+        self.assertEqual(sum(p.get('superseded', False) for p in self.replacements(reduced)), 2)
         planned, _, request = self.plan(inputs, reduced)
         self.assertEqual(parts.find_stage(planned), 'final')
         self.assertTrue(has_attachment(inputs[1], review_excerpts.read_sent_packet(request), body))
