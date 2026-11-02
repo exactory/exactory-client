@@ -457,105 +457,108 @@ def _review_status(records, artifacts):
 
 
 def status_report(store, *, counters=False):
+    from .review_state_evaluation import runtime_scope
     started = time.monotonic()
     snapshot = store.snapshot()
-    records = snapshot["records"]
-    evaluation = Evaluation(records, ArtifactStore(store.root))
-    # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
-    advisories = find_view_advisories(store, snapshot["revision"])
-    if "problem" in records.get("workspace", {}):
-        report = gate_state(records, evaluation, "post")
-        if records.get("review_epoch"):
-            report = dict(report, obligations=order_obligations(report["obligations"]))
-        slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
-        # A stale slate decides nothing; its stale obligation leads the report instead.
-        if current_slate is not None and not current_slate["selected"]:
-            upcoming = {"code": "problem_no_post", "reason": current_slate["reason"],
-                        "explanation": "The latest slate selects no candidate; a new slate that selects one reopens the post path."}
-        elif report["obligations"]:
-            upcoming = report["obligations"][0]
-        else:
-            upcoming = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
-        return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
-                    problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
-                    limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
-                    # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
-                    literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
-                    candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
-                    next=upcoming, review=_review_status(records, evaluation), advisories=advisories)
-    config = records.get("configuration", {}).get("research")
-    profile = config["profile"] if config else "research"
-    study = records.get("workspace", {}).get("study")
-    action = "verification" if profile == "verification" else "readiness"
-    from .publication_scope import has_publication_scope
-    scoped_report = gate_state(records, evaluation, "manuscript-readiness") if has_publication_scope(records) else None
-    report = scoped_report if scoped_report is not None and action == "readiness" else gate_state(records, evaluation, action, profile=profile)
-    round_report = None
-    if config is not None and profile == "research":
-        from .rounds import round_state, round_summary
-        round_report = round_state(records, evaluation)
-        if study and study["stage"] == "evaluate":
-            # At evaluate the study is led first through the manuscript measurement, then to the round decision.
-            from .publication import publication_state
-            merged = report["obligations"] + publication_state(records, evaluation, "publication")["obligations"] + round_report["obligations"]
-            obligations = order_obligations({digest(o): o for o in merged}.values())
-            report = dict(report, ready=not obligations, obligations=obligations, counts=dict(report["counts"], obligations=len(obligations)))
-    # Before later gates are applicable, expose the actual next unread cohort
-    # abstract instead of asking for a root or completed development too early.
-    preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
-    from .claim_dependencies import uses_claim_dependencies
-    managed = uses_claim_dependencies(records)
-    if managed:
-        preparation = dict(preparation, advisory=True)
-        milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
-        if milestone is not None:
-            report = gate_state(records, evaluation, milestone, profile=profile)
-    draft_pending = find_draft_obligations(records, store.root)
-    if draft_pending:
-        obligations = report["obligations"] + draft_pending
-        report = dict(report, ready=False, obligations=obligations,
-                      counts=dict(report["counts"], obligations=len(obligations)))
-    # The cohort inventory names the next unread abstract; every other stage
-    # takes the highest-priority current obligation in preparation order.
-    upcoming = preparation.get("next") if not managed and study and study["stage"] == "cohort" else None
-    obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
-    current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
-    tool_status = {}
-    tool_status["bundle_drift"] = find_bundle_drift(records, evaluation) if profile == "research" else None
-    diagnostics = {"evaluation": dict(evaluation.counters,
-                                     elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
-    if records.get("probe_intent") or records.get("probe"):
-        tool_status["probes"] = summarize_probes(records)
-    provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
-    if provisional:
-        tool_status["provisional_searches"] = [{"id": search["id"], "question": search["question"], "profile": search["profile"]}
-                                                for search in provisional]
-    scope_status = {}
-    if scoped_report is not None:
-        scope_status = {key: scoped_report[key] for key in ("manuscript_ready", "manuscript_obligations", "objective_complete",
-                                                           "objective_obligations", "scientific_target_digest", "remaining_obligations")}
-        scope_status["scope_contract_id"] = scoped_report["selected_contract_id"]
-        scope_status["historical_publications"] = list_publication_receipts(records)
-        scope_status["historical_submissions"] = list(records.get("submission_receipt", {}).values())
-        if scoped_report["contract"] is not None:
-            flags = ["--managed-only", "--scope-contract-id", scoped_report["contract"]["id"],
-                     "--scope-target-digest", scoped_report["scientific_target_digest"]]
-            scope_status["publication_commands"] = {"deposit": ["exactory-draft", "deposit"] + flags,
-                                                    "submit": ["exactory", "submit"] + flags}
-    return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
-                source_deferrals=assess_deferrals(records, evaluation, profile),
-                deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
-                study=study, preparation=preparation, resources=resources.account_report(records, profile),
-                limits=limits_report(records), **tool_status, **diagnostics, **scope_status,
-                round=round_summary(round_report) if round_report else None,
-                grand_challenge=current_challenge["payload"] if current_challenge else None,
-                next=draft_pending[0] if draft_pending else (
-                    upcoming or (order_obligations(obligations)[0] if obligations else None)),
-                pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
-                remote_intents=list(records.get("remote_intent", {}).values()),
-                remote_observations=list(records.get("remote_observation", {}).values()),
-                historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=_review_status(records, evaluation),
-                advisories=advisories)
+    evaluation = Evaluation(snapshot['records'], ArtifactStore(store.root))
+    with runtime_scope(snapshot['records'], evaluation):
+        records = snapshot["records"]
+        # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
+        advisories = find_view_advisories(store, snapshot["revision"])
+        if "problem" in records.get("workspace", {}):
+            report = gate_state(records, evaluation, "post")
+            if records.get("review_epoch"):
+                report = dict(report, obligations=order_obligations(report["obligations"]))
+            slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
+            # A stale slate decides nothing; its stale obligation leads the report instead.
+            if current_slate is not None and not current_slate["selected"]:
+                upcoming = {"code": "problem_no_post", "reason": current_slate["reason"],
+                            "explanation": "The latest slate selects no candidate; a new slate that selects one reopens the post path."}
+            elif report["obligations"]:
+                upcoming = report["obligations"][0]
+            else:
+                upcoming = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
+            return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
+                        problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
+                        limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
+                        # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
+                        literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
+                        candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
+                        next=upcoming, review=_review_status(records, evaluation), advisories=advisories)
+        config = records.get("configuration", {}).get("research")
+        profile = config["profile"] if config else "research"
+        study = records.get("workspace", {}).get("study")
+        action = "verification" if profile == "verification" else "readiness"
+        from .publication_scope import has_publication_scope
+        scoped_report = gate_state(records, evaluation, "manuscript-readiness") if has_publication_scope(records) else None
+        report = scoped_report if scoped_report is not None and action == "readiness" else gate_state(records, evaluation, action, profile=profile)
+        round_report = None
+        if config is not None and profile == "research":
+            from .rounds import round_state, round_summary
+            round_report = round_state(records, evaluation)
+            if study and study["stage"] == "evaluate":
+                # At evaluate the study is led first through the manuscript measurement, then to the round decision.
+                from .publication import publication_state
+                merged = report["obligations"] + publication_state(records, evaluation, "publication")["obligations"] + round_report["obligations"]
+                obligations = order_obligations({digest(o): o for o in merged}.values())
+                report = dict(report, ready=not obligations, obligations=obligations, counts=dict(report["counts"], obligations=len(obligations)))
+        # Before later gates are applicable, expose the actual next unread cohort
+        # abstract instead of asking for a root or completed development too early.
+        preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
+        from .claim_dependencies import uses_claim_dependencies
+        managed = uses_claim_dependencies(records)
+        if managed:
+            preparation = dict(preparation, advisory=True)
+            milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
+            if milestone is not None:
+                report = gate_state(records, evaluation, milestone, profile=profile)
+        draft_pending = find_draft_obligations(records, store.root)
+        if draft_pending:
+            obligations = report["obligations"] + draft_pending
+            report = dict(report, ready=False, obligations=obligations,
+                          counts=dict(report["counts"], obligations=len(obligations)))
+        # The cohort inventory names the next unread abstract; every other stage
+        # takes the highest-priority current obligation in preparation order.
+        upcoming = preparation.get("next") if not managed and study and study["stage"] == "cohort" else None
+        obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
+        current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
+        tool_status = {}
+        tool_status["bundle_drift"] = find_bundle_drift(records, evaluation) if profile == "research" else None
+        diagnostics = {"evaluation": dict(evaluation.counters,
+                                         elapsed_seconds=round(time.monotonic() - started, 3),
+                                         retention=evaluation.retention_report())} if counters else {}
+        if records.get("probe_intent") or records.get("probe"):
+            tool_status["probes"] = summarize_probes(records)
+        provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
+        if provisional:
+            tool_status["provisional_searches"] = [{"id": search["id"], "question": search["question"], "profile": search["profile"]}
+                                                    for search in provisional]
+        scope_status = {}
+        if scoped_report is not None:
+            scope_status = {key: scoped_report[key] for key in ("manuscript_ready", "manuscript_obligations", "objective_complete",
+                                                               "objective_obligations", "scientific_target_digest", "remaining_obligations")}
+            scope_status["scope_contract_id"] = scoped_report["selected_contract_id"]
+            scope_status["historical_publications"] = list_publication_receipts(records)
+            scope_status["historical_submissions"] = list(records.get("submission_receipt", {}).values())
+            if scoped_report["contract"] is not None:
+                flags = ["--managed-only", "--scope-contract-id", scoped_report["contract"]["id"],
+                         "--scope-target-digest", scoped_report["scientific_target_digest"]]
+                scope_status["publication_commands"] = {"deposit": ["exactory-draft", "deposit"] + flags,
+                                                        "submit": ["exactory", "submit"] + flags}
+        return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
+                    source_deferrals=assess_deferrals(records, evaluation, profile),
+                    deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
+                    study=study, preparation=preparation, resources=resources.account_report(records, profile),
+                    limits=limits_report(records), **tool_status, **diagnostics, **scope_status,
+                    round=round_summary(round_report) if round_report else None,
+                    grand_challenge=current_challenge["payload"] if current_challenge else None,
+                    next=draft_pending[0] if draft_pending else (
+                        upcoming or (order_obligations(obligations)[0] if obligations else None)),
+                    pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
+                    remote_intents=list(records.get("remote_intent", {}).values()),
+                    remote_observations=list(records.get("remote_observation", {}).values()),
+                    historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=_review_status(records, evaluation),
+                    advisories=advisories)
 
 
 def load_candidates(path):
@@ -643,16 +646,18 @@ def run(args):
     if args.command in ("research-decision-assess", "strategy-packet", "review-route-assess"):
         snapshot = store.snapshot()
         artifacts = Evaluation(snapshot["records"], ArtifactStore(root))
-        if args.command == "research-decision-assess":
-            return dict(research_decisions.decision_state(snapshot["records"], artifacts, args.boundary,
-                                                         decision_id=args.decision_id), revision=snapshot["revision"])
-        if args.command == "review-route-assess":
-            return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id), revision=snapshot["revision"])
-        context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
-        if not isinstance(context, dict):
-            raise ResearchError("invalid_input", "Reviewer context must be a JSON object")
-        return review_protocol.build_packet(snapshot["records"], artifacts, args.dossier_id, args.role,
-                                            args.reviewer_id, **context)
+        from .review_state_evaluation import runtime_scope
+        with runtime_scope(snapshot["records"], artifacts):
+            if args.command == "research-decision-assess":
+                return dict(research_decisions.decision_state(snapshot["records"], artifacts, args.boundary,
+                                                             decision_id=args.decision_id), revision=snapshot["revision"])
+            if args.command == "review-route-assess":
+                return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id), revision=snapshot["revision"])
+            context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
+            if not isinstance(context, dict):
+                raise ResearchError("invalid_input", "Reviewer context must be a JSON object")
+            return review_protocol.build_packet(snapshot["records"], artifacts, args.dossier_id, args.role,
+                                                args.reviewer_id, **context)
     if args.command in ("status", "next"):
         report = status_report(store, counters=args.summary or args.counters)
         if args.summary:

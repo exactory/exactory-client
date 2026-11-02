@@ -1,6 +1,8 @@
 """Reuse complete review states only for one records view and current runtimes."""
 
 import copy
+from contextlib import contextmanager
+import weakref
 
 from .errors import ResearchError
 from .evaluation import Evaluation
@@ -23,6 +25,42 @@ def _runtime_fingerprint(records, artifacts):
         # This observation only decides whether reuse is possible. The native
         # computation still checks its actual dependencies and keeps its errors.
         return None
+
+
+@contextmanager
+def runtime_scope(records, artifacts):
+    """Own runtime observations for one read or preparation, ending before I/O."""
+    evaluation = Evaluation.of(records, artifacts)
+    root = evaluation.find_root()
+    if root._runtime_scope[0] is not None:
+        yield evaluation
+        return
+    before = _runtime_fingerprint(evaluation.records, evaluation)
+    scope = {'fingerprint': before, 'arenas': {id(root._optional): (root._optional, root._retained_bytes)}}
+    root._runtime_scope[0] = scope
+    previous = getattr(records, '_review_evaluation', None)
+    # Preparation mappings carry ownership to callbacks that still accept the
+    # raw store interface (including correction preparation). Plain dict users
+    # pass the yielded Evaluation explicitly.
+    attached = hasattr(records, '__dict__')
+    if attached:
+        records._review_evaluation = weakref.ref(evaluation)
+    try:
+        yield evaluation
+        if before is not None and _runtime_fingerprint(evaluation.records, evaluation) != before:
+            raise ResearchError('review_runtime_changed', 'The reviewer runtime changed during this operation; retry against the current runtime.')
+    except BaseException:
+        for optional, retained_bytes in scope['arenas'].values():
+            optional.clear()
+            retained_bytes[0] = 0
+        raise
+    finally:
+        root._runtime_scope[0] = None
+        if attached:
+            if previous is None:
+                del records._review_evaluation
+            else:
+                records._review_evaluation = previous
 
 
 def _fingerprint_selection(records, identifier, kind):
@@ -62,13 +100,14 @@ def _fingerprint_selection(records, identifier, kind):
 def evaluate_state(records, artifacts, kind, identifier, compute):
     """Run native checks or return an isolated copy of their exact prior result."""
     evaluation = Evaluation.of(records, artifacts)
-    scope = evaluation.once(('review_state_evaluation',), lambda: {'values': {}, 'active': set()})
+    active = evaluation._active_states
+    scope = evaluation.find_root()._runtime_scope[0]
     identity = (kind, identifier)
-    if identity in scope['active']:
+    if identity in active:
         raise ResearchError('review_context_repair_mismatch', 'Reviewer lineage must be acyclic')
-    scope['active'].add(identity)
+    active.add(identity)
     try:
-        before = _runtime_fingerprint(evaluation.records, evaluation)
+        before = scope['fingerprint'] if scope is not None else _runtime_fingerprint(evaluation.records, evaluation)
         key = (kind, identifier, before)
         if kind in ('assignment', 'adjudication'):
             assignment_id = (evaluation.records.get('review_adjudication', {}).get(identifier, {}).get('assignment_id', identifier)
@@ -78,11 +117,21 @@ def evaluate_state(records, artifacts, kind, identifier, compute):
                 # Mutable selected roots invalidate staged states within one
                 # view; native states retain their original cache key.
                 key += (_fingerprint_selection(evaluation.records, identifier, kind),)
-        if before is not None and key in scope['values']:
-            return copy.deepcopy(scope['values'][key])
-        result = compute(evaluation.records, evaluation, identifier)
-        if before is not None and _runtime_fingerprint(evaluation.records, evaluation) == before:
-            scope['values'][key] = copy.deepcopy(result)
+        def calculate():
+            result = compute(evaluation.records, evaluation, identifier)
+            if scope is None and before is not None and _runtime_fingerprint(evaluation.records, evaluation) != before:
+                # Unscoped calls retain their historical behavior: return the
+                # native result without retaining it after observed drift.
+                changed.append(True)
+            return copy.deepcopy(result)
+        changed = []
+        if before is None:
+            return copy.deepcopy(calculate())
+        result = evaluation.once(('review_state', key), calculate)
+        if changed:
+            removed = evaluation._optional.pop(('memo', evaluation._namespace, ('review_state', key)), None)
+            if removed is not None:
+                evaluation._retained_bytes[0] -= removed[1]
         return copy.deepcopy(result)
     finally:
-        scope['active'].remove(identity)
+        active.remove(identity)

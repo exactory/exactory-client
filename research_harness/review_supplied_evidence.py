@@ -27,33 +27,54 @@ def find_scientific_predecessor(assignment):
     return context.get('prior_assignment_id') or context.get('staged_upgrade', {}).get('assignment_id')
 
 
-def lineage_packets(records, artifacts, assignment_ids):
-    pending, seen, result = list(assignment_ids), set(), []
+def visit_lineage(records, artifacts, assignment_ids, visit, *, validation_key=None):
+    """Walk dependencies with a separate cycle guard and optional completed-node reuse."""
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    records = evaluation.records
+    active, seen = set(), set()
+    pending = [(identifier, False) for identifier in assignment_ids]
     while pending:
-        identifier = pending.pop()
+        identifier, exiting = pending.pop()
+        key = ('lineage_checked', evaluation._namespace, validation_key, identifier)
+        if exiting:
+            active.remove(identifier)
+            seen.add(identifier)
+            if validation_key is not None:
+                evaluation._retain_once(key, lambda: True)
+            continue
+        if identifier in active:
+            raise ResearchError('review_context_repair_mismatch', 'Reviewer lineage must be acyclic')
         if identifier in seen:
             continue
-        seen.add(identifier)
+        if validation_key is not None and evaluation._retain_once(key, None):
+            seen.add(identifier)
+            continue
         assignment = records.get('review_assignment', {}).get(identifier)
         if assignment is None:
             raise ResearchError('review_record_missing', 'The exact evidence-supplying assignment is missing')
+        active.add(identifier)
+        pending.append((identifier, True))
         if assignment.get('staged_review') is not None:
             from .direction_reviews import collect_selected_task_graph
-            graph = collect_selected_task_graph(records, artifacts, identifier)
-            result.extend(packet for _, packet in graph['packets'])
+            graph = collect_selected_task_graph(records, evaluation, identifier)
+            for _, packet in graph['packets']:
+                visit(packet)
             if graph.get('frame_packet') is not None:
-                result.append(graph['frame_packet'])
-            # Replacement reviewers must read independently; predecessor packets
-            # retained as scientific history do not supply fresh reading credit.
+                visit(graph['frame_packet'])
             continue
         from .review_protocol import source_delivery_packet
-        packet = source_delivery_packet(records, artifacts, assignment)
-        result.append(packet)
+        visit(source_delivery_packet(records, evaluation, assignment))
         parent = assignment.get('history_assignment_id') or find_scientific_predecessor(assignment)
         if parent is None and assignment['role'] == 'slate' and assignment.get('session_id') != identifier:
             parent = assignment.get('session_id')
         if parent is not None:
-            pending.append(parent)
+            pending.append((parent, False))
+
+
+def lineage_packets(records, artifacts, assignment_ids):
+    result = []
+    visit_lineage(records, artifacts, assignment_ids, result.append)
     return result
 
 

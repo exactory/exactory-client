@@ -507,6 +507,15 @@ def _put_json(artifacts, value):
     return artifacts.put(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode(), 'application/json')
 
 
+def _prepare_review_mutation(store, operation, payload, prepare, **kwargs):
+    """Give each authenticated preparation fresh evaluation and runtime ownership."""
+    from .review_state_evaluation import runtime_scope
+    def prepare_scoped(records, value):
+        with runtime_scope(records, store.build_artifact_store()):
+            return prepare(records, value)
+    return prepared_mutation(store, operation, payload, prepare_scoped, **kwargs)
+
+
 def _read_json(artifacts, reference):
     return json.loads(artifacts.read(reference))
 
@@ -1411,17 +1420,11 @@ def build_assignment_request(records, artifacts, assignment):
     route = records['review_route'][assignment['route_id']]
 
     def build_request():
-        def index_attempts_by_assignment():
-            attempts_by_assignment = {}
-            for attempt in records.get('review_attempt', {}).values():
-                attempts_by_assignment.setdefault(attempt['assignment_id'], []).append(attempt)
-            return attempts_by_assignment
-
         packet = _read_json(evaluation, assignment['packet'])
         if assignment.get('staged_review'):
             from .review_staged_protocol import build_assigned_request
             return build_assigned_request(evaluation, route, assignment, packet)
-        attempts_by_assignment = evaluation.once(('attempts_by_assignment',), index_attempts_by_assignment)
+        attempts_by_assignment = evaluation.index_records('review_attempt', 'assignment_id')
         recorded = [_read_json(evaluation, attempt['request'])
                     for attempt in attempts_by_assignment.get(assignment['id'], ())
                     if attempt['status'] == 'completed' and attempt.get('request')]
@@ -1826,19 +1829,19 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
             from .review_staged_protocol import invoke_task
             return invoke_task(store, payload, expected_revision=expected_revision, request_id=request_id)
     if snapshot.has_request(request_id):
-        return prepared_mutation(store, operation, payload, lambda r, v: None,
+        return _prepare_review_mutation(store, operation, payload, lambda r, v: None,
                                  expected_revision=expected_revision, request_id=request_id, _snapshot=snapshot)
     beginning = request_id + ':start'
     if snapshot.has_request(beginning):
         # Validate request replay/conflict through Store, then retain the unknown result.
-        prepared_mutation(store, operation + '_start', payload, lambda r, v: None,
+        _prepare_review_mutation(store, operation + '_start', payload, lambda r, v: None,
                           expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot)
         raise ResearchError('review_invocation_pending', 'The prior invocation is pending; reconcile it before any explicit retry')
     from .review_task_execution import start_call, release_call
     from .review_worker import own_call, _own_transport_processes, _guard_call_termination
     from contextlib import nullcontext
     with own_call(store, operation, text(payload.get('id'), 'Invocation ID')) as authority:
-        invocation = prepared_mutation(store, operation + '_start', payload, start,
+        invocation = _prepare_review_mutation(store, operation + '_start', payload, start,
                                        expected_revision=expected_revision, request_id=beginning,
                                        _snapshot=snapshot,
                                        validate_commit=lambda tx, result: start_call(tx, operation, result, authority, expected_revision + 1))['result']
@@ -1853,15 +1856,17 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
                 revision = store.revision
                 def prepare(current, value):
                     return finish(current, value, invocation, observation, revision + 1)
-                return prepared_mutation(store, operation, payload, prepare,
+                return _prepare_review_mutation(store, operation, payload, prepare,
                                          expected_revision=revision, request_id=request_id,
                                          validate_commit=lambda tx, result: release_call(tx, authority.reservation_id, termination, revision + 1))
         return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS)
 
 
 def probe_route(store, payload, *, expected_revision, request_id, credential=None):
-    artifacts = store.build_artifact_store()
+    store_artifacts = store.build_artifact_store()
     def start(records, value):
+        from .evaluation import Evaluation
+        artifacts = Evaluation.of(records, store_artifacts)
         fields(value, ('id', 'route_id'))
         route = _get(records, 'review_route', value['route_id'])
         _require_route_runtime(route)
@@ -1908,7 +1913,9 @@ def _route_state(records, artifacts, route_id):
     route = records.get('review_route', {}).get(route_id)
     status, proof = 'unverified', None
     if route:
-        for saved in sorted(records.get('review_route_probe', {}).values(), key=lambda p: p['recorded_revision']):
+        from .evaluation import Evaluation
+        evaluation = Evaluation.of(records, artifacts)
+        for saved in evaluation.index_records('review_route_probe', 'route_id', order='recorded_revision').get(route_id, ()):
             if saved['route_id'] != route_id or saved.get('route_digest') != digest(route) or saved.get('runtime') != route['runtime']:
                 continue
             status, proof = 'unverified', None
@@ -2530,7 +2537,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
         return changes + [immutable_record(records, 'review_assignment', value['id'], record)], record
-    result = prepared_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id)
+    result = _prepare_review_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id)
     if 'scheduler' in payload:
         from .review_task_execution import record_capacity
         capacity = record_capacity(store, payload['scheduler'], request_id=request_id + ':capacity')
@@ -2560,9 +2567,16 @@ def record_attempt(store, payload, *, expected_revision, request_id):
 
 
 def validate_assignment_inventories(records, artifacts, assignment_id):
-    for packet in supplied_evidence.lineage_packets(records, artifacts, [assignment_id]):
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    records = evaluation.records
+    def validate(packet):
         if 'source_inventory' in packet:
-            bar_sources.validate_inventory(artifacts, packet['source_inventory'])
+            inventory = packet['source_inventory']
+            evaluation.once(('inventory_validation', digest(inventory)),
+                            lambda: bool(bar_sources.validate_inventory(evaluation, inventory)) or True)
+    supplied_evidence.visit_lineage(records, evaluation, [assignment_id], validate,
+                                   validation_key='assignment_inventories')
 
 
 def _context_observed(artifacts, attempt):
@@ -2576,8 +2590,10 @@ def _context_observed(artifacts, attempt):
 
 
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None):
-    artifacts = store.build_artifact_store()
+    store_artifacts = store.build_artifact_store()
     def start(records, value):
+        from .evaluation import Evaluation
+        artifacts = Evaluation.of(records, store_artifacts)
         fields(value, ('id', 'assignment_id'))
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         if assignment['route_id'] in retired_routes(records):
@@ -2585,8 +2601,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         if find_replacement(records, assignment) is not None:
             raise ResearchError('review_assignment_replaced', 'This turn ended without output and a later '
                                 'continuation replaced it; run the replacement')
-        completed = [a for a in records.get('review_attempt', {}).values()
-                     if a['assignment_id'] == value['assignment_id'] and a['status'] == 'completed'
+        completed = [a for a in artifacts.index_records('review_attempt', 'assignment_id').get(value['assignment_id'], ())
+                     if a['status'] == 'completed'
                      and _context_observed(artifacts, a)]
         if completed:
             from .review_refusal import refused_attempts
@@ -2727,7 +2743,9 @@ def _read_raw_observation(artifacts, attempt_id, attempt, captured=None):
 
 def _selected_attempt(records, artifacts, assignment_id):
     """Keep the native fixed binding and its exact observed-refusal diagnostics."""
-    attempts = sorted((a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == assignment_id),
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    attempts = sorted(evaluation.index_records('review_attempt', 'assignment_id').get(assignment_id, ()),
                       key=lambda a: a['recorded_revision'])
     completed = [a for a in attempts if a['status'] == 'completed']
     assignment = records.get('review_assignment', {}).get(assignment_id, {})
@@ -2989,7 +3007,7 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
             changes.append(('review_slot_head', epoch['slot_id'], transition_outcome(head, 'complete',
                 outcome=dict(kind='review_adjudication', id=record['id'], output_digest=digest(output)))))
         return changes, record
-    return prepared_mutation(store, 'review.adjudication', payload, prepare, expected_revision=expected_revision, request_id=request_id)
+    return _prepare_review_mutation(store, 'review.adjudication', payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
 def adjudication_state(records, artifacts, adjudication_id):
