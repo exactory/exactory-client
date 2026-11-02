@@ -450,7 +450,7 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertTrue(has_attachment(artifacts, sent, bodies[2]))
         route = records['review_route']['route']
         self.assertLessEqual(parts._measure(route, request), transport.local_input_limit(route))
-        self.assertTrue(parts._fits(artifacts, route, final['prompt'], self.packet(final), final['history'],
+        self.assertTrue(parts._fits(artifacts, route, final['prompt'], self.packet(final), read_history(self.case.artifacts, final),
                                     bodies[2:])[0])
 
     def test_invalid_body_only_part_response_gives_no_objection_body_credit(self):
@@ -475,7 +475,7 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertEqual(parts.find_credited_objection_bodies(full, parts._artifact_turns(observed)), set())
         value = {'id': 'retry-body-part', 'role': 'result', 'context': {'prior_assignment_id': body_part['id']}}
         planned = parts.prepare_packet(records, artifacts, value, records['review_route']['route'], full,
-                                       body_part['prompt'], body_part['history'])
+                                       body_part['prompt'], read_history(self.case.artifacts, body_part))
         self.assertEqual(planned[KEY]['stage'], 'part')
         self.assertEqual(planned[KEY]['turn'], packet[KEY]['turn'])
         self.assertEqual(planned[KEY]['objection_bodies'], bodies)
@@ -611,7 +611,11 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         observations = parts.observe_series(self.case.read_records(), self.case.artifacts, last['id'])
         self.assertIn(digest(references[0]), parts._artifact_turns(observations))
         self.case.expected['computations'] = []
-        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+        # Since 0.71.0 a new series whose ordinary request fits and carries every body is delivered whole, as 0.70.x
+        # delivered it on local routes; the planner, which this test exercises, serves one whose ordinary request
+        # does not carry every evidence body.
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit, \
+                patch.object(parts, 'preserves_ordinary_packet', return_value=False):
             final = self.assign('refreshed-final', last['id'])
         self.assertEqual(fit.call_args.args[-1], [references[0]])
         sent = self.sent(final)
