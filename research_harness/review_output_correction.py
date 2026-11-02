@@ -209,13 +209,19 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
         assignment = records['review_assignment'][value['assignment_id']]
         route = _route(records, evaluation, assignment, value['route_id'])
         request = transport.request_body(route, PROMPT, packet)
+        from . import review_preflight
+        preflight = review_preflight.check_request(
+            review_preflight.build_report(records, evaluation, route, assignment['role'], PROMPT, packet, request),
+            request, correction_packet=packet)
         invocation = dict(value, protocol=PROTOCOL, diagnostic=packet['diagnostic'], packet_digest=digest(packet),
+            preflight=preflight,
             prompt_hash=digest(PROMPT), route_digest=digest(route), request=protocol._put_json(artifacts, request),
             recorded_revision=expected_revision + 1)
         return [immutable_record(records, 'review_output_correction_invocation', value['id'], invocation)], invocation
 
     def finish(records, value, invocation, observation, revision):
         result = dict(observation, **value, origin='instrumented', invocation_id=invocation['id'],
+                      preflight=invocation['preflight'],
                       protocol=PROTOCOL, diagnostic=invocation['diagnostic'],
                       recorded_revision=revision, correction_status='failed', correction_error=None,
                       corrected_output=None, composition='original-output-plus-observed-metadata-delta')

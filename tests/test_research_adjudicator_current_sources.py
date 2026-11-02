@@ -144,20 +144,31 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
                 messages[-1]["content"] = transport.PACKET_LABEL + json.dumps(actual, sort_keys=True, ensure_ascii=False)
                 request["input"] = messages
             return request
+        before = self.store.snapshot()
         with patch.object(transport, "request_body", side_effect=elide_current_body):
-            self.assert_error("review_current_source_incomplete", lambda: self.observe_focused_review(self.supporting))
-            state = protocol.assignment_state(self.read_records(), self.artifacts, assignment["id"])
+            self.assert_error("review_input_too_large", lambda: self.observe_focused_review(self.supporting))
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertNotIn("focused-finding", self.read_records().get("review_adjudication", {}))
+        self.assertEqual(self.read_records().get("review_output_refusal", {}), {})
+        # Keep the historical acceptance check: old observed requests still reconstruct and authenticate, while
+        # an adjudication whose actual current source body was omitted remains unusable.
+        self.observe_focused_review(self.supporting)
+        records = copy.deepcopy(self.read_records())
+        with patch.object(transport, "request_body", side_effect=elide_current_body):
+            actual_request = protocol.build_assignment_request(records, self.artifacts, assignment)
+            from research_harness.evidence import digest
+            reference = self.artifacts.put(json.dumps(actual_request).encode(), "application/json")
+            attempt = next(row for row in records["review_attempt"].values()
+                           if row["assignment_id"] == assignment["id"])
+            attempt.update(request=reference, request_digest=digest(actual_request))
+            records["review_invocation"][attempt["invocation_id"]]["request"] = reference
+            state = protocol.assignment_state(records, self.artifacts, assignment["id"])
             self.assertTrue(state["ready"], state["obligations"])
-            attempt = self.read_records()["review_attempt"][state["attempt_id"]]
-            actual_request = json.loads(self.artifacts.read(attempt["request"]))
             actual = json.loads(transport.logical_messages(actual_request)[-1]["content"].removeprefix(transport.PACKET_LABEL))
             entry = next(row for row in actual["evidence"] if row["artifact"] == self.new_source)
             self.assertEqual(entry["encoding"], "omitted")
             self.assertNotIn("content", entry)
-            self.assertNotIn("focused-finding", self.read_records().get("review_adjudication", {}))
-            self.assertEqual(self.read_records().get("review_output_refusal", {}), {})
             legacy = dict(state["output"], id="legacy-incomplete", assignment_id=assignment["id"], dossier_id=None)
-            records = copy.deepcopy(self.read_records())
             records.setdefault("review_adjudication", {})[legacy["id"]] = legacy
             saved_state = protocol.adjudication_state(records, self.artifacts, legacy["id"])
             self.assertFalse(saved_state["ready"])
@@ -249,7 +260,7 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
         send.assert_not_called()
         self.assertNotIn("focused", self.read_records().get("review_assignment", {}))
 
-    def test_missing_current_bytes_block_recording_even_when_output_cites_another_delivered_artifact(self):
+    def test_missing_current_bytes_block_dispatch_even_when_output_cites_another_delivered_artifact(self):
         from research_harness import review_adjudicator_sources as current
         self.prepare_reviews(result_reviewer="first")
         self.new_source = self.add_new_source()
@@ -261,6 +272,8 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
             return packet
         with patch.object(protocol, "build_packet", side_effect=forged):
             self.assign_focused_review()
-        self.assert_error("review_current_source_incomplete", lambda: self.observe_focused_review(self.supporting))
+        before = self.store.snapshot()
+        self.assert_error("review_input_too_large", lambda: self.observe_focused_review(self.supporting))
+        self.assertEqual(self.store.snapshot(), before)
         self.assertNotIn("focused-finding", self.read_records().get("review_adjudication", {}))
         self.assertEqual(self.read_records().get("review_output_refusal", {}), {})

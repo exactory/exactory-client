@@ -12,6 +12,8 @@ from research_harness import review_problem_parts as parts, review_protocol as p
 from research_harness import review_transport as transport, review_excerpts
 from research_harness import review_staged, review_worker, review_task_execution
 from research_harness import review_staged_protocol as staged_protocol
+# Bind the real citation dependency before the fixture installs its problem_claims double.
+from research_harness import problem_citation_metadata
 from research_harness.evidence import digest
 from research_harness.errors import ResearchError
 
