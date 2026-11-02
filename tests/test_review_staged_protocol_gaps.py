@@ -305,7 +305,7 @@ class StagedObservedGapTests(ResultPartsCase):
 
     def test_frozen_producer_units_have_one_explicit_evidence_class(self):
         self.oversized()
-        controller = self.assign('classes-controller')
+        controller = self.assign_staged('classes-controller')
         records = self.case.read_records()
         value = records['review_epoch'][controller['staged_review']['epoch_id']]
         self.assertEqual({row.get('evidence_class') for row in value['manifest']['occurrences']}, {'current'})
@@ -316,7 +316,7 @@ class StagedObservedGapTests(ResultPartsCase):
         import sys
         from research_harness import review_worker
         self.oversized()
-        controller = self.assign('page-controller')
+        controller = self.assign_staged('page-controller')
         records = self.case.read_records()
         value = records['review_epoch'][controller['staged_review']['epoch_id']]
         bindings = staged_protocol.build_composition_bindings(value, [])

@@ -3,6 +3,8 @@
 import copy
 import json
 from pathlib import Path
+import sys
+import types
 from unittest.mock import patch
 
 from problem_parts_fixtures import ResultPartsCase
@@ -46,9 +48,9 @@ class StagedEntryTests(ResultPartsCase):
         self.assertEqual(assignment['prompt'], protocol.canonical_prompt('result', orchestration='problem_creation'))
         self.assertTrue(assignment['history'])
 
-    def test_new_oversized_assignment_is_a_controller_with_immutable_frame_children(self):
+    def test_explicit_oversized_upgrade_is_a_controller_with_immutable_frame_children(self):
         self.oversized()
-        controller = self.assign('controller')
+        controller = self.assign_staged('controller')
         self.assertEqual(controller['staged_review']['kind'], 'controller')
         self.assertEqual(controller['history'], [])
         records = self.case.read_records()
@@ -71,7 +73,7 @@ class StagedEntryTests(ResultPartsCase):
             self.case.assign('result', 'first', identifier='duplicate',
                              controller_assignment_id=controller['id'], task_id=task_id)
 
-    def test_first_turn_fitted_body_omission_enters_v2_even_below_limit(self):
+    def test_first_turn_fitted_body_omission_uses_v1_even_below_limit(self):
         self.case.add_reading_and_computation()
         original = transport.request_body
         def omit(route, prompt, packet, history=(), **kwargs):
@@ -87,7 +89,8 @@ class StagedEntryTests(ResultPartsCase):
             return result
         with patch.object(transport, 'request_body', side_effect=omit):
             assignment = self.assign('body-omitted')
-        self.assertEqual(assignment['staged_review']['kind'], 'controller')
+        self.assertNotIn('staged_review', assignment)
+        self.assertEqual(self.packet(assignment)[parts.KEY]['stage'], 'part')
 
     def test_raw_accessor_preserves_exact_legacy_observation_and_native_output(self):
         records = self.case.read_records()
@@ -137,7 +140,7 @@ class StagedEntryTests(ResultPartsCase):
 
     def test_controller_pending_and_child_output_never_become_scientific_output(self):
         self.oversized()
-        controller = self.assign('pending-controller')
+        controller = self.assign_staged('pending-controller')
         records = self.case.read_records()
         state = protocol.assignment_state(records, self.case.artifacts, controller['id'])
         self.assertFalse(state['ready'])
@@ -145,9 +148,54 @@ class StagedEntryTests(ResultPartsCase):
         self.assertIsNone(state['raw_output'])
         self.assertEqual(state['effective']['kind'], 'pending')
 
+    def test_0700_automatic_slot_rebuilds_continues_and_retains_post_quality_obligation(self):
+        from research_harness.gates import gate_state
+        source = (Path(__file__).parent / 'fixtures/review_problem_parts_0_70_0.py.txt').read_text()
+        legacy = types.ModuleType('research_harness._legacy_problem_parts_0700')
+        legacy.__package__ = 'research_harness'
+        exec(compile(source, 'review_problem_parts_0700.py', 'exec'), legacy.__dict__)
+        self.oversized()
+        with patch.object(protocol, 'review_problem_parts', legacy):
+            controller = self.assign('retained-controller')
+            child = self.case.assign('result', 'first', identifier='retained-child',
+                controller_assignment_id=controller['id'], task_id=controller['staged_review']['task_ids'][0])
+        self.assertNotIn('staged_upgrade', controller['context'])
+        self.assertNotIn('predecessor', self.case.read_records()['review_epoch'][controller['staged_review']['epoch_id']])
+        before = self.case.store.snapshot()
+        records = before['records']
+        for planned in records['review_task'].values():
+            frozen = self.case.artifacts.read(planned['request'])
+            rebuilt = staged_protocol.build_request(self.case.artifacts, records['review_route']['route'],
+                planned['prompt'], protocol._read_json(self.case.artifacts, planned['packet']))
+            self.assertEqual(self.case.artifacts.read(protocol._put_json(self.case.artifacts, rebuilt)), frozen)
+        for assignment in records['review_assignment'].values():
+            if assignment.get('request'):
+                frozen = self.case.artifacts.read(assignment['request'])
+                rebuilt = protocol.build_assignment_request(records, self.case.artifacts, assignment)
+                self.assertEqual(self.case.artifacts.read(protocol._put_json(self.case.artifacts, rebuilt)), frozen)
+        report = gate_state(records, self.case.artifacts, 'post')
+        quality = [row for row in report['obligations'] if row['code'] == 'review_quality_measurement_pending']
+        self.assertEqual({row['epoch_id'] for row in quality}, {controller['staged_review']['epoch_id']})
+        self.assertEqual(self.case.store.snapshot(), before)
+        with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', _WORKER_SCRIPT]):
+            self.case.mutate(protocol.invoke_assignment, dict(
+                assignment_id=child['id'], id='retained-observation'))
+        records = self.case.read_records()
+        self.assertTrue(protocol.assignment_state(records, self.case.artifacts, child['id'])['accepted'])
+        state = protocol.assignment_state(records, self.case.artifacts, controller['id'])
+        self.assertEqual(state['effective']['kind'], 'pending')
+        self.assertTrue(protocol.authenticate_attempt(records, self.case.artifacts, child,
+            records['review_attempt']['retained-observation']))
+        attempt = records['review_attempt']['retained-observation']
+        self.assertEqual(self.case.artifacts.read(attempt['request']), self.case.artifacts.read(child['request']))
+        self.assertTrue(any(row['code'] == 'review_quality_measurement_pending'
+                            for row in gate_state(records, self.case.artifacts, 'post')['obligations']))
+        self.assertEqual(records['review_slot_head'][controller['slot_id']]['epoch_id'],
+                         controller['staged_review']['epoch_id'])
+
     def test_child_request_rejects_history_and_fitting_tampering(self):
         self.oversized()
-        controller = self.assign('frozen-controller')
+        controller = self.assign_staged('frozen-controller')
         child = self.case.assign('result', 'first', identifier='frozen-child',
             controller_assignment_id=controller['id'], task_id=controller['staged_review']['task_ids'][0])
         records = self.case.read_records()
@@ -167,7 +215,7 @@ class StagedEntryTests(ResultPartsCase):
         import sys
         from research_harness import review_worker
         self.oversized()
-        controller = self.assign('run-controller')
+        controller = self.assign_staged('run-controller')
         child = self.case.assign('result', 'first', identifier='run-child',
             controller_assignment_id=controller['id'], task_id=controller['staged_review']['task_ids'][0])
         script = _WORKER_SCRIPT
@@ -192,7 +240,7 @@ class StagedEntryTests(ResultPartsCase):
     def test_core_task_envelope_can_be_assigned_after_the_initial_frontier(self):
         from research_harness import review_staged as staged
         self.oversized()
-        controller = self.assign('frontier-controller')
+        controller = self.assign_staged('frontier-controller')
         records = self.case.read_records()
         epoch = records['review_epoch'][controller['staged_review']['epoch_id']]
         source = next(row for row in epoch['manifest']['sources'] if row['kind'] == 'item')
@@ -204,7 +252,7 @@ class StagedEntryTests(ResultPartsCase):
         self.assertEqual(child['history'], [])
         self.assertIn(task['id'], self.case.read_records()['review_task'])
 
-    def test_new_focused_and_repair_packet_entry_and_unsupported_routes(self):
+    def test_new_focused_and_repair_packets_remain_ordinary(self):
         records = self.case.read_records()
         route = records['review_route']['route']
         packet = dict(subject={'kind':'problem'}, role='adjudicator', evidence=[],
@@ -213,14 +261,13 @@ class StagedEntryTests(ResultPartsCase):
         with patch.object(transport, 'local_input_limit', return_value=50000):
             entered = parts.prepare_packet(records, self.case.artifacts, value, route, packet,
                 protocol.canonical_prompt('adjudicator', orchestration='problem_creation'), [])
-        self.assertEqual(entered['staged_review']['kind'], 'controller')
+        self.assertIs(entered, packet)
         repair = dict(packet, role='result', context_repair={'assignment_id':'prior'})
         value = dict(value, role='result')
         with patch.object(transport, 'local_input_limit', return_value=50000):
             entered = parts.prepare_packet(records, self.case.artifacts, value, route, repair,
                 protocol.canonical_prompt('result', repair=True, orchestration='problem_creation'), [])
-        self.assertEqual(entered['staged_review']['kind'], 'controller')
-        self.assertFalse(parts.allows_staged_entry(value, dict(route, adapter='openai_responses_v1'), repair))
+        self.assertIs(entered, repair)
 
     def test_explicit_upgrade_binds_a_no_output_predecessor_and_installs_pending_slot(self):
         prior = self.assign('no-output')
@@ -329,7 +376,7 @@ class StagedEntryTests(ResultPartsCase):
         import sys
         from research_harness import review_worker
         self.oversized()
-        controller = self.assign('retry-controller')
+        controller = self.assign_staged('retry-controller')
         child = self.case.assign('result', 'first', identifier='retry-child',
             controller_assignment_id=controller['id'], task_id=controller['staged_review']['task_ids'][0])
         failed_script = _WORKER_SCRIPT.replace(
@@ -376,7 +423,7 @@ class StagedEntryTests(ResultPartsCase):
 
     def test_evidence_change_keeps_the_frozen_epoch_but_blocks_its_dispatch(self):
         self.oversized()
-        controller = self.assign('currency-controller')
+        controller = self.assign_staged('currency-controller')
         child = self.case.assign('result', 'first', identifier='currency-child',
             controller_assignment_id=controller['id'], task_id=controller['staged_review']['task_ids'][0])
         self.case.expected['value']['motivation'][0]['text'] = 'The scientific claim changed.'

@@ -491,16 +491,20 @@ class ProblemResultPartsTests(ResultPartsCase):
         next_turn = self.assign('refresh-part-2', successor['id'])
         self.assertEqual(self.packet(next_turn)[KEY]['series_assignment_id'], 'refresh')
 
-    def test_changed_series_digest_starts_fresh_even_when_new_evidence_is_small(self):
+    def test_changed_series_digest_uses_ordinary_delivery_when_new_evidence_fits(self):
         self.oversized()
         first = self.assign()
         self.invoke(first)
         self.case.expected['openness_searches'] = [{'search': {'id': 'smaller-search', 'reason': 'New evidence.'},
                                                    'sources': []}]
         restarted = self.assign('smaller-series', first['id'])
-        self.assertEqual(self.packet(restarted)[KEY]['series_assignment_id'], 'smaller-series')
-        self.assertEqual(self.packet(restarted)[KEY]['stage'], 'part')
-        self.assertEqual(self.packet(restarted)[KEY]['delivered_before'], [])
+        packet = self.packet(restarted)
+        self.assertNotIn(KEY, packet)
+        self.assertNotIn('staged_review', restarted)
+        request = self.request(restarted)
+        self.assertEqual(review_excerpts.read_sent_packet(request), packet)
+        self.assertEqual(restarted['prompt'], protocol.canonical_prompt(
+            'result', orchestration='problem_creation', excerpts=True))
 
     def test_stage_prompts_match_every_supported_excerpt_and_common_version(self):
         for stage in ('part', 'final'):

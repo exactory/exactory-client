@@ -982,7 +982,10 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertLess(full_size, pending_size)
         limit = (full_size + pending_size) // 2
         value = {'id': 'tiny-part', 'role': 'result', 'context': {'prior_assignment_id': first['id']}}
-        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', limit), patch.object(parts, 'PART_UNIT_CHARACTERS', 1000):
+        # The ordinary request is smaller than any part projection, so it fits under this limit. The planner
+        # serves a new series whose ordinary request does not carry every evidence body.
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', limit), patch.object(parts, 'PART_UNIT_CHARACTERS', 1000), \
+                patch.object(parts, 'preserves_ordinary_packet', return_value=False):
             planned = parts.prepare_packet(records, artifacts, value, route, packet, prompt, [])
             request = transport.request_body(route, prompt['text'], planned)
         sent = review_excerpts.read_sent_packet(request)
