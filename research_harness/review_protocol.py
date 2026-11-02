@@ -2249,16 +2249,28 @@ def _find_problem_refresh_parent(records, artifacts, value):
     return prior['id'] if _is_problem_refresh(records, artifacts, prior, _read_json(artifacts, prior['packet'])) else None
 
 
-def _initial_size_failure(records, prior, value):
-    """A failed initial problem result whose adapter rejected every request before starting its CLI."""
-    if (prior.get('context') or prior['route_id'] != value['route_id']
-            or any(normalized_text(prior[key]) != normalized_text(value[key]) for key in ('reviewer_id', 'author_id'))
-            or not has_ended_without_output(records, prior['id'])):
+def _initial_size_failure(records, artifacts, prior, value):
+    """An initial problem result that its route cannot carry: its adapter rejected every recorded request before
+    starting its CLI, or it never ran and `review-run` refuses its exact frozen request before an invocation exists
+    (0.71.0 records nothing for that refusal)."""
+    if (prior.get('context') or prior.get('staged_review') or prior['route_id'] != value['route_id']
+            or any(normalized_text(prior[key]) != normalized_text(value[key]) for key in ('reviewer_id', 'author_id'))):
         return False
     attempts = [attempt for attempt in records.get('review_attempt', {}).values() if attempt['assignment_id'] == prior['id']]
-    return all(attempt.get('origin') == 'instrumented' and attempt['status'] == 'failed'
-               and (attempt.get('error') or {}).get('code') == 'review_input_too_large'
-               and attempt.get('response') is None and attempt.get('output') is None for attempt in attempts)
+    if not attempts and not any(invocation['assignment_id'] == prior['id']
+                                for invocation in records.get('review_invocation', {}).values()):
+        from . import review_preflight
+        request = build_assignment_request(records, artifacts, prior)
+        try:
+            review_preflight.check_request(review_preflight.build_assignment_report(records, artifacts, prior, request),
+                                           request, packet=_read_json(artifacts, prior['packet']), artifacts=artifacts)
+        except ResearchError as error:
+            return error.code == 'review_input_too_large'
+        return False
+    return has_ended_without_output(records, prior['id']) and all(
+        attempt.get('origin') == 'instrumented' and attempt['status'] == 'failed'
+        and (attempt.get('error') or {}).get('code') == 'review_input_too_large'
+        and attempt.get('response') is None and attempt.get('output') is None for attempt in attempts)
 
 
 def _initial_slot(records, artifacts, value):
@@ -2273,7 +2285,7 @@ def _initial_slot(records, artifacts, value):
     for identifier, members in slots.items():
         if any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id']) for prior in members):
             if (value['role'] == 'result' and value.get('subject', {}).get('kind') == 'problem'
-                    and all(_initial_size_failure(records, prior, value) for prior in members)):
+                    and all(_initial_size_failure(records, artifacts, prior, value) for prior in members)):
                 return identifier
             raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; record its observed output, or invoke its assignment again after a refusal')
         replaceable_members = True

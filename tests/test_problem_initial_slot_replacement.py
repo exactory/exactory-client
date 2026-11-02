@@ -54,6 +54,29 @@ class ProblemInitialSlotReplacementTests(ResultPartsCase):
                 self.assert_code('review_resampling_forbidden', lambda: protocol._initial_slot(
                     records, self.case.artifacts, candidate))
 
+    def test_a_run_refused_before_its_invocation_frees_the_slot(self):
+        from codex_route_fixtures import limit_codex_input
+        # The frozen ordinary request fits when it is assigned and exceeds the route after the limit falls, as a
+        # visual-route packet or a packet frozen under an earlier limit does. Since 0.71.0 its run records nothing.
+        self.oversized(limit=10 ** 6)
+        refused = self.assign('refused-initial')
+        self.assertNotIn('problem_evidence_parts', self.packet(refused))
+        limit_codex_input(self, 110000)
+        with patch.object(transport, 'send_request', side_effect=AssertionError('No reviewer call is permitted')):
+            self.assert_code('review_input_too_large', lambda: self.case.mutate(
+                protocol.invoke_assignment, {'id': 'refused-attempt', 'assignment_id': refused['id']},
+                credential='fixture-only'))
+        records = self.case.read_records()
+        self.assertFalse([attempt for attempt in records.get('review_attempt', {}).values()
+                          if attempt['assignment_id'] == refused['id']])
+        replacement = self.assign('replacement')
+        self.assertEqual(replacement['slot_id'], refused['slot_id'])
+        self.assertEqual(self.packet(replacement)['problem_evidence_parts']['turn'], 1)
+
+    def test_an_initial_assignment_that_never_ran_and_fits_holds_its_slot(self):
+        self.assign('held-initial')
+        self.assert_code('review_resampling_forbidden', lambda: self.assign('replacement'))
+
     def test_bar_and_nonproblem_roles_keep_the_existing_rule(self):
         failed = self.failed_initial()
         records = self.case.read_records()
