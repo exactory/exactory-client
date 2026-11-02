@@ -12,19 +12,28 @@ is appended only after a harness-command entry of the same host and session. An
 inspection by another session, or by a session without a host identity, leaves
 the file unchanged. Each entry carries the time, the tool, the target, the
 host-qualified `session_id` (or null) and `harness_command`. The log keeps the
-last 200 entries of all sessions. `exactory-math status` shows the last entries
-of the latest session with a harness-command entry. Any other call, a failed
-tool result and any internal error, including a failure of the shell parser, is
-silent. The hook exits 0 with no output and appends nothing. It never blocks: it
-runs after the tool already did its work, and the PreToolUse guard does not
-depend on it.
+last 200 entries of all sessions, plus the most recent harness-command entry
+of each identified session represented among those 200, in its original
+position. A working session therefore keeps its ordinary shell eligibility.
+An exclusive `fcntl` lock on the attack directory itself covers the read, append
+and rewrite, so the hook adds no file that a workspace snapshot would see. A
+temporary file in the same directory replaces the log atomically.
+`exactory-math status` shows the last
+entries of the latest session with a harness-command entry. Any other call, a
+failed tool result and any internal error, including a failure of the shell
+parser, is silent. The hook exits 0 with no output and appends nothing. It never
+denies a tool call: it runs after the tool already did its work, and the
+PreToolUse guard does not depend on it.
 """
 
 from __future__ import annotations
 
 import datetime
+import fcntl
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from math_search import (
     SHELL_SEPARATORS, build_shell_lexer, is_path_candidate, iter_simple_commands, normalize, session_id, workspace_for,
@@ -139,18 +148,47 @@ def _has_harness_session(lines: list[str], session_identity: str | None) -> bool
 def _append(workspace: Path, tool_name: str, target: str, session_identity: str | None,
             is_harness_call: bool) -> None:
     log_path = workspace / _LOG_NAME
-    lines = log_path.read_text(encoding="utf-8").splitlines() if log_path.is_file() else []
-    if tool_name == "Bash" and not is_harness_call and not _has_harness_session(lines, session_identity):
-        return
-    entry = {
-        "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "tool": tool_name,
-        "target": target,
-        "session_id": session_identity,
-        "harness_command": is_harness_call,
-    }
-    lines.append(json.dumps(entry))
-    log_path.write_text("".join(line + "\n" for line in lines[-_KEPT_ENTRIES:]), encoding="utf-8")
+    directory = os.open(workspace, os.O_RDONLY)
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX)
+        lines = log_path.read_text(encoding="utf-8").splitlines() if log_path.is_file() else []
+        if tool_name == "Bash" and not is_harness_call and not _has_harness_session(lines, session_identity):
+            return
+        entry = {
+            "at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "tool": tool_name,
+            "target": target,
+            "session_id": session_identity,
+            "harness_command": is_harness_call,
+        }
+        lines.append(json.dumps(entry))
+        tail_start = max(0, len(lines) - _KEPT_ENTRIES)
+        recent_sessions, latest_harness = set(), {}
+        for index, line in enumerate(lines):
+            try:
+                recorded = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(recorded, dict):
+                continue
+            identity = recorded.get("session_id")
+            if not isinstance(identity, str) or not identity.strip():
+                continue
+            if index >= tail_start:
+                recent_sessions.add(identity)
+            if recorded.get("harness_command") is True:
+                latest_harness[identity] = index
+        kept_markers = {latest_harness[identity] for identity in recent_sessions if identity in latest_harness}
+        retained = [line for index, line in enumerate(lines) if index >= tail_start or index in kept_markers]
+        descriptor, temporary_name = tempfile.mkstemp(prefix=".activity-", dir=workspace)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as temporary:
+                temporary.write("".join(line + "\n" for line in retained))
+            os.replace(temporary_name, log_path)
+        finally:
+            Path(temporary_name).unlink(missing_ok=True)
+    finally:
+        os.close(directory)
 
 
 def main() -> None:
