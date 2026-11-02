@@ -309,10 +309,12 @@ class FulltextPurposeTests(LiteratureCase):
         next_payload["depth"] = {"core_fulltexts": 2}
         self.mutate(require_fulltext, next_payload)
 
-    def test_verification_core_refuses_an_override_even_without_configuration(self):
+    def test_verification_core_records_an_override_even_without_configuration(self):
         from research_harness.reading import require_fulltext
         payload = self.requirement(1, "core", depends_on="finding-1", depth={"core_fulltexts": 20})
-        self.assert_error("profile_inapplicable", lambda: self.mutate(require_fulltext, payload))
+        saved = self.mutate(require_fulltext, payload)["result"]
+        self.assertEqual(saved["depth"], {"core_fulltexts": 20})
+        self.assertTrue(saved["critical"])
 
     def requirement(self, number, purpose, **extra):
         return dict({"id": "req-" + str(number), "profile": "verification", "version_id": self.metadata(number),

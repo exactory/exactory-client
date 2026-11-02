@@ -6,6 +6,7 @@ import json
 
 from . import bar_sources
 from .errors import ResearchError
+from .review_bodies import read_history
 from .evidence import digest
 from .source_links import captured_source
 from .bar_sources import descriptor
@@ -33,7 +34,7 @@ def _native_alternative(records, artifacts, version, row):
     from .fulltext import extraction_measures
     from .graph import main_captures
     source = captured_source(records, artifacts, row['source_id'])
-    _require(source.get('origin_verified') is True and source.get('capture_method') == 'http'
+    _require(source.get('origin_verified') is True and source.get('capture_method') in ('http', 'http_range_v1')
              and source.get('observed_identifier') == version and row['version_id'] == version,
              'Every alternative must retain an authenticated exact observed version')
     work = records['work'][version]
@@ -46,10 +47,11 @@ def _native_alternative(records, artifacts, version, row):
     _require(capture.get('availability') == 'available' and capture.get('extraction_status') == 'extracted',
              'Select only available native complete extractions')
     validate_binding(records, artifacts, version, capture)
-    original = artifacts.read(capture['original'])
+    original_size = (capture['original']['size'] if source.get('capture_method') == 'http_range_v1'
+                     else len(artifacts.read(capture['original'])))
     extracted = artifacts.read(capture['text']).decode('utf-8')
     _require(all(capture.get('extraction', {}).get(key) == value
-                 for key, value in extraction_measures(extracted, len(original)).items()),
+                 for key, value in extraction_measures(extracted, original_size).items()),
              'Native extraction measurements must match the complete exact bytes')
     main = {(item['source_id'], item['original']['sha256']) for item in main_captures(records, work)}
     _require(row['main_representation'] == ((row['source_id'], row['original_descriptor']['sha256']) in main),
@@ -260,16 +262,17 @@ def validate(records, artifacts, assignment, packet):
              and assignment.get('context', {}).get('prior_assignment_id'))), 'Use a prospective native result source continuation')
     expected = selection(records, artifacts, packet['source_deliveries'])
     _require(all(value[key] == item for key, item in expected.items()), 'Complete main selection must match native exact source records')
+    stored_history = read_history(artifacts, assignment)
     if repair:
         prior, history, output = visual_repair.validate(records, artifacts, assignment, packet)
     else:
         prior = records['review_assignment'][assignment['context']['prior_assignment_id']]
-        history = assignment['history']
+        history = stored_history
         output = json.loads(history[-1]['content'])
     historical_sources = _historical_sources(records, artifacts, prior)
     _require(value['historical_source_bodies'] == historical_sources, 'Preserve only exact source identities from frozen prior packets')
     restored, searches, existing = _restoration(records, history, packet['source_deliveries'], historical_sources)
-    _require(value['history_digest'] == digest(assignment['history']) and value['restored_evidence'] == restored
+    _require(value['history_digest'] == digest(stored_history) and value['restored_evidence'] == restored
              and value['historical_search_elisions'] == searches and value['historical_existing_elisions'] == existing,
              'Restore required scientific evidence from the exact bound history')
     _require(value['source_requests'] == requests_for_lineage(records, artifacts, prior, output),

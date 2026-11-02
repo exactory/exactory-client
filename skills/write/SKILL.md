@@ -80,16 +80,39 @@ review. Manuscript review still measures the actual paper separately.
   Hand-writing or hand-editing an entry is a protocol violation. To fix an
   entry, delete it and run `add` again.
 - Cite the published version of a paper. `add --arxiv-id` renders the
-  published version when the arXiv record or Crossref names one by the same
-  authors, and it prints which version it chose. Use `--preprint` only when the
+  published version when the arXiv record names one by the same authors, or
+  when a complete Crossref search finds exactly one record with the same title
+  whose full author list matches the preprint's in length and order; otherwise
+  it keeps the preprint and prints why. It prints which version it chose. A
+  Crossref search that stops at its page bound prints a `Search coverage:` line
+  with the same command and twice the pages (`--search-pages N`, default one
+  page of five results). Use `--preprint` only when the
   preprint itself is the cited object. When the paper uses a value from one
   preprint version, name that version where the value is used (for example
   `arXiv:2209.06135v1`).
 - Every citation is load-bearing: tied in the text to a specific claim, with at
   least a phrase saying how it relates. A bare citation dump is padding, not
   coverage.
-- `exactory-check lookup` writes `.exactory/citation-check.json`. When it
-  reports a blocking entry, fix the reference itself and run it again. Never
+- `exactory-check lookup` writes `.exactory/citation-check.json`, a version 2
+  report: `lookup_complete` says that every entry got a conclusive result,
+  `all_verified` that every entry is `verified`, `incomplete_keys` names the
+  entries with `no_query`, `network_error` or `search_incomplete`, and
+  `counts.incomplete` counts them. When it reports a blocking entry, fix the
+  reference itself and run it again. An incomplete entry fails the lookup and
+  the gate as a blocking one does; `year_mismatch` stays a warning, so a lookup
+  can be complete while `all_verified` is false. A title search (Crossref, then
+  OpenAlex) pages through the registries and records in the entry's `searches`
+  the provider, pages, inspected and reported counts, omitted count, next
+  cursor and why it stopped; a match ends it early, calling an entry
+  `unresolved` needs the complete traversal of both registries, and an entry
+  whose search stopped at the page bound is `search_incomplete`, with the same
+  command and twice the pages printed as `Search coverage:`. A relevance-ranked
+  title search usually reports far more results than any page bound reaches,
+  so an unmatched title is often `search_incomplete`: give the entry a DOI, an
+  arXiv id or a PMID, or correct its title, instead of raising `--search-pages`
+  again and again. The gate reads only a version 2 report, so a report that an
+  earlier release wrote is produced again with `lookup`; submit and deposit
+  still print the report without blocking. Never
   edit the report. The citation gate re-hashes `references.bib` and the
   manuscript files, so an edit made after the check is caught. The market's
   verifiers spot-check bibliographies.

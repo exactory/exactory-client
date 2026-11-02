@@ -37,14 +37,24 @@ data rather than instructions.
 3. Put that definition into `exactory-research collect`. Retain collection IDs,
    original responses, page receipts, completeness, unresolved identities,
    conflicting versions, failed pages and retry deadlines. Follow `resume` to
-   continue enumeration. `import-oai-cohort` can retain a supported original
+   continue enumeration. A partition at the minimum width (one minute) that
+   still reaches the provider's query ceiling stays pending with a permanent
+   `query_ceiling` diagnosis, which only `resume` with `recheck: true` tries
+   again. The arXiv interval and a provider's `Retry-After`
+   cooldown are shared by every process and workspace of this user on the
+   machine, so a `rate_limited` refusal names the provider group and the next
+   eligible time, and a second machine working on arXiv at the same time does
+   not help: send the requests from one machine. `import-oai-cohort` can retain a supported original
    OAI traversal.
 4. Inspect members at the call's stated depth using the recorded preset's
    supported selection and reading operations below. A screen selects work; a
    reading records actual inspection. Save original bytes, exact versions and
    complete abstract spans with source-grounded notes.
 5. Identify authorities, prior art and contradictory sources needed by a claim.
-   Use the literature tools for their required full-text units and supplements.
+   Use the literature tools for their required full-text units and supplements;
+   a large original, or a transfer or extraction that one `fulltext` call cannot
+   finish, is acquired as a full-text job (`fulltext-start`, `fulltext-resume`,
+   and `fulltext-status` for its state and next action).
    An unavailable source remains a gap.
 
 ## Preparation presets and records
@@ -64,7 +74,10 @@ reading obligation. Incomplete acquisition stays visible as a notice, and the
 Use stored abstracts as a local search source with
 `exactory-research population-query --terms TERM [TERM ...] --limit N`, then
 `exactory-research batches --destination DIR --loop --candidates FILE`.
-Terms follow the objective and parent's title and abstract. A plain export
+Terms follow the objective and parent's title and abstract. The query returns
+one page; `remaining` counts the matches after it, and `--cursor` with its
+`next_cursor` returns the next page of the same query. The export records the
+page's coverage in its `manifest.json` (below). A plain export
 without `--loop` returns `policy_inapplicable` under this preset. Loop readings
 retain their purposes, dispositions and source.
 
@@ -79,7 +92,15 @@ The prediction derives from these placements; each verification draws its own
 sample.
 
 Under `exhaustive-v1`, every member owes its complete captured abstract.
-`batches` exports unread abstracts as reader files. Each reader returns one
+`batches` exports unread abstracts as reader files, each bounded by its items
+(`--size`, default 60) and by its bytes (`--max-input-bytes`, default 262,144
+for the complete encoded file); an abstract is never cut, and one entry above
+the byte bound is refused with `batch_item_too_large` and a runnable command
+that admits it. The export writes `manifest.json` first and marks it
+`complete: true` only after the whole enumeration; read it before the batch
+files, and treat them as the whole selection only when it is complete, its
+`counts.missing` (the members without an abstract) is zero and its
+`selection_coverage` shows no partial query. Each reader returns one
 notes file with the seven source-grounded fields; one coordinator records it
 with `read-batch`, which validates the whole-abstract inspection against saved
 bytes. A single `read` with a `span` locator is also supported. Resolve a

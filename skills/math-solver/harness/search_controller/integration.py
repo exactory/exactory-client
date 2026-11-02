@@ -281,16 +281,44 @@ def after_legacy(context, outcome, diagnostics=None):
         reconcile_native_intents(controller, state, content, lambda kind, payload: operations.append({"kind": kind, "payload": payload}), context)
         if context["command"] == "journal":
             reconcile_journals(controller, state, content, lambda kind, payload: operations.append({"kind": kind, "payload": payload}))
-        import copy
-        from .model import EVENT_HANDLERS
-        state = copy.deepcopy(state)
-        for operation in operations:
-            EVENT_HANDLERS[operation["kind"]](state, operation["payload"])
-        for node in state["nodes"].values():
-            if node["proposal_id"] is not None:
-                operations.append({"kind": "node_facts_recorded", "payload": {"facts": observe_node(controller, state, node)}})
         return operations
     internal_operation(controller, "reconcile", "journal-ack-" + uuid.uuid4().hex, build)
+    refresh_producers(controller, [context["node"]["id"]])
+
+
+def observe_nodes(controller, state, node_ids, content, maximum=256):
+    """Collect changed facts in ID order, reducing them into privately owned state."""
+    from .model import EVENT_HANDLERS
+    operations = []
+    for node_id in sorted(set(node_ids)):
+        node = reference(state["nodes"], node_id, "observation node")
+        facts = observe_node(controller, state, node, content)
+        previous = state["control"]["node_facts"].get(node_id, {})
+        if facts == {key: previous.get(key) for key in facts}:
+            continue
+        if len(operations) == maximum:
+            raise SearchError("recovery_required", "Changed local observations require a bounded refresh batch",
+                              {"node_ids": [operation["payload"]["facts"]["node_id"] for operation in operations],
+                               "has_more": True})
+        operation = {"kind": "node_facts_recorded", "payload": {"facts": facts}}
+        EVENT_HANDLERS[operation["kind"]](state, operation["payload"])
+        operations.append(operation)
+    return operations
+
+
+def refresh_producers(controller, node_ids):
+    """Observe recorded work separately so an observation cannot undo its acknowledgment."""
+    node_ids = sorted(set(node_ids))
+    if not node_ids:
+        return
+    def build(state, content):
+        s.require(not state["service"]["native_intents"], "A native intent requires reconciliation", "recovery_required")
+        return observe_nodes(controller, state, node_ids, content)
+    try:
+        internal_operation(controller, "reconcile", "producer-refresh-" + uuid.uuid4().hex, build)
+    except Exception as error:
+        raise SearchError("recovery_required", "Work is already acknowledged; producer observation requires refresh",
+                          {"node_ids": node_ids, "reason": str(error)}) from error
 
 
 def native_snapshot(controller, node, content):

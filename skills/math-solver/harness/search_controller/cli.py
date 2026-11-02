@@ -39,11 +39,11 @@ def run_search(args):
         if internal:
             if not isinstance(spec, dict) or spec.get("session_id") != validation["session_id"]:
                 raise SearchError("focus_required", "Internal Stop must bind its normalized session")
-            revision = controller.status()["revision"] if revision is None else revision
+            revision = controller.command("guard-status", {}, None, None)["revision"] if revision is None else revision
         elif revision is None:
             raise SearchError("invalid_command", "Public hook-stop requires --expected-revision")
-    elif args.search_command in {"status", "next", "strategy-context"} and requested_validation:
-        spec = validation
+    elif args.search_command in {"status", "guard-status", "next", "strategy-context"} and requested_validation:
+        spec = {key: value for key, value in validation.items() if value is not None}
     result = controller.command(args.search_command, spec,
                                 revision,
                                 getattr(args, "request_id", None), getattr(args, "target", None),
@@ -56,18 +56,21 @@ def run_search(args):
 def install_parser(commands, strategies_default):
     search = commands.add_parser("search", help="manage one persistent mathematical objective")
     nested = search.add_subparsers(dest="search_command", required=True, parser_class=SearchParser)
-    readonly = {"status", "next", "strategy-context", "review-packet"}
+    readonly = {"status", "guard-status", "next", "strategy-context", "review-packet"}
     specs = {"init", "adopt", "propose", "review", "begin", "run", "checkpoint", "accept",
-             "retreat", "replan", "focus", "pause", "resume", "side-interval", "hook-stop", "complete", "amend-computation", "amend-foundation", "interpret", "reassess", "review-packet"}
+             "retreat", "replan", "focus", "pause", "resume", "side-interval", "hook-stop", "complete", "amend-computation", "amend-foundation", "interpret", "reassess", "review-packet", "refresh"}
     targets = {"admit", "begin", "run", "accept", "retreat", "side-interval", "amend-computation", "amend-foundation", "interpret"}
     for name in ["init", "adopt", "propose", "review", "admit", "begin", "run", "reconcile",
-                 "checkpoint", "accept", "retreat", "replan", "focus", "pause", "resume", "side-interval",
-                 "audit", "status", "next", "hook-stop", "render", "complete", "amend-computation", "amend-foundation", "interpret", "strategy-context", "reassess", "review-packet", "deliver-closure", "deliver-attempt"]:
+                 "checkpoint", "accept", "refresh", "retreat", "replan", "focus", "pause", "resume", "side-interval",
+                 "audit", "status", "guard-status", "next", "hook-stop", "render", "complete", "amend-computation", "amend-foundation", "interpret", "strategy-context", "reassess", "review-packet", "deliver-closure", "deliver-attempt"]:
         parser = nested.add_parser(name)
         if name in {"init", "focus", "resume"}:
             parser.add_argument("--workspace-root", type=Path)
         if name in {"status", "next", "strategy-context", "hook-stop"}:
             for option in ("session-id", "focus-request-id", "objective-id", "contract-digest"):
+                parser.add_argument("--" + option)
+        if name == "guard-status":
+            for option in ("objective-id", "contract-digest"):
                 parser.add_argument("--" + option)
         if name == "hook-stop":
             parser.add_argument("--internal", action="store_true", help="validate a host Stop in one controller process")
@@ -85,7 +88,7 @@ def install_parser(commands, strategies_default):
             parser.add_argument("--expected-revision", type=int, required=name != "hook-stop")
             parser.add_argument("--request-id", required=True)
         parser.add_argument("--json", action="store_true")
-        if name not in {"status", "next", "strategy-context"}:
+        if name not in {"status", "guard-status", "next", "strategy-context"}:
             parser.add_argument("--check", action="store_true",
                                 help="pause, side-interval, retreat, interpret and render: build and validate the "
                                      "event as the write does, write nothing, and print the check diagnostic or the "

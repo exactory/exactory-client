@@ -349,7 +349,8 @@ class EffectiveConsumerTests(unittest.TestCase):
         raw = dict(stage='result', support=None, value={'status': 'insufficient'}, objections=[], limitations=[],
                    terminal={'composition_root': digest('authorized')},
                    reassessment={'findings': [dict(review_id='old', disposition='confirmed', reason='Earlier reason.')]})
-        packet = dict(original_output=raw, diagnostic=dict(original_output_digest=digest(raw),
+        self.records['review_attempt']['original'] = dict(id='original', assignment_id='assignment', status='completed')
+        packet = dict(original_output=raw, diagnostic=dict(attempt_id='original', original_output_digest=digest(raw),
                       findings=[dict(index=0, review_id='old')]))
         change = dict(source_output_digest=digest(raw), findings=[dict(review_id='old', disposition='revised',
                                                                       reason='The wording changed.')])

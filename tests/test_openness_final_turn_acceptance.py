@@ -206,7 +206,8 @@ class AcceptanceCase(OpennessReadingCase):
 
     def build_request(self, packet, order=()):
         """The Codex request of a packet: by default rendered without any transport reduction."""
-        prompt = protocol.canonical_prompt('native_math', reading_stage=openness_reading.find_stage(packet))['text']
+        prompt = protocol.canonical_prompt('native_math', reading_stage=openness_reading.find_stage(packet),
+                                           reading_protocol=openness_reading.find_protocol(packet))['text']
         return transport.request_body(self.read_route(), prompt, packet, order=order)
 
     def measure(self, packet):
@@ -404,10 +405,11 @@ class KmpShapedChainAcceptanceTests(AcceptanceCase):
             self.assertLessEqual(sum(row['characters'] for row in plan['delivered_now']), TURN_BUDGET_CHARACTERS)
         final = turns[-1]
         records = self.store.snapshot()['records']
-        self.assertEqual(records['review_assignment'][final]['prompt']['template_id'], PROTOCOL_V3 + '/final')
+        self.assertEqual(records['review_assignment'][final]['prompt']['template_id'],
+                         openness_reading.PROTOCOL_V4 + '/final')
         packet = self.read_packet(final)
         record = packet['reading_record']
-        self.assertEqual(record['protocol'], PROTOCOL_V3)
+        self.assertEqual(record['protocol'], openness_reading.PROTOCOL_V4)
         self.assertEqual([turn['assignment_id'] for turn in record['turns']], turns[:-1])
         verified = [entry for entry in record['excerpts'] if entry['status'] == 'verified']
         unmatched = [entry for entry in record['excerpts'] if entry['status'] == 'unmatched']
@@ -459,9 +461,9 @@ class KmpShapedChainAcceptanceTests(AcceptanceCase):
         self.assertEqual([name_unit(row) for row in self.list_delivered_rows(continued)], self.list_record_names())
         records = self.store.snapshot()['records']
         self.assertEqual([records['review_assignment'][identifier]['prompt']['template_id'] for identifier in continued],
-                         [PROTOCOL_V3 + '/reading'] * len(continued))
+                         [openness_reading.PROTOCOL_V4 + '/reading'] * len(continued))
         carried = self.read_packet(continued[0])['reading_turn']['reading_record']
-        self.assertEqual(carried['protocol'], PROTOCOL_V3)
+        self.assertEqual(carried['protocol'], openness_reading.PROTOCOL_V4)
         self.assertEqual([turn['assignment_id'] for turn in carried['turns']], legacy)
         verified = [entry for entry in carried['excerpts'] if entry['status'] == 'verified']
         self.assertEqual(len(verified), KMP_VERIFIED_EXCERPTS)
@@ -720,6 +722,21 @@ class FinalTurnAcceptanceTests(AcceptanceCase):
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', limit):
             with self.assertRaises(ResearchError) as raised:
                 self.assign(final, native_packet, prior=turns[-1])
+        self.assertEqual(raised.exception.details['phase'], 'final_preflight')
+        lower_bound = raised.exception.details['input_characters']
+        # Entry now refuses before fitting. Exercise the unchanged final builder separately so its exact
+        # minimum-size diagnostic and equality boundary remain covered.
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', UNLIMITED_INPUT_CHARACTERS):
+            baseline = self.preview_turn(native_packet, turns[-1], final)
+        records = self.store.snapshot()['records']
+        rows = openness_reading.list_reading_rows(records, self.artifacts, baseline['native'])
+        spans = openness_reading._compute_spans(self.artifacts, rows)
+        chain = openness_reading._list_chain(records, records['review_assignment'][turns[-1]])
+        observations = openness_reading._observe_turns(records, self.artifacts, chain, rows, spans)
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', limit):
+            with self.assertRaises(ResearchError) as raised:
+                openness_reading._build_final_turn(records['review_route']['route'], baseline,
+                    baseline['reading_record'], rows, spans, observations)
         error = raised.exception
         self.assertEqual(error.code, 'review_input_too_large')
         self.assertNotIn(final, self.store.snapshot()['records']['review_assignment'])
@@ -731,14 +748,13 @@ class FinalTurnAcceptanceTests(AcceptanceCase):
         self.assertEqual(sum(parts.values()), details['input_characters'])
         self.assertEqual(details['input_limit_characters'], limit)
         self.assertGreater(details['input_characters'], limit)
+        self.assertLessEqual(lower_bound, details['input_characters'])
         message = str(error)
         for name, count in sorted(parts.items()):
             self.assertTrue(str(count) in message or '{:,}'.format(count) in message, (name, count, message))
         # At exactly the refused size the same assignment is recorded: the candidate that withholds every body that
         # reading turns delivered, except the statement record, and the notes of every turn.
         names = self.name_bodies(native_packet)
-        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', UNLIMITED_INPUT_CHARACTERS):
-            baseline = self.preview_turn(native_packet, turns[-1], final)
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', details['input_characters']):
             self.assign_turn(final, native_packet, turns[-1])
         packet = self.read_packet(final)

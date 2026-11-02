@@ -31,7 +31,8 @@ from .problem_evidence import BINDING_RECORD_KINDS, collect_binding_record_kinds
 from .provenance import plugin_version
 from .publication import latest_reviews
 from .review_context_repair import _lineage, _parent, historical_reviews, slot_id
-from .review_protocol import _context_observed, has_ended_without_output
+from .review_budget import CHARGE_KINDS
+from .review_protocol import _context_observed, has_ended_without_output, usage_report
 from .storage import Store
 from .workspace import checked_parent, find_entry_kind, find_workspace, read_file, strict_json, write_projection
 
@@ -687,7 +688,7 @@ _STAGED_KINDS = ("review_epoch", "review_task", "assessment_incomplete", "review
                  "review_task_acceptance_index", "review_epoch_discoveries", "review_resource_ledger",
                  "review_execution_exhaustion", "review_capture_attempt",
                  "review_pool_membership", "review_capacity_policy", "review_slot_head", "review_task_dispatch",
-                 "review_composition_plan")
+                 "review_composition_plan", "review_call_observation")
 
 
 def _build_staged_records(records, artifacts, inputs):
@@ -852,6 +853,14 @@ def _build_check_reports(records, artifacts, inputs):
             for name, data in inputs.check_reports.items()}
 
 
+def _build_review_usage(records, artifacts, inputs):
+    """Expose the store allowance alongside observed and unknown review usage."""
+    if not records.get('review_budget') and not any(records.get(kind) for kind in CHARGE_KINDS):
+        return {}
+    return {'intermediate/reviews/usage.json': ViewFile(_encode(usage_report(records)),
+                                                       {'source': 'review_usage'})}
+
+
 VIEW_GROUPS = (
     ViewGroup("records", tuple(_RECORD_TREES), _RECORD_TREE_READS, _build_records),
     ViewGroup("value_reviews", ("value_review", "research_support"),
@@ -861,6 +870,7 @@ VIEW_GROUPS = (
     ViewGroup("review_series", _SERIES_KINDS, _ADOPTING_KINDS + _STAGED_KINDS, _build_series),
     ViewGroup("staged_reviews", _STAGED_KINDS, _SERIES_KINDS, _build_staged_records),
     ViewGroup("review_routes", ("review_route", "review_probe_invocation", "review_route_probe"), (), _build_routes),
+    ViewGroup("review_usage", ("review_budget",), CHARGE_KINDS + ("review_observation",), _build_review_usage),
     ViewGroup("problem_candidates", ("problem_candidate",), (), _build_candidates),
     ViewGroup("lab_probes", _PROBE_KINDS + ("probe_artifact", "probe_artifact_pin", "local_artifact"), (),
               _build_probes),
@@ -872,6 +882,7 @@ VIEW_GROUPS = (
 # Records of evidence, bookkeeping, plans, configuration and selection pointers have no view of their own; a group
 # reads a pointer to name the record it selects as current.
 _UNPLACED_KINDS = (
+    "fulltext_job", "fulltext_unit", "source_assembly",
     "acquisition_operation", "alias", "availability", "bundle_selection", "cohort_abstract_selection",
     "cohort_enumeration", "cohort_enumeration_history", "cohort_exclusion", "cohort_member", "cohort_partition_entry",
     "cohort_partition_member", "cohort_sample", "cohort_sample_selection", "cohort_seen", "collection",

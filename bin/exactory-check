@@ -11,9 +11,10 @@ Three commands:
             deposit commands do before they send anything
 
 The good status is verified. The blocking statuses are not_found, unresolved,
-title_mismatch, and author_mismatch. The warning statuses are year_mismatch,
-no_query, and network_error. A network failure is never treated as fabrication,
-and a report where nothing was verified does not pass the gate.
+title_mismatch, and author_mismatch. The warning status is year_mismatch. The
+incomplete statuses are no_query, network_error, and search_incomplete: they
+make the lookup and the gate fail. A network failure is never treated as
+fabrication, and a report where nothing was verified does not pass the gate.
 
 lookup also reads the manuscript next to the bibliography: the main LaTeX file
 (--main, else paper.tex, else the only file with \\documentclass) and the files
@@ -35,6 +36,7 @@ import json
 import os
 import posixpath
 import re
+import shlex
 import string
 import sys
 import time
@@ -44,6 +46,10 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from research_harness import providers
+from research_harness.errors import ResearchError
 
 _CROSSREF_API_URL = "https://api.crossref.org/works"
 _DATACITE_API_URL = "https://api.datacite.org/dois"
@@ -69,7 +75,8 @@ _TITLE_SIMILARITY_FLOOR = 0.97
 _NAME_SIMILARITY_FLOOR = 0.93
 
 _BLOCKING_STATUSES = {"not_found", "unresolved", "title_mismatch", "author_mismatch"}
-_WARNING_STATUSES = {"year_mismatch", "no_query", "network_error"}
+_WARNING_STATUSES = {"year_mismatch"}
+_INCOMPLETE_STATUSES = {"no_query", "network_error", "search_incomplete"}
 
 
 # The release version has one definition: the plugin manifest. Deriving the
@@ -94,13 +101,14 @@ def _exit_with_error(message: str, code: int = 1) -> None:
 _last_request_monotonic = 0.0
 
 
-def _open_url(url: str, accept: str = "application/json") -> tuple[int | None, str | None]:
+def _open_url(url: str, accept: str = "application/json", *, headers=None) -> tuple[int | None, str | None]:
     """Send one polite GET request. Returns (status, body), where (None, None)
     means the network failed. Keeps a shared minimum interval between live
     requests and retries 429/503 with the Retry-After delay. Tests replace this
     function; nothing else touches the network."""
     global _last_request_monotonic
-    request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": accept})
+    request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": accept,
+                                                 **(headers or {})})
     backoff_seconds = 1.0
     for attempt in range(_MAX_RETRIES + 1):
         wait_seconds = _MIN_REQUEST_INTERVAL_SECONDS - (time.monotonic() - _last_request_monotonic)
@@ -662,17 +670,19 @@ _PUBLISHED_YEAR_TOLERANCE = 1
 
 
 def _is_published_version_of(meta: dict, preprint: dict) -> bool:
-    """A journal, proceedings or chapter record, not an arXiv DOI, whose first author
-    and, when both list two or more, second author match the preprint's."""
+    """A journal, proceedings or chapter record, not an arXiv DOI, whose full author
+    list matches the preprint's in length and order."""
     if meta.get("type") not in _PUBLISHED_WORK_TYPES or not meta.get("doi"):
         return False
     if meta["doi"].lower().startswith("10.48550/"):
         return False
-    author_pairs = list(zip(meta.get("authors") or [], preprint.get("authors") or []))[:2]
-    return bool(author_pairs) and all(_names_match(published, posted) for published, posted in author_pairs)
+    published_authors, posted_authors = meta.get("authors") or [], preprint.get("authors") or []
+    return (bool(published_authors) and len(published_authors) == len(posted_authors)
+            and all(published.strip() and posted.strip() and _names_match(published, posted)
+                    for published, posted in zip(published_authors, posted_authors)))
 
 
-def _find_published_version(preprint: dict) -> tuple[dict | None, str]:
+def _find_published_version(preprint: dict, search_pages: int = 1) -> tuple[dict | None, str, list]:
     """(record, how it was found) of a preprint's published version, or (None, why
     none was chosen). The DOIs that the arXiv record names come first; each must
     be a published version by the same authors. Otherwise exactly one Crossref
@@ -682,31 +692,30 @@ def _find_published_version(preprint: dict) -> tuple[dict | None, str]:
     for doi in (preprint.get("published_doi") or "").split():
         resolution = _resolve_doi(doi)
         if "meta" in resolution and _is_published_version_of(resolution["meta"], preprint):
-            return resolution["meta"], f"DOI {doi}, named by the arXiv record"
+            return resolution["meta"], f"DOI {doi}, named by the arXiv record", []
         findings.append(f"the arXiv record names DOI {doi}, which is not a published version by the"
                         " same authors" if "meta" in resolution
                         else f"the arXiv record names DOI {doi}, whose record could not be fetched"
                              f" ({resolution['detail']})")
     title = _normalize_for_match(preprint.get("title", ""))
     if not title or not preprint.get("authors"):
-        return None, "; ".join(findings + ["the preprint record has no title or author to search for"])
-    query = {"rows": "5", "query.bibliographic": preprint["title"], "query.author": preprint["authors"][0]}
-    code, text = _open_url(f"{_CROSSREF_API_URL}?" + urllib.parse.urlencode(query))
-    try:
-        items = json.loads(text).get("message", {}).get("items", []) if code == 200 and text else None
-    except ValueError:
-        items = None
-    if items is None:
-        return None, "; ".join(findings + ["Crossref was not reachable"])
+        return None, "; ".join(findings + ["the preprint record has no title or author to search for"]), []
+    query = {"query.bibliographic": preprint["title"], "query.author": preprint["authors"][0]}
     earliest_year = (preprint.get("year") or 0) - _PUBLISHED_YEAR_TOLERANCE
-    matches = {meta["doi"].lower(): meta for meta in map(_normalize_crossref_work, items)
-               if _normalize_for_match(meta["title"]) == title and _is_published_version_of(meta, preprint)
-               and (meta.get("year") or 0) >= earliest_year}
+    matches = {}
+    for metas, coverage in _iterate_search_pages(providers.Crossref(), query, search_pages):
+        matches.update({meta["doi"].lower(): meta for meta in metas
+                        if _normalize_for_match(meta["title"]) == title
+                        and _is_published_version_of(meta, preprint)
+                        and (meta.get("year") or 0) >= earliest_year})
+    if not coverage["complete"]:
+        why = "Crossref was not reachable" if coverage["termination_reason"] == "network_error" else "Crossref search incomplete"
+        return None, "; ".join(findings + [why]), [coverage]
     if len(matches) == 1:
         meta = next(iter(matches.values()))
-        return meta, f"DOI {meta['doi']}, found by a Crossref title and author match"
+        return meta, f"DOI {meta['doi']}, found by a Crossref title and author match", [coverage]
     return None, "; ".join(findings + ["Crossref has several matching records" if matches else
-                                       "Crossref has no record with the same title and authors"])
+                                       "Crossref has no record with the same title and authors"]), [coverage]
 
 
 def _normalize_pubmed_summary(summary: dict) -> dict:
@@ -801,57 +810,111 @@ def _pick_matching_candidate(
     return None, near_miss
 
 
-def _search_title(entry: dict) -> dict:
+def _iterate_search_pages(provider, query: dict, search_pages: int):
+    coverage = {"provider": provider.name, "pages": 0, "inspected_count": 0,
+                "reported_total": None, "omitted_count": None, "complete": False,
+                "next_cursor": "*", "termination_reason": None, "continuation": None}
+    cursor, seen_cursors = "*", set()
+    known_total, unknown_total, inconsistent_total = None, False, False
+    for page_number in range(search_pages):
+        seen_cursors.add(cursor)
+        request = provider.search_request(query, cursor=cursor, page_size=5)
+        options = {"headers": request.headers} if request.headers else {}
+        code, text = _open_url(request.url, accept=request.accept[0], **options)
+        coverage["pages"] += 1
+        metas = []
+        reason = "network_error"
+        if code == 200 and text:
+            reason = "malformed_response"
+            try:
+                document = providers._json(text)
+                crossref = provider.name == "crossref"
+                metadata = document.get("message") if crossref else document.get("meta")
+                if not isinstance(metadata, dict):
+                    raise ValueError()
+                items = metadata.get("items") if crossref else document.get("results")
+                if not isinstance(items, list) or len(items) > 5:
+                    raise ValueError()
+                total = metadata.get("total-results" if crossref else "count")
+                if total is not None and (type(total) is not int or total < 0):
+                    unknown_total = True
+                    raise ValueError()
+                next_cursor = metadata.get("next-cursor" if crossref else "next_cursor")
+                if next_cursor is not None and (not isinstance(next_cursor, str)
+                                                or not next_cursor.strip() or "\x00" in next_cursor):
+                    raise ValueError()
+                if total is None:
+                    unknown_total = True
+                elif known_total is not None and total != known_total:
+                    inconsistent_total = True
+                else:
+                    known_total = total
+                coverage["inspected_count"] += len(items)
+                terminal = len(items) < 5 if crossref else next_cursor is None
+                if known_total is not None and (coverage["inspected_count"] > known_total
+                                               or terminal and coverage["inspected_count"] != known_total):
+                    inconsistent_total = True
+                coverage["next_cursor"] = None if terminal else next_cursor
+                for item in items:
+                    parsed = provider.parse(json.dumps({"message": item} if crossref else item))
+                    if parsed.failures or len(parsed.works) != 1:
+                        raise ValueError()
+                    metas.append(_normalize_crossref_work(item) if crossref else _normalize_openalex_work(item))
+                if inconsistent_total:
+                    reason = "inconsistent_total"
+                elif terminal:
+                    reason = "exhausted"
+                    coverage["complete"] = True
+                elif not next_cursor:
+                    reason = "missing_cursor"
+                elif next_cursor in seen_cursors:
+                    reason = "repeated_cursor"
+                elif not items:
+                    reason = "empty_page"
+                else:
+                    reason = "page_limit" if page_number + 1 == search_pages else "more_pages"
+                    cursor = next_cursor
+            except (ResearchError, ValueError, TypeError, KeyError, AttributeError, IndexError, OverflowError):
+                pass
+        coverage["reported_total"] = None if unknown_total or inconsistent_total else known_total
+        coverage["omitted_count"] = (None if coverage["reported_total"] is None
+                                     else coverage["reported_total"] - coverage["inspected_count"])
+        coverage["termination_reason"] = reason
+        yield metas, dict(coverage)
+        if reason != "more_pages":
+            return
+
+
+def _search_title(entry: dict, search_pages: int = 1) -> dict:
     """Id-less entry: find any real work with a strictly matching title, first in
     Crossref, then in OpenAlex, and compare the full metadata of each candidate.
     Only after both searches come up empty over a working network is the entry
     called unresolved."""
     title = entry.get("title", "")
-    reached_any = False
     near_miss = None
-
-    code, text = _open_url(f"{_CROSSREF_API_URL}?rows=5&query.bibliographic="
-                           + urllib.parse.quote(title))
-    if code == 200 and text:
-        try:
-            items = json.loads(text).get("message", {}).get("items", [])
-        except ValueError:
-            items = None
-        if items is not None:
-            reached_any = True
+    searches = []
+    for provider, query in ((providers.Crossref(), {"query.bibliographic": title}),
+                            (providers.OpenAlex(), {"search": title})):
+        for metas, coverage in _iterate_search_pages(provider, query, search_pages):
             accepted, near_miss = _pick_matching_candidate(
-                entry, title, [_normalize_crossref_work(item) for item in items], near_miss
+                entry, title, metas, near_miss
             )
             if accepted:
-                return accepted
-    elif code is not None:
-        reached_any = True
-
-    code, text = _open_url(f"{_OPENALEX_API_URL}?per_page=5&search=" + urllib.parse.quote(title))
-    if code == 200 and text:
-        try:
-            works = json.loads(text).get("results", [])
-        except ValueError:
-            works = None
-        if works is not None:
-            reached_any = True
-            accepted, near_miss = _pick_matching_candidate(
-                entry, title, [_normalize_openalex_work(work) for work in works], near_miss
-            )
-            if accepted:
-                return accepted
-    elif code is not None:
-        reached_any = True
-
+                if coverage["termination_reason"] == "more_pages":
+                    coverage["termination_reason"] = "match"
+                return dict(accepted, searches=searches + [coverage])
+        searches.append(coverage)
+    if not all(search["complete"] for search in searches):
+        status = ("network_error" if all(search["termination_reason"] == "network_error"
+                                        for search in searches) else "search_incomplete")
+        return {"status": status, "detail": "citation search incomplete", "searches": searches}
     if near_miss:
-        return near_miss
-    if not reached_any:
-        return {"status": "network_error", "detail": "no search endpoint was reachable"}
+        return dict(near_miss, searches=searches)
     return {"status": "unresolved",
-            "detail": "no Crossref or OpenAlex work matches this title"}
+            "detail": "no Crossref or OpenAlex work matches this title", "searches": searches}
 
 
-def _classify_entry(entry: dict) -> dict:
+def _classify_entry(entry: dict, search_pages: int = 1) -> dict:
     """Resolve the entry's registry record and compare field by field. The result
     may carry _meta (the fetched record) for the positive cache. A definitive
     not-found on one id falls through to the next resolvable handle, so a real
@@ -875,7 +938,7 @@ def _classify_entry(entry: dict) -> dict:
             result = {}
     if not result:
         if title:
-            result = _search_title(entry)
+            result = _search_title(entry, search_pages)
         else:
             result = {"status": "no_query",
                       "detail": "the entry has no DOI, arXiv id, PMID, or title to look up"}
@@ -1183,14 +1246,51 @@ def _check_manuscript(bib_path: Path, entries: list[dict], main: str | None) -> 
             "prior_art_without_citation": prior_art}
 
 
-def _print_lookup_summary(report: dict, out_path: Path) -> None:
+def _summarize_lookup_entries(entries: list) -> dict:
+    incomplete_keys = [entry["key"] for entry in entries if entry["status"] in _INCOMPLETE_STATUSES]
+    counts = {"verified": sum(entry["status"] == "verified" for entry in entries),
+              "blocking": sum(entry["status"] in _BLOCKING_STATUSES for entry in entries),
+              "warning": sum(entry["status"] in _WARNING_STATUSES for entry in entries),
+              "incomplete": len(incomplete_keys)}
+    return {"counts": counts, "incomplete_keys": incomplete_keys,
+            "lookup_complete": not incomplete_keys,
+            "all_verified": bool(entries) and counts["verified"] == len(entries),
+            "nothing_verified": counts["verified"] == 0}
+
+
+def _build_search_continuation(args: argparse.Namespace) -> str:
+    command = ["exactory-check", args.command]
+    if args.command == "lookup":
+        command.extend(["--refs-json", args.refs_json] if args.refs_json else
+                       ["--bib", args.bib or _DEFAULT_BIB_PATH])
+        command.extend(["--out", args.out])
+        if args.main:
+            command.extend(["--main", args.main])
+    else:
+        command.extend(["--arxiv-id", args.arxiv_id, "--bib", args.bib])
+    command.extend(["--search-pages", str(args.search_pages * 2)])
+    return shlex.join(command)
+
+
+def _print_search_coverage(searches: list, continuation: str) -> None:
+    for search in searches:
+        if not search["complete"]:
+            search["continuation"] = continuation
+        print("Search coverage: " + json.dumps(search, ensure_ascii=False))
+
+
+def _print_lookup_summary(report: dict, out_path: Path, continuation: str) -> None:
     counts, manuscript = report["counts"], report["manuscript"]
     print(f"Checked {len(report['entries'])} references: {counts['verified']} verified,"
-          f" {counts['blocking']} blocking, {counts['warning']} warnings.")
+          f" {counts['blocking']} blocking, {counts['warning']} warnings,"
+          f" {counts['incomplete']} incomplete.")
+    print(f"Lookup complete: {report['lookup_complete']}. All verified: {report['all_verified']}.")
     for entry in report["entries"]:
+        _print_search_coverage(entry["searches"], continuation)
         if entry["status"] == "verified":
             continue
-        label = "blocking" if entry["status"] in _BLOCKING_STATUSES else "warning"
+        label = ("blocking" if entry["status"] in _BLOCKING_STATUSES else
+                 "incomplete" if entry["status"] in _INCOMPLETE_STATUSES else "warning")
         print(f"  [{label}] {entry['status']}: {entry['key']}. {entry['detail']}")
     if manuscript["tex_sha256"]:
         print(f"Read the manuscript {manuscript['main'] or 'files'} ({len(manuscript['tex_sha256'])} LaTeX files):"
@@ -1233,16 +1333,21 @@ def _run_lookup(args: argparse.Namespace) -> None:
     cache = _load_cache(cache_path)
 
     report_entries = []
+    continuation = _build_search_continuation(args)
     for entry in entries:
         cache_key = _build_cache_key(entry)
         cached_meta = cache.get(cache_key) if cache_key else None
         if isinstance(cached_meta, dict):
             result = _compare_entry_with_meta(entry, cached_meta)
         else:
-            result = _classify_entry(entry)
+            result = _classify_entry(entry, args.search_pages)
             meta = result.pop("_meta", None)
             if meta is not None and cache_key and result["status"] in ("verified", "year_mismatch"):
                 cache[cache_key] = meta
+        searches = result.get("searches", [])
+        for search in searches:
+            if not search["complete"]:
+                search["continuation"] = continuation
         report_entries.append({
             "key": entry.get("key", ""),
             "doi": _extract_doi(entry),
@@ -1250,37 +1355,34 @@ def _run_lookup(args: argparse.Namespace) -> None:
             "title": entry.get("title", ""),
             "status": result["status"],
             "detail": result.get("detail", ""),
+            "searches": searches,
         })
 
     # counts are per reference, from the registries; the gate's blocking count also
     # includes the entries that the manuscript never cites.
-    verified_count = sum(1 for entry in report_entries if entry["status"] == "verified")
-    registry_blocking_count = sum(1 for entry in report_entries if entry["status"] in _BLOCKING_STATUSES)
-    warning_count = sum(1 for entry in report_entries if entry["status"] in _WARNING_STATUSES)
-    blocking_count = registry_blocking_count + len(manuscript["uncited_keys"])
-    nothing_verified = verified_count == 0
+    summary = _summarize_lookup_entries(report_entries)
+    blocking_count = summary["counts"]["blocking"] + len(manuscript["uncited_keys"])
     report = {
-        "version": 1,
+        "version": 2,
         "bib_sha256": hashlib.sha256(source_bytes).hexdigest(),
         "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "entries": report_entries,
-        "counts": {"verified": verified_count, "blocking": registry_blocking_count,
-                   "warning": warning_count},
+        **summary,
         "blocking": blocking_count,
-        "nothing_verified": nothing_verified,
-        "ok": blocking_count == 0 and not nothing_verified,
+        "ok": blocking_count == 0 and not summary["nothing_verified"] and summary["lookup_complete"],
         "manuscript": manuscript,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     cache_path.write_text(json.dumps({"version": _CACHE_SCHEMA_VERSION, "records": cache}, indent=2) + "\n",
                           encoding="utf-8")
-    _print_lookup_summary(report, out_path)
+    _print_lookup_summary(report, out_path, continuation)
     if not report["ok"]:
         sys.exit(1)
 
 
-def _resolve_preprint_citation(arxiv_id: str, keep_preprint: bool) -> tuple[dict, str]:
+def _resolve_preprint_citation(arxiv_id: str, keep_preprint: bool,
+                               search_pages: int = 1) -> tuple[dict, str]:
     """The registry record to cite for an arXiv id, and a notice that says which
     version the entry cites and why."""
     resolution = _resolve_arxiv_id(arxiv_id)
@@ -1291,14 +1393,15 @@ def _resolve_preprint_citation(arxiv_id: str, keep_preprint: bool) -> tuple[dict
         named = preprint.get("published_doi")
         return resolution, ((f"The arXiv record names a published version, DOI {named}. " if named else "")
                             + "The entry cites the preprint because of --preprint.")
-    published, how = _find_published_version(preprint)
+    published, how, searches = _find_published_version(preprint, search_pages)
+    resolution["searches"] = searches
     if published is None:
         return resolution, (f"The entry cites the preprint arXiv:{arxiv_id}: {how}. If the paper has"
                             " been published, remove this entry and add the published version"
                             " with --doi.")
     # The published entry keeps the preprint's identifier, so the work stays
     # recognizable from its arXiv id in the bibliography and in the research store.
-    return {"meta": dict(published, arxiv=arxiv_id)}, (f"arXiv:{arxiv_id} has a published version, {how}. The entry"
+    return {"meta": dict(published, arxiv=arxiv_id), "searches": searches}, (f"arXiv:{arxiv_id} has a published version, {how}. The entry"
                                  " cites the published version. To cite the preprint itself, remove"
                                  " the entry and run the command again with --preprint.")
 
@@ -1312,7 +1415,7 @@ def _run_add(args: argparse.Namespace) -> None:
         identifier = f"DOI {args.doi}"
     else:
         resolution, notice = _resolve_preprint_citation(
-            re.sub(r"v\d+$", "", args.arxiv_id.strip()), args.preprint)
+            re.sub(r"v\d+$", "", args.arxiv_id.strip()), args.preprint, args.search_pages)
         identifier = f"arXiv id {args.arxiv_id}"
     if "meta" not in resolution:
         _exit_with_error(f"The client cannot fetch the record for {identifier}:"
@@ -1364,6 +1467,8 @@ def _run_add(args: argparse.Namespace) -> None:
     print(f"\nThe entry {key} is now in {bib_path}.")
     if notice:
         print(notice)
+    if resolution.get("searches"):
+        _print_search_coverage(resolution["searches"], _build_search_continuation(args))
 
 
 _GATE_LOOKUP_CMD = "exactory-check lookup --bib draft/references.bib"
@@ -1402,7 +1507,10 @@ def _run_gate(args: argparse.Namespace) -> None:
         report = None
     if not isinstance(report, dict):
         _exit_with_error(f"The citation report is not readable. Run: {_GATE_LOOKUP_CMD}")
-    if report.get("bib_sha256") != hashlib.sha256(references_path.read_bytes()).hexdigest():
+    if type(report.get("version")) is not int or report["version"] != 2:
+        _exit_with_error(f"Citation report version 2 required. Run: {_GATE_LOOKUP_CMD}")
+    references_bytes = references_path.read_bytes()
+    if report.get("bib_sha256") != hashlib.sha256(references_bytes).hexdigest():
         _exit_with_error("The citation report is stale because draft/references.bib"
                          f" changed. Run: {_GATE_LOOKUP_CMD}")
     manuscript = report.get("manuscript")
@@ -1419,10 +1527,33 @@ def _run_gate(args: argparse.Namespace) -> None:
     if report.get("blocking") != 0:
         _exit_with_error("The citation report shows blocking references. Correct"
                          f" them. Then run: {_GATE_LOOKUP_CMD}")
-    if report.get("nothing_verified") is not False:
+    entries = report.get("entries")
+    statuses = _BLOCKING_STATUSES | _WARNING_STATUSES | _INCOMPLETE_STATUSES | {"verified"}
+    if (not isinstance(entries, list)
+            or any(not isinstance(entry, dict) or not isinstance(entry.get("status"), str)
+                   or entry["status"] not in statuses for entry in entries)
+            or [entry.get("key") for entry in entries] != [entry["key"] for entry in
+                _parse_bib(references_bytes.decode("utf-8", errors="replace"))]):
+        _exit_with_error(f"Citation report entries are invalid or incomplete. Run: {_GATE_LOOKUP_CMD}")
+    summary = _summarize_lookup_entries(entries)
+    if (not summary["lookup_complete"] or summary["counts"]["blocking"]
+            or any(report.get(key) != value for key, value in summary.items())):
+        _exit_with_error(f"Citation lookup is incomplete or inconsistent. Run: {_GATE_LOOKUP_CMD}")
+    if summary["nothing_verified"]:
         _exit_with_error("The citation report verified zero references. Connect to"
                          f" the network. Then run: {_GATE_LOOKUP_CMD}")
-    print("Citation gate: pass")
+    print(f"Citation gate: pass (lookup complete; {summary['counts']['warning']} warnings;"
+          f" all verified: {summary['all_verified']})")
+
+
+def _parse_search_pages(value: str) -> int:
+    try:
+        pages = int(value)
+        if pages > 0:
+            return pages
+    except ValueError:
+        pass
+    raise argparse.ArgumentTypeError("must be a positive integer")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1441,6 +1572,9 @@ def _build_parser() -> argparse.ArgumentParser:
                      help="With --arxiv-id: cite the preprint even when a published version exists.")
     add.add_argument("--bib", default=_DEFAULT_BIB_PATH,
                      help=f"Path of the references file (default: {_DEFAULT_BIB_PATH}).")
+    add.add_argument("--search-pages", type=_parse_search_pages, default=1,
+                     help="With --arxiv-id: pages of five Crossref results to search for a published"
+                          " version (default: 1).")
     add.set_defaults(handler=_run_add)
 
     lookup = commands.add_parser("lookup", allow_abbrev=False,
@@ -1458,6 +1592,8 @@ def _build_parser() -> argparse.ArgumentParser:
                              " \\documentclass).")
     lookup.add_argument("--out", default=_DEFAULT_REPORT_PATH,
                         help=f"Path of the report file (default: {_DEFAULT_REPORT_PATH}).")
+    lookup.add_argument("--search-pages", type=_parse_search_pages, default=1,
+                        help="Pages of five results per registry for a title search (default: 1).")
     lookup.set_defaults(handler=_run_lookup)
 
     gate = commands.add_parser("gate", allow_abbrev=False,

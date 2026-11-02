@@ -622,18 +622,18 @@ class TestRecordAttackActivity(unittest.TestCase):
                     self._run("Bash", {"command": command + " attack/sample/problem.json"}, host=host)
                     self.assertFalse((self.workspace / "activity.jsonl").exists())
 
-    def test_only_a_retained_harness_entry_enables_ordinary_calls(self) -> None:
+    def test_retention_keeps_the_harness_entry_of_a_working_session(self) -> None:
         log_path = self.workspace / "activity.jsonl"
         self._run("Bash", {"command": "exactory-math status sample"})
         retained = json.dumps({"at": "old", "tool": "Write", "target": "notes.md",
                                "session_id": "claude:session", "harness_command": False})
         log_path.write_text(log_path.read_text() + (retained + "\n") * 199)
         self._run("Write", {"file_path": "attack/sample/notes.md"})
-        self.assertEqual(len(self.read_log()), 200)
-        self.assertFalse(any(entry.get("harness_command") for entry in self.read_log()))
-        before = log_path.read_bytes()
+        self.assertEqual(len(self.read_log()), 201)
+        self.assertIs(self.read_log()[0]["harness_command"], True)
         self._run("Bash", {"command": "cat attack/sample/problem.json"})
-        self.assertEqual(log_path.read_bytes(), before)
+        self.assertEqual(len(self.read_log()), 201)
+        self.assertEqual(self.read_log()[-1]["target"], "cat attack/sample/problem.json")
 
     def test_a_checked_harness_command_leaves_no_activity(self) -> None:
         # A check writes nothing, so it leaves no activity entry either; another call of the same shell command still

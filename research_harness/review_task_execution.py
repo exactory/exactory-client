@@ -41,6 +41,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .operations import _read_preparation, fields, immutable_record, prepared_mutation, prepared_task_mutation, text
 from .provenance import runtime_provenance
+from .review_budget import check_admission
 from .storage import _canonical
 from .workspace import strict_json
 
@@ -316,6 +317,7 @@ def _active_legacy(records, policy):
 
 def start_call(transaction, operation, invocation, authority, revision):
     """Bind capacity and live ownership to the invocation's start transaction."""
+    check_admission(_TransactionRecords(transaction), operation, invocation['id'])
     admit_call(transaction, invocation["route_id"])
     record = {"protocol": PROTOCOL, "id": authority.reservation_id, "operation": operation, "invocation_id": invocation["id"],
               "route_id": invocation["route_id"], "token": authority.token, "owner": authority.identity,
@@ -360,7 +362,7 @@ def reconcile_call(store, payload, *, request_id, expected_revision=None):
                 if current["released"] or termination is None:
                     return current
                 invocation = _get(records, kind, invocation_id)
-                if tx.get(completed, invocation_id) is None:
+                if tx.get(completed, invocation_id) is None and tx.get('review_call_observation', lifecycle_id) is None:
                     failure = dict(invocation, origin="execution", status="failed", output=None, response=None,
                                    usage={}, reason="Owned execution terminated before its observation committed; outcome unknown",
                                    error={"code": "review_invocation_interrupted", "message": "No committed observation"},
@@ -522,8 +524,9 @@ def reserve_task(store, payload, *, request_id, expected_revision=None):
         exhaustion = _consume_resources(tx, records, plan, state, request_id, revision)
         if exhaustion is not None:
             return {"exhaustion": exhaustion}
-        admit_call(tx, plan["route_id"])
         reservation_id = "review-reservation:" + digest([plan["id"], request_id])
+        check_admission(records, 'review.task_reserve', reservation_id)
+        admit_call(tx, plan["route_id"])
         reservation = {"protocol": PROTOCOL, "id": reservation_id, "plan_id": plan["id"],
                        "task_id": plan["task_id"], "task_generation": plan["task_generation"],
                        "epoch_id": plan["epoch_id"], "route_id": plan["route_id"], "attempt": state["attempts"] + 1,

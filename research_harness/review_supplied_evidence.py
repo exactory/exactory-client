@@ -27,33 +27,54 @@ def find_scientific_predecessor(assignment):
     return context.get('prior_assignment_id') or context.get('staged_upgrade', {}).get('assignment_id')
 
 
-def lineage_packets(records, artifacts, assignment_ids):
-    pending, seen, result = list(assignment_ids), set(), []
+def visit_lineage(records, artifacts, assignment_ids, visit, *, validation_key=None):
+    """Walk dependencies with a separate cycle guard and optional completed-node reuse."""
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    records = evaluation.records
+    active, seen = set(), set()
+    pending = [(identifier, False) for identifier in assignment_ids]
     while pending:
-        identifier = pending.pop()
+        identifier, exiting = pending.pop()
+        key = ('lineage_checked', evaluation._namespace, validation_key, identifier)
+        if exiting:
+            active.remove(identifier)
+            seen.add(identifier)
+            if validation_key is not None:
+                evaluation._retain_once(key, lambda: True)
+            continue
+        if identifier in active:
+            raise ResearchError('review_context_repair_mismatch', 'Reviewer lineage must be acyclic')
         if identifier in seen:
             continue
-        seen.add(identifier)
+        if validation_key is not None and evaluation._retain_once(key, None):
+            seen.add(identifier)
+            continue
         assignment = records.get('review_assignment', {}).get(identifier)
         if assignment is None:
             raise ResearchError('review_record_missing', 'The exact evidence-supplying assignment is missing')
+        active.add(identifier)
+        pending.append((identifier, True))
         if assignment.get('staged_review') is not None:
             from .direction_reviews import collect_selected_task_graph
-            graph = collect_selected_task_graph(records, artifacts, identifier)
-            result.extend(packet for _, packet in graph['packets'])
+            graph = collect_selected_task_graph(records, evaluation, identifier)
+            for _, packet in graph['packets']:
+                visit(packet)
             if graph.get('frame_packet') is not None:
-                result.append(graph['frame_packet'])
-            # Replacement reviewers must read independently; predecessor packets
-            # retained as scientific history do not supply fresh reading credit.
+                visit(graph['frame_packet'])
             continue
         from .review_protocol import source_delivery_packet
-        packet = source_delivery_packet(records, artifacts, assignment)
-        result.append(packet)
+        visit(source_delivery_packet(records, evaluation, assignment))
         parent = assignment.get('history_assignment_id') or find_scientific_predecessor(assignment)
         if parent is None and assignment['role'] == 'slate' and assignment.get('session_id') != identifier:
             parent = assignment.get('session_id')
         if parent is not None:
-            pending.append(parent)
+            pending.append((parent, False))
+
+
+def lineage_packets(records, artifacts, assignment_ids):
+    result = []
+    visit_lineage(records, artifacts, assignment_ids, result.append)
     return result
 
 
@@ -119,29 +140,19 @@ def register_supplied_artifact(references, reference):
 
 
 def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
-    """The artifacts that the packets of the assignments' lineages attached, and the passage mappings they delivered:
+    """The artifacts that the assignments' authenticated requests attached, and the passage mappings they delivered:
     prior context, an adjudicator's original and version passages, and passages delivered with a material objection or
     an objection of a historical review. Two descriptors of the same bytes are both kept: the one whose digest sorts
     first is the entry of the SHA-256, and every other one is an entry of the SHA-256 joined with its own digest.
-    Focused refreshes and corrections retain their packet lineage."""
+    Historical deliveries follow the recorded citation contract."""
     references, mappings = {}, []
-    from .review_source_capacity import BODY_DELIVERY
-    from .review_source_complete import ALTERNATE
-    for packet in lineage_packets(records, artifacts, assignment_ids):
-        for entry in packet.get('evidence', []):
-            if entry.get('delivery') in (BODY_DELIVERY, ALTERNATE) or entry.get('encoding') == 'omitted':
-                continue
-            reference = entry['artifact']
+    from .research_decisions import read_review_citation_delivery
+    for assignment_id in assignment_ids:
+        delivery = read_review_citation_delivery(records, artifacts, records['review_assignment'][assignment_id])
+        for reference in delivery['artifacts'].values():
             artifacts.read(reference)
             register_supplied_artifact(references, reference)
-        delivered = (packet.get('prior_context', []) + packet.get('version_source_mappings', [])
-                     + packet.get('supplied_source_mappings', []))
-        delivered += [mapping for objection in list_delivered_objections(packet)
-                      for mapping in resolved_objection_entries(packet, objection, 'version_source_mappings')]
-        delivered += list_delivered_parts(packet)
-        for entry in delivered:
-            if 'origin' not in entry or 'excerpt' not in entry:
-                continue
+        for entry in delivery['source_mappings']:
             # Legacy mappings, with or without a saved citation, meet the receiving role's evidence contract.
             if not frozen:
                 entry = deliver_passage(records, artifacts, entry)
@@ -296,15 +307,17 @@ def undelivered_references(records, artifacts, evidence, carried, references, ma
     return missing
 
 
-def adjudicator_undelivered_references(records, artifacts, assignment_id, evidence, *, frozen=False):
+def adjudicator_undelivered_references(records, artifacts, assignment_id, evidence, *, frozen=False, attempt=None):
     """Check the adjudicator's actual packet delivery, including its focused refresh/correction ancestry."""
-    from .review_protocol import collect_carried_records
-    staged = records['review_assignment'][assignment_id].get('staged_review') is not None
-    packets = lineage_packets(records, artifacts, [assignment_id]) if frozen or staged else None
-    carried = collect_carried_records(records, artifacts, assignment_id, packets=packets)
-    references, mappings = supplied_context(records, artifacts, [assignment_id], frozen=frozen)
-    return undelivered_references(records, artifacts, evidence, carried, references, mappings, frozen=frozen,
-                                  packets=packets if staged else ())
+    from .review_delivered_evidence import project_delivery_view
+    from .research_decisions import find_review_undelivered_references, read_review_citation_delivery
+    assignment = records['review_assignment'][assignment_id]
+    if assignment.get('staged_review', {}).get('kind') == 'controller':
+        delivery = project_delivery_view(records, artifacts, lineage_packets(records, artifacts, [assignment_id]))
+    else:
+        delivery = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)
+    return find_review_undelivered_references(records, artifacts, evidence, delivery,
+        require_complete_artifacts=assignment.get('staged_review') is not None)
 
 
 def validate_correction(records, artifacts, evidence, references, mappings):

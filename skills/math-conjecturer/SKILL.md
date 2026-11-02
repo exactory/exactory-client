@@ -31,7 +31,10 @@ the record, not an order of tools: every tool is available at every milestone, a
 Every `exactory-research` mutation below takes `--file FILE --expected-revision REVISION
 --request-id ID`. Read `exactory-research status` before each mutation and use its revision.
 Retry an interrupted mutation with its original request id, revision and payload: the harness
-returns the original receipt. `exactory-research example OPERATION` prints a complete example
+returns the original receipt. The same retry finishes a `review-run`, `review-probe` or
+`review-output-correction` whose process stopped after the reviewer answered: the harness records
+the captured answer without a second call, and until then refuses a new run of that assignment
+with `review_invocation_pending`. `exactory-research example OPERATION` prints a complete example
 payload. `exactory-research next` names the first missing condition with the action that clears
 it. Add `--check` to validate a payload without writing: the harness reports the first refusal
 or `{check: "accepted", revision, recorded: false, ...}` from one snapshot of the store and
@@ -113,7 +116,10 @@ closes it. It has a budget, and it has a legitimate outcome in which nothing is 
 2. Run `exactory-research problem-init --file init.json --expected-revision 0 --request-id init`.
 3. Before the first costly call, record the exploration budget with `exactory-research budget`
    (profile `research`; purpose `literature`, `screening` or `experiment`). To spend beyond it,
-   record a new budget with the reason.
+   record a new budget with the reason. Reviewer calls stay outside that budget; when the user
+   sets a ceiling on their number, record it with `exactory-research review-budget` and
+   `{max_calls, reason}`, and a run refused with `review_budget_exhausted` waits for a larger
+   allowance from the user.
 
 One principle of problem selection is absolute, and no rubric grade, review or other
 consideration outweighs it. When a counterexample or another proof refutes a conjecture, the
@@ -398,10 +404,13 @@ result and its source; start no solver work to reproduce an established result.
    - Assign the next turn with the same reviewer, route, author and packet and
      `context: {native_packet, prior_assignment_id}`, where `prior_assignment_id` names the turn
      that just ran. Run it with `review-run`. Repeat while the new assignment is a reading turn
-     (prompt template `exactory-openness-reading-v3/reading`). A text of 300,000 characters takes
+     (prompt template `exactory-openness-reading-v4/reading`). A text of 300,000 characters takes
      three reading turns, so a chain over several long texts and their records has many turns. A
-     chain that 0.64.2 to 0.66.2 started continues in the same way: its next turns read the
-     units that no reading turn delivered, full texts first and then the records.
+     chain that an earlier release started, under `exactory-openness-reading-v3` or before,
+     continues in the same way: its next turn records `exactory-openness-reading-v4`, and its next
+     turns read the units that no reading turn delivered, full texts first and then the records.
+     Each turn's answer is checked under the protocol of its own packet, so a turn built under v3
+     keeps v3's rules.
    - When a turn's run ends without output, for example at the route timeout, assign the next
      turn again with the same `prior_assignment_id`. The new assignment replaces the failed turn,
      which can no longer be run or continued (`review_assignment_replaced`). When the first turn
@@ -419,19 +428,33 @@ result and its source; start no solver work to reproduce an established result.
      by a sibling turn (`review_source_continuation_fork`): export the packet again under a new
      assignment id and start a new chain, and keep both diagnostics in your report.
    - The assignment after the last reading turn is the final turn (prompt template
-     `exactory-openness-reading-v3/final`): the native packet with the reading record of the
+     `exactory-openness-reading-v4/final`): the native packet with the reading record of the
      earlier turns. To fit the route's input limit it withholds, only as far as needed, the bodies
      that reading turns delivered complete (full texts from the end of `text_priority`, then the
      other full texts, the reading records and the search records, largest first within each
      kind), each replaced by a note naming the turns that delivered it, and then the notes of the
      earliest turns, oldest first. It never withholds an excerpt, a passage, the statement or the
      formulations. When it returns a reading answer with passage requests, assign one more final
-     turn in the same way.
+     turn in the same way. Under `exactory-openness-reading-v4` at least one of those requests
+     must deliver characters: its anchor is found in a bound body, and its characters fit the
+     remaining passage allowance. A reading answer in which no request delivers characters is an
+     output refusal (`invalid_reading_response`, `path` `/passage_requests`), handled as above:
+     run `review-run` on the same turn again, and the chain does not continue from the refused
+     answer.
    - When `review-assignment` refuses the final turn with `review_input_too_large`, the refusal
      names the size of each part: the base packet, the notes, the excerpts and the passages. What
      remains is protected evidence, the statement, and the excerpts and passages that the
      allowances let the chain keep; a new export does not reduce it. Report the four sizes to the
      owner and wait for the owner's decision.
+   - When `review-assignment` refuses a turn with `review_input_too_large` and `phase:
+     "final_preflight"`, before that turn is planned, the mandatory final input already exceeds
+     the route's limit: the statement record, the protected source and screening bodies, the
+     required proof bytes, the excerpts and passages gathered so far and the final prompt. The
+     chain cannot finish on that route with that material, whichever turns it reads, and nothing
+     was written. `mandatory_components` names each body with its kind, SHA-256 and size, and a
+     new export of the same record measures the same; a registered route with a larger input
+     limit can hold a new chain. Report the components to the owner and wait for the owner's
+     decision.
 7. Record the observed finding with `exactory-research problem-openness` and
    `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
    native result. For a chain, the record adds `reading_turns`, and every unit of the packet, full
@@ -584,7 +607,9 @@ field blind; now they grade the realized statement against their own bar, on the
 evidence that each reviewer's actual request delivers. The post gate's result coverage check
 (`problem_evidence_unassessed`) requires that request to carry every part of the current
 evidence, deliver every reading and attach the bytes of the artifacts of the assessment
-evidence, the computations and the formal checks. The search records in that evidence satisfy
+evidence, the computations and the formal checks; a saved packet that the request did not
+carry credits nothing, and the same request bounds what the review may cite
+(`review_evidence_undelivered`). The search records in that evidence satisfy
 the check for the bound searches, so a text route may withhold the bodies of their captured
 responses at its input limit. For a review performed in stages (step 3), the check reads the
 accepted tasks of the epoch instead of one request. The
@@ -608,10 +633,22 @@ accepted tasks of the epoch instead of one request. The
    the readings with their inline passages, the computations, the formal checks, and every
    applicable objection. Run the assignment with `review-run` and record the observed review
    with `value-review`. When the result packet does not fit one input of the route, or its fitted
-   request would withhold an evidence body, the assignment becomes the controller of a staged
-   review: the harness freezes an epoch (the evidence, the claims and the budgets), plans every
-   task itself and performs the review in tasks, each a fresh call. Follow `next`:
-   `review-assignment {controller_assignment_id}` plans and assigns the next task, then
+   request would withhold an evidence body, the harness delivers the evidence in parts
+   (`exactory-problem-evidence-parts-v1`): continue each part turn with a new assignment of the
+   same role, route and reviewer and `context: {prior_assignment_id}`, as in step 4, until a turn
+   returns the review; `next` lists `problem_evidence_part_pending` while a part turn waits, and
+   `value-review` records only the turn that returned the review. A session that was already a
+   series continues the same way, and a completed series can make the gate ready. A staged
+   review, in which the harness freezes an epoch (the evidence, the claims and the budgets),
+   plans every task itself and performs the review in tasks, each a fresh call, starts only when
+   `review-assignment` is given `context: {staged_upgrade: {assignment_id}}` for a recorded slot;
+   the slots that 0.70.0 staged on assignment continue in it. Its result cannot post before the
+   quality measurement: every staged review lists `review_quality_measurement_pending`, because
+   the measurement of its quality against a single-input review has not run, so the gate stays
+   not ready for a staged review in this release; report that to the user instead of working
+   around it, since in this release only an ordinary review or a series reaches the post. In a
+   staged review, follow
+   `next`: `review-assignment {controller_assignment_id}` plans and assigns the next task, then
    `review-run {assignment_id, epoch_id, task_id}` runs it, and the two alternate until `next`
    is the `value-review` payload; `action: "accept"` resumes an interrupted acceptance and
    `action: "reconcile"` reconciles a worker, neither with a reviewer call. A refused output
@@ -619,15 +656,7 @@ accepted tasks of the epoch instead of one request. The
    hand. The review is the controller's effective result, and `value-review` records it naming
    the controller's assignment id. An assessment that the reviewer cannot complete, or that the
    bounded execution cannot finish, is recorded as `assessment_incomplete`: the slot stays
-   occupied, `next` names the research or recovery work, and no second reviewer replaces it.
-   Every staged review also lists
-   `review_quality_measurement_pending`: the measurement of its quality against a single-input
-   review has not run, so the gate stays not ready for a staged review in this release; report
-   that to the user instead of working around it. A session that was already a series in parts
-   under 0.69.x continues in parts: continue each part turn with a new assignment of the same
-   role, route and reviewer and `context: {prior_assignment_id}`, as in step 4, until a turn
-   returns the review; `next` lists `problem_evidence_part_pending` while a part turn waits, and
-   `value-review` records only the turn that returned the review. The
+   occupied, `next` names the research or recovery work, and no second reviewer replaces it. The
    [CLI reference](../../docs/research-cli.md#staged-problem-reviews) states the records, the
    codes and the recovery steps. Replace a recorded version 1 result review, which has no rubric
    grades, before the post (`problem_rubric_review_required`). When the gate or `next` lists
@@ -652,10 +681,15 @@ accepted tasks of the epoch instead of one request. The
    repair `review_evidence_undelivered`.
 4. Answer a reviewer's source request with a continuation assignment of the same role, route and
    reviewer. One continuation delivers at most 120,000 characters of new full text, so long
-   requested texts arrive in parts and the other requests wait (`deferred_reading_budget`); keep
-   assigning continuations while requests stay pending. When a continuation's run ends without
-   output, for example at the route timeout, assign a new continuation of the same parent: it
-   replaces the failed one.
+   requested texts arrive in parts and the other requests wait (`deferred_reading_budget`); a
+   reply that the route's input cannot hold beside the others waits too (`deferred_capacity`),
+   chosen when `review-assignment` records the turn, and stays in `pending_source_requests`.
+   Keep assigning continuations while requests stay pending. When a continuation's run ends
+   without output, for example at the route timeout, assign a new continuation of the same
+   parent: it replaces the failed one. When `review-assignment` refuses a continuation with
+   `review_source_no_progress`, the reviewer repeated requests that the harness already answered
+   with nothing new; do not continue the session with the same requests: record the reviewer's
+   output as it stands, or change the evidence first, for example by acquiring the source.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
    repaired with evidence changes the evidence digest, and the result reviews are refreshed for
    the same reviewers.
@@ -666,10 +700,13 @@ accepted tasks of the epoch instead of one request. The
    `attempt` or `calibration`, and name both original result review ids in
    `context.review_ids`. An adjudication of A7 decides only whether the question is of the
    excluded kind. Run the assignment with `review-run` and record the observed finding with
-   `review-adjudication`. An adjudication whose packet does not fit one input becomes a staged
-   review as in step 3, with the objection's claim, reason, resolution condition and correction
-   request as its claims; the disposition is the terminal choice of its final task, and
-   `review-adjudication` records the controller's effective result. An incomplete adjudication
+   `review-adjudication`. An adjudication whose packet does not fit one input stays an ordinary
+   assignment, and `review-run` refuses its run before an invocation exists, with
+   `review_input_too_large` and `phase: "dispatch_preflight"`, recording nothing; an explicit `staged_upgrade`
+   that names that assignment, as in step 3, opens a staged review with the objection's claim,
+   reason, resolution condition and correction request as its claims; the disposition is the
+   terminal choice of its final task, and `review-adjudication` records the controller's
+   effective result. An incomplete adjudication
    leaves the objection open (`assessment_incomplete`); do the recovery work that `next` names.
 7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
    as a resolution of that one item.
@@ -741,7 +778,11 @@ Check every citation locator before posting, exactly as `/exactory:propose-grand
    If the citation names a title, include it as `bibliography.title`.
 2. Run `exactory-check lookup --refs-json problem-refs.json --out problem-citation-report.json`.
    Always give `--out`. The default path belongs to a draft workspace's citation gate.
-3. Fix or remove every blocking entry. Run the check again until all entries pass.
+3. Fix or remove every blocking entry. Run the check again until all entries pass. The check
+   also fails while an entry is incomplete (`no_query`, `network_error` or `search_incomplete`).
+   A `search_incomplete` entry is a title search that stopped at its page bound; the output
+   prints the command with twice the pages (`--search-pages`), but the reliable fix is the DOI
+   or the arXiv id in `bibliography`, which is resolved without a search.
 4. Fetch every https locator. Check that it returns the cited document.
 
 Check that the problem is not already posted:

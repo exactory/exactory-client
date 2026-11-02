@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.71.0](docs/releases/0.71.0.md) carries the records left open after 0.70.0: an oversized problem result returns to the part delivery of 0.69.x unless a staged review is requested, every ordinary review is judged on what its exact request delivered, a request is checked before any reviewer call exists and every ordinary call is captured, enumerations and batches state their bounds, exports and deposits stream, large originals get a resumable full-text job, provider pacing is shared across local processes, and the math-solver audits, replay, render and hooks stop repeating work.
+
 Version [0.70.2](docs/releases/0.70.2.md) lets a problem result final count objection-evidence bodies that its own series delivered, and delivers undelivered ones in a part turn of their own when the final would not fit.
 
 Version [0.70.1](docs/releases/0.70.1.md) also replaces, in the replayed history of a refreshed problem result slot, the part outputs of an earlier series that ended when the problem evidence changed, when the turn would not fit otherwise.
@@ -49,7 +51,7 @@ Version [0.69.18](docs/releases/0.69.18.md) registers the record kind and the co
 
 Version [0.69.17](docs/releases/0.69.17.md) makes `minimum.text_priority` of an openness export name the full texts that the packet carries, and refuses a listed version without one.
 
-Version [0.69.16](docs/releases/0.69.16.md) treats every BibTeX directive head as a boundary (so `@comment`, `@string` and `@preamble` text is never evidence) and normalizes titles in linear time without cutting combining marks.
+Version [0.69.16](docs/releases/0.69.16.md) treats a BibTeX directive head at the start of a line as a boundary (so the text of a braced `@comment`, `@string` or `@preamble` that starts a line is not evidence) and normalizes titles in linear time without cutting combining marks; 0.71.0 lists the directive forms that it does not cover.
 
 Version [0.69.15](docs/releases/0.69.15.md) adds `problem-citation-metadata`, which gives a `url:` work of a problem record its citation title and authors from exact byte spans of retained captures.
 

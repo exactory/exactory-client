@@ -1,4 +1,4 @@
-"""Automatic scale fallback at the public assignment-recording boundary."""
+"""Legacy defaults and explicit staged scale checks at the assignment boundary."""
 
 import copy
 from pathlib import Path
@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
+from research_harness.review_bodies import read_history
 from research_harness import review_problem_parts as parts, review_protocol as protocol
 from research_harness import review_staged as staged, review_staged_protocol as producer
 from research_harness import review_transport as transport
@@ -51,7 +52,7 @@ class StagedScaleEntryTests(ResultPartsCase):
         self.addCleanup(patcher.stop)
         return packets
 
-    def test_automatic_large_entry_records_byte_exact_06918_part_within_30_seconds(self):
+    def test_automatic_large_entry_skips_scale_checks_and_records_byte_exact_06918_part(self):
         packets = self.install_scale_packet()
         def timed_out(signum, frame):
             raise AssertionError('automatic scale fallback exceeded 30 seconds')
@@ -63,8 +64,8 @@ class StagedScaleEntryTests(ResultPartsCase):
                     patch.object(producer, 'check_scale', wraps=producer.check_scale) as preflight, \
                     patch.object(staged, 'freeze_epoch', wraps=staged.freeze_epoch) as freeze:
                 assignment = self.assign('large-automatic')
-            self.assertEqual(manifest.call_count, 1)
-            self.assertEqual(preflight.call_count, 1)
+            self.assertEqual(manifest.call_count, 0)
+            self.assertEqual(preflight.call_count, 0)
             self.assertEqual(freeze.call_count, 0)
             self.assertLess(time.monotonic() - started, 30)
         finally:
@@ -81,18 +82,18 @@ class StagedScaleEntryTests(ResultPartsCase):
         legacy = load_legacy_parts()
         expected = legacy.prepare_packet(records, self.case.artifacts,
             dict(id=assignment['id'], role='result', context={}), records['review_route']['route'], packets[-1],
-            protocol.canonical_prompt('result', orchestration='problem_creation'), assignment['history'])
+            protocol.canonical_prompt('result', orchestration='problem_creation'), read_history(self.case.artifacts, assignment))
         self.assertEqual(_canonical(recorded[KEY]), _canonical(expected[KEY]))
         self.assertEqual(assignment['packet'], protocol._put_json(self.case.artifacts, expected))
         self.assertEqual(assignment['prompt'], protocol.canonical_prompt(
             'result', orchestration='problem_creation', excerpts=True, evidence_parts='part'))
-        self.assertTrue(assignment['history'])
+        self.assertTrue(read_history(self.case.artifacts, assignment))
 
-    def test_automatic_under_bound_entry_preflights_and_freezes_manifest_once(self):
+    def test_explicit_under_bound_entry_preflights_and_freezes_manifest_once(self):
         self.install_scale_packet(large=False)
         with patch.object(producer, 'build_manifest', wraps=producer.build_manifest) as manifest, \
                 patch.object(producer, 'check_scale', wraps=producer.check_scale) as preflight:
-            assignment = self.assign('small-automatic')
+            assignment = self.assign_staged('small-explicit')
         self.assertEqual(assignment['staged_review']['kind'], 'controller')
         self.assertNotIn(KEY, self.packet(assignment))
         self.assertEqual(manifest.call_count, 1)
@@ -115,12 +116,14 @@ class StagedScaleEntryTests(ResultPartsCase):
         self.assertEqual(self.case.store.snapshot(), before)
         self.assertEqual(sorted(path.relative_to(objects) for path in objects.rglob('*')), paths)
 
-    def test_automatic_entry_propagates_other_preflight_errors(self):
+    def test_explicit_entry_propagates_other_preflight_errors(self):
         self.install_scale_packet(large=False)
+        prior = self.assign('predecessor')
         with patch.object(producer, 'check_scale', side_effect=ResearchError(
                 'review_task_dependency_changed', 'The prepared input changed.')):
             with self.assertRaises(ResearchError) as caught:
-                self.assign('changed-input')
+                self.case.assign('result', 'first', identifier='changed-input',
+                                 staged_upgrade=dict(assignment_id=prior['id']))
         self.assertEqual(caught.exception.code, 'review_task_dependency_changed')
 
     def test_focused_scale_refusal_retains_the_06918_packet(self):
@@ -213,11 +216,11 @@ class StagedOmittedBodyEntryTests(ResultPartsCase):
         assignment = self.assign('omitted-body-fallback')
         route = records['review_route']['route']
         prompt = protocol.canonical_prompt('result', orchestration='problem_creation')
-        ordinary = transport.request_body(route, prompt['text'], packet, assignment['history'])
+        ordinary = transport.request_body(route, prompt['text'], packet, read_history(self.case.artifacts, assignment))
         self.assertLessEqual(parts._measure(route, ordinary), transport.local_input_limit(route))
         self.assertFalse(parts.preserves_ordinary_packet(self.case.artifacts, packet, ordinary))
         legacy = load_legacy_parts().prepare_packet(records, self.case.artifacts,
-            dict(id=assignment['id'], role='result', context={}), route, packet, prompt, assignment['history'])
+            dict(id=assignment['id'], role='result', context={}), route, packet, prompt, read_history(self.case.artifacts, assignment))
         self.assertEqual(legacy, packet)
         prepared = self.packet(assignment)
         self.assertNotIn('staged_review', prepared)

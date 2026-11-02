@@ -84,6 +84,13 @@ advisory, and an earlier result replays without it.
 """
 
 import copy
+import fcntl
+import functools
+import hashlib
+import inspect
+import os
+import stat
+from contextlib import contextmanager
 import re
 from datetime import date, datetime, timedelta, timezone
 
@@ -95,9 +102,56 @@ from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_me
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, find_doi_family_conflicts, normalize_identifier, version_of
 from .imports import parse_mapped
+from .import_io import read_import_input, validate_import_size
+from .workspace import checked_parent
+from .operations import text
 from .providers import Arxiv, Crossref, OpenAlex
 from .provenance import runtime_provenance
 from . import resources
+
+
+@contextmanager
+def hold_operation(store, target, request_id):
+    relative = ".exactory/acquisition-locks/" + digest(target) + ".lock"
+    with checked_parent(store.root, relative, create=True) as (directory, name):
+        descriptor = os.open(name, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600, dir_fd=directory)
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ResearchError("unsafe_path", "Acquisition lock must be a regular file")
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            owner = os.read(descriptor, 4096).decode("utf-8", errors="replace")
+            raise ResearchError("acquisition_in_progress", "An acquisition is running for this target",
+                                {"target": target, "operation_id": owner})
+        os.ftruncate(descriptor, 0)
+        os.write(descriptor, request_id.encode("utf-8"))
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def serialize_acquisition(function):
+    signature = inspect.signature(function)
+
+    @functools.wraps(function)
+    def run(*args, **kwargs):
+        values = signature.bind(*args, **kwargs).arguments
+        store, request_id = values["store"], values["request_id"]
+        # Authenticate replays in the operation itself, without acquiring a new lock.
+        if store.committed_request(request_id) is not None:
+            return function(*args, **kwargs)
+        if "identifier" in values:
+            target = normalize_identifier(values["identifier"])
+        elif "definition" in values:
+            target = "cohort:" + digest(_definition(values["definition"]))
+        elif "collection_id" in values:
+            target = text(values["collection_id"], "Collection ID")
+        else:
+            target = safe_url(values["source_url"])
+        with hold_operation(store, target, request_id):
+            return function(*args, **kwargs)
+    return run
 
 
 def _definition(value):
@@ -125,6 +179,12 @@ def _partition(identifier, start, end):
             "seen_count": 0, "entries_seen": 0, "epoch": 0, "status": "pending", "restart": False}
 
 
+def describe_query_ceiling(partition, total):
+    return {"code": "query_ceiling", "partition_id": partition["id"], "reported_total": total,
+            "partition": {"start": partition["start"], "end": partition["end"]},
+            "adapter_ceiling": Arxiv.query_ceiling, "retryable_with_same_configuration": False}
+
+
 def _split_partition(collection, partition):
     """Replace a multi-minute partition by two date halves that restart at offset zero."""
     begin, end = (datetime.strptime(partition[key], "%Y%m%d%H%M") for key in ("start", "end"))
@@ -141,7 +201,7 @@ def _supersede(transaction, operation, target, request_id):
             transaction.put("acquisition_operation", identifier, dict(record, state="superseded"))
 
 
-def _begin(store, operation, payload, request_id, expected_revision, *, target=None, apply=None):
+def _begin(store, operation, payload, request_id, expected_revision, *, target=None, apply=None, reserved_requests=None):
     admitted = []
     runtime = runtime_provenance()
 
@@ -149,11 +209,13 @@ def _begin(store, operation, payload, request_id, expected_revision, *, target=N
         if apply:
             apply(transaction)
         _supersede(transaction, operation, target, request_id)
-        resources.admit(transaction, "literature", payload.get("max_requests"))
+        if reserved_requests != 0:
+            resources.admit(transaction, "literature", payload.get("max_requests") if reserved_requests is None else reserved_requests)
         result = {"status": "admitted", "request_id": request_id, "revision": expected_revision + 1,
                   "target": target, "pending": [{"code": "operation_incomplete"}]}
         transaction.put("acquisition_operation", request_id,
-                        {"operation": operation, "payload": payload, "state": "admitted", "target": target,
+                        {"operation": operation, "payload": payload if reserved_requests is None else dict(payload, max_requests=reserved_requests),
+                         "state": "admitted", "target": target,
                          "admission_revision": expected_revision + 1, "result": result, "runtime": runtime})
         admitted.append(True)
         return result
@@ -280,6 +342,7 @@ def collection_status(store, collection_id=None):
             else dict(summaries[0], revision=snapshot["revision"]))
 
 
+@serialize_acquisition
 def collect_cohort(store, definition, *, request_id, expected_revision, max_requests=None, http=None, page_size=100):
     definition = _definition(definition)
     budget = RequestBudget(max_requests)
@@ -304,8 +367,14 @@ def collect_cohort(store, definition, *, request_id, expected_revision, max_requ
     return replay if replay is not None else _run_collection(store, collection_id, request_id, budget, http or HttpClient())
 
 
-def resume_cohort(store, collection_id, *, request_id, expected_revision, max_requests=None, http=None):
+@serialize_acquisition
+def resume_cohort(store, collection_id, *, request_id, expected_revision, max_requests=None, http=None, recheck=False):
+    if type(recheck) is not bool:
+        raise ResearchError("invalid_input", "recheck must be boolean")
     budget = RequestBudget(max_requests)
+    held = (store._read_scoped_preparation().records.get("collection", {}).get(collection_id)
+            if store.committed_request(request_id) is None else None)
+    preserve_ceiling = (not recheck and held is not None and any(p.get("code") == "query_ceiling" for p in held["pending"]))
 
     def admission(transaction):
         collection = transaction.get("collection", collection_id)
@@ -315,7 +384,18 @@ def resume_cohort(store, collection_id, *, request_id, expected_revision, max_re
         if previous is not None and previous["state"] == "admitted":
             transaction.put("acquisition_operation", collection["active_operation"], dict(previous, state="superseded"))
         collection["active_operation"] = request_id
-        collection["pending"] = []
+        ceilings = {p.get("partition_id"): p for p in collection["pending"] if p.get("code") == "query_ceiling"}
+        if recheck:
+            for partition in collection["partitions"]:
+                if partition['id'] in ceilings and partition['offset']:
+                    partition['restart'] = True
+            collection["pending"] = []
+        elif ceilings:
+            collection["pending"] = [describe_query_ceiling(partition, ceilings[partition['id']].get('reported_total'))
+                                      for partition in collection['partitions'] if partition['id'] in ceilings
+                                      and partition['start'] == partition['end']]
+        else:
+            collection["pending"] = []
         for partition in collection["partitions"]:
             if partition["restart"]:
                 partition.update({"offset": 0, "total": None, "seen_count": 0, "epoch": partition["epoch"] + 1,
@@ -324,8 +404,12 @@ def resume_cohort(store, collection_id, *, request_id, expected_revision, max_re
                     partition["entries_seen"] = 0
         transaction.put("collection", collection_id, collection)
 
-    replay = _begin(store, "cohort.resume", {"collection_id": collection_id, "max_requests": max_requests},
-                    request_id, expected_revision, target=collection_id, apply=admission)
+    payload = {"collection_id": collection_id, "max_requests": max_requests}
+    if recheck:
+        payload["recheck"] = True
+    replay = _begin(store, "cohort.resume", payload,
+                    request_id, expected_revision, target=collection_id, apply=admission,
+                    reserved_requests=0 if preserve_ceiling else None)
     return replay if replay is not None else _run_collection(store, collection_id, request_id, budget, http or HttpClient())
 
 
@@ -398,7 +482,9 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
         _split_partition(collection, partition)
         disposition = "split"
     elif error:
-        failures.insert(0, {"code": error.code})
+        diagnosis = (describe_query_ceiling(partition, partition['total']) if error.code == 'query_ceiling'
+                     else {"code": error.code})
+        failures.insert(0, diagnosis)
         disposition = "failed"
     elif page.start != partition["offset"]:
         failures.insert(0, {"code": "changed_cursor"})
@@ -408,7 +494,7 @@ def _page_update(transaction, collection, partition_id, page, prepared, sources,
         partition["restart"] = True
     elif page.total > Arxiv.query_ceiling:
         if partition["start"] == partition["end"]:
-            failures.insert(0, {"code": "query_ceiling", "partition_id": partition["id"], "reported_total": page.total})
+            failures.insert(0, describe_query_ceiling(partition, page.total))
         else:
             _split_partition(collection, partition)
             disposition = "split"
@@ -535,6 +621,7 @@ def _matches(identifier, work):
     return identifier in work["aliases"]
 
 
+@serialize_acquisition
 def acquire_work(store, identifier, *, request_id, expected_revision, http=None, provider=None, max_requests=None):
     identifier = normalize_identifier(identifier)
     provider = _provider(provider or ("arxiv" if identifier.startswith("arxiv:") else "openalex" if identifier.startswith("openalex:") else "crossref"))
@@ -595,6 +682,7 @@ def _extraction_options(value):
     return dict(value)
 
 
+@serialize_acquisition
 def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, http=None, max_requests=None, extractor=None,
                      extraction_options=None, component=None):
     identifier, url = normalize_identifier(identifier), safe_url(url)
@@ -723,6 +811,7 @@ def _import_pending(page):
 
 def preview_import_response(store, provider, response, *, source_url, captured_at, media_type=None, mappings=None):
     """Parse local response bytes and report new DOI-family conflicts without writing evidence."""
+    validate_import_size(len(response), input_kind="response")
     _, _, page = _import_page(provider, response, source_url, captured_at, media_type, mappings)
     snapshot = store.snapshot()
     return {"status": "preview", "scope": "metadata_import", "revision": snapshot["revision"],
@@ -731,42 +820,75 @@ def preview_import_response(store, provider, response, *, source_url, captured_a
             "identity_conflicts": find_doi_family_conflicts(snapshot["records"], page.works)}
 
 
+def build_import_payload(provider, response_sha256, *, source_url, captured_at, media_type=None, mappings=None):
+    if provider not in ("web", "mcp"):
+        media_type = media_type or ("application/atom+xml" if provider == "arxiv" else "application/json")
+    return {"provider": provider, "source_url": safe_url(source_url), "captured_at": captured_at,
+            "response_sha256": response_sha256, "media_type": media_type, "mappings": mappings}
+
+
+def import_response_file(store, provider, response_file, *, source_url, captured_at, request_id, expected_revision,
+                         media_type=None, mappings=None):
+    if store.committed_request(request_id) is not None:
+        hasher = hashlib.sha256()
+        descriptor = os.open(response_file, os.O_RDONLY | os.O_NONBLOCK)
+        with os.fdopen(descriptor, "rb") as source:
+            if not stat.S_ISREG(os.fstat(source.fileno()).st_mode):
+                raise ResearchError("invalid_import", "Import response must be a regular file")
+            for block in iter(lambda: source.read(65536), b""):
+                hasher.update(block)
+        payload = build_import_payload(provider, hasher.hexdigest(), source_url=source_url, captured_at=captured_at,
+                                       media_type=media_type, mappings=mappings)
+        return _begin(store, "response.import", payload, request_id, expected_revision, target=payload["source_url"])
+    response = read_import_input(response_file, input_kind="response")
+    return import_response(store, provider, response, source_url=source_url, captured_at=captured_at,
+                           media_type=media_type, mappings=mappings, request_id=request_id, expected_revision=expected_revision)
+
+
 def import_response(store, provider, response, *, source_url, captured_at, request_id, expected_revision,
                     media_type=None, mappings=None):
-    source_url, media_type, page = _import_page(provider, response, source_url, captured_at, media_type, mappings)
-    payload = {"provider": provider, "source_url": source_url, "captured_at": captured_at,
-               "response_sha256": digest_bytes(response), "media_type": media_type, "mappings": mappings}
-    replay = _begin(store, "response.import", payload, request_id, expected_revision, target=source_url)
-    if replay is not None:
-        return replay
-    snapshot = store.snapshot()
-    artifacts = ArtifactStore(store.root)
-    attempts = [{"url": source_url, "captured_at": captured_at, "status": 200,
-                 "headers": {"content-type": media_type}, "body": response, "complete": True, "error": None}]
-    sources = prepare_sources(artifacts, attempts, provider, request_id)
-    if provider in ("web", "mcp"):
-        sources[0]["response"] = artifacts.put(response, media_type)
-    sources[0]["http_status"] = None
-    sources[0]["imported"] = True
-    sources[0].update({"capture_method": "external_import", "content_scope": "tool_response" if provider in ("web", "mcp") else "provider_response",
-                       "origin_verified": False})
-    prepared = [prepare_work(artifacts, work, sources[0]["id"]) for work in page.works]
-    pending = _import_pending(page)
-    identity_conflicts = find_doi_family_conflicts(snapshot["records"], page.works)
+    if not isinstance(response, bytes):
+        raise ResearchError("invalid_import", "Import response must be original bytes")
+    payload = build_import_payload(provider, digest_bytes(response), source_url=source_url, captured_at=captured_at,
+                                   media_type=media_type, mappings=mappings)
+    if store.committed_request(request_id) is not None:
+        return _begin(store, "response.import", payload, request_id, expected_revision, target=payload["source_url"])
+    validate_import_size(len(response), input_kind="response")
+    from .storage import _canonical
+    validate_import_size(len(_canonical(payload).encode("utf-8")), input_kind="payload")
+    with hold_operation(store, payload['source_url'], request_id):
+        source_url, media_type, page = _import_page(provider, response, source_url, captured_at, media_type, mappings)
+        replay = _begin(store, "response.import", payload, request_id, expected_revision, target=source_url)
+        if replay is not None:
+            return replay
+        snapshot = store.snapshot()
+        artifacts = ArtifactStore(store.root)
+        attempts = [{"url": source_url, "captured_at": captured_at, "status": 200,
+                     "headers": {"content-type": media_type}, "body": response, "complete": True, "error": None}]
+        sources = prepare_sources(artifacts, attempts, provider, request_id)
+        if provider in ("web", "mcp"):
+            sources[0]["response"] = artifacts.put(response, media_type)
+        sources[0]["http_status"] = None
+        sources[0]["imported"] = True
+        sources[0].update({"capture_method": "external_import", "content_scope": "tool_response" if provider in ("web", "mcp") else "provider_response",
+                           "origin_verified": False})
+        prepared = [prepare_work(artifacts, work, sources[0]["id"]) for work in page.works]
+        pending = _import_pending(page)
+        identity_conflicts = find_doi_family_conflicts(snapshot["records"], page.works)
 
-    def commit(transaction):
-        put_sources(transaction, sources)
-        for item in prepared:
-            put_work(transaction, item)
-        transaction.put("source_import", request_id,
-                        dict(payload, source_id=sources[0]["id"], work_ids=[w["id"] for w in page.works], failures=page.failures))
+        def commit(transaction):
+            put_sources(transaction, sources)
+            for item in prepared:
+                put_work(transaction, item)
+            transaction.put("source_import", request_id,
+                            dict(payload, source_id=sources[0]["id"], work_ids=[w["id"] for w in page.works], failures=page.failures))
 
-    # The family conflicts come from this snapshot, so the write keeps its revision instead of retrying on a later one;
-    # an import costs no network request to run again.
-    return _finish_once(store, request_id, snapshot["revision"],
-                        {"status": "pending" if pending else "complete", "scope": "metadata_import", "pending": pending,
-                         "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources],
-                         "identity_conflicts": identity_conflicts}, apply=commit)
+        # The family conflicts come from this snapshot, so the write keeps its revision instead of retrying on a later one;
+        # an import costs no network request to run again.
+        return _finish_once(store, request_id, snapshot["revision"],
+                            {"status": "pending" if pending else "complete", "scope": "metadata_import", "pending": pending,
+                             "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources],
+                             "identity_conflicts": identity_conflicts}, apply=commit)
 
 
 def digest_bytes(data):

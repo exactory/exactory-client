@@ -50,7 +50,12 @@ def media_type(headers):
 def prepare_sources(artifacts, attempts, provider, operation_id, *, start=0, version=None, requested_identifier=None):
     sources = []
     for index, attempt in enumerate(attempts, start):
-        successful = attempt["complete"] and attempt["error"] is None and attempt["status"] is not None and 200 <= attempt["status"] < 300
+        successful = (attempt["complete"] and attempt["error"] is None and attempt["status"] is not None
+                      and 200 <= attempt["status"] < 300 and attempt["status"] != 206)
+        body = attempt.get("body", b"")
+        response = attempt.get("response")
+        if "response" not in attempt:
+            response = artifacts.put(body, media_type(attempt["headers"])) if body or attempt["complete"] else None
         source = {"id": derived_id(operation_id, "source", index), "provider": provider,
                   "operation_id": operation_id, "attempt_ordinal": index, "requested_identifier": requested_identifier,
                   "url": attempt["url"], "captured_at": attempt["captured_at"], "exact_version": version,
@@ -58,10 +63,10 @@ def prepare_sources(artifacts, attempts, provider, operation_id, *, start=0, ver
                   "next_eligible_at": attempt.get("next_eligible_at"),
                   "capture_method": "http", "content_scope": "response", "origin_verified": attempt["status"] is not None,
                   "http_status": attempt["status"], "headers": attempt["headers"],
-                  "status": "captured" if successful else "partial" if attempt["status"] == 206 or (not attempt["complete"] and attempt["body"]) else "failed",
+                  "status": "captured" if successful else "partial" if attempt["status"] == 206 or (not attempt["complete"] and (body or (response and response["size"]))) else "failed",
                   "response_complete": attempt["complete"],
-                  "response": artifacts.put(attempt["body"], media_type(attempt["headers"])) if attempt["body"] or attempt["complete"] else None,
-                  "error": attempt["error"] or (None if successful else "http_status" if attempt["status"] is not None else "network_error")}
+                  "response": response,
+                  "error": attempt["error"] or (None if successful else "partial_response" if attempt["status"] == 206 else "http_status" if attempt["status"] is not None else "network_error")}
         sources.append(source)
     return sources
 

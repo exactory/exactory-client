@@ -929,20 +929,24 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
         self.prepare_problem_evidence()
         full = self.add_unbound_full_source()
         json_link = self.read_a_json_passage()
-        assignment = self.assign("bar", "first", source_links=[full, json_link]
-                                 + self.deliver_supporting("first")["source_links"])
-        packet = json.loads(self.artifacts.read(assignment["packet"]))
-        for mapping in packet["prior_context"]:
-            mapping.pop("citation", None)
-        self.put("review_assignment", assignment["id"], dict(assignment, packet=protocol._put_json(self.artifacts, packet)))
-        _, mappings = supplied_context(self.store.snapshot()["records"], self.artifacts, [assignment["id"]])
-        self.assertEqual(["citation" in row for row in mappings], [True, False, False])
-        # Stored legacy citations are subject to the same rule on subsequent delivery.
-        for mapping, link in zip(packet["prior_context"], [full, json_link, self.supporting_links[self.supporting["sha256"]]]):
-            mapping["citation"] = link
-        self.put("review_assignment", assignment["id"], dict(assignment, packet=protocol._put_json(self.artifacts, packet)))
-        _, mappings = supplied_context(self.store.snapshot()["records"], self.artifacts, [assignment["id"]])
-        self.assertEqual(["citation" in row for row in mappings], [True, False, False])
+        links = [full, json_link] + self.deliver_supporting("first")["source_links"]
+        for legacy_citations, reviewer in ((False, "first"), (True, "second")):
+            assignment = self.assign("bar", reviewer, source_links=links)
+            packet = json.loads(self.artifacts.read(assignment["packet"]))
+            for mapping, link in zip(packet["prior_context"], links):
+                if legacy_citations:
+                    mapping["citation"] = link
+                else:
+                    mapping.pop("citation", None)
+            packet['digest'] = digest({key: value for key, value in packet.items() if key != 'digest'})
+            assignment = dict(assignment, packet=protocol._put_json(self.artifacts, packet), packet_digest=packet['digest'])
+            self.put("review_assignment", assignment["id"], assignment)
+            output = self.build_review_output("bar")
+            with patch("research_harness.review_transport.send_request", return_value=self.build_provider_response(output)):
+                self.mutate(protocol.invoke_assignment, {'id': 'legacy-attempt-' + reviewer, 'assignment_id': assignment['id']},
+                            credential='test-only')
+            _, mappings = supplied_context(self.store.snapshot()["records"], self.artifacts, [assignment["id"]])
+            self.assertEqual(["citation" in row for row in mappings], [True, False, False])
 
     def adjudication_output(self, evidence, correction_admissible=None):
         return {"objection_id": "unsupported-implication", "disposition": "not_upheld",
@@ -1850,7 +1854,9 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
         self.put("review_attempt", "refused-1", dict(attempt, request_digest="different-request"))
         with self.assertRaises(ResearchError) as caught:
             self.invoke_output(output, attempt="forbidden-2")
-        self.assertEqual(caught.exception.code, "review_request_changed")
+        # Since 0.71.0 a refusal counts only from an attempt whose actual delivery authenticates, and a request digest
+        # that disagrees with its stored request does not; its provenance is unverified, so the retry is forbidden.
+        self.assertEqual(caught.exception.code, "review_resampling_forbidden")
         self.assertNotIn("forbidden-2", self.records()["review_invocation"])
 
     def test_malformed_artifact_descriptor_is_refused_before_byte_availability(self):

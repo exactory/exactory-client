@@ -58,20 +58,23 @@ def readiness_packet(report):
 
 def _source_closure(records, version_ids):
     works, readings, bundles, source_ids = {}, {}, {}, set()
+    readings_by_version, bundles_by_version = {}, {}
+    for reading in records.get("reading", {}).values():
+        readings_by_version.setdefault(reading["version_id"], []).append(reading)
+    for bundle in records.get("source_bundle", {}).values():
+        bundles_by_version.setdefault(bundle["version_id"], []).append(bundle)
     for version in sorted(version_ids):
         work = records.get("work", {}).get(version)
         if work is None:
             continue
         works[version] = work
         source_ids.update(work.get("source_ids", []))
-        for reading in records.get("reading", {}).values():
-            if reading["version_id"] == version:
-                readings[reading["id"]] = reading
-                source_ids.update(i["link"]["source_id"] for i in reading["inspections"])
-        for bundle in records.get("source_bundle", {}).values():
-            if bundle["version_id"] == version:
-                bundles[bundle["id"]] = bundle
-                source_ids.update(u["link"]["source_id"] for u in bundle["units"] if u["link"] is not None)
+        for reading in readings_by_version.get(version, ()):
+            readings[reading["id"]] = reading
+            source_ids.update(i["link"]["source_id"] for i in reading["inspections"])
+        for bundle in bundles_by_version.get(version, ()):
+            bundles[bundle["id"]] = bundle
+            source_ids.update(u["link"]["source_id"] for u in bundle["units"] if u["link"] is not None)
     sources = {identifier: records["source"][identifier] for identifier in sorted(source_ids) if identifier in records.get("source", {})}
     return {"work": works, "reading": readings, "source_bundle": bundles, "source": sources}
 

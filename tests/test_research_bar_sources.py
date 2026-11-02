@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 from strategy_fixtures import StrategyCase
+from research_harness.review_bodies import read_history
 from research_harness import research_decisions, review_protocol as protocol
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -95,7 +96,7 @@ class BarSourceTests(StrategyCase):
             dict(response, id='bar-a', dossier_id='dossier-1', assignment_id='a')))
         continued = self.assign('b', prior_assignment_id='a')
         self.assertEqual(continued['session_id'], 'a')
-        self.assertEqual(len(continued['history']), 2)
+        self.assertEqual(len(read_history(self.artifacts, continued)), 2)
         self.assertIn('UNREAD SOURCE REQUESTED BY THE REVIEWER.', json.dumps(self.packet('b')))
         delivery = self.packet('b')['source_deliveries'][0]
         self.assertEqual(delivery['status'], 'delivered')
@@ -195,7 +196,7 @@ class BarSourceTests(StrategyCase):
         self.invoke(response, 'c')
         self.mutate(research_decisions.record_value_review,
             dict(response, id='bar-a', dossier_id='dossier-1', assignment_id='c'))
-        self.assertEqual(len(self.store.snapshot()['records']['review_assignment']['c']['history']), 4)
+        self.assertEqual(len(read_history(self.artifacts, self.store.snapshot()['records']['review_assignment']['c'])), 4)
 
     def test_tampered_reading_is_inventory_metadata_without_current_read_credit(self):
         source = self.metadata(1)

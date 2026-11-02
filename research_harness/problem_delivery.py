@@ -19,12 +19,18 @@ from .problem_openness import assess_openness
 
 
 def assess_minimum(records, artifacts):
+    return _assess_minimum(records, Evaluation.of(records, artifacts))[0]
+
+
+def _assess_minimum(records, artifacts):
     pending = assess_slate(records, artifacts)
     statement, value = find_current_statement(records), find_value(records)
     if statement is None:
         pending.append(obligation("problem_statement_missing", "Record the exact statement and resolution criteria."))
-    pending.extend(assess_attempt(records, artifacts))
-    pending.extend(assess_openness(records, artifacts))
+    attempt = assess_attempt(records, artifacts)
+    pending.extend(attempt)
+    openness = assess_openness(records, artifacts)
+    pending.extend(openness)
     if value is None or statement is None or value["statement_id"] != statement["id"]:
         pending.append(obligation("problem_value_missing", "Bind motivation and current-state paragraphs to this statement's evidence.",
                                   statement_id=None if statement is None else statement["id"]))
@@ -39,7 +45,7 @@ def assess_minimum(records, artifacts):
         project_citations(records, artifacts)
     except ResearchError as error:
         pending.append(obligation(error.code, error.message, **(error.details or {})))
-    return pending
+    return pending, attempt, openness
 
 
 def collect_review_outcomes(records, artifacts):
@@ -261,7 +267,7 @@ def assess_post(records, artifacts):
     require_problem(records)
     from .research_decisions import assess_problem_reviews
     statement = find_current_statement(records)
-    minimum = assess_minimum(records, artifacts)
+    minimum, attempt, openness = _assess_minimum(records, artifacts)
     # A packet is judged only when its own evidence is available. Missing claim
     # evidence is already reported with the more useful minimum obligations.
     reviews = assess_problem_reviews(records, artifacts, check_evidence=not minimum)
@@ -303,9 +309,9 @@ def assess_post(records, artifacts):
         milestone = "slate"
         if slate["selected"] and statement is not None:
             milestone = "formulation"
-            if not assess_attempt(records, artifacts):
+            if not attempt:
                 milestone = "attempt"
-                if not assess_openness(records, artifacts):
+                if not openness:
                     milestone = "openness"
     if not minimum and reviews is not None and reviews["ready"] and decision is not None and decision["action"] == "post" and decision["problem_evidence_digest"] == evidence_digest:
         milestone = "value"

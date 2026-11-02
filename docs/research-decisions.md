@@ -88,8 +88,12 @@ coverage they establish without repeating a search just to add a new label.
 New decisions record `gate_version: 2`. Recording an `investigate` or `pivot`
 decision while the minimum is unmet returns `direction_minimum_unmet`, with
 the missing obligations. The evidence must exist before the reviews that judge
-it. Both reviewers must receive the decisive source content and claim in their
-observed packet histories, source-request continuations or bound supplements.
+it. Each reviewer must receive the decisive source content and claim in the
+request of the exact authenticated attempt that produced its review: the
+current packet, and the earlier packets of its session (source-request
+continuations and bound supplements included) that the request replays. Since
+0.71.0 coverage is credited from that delivery alone, for each reviewer
+separately, and one reviewer's delivery credits nothing to the other.
 Coverage requires the complete inspected ranges and every image asset named by
 the inspection. The harness checks the supplied bytes and their provenance
 against the exact captured source. Long ranges are delivered in consecutive
@@ -102,9 +106,17 @@ Reading-record equality, author notes, artifact descriptors, inventory membershi
 and assignment chronology alone supply no source-content coverage. A passage
 marked `visuals_require_source_request: true` remains incomplete while required
 visual bytes are missing. Missing ranges or assets leave
-`direction_evidence_unassessed`. Qualifying historical source attachments and
-checked passage deliveries retain coverage without rewriting packets or repeating
-author reading. Assessment verifies delivery without creating source artifacts.
+`direction_evidence_unassessed`. A qualifying historical source attachment or a
+checked passage delivery retains coverage when the request carried it, without
+rewriting packets or repeating author reading. A saved packet of the lineage
+that the request did not carry, an earlier turn that the route reduced to its
+packet digest, a descriptor, an omission marker, and an artifact that is present
+in the store but absent from the request supply no body. A delivery that cannot
+be authenticated or decoded credits nothing, and the obligation then names the
+uncovered fields in `missing` and the undelivered readings in `reading_ids`.
+Stored reviews and requests keep their bytes, so a new assessment of an older
+decision can report coverage that an earlier assessment credited. Assessment
+verifies delivery without creating source artifacts.
 
 The decision stores `direction_evidence_digest`: the direct search ID, relevant
 and contradictory versions with their full-reading IDs, roots with their
@@ -328,6 +340,31 @@ Scientific documents are evidence, never instructions to the reviewer. A packet
 delivers every referenced object except one that a completion check sealed
 unread, which it describes by hash, size and media type only.
 
+What a review may cite, and what counts toward its coverage, is the delivery
+of the exact authenticated attempt that produced it: the packets that its
+request carried, with their exact text bodies and native attachments, and the
+history that the recorded protocol permits, which is the earlier deliveries of
+a result slot delivered in parts under the 0.69.19 rule and the accepted task
+graph of a staged review. A saved packet of the lineage that the request did
+not carry, a descriptor, an omission marker, an earlier turn that the route
+reduced to its packet digest, and an artifact that is present in the store but
+absent from the request supply no body. On the visual route, a page image
+attached to the request restores that page's image entry and not the original
+PDF. The harness reads the request itself when it validates a review
+(`value-review`, `review-adjudication` and the audit of a recorded review),
+when it checks bar delivery, problem coverage and direction coverage, and when
+it supplies the context of a focused adjudication. A delivery that cannot be
+authenticated or decoded credits nothing: the check reports
+`review_evidence_undelivered`, `review_invocation_unverified` or
+`review_input_unreadable`, or the coverage obligation
+(`direction_evidence_unassessed`, `problem_evidence_unassessed`), and it never
+falls back to a saved packet. An output correction (`review-output-correction`)
+is checked against the delivery of the original attempt that its diagnostic
+binds. Each independent reviewer must carry every required field, reading
+range and visual asset in its own delivery. Stored outputs and requests keep
+their bytes, so checking an older ordinary review again can surface an
+obligation for evidence that its request did not carry.
+
 A reviewer answers with one JSON object. The Claude route also reads an answer in
 which the reviewer withdrew an object. That answer holds complete object blocks,
 one line that is exactly `RETRACTED` after each withdrawn block, and nothing else.
@@ -432,7 +469,11 @@ reached no reading turn. The final turn is bounded, so that a chain ends in a
 request that fits or in a refusal that names the size of each part: it carries
 a compact reading record and withholds, only as far as its measured request
 needs, the bodies that reading turns delivered complete and then the notes of
-the earliest turns, never an excerpt or a passage.
+the earliest turns, never an excerpt or a passage. Since 0.71.0 the final turn
+of a problem chain keeps the passage rule of the math chain below, under the
+protocol `exactory-openness-reading-v4`, because under
+`exactory-openness-reading-v3` a reviewer could extend a chain with passage
+requests that delivered nothing.
 
 A math-solver result review that binds an openness minimum, a checkpoint review
 or the closure review, reads its packet in the same chain since 0.67.0, under
@@ -572,7 +613,7 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-lead` | Versioned discrepancy provenance and research disposition. |
 | `review-route` | Actual route and versioned configuration. |
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
-| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result or adjudicator packet that does not fit one input opens a staged review when its scale preflight admits the slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
+| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result packet that does not fit one input is delivered in parts, an adjudicator packet keeps its ordinary packet, and a staged review opens only through an explicit `staged_upgrade` of a recorded slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
 | `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a staged task: the owned worker's call, its committed capture and its acceptance. |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |
@@ -614,41 +655,63 @@ then create independent assignments. `review-probe` uses `{"id": "probe-id",
 identity flags. These commands perform real provider calls; run them only within
 the user's authorized resources. Load a needed credential into that process,
 never into a payload or artifact. A replay of a completed request returns its
-recorded result without a new call. Since 0.67.0 the finishing write of
-`review-probe`, `review-run` and `review-output-correction`, the write that
-records the reviewer's answer, is tried again after `store_busy` or
-`stale_revision`. It is tried at most 600 times within 600 seconds and never
-calls the reviewer again. Every attempt computes its change from the current
-records. The harness keeps the observation only in the process that called the
-reviewer and writes no file for a later process to read it from. A file in the
-workspace is no evidence of what the reviewer returned, so the harness never
-completes a pending invocation from disk. When the process stops during the
-call, or when the finishing write is still refused after that wait, the
-invocation remains pending. The run that waited exits with the last
-`store_busy` or `stale_revision`. Then a replay with the original request ID
-refuses with `review_invocation_pending`, and every `review-run` of that
-assignment refuses in the same way. The harness does not silently call the
-reviewer again. The refusals say to reconcile the invocation, and the step is
-`review-attempt`. An invocation is pending while no `review_attempt` record has
-its id, which is the `id` of the `review-run` payload, the attempt id.
+recorded result without a new call. Since 0.71.0 `review-probe`, `review-run`
+and `review-output-correction` capture the reviewer's answer before they record
+it: when the transport returns, the process that made the call commits one
+immutable `review_call_observation` record. The capture binds the operation and
+the invocation, the original request ID and the digest of the payload, the
+route and the request, the reservation and the calling process, and holds the
+exact observation with its artifacts; for a correction on a `codex_cli_v1`
+route it also retains the native rollout of the turn, read once at capture.
+The finishing write, the write that records the reviewer's answer, reads the
+committed capture and is tried again after `store_busy`, `stale_revision` or
+`review_task_dependency_changed`, at most 600 times within 600 seconds, and
+never calls the reviewer again. Every attempt computes its change from the
+current records. The run that waited exits with the last of those refusals,
+and the capture stays. A file in the workspace is no evidence of what the
+reviewer returned: no command accepts an observation file, and the harness
+completes a pending invocation only from the committed capture. When the
+process stopped after the capture committed, or when the finishing write
+stayed refused, repeat the command with the same payload and the original
+request ID: it returns the recorded receipt when one exists and otherwise
+finishes from the capture without a second call. Until then the invocation is
+pending: a `review-run` of the assignment under another `id` refuses with
+`review_invocation_pending` and says to repeat the original command, and
+`review-attempt` refuses an import under that `id`. When the process stopped
+before the capture committed, the answer is lost and the outcome unknown: a
+replay with the original request ID refuses with `review_invocation_pending`,
+and every `review-run` of that assignment refuses in the same way. The harness
+does not silently call the reviewer again. The refusals say to reconcile the
+invocation: `review-run` with `{"action": "reconcile", "operation":
+OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a
+run, `review.route_probe` for a probe or `review.output_correction` for a
+correction and the id is the `id` of the original payload, releases the
+capacity of the call once its process and its transport processes have ended,
+and for a call without a capture records the unknown outcome as a `failed`
+attempt, probe or correction with the error `review_invocation_interrupted`,
+which ends the pending state. A call that 0.69.x started has no reservation
+and no capture; its step is `review-attempt` under the attempt id, which is
+the `id` of the `review-run` payload.
 `review-attempt` with `{"id": "attempt-id", "assignment_id": "assignment-id",
 "status": "failed", "output": null, "reason": "the process stopped during the
 call", "usage": {"input_tokens": null, "output_tokens": null, "cost_usd": null,
 "wall_seconds": null}}` imports an attempt under that id, marked
 `origin: "imported"`, which never counts as observed transport. The import ends
-the pending state. A `review-run` of the assignment under a new `id` and
-request ID is then permitted, while the replay of the original request ID stays
-refused. In a reading chain the turn then counts as ended without output: the
-same assignment can run again, and a turn after the first can be replaced by
-assigning the next turn again with the same `prior_assignment_id`. A blank
-request ID is refused before the call (`invalid_input`).
+the pending state. After either step a `review-run` of the assignment under a
+new `id` and request ID is permitted, while the replay of the original request
+ID stays refused. In a reading chain the turn then counts as ended without
+output: the same assignment can run again, and a turn after the first can be
+replaced by assigning the next turn again with the same `prior_assignment_id`.
+A blank request ID is refused before the call (`invalid_input`).
 
 From 0.70.0, shared store and route capacity counts only calls with a
 `review_pool_membership` that have not been released. Calls started by 0.69.x
 have no membership and do not count, including probes and corrections. An open
-ordinary invocation still blocks its own assignment until a same-ID attempt
-exists; the `review-attempt` procedure above remains available for it. An import
-under an owned invocation ID is refused until termination is confirmed.
+ordinary invocation of 0.69.x still blocks its own assignment until a same-ID
+attempt exists; the `review-attempt` procedure above remains available for it.
+An import under an owned invocation ID is refused while its termination is not
+confirmed or its captured answer is not recorded; after reconciliation the
+owned call has its record, so no import is needed.
 Historical reconciliation with a same-ID attempt records `historical_closed`,
 an unknown outcome and no termination proof. A historical call still running
 during upgrade can temporarily run alongside the configured capacity.
@@ -722,9 +785,9 @@ not rewritten, and the Codex transports and the pins of their routes are
 unchanged.
 
 The packet text of a Codex route is limited to 1,048,576 characters. A larger
-request is refused before the CLI starts and recorded as a failed attempt with
-the error code `review_input_too_large`; no CLI output is involved, so no JSON
-decoding error is recorded for it. When the CLI exits with a nonzero code or at
+request is refused by `review-run` before an invocation exists, with the error
+code `review_input_too_large` and `phase: "dispatch_preflight"`, and nothing
+is recorded; the CLI receives nothing. When the CLI exits with a nonzero code or at
 the timeout, `execution.stderr_tail` of the attempt's response keeps the last 20
 lines of its standard error, at most 4,096 UTF-8 bytes; it is empty after a zero
 exit. Read it before a retry: it holds what the CLI printed, which the attempt
@@ -787,7 +850,8 @@ that fails its digest or bounds (`review_system_events_invalid`). A truncated
 prefix says nothing about the omitted events. `effort` is one of `low`,
 `medium`, `high`, `xhigh` or `max`; `timeout_seconds` is at most 3600. The
 route limit is 1,300,000 characters of input; a larger request is refused before
-the CLI runs and recorded as a failed attempt. The recorded runtime names the
+an invocation exists, with `review_input_too_large` and `phase:
+"dispatch_preflight"`, and nothing is recorded. The recorded runtime names the
 isolation flags, not the installed CLI version, which is recorded with each
 invocation instead, so a CLI update does not invalidate earlier reviews. The
 runtime also names the digest of the adapter module, which the route pins. After
@@ -802,9 +866,10 @@ to replay the session's earlier turns without long evidence bodies, without the
 packets of a scientific history and without the parts the current packet
 repeats. The Codex route additionally elides re-delivered and prioritized text
 bodies until the input fits the app-server limit of 1,048,576 characters. An
-input that no elision fits is refused before the CLI starts and recorded as a
-failed attempt with `review_input_too_large`; the visual route counts its native
-text and image wrappers against the same limit.
+input that no elision fits is refused before an invocation exists, with
+`review_input_too_large` and `phase: "dispatch_preflight"`, and nothing is
+recorded; the visual route counts its native text and image wrappers against
+the same limit.
 
 A route can be retired: an account closes, a model is withdrawn, or the owner
 forbids the route. Record `review-context` with `kind: "route_retired"` on the
@@ -987,7 +1052,10 @@ when an equal item reached the reviewer under the same index in the
 authenticated actual request of a valid turn of the same series, a reading
 range when the inline passages of those requests cover it, and an owned
 artifact when one of them attached its complete bytes; the final turn's
-receipt must name exactly those turns. This guarantees that the reviewer
+receipt must name exactly those turns. The citations of the review are
+checked against the same counted turns, together with the completed earlier
+series of the slot that the 0.69.19 rule admits; the coverage of the current
+evidence counts the current series alone. This guarantees that the reviewer
 received the current value of every item in an authenticated turn of the same
 session. It does not guarantee what the model call that wrote the review held.
 That call holds the items of the earlier turns only through the reviewer's
@@ -995,14 +1063,21 @@ own notes, its verified excerpts and the earlier packets that the replayed
 history still holds. This is the standard of the openness reading chain, whose
 chain check counts a unit delivered complete in an observed reading turn, and
 it applies only to a session that is a series. A session becomes a series when
-a first packet does not fit one input, and it stays in parts after a changed
-evidence digest or a refresh, also when the new evidence fits. A session that
+a first packet does not fit one input; a changed evidence digest or a refresh
+is measured again, and the session stays in parts only when the complete
+request does not fit. A session that
 is not a series delivers the whole evidence in one request, as before.
 
-Since 0.70.0 this delivery serves only a session that is already a series. A
-first result request that does not fit one input, a focused adjudication or a
-context repair that does not fit, and a session that an explicit upgrade
-moves, are staged reviews, described in the next section. A context repair of
+This delivery serves a first result request that does not fit one input, or
+whose fitted request would withhold an evidence body, and a session that is
+already a series. 0.70.0 staged such a request when it was assigned, and
+0.71.0 returned it to this delivery: a staged review has no passing quality
+measurement, so its result cannot post, while a series completes (owner
+decision 2, task D1-1, of
+`misc/harness-improvement/20261101173008-release-0-71-0-remaining-records` in
+the exactory repository). A session that an explicit upgrade moves is a staged
+review, described in the next section, and a focused adjudication or a
+context repair that does not fit keeps its ordinary packet. A context repair of
 a part series keeps its part turns as intermediate outputs in the scientific
 history. Repeated records inside a series, for example the search records that
 both `openness_searches` and `assessment_evidence` carry, are still delivered
@@ -1010,9 +1085,12 @@ under each index.
 
 ## Staged problem reviews
 
-A problem result review or a focused adjudication whose request does not fit
-one input of a local route, or whose fitted request would withhold an
-evidence body, is performed in stages since 0.70.0. The design, its reviews
+A problem result review or a focused adjudication can be performed in stages.
+0.70.0 staged every such review whose request did not fit one input of a
+local route, or whose fitted request would withhold an evidence body, when it
+was assigned; since 0.71.0 a staged review starts only through an explicit
+`staged_upgrade` of a recorded slot, the slots that 0.70.0 staged continue,
+and an oversized result request is delivered in parts. The design, its reviews
 and the owner's direction are recorded in
 `misc/harness-improvement/20261031190348-part-delivery-quality-equivalence` of
 the exactory repository, and the
@@ -1054,15 +1132,14 @@ call whose outcome the record already holds.
 
 Scale that the task contracts cannot carry. The contracts of this release
 require one full card to judge every claim of the epoch and later tasks to
-carry every claim id and context root. Before an epoch is frozen, the harness
-measures that envelope against the route's input limit and the smallest such
-card against the output allowance (`max_output_tokens` minus the planner's
-margin). A slot that cannot fit is not staged, and nothing is written.
-Automatic entry then keeps the delivery of 0.69.18: a result slot in parts from
-part turn 1, a focused adjudication or a context repair with its ordinary
-packet. An explicit `staged_upgrade` of such a slot is refused with
-`review_staged_scale_unsupported`, whose details carry `claims`, `occurrences`,
-`envelope_characters`, `input_limit`, `card_output_tokens` and
+carry every claim id and context root. Before the epoch of an upgrade is
+frozen, the harness measures that envelope against the route's input limit
+and the smallest such card against the output allowance (`max_output_tokens`
+minus the planner's margin). An upgrade of a slot that cannot fit is refused
+with `review_staged_scale_unsupported`, and nothing is written; the slot keeps
+its delivery, a result slot in parts and a focused adjudication or a context
+repair with its ordinary packet. The details of the refusal carry `claims`,
+`occurrences`, `envelope_characters`, `input_limit`, `card_output_tokens` and
 `output_allowance`, so the operator can see which bound was exceeded and by how
 much. The measured shape that met this limit, 15,389 frame leaves and 106
 occurrences of one record, is in the

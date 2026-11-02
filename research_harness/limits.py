@@ -1,13 +1,15 @@
 """The single reading of the bounded policies' counts that both status and the policy report serve."""
 
 from . import lineage, principles, sampling
-from .depth import find_current_depth_plan, resolve_depth_values
+from .depth import find_current_depth_plan, resolve_depth_profile, resolve_depth_values
 
 
 def describe_depth(records):
     """The current depth plan with its resolved amounts, or None without a plan."""
     plan = find_current_depth_plan(records)
-    return None if plan is None else {"plan_id": plan["id"], "values": resolve_depth_values(records)}
+    return None if plan is None else {"plan_id": plan["id"], "profile": resolve_depth_profile(records),
+                                      "stopping_criterion": plan.get("stopping_criterion"),
+                                      "values": resolve_depth_values(records)}
 
 
 def limits_report(records):

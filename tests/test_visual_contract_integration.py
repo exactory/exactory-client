@@ -13,6 +13,7 @@ from research_harness import review_codex_transport as codex
 from research_harness import review_input_projection as projection
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import research_decisions as decisions
+from research_harness import review_delivered_evidence
 from research_harness.artifacts import ArtifactStore, describe_artifact
 from research_harness.errors import ResearchError
 from test_research_codex_visual_transport import png
@@ -68,18 +69,27 @@ class VisualContractIntegrationTests(unittest.TestCase):
             self.project(request)
 
     def probe_prompt(self, adapter):
-        version = SimpleNamespace(returncode=0, stdout='codex-cli fixture-version')
         with tempfile.TemporaryDirectory() as directory, \
-                patch.object(codex.shutil, 'which', return_value='/fixture/codex'), \
-                patch.object(codex, '_run_owned', return_value=version):
+                patch.object(codex, 'runtime', side_effect=lambda: {
+                    'adapter': 'codex_cli_v1', 'fixture': 'visual-probe-prompt'}), \
+                patch('research_harness.review_visual_inputs.control_image', return_value=self.data):
             store = SimpleNamespace(root=Path(directory), build_artifact_store=lambda: ArtifactStore(Path(directory)))
-            route = {'id': 'route', 'adapter': adapter}
+            route = {'id': 'route', 'adapter': adapter, 'model': 'fixture-model',
+                     'endpoint': ('codex://local' if adapter in transport.LOCAL_ADAPTERS
+                                  else 'https://api.example.test/v1/responses'),
+                     'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}}
             route['runtime'] = transport.runtime(route)
             records = {'review_route': {'route': route}}
             def start_only(store, payload, operation, start, finish, **options):
                 return start(records, payload)
+            build_request = transport.request_body
+            def capture_request(route, prompt, packet):
+                # The retired adapter case checks the prompt with the compatible explicit text representation.
+                if route['adapter'] not in transport.LOCAL_ADAPTERS and route['adapter'] != transport.ADAPTER:
+                    route = dict(route, adapter=transport.ADAPTER)
+                return build_request(route, prompt, packet)
             with patch.object(protocol, '_invoke_once', side_effect=start_only), \
-                 patch.object(transport, 'request_body', return_value={'input': []}) as builder:
+                 patch.object(transport, 'request_body', side_effect=capture_request) as builder:
                 protocol.probe_route(store, {'id': 'probe', 'route_id': 'route'},
                                      expected_revision=1, request_id='probe-test')
             return builder.call_args.args[1]
@@ -132,14 +142,20 @@ class VisualContractIntegrationTests(unittest.TestCase):
 
     def test_visual_output_contract_refuses_an_omitted_whole_pdf_reference(self):
         case, records, assignment, request, output = self.contract_fixture(image=False)
-        with patch.object(transport, 'request_body', return_value=request):
+        delivery = review_delivered_evidence.project_delivery_view(records, case.artifacts,
+            projection.packets_from_visual_request(request, assignments=[assignment]))
+        with patch.object(transport, 'request_body', return_value=request), patch.object(
+                decisions, 'read_review_citation_delivery', return_value=delivery):
             with self.assertRaises(ResearchError) as failure:
                 decisions.validate_review_contract(records, case.artifacts, assignment, output)
         self.assertEqual(failure.exception.code, 'review_evidence_undelivered')
 
     def test_visual_output_contract_accepts_exact_attached_png_reference(self):
         case, records, assignment, request, output = self.contract_fixture(image=True)
-        with patch.object(transport, 'request_body', return_value=request):
+        delivery = review_delivered_evidence.project_delivery_view(records, case.artifacts,
+            projection.packets_from_visual_request(request, assignments=[assignment]))
+        with patch.object(transport, 'request_body', return_value=request), patch.object(
+                decisions, 'read_review_citation_delivery', return_value=delivery):
             decisions.validate_review_contract(records, case.artifacts, assignment, output)
 
 

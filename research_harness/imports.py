@@ -16,6 +16,7 @@ origin article capture, or create a fulltext record. Import of an entire native
 registry response instead uses that provider's documented metadata parser.
 """
 
+import json
 import re
 from datetime import date, datetime
 
@@ -48,8 +49,12 @@ def parse_mapped(data, media_type, mappings):
     if not isinstance(mappings, list):
         raise ResearchError("invalid_import", "Web/MCP imports require explicit record mappings")
     try:
-        text = data.decode("utf-8-sig")
-        document = _json(data, require_object=False) if media_type == "application/json" else None
+        if media_type == "application/json":
+            if json.detect_encoding(data) not in ("utf-8", "utf-8-sig"):
+                raise ValueError("Mapped JSON must use UTF-8")
+            document = _json(data, require_object=False)
+        else:
+            text = data.decode("utf-8-sig")
     except (UnicodeError, ValueError, ResearchError) as error:
         raise ResearchError("invalid_import", "Import response is not valid UTF-8 or JSON") from error
 

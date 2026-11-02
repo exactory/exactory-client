@@ -7,6 +7,7 @@ import random
 from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, SPLIT_KEYS, ResultPartsCase, indices, note_units
+from research_harness.review_bodies import read_history
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import research_decisions as decisions, review_excerpts, review_refusal
 from research_harness import review_codex_transport as codex, review_claude_transport as claude
@@ -23,11 +24,16 @@ class ProblemResultPartsTests(ResultPartsCase):
         self.addCleanup(source_case.doCleanups)
         # This transport fixture substitutes the claim validator. Build the reading
         # and its metadata with the real operations before delivering their projection.
-        with patch.dict(sys.modules, {"research_harness.problem_claims": cli.problem_claims}):
+        # Swap only this entry, so that the modules first imported meanwhile stay in sys.modules.
+        replaced = sys.modules["research_harness.problem_claims"]
+        sys.modules["research_harness.problem_claims"] = cli.problem_claims
+        try:
             source_case.setUp()
             source_case.record_metadata()
             records = source_case.store.snapshot()["records"]
             evidence = describe_evidence(records, source_case.artifacts)
+        finally:
+            sys.modules["research_harness.problem_claims"] = replaced
         for reference in protocol.collect_references(records):
             self.assertEqual(self.case.artifacts.put(source_case.artifacts.read(reference), reference['media_type']), reference)
         for kind in ('work', 'source', 'source_bundle', 'reading', 'problem_citation_metadata'):
@@ -68,7 +74,7 @@ class ProblemResultPartsTests(ResultPartsCase):
         self.assertEqual(assignment['prompt'], prompt)
         self.assertNotIn(KEY, self.packet(assignment))
         self.assertEqual(self.request(assignment), transport.request_body(records['review_route']['route'],
-            prompt['text'], expected, assignment['history']))
+            prompt['text'], expected, read_history(self.case.artifacts, assignment)))
 
     def test_oversized_searches_take_the_longest_fitting_prefix_and_empty_final(self):
         self.oversized()
@@ -91,7 +97,7 @@ class ProblemResultPartsTests(ResultPartsCase):
         next_packet.pop('digest')
         next_packet['digest'] = digest(next_packet)
         larger = transport.request_body(self.case.read_records()['review_route']['route'], first['prompt']['text'],
-                                       next_packet, first['history'])
+                                       next_packet, read_history(self.case.artifacts, first))
         self.assertGreater(len(codex.packet_text(larger)), transport.CODEX_INPUT_LIMIT_CHARS)
         all_parts, final = self.finish_parts(first)
         for assignment in all_parts + [final]:
@@ -491,16 +497,20 @@ class ProblemResultPartsTests(ResultPartsCase):
         next_turn = self.assign('refresh-part-2', successor['id'])
         self.assertEqual(self.packet(next_turn)[KEY]['series_assignment_id'], 'refresh')
 
-    def test_changed_series_digest_starts_fresh_even_when_new_evidence_is_small(self):
+    def test_changed_series_digest_uses_ordinary_delivery_when_new_evidence_fits(self):
         self.oversized()
         first = self.assign()
         self.invoke(first)
         self.case.expected['openness_searches'] = [{'search': {'id': 'smaller-search', 'reason': 'New evidence.'},
                                                    'sources': []}]
         restarted = self.assign('smaller-series', first['id'])
-        self.assertEqual(self.packet(restarted)[KEY]['series_assignment_id'], 'smaller-series')
-        self.assertEqual(self.packet(restarted)[KEY]['stage'], 'part')
-        self.assertEqual(self.packet(restarted)[KEY]['delivered_before'], [])
+        packet = self.packet(restarted)
+        self.assertNotIn(KEY, packet)
+        self.assertNotIn('staged_review', restarted)
+        request = self.request(restarted)
+        self.assertEqual(review_excerpts.read_sent_packet(request), packet)
+        self.assertEqual(restarted['prompt'], protocol.canonical_prompt(
+            'result', orchestration='problem_creation', excerpts=True))
 
     def test_stage_prompts_match_every_supported_excerpt_and_common_version(self):
         for stage in ('part', 'final'):

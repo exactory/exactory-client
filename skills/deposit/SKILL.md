@@ -59,7 +59,13 @@ plugin is enabled.
 ## Procedure
 
 1. **Read the citation report.** Run `exactory-check lookup` and read the report.
-   Fix any blocking finding at the reference, never in the report. A production
+   Fix any blocking finding at the reference, never in the report. An incomplete
+   entry (`no_query`, `network_error` or `search_incomplete`) fails the lookup and
+   the gate as a blocking one does: a `network_error` entry is run again when the
+   network returns, and a `no_query` or `search_incomplete` entry needs a DOI, an
+   arXiv id or a PMID, or a corrected title, as the evaluate skill describes. The gate reads only a
+   version 2 report, so a report that an earlier release wrote is produced again
+   with `lookup`. A production
    deposit runs the same check again and prints its report on stderr as
    `Citation report:` when it fails, then continues. When the user has asked for
    the deposit now, deposit now and report the blocking findings beside the DOI.
@@ -78,7 +84,9 @@ plugin is enabled.
    that file. Build no new archive now: the command refuses the existing
    `draft/sources.zip` (`package_destination_exists`), and an archive built
    under another name holds the revision and the records of its own snapshot,
-   so it is not the pinned `sources`. An archive that the bundle did not pin
+   so it is not the pinned `sources`; even for the same content, an archive
+   built again keeps the member names, bytes and order and can differ in its
+   container bytes. An archive that the bundle did not pin
    takes the direct path, with the `Managed record skipped` line and no managed
    receipt. An archive built at this stage fits only a deposit that takes the
    direct path, from a workspace whose store holds a pinned bundle. For such a

@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
 from codex_route_fixtures import install_codex_runtime, limit_codex_input
+from research_harness.review_bodies import read_history
 from research_harness import research_decisions as decisions, review_problem_parts as parts
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import review_excerpts, review_context_repair, output_views
@@ -59,10 +60,30 @@ class ProblemResultHistoryTests(ResultPartsCase):
                      'superseded', 'many-superseded'):
             builder = cls()
             try:
-                builder.setUp()
                 if name == 'legacy':
-                    builder.record_series((2, 2, 2), 300000, note_size=12000, limit=500000, final_size=14000)
-                elif name == 'ledger':
+                    # This fixture stands for a 0.69.18 store, whose request the frozen fixture of
+                    # test_recorded_06918_request_rebuilds_byte_for_byte binds with its records' revisions. Such a
+                    # store has no reviewer call captures (0.71.0), so its bars and series are recorded without them:
+                    # the observation stays in this process, as it did then. The module is the one that
+                    # review_protocol's relative import resolves, as for review_problem_history below.
+                    review_call_capture = importlib.import_module('research_harness.review_call_capture')
+                    held = {}
+
+                    def keep_observation(store, operation, payload, invocation, route, observation, **kwargs):
+                        held[operation, payload['id']] = (invocation, observation)
+
+                    def read_observation(records, artifacts, operation, payload, request_id):
+                        return held[operation, payload['id']]
+
+                    with patch.object(review_call_capture, 'capture_call', side_effect=keep_observation), \
+                            patch.object(review_call_capture, 'read_call_observation', side_effect=read_observation):
+                        ResultPartsCase.setUp(builder)
+                        install_codex_runtime(builder)
+                        builder.record_series((2, 2, 2), 300000, note_size=12000, limit=500000, final_size=14000)
+                    builder.save_fixture(name)
+                    continue
+                builder.setUp()
+                if name == 'ledger':
                     builder.record_ledger_series()
                 else:
                     if name == 'owned':
@@ -240,7 +261,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         with self.pad_frame(self.frame_size):
             final = self.assign('compacted-final', prior['id'])
         self.assertEqual((self.packet(final)[KEY]['stage'], self.packet(final)[KEY]['turn']), ('final', 3))
-        self.assertEqual(len(self.replacements(final['history'])), 2)
+        self.assertEqual(len(self.replacements(read_history(self.case.artifacts, final))), 2)
         self.assertLessEqual(parts._measure(self.case.read_records()['review_route']['route'], self.request(final)), self.input_limit)
 
     def test_superseded_parts_allow_the_third_series_final_to_fit(self):
@@ -273,7 +294,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         with self.pad_frame(self.frame_size):
             final = self.assign('superseded-final', prior['id'])
         self.assertEqual(self.packet(final)[KEY]['stage'], 'final')
-        self.assertEqual(final['history'], reduced)
+        self.assertEqual(read_history(self.case.artifacts, final), reduced)
         output = self.final_output()
         output['value']['objection_findings'] = [{'id': 'earlier-limitation', 'status': 'continuing',
             'reason': 'The changed evidence still leaves this hypothesis open.', 'evidence': output['value']['evidence']}]
@@ -339,7 +360,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
 
     def test_multiple_superseded_series_choose_first_eligible_final_in_ancestry_order(self):
         prior = self.use_fixture('many-superseded')
-        self.assertEqual(self.replacements(prior['history']), [])
+        self.assertEqual(self.replacements(read_history(self.case.artifacts, prior)), [])
         inputs = self.refusal_inputs(prior)
         reduced = self.bound(inputs)
         abandoned_ids = {row['id'] for turns in self.abandoned for row in turns}
@@ -390,7 +411,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.refusal_inputs(prior)
         with self.pad_frame(self.frame_size):
             child = self.assign('compacted-child', prior['id'])
-        self.assertTrue(self.replacements(child['history']))
+        self.assertTrue(self.replacements(read_history(self.case.artifacts, child)))
         fresh = self.case.read_records()
         evaluation = Evaluation(fresh, self.case.artifacts)
         rebuilt = protocol.build_assignment_request(fresh, evaluation, old)
@@ -592,6 +613,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
                 elif defect == 'user-digest':
                     history[0] = dict(history[0], content=transport.PACKET_LABEL + json.dumps({'packet_digest': '0' * 64}))
                 elif defect == 'count':
+                    altered['review_assignment'][prior['id']].pop('history_ref', None)
                     altered['review_assignment'][prior['id']]['history'] = []
                 elif defect == 'role':
                     history[1]['role'] = 'user'
@@ -706,7 +728,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
                          ['already_delivered', 'over_allowance'])
         with self.pad_frame(self.frame_size):
             compacted = self.assign('ledger-compacted-reply', reply['id'])
-        self.assertTrue(self.replacements(compacted['history']))
+        self.assertTrue(self.replacements(read_history(self.case.artifacts, compacted)))
         packet = self.packet(compacted)
         for key in (review_excerpts.KEY, 'source_deliveries', 'pending_source_requests'):
             self.assertEqual(packet[key], expected[key])
@@ -795,9 +817,9 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.assertEqual(self.coverage(review), [])
         self.case.expected['value']['motivation'][0]['text'] += ' refreshed'
         child = self.assign('inherited-final')
-        inherited = {json.loads(m['content'])['assignment_id']: m['content'] for m in final['history'][1::2]
+        inherited = {json.loads(m['content'])['assignment_id']: m['content'] for m in read_history(self.case.artifacts, final)[1::2]
                      if json.loads(m['content']).get('delivery') == 'output-elided-from-replayed-history'}
-        self.assertEqual({json.loads(m['content'])['assignment_id']: m['content'] for m in child['history'][1::2]
+        self.assertEqual({json.loads(m['content'])['assignment_id']: m['content'] for m in read_history(self.case.artifacts, child)[1::2]
                           if json.loads(m['content']).get('delivery') == 'output-elided-from-replayed-history'}, inherited)
         # A successful later fallback must recognize and freeze the old placeholders while omitting new outputs.
         while True:
@@ -808,7 +830,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.refusal_inputs(child)
         with self.pad_frame(self.frame_size):
             compacted_again = self.assign('second-compacted-final', child['id'])
-        repeated = {json.loads(m['content'])['assignment_id']: m['content'] for m in compacted_again['history'][1::2]
+        repeated = {json.loads(m['content'])['assignment_id']: m['content'] for m in read_history(self.case.artifacts, compacted_again)[1::2]
                     if json.loads(m['content']).get('delivery') == 'output-elided-from-replayed-history'}
         self.assertGreater(len(repeated), len(inherited))
         for identifier, content in inherited.items():
@@ -838,7 +860,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.refusal_inputs(prior)
         with self.pad_frame(self.frame_size):
             final = self.assign('first-superseded-fallback', prior['id'])
-        inherited = {p['assignment_id']: message['content'] for message in final['history'][1::2]
+        inherited = {p['assignment_id']: message['content'] for message in read_history(self.case.artifacts, final)[1::2]
                      for p in [json.loads(message['content'])] if p.get('delivery') == module.DELIVERY}
         self.assertTrue(any(json.loads(content).get('superseded') for content in inherited.values()))
         request = canonical(self.request(final))
@@ -859,7 +881,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         inputs = self.refusal_inputs(child)
         with self.pad_frame(self.frame_size):
             again = self.assign('second-superseded-fallback', child['id'])
-        repeated = {p['assignment_id']: message['content'] for message in again['history'][1::2]
+        repeated = {p['assignment_id']: message['content'] for message in read_history(self.case.artifacts, again)[1::2]
                     for p in [json.loads(message['content'])] if p.get('delivery') == module.DELIVERY}
         self.assertGreater(len(repeated), len(inherited))
         for identifier, content in inherited.items():
@@ -935,7 +957,10 @@ class ProblemResultHistoryTests(ResultPartsCase):
                 changed = copy.deepcopy(records)
                 part = self.current[-1]
                 if defect == 'request':
-                    changed['review_assignment'][part['id']]['history'][0]['content'] += ' tampered'
+                    assignment = changed['review_assignment'][part['id']]
+                    assignment['history'] = read_history(self.case.artifacts, assignment)
+                    assignment.pop('history_ref', None)
+                    assignment['history'][0]['content'] += ' tampered'
                 elif defect == 'part-output':
                     output = dict(self.output(part), notes=[])
                     changed['review_attempt']['attempt-' + part['id']]['output'] = protocol._put_json(self.case.artifacts, output)
@@ -1053,10 +1078,6 @@ class ProblemResultHistoryTests(ResultPartsCase):
         self.addCleanup(self.case.doCleanups)
         case = self.case
         case.supporting = case.artifacts.put(b'A captured field standard.', 'text/plain')
-        # This fixture reconstructs series that 0.69.x recorded, as ResultPartsCase.setUp does for its routes.
-        legacy = patch.object(parts, 'allows_staged_entry', return_value=False)
-        legacy.start()
-        self.addCleanup(legacy.stop)
         case.mutate(protocol.record_route, {'id': 'route', 'adapter': 'claude_cli_v1', 'model': 'fixture-model',
             'endpoint': 'claude://local', 'configuration': {'effort': 'xhigh', 'max_output_tokens': 20000, 'timeout_seconds': 5}})
 
@@ -1119,7 +1140,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         for index, (_, assignment, _) in enumerate(self.closed):
             output = json.loads(self.case.artifacts.read(records['review_attempt']['attempt-' + assignment['id']]['output']))
             self.assertEqual(len(json.dumps(output, sort_keys=True)), self.final_sizes[index])
-        self.assertEqual(self.replacements(prior['history']), [])
+        self.assertEqual(self.replacements(read_history(self.case.artifacts, prior)), [])
         inputs = self.refusal_inputs(prior)
         error = self.assert_code('review_input_too_large', lambda: parts.prepare_packet(*inputs[:7]))
         self.assertEqual(error.details['input_characters'], 1472433)
@@ -1128,23 +1149,23 @@ class ProblemResultHistoryTests(ResultPartsCase):
             final = self.assign('fourth-series-final', prior['id'])
         plan = self.packet(final)[KEY]
         self.assertEqual((plan['stage'], plan['turn'], plan['series_assignment_id']), ('final', 5, 'series-4'))
-        replaced = self.replacements(final['history'])
+        replaced = self.replacements(read_history(self.case.artifacts, final))
         self.assertEqual(sum(p['evidence_stage'] == 'part' for p in replaced), 7)
         self.assertEqual(sum(p['evidence_stage'] == 'final' for p in replaced), 2)
         self.assertEqual(sum(self.part_sizes[0] + self.part_sizes[1] + self.part_sizes[2]), 199472)
         self.assertEqual(sum(self.final_sizes[:2]), 72006)
         # History comes directly from the same parent request, so every retained position has exact bytes.
         eligible = {p['assignment_id'] for p in replaced}
-        self.assertEqual(len(final['history']), len(original))
+        self.assertEqual(len(read_history(self.case.artifacts, final)), len(original))
         chain = []
         current = prior
         while current is not None:
             chain.append(current)
             current = inputs[0]['review_assignment'].get(current.get('history_assignment_id'))
         for index, row in enumerate(reversed(chain)):
-            self.assertEqual(final['history'][2 * index], original[2 * index])
+            self.assertEqual(read_history(self.case.artifacts, final)[2 * index], original[2 * index])
             if row['id'] not in eligible:
-                self.assertEqual(final['history'][2 * index + 1], original[2 * index + 1])
+                self.assertEqual(read_history(self.case.artifacts, final)[2 * index + 1], original[2 * index + 1])
         size = parts._measure(inputs[3], self.request(final))
         self.assertLessEqual(size, 1300000)
         print('Claude fourth-series final: baseline=1472433, compacted=%d, limit=1300000' % size)

@@ -28,9 +28,6 @@ from tests.search_execution_support import admit_workspace, begin_spec, invoke
 from tests.search_fixtures import contract, digest, proposal, provenance, review
 from tests.support import WorkspaceTest, make_move
 
-UNKNOTTING_ATTACK_ROOT = Path("/Users/ryshiro/exactory/math-conjectures/202610282209-unknotting-connected-sum/attack")
-
-
 def observe(actor, assignment):
     return dict(provenance(actor), attestation_id="review-assignment:" + assignment)
 
@@ -671,13 +668,26 @@ class SharedWorkspaceRootTests(WorkspaceTest):
 
 
 class AcceptanceCheckTests(unittest.TestCase):
-    """A local check on a copy of a real record; it skips where the record is absent."""
+    """Copied controller and research stores render without depending on live records."""
 
-    @unittest.skipUnless(UNKNOTTING_ATTACK_ROOT.is_dir(), "the unknotting record is not on this machine")
-    def test_a_copy_of_the_unknotting_record_renders(self):
+    def build_fixture(self):
+        fixture = SharedWorkspaceRootTests()
+        self.addCleanup(fixture.doCleanups)
+        fixture.setUp()
+        fixture.research('problem-init', dict(slug='fixture-problem', area='math.CO', field='Fixture propositions',
+                                             authors=['native-fixture-author']), 'problem-init')
+        controller = admit_workspace(fixture.attack_root, review_workspace='..')
+        from tests.strategy_refresh_support import reassess_fixture
+        for _ in range(9):
+            reassess_fixture(controller, None)
+        return fixture.attack_root
+
+    def test_a_copy_of_a_generated_record_renders(self):
+        source = self.build_fixture()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "record" / "attack"
-            shutil.copytree(str(UNKNOTTING_ATTACK_ROOT), str(root), symlinks=True)
+            shutil.copytree(str(source), str(root), symlinks=True)
+            (root / '.search' / output_views.MARKER_NAME).unlink()
             store = Controller(root).store
             started = time.monotonic()
             output_views.render_views(root, store)
@@ -687,19 +697,19 @@ class AcceptanceCheckTests(unittest.TestCase):
             skipped = time.monotonic() - started
             index = json.loads((root.parent / "final/math/attack/index.json").read_bytes())
             self.assertEqual(len(index["adoptions"]), 10)
-            print("\nunknotting copy: first render %.3f s, skipped render %.4f s, %d final files"
+            print("\ngenerated copy: first render %.3f s, skipped render %.4f s, %d final files"
                   % (first, skipped, len(index["files"])))
 
-    @unittest.skipUnless((UNKNOTTING_ATTACK_ROOT.parent / ".exactory/research.sqlite3").is_file(),
-                         "the unknotting record is not on this machine")
-    def test_a_copy_of_the_unknotting_record_renders_both_views_side_by_side(self):
+    def test_a_copy_of_a_generated_record_renders_both_views_side_by_side(self):
+        source = self.build_fixture()
         with tempfile.TemporaryDirectory() as temporary:
             workspace = Path(temporary).resolve() / "record"
-            shutil.copytree(str(UNKNOTTING_ATTACK_ROOT), str(workspace / "attack"), symlinks=True)
+            shutil.copytree(str(source), str(workspace / "attack"), symlinks=True)
+            (workspace / 'attack' / '.search' / output_views.MARKER_NAME).unlink()
             (workspace / ".exactory").mkdir()
-            shutil.copy2(str(UNKNOTTING_ATTACK_ROOT.parent / ".exactory/research.sqlite3"),
+            shutil.copy2(str(source.parent / ".exactory/research.sqlite3"),
                          str(workspace / ".exactory/research.sqlite3"))
-            objects = UNKNOTTING_ATTACK_ROOT.parent / "research/sources/objects"
+            objects = source.parent / "research/sources/objects"
             if objects.is_dir():
                 shutil.copytree(str(objects), str(workspace / "research/sources/objects"))
             controller = Controller(workspace / "attack")
@@ -713,7 +723,7 @@ class AcceptanceCheckTests(unittest.TestCase):
             self.assertTrue([path for path in own if path.startswith("final/history/math/attack/")])
             adoptions = check_series_adoptions(self, workspace, "attack")
             check_second_renders_write_nothing(self, workspace, controller)
-            print("\nunknotting copy, both renderers: first render %.3f s, %d adopted assignments"
+            print("\ngenerated copy, both renderers: first render %.3f s, %d adopted assignments"
                   % (elapsed, len(adoptions)))
 
 

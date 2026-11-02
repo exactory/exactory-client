@@ -35,10 +35,10 @@ minimum's missing evidence before a cycle decision exists.
    and accounted results, full readings of relevant/contradictory hits and
    roots, applicable standards with valid own sources, and the Grand Challenge
    record. Both reviewers receive complete inspected ranges and every named
-   image asset, with checked source bytes and provenance. Observed deliveries
-   in packets, continuations and supplements establish coverage; inventory,
-   reading notes and assignment chronology alone do not. Missing content
-   leaves `direction_evidence_unassessed`. Its evidence digest is
+   image asset, with checked source bytes and provenance. Deliveries that each
+   reviewer's own authenticated request carried establish coverage; inventory,
+   reading notes, assignment chronology and saved packets that the request did
+   not carry do not. Missing content leaves `direction_evidence_unassessed`. Its evidence digest is
    fixed in the decision; new decisive readings need a new reviewed decision.
    Both slate reviews pass `q1_venue` on potential under the planned method.
 3. Compare credible candidate approaches, the option of not pursuing the branch,

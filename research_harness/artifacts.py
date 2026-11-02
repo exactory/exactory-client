@@ -8,6 +8,7 @@ Read-only operations never create directories or files.
 
 import errno
 import hashlib
+import io
 import os
 import re
 import stat
@@ -16,6 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .errors import ResearchError
+from .file_streams import _check_file_size, _copy_stream, freeze_file
 
 
 _OBJECT_DIRECTORY = "research/sources/objects"
@@ -147,9 +149,13 @@ def validate_reference(ref: dict, *, sealed=False):
         raise ResearchError("unsafe_path", "Artifact path must identify its content-addressed object")
 
 
-def _verify_object(directory: int, reference: dict) -> bytes:
+def _verify_object(directory: int, reference: dict, *, retain=True):
     descriptor = _regular_file(directory, reference["sha256"])
     with os.fdopen(descriptor, "rb") as source:
+        if not retain:
+            _copy_stream(source, expected=reference)
+            return
+        _check_file_size(source, reference)
         data = source.read()
     return _verify_content(data, reference)
 
@@ -172,6 +178,52 @@ class ArtifactStore:
         reference = describe_artifact(data, media_type)
         return self._put(data, reference, _OBJECT_DIRECTORY)
 
+    def put_stream(self, source, media_type: str, *, expected=None) -> dict:
+        """Publish a complete bounded stream, optionally checking a pinned descriptor."""
+        return self._publish_stream(source, media_type, expected)
+
+    def put_file(self, path, media_type: str, *, expected=None) -> dict:
+        """Insert a regular file through the checked workspace descriptor boundary."""
+        from .workspace import open_file
+        _media_type(media_type)
+        try:
+            path = Path(path).absolute()
+        except (TypeError, ValueError, OSError, RuntimeError) as error:
+            raise ResearchError("unsafe_path", "Invalid artifact input path") from error
+        with open_file(path.parent, path.name) as source:
+            return self._publish_stream(source, media_type, expected)
+
+    def _publish_stream(self, source, media_type, expected):
+        _media_type(media_type)
+        if expected is not None:
+            validate_reference(expected)
+        # Check-mode stores must never inherit a mutating publication path.
+        self.require_external_effect()
+        with _artifact_operation(), self._workspace.directory(_OBJECT_DIRECTORY, create=True) as directory:
+            temporary = ".object-" + uuid.uuid4().hex
+            descriptor = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                 0o600, dir_fd=directory)
+            try:
+                with os.fdopen(descriptor, "w+b") as target:
+                    identity = _copy_stream(source, target, expected)
+                    reference = {"sha256": identity["sha256"],
+                                 "path": _OBJECT_DIRECTORY + "/" + identity["sha256"],
+                                 "size": identity["size"], "media_type": media_type}
+                    target.flush()
+                    target.seek(0)
+                    _copy_stream(target, expected=reference)
+                    os.fchmod(target.fileno(), 0o444)
+                    os.fsync(target.fileno())
+                try:
+                    os.link(temporary, reference["sha256"], src_dir_fd=directory, dst_dir_fd=directory,
+                            follow_symlinks=False)
+                except FileExistsError:
+                    _verify_object(directory, reference, retain=False)
+            finally:
+                os.unlink(temporary, dir_fd=directory)
+            os.fsync(directory)
+        return reference
+
     def require_external_effect(self):
         pass
 
@@ -184,7 +236,7 @@ class ArtifactStore:
         digest = reference["sha256"]
         with _artifact_operation(), self._workspace.directory(relative, create=True) as directory:
             try:
-                _verify_object(directory, reference)
+                _verify_object(directory, reference, retain=False)
                 os.fsync(directory)
                 return reference
             except FileNotFoundError:
@@ -202,7 +254,7 @@ class ArtifactStore:
                     os.link(temporary, digest, src_dir_fd=directory, dst_dir_fd=directory,
                             follow_symlinks=False)
                 except FileExistsError:
-                    _verify_object(directory, reference)
+                    _verify_object(directory, reference, retain=False)
             finally:
                 os.unlink(temporary, dir_fd=directory)
             os.fsync(directory)
@@ -213,7 +265,7 @@ class ArtifactStore:
         validate_reference(ref, sealed=True)
         try:
             with self._workspace.directory(_SEALED_DIRECTORY) as directory:
-                _verify_object(directory, ref)
+                _verify_object(directory, ref, retain=False)
         except FileNotFoundError as error:
             raise ResearchError("artifact_missing", "Sealed artifact has not been stored",
                                 {"path": ref["path"]}) from error
@@ -231,6 +283,70 @@ class ArtifactStore:
         except OSError as error:
             raise _filesystem_error(error) from error
 
+    @contextmanager
+    def _open_source(self, ref):
+        validate_reference(ref)
+        try:
+            with self._workspace.directory(_OBJECT_DIRECTORY) as directory:
+                source = os.fdopen(_regular_file(directory, ref["sha256"]), "rb")
+        except FileNotFoundError as error:
+            raise ResearchError("artifact_missing", "Artifact has not been stored", {"path": ref["path"]}) from error
+        except OSError as error:
+            raise _filesystem_error(error) from error
+        with source:
+            yield source
+
+    def verify(self, reference):
+        """Verify an existing object with bounded reads and no retained body."""
+        with self._open_source(reference) as source, _artifact_operation():
+            _copy_stream(source, expected=reference)
+            self._record_verified(reference)
+
+    def _record_verified(self, reference):
+        pass
+
+    @contextmanager
+    def open_verified(self, reference):
+        """Yield a private FrozenFile, verified before the caller can read it."""
+        with self._open_source(reference) as source, freeze_file(source, reference) as frozen:
+            self._record_verified(reference)
+            yield frozen
+
+    @contextmanager
+    def materialize_verified(self, reference, directory):
+        """Yield a verified private subprocess input path and remove it on exit."""
+        from .workspace import checked_parent
+        validate_reference(reference)
+        destination = _Workspace(directory).root
+        temporary = ".artifact-" + uuid.uuid4().hex
+        with self.open_verified(reference) as frozen, checked_parent(destination, temporary) as (parent, name):
+            with _artifact_operation():
+                os.mkdir(name, mode=0o700, dir_fd=parent)
+            try:
+                with _Workspace(destination).directory(name) as private:
+                    filename = reference["sha256"]
+                    try:
+                        with _artifact_operation():
+                            descriptor = os.open(filename, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                                 0o600, dir_fd=private)
+                            with os.fdopen(descriptor, "w+b") as target:
+                                _copy_stream(frozen.stream, target, reference)
+                                target.flush()
+                                target.seek(0)
+                                _copy_stream(target, expected=reference)
+                                os.fchmod(target.fileno(), 0o444)
+                                os.fsync(target.fileno())
+                        yield destination / name / filename
+                    finally:
+                        with _artifact_operation():
+                            try:
+                                os.unlink(filename, dir_fd=private)
+                            except FileNotFoundError:
+                                pass
+            finally:
+                with _artifact_operation():
+                    os.rmdir(name, dir_fd=parent)
+
 
 class _StagedArtifacts(ArtifactStore):
     """Check publication paths and retain prepared bytes only in this operation."""
@@ -244,12 +360,18 @@ class _StagedArtifacts(ArtifactStore):
         with _artifact_operation():
             try:
                 with self._workspace.directory(relative) as directory:
-                    _verify_object(directory, reference)
+                    _verify_object(directory, reference, retain=False)
             except FileNotFoundError:
                 pass
         self._staged[reference["path"]] = data
         self._observed.add(reference["sha256"])
         return reference
+
+    def _publish_stream(self, source, media_type, expected):
+        _media_type(media_type)
+        if expected is not None:
+            validate_reference(expected)
+        raise _CheckEffectRequired()
 
     def read(self, ref):
         validate_reference(ref)
@@ -270,6 +392,19 @@ class _StagedArtifacts(ArtifactStore):
 
     def read_digests(self):
         return sorted(self._observed)
+
+    @contextmanager
+    def _open_source(self, ref):
+        validate_reference(ref)
+        if ref["path"] in self._staged:
+            with io.BytesIO(self._staged[ref["path"]]) as source:
+                yield source
+        else:
+            with super()._open_source(ref) as source:
+                yield source
+
+    def _record_verified(self, reference):
+        self._observed.add(reference["sha256"])
 
     def require_external_effect(self):
         raise _CheckEffectRequired()

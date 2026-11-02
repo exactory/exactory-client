@@ -22,8 +22,8 @@ not write targets: it denies a writing command that only reads one of the
 files, and it misses a file named without a `/`, a write after a `cd`, a
 redirection whose word does not begin with `>` (such as `2>`, `&>` or
 `x>file`), `>|file` without a space, and `dd of=`. A command that does not
-write is untouched. Any other file, any other tool, and any error of the hook's
-own checks are silent: exit 0, no output.
+write is untouched. An allowed call is silent; an unexpected check failure
+produces an explicit denial.
 
 After the controller check and before the check of the eight files, the hook
 denies a Write, an Edit or a NotebookEdit (its path is `notebook_path`) into
@@ -167,30 +167,30 @@ def main() -> None:
         _deny("[math-solver] Recovery required before this managed operation: " + str(error))
     if reason is not None:
         _deny("[math-solver] " + reason)
-    tool_name = payload.get("tool_name")
-    tool_input = payload.get("tool_input") or {}
-    cwd = Path(payload.get("cwd") or ".").resolve()
-    if tool_name in _PATH_FIELD_BY_TOOL:
-        target = _resolve(tool_input.get(_PATH_FIELD_BY_TOOL[tool_name], ""), cwd)
-        folder = _find_output_folder(target)
-        if folder is not None:
+    for item in payload.get("_math_guard_batch", [payload]):
+        tool_name = item.get("tool_name")
+        tool_input = item.get("tool_input") or {}
+        cwd = Path(item.get("cwd") or ".").resolve()
+        if tool_name in _PATH_FIELD_BY_TOOL:
+            target = _resolve(tool_input.get(_PATH_FIELD_BY_TOOL[tool_name], ""), cwd)
+            folder = _find_output_folder(target)
+            if folder is not None:
+                _deny(
+                    f"[exactory] {target.relative_to(folder.parent).as_posix()} is in {folder.name}/, which the harness"
+                    f" generates from its records. Write your own files to work/ instead."
+                )
+        if tool_name in ("Write", "Edit"):
+            owner = _find_owner(target)
+        elif tool_name == "Bash":
+            owner = _find_shell_write_target(tool_input.get("command", ""), cwd)
+        else:
+            owner = None
+        if owner is not None:
+            relative, instruction = owner
             _deny(
-                f"[exactory] {target.relative_to(folder.parent).as_posix()} is in {folder.name}/, which the harness"
-                f" generates from its records. Write your own files to work/ instead."
+                f"[math-solver] {relative} is written by the harness only, which validates"
+                f" what it puts there. Run the command instead of editing the file:\n  {instruction}"
             )
-    if tool_name in ("Write", "Edit"):
-        owner = _find_owner(target)
-    elif tool_name == "Bash":
-        owner = _find_shell_write_target(tool_input.get("command", ""), cwd)
-    else:
-        owner = None
-    if owner is None:
-        sys.exit(0)
-    relative, instruction = owner
-    _deny(
-        f"[math-solver] {relative} is written by the harness only, which validates"
-        f" what it puts there. Run the command instead of editing the file:\n  {instruction}"
-    )
 
 
 if __name__ == "__main__":
@@ -198,5 +198,6 @@ if __name__ == "__main__":
         main()
     except SystemExit:
         raise
-    except Exception:
-        sys.exit(0)
+    except Exception as error:
+        _deny("[exactory] The plugin's file guard could not check this tool call and stopped it. Report this error"
+              " to the user, because the plugin needs a fix or an update: " + str(error))

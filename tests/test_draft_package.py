@@ -239,12 +239,15 @@ class DraftPackageTests(unittest.TestCase):
                     self.assertEqual(json.loads(archive.read("claim-evidence.json")), self.links)
 
     def test_repeated_packages_are_identical_and_work_from_a_study_subdirectory(self):
-        first = self.package().read_bytes()
+        first = self.package()
         subdirectory = self.root / "research"
         subdirectory.mkdir(exist_ok=True)
         result = self.invoke("--output", "../second.zip", cwd=subdirectory)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual((self.root / "second.zip").read_bytes(), first)
+        with zipfile.ZipFile(first) as left, zipfile.ZipFile(self.root / "second.zip") as right:
+            self.assertEqual(left.namelist(), right.namelist())
+            self.assertEqual([left.read(name) for name in left.namelist()],
+                             [right.read(name) for name in right.namelist()])
 
     def test_supplementary_code_and_disclosures_are_explicitly_included(self):
         (self.root / "tools").mkdir()

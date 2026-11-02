@@ -1,20 +1,22 @@
 """Offline deposit archives of frozen executions, evidence and retained records."""
 
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import stat
+import tempfile
 from urllib.parse import quote
 import uuid
 import zipfile
 
 from .artifacts import ArtifactStore, _filesystem_error, _relative_parts, validate_reference
 from .errors import ResearchError
-from .evaluation import Evaluation
+from .file_streams import _copy_stream, freeze_file
 from .publication import find_selected_bundle
 from .scientific_json import is_json_media_type
-from .workspace import checked_parent, read_file, strict_json
+from .workspace import checked_parent, open_file, strict_json
 
 
 RECORD_KINDS = (
@@ -26,10 +28,6 @@ RECORD_KINDS = (
 )
 _SUFFIXES = {"application/json": ".json", "image/svg+xml": ".svg", "image/png": ".png",
              "application/pdf": ".pdf", "text/plain": ".txt"}
-
-
-def _encode_json_bytes(value):
-    return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False) + "\n").encode("utf-8")
 
 
 def _iter_stored_references(value):
@@ -70,13 +68,26 @@ class _Archive:
             raise ResearchError("package_member_conflict", "Archive files must not replace directories", {"path": name})
         self.directories.update(parents)
 
-    def write(self, name, data, *, supplement=False):
+    def write(self, name, data):
+        with io.BytesIO(data) as source, freeze_file(source) as frozen:
+            self.write_stream(name, frozen)
+
+    def write_json(self, name, value):
+        encoder = json.JSONEncoder(ensure_ascii=False, sort_keys=True, indent=2, allow_nan=False)
+        with tempfile.TemporaryFile(mode="w+b") as source:
+            for piece in encoder.iterencode(value):
+                source.write(piece.encode("utf-8"))
+            source.write(b"\n")
+            source.seek(0)
+            with freeze_file(source) as frozen:
+                self.write_stream(name, frozen)
+
+    def write_stream(self, name, frozen, *, supplement=False):
         self.reserve_parents(name)
         if name in self.directories:
             raise ResearchError("package_member_conflict", "Archive files must not replace directories", {"path": name})
-        content_digest = hashlib.sha256(data).hexdigest()
         if name in self.members:
-            if supplement or self.members[name] != content_digest:
+            if supplement or self.members[name] != frozen.sha256:
                 raise ResearchError("package_member_conflict", "Archive members must have distinct names",
                                     {"path": name})
             return
@@ -84,8 +95,11 @@ class _Archive:
         info.compress_type = zipfile.ZIP_DEFLATED
         info.create_system = 3
         info.external_attr = 0o100644 << 16
-        self.archive.writestr(info, data)
-        self.members[name] = content_digest
+        info.file_size = frozen.size
+        frozen.stream.seek(0)
+        with self.archive.open(info, "w") as target:
+            _copy_stream(frozen.stream, target, {"path": name, "size": frozen.size, "sha256": frozen.sha256})
+        self.members[name] = frozen.sha256
 
     def write_directory(self, name):
         self.reserve_parents(name)
@@ -101,17 +115,16 @@ class _Archive:
         self.members[name + "/"] = hashlib.sha256(b"").hexdigest()
 
     def write_artifact(self, ref, name=None):
-        data = self.artifacts.read(ref)
-        if ref["path"] not in self.index:
-            self.index[ref["path"]] = name or "data/objects/" + ref["sha256"]
-            self.write(self.index[ref["path"]], data)
-        if name is not None:
-            self.write(name, data)
+        with self.artifacts.open_verified(ref) as frozen:
+            if ref["path"] not in self.index:
+                self.index[ref["path"]] = name or "data/objects/" + ref["sha256"]
+                self.write_stream(self.index[ref["path"]], frozen)
+            if name is not None:
+                self.write_stream(name, frozen)
         key = (ref["sha256"], ref["media_type"])
         if key not in self.followed:
             self.followed.add(key)
-            self.pending.append((ref, data))
-        return data
+            self.pending.append(ref)
 
     def write_references(self, value):
         for ref in _iter_stored_references(value):
@@ -120,17 +133,19 @@ class _Archive:
     def follow(self):
         # Packet representations belong to their producer; only the common artifact boundary is used here.
         while self.pending:
-            ref, data = self.pending.pop()
+            ref = self.pending.pop()
             if not is_json_media_type(ref["media_type"]):
                 continue
             try:
-                structured = strict_json(data)
+                with self.artifacts.open_verified(ref) as frozen:
+                    structured = strict_json(frozen.stream.read())
             except ResearchError as error:
                 if error.code != "invalid_json":
                     raise
                 # Historical outputs retain their bytes even when their declared JSON is not strict JSON.
                 continue
             self.write_references(structured)
+            del structured
 
 
 def _select_bundle(records, selector):
@@ -199,7 +214,8 @@ def _write_run(archive, root, records, execution):
         run.update(admission_id=admission["id"], directory=directory, argv=argv, runtime=binding["runtime"],
                    script=binding["script"], inputs=binding["inputs"], declared_outputs=binding["outputs"])
         for path, ref in pairs:
-            archive.write(directory + "/" + path, archive.write_artifact(ref))
+            archive.write_artifact(ref)
+            archive.write_artifact(ref, directory + "/" + path)
         for name in ("logs", "results", "plots"):
             archive.write_directory(directory + "/" + name)
     for output in sorted(execution["outputs"], key=lambda item: item["id"]):
@@ -213,18 +229,19 @@ def _write_run(archive, root, records, execution):
     return run
 
 
-def _iter_supplement_files(root, relative):
+def _iter_supplement_files(root, relative, *, exclude=None):
     parts = _relative_parts(relative)
     with checked_parent(root, relative) as (directory, name):
         info = os.stat(name, dir_fd=directory, follow_symlinks=False)
     if stat.S_ISREG(info.st_mode):
-        yield relative, read_file(root, relative)
+        if exclude is None or (info.st_dev, info.st_ino) != (exclude.st_dev, exclude.st_ino):
+            yield relative
     elif stat.S_ISDIR(info.st_mode):
         from .artifacts import _Workspace
         with _Workspace(root).directory("/".join(parts)) as directory:
             names = sorted(os.listdir(directory))
         for name in names:
-            yield from _iter_supplement_files(root, relative + "/" + name)
+            yield from _iter_supplement_files(root, relative + "/" + name, exclude=exclude)
     else:
         raise ResearchError("unsafe_path", "Supplementary paths must contain only regular files and directories")
 
@@ -232,15 +249,16 @@ def _iter_supplement_files(root, relative):
 def _write_package(stream, root, snapshot, bundle, supplements):
     records = snapshot["records"]
     with zipfile.ZipFile(stream, "w", compression=zipfile.ZIP_DEFLATED) as zipped:
-        archive = _Archive(zipped, Evaluation(records, ArtifactStore(root)))
+        archive = _Archive(zipped, ArtifactStore(root))
         claims = bundle.get("files", {}).get("claims")
         links = bundle.get("claim_evidence")
         if claims is None or not isinstance(links, list):
             raise ResearchError("publication_claims_missing", "Package the pinned claim registry and its evidence map")
         archive.write("README.txt", b"Read package.json for frozen runs and records, "
                       b"and data/INDEX.json for object names.\n")
-        archive.write("claims.json", archive.write_artifact(claims["artifact"]))
-        archive.write("claim-evidence.json", _encode_json_bytes(links))
+        archive.write_artifact(claims["artifact"])
+        archive.write_artifact(claims["artifact"], "claims.json")
+        archive.write_json("claim-evidence.json", links)
         manifest = {"schema": 1, "revision": snapshot["revision"],
                     "bundle": {"id": bundle["id"], "digest": bundle["digest"]},
                     "runs": [_write_run(archive, root, records, execution)
@@ -251,21 +269,21 @@ def _write_package(stream, root, snapshot, bundle, supplements):
             group = {}
             for key, value in sorted(records.get(kind, {}).items()):
                 name = "managed-record/" + kind + "/" + _quote_component(key) + ".json"
-                archive.write(name, _encode_json_bytes(value))
+                archive.write_json(name, value)
                 archive.write_references(value)
                 group[key] = name
             if group:
                 manifest["records"][kind] = group
         archive.follow()
-        for path, data in supplements:
+        for path in supplements:
             if path in ("package.json", "data/INDEX.json") or path.startswith("runs/"):
                 raise ResearchError("package_member_conflict",
                                     "Supplementary files must stay outside frozen runs and metadata")
-            archive.write(path, data, supplement=True)
-            manifest["supplements"].append({"path": path, "sha256": hashlib.sha256(data).hexdigest(),
-                                            "size": len(data)})
-        archive.write("data/INDEX.json", _encode_json_bytes(archive.index))
-        archive.write("package.json", _encode_json_bytes(manifest))
+            with open_file(root, path) as source, freeze_file(source) as frozen:
+                archive.write_stream(path, frozen, supplement=True)
+                manifest["supplements"].append({"path": path, "sha256": frozen.sha256, "size": frozen.size})
+        archive.write_json("data/INDEX.json", archive.index)
+        archive.write_json("package.json", manifest)
         return {"revision": snapshot["revision"], "bundle_digest": bundle["digest"], "runs": len(manifest["runs"]),
                 "artifacts": len(archive.index), "members": len(archive.members), "mechanical_only": True}
 
@@ -277,7 +295,6 @@ def build_package(store, destination, *, bundle=None, includes=()):
     destination = Path(destination).absolute()
     destination = destination.parent.resolve() / destination.name
     try:
-        supplements = [item for path in includes for item in _iter_supplement_files(store.root, path)]
         with checked_parent(destination.parent, destination.name) as (directory, name):
             try:
                 os.stat(name, dir_fd=directory, follow_symlinks=False)
@@ -289,6 +306,9 @@ def build_package(store, destination, *, bundle=None, includes=()):
             descriptor = os.open(temporary, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
                                  0o600, dir_fd=directory)
             try:
+                exclude = os.fstat(descriptor)
+                supplements = (item for path in includes
+                               for item in _iter_supplement_files(store.root, path, exclude=exclude))
                 with os.fdopen(descriptor, "w+b") as stream:
                     result = _write_package(stream, store.root, snapshot, selected, supplements)
                     stream.flush()

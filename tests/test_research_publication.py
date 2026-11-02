@@ -302,7 +302,7 @@ class ResearchPublicationTests(DevelopmentCase):
             if method == "GET" and "/deposit/depositions?page=" in url:
                 return created
             if method == "PUT" and "/files/" in url:
-                uploaded.append(kwargs["file_bytes"])
+                uploaded.append(kwargs["file_stream"].read(kwargs["file_size"]))
                 return {"filename": "paper.pdf"}
             if url.endswith("/actions/publish"):
                 return {"id": 91, "submitted": True, "doi": "10.5281/zenodo.91", "conceptdoi": "10.5281/zenodo.90", "links": {"record_html": "https://zenodo.org/records/91"}}
@@ -386,7 +386,7 @@ class ResearchPublicationTests(DevelopmentCase):
                 return dict(record)
             if method == "PUT" and "/files/" in url:
                 record["files"] = [{"filename": "paper.pdf",
-                                    "checksum": "md5:" + hashlib.md5(kwargs["file_bytes"]).hexdigest()}]
+                                    "checksum": "md5:" + hashlib.md5(kwargs["file_stream"].read(kwargs["file_size"])).hexdigest()}]
                 return {"filename": "paper.pdf"}
             if method == "PUT" and url.endswith("/deposit/depositions/91"):
                 record["metadata"] = kwargs["json_body"]["metadata"]
@@ -509,7 +509,7 @@ class ResearchPublicationTests(DevelopmentCase):
                         "links": {"bucket": "https://zenodo.org/api/files/bucket", "html": "https://zenodo.org/deposit/91"}}
             if method == "PUT" and "/files/" in url:
                 published["files"].append({"filename": url.rsplit("/", 1)[-1],
-                                           "checksum": "md5:" + hashlib.md5(kwargs["file_bytes"]).hexdigest()})
+                                           "checksum": "md5:" + hashlib.md5(kwargs["file_stream"].read(kwargs["file_size"])).hexdigest()})
                 return {"filename": url.rsplit("/", 1)[-1]}
             if url.endswith("/actions/publish"):
                 return None

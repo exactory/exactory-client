@@ -7,6 +7,7 @@ from unittest.mock import patch
 from development_fixtures import DevelopmentCase
 from literature_fixtures import LiteratureCase
 from strategy_fixtures import StrategyCase
+from research_harness.review_bodies import read_history
 from research_harness import research_decisions, review_protocol, strategy
 
 
@@ -67,7 +68,7 @@ class SlateSourceRequestTests(StrategicSourceHelpers, StrategyCase):
         self.assertEqual(continued["session_id"], "assignment-bar-a")
         prior = self.store.snapshot()["records"]["review_attempt"]["attempt-source-a"]
         observed_input = json.loads(self.artifacts.read(prior["request"]))["input"]
-        self.assertEqual(continued["history"], observed_input + [{"role": "assistant", "content": json.dumps(output, sort_keys=True)}])
+        self.assertEqual(read_history(self.artifacts, continued), observed_input + [{"role": "assistant", "content": json.dumps(output, sort_keys=True)}])
         packet = self.packet("source-b")
         self.assertEqual(packet["source_inventory"], self.packet()["source_inventory"])
         self.assertEqual(json.loads(observed_input[-1]["content"].removeprefix("The packet below is JSON.\n"))["dossier"], self.packet()["dossier"])
@@ -184,7 +185,7 @@ class ResultSourceRequestTests(StrategicSourceHelpers, DevelopmentCase):
         self.assertEqual(packet["support_contract"], self.packet()["support_contract"])
         attempt = self.store.snapshot()["records"]["review_attempt"]["attempt-source-a"]
         observed_input = json.loads(self.artifacts.read(attempt["request"]))["input"]
-        self.assertEqual(continued["history"], observed_input + [{"role": "assistant", "content": json.dumps(output, sort_keys=True)}])
+        self.assertEqual(read_history(self.artifacts, continued), observed_input + [{"role": "assistant", "content": json.dumps(output, sort_keys=True)}])
         self.assertEqual(json.loads(observed_input[-1]["content"].removeprefix("The packet below is JSON.\n"))["readiness"], self.packet()["readiness"])
         self.assertEqual(packet["pending_source_requests"], [])
         final = self.supported_response()

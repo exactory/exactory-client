@@ -42,8 +42,18 @@ class VisualContextRepairTests(unittest.TestCase):
             'kind': 'contamination', 'source': 'runtime_instruction_transformation',
             'reason': 'The observed instruction bytes differ; no foreign author context was observed.',
             'evidence': [self.event_evidence]})
-        self.case.mutate(decisions.record_value_review, dict(self.output, id='failed-visual-final',
-            dossier_id=None, assignment_id=self.prior['id']))
+        payload = dict(self.output, id='failed-visual-final', dossier_id=None, assignment_id=self.prior['id'])
+        with self.assertRaises(ResearchError) as rejected:
+            self.case.mutate(decisions.record_value_review, payload)
+        self.assertEqual(rejected.exception.code, 'review_invocation_unverified')
+        # Model an older store that recorded this finding using its saved packet despite the failed actual input.
+        # New recording must refuse it; repair still retains the immutable historical finding and observation.
+        self.case.put('value_review', payload['id'], dict(id=payload['id'], payload=payload, digest=digest(payload),
+            recorded_revision=self.case.store.revision + 1, dossier_id=None, dossier_digest=None,
+            assignment_id=self.prior['id'], reviewer_id=self.prior['reviewer_id'],
+            packet_digest=self.prior['packet_digest'], prompt_hash=self.prior['prompt_hash'],
+            output_digest=digest(self.output), support=None, independence_at_recording='contaminated',
+            subject=self.prior['subject']))
         self.probe('repair-probe')
         self.value = {'id': 'repaired-visual-result', 'route_id': self.prior['route_id'], 'dossier_id': None,
             'role': 'result', 'reviewer_id': self.prior['reviewer_id'], 'author_id': self.prior['author_id'],

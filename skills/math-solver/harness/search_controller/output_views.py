@@ -6,12 +6,11 @@ final/history/math/<rel>/ (earlier results that a later record superseded or tha
 intermediate/math/<rel>/ (every other output). STATE_GROUPS and OPERATION_GROUPS classify every replayed state
 collection and every inner operation kind by the view group that shows it.
 
-A render reads the event document, the controller's content stores and the node workspaces, and writes only these
-folders and its marker and lock in .search/. It runs once per command, after the command's last commit and outside
-every controller lock. It skips when the marker already shows the document's last event under the installed
-plugin version; otherwise it builds the whole model, writes the files whose bytes differ, and removes the owned files
-that the model no longer produces. A failed render never changes the command's result: it prints one warning, and
-search status and search next report output_views_stale.
+A render reads the event document, the controller's content stores and the node workspaces, and publishes Markdown
+and these folders under its render lock, after the command's last commit and outside the writer lock. Markdown is
+repaired even when the JSON marker already shows the last event under the installed plugin version. Otherwise the
+JSON render builds the whole model, writes files whose bytes differ, and removes files no longer produced. A failed
+render never changes the command's result: it prints one warning, and status and next report output_views_stale.
 """
 
 import errno
@@ -25,6 +24,7 @@ import sys
 import time
 
 from . import schema as s
+from . import render as markdown
 from .errors import SearchError
 from .evidence import manifest_closure
 from .model import replay
@@ -120,6 +120,7 @@ class Views:
         self.rel = self.root.relative_to(self.workspace).as_posix()
         self.files = {}
         self.adoptions = []
+        self.adoption_keys = set()
 
     def find_base(self, status):
         return _TREES[status] + self.rel
@@ -164,7 +165,9 @@ class Views:
             if attestation.startswith(PREFIX):
                 entry = {"review_id": s.digest(review), "assignment_id": attestation[len(PREFIX):],
                          "adopting_record": {"kind": kind, "id": identity, "status": status, "path": path}}
-                if entry not in self.adoptions:
+                key = (entry["review_id"], entry["assignment_id"], kind, identity, status, path)
+                if key not in self.adoption_keys:
+                    self.adoption_keys.add(key)
                     self.adoptions.append(entry)
 
 
@@ -178,12 +181,16 @@ def build_objective(views):
 def build_admissions(views):
     """Admitted proposals in final/, every other proposal in intermediate/, each with its recorded reviews."""
     state = views.state
+    nodes_by_proposal, reviews_by_proposal = {}, {}
+    for node in state["nodes"].values():
+        nodes_by_proposal.setdefault(node["proposal_id"], node["id"])
+    for review in state["reviews"].values():
+        reviews_by_proposal.setdefault(review["proposal_id"], []).append(review)
     for identity, proposal in state["proposals"].items():
         admitted = proposal["status"] == "admitted"
         status = "current" if admitted else "not_selected"
-        node = next((node["id"] for node in state["nodes"].values() if node["proposal_id"] == identity), None)
-        value = {"proposal": proposal, "node_id": node,
-                 "reviews": [review for review in state["reviews"].values() if review["proposal_id"] == identity]}
+        value = {"proposal": proposal, "node_id": nodes_by_proposal.get(identity),
+                 "reviews": reviews_by_proposal.get(identity, [])}
         kind = "admission" if admitted else "proposal"
         path = views.add_record(status, ("admissions/" if admitted else "proposals/") + identity + ".json",
                                 value, kind, identity)
@@ -249,10 +256,15 @@ def build_closure(views):
 
 def build_imports(views):
     service = views.state["service"]
+    versions_by_import, allowances_by_import = {}, {}
+    for item in service["import_versions"]:
+        versions_by_import.setdefault(item["import_id"], []).append(item)
+    for item in service["adoption_allowances"]:
+        allowances_by_import.setdefault(item["import_id"], []).append(item)
     for identity, record in service["imports"].items():
         value = {"import": record,
-                 "versions": [item for item in service["import_versions"] if item["import_id"] == identity],
-                 "allowances": [item for item in service["adoption_allowances"] if item["import_id"] == identity]}
+                 "versions": versions_by_import.get(identity, []),
+                 "allowances": allowances_by_import.get(identity, [])}
         path = views.add_record("current", "imports/" + identity + ".json", value, "import", identity)
         views.adopt(value, "import", identity, "current", path)
 
@@ -313,10 +325,19 @@ def build_runs(views):
                              identity)
 
 
-def describe_file(views, path):
-    raw = path.read_bytes()
-    return {"path": path.relative_to(views.workspace).as_posix(), "digest": hashlib.sha256(raw).hexdigest(),
-            "size": len(raw)}, raw
+def describe_file(views, path, *, include_body=False):
+    raw = None
+    digest, size = hashlib.sha256(), 0
+    if include_body:
+        raw = path.read_bytes()
+        digest.update(raw)
+        size = len(raw)
+    else:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+                size += len(chunk)
+    return {"path": path.relative_to(views.workspace).as_posix(), "digest": digest.hexdigest(), "size": size}, raw
 
 
 def list_files(views, directory, excluded=()):
@@ -352,7 +373,7 @@ def build_nodes(views):
             value["workspace_present"] = True
             journal = workspace / "journal.jsonl"
             if is_real_file(journal):
-                listing, raw = describe_file(views, journal)
+                listing, raw = describe_file(views, journal, include_body=True)
                 listing["moves"] = [describe_move(line) for line in raw.splitlines() if line.strip()]
                 value["journal"] = listing
             deterministic = workspace / "deterministic"
@@ -555,12 +576,11 @@ def has_reserved_name(root):
     return Path(root).name == RESERVED_ROOT_NAME
 
 
-def render_views(root, store, replayed=None):
-    """Render the views when the marker does not show the document's last event; return the replayed state, or None
-    when the views were already current or the root has the reserved name. replayed is a (document, state) pair the
-    caller already holds; it is used when no later event was committed since."""
-    if has_reserved_name(root):
-        return None
+def render_views(root, store, replayed=None, *, preserve_manual=False):
+    """Repair Markdown, then render JSON if stale; return state when JSON was rendered, or None otherwise.
+
+    Select the document under the render lock. Reuse the supplied (document, state) only if it is still current.
+    """
     descriptor = hold_render_lock(store)
     try:
         marker = read_marker(store)
@@ -569,12 +589,24 @@ def render_views(root, store, replayed=None):
             events = document["events"]
             identity = {"revision": len(events), "event_digest": s.digest(events[-1]) if events else None,
                         "plugin_version": read_runtime_identity()["plugin_version"]}
-            if all(marker.get(key) == value for key, value in identity.items()):
-                return None
             if replayed is not None and replayed[0]["events"][-1:] == events[-1:] and len(replayed[0]["events"]) == len(events):
                 state = replayed[1]
             else:
                 state = replay(document)
+            s.require(all(safe_path(store.root, "effect-" + s.digest(effect) + ".json").exists()
+                          for effect in state["service"]["effects"]),
+                      "Filesystem initialization is pending; run search render", "recovery_required")
+            paths = {"SEARCH_TREE.md"} | {node["attack_slug"] + "/LINEAGE.md" for node in state["nodes"].values()}
+            for relative in paths:
+                s.require(not safe_path(root, relative).is_symlink(), "Generated views cannot be symlinks", "unsafe_path")
+            initial_manual = (preserve_manual and len(events) == 1
+                              and events[0].get("payload", {}).get("command") == "init"
+                              and safe_path(root, "SEARCH_TREE.md").exists())
+            if not initial_manual:
+                markdown.render(root, state)
+            if has_reserved_name(root) or (marker.get("failure") is None
+                                          and all(marker.get(key) == value for key, value in identity.items())):
+                return None
             files = write_views(build_views(root, store, document, state), marker)
             write_marker(store, dict(identity, schema=_MARKER_SCHEMA, files=files, failure=None))
             return state
@@ -608,12 +640,12 @@ def find_research_renderer():
     return getattr(module, "render_workspace_views", None)
 
 
-def render_after_command(controller, replayed=None, *, research=True):
-    """Render after a command's last commit, outside every lock: the controller views, then (for controller commands)
+def render_after_command(controller, replayed=None, *, research=True, preserve_manual=False):
+    """Render after a command's last commit, outside the writer lock: controller views, then (for controller commands)
     the research views of the common review store. A failure prints one warning line and changes nothing else."""
     state = None
     try:
-        state = render_views(controller.root, controller.store, replayed)
+        state = render_views(controller.root, controller.store, replayed, preserve_manual=preserve_manual)
     except Exception as error:
         warn_unrendered(error)
     if not research:

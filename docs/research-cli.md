@@ -36,15 +36,20 @@ lists `direction_search_missing`, `direction_search_incomplete`,
 `direction_standards_missing`, `direction_standards_unresolved` and
 `grand_challenge_missing`.
 
-Both reviewers must receive the decisive source content and claim in their
-observed packet histories, source-request continuations or bound supplements.
-Coverage requires every inspected range and every image asset named by its
-inspection. Long text ranges are delivered in consecutive chunks of at most
-2,000 characters; PDF inspections use the checked original within the 64 MiB
-per-artifact delivery bound. Qualifying historical attachments retain coverage.
-A descriptor, inventory entry, reading note or assignment date alone supplies
-no delivered-source coverage. Missing ranges or image bytes leave
-`direction_evidence_unassessed`. The decision stores
+Each reviewer must receive the decisive source content and claim in the
+request of the exact authenticated attempt that produced its review: its
+current packet and the earlier packets of its session that the request
+replays. Coverage requires every inspected range and every image asset named
+by its inspection. Long text ranges are delivered in consecutive chunks of at
+most 2,000 characters; PDF inspections use the checked original within the
+64 MiB per-artifact delivery bound. A qualifying historical attachment retains
+coverage when the request carried it. A descriptor, an omission marker, an
+inventory entry, a reading note, an assignment date, a saved packet that the
+request did not carry or an artifact present only in the store supplies no
+delivered-source coverage, and a delivery that cannot be authenticated or
+decoded credits nothing. Missing ranges or image bytes leave
+`direction_evidence_unassessed`, with the uncovered fields in `missing` and
+the undelivered readings in `reading_ids`. The decision stores
 `direction_evidence_digest`; changed decisive evidence reports
 `direction_evidence_unassessed` and requires a new decision with reviews that
 saw it. Target commitment applies that same minimum and review-coverage rule.
@@ -66,15 +71,16 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `strategy` | Freeze a comparative prospective, result or post-measurement dossier, exact dependencies and a bounded question. |
 | `work-item` | Retain one stable reviewer request or development obligation, classification, actual execution state and lineage. |
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
-| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. |
-| `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. |
-| `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. A problem `result` or `adjudicator` packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, becomes the controller of a staged review when the scale preflight admits the slot; `{controller_assignment_id}` alone plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, `context: {staged_upgrade: {assignment_id}}` opens a staged review in a recorded slot, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A problem `result` assignment that the part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series ([Problem evidence in parts](#problem-evidence-in-parts)). |
-| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last `store_busy` or `stale_revision`. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
+| `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. A `status` read or a review preparation observes the installed runtime of the adapters in use at its start and at its end; when it changed in between, the command refuses with `review_runtime_changed` and writes nothing, and the same command run again reads the current runtime. |
+| `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. A probe interrupted after the reviewer answered is finished or reconciled as an interrupted `review-run` is. |
+| `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. A problem `result` packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, is delivered in parts ([Problem evidence in parts](#problem-evidence-in-parts)), and an `adjudicator` packet stays an ordinary assignment, also when its request does not fit. A staged review starts only through `context: {staged_upgrade: {assignment_id}}`, which opens one in a recorded slot; `{controller_assignment_id}` alone then plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A problem `result` assignment that the part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series ([Problem evidence in parts](#problem-evidence-in-parts)). Since 0.71.0 an ordinary assignment, one that is neither on a `codex_cli_visual_v1` route nor the controller or a task of a staged review, stores its replayed history as `history_ref` instead of `history`: a version 1 root with `version`, `message_count`, `history_digest` and the ordered `pages`, each page an immutable artifact with `version`, `start` and at most 32 `messages`, and each message with `body` (an artifact that holds the exact content, UTF-8 text or JSON for a native content array), `metadata` (the other fields of the message), `source` (`assignment_id`, `message_index`) and `occurrence` (`session_id`, `index`); the pages and bodies of an unchanged prefix are shared between the turns of a session. Every command reads either form, and the reviewer receives the identical history. A record that carries both fields is refused with `review_history_ambiguous`, and a page or body that does not match its root with `review_history_invalid`, or with `artifact_missing` or `artifact_corrupt` when its artifact is gone or altered; either code means that the artifacts of the store are damaged or a record was edited, so stop and report it. |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. When the reviewer answers, the run commits the answer as one immutable record, `review_call_observation`, before the write that records the run: this capture binds the operation and the invocation, the original request ID and the digest of the payload, the route and the request, the reservation and the calling process, and holds the exact observation with its artifacts. The write that records the run reads the capture and is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last of those refusals, and the capture stays. A run whose process ended after the capture committed, or whose write is still refused after that wait, is finished by repeating `review-run` with the same payload and the original request ID: that returns the recorded receipt when one exists and otherwise records the run from the capture, without calling the reviewer again. Until then the invocation is pending: a `review-run` of the assignment under another `id` refuses with `review_invocation_pending` and names that step, and `review-attempt` refuses an import under the run's `id`. A run whose process ended before the capture committed leaves an unknown outcome and the invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`, and the refusals say to reconcile it. `review-run` with `{"action": "reconcile", "operation": OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a run, `review.route_probe` for a probe or `review.output_correction` for a correction and the id is the `id` of the original payload, releases the capacity of the call once its process and its transport processes have ended; for a call without a capture it also records the unknown outcome as a `failed` attempt, probe or correction with the error `review_invocation_interrupted`, which ends the pending state. For a run that 0.69.x started, which has no reservation, the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload), and the refusal carries that payload under `next`. After either step, a `review-run` of the assignment under a new `id` and request ID is permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
-| `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. |
-| `review-output-correction` | `{id, assignment_id, route_id}`. For a problem result reassessment whose two completed, authenticated outputs both have recorded refusals, the latest for `review_reassessment_mismatch`: when relabeling the latest output's `confirmed` findings whose content changed as `revised` would satisfy its output contract, ask the same reviewer once for that relabeling. Use a verified route with the original endpoint, model and adapter; a `codex_cli_visual_v1` assignment can use `codex_cli_v1` instead. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. |
-| `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. A part turn of a problem result series is refused with `problem_evidence_part_pending` and leaves no refusal record. A staged review is recorded from its controller's effective result; an incomplete assessment is refused with `assessment_incomplete`. |
+| `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. The finding's citations are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). |
+| `review-output-correction` | `{id, assignment_id, route_id}`. For a problem result reassessment whose two completed, authenticated outputs both have recorded refusals, the latest for `review_reassessment_mismatch`: when relabeling the latest output's `confirmed` findings whose content changed as `revised` would satisfy its output contract, ask the same reviewer once for that relabeling. Use a verified route with the original endpoint, model and adapter; a `codex_cli_visual_v1` assignment can use `codex_cli_v1` instead. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. On a `codex_cli_v1` route the native rollout of the correction turn is read once, when the answer is captured, and retained in the capture, so a correction finished after an interruption authenticates against the retained rollout. An interrupted correction is finished or reconciled as an interrupted `review-run` is. |
+| `review-budget` | `{max_calls, reason}`. Record the optional store-wide allowance of reviewer calls as `review_budget/store`: `max_calls` is a nonnegative integer, or null for no limit, and `reason` is nonempty text. A store without the record behaves as before. With it, the start of every ordinary `review-run`, `review-probe` and `review-output-correction`, and every reservation of a staged task, is refused with `review_budget_exhausted` when no call remains; the check runs in the transaction that records the start, together with the capacity admission ([Staged problem reviews](#staged-problem-reviews)), so two processes cannot both take the last call. Each admission counts once: a staged reservation and its accepted attempt count once, a replay, a capture, an acceptance and a reconciliation add nothing, and a failed or unknown outcome stays counted. An allowance below the calls already admitted is refused with `review_budget_below_charged`, whose details name the smallest allowance permitted as `minimum_max_calls` and a `review-budget` command under `recovery`; raising the allowance keeps the expenditure. With an allowance set, the ID of an imported call cannot admit a new call (`record_conflict`). `intermediate/reviews/usage.json` shows the allowance, the charged calls and the remaining calls under `review_budget`. The allowance counts calls, not money, and review usage stays outside the preparation budgets of `budget`. `--check` accepts or refuses without writing. |
+| `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. The output's citations and bars are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). A part turn of a problem result series is refused with `problem_evidence_part_pending` and leaves no refusal record. A staged review is recorded from its controller's effective result; an incomplete assessment is refused with `assessment_incomplete`. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
 | `source-impact` | Bind an explicit impact classification for the complete source delta since the selected decision. |
 
@@ -178,7 +184,44 @@ for a recorded bar, slate or result review. Under the excerpt rules:
   valid only in a turn under the excerpt rules.
 
 A final phase assessment still needs every pending request settled.
-`already_delivered` answers and passage answers are settled and never pending.
+`already_delivered` answers and the passage answers `delivered`, `not_found`
+and `over_allowance` are settled and never pending; a passage reply that a
+turn defers for capacity (below) stays pending until a later turn includes it.
+
+The source reply batch. When `review-assignment` records a continuation that
+answers source requests, or a `complete-visible-v1` assignment, it plans the
+replies of that turn against the complete reviewer request: the prompt, the
+history, the metadata of every reply (an inventory page or query, an abstract,
+a full text or a passage) and the native attachments, measured in the route's
+own representation. It includes whole replies in request order while the
+request fits the route's input limit; the exact full-text parts of the reading
+budget stay the only subdivision of a reply. A reply that does not fit is
+deferred with status `deferred_capacity` and stays in
+`pending_source_requests`, a passage included, and the passage allowance of
+the session is charged only for the passages that the turn includes. A reply
+counts as delivered only when its metadata, its provenance and its required
+bodies survive the construction of the request. The choice is frozen in the
+packet under `source_reply_batch` (protocol
+`exactory-review-source-batch-v1`) with `included_request_ids`,
+`deferred_request_ids`, the requests themselves and the measurement; the
+marker's `guidance` tells the reviewer which replies the turn includes and
+defers, that a deferred request stays pending and need not be repeated, and
+that a pending request its assessment needs keeps the response unresolved
+with `support: null`. A reply that cannot fit on its own refuses the
+assignment with `review_input_too_large` and the details `limiting_component:
+"source_reply"`, `source_request`, `measurement` and
+`input_limit_characters`; a `complete-visible-v1` closure that does not fit
+refuses the assignment before any invocation, with `limiting_component:
+"complete_visible_closure"`, and never becomes a partial review. A
+continuation whose inherited unavailable requests and bound source state are
+unchanged, compared by the meaning of each request and the state of its
+source rather than by request id, is refused with
+`review_source_no_progress` before any reviewer call, and its pending
+requests stay as they were: the reviewer repeated requests that the harness
+already answered with nothing new, so do not continue the session with the
+same requests; record the reviewer's output as it stands, or change the
+evidence first, for example by acquiring the source. A packet recorded before
+0.71.0 rebuilds unchanged and gains no batch.
 
 A continuation whose recorded attempts all ended without a completed output,
 for example because the run was stopped at the route timeout, does not hold the
@@ -187,16 +230,20 @@ route and author: it replaces the failed one, which stays in the record and can
 no longer be run or continued (`review_assignment_replaced`). A continuation
 with a completed output, or one that never ran, still blocks a second
 continuation of its parent (`review_source_continuation_fork`). An initial
-problem `result` assignment whose recorded attempts all failed with
-`review_input_too_large` before the reviewer CLI started, with no completed
-output and no pending invocation, does not hold its slot either. Assign a new
-initial `result` assignment of the same reviewer, on the same route and with
-the same author, with `dossier_id: null` and an empty context: it takes the
-slot of that reviewer's bar, and the earlier assignment stays in the record and
-can no longer be run or continued (`review_assignment_superseded`). A
-replacement on another route or with another author, and a replacement of an
-initial assignment that has a completed output, a pending invocation or an
-attempt that failed with another code, are refused with
+problem `result` assignment that never ran because `review-run` refuses its
+exact frozen request before an invocation exists (`review_input_too_large`
+with `phase: "dispatch_preflight"`, the dispatch preflight below), or whose
+recorded attempts all failed with `review_input_too_large` before the reviewer
+CLI started (the record that such a refusal left before 0.71.0), with no
+completed output and no pending invocation, does not hold its slot either.
+Assign a new initial `result` assignment of the same reviewer, on the same
+route and with the same author, with `dossier_id: null` and an empty context:
+it takes the slot of that reviewer's bar, and the earlier assignment stays in
+the record and can no longer be run or continued
+(`review_assignment_superseded`). A replacement on another route or with
+another author, a replacement of an initial assignment that never ran and
+fits, and a replacement of one that has a completed output, a pending
+invocation or an attempt that failed with another code, are refused with
 `review_resampling_forbidden`.
 
 The excerpt rules of 0.64.2 to 0.65.1 (`exactory-review-excerpts-v1`) had no
@@ -228,21 +275,27 @@ Steps 4 to 6, 9 and 11 keep every protected body and every source that the turn
 delivers on request. A requested source loses a body only in step 3, where its
 HTML original is withheld while its complete extraction is delivered, and in
 step 10, where a whole source is deferred as pending. Each withheld body names
-its delivery and a note. [Problem creation](#problem-creation) states which
+its delivery and a note. Since 0.71.0 the whole replies of a new continuation
+or `complete-visible-v1` assignment are chosen when `review-assignment`
+records it (the source reply batch, above), and the replies that it includes
+survive this fitting whole. [Problem creation](#problem-creation) states which
 records, readings and artifact bytes each result reviewer's actual request must
 deliver for the post gate's result coverage check, and how that check treats a
-body that step 6 withholds. A request that still does not fit is refused before
-the reviewer CLI starts and recorded as a failed attempt with the code
-`review_input_too_large`. The record keeps the code, not the message. The limit
-is 1,300,000 characters on `claude_cli_v1` and 1,048,576 on `codex_cli_v1` and
-`codex_cli_framed_v1` (the
+body that step 6 withholds. A request that still does not fit is refused by
+`review-run` before an invocation exists, with the code
+`review_input_too_large`, the details `phase: "dispatch_preflight"` and the
+preflight report (the dispatch preflight, below), and nothing is recorded. The
+limit is 1,300,000 characters on `claude_cli_v1` and 1,048,576 on
+`codex_cli_v1` and `codex_cli_framed_v1` (the
 [route instructions](research-decisions.md#commands-and-shared-state)). The CLI
 receives nothing.
-A problem `result` or `adjudicator` request on these routes becomes a staged
-review ([Staged problem reviews](#staged-problem-reviews)) when the scale
-preflight of that section admits the slot; a session that is already a series,
-and a result slot that the preflight refuses, stay in parts
-([Problem evidence in parts](#problem-evidence-in-parts)).
+A problem `result` request on these routes that does not fit, or whose fitted
+request withholds an evidence body, is delivered in parts
+([Problem evidence in parts](#problem-evidence-in-parts)); an `adjudicator`
+request that does not fit is recorded as an ordinary assignment, whose run is
+refused as above. A staged review
+([Staged problem reviews](#staged-problem-reviews)) starts only through an
+explicit `staged_upgrade` of a recorded slot.
 The harness also keeps the earlier
 reduction orders of 0.56.0, of 0.56.1 and 0.57.0, and of the two repaired
 copies of 0.56.0 that the extremal-graph-stability and Sidorenko girth-six
@@ -251,45 +304,80 @@ problem records ran before 0.58.0, which the
 request with each earlier order, so an attempt recorded under one of them stays
 authenticated.
 
+The dispatch preflight. `review-run` of an ordinary assignment, `review-probe`
+and `review-output-correction` build the exact request and measure it before
+the invocation is recorded, in the route's own representation (the visual
+route counts its image wrappers). An input above the route limit, a mandatory
+current source that the request cannot carry, or a fitted correction request
+that loses the original output or its history is refused with
+`review_input_too_large`, the details `phase: "dispatch_preflight"` and the
+report under `preflight`, and nothing is recorded: no invocation and no
+attempt. Before 0.71.0 such a run recorded a failed attempt. The report
+(`exactory-review-preflight-v1`) states `input_size` (the measured characters,
+the limit and the representation), `mandatory_final_input`,
+`required_output_units` and `work_units` (the kind of work and its count),
+`remaining_calls`, `remaining_cost_usd`, `output_tokens` and
+`duration_seconds`, each marked `kind: "measurement"` or `kind: "unknown"`;
+the output-token and duration estimates are unknown in 0.71.0 and never refuse
+work. A run that passes keeps the report in its invocation and attempt
+records, and `review-run` returns it under `preflight`. A recorded request is
+never checked again: the reconstruction and authentication of recorded
+attempts do not run the preflight.
+
 ### Staged problem reviews
 
-A problem `result` or `adjudicator` assignment on a local route
-(`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1` and
-`codex_cli_visual_v1`) is an ordinary review when the request that the
-transport builds fits the route's input limit and delivers every item of the
-packet and every artifact body of its `evidence` list; on the visual route the
-request also delivers every page image of its native sources. The harness then
-records the packet, the prompt and the request as before, byte for byte. When
-the request does not fit, or when the fitted request withholds one of those
-bodies, also below the limit, the assignment becomes the controller of a staged
-review. A staged review performs one review as tasks of a frozen epoch, each
-task a fresh call with an empty history, instead of one call or a series of
-part turns. This applies to an initial assignment, a refresh, a continuation
-with `prior_assignment_id`, a context repair and a focused adjudication. It
-does not apply to a continuation with `context.source_delivery`, to a session
-that is already a series ([Problem evidence in parts](#problem-evidence-in-parts)),
-to a bar or slate packet, or to a route without a local input limit. The
-protocol is `exactory-review-staged-v2`. The harness plans every task itself
-and names the next command in `next`; the operator runs those commands and
-builds no task envelope.
+A staged review performs one review as tasks of a frozen epoch, each task a
+fresh call with an empty history, instead of one call or a series of part
+turns. Its protocol is `exactory-review-staged-v2`. It starts in two ways:
+`review-assignment` with `context: {staged_upgrade: {assignment_id}}` opens
+one in a recorded slot (Upgrading a recorded session, below), and a context
+repair of a slot whose predecessor is a controller is itself a controller
+(Context repair of a staged slot, below). Every other `result` or
+`adjudicator` assignment, except a child assignment that runs a task of a
+staged review, is an ordinary assignment or a part turn. A problem `result` or
+`adjudicator` assignment on a local route (`claude_cli_v1`, `codex_cli_v1`,
+`codex_cli_framed_v1` and `codex_cli_visual_v1`) is an ordinary review when
+the request that the transport builds fits the route's input limit and
+delivers every item of the packet and every artifact body of its `evidence`
+list; the harness records the packet, the prompt and the request byte for
+byte, as before. A `result` request on a route with a local input limit that
+does not fit, or whose fitted request withholds one of those bodies, is
+delivered in parts ([Problem evidence in parts](#problem-evidence-in-parts)):
+a series continued with the same evidence digest goes on, and a refreshed
+session, a continuation whose evidence digest changed and a session that
+never was a series start a series at part turn 1. An `adjudicator` request, a
+context repair of an ordinary slot, a continuation with
+`context.source_delivery` and an assignment on the visual route keep their
+ordinary packet, whatever its size; when the request does not fit,
+`review-run` refuses it before an invocation exists with
+`review_input_too_large` (the dispatch preflight, above) and records nothing,
+except that a `complete-visible-v1` closure that does not fit is refused by
+`review-assignment` (the source reply batch, above),
+and a recorded `result` or
+`adjudicator` assignment can be the predecessor of an explicit upgrade
+(Upgrading a recorded session, below). 0.70.0 opened a staged review for every
+oversized `result` or `adjudicator` request when it was assigned. The slots it
+opened keep working unchanged: their controller, tasks and child assignments
+continue, their requests rebuild byte for byte, and the post gate reports
+`review_quality_measurement_pending` for their epochs. The harness plans every
+task of a staged review itself and names the next command in `next`; the
+operator runs those commands and builds no task envelope.
 
 The scale preflight. The task contracts of this release require one full card
 to judge every claim of the epoch and later tasks to carry every claim id and
-context root. Before the epoch is frozen, the harness measures that envelope
-against the route's input limit, and the estimated output of the smallest full
-card that judges every claim against the output allowance (`max_output_tokens`
-minus the planner's margin). When either does not fit, the slot is not staged
-and nothing is written: no epoch, task, slot head or packet record, and no
-artifact. Automatic entry then builds the packet as 0.69.18 did: a result slot
-is delivered in parts ([Problem evidence in parts](#problem-evidence-in-parts))
-from part turn 1, and a focused adjudication or a context repair keeps its
-ordinary packet under the rules that applied before 0.70.0. An explicit
-`staged_upgrade` of such a slot is refused with
-`review_staged_scale_unsupported`; its details are `claims`, `occurrences`,
-`envelope_characters`, `input_limit`, `card_output_tokens` and
-`output_allowance`, so the refusal shows which bound was exceeded and by how
-much. The measured shape that met this limit, 15,389 frame leaves and 106
-occurrences, is in the [0.70.0 release note](releases/0.70.0.md#known-limits).
+context root. Before the epoch of an upgrade is frozen, the harness measures
+that envelope against the route's input limit, and the estimated output of the
+smallest full card that judges every claim against the output allowance
+(`max_output_tokens` minus the planner's margin). When either does not fit,
+the `staged_upgrade` is refused with `review_staged_scale_unsupported` and
+nothing is written: no epoch, task, slot head or packet record, and no
+artifact; the recorded slot keeps its delivery, a result slot in parts and an
+adjudication or a context repair with its ordinary packet. The details of the
+refusal are `claims`, `occurrences`, `envelope_characters`, `input_limit`,
+`card_output_tokens` and `output_allowance`, so the refusal shows which bound
+was exceeded and by how much. The measured shape that met this limit, 15,389
+frame leaves and 106 occurrences, is in the
+[0.70.0 release note](releases/0.70.0.md#known-limits).
 
 The controller and the epoch. `review-assignment` records the controller with
 `staged_review: {protocol, kind: "controller", epoch_id, task_ids}`, an empty
@@ -454,7 +542,11 @@ its claims in `context_roots`. A task planned under an older version is
 superseded (`task_supersessions`, reason `context_expanded`) once current
 tasks cover every obligation it held, and it leaves the frontier; a child
 assignment of such a task is refused with `review_task_dependency_changed`,
-and so is its run. A frame task's claims, conditions, dependencies and
+and so is its run. Since 0.71.0 the same code refuses an ordinary review
+assignment, run, probe or output correction when another process's commit
+changed a record that its preparation read (an unrelated commit leaves the
+preparation valid, and the finishing commit of a run tries again by itself),
+and the repair is to run the same command again. A frame task's claims, conditions, dependencies and
 unresolved items enter the claim graph, and an unresolved item must be
 answered by a grounded `answers` entry of a later task before the completion
 check passes.
@@ -519,7 +611,10 @@ reservation of a staged task, and the start of an ordinary `review-run`, a
 reservations and the pending ordinary invocations, probes and corrections on
 covered adapters, refuses with `review_capacity_wait` and the active
 reservation ids when the store limit or the route limit is reached, and
-otherwise writes the reservation and its pool membership together. A route
+otherwise writes the reservation and its pool membership together. When
+`review-budget` has recorded an allowance of calls (its row under "Scientific
+contribution decisions"), the same admission first refuses with
+`review_budget_exhausted` when no call of the allowance remains. A route
 outside the covered adapters cannot reserve a task
 (`review_route_unsupported`). Lowering a limit admits no new call until the
 active calls are below it. A reservation is released only after the harness
@@ -690,7 +785,9 @@ staged review the result coverage check reads the accepted task graph
 `review_quality_measurement_pending {route_id, protocol,
 calibration_profile_version}`: the measurement that compares a staged review
 with a single-input review has not run, so the staged mode decides no posting
-in this release, and no author flag lifts the obligation. The gate report and
+in this release, and no author flag lifts the obligation; a slot delivered in
+parts carries no such obligation, and its completed series can make the gate
+ready. The gate report and
 the `review` section of `status` carry `slot_outcomes` (`slots`, `occupied`,
 `complete`, `incomplete`, `pending`, `adverse_findings`,
 `assessment_complete` and `ready`); `status --summary` reduces them to
@@ -749,9 +846,9 @@ recorded. A turn that continues such a series with the same evidence digest,
 before the result review of its final turn is recorded, continues it under
 the rules of the next section. A continuation whose evidence digest changed
 and a refresh of the series start new work under the entry rule above
-(ordinary, staged, or in parts when the scale preflight refuses the slot), and
-an explicit `staged_upgrade` moves the recorded slot to a staged review at
-once, under the same preflight. No module that a route pins by its bytes
+(ordinary when the complete request fits, otherwise in parts), and an explicit
+`staged_upgrade` moves the recorded slot to a staged review at once, under the
+scale preflight. No module that a route pins by its bytes
 changed, and the reduction orders do not change.
 
 Views. `intermediate/reviews/staged/<kind>/<id>.json` holds the epochs, the
@@ -770,18 +867,18 @@ adjudication whose slot has a staged successor is `historical`.
 
 ### Problem evidence in parts
 
-Since 0.70.0 this delivery serves a session that is already a series and a
-result slot that the scale preflight of a staged review refuses. A turn that
-continues a series started under 0.69.0 to 0.69.4 with the same evidence
-digest, before the result review of its final turn is recorded, continues
-under these rules. A continuation of a series whose evidence digest changed, a
+This delivery serves a `result` session whose request does not fit one input
+of the route, or whose fitted request withholds an evidence body, and a
+session that is already a series. A turn that continues a recorded series
+with the same evidence digest, before the result review of its final turn is
+recorded, continues under these rules; this includes a series started under
+0.69.0 to 0.69.4. A continuation of a series whose evidence digest changed, a
 refresh of a series and a first turn of a session that never was a series are
 measured against the route limit: a request that fits and delivers every body
 is built as before, byte for byte, with the same packet and prompt; one that
-does not becomes a staged review
-([Staged problem reviews](#staged-problem-reviews)) when the preflight admits
-the slot, and otherwise starts a series under these rules at part turn 1. A
-`staged_upgrade` assignment moves a recorded slot to a staged review at once.
+does not starts a series under these rules at part turn 1. A `staged_upgrade`
+assignment moves a recorded slot to a staged review at once
+([Staged problem reviews](#staged-problem-reviews)).
 The rules below describe the series that continue. They apply
 to a `result` session on a route with a local input limit (`claude_cli_v1`,
 `codex_cli_v1` and `codex_cli_framed_v1`); a `complete-visible-v1`
@@ -964,21 +1061,22 @@ coverage of a review of a series and what that check guarantees.
 A series freezes the evidence digest of its first turn. Once a session is a
 series, a continuation whose current evidence digest differs does not continue
 the series, and neither does a refresh of a series, a new assignment of the
-same reviewer after the recorded result review of its final turn. Since
-0.70.0 both start new work under the entry rule of
-[Staged problem reviews](#staged-problem-reviews): ordinary when the request
-fits and delivers every body, staged when the scale preflight admits the slot,
-and otherwise in parts from part turn 1. A later
+same reviewer after the recorded result review of its final turn. Both start
+new work under the entry rule of this section: ordinary when the request fits
+and delivers every body, and otherwise in parts from part turn 1. A later
 turn of a refreshed session carries its `problem_refresh` marker, and the
 marker alone starts no new series. A continuation of a series with the
 unchanged digest receives the full current problem evidence and never the
 `delivered-in-an-earlier-turn` marker, because the replayed history of a
 series does not carry the evidence whole.
 
-The problem adjudicator and a context repair are not delivered in parts. Since
-0.70.0 an adjudicator request or a repair request that does not fit one input
-becomes a staged review ([Staged problem reviews](#staged-problem-reviews))
-instead of a failed attempt with `review_input_too_large`. A context repair of
+The problem adjudicator and a context repair are not delivered in parts. An
+adjudicator request or a repair request that does not fit one input is
+recorded with its ordinary packet, and `review-run` refuses its run before an
+invocation exists with `review_input_too_large` and `phase:
+"dispatch_preflight"`, recording nothing; an explicit `staged_upgrade` that
+names the recorded adjudicator assignment opens a staged review in its slot
+([Staged problem reviews](#staged-problem-reviews)). A context repair of
 a slot whose session holds a part turn keeps each part turn in its scientific
 history as `intermediate_output` and needs no recorded final for it; a final
 turn of the series that returned a review must be recorded before the repair,
@@ -991,7 +1089,13 @@ its complete required source units, the same reviewer then receives one complete
 authenticated main text per exact version, in a visible reversible encoding of
 the logical messages. An incomplete or unavailable request stays pending, and
 further source requests remain actionable. Such a continuation and a visual
-route do not use the reductions above.
+route do not use the reductions above. The complete texts of such a
+continuation are planned as one closure when `review-assignment` records it
+(the source reply batch in
+[Scientific contribution decisions](#scientific-contribution-decisions)): a
+closure that does not fit the route's input limit is refused there with
+`review_input_too_large` and `limiting_component: "complete_visible_closure"`,
+before any invocation, and never becomes a partial review.
 
 A final assessment binds its assignment. `value-review` and `review-adjudication`
 check the observed output against its output contract: the shape of the payload,
@@ -1212,7 +1316,7 @@ A check opens the store read-only, reads one snapshot, and runs the operation's 
 
 A check refuses with `check_unsupported` when the operation acts outside the store:
 
-- `collect`, `resume`, `acquire`, `expand`, `fulltext`, `import-response`, `import-oai-cohort` and `visual`, which acquire sources; `review-probe`, `review-run` and `review-output-correction`, which call a reviewer; and `reconcile-run`. A new request is refused before any effect. A request already recorded returns its receipt.
+- `collect`, `resume`, `acquire`, `expand`, `fulltext`, `fulltext-start`, `fulltext-resume`, `import-response`, `import-oai-cohort` and `visual`, which acquire sources; `review-probe`, `review-run` and `review-output-correction`, which call a reviewer; and `reconcile-run`. A new request is refused before any effect. A request already recorded returns its receipt. `fulltext-status` only reads and has no `--check` flag.
 - `batches`, `export`, `recover` and `restore`, which write files or recovery state, and `strategy-packet`, which can store a file in the artifact store while it builds the packet, for example a projected claim file, without a revision change. These five refuse before they open the workspace.
 - `exactory-lab init`, `run`, `probe` and `colab-serve`, and every `exactory-draft` command: `init`, `package`, `deposit`, `reconcile` and `attach-problem`. They create a workspace, run a program, write an archive or call Zenodo or exactory, and they refuse before they read anything.
 - A preparation that needs the installed reviewer CLI: `review-route` with a local adapter (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1` or `codex_cli_visual_v1`), and, in a workspace that holds a route of a local adapter, every command whose validation evaluates a route or an assignment state, for example `review-assignment`, `value-review`, `review-adjudication` and `problem-openness`. That evaluation reads the installed runtime of each local adapter in use, and reading a Codex runtime runs the Codex CLI.
@@ -1258,7 +1362,8 @@ defaults to `lineage-v1`; verification defaults to `sampled-v1`.
 A configuration predating this field retains `exhaustive-v1`. Each bounded
 preset belongs to its profile and returns `policy_inapplicable` on the other.
 The [catalog](research-tools.md) describes depth and budget arguments. Research
-presets supply default amounts; verification retains its fixed contract.
+presets supply default amounts; a verification raises only its three
+literature amounts, through a plan of its own profile ("Depth plan").
 
 `exactory-lab state set` validates requested fields together. Stages remain
 `initiate`, `cohort`, `literature`, `ideate`, `experiment`, `write`,
@@ -1341,22 +1446,24 @@ The example for each operation contains all its required keys and shows the comp
 | `constitution` | `previous_sha256`, `reason` | Adopts the current distributed policy. Research adoption of Version 7 alone leaves claims current. An adopted Version 6 can remain in use without revalidation; verification retains Version 6 in this release. |
 | `artifact` | `id`, `path`, `media_type` | The local path must remain inside the workspace without traversing symlinks. |
 | `collect` | `definition: {corpus, primaryCategory, windowStart, windowEnd}` | `max_requests`, `page_size`; current corpus is `arxiv`. Dates are ISO calendar dates. |
-| `resume` | `collection_id` | `max_requests`; resumes retained collection/page evidence. |
+| `resume` | `collection_id` | `max_requests`, `recheck`; resumes retained collection/page evidence. A partition at the minimum width (one minute) whose reported total still reaches the provider's query ceiling keeps a permanent `query_ceiling` diagnosis in `pending`, and an ordinary `resume` leaves it as it is; `recheck: true` asks the provider for that partition again, from its first page. |
 | `acquire`, `expand` | `identifier` | `provider`, `max_requests`; expansion acquires an unresolved identifier without asserting its bibliography has been read. An old arXiv archive name without its hyphen, as in `arxiv:astroph/0410063`, is read as the hyphenated archive (`arxiv:astro-ph/0410063`). |
-| `fulltext` | `identifier`, `url` | Optional `component` declares a pinned supplement relationship (see below). The response is read when its reported media type, without parameters such as `charset`, is PDF (`application/pdf`), HTML (`text/html`, `application/xhtml+xml`) or XML (`application/xml`, `text/xml`). A body served as `application/octet-stream` or `binary/octet-stream` is read as a PDF when its bytes start with the PDF signature. Without that signature it is `unsupported_fulltext`. A response of any other type is recorded `pending` with `unexpected_mime`. XML is read as a JATS article when its root element is `article`. Element names are matched by their local name, so a namespaced document reads the same. The Europe PMC endpoint `https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML` (for example `PMC13104172`) serves such a document for an open-access article. The extractor `jats` saves the text of the whole article (front matter, body and back matter) with a line break at each block element. `includes_abstract` is true when the abstract has text. The capture field `visual_asset_names` lists the `graphic` references of each `fig`, in document order and without repeats. These are names only: no image is fetched, and `visual` acquires images from an HTML original only. The extraction status depends on body content: text in a paragraph, list item, table cell or similar element inside `body`, outside headings, abstracts and metadata. An `article` without such text is `landing_page`, and an XML document whose root is not `article` is `unsupported_fulltext`. The parser loads no external DTD or entity and expands no declared entity. A document that declares an internal entity is `xml_internal_entity`. A document that refers to an external entity is `xml_external_entity`. So is a document that refers to a named entity that only an external DTD defines (for example `&nbsp;` from the JATS DTD). Invalid XML is `malformed_xml`. Predefined entities and numeric character references read normally. The extractor is bounded: at most 200,000 elements (`xml_element_limit`), a nesting depth of at most 256 (`xml_depth_limit`), at most 33,554,432 characters of decoded markup and text (`xml_text_limit`, a bound on characters, not on bytes) and ten seconds for the whole extraction (`xml_timeout`). Each of these XML statuses leaves the capture `pending` with that code as `extraction_status` and keeps the original bytes. A pending capture has no text to read. Acquire another supported original of the work with a new `fulltext` request, for example the publisher's PDF or HTML page, and read that capture. `max_requests` bounds the HTTP attempts of the capture, and each redirect and each retry is one attempt, so set it for the whole chain of a link that redirects: a publisher PDF link that was redirected three times before it served the file needed four attempts. When the budget runs out, the capture is recorded as `pending` with `extraction_status` `request_budget` and stays in the record; a new `fulltext` request with its own request id and a larger `max_requests` tries again. `extraction_options: {"layout": bool}` (default true) chooses the PDF extractor's layout mode. For scanned PDFs, `extraction_options: {"ocr": true}` uses bounded English OCR with pdfinfo, pdftoppm and Tesseract, retaining every PDF page boundary and actual tool versions. OCR has a 600-second deadline, 200-page limit, 5000-pixel maximum page dimension, and 32 MiB limits for each rendered page and total text. OCR and layout options are mutually exclusive. Interpret OCR text against the original page images; the harness records the tools and does not check the text. An original up to 128 MiB is captured; a larger response fails with `response_too_large`. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. A capture with other options is a distinct capture of the same original; a reading on any capture of that original satisfies its full-text coverage. |
-| `import-response` | `provider`, `response_file`, `source_url`, `captured_at` | `media_type`, `mappings`; `web`/`mcp` mappings use JSON pointers into the original saved response for every work. The result of a new import carries `identity_conflicts`: each DOI of the batch that the import makes ambiguous, as `{identifier, existing_families, incoming_families, candidates}` with sorted arrays, including a conflict between two works of one batch; an assertion that repeats a recorded family adds none. The import continues, the field is advisory, and the original result of an earlier import replays without it. `--preview` on the command line reports the same for the payload without writing: `{status: "preview", scope: "metadata_import", revision, work_ids, pending, warnings, identity_conflicts}` from the current snapshot, with no record, artifact, receipt or charge. It needs an existing store and takes no `--expected-revision` or `--request-id`. |
+| `fulltext` | `identifier`, `url` | Optional `component` declares a pinned supplement relationship (see below). The response is read when its reported media type, without parameters such as `charset`, is PDF (`application/pdf`), HTML (`text/html`, `application/xhtml+xml`) or XML (`application/xml`, `text/xml`). A body served as `application/octet-stream` or `binary/octet-stream` is read as a PDF when its bytes start with the PDF signature. Without that signature it is `unsupported_fulltext`. A response of any other type is recorded `pending` with `unexpected_mime`. XML is read as a JATS article when its root element is `article`. Element names are matched by their local name, so a namespaced document reads the same. The Europe PMC endpoint `https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML` (for example `PMC13104172`) serves such a document for an open-access article. The extractor `jats` saves the text of the whole article (front matter, body and back matter) with a line break at each block element. `includes_abstract` is true when the abstract has text. The capture field `visual_asset_names` lists the `graphic` references of each `fig`, in document order and without repeats. These are names only: no image is fetched, and `visual` acquires images from an HTML original only. The extraction status depends on body content: text in a paragraph, list item, table cell or similar element inside `body`, outside headings, abstracts and metadata. An `article` without such text is `landing_page`, and an XML document whose root is not `article` is `unsupported_fulltext`. The parser loads no external DTD or entity and expands no declared entity. A document that declares an internal entity is `xml_internal_entity`. A document that refers to an external entity is `xml_external_entity`. So is a document that refers to a named entity that only an external DTD defines (for example `&nbsp;` from the JATS DTD). Invalid XML is `malformed_xml`. Predefined entities and numeric character references read normally. The extractor is bounded: at most 200,000 elements (`xml_element_limit`), a nesting depth of at most 256 (`xml_depth_limit`), at most 33,554,432 characters of decoded markup and text (`xml_text_limit`, a bound on characters, not on bytes) and ten seconds for the whole extraction (`xml_timeout`). Each of these XML statuses leaves the capture `pending` with that code as `extraction_status` and keeps the original bytes. A pending capture has no text to read. Acquire another supported original of the work with a new `fulltext` request, for example the publisher's PDF or HTML page, and read that capture. `max_requests` bounds the HTTP attempts of the capture, and each redirect and each retry is one attempt, so set it for the whole chain of a link that redirects: a publisher PDF link that was redirected three times before it served the file needed four attempts. When the budget runs out, the capture is recorded as `pending` with `extraction_status` `request_budget` and stays in the record; a new `fulltext` request with its own request id and a larger `max_requests` tries again. `extraction_options: {"layout": bool}` (default true) chooses the PDF extractor's layout mode. For scanned PDFs, `extraction_options: {"ocr": true}` uses bounded English OCR with pdfinfo, pdftoppm and Tesseract, retaining every PDF page boundary and actual tool versions. OCR has a 600-second deadline, 200-page limit, 5000-pixel maximum page dimension, and 32 MiB limits for each rendered page and total text. OCR and layout options are mutually exclusive. Interpret OCR text against the original page images; the harness records the tools and does not check the text. An original up to 128 MiB is captured; a larger response fails with `response_too_large`. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. A capture with other options is a distinct capture of the same original; a reading on any capture of that original satisfies its full-text coverage. An original larger than 128 MiB, or a transfer or extraction that one `fulltext` call cannot finish within its limits, is acquired as a full-text job (`fulltext-start`, below). |
+| `fulltext-start` | `identifier`, and exactly one of `url` or `source_id` | `extraction_options`, `allowances`, `use_ranges`. Records a durable full-text job for the exact version and returns `{job_id, status: "pending", pending: [{code: "fulltext_job_pending"}], revision}`; the transfer and the extraction run in `fulltext-resume`. `url` names the original to transfer; `source_id` names a retained complete original of the exact version, for example the original of a `fulltext` capture, which the job extracts without a transfer. `use_ranges` (default true) transfers in verified byte ranges that a later resume continues; false transfers the original whole. `allowances` are the job's limits: `original_bytes` (default 512 MiB), `retained_bytes` (4 GiB of retained transfer and extraction artifacts), `text_bytes` (256 MiB of extracted text), `network_attempts` (100), `invocation_seconds` (120 per resume), `unit_seconds` (30 per transfer unit or extraction page), `unit_output_bytes` and `unit_image_bytes` (32 MiB each), `pages_per_resume` (20) and `range_bytes` (8 MiB). See "Full-text jobs" below. |
+| `fulltext-resume` | `job_id` | `max_requests`, `max_pages`, `allowances`, `reason`. Runs the job within its allowances: the next transfer units (`max_requests` bounds the network attempts of this invocation) and then the next extraction pages (`max_pages`, 1 to `pages_per_resume`), each recorded durably as it completes. `allowances` raises one or more limits of the job, never lowers one, and then needs `reason`; the expenditure so far is kept. The result is `{job_id, status, pending, completed_pages, page_count, attempts_used, next_unit, revision}`, and `fulltext-status` shows the next action. |
+| `import-response` | `provider`, `response_file`, `source_url`, `captured_at` | `media_type`, `mappings`; `web`/`mcp` mappings use JSON pointers into the original saved response for every work. A request already committed is replayed first, from its recorded receipt, before the response is parsed. A new response, or the import payload, above 8 MiB is refused with `import_input_too_large` before it is parsed. The result of a new import carries `identity_conflicts`: each DOI of the batch that the import makes ambiguous, as `{identifier, existing_families, incoming_families, candidates}` with sorted arrays, including a conflict between two works of one batch; an assertion that repeats a recorded family adds none. The import continues, the field is advisory, and the original result of an earlier import replays without it. `--preview` on the command line reports the same for the payload without writing: `{status: "preview", scope: "metadata_import", revision, work_ids, pending, warnings, identity_conflicts}` from the current snapshot, with no record, artifact, receipt or charge. It needs an existing store and takes no `--expected-revision` or `--request-id`. |
 | `import-oai-cohort` | `collection_id`, `pages: [{response_file, source_url, captured_at}]` | Existing arXiv math-ph collection only. Each file is an original XML response at a checked workspace-relative path. Supply the complete ordered arXivRaw whole-set token chain; no authored works, totals, flags or HTTP receipts. |
 | `roots` | `profile`, `roots: string[]`, `collection_ids: string[]` | `target` is required for verification; optional `historical_cutoff`. Research objective identity is set by `target`, not by this scope. |
 | `bundle` | `id`, `version_id`, `source_id`, `scope`, `completeness`, `units`, `inventory`, `bibliography`, `resolutions` | Each unit has `id`, `kind`, `required`, `link`, and optional `reason`/`url`; inventory and bibliography must reflect the original article. The citation graph reads every registry occurrence and, for each acquired original of the version that has a bundle, the bibliography occurrences of that original's latest bundle, unless the version's last `bundle` import named an earlier bundle of that original. An acquired original is an available main original of the version, so an original that a bundle of another of the version's bodies links as a `supplement` unit is another body. Only a version none of whose acquired originals has a bundle reads, by the same rule, the bundles of its other bodies, such as the saved response of a passage or such a supplement. A bundle of another body, such as a passage on a saved tool response or a bundle whose body is such a supplement, is therefore not read once a bundle of an acquired original exists, whichever was imported first, while a passage bundle whose body is an acquired original is read as that original's bundle. A new bundle for the same body replaces the occurrences of the earlier one, so their obligations end with it. A verification target reads the bundle of each acquired original whatever its pin. `resolutions` account for earlier occurrences that the graph still reads, such as registry observations. An entry or a resolution of kind `paper` can add `target_family`: the canonical id of an acquired family that an assertion of its `target` names, chosen with the entry's own `link` and `reason`. A DOI target can choose its own family or an asserted arXiv family; an exact arXiv target of the chosen family keeps its version. An unknown, unrelated, versioned, noncanonical or malformed choice is `invalid_family_selection`, and nothing is written. The choice binds that occurrence or resolution only: earlier bundles and reading units keep their digests, and an occurrence without a choice stays `reference_identity_ambiguous` while its target has conflicting assertions. A resolution with a choice resolves an occurrence of an earlier bundle. |
 | `read` | `id`, `version_id`, `depth`, `inspections`, `notes` | Fulltext reading also supplies `bundle_id`; each inspection has `unit_id`, `link`, `note`. All seven note fields shown in the example are required. |
 | `budget` | `profile`, `purpose`, `limits`, `reason` | Purposes are `literature`, `screening`, `experiment`, `development`. `limits` names every unit (`network_requests`, `source_bytes`, `readings`, `screenings`, `model_input_tokens`, `model_output_tokens`, `wall_seconds`, `rounds`); null means unlimited. A `development` budget bounds the number of rounds with the `rounds` unit; `round-admit` charges one round. Any unit of a `development` budget at its limit refuses the next `continue` with `resource_budget_exhausted`, so leave its other units null. A later budget for the same key needs a reason and cannot drop a limit below the charged amount (`resource_budget_below_charged`). Acquisition admission needs room for `max_requests` (at least one request) beside the reservations of every acquisition that is still admitted, and finish charges the attempts and bytes actually used; the reserved amount is the allowance of the admitted operations, so an interrupted acquisition holds its allowance until a new request id for the same operation and target supersedes it. `read-batch` and `screen-batch` charge their counts and reported usage, counting null usage as unknown. New work over a limit is refused with `resource_budget_exhausted`, and usage already spent is recorded. Three kinds of charge fail instead and change nothing. A charge that makes an account total an integer of more than 4300 digits fails with `invalid_input`, because the store refuses that integer. A float `wall_seconds` charge to an integer total beyond the float range (about 1.8e308) fails with `invalid_input`. A `wall_seconds` charge whose sum with the total is a float beyond the float range fails with `invalid_input`. With a `wall_seconds` limit, it fails with `resource_budget_exhausted` instead. A JSON number with a decimal point or an exponent is a float. Charged plus reserved at or above a limit is a preparation obligation, except for `development`, whose exhausted limit is a `gate round` obligation; `status --summary` shows every account. |
-| `read-batch` | `id`, `depth`, `items` | Optional `usage`, `depth_values`. Use `depth: "abstract"` with `depth_values` for per-call amounts; the object form of `depth` remains supported. Records 1 to 100 abstract readings in one event, all or none. Each item is `{version_id, note, notes: {seven fields: {text, status}}}` with optional `screening: {relevance, reason, conventions}`, `audit: {relevance, reason}`, `consequential: bool`, `placement: {position, reason}` where position is `above`, `below` or `unplaced`, `loop: {purposes, disposition, source}` where source is `search`, `population`, `citing` or `author`, `innovation_candidate: true`, and `search_hit: true`; the harness derives the whole-abstract span inspection itself. The recorded policy decides which extras apply: `loop` and `innovation_candidate` under `lineage-v1`, and `placement` and `search_hit` under `sampled-v1`. A research call with explicit depth values or a selected depth plan can also record sample placements and search-hit readings; other incompatible extras fail with `invalid_batch`. The catalog example carries `loop` on its first item and `placement` on its second so that both shapes are visible; use the applicable policy or explicit research-tool depth, and the `README.json` of a `batches` export states the shape for that export's mode. A `placement` judges a member of the current sample (`invalid_batch` otherwise). A batch that would exceed its effective study loop limit (`loop_limit_reached`, default 100), effective development-round loop limit (`round_loop_limit_reached`, default 40), or search-hit limit (`search_reading_limit_reached`, fixed at 20 for verification) is rejected whole; the 20 abstracts of a further loop round are a rule the coordinator follows, not one the store refuses. Reading ids are `reading:<sha256 of [batch id, version]>`. The reading covers the version's selected complete abstract; a version without one fails with `abstract_missing`. An `audit` belongs to a currently excluded member (`invalid_batch` otherwise) and is stored with the member's screening `round` at the time of reading. A failing item rejects the batch with `invalid_batch` and the failing `items` (`index`, `code`, `message`). `usage` is `{model, input_tokens, output_tokens, wall_seconds}`, each null when unknown. The token counts are nonnegative integers. `wall_seconds` is a nonnegative number with a finite float value, so an integer beyond the float range (about 1.8e308) fails with `invalid_batch`. |
+| `read-batch` | `id`, `depth`, `items` | Optional `usage`, `depth_values`. Use `depth: "abstract"` with `depth_values` for per-call amounts; the object form of `depth` remains supported. Records 1 to 100 abstract readings in one event, all or none. Each item is `{version_id, note, notes: {seven fields: {text, status}}}` with optional `screening: {relevance, reason, conventions}`, `audit: {relevance, reason}`, `consequential: bool`, `placement: {position, reason}` where position is `above`, `below` or `unplaced`, `loop: {purposes, disposition, source}` where source is `search`, `population`, `citing` or `author`, `innovation_candidate: true`, and `search_hit: true`; the harness derives the whole-abstract span inspection itself. The recorded policy decides which extras apply: `loop` and `innovation_candidate` under `lineage-v1`, and `placement` and `search_hit` under `sampled-v1`. A research call with explicit depth values or a selected depth plan can also record sample placements and search-hit readings; other incompatible extras fail with `invalid_batch`. The catalog example carries `loop` on its first item and `placement` on its second so that both shapes are visible; use the applicable policy or explicit research-tool depth, and the `README.json` of a `batches` export states the shape for that export's mode. A `placement` judges a member of the current sample (`invalid_batch` otherwise). A batch that would exceed its effective study loop limit (`loop_limit_reached`, default 100), effective development-round loop limit (`round_loop_limit_reached`, default 40), or search-hit limit (`search_reading_limit_reached`, the effective `search_readings` amount, default 20 and never below it for verification) is rejected whole; the 20 abstracts of a further loop round are a rule the coordinator follows, not one the store refuses. Reading ids are `reading:<sha256 of [batch id, version]>`. The reading covers the version's selected complete abstract; a version without one fails with `abstract_missing`. An `audit` belongs to a currently excluded member (`invalid_batch` otherwise) and is stored with the member's screening `round` at the time of reading. A failing item rejects the batch with `invalid_batch` and the failing `items` (`index`, `code`, `message`). `usage` is `{model, input_tokens, output_tokens, wall_seconds}`, each null when unknown. The token counts are nonnegative integers. `wall_seconds` is a nonnegative number with a finite float value, so an integer beyond the float range (about 1.8e308) fails with `invalid_batch`. |
 | `screen-batch` | `id`, `items`, `screener` | `round` (default 1), `usage` with the shape and rules of `read-batch`. Under `screened-v1` only (`policy_inapplicable` otherwise). Records 1 to 200 screenings, all or none; a failing item rejects the batch with `invalid_screening` and the failing `items`. A re-screen needs a round above the member's current round and replaces the member's screening. Each item is `{collection_id (null for a Tier 3 family), work_id, version_id, disposition, relevance, reason, conventions}` with `promotion_reasons` for `promote` and `context` for a reference. Rules: `strong` relevance requires `promote`; `exclude` requires `none` relevance and a complete abstract; `weak` stays `pending`, `doctrine`, or `promote`. `screener` is `{kind: agent|human, model}`. A screen is never a reading. |
 | `screening-checkpoint` | `id`, `batch_ids`, `reason` | Under `screened-v1` only. Accepted when the two named batches are the two most recent `read-batch` records, both contain only `pending` members, and every item of both was judged `consequential: false`; otherwise `invalid_screening`. While it covers, unread `pending` members carry no obligation and are counted as `inventoried_unread`; a later consequential batch, a higher screening round, or a policy change removes the effect. |
 | `sample` | `id`, `collection_id`, `size`, `seed` | Optional `depth`. Available under `sampled-v1`, or in research with an explicit `depth` object or selected depth plan (`policy_inapplicable` otherwise). Draws and records a sample of one frozen population, stratified by month with equal allocation, a short month's shortfall passed to the next months, and the whole population when it fits within `size` (1 to the effective `sample_size`; verification keeps 1 to 100). The enumeration must be complete (`collection_pending`). The record keeps the seed, the per-month population and sampled counts, the population digest and the drawn members; the draw repeats from that seed, and two verifications of one paper choose their own seeds and read different members. A second draw against the unchanged population is refused with `sample_exists`; a population that changed after the draw reports `sample_stale`, which a new draw clears. Under the verification preset every sampled member owes an abstract reading (`sample_reading_missing`) carrying a placement (`placement_missing`), and a scoped collection that is not the sampled one reports `sample_missing`. Research records the draw as tool evidence, with readings at its stated depth. |
 | `loop-close` | `id`, `purposes` | Optional `depth`. Under `lineage-v1` only (`policy_inapplicable` otherwise). Closes the bounded loop. `purposes` names all five search purposes exactly once, each `{status, note}` with status `covered` or `gap`. A `covered` purpose needs a loop reading judged `relevant` or `contradictory`, or two distinct captured queries for it with no such hit; a `gap` needs two distinct queries tried, or the loop at the call's effective `loop_abstracts` limit (default 100). Each captured query counts once. A native capture counts by the query it asks: its provider, endpoint and the parameters that decide which works match, as the registries' API references define them (`search_query` and `id_list` for arXiv; `query`, every field query `query.<field>` and `filter` for Crossref; `search`, `search.exact`, `search.semantic`, `filter` and `corpus` for OpenAlex). Its pages, its repeated captures and captures that differ only in another parameter (an order such as `sort`, `order`, `sortBy` or `sortOrder`, `select`, `sample`, `seed`, `facet`, `group_by`, paging, `mailto`, `api_key`, or any parameter outside these lists) therefore count once, whichever of its query parameters a judgment binds (for example OpenAlex `search` and `filter`). So do captures whose URLs spell one query differently: the endpoint is compared by its host and its path without a trailing slash, an empty parameter or list item counts as absent, and the comma-separated items of a `filter` or an arXiv `id_list` are compared as a set, because the registries combine them in any order. An OpenAlex `filter` is compared as OpenAlex reads it: the letter case of its values does not count, and the `\|` alternatives of one filter, after a leading `!` that negates them all, are compared as a set, so `type:Article` asks the same query as `type:article`, and `cites:W2\|W1` as `cites:W1\|W2`. Two native captures whose matching parameters differ in any other way count apart, even when they share a query value; this includes the name of a filter in another letter case, another letter case of the value of a `.search` filter such as `title.search` (OpenAlex reads its Boolean operators only in uppercase), and another letter case of the value of any other matching parameter, such as `search`. A `web` or `mcp` capture counts by its saved response and its bound query: the queries bound to one response count once, and so do the responses bound to one query. Such a capture adds no query when a native capture of the purpose was bound to the same value, because the harness cannot tell it from another capture of that query. The record keeps the queries each purpose tried and a digest of the loop it closed: a later loop reading or search reports `loop_closure_stale`, and no closure at all reports `loop_closure_missing`. |
-| `search` | `id`, `profile`, `purpose`, `queries`, `responses`, `captured_at`, `found_work_ids`, `verdict`, `cited_work_ids`, `impact`, `gaps`, `dispositions` | Optional `resolved`, `scope`, `question`, `binding`, `depth`, `hits_per_query`. Without `scope`, the question supplies its text. A provisional search before roots requires `question`; see the search coverage section. Bind the original query and every result. A response's `query` is the value of a query parameter of its captured URL (`search_query` for arXiv; `query`, `query.bibliographic` or `query.author` for Crossref; `search` or `filter` for OpenAlex, so a citing-works capture binds its whole filter value, such as `cites:W123` or, when the filter also holds a date clause, `cites:W123,from_publication_date:2025-01-01`; `q`, `query`, `search` or `search_query` for `web` and `mcp`), or, for a `web` or `mcp` capture, a saved response value named by `query_locator`. `nothing-new` needs an actual captured search, including an actual empty result array when appropriate. `dispositions` judges every found work once: `{work_id, disposition, reason}` with `relevant`, `contradictory`, `potentially_relevant`, `out_of_scope`, `duplicate`, or `unresolved`; cited works are relevant or contradictory. Each cited work becomes a critical full-text requirement (purpose `novelty`), so it is owed a full reading, while its judgment is the selected search of the profile and purpose; a new search for the purpose retires the requirements of the works it does not cite again (the stored requirement records stay). A new search for a purpose carries forward each `contradictory` or `unresolved` work of the selected search or lists it under `resolved: [{work_id, reason}]`, else `search_findings_dropped`. A judgment is stale when its scope changes (`search_scope_stale`), when a root, required full text, found or cited work changes content (`search_evidence_stale`), or when a family enters or moves in the citation graph (`search_frontier_stale`); a new version of an unrelated reference changes nothing. When a new search for a purpose drops a family that only the judgment it replaced required, each selected judgment of another purpose that was recorded while the family was required reports `search_frontier_stale` and `search_evidence_stale` until it is recorded again: as notices under `lineage-v1` and `sampled-v1`, and as obligations under `exhaustive-v1` and `screened-v1`. The one exception is a judgment that found a version of the family: it reports only `search_frontier_stale` when the citation graph had read no reference of the family's versions when the judgment was recorded, for example because no root or other required full text cited the family then. A reference of the family that the graph read later, while the family was required, does not change this. A judgment recorded before the family was required is stale while the family is required, and the drop ends that staleness. Searches recorded before dispositions existed report `search_dispositions_missing`. Under `lineage-v1` and `sampled-v1`, captured hits are bounded by the resolved `hits_per_query`, counted across every response of that query (`invalid_search` above that). Research may use bounded coverage. Verification keeps its ten-hit limit and native search enumeration obligation; see the search coverage section for both profiles. |
-| `require-fulltext` | `id`, `profile`, `version_id`, `purpose`, `reason` | Optional `historical_cutoff`, `depends_on`, and `depth` for purpose `core`. Purposes: `major_claim`, `novelty`, `innovation`, `validity`, `exemplar`, `lineage` (the parent's own line of results), `classic` (a foundational paper that line rests on), `core` (a paper whose full text decides a verdict's stance or its prediction band) and `contradiction` (a source that opposes a claim). `lineage`, `classic` and `core` name the claim, lineage entry or finding they serve in `depends_on`. A `core` requirement beyond the effective `core_fulltexts` amount is refused with `core_limit_reached`; verification keeps its fixed limit of ten. Every `lineage` and nondeferred `classic` entry is cited in the pinned bibliography (see "Review, publication, and verification"). An `exemplar` requirement under the `research` profile, recorded while a round is active, is that round's exemplar (see "Development rounds"). |
+| `search` | `id`, `profile`, `purpose`, `queries`, `responses`, `captured_at`, `found_work_ids`, `verdict`, `cited_work_ids`, `impact`, `gaps`, `dispositions` | Optional `resolved`, `scope`, `question`, `binding`, `depth`, `hits_per_query`. Without `scope`, the question supplies its text. A provisional search before roots requires `question`; see the search coverage section. Bind the original query and every result. A response's `query` is the value of a query parameter of its captured URL (`search_query` for arXiv; `query`, `query.bibliographic` or `query.author` for Crossref; `search` or `filter` for OpenAlex, so a citing-works capture binds its whole filter value, such as `cites:W123` or, when the filter also holds a date clause, `cites:W123,from_publication_date:2025-01-01`; `q`, `query`, `search` or `search_query` for `web` and `mcp`), or, for a `web` or `mcp` capture, a saved response value named by `query_locator`. `nothing-new` needs an actual captured search, including an actual empty result array when appropriate. `dispositions` judges every found work once: `{work_id, disposition, reason}` with `relevant`, `contradictory`, `potentially_relevant`, `out_of_scope`, `duplicate`, or `unresolved`; cited works are relevant or contradictory. Each cited work becomes a critical full-text requirement (purpose `novelty`), so it is owed a full reading, while its judgment is the selected search of the profile and purpose; a new search for the purpose retires the requirements of the works it does not cite again (the stored requirement records stay). A new search for a purpose carries forward each `contradictory` or `unresolved` work of the selected search or lists it under `resolved: [{work_id, reason}]`, else `search_findings_dropped`. A judgment is stale when its scope changes (`search_scope_stale`), when a root, required full text, found or cited work changes content (`search_evidence_stale`), or when a family enters or moves in the citation graph (`search_frontier_stale`); a new version of an unrelated reference changes nothing. When a new search for a purpose drops a family that only the judgment it replaced required, each selected judgment of another purpose that was recorded while the family was required reports `search_frontier_stale` and `search_evidence_stale` until it is recorded again: as notices under `lineage-v1` and `sampled-v1`, and as obligations under `exhaustive-v1` and `screened-v1`. The one exception is a judgment that found a version of the family: it reports only `search_frontier_stale` when the citation graph had read no reference of the family's versions when the judgment was recorded, for example because no root or other required full text cited the family then. A reference of the family that the graph read later, while the family was required, does not change this. A judgment recorded before the family was required is stale while the family is required, and the drop ends that staleness. Searches recorded before dispositions existed report `search_dispositions_missing`. Under `lineage-v1` and `sampled-v1`, captured hits are bounded by the resolved `hits_per_query`, counted across every response of that query (`invalid_search` above that). Research may use bounded coverage. Verification resolves `hits_per_query` from a plan or override of its own profile, default 10 and never below it, and keeps its native search enumeration obligation; see the search coverage section for both profiles. |
+| `require-fulltext` | `id`, `profile`, `version_id`, `purpose`, `reason` | Optional `historical_cutoff`, `depends_on`, and `depth` for purpose `core`. Purposes: `major_claim`, `novelty`, `innovation`, `validity`, `exemplar`, `lineage` (the parent's own line of results), `classic` (a foundational paper that line rests on), `core` (a paper whose full text decides a verdict's stance or its prediction band) and `contradiction` (a source that opposes a claim). `lineage`, `classic` and `core` name the claim, lineage entry or finding they serve in `depends_on`. A `core` requirement beyond the effective `core_fulltexts` amount is refused with `core_limit_reached`; verification resolves the amount from a plan or override of its own profile, default 10 and never below it. Every `lineage` and nondeferred `classic` entry is cited in the pinned bibliography (see "Review, publication, and verification"). An `exemplar` requirement under the `research` profile, recorded while a round is active, is that round's exemplar (see "Development rounds"). |
 | `availability` | `id`, `profile`, `version_id`, `depth`, `source_ids`, `reason`, `policy` | Policy has `id`, `minimum_attempts`, `allowed_statuses`, `rationale`. Two policies qualify: captured terminal HTTP 403/404/410/451 failures, or (abstract depth, non-arXiv work) `allowed_statuses` `[200]` with complete captures of the work from every registry that addresses its identifiers (Crossref and OpenAlex for a DOI, OpenAlex for an OpenAlex id, the saved web/MCP import for a `url:` work), none carrying an abstract. Critical sources remain required. |
 | `defer-source` | `id`, `profile`, `version_id`, `reason`, `authorization`, `acquisition_evidence`, `dependent_claims`, `continuing_work` | Research only. Names one registered exact version with a current missing full-text requirement. `authorization` is a checked, nonempty artifact reference; `acquisition_evidence` is a nonempty array of checked, nonempty artifact references. The last two fields are nonempty string arrays recording claims that cannot use the source and work that can continue. Roots and verification targets cannot be deferred. |
 | `resume-source` | `id`, `profile`, `version_id`, `deferral_id`, `reason` | Restores ordinary obligations for the selected active or stale research deferral. Names its exact `deferral_id`; all earlier decisions and receipts remain immutable. |
@@ -1384,6 +1491,43 @@ The example for each operation contains all its required keys and shows the comp
 | `round-review` | `id`, `round_id`, `round_digest`, `assessor`, `verdict`, `checks`, `limitations` | `verdict` is `approved`, `not_approved`, or `unresolved`. For a `continue` decision the checks are `impact`, `demand`, `novelty_risk`, `feasibility`, `distinctness`, `continuity`, `grand_challenge`; for `stop` they are `stop` and `demand`; each is addressed once with `status` (`passed`, `failed`, `unresolved`), a reason and evidence. One review per assessor per decision (`round_review_duplicate`); the assessor is not a cycle author. |
 | `round-admit` | `id`, `round_id`, `review_id`, `reason` | Opens the round of an approved `continue` decision on the current bundle. Records the round's number, goal, objective, limits and opening state; applies a widened objective through its lineage. While the round runs, its receipt is the only output that reports the admitted goal (see "Development rounds"). |
 | `round-assess` | `id`, `round_id`, `bundle_digest`, `criteria`, `stop_conditions`, `summary` | Judges every success criterion and stop condition of the admitted goal once with `status` (`observed`, `not_observed`, `unresolved`), an explanation and evidence, on the exact current bundle. The harness derives and stores the round's progress with the record. |
+
+Full-text jobs. A job acquires a full text that a single `fulltext` call
+cannot finish: an original above 128 MiB, up to the job's `original_bytes`, or
+a transfer or a PDF extraction that would otherwise be lost at an interruption
+or a time limit. `fulltext-start` records the job, and each `fulltext-resume`
+runs it within the invocation allowances and records every completed transfer
+unit, network attempt and `pdf-pages-v1` extraction page durably as a
+`fulltext_unit` record, so an interrupted resume loses no completed unit and
+the next resume continues from the verified byte ranges already transferred
+and from the next page. The job publishes its capture only when it is
+complete, as a `source_assembly` with the capture method `http_range_v1`,
+which the readers of captures accept where they accept `http`. A pending job
+grants no reading, availability or delivery credit, and a complete capture
+keeps the visual-inspection and reading obligations of every other capture.
+`fulltext-status --job-id ID [--cursor N] [--limit N]` is read-only and takes
+no `--expected-revision`, `--request-id` or `--check`: it returns the job
+record (`status`, `pending`, `next_unit`, `capture`, the allowances and the
+counts) with `next_action` (`fulltext-resume` while the job is pending,
+`complete` when it is) and one page of its units as `units`, `total_units`
+and `next_cursor`, with `--limit` from 1 to 100 (default 30). The job codes
+are `fulltext_job_pending` (the job is not complete after this invocation,
+because its time, page or request allowance for the invocation ended or an
+earlier worker has not terminated; resume it), `fulltext_transfer_changed`
+(the server's response no longer matches the committed transfer units, for
+example another validator, size or range), `fulltext_resume_unsupported` (the
+transfer cannot continue where it stopped: the server answered the range
+continuation with a whole response or without a strong ETag, or a whole
+transfer was interrupted; start a new job, with `use_ranges: false` and a
+larger `invocation_seconds` when the server serves no ranges),
+`fulltext_unit_limit` (a unit's output or the extracted text exceeds its
+allowance) and `fulltext_storage_limit` (the retained artifacts or the scratch
+space exceed the storage allowance); `unknown_fulltext_job` names a job id
+that no record has. Every acquisition command for one target (an identifier,
+a cohort definition or collection, a source URL or a job) holds a lock while
+it runs, so a second command for the same target is refused with
+`acquisition_in_progress`, whose details name the running operation; a replay
+of a committed request takes no lock.
 
 Source deferral requires an explicit authorization artifact and the actual retained
 retrieval evidence. It creates no HTTP failure, availability qualification or
@@ -1425,6 +1569,8 @@ A fulltext note uses `depth: "fulltext"`, its current `bundle_id`, and inspectio
 
 A retry deadline exposed as `next_eligible_at` is a pending condition until that deadline. Resuming earlier can make zero requests and preserve all evidence. An expired deadline is retained history, not a permanent block. Unversioned arXiv material remains unresolved until exact-version evidence is explicitly selected. PDF extraction uses installed `pdftotext` with bounded execution; unavailable extraction remains pending.
 
+Every HTTP attempt of the research harness is admitted through one scheduling state per user on this machine: the SQLite file `provider-pacing.sqlite3` under `$XDG_STATE_HOME/exactory`, or `~/.local/state/exactory` when `XDG_STATE_HOME` is unset. The state holds the current deadlines and cooldowns of each provider group, not a request history. A `Retry-After` cooldown is recorded as soon as the response headers arrive and blocks every identifier, alias, client, process and workspace of that provider group on this machine until it expires. The arXiv hosts form one group with the existing interval of 3 seconds between requests and one active connection at a time, held until the response closes; other providers can have concurrent requests and share their cooldowns. A call refuses with `rate_limited` when the wait would exceed its allowance, naming the provider group and the next eligible time in the details, and the refusal charges no network attempt; with `provider_state_capacity` when live deadlines fill the state; and with `provider_state_unavailable` when the state is corrupt, unavailable or stays busy. Nothing is sent after these refusals. The coordination covers the processes of one machine and one user, so several machines that work on arXiv at the same time must send their requests from one machine.
+
 ## Depth plan (`depth`)
 
 Record `{id, values, reason}` as an immutable `depth_plan` and select it as current.
@@ -1443,9 +1589,22 @@ The ID and reason are required nonempty text. Values may contain any subset of:
 
 Amounts are positive integers with no fixed upper ceiling. Omitted keys retain
 their current values, and merged `innovation_cases` cannot exceed
-`innovation_candidates`. Budgets still bound cost. Verification keeps its fixed
-contract and refuses plans or explicit overrides with `profile_inapplicable`.
-Research depth needs no particular constitution version or revalidation.
+`innovation_candidates`. Budgets still bound cost. Research depth needs no
+particular constitution version or revalidation.
+
+A depth plan belongs to a profile, and the selection is kept per profile: a
+research plan never changes a verification search, and a verification plan
+never changes research work. A plan without `profile` belongs to the
+configured profile, and a selection that an earlier release wrote under
+`current` is read as the research plan. A verification plan is `{id, profile:
+"verification", values, reason, stopping_criterion}` with a nonempty stopping
+criterion; a plan in a verification workspace without `profile: verification`
+is `profile_inapplicable`. Its values may hold only `hits_per_query`,
+`search_readings` and `core_fulltexts`, each at least its default (10, 20 and
+10): a smaller value is `invalid_input`, and another key is
+`profile_inapplicable`, for the plan and for an explicit per-call override
+alike. Work recorded before the plan keeps its amounts. A research plan may
+also carry `stopping_criterion`.
 
 ```json
 {"id":"depth-1","values":{"loop_abstracts":150,"hits_per_query":15},"reason":"Broaden the next comparison."}
@@ -1455,7 +1614,8 @@ Research depth needs no particular constitution version or revalidation.
 exactory-research depth --file depth.json --expected-revision REV --request-id depth-1
 ```
 
-The plan records all eight effective defaults and its revision. Search, sample,
+The plan records its revision and the effective amounts of its profile, all
+eight for research and the three for verification. Search, sample,
 `require-fulltext` with purpose `core`, innovation, and loop-close accept an
 optional `depth` object with their relevant keys. For loop or search-hit
 `read-batch`, keep `depth: "abstract"` and add the optional `depth_values`
@@ -1479,8 +1639,8 @@ and five to ten external cases under the other two policies. Defaults and
 overrides change work amounts, never claim minimums.
 
 Depth stays outside configuration and dependency digests. With a selected plan,
-status includes `limits.depth: {plan_id, values}`; old stores keep their report
-shape. Summary plan IDs are truncated to 64 characters. Invalid keys, types,
+status includes `limits.depth: {plan_id, profile, stopping_criterion, values}`;
+old stores keep their report shape. Summary plan IDs are truncated to 64 characters. Invalid keys, types,
 nonpositive values or case relationships produce `invalid_input`; immutable ID,
 revision and request conflicts use the normal mutation errors.
 
@@ -2137,7 +2297,7 @@ exactory-research export --kind readiness
 exactory-research export --kind manuscript --destination /new/independent/manuscript
 ```
 
-Delivery copies the actual candidate/source/program/output bytes and an `inputs.json` manifest into a new directory: `--destination`, or without it `intermediate/reviews/packets/<kind>-r<revision>/` under the workspace root, where `<revision>` is the store revision at the export and a numeric suffix is added when that directory exists. `--destination` stays free so that a reviewer can run outside the workspace. One exception: an object that a completion check sealed (see "Exploratory computation") is not copied; the packet keeps its hash, size and media type, with `sealed_path` in place of `path`. The manifest is a neutral packet: no revision labels, request identities, launcher tokens, author names, assessment history, prior scores or verdicts. A readiness packet carries the candidate, branches, plans, assessments, checkpoints, sources and synthesis sections that the six checks need. A branch of `review_inputs.branches` whose plan disclosed runs also carries `program_probes`: for each disclosed run its `program`, `inputs`, `interpreter`, `context`, `program_run` (the observed times, output hashes and read status), `outputs`, `stdout`, `stderr`, `exit_status`, `elapsed_seconds`, a `statement` of whether the outputs were read, and `admitted_runs`, which lists each admission of the plan with its `program_sha256`, `earlier_version` (true when the hashes differ) and a unified `program_diff` of the two programs when both are UTF-8 text.
+Delivery copies the actual candidate/source/program/output bytes and an `inputs.json` manifest into a new directory: `--destination`, or without it `intermediate/reviews/packets/<kind>-r<revision>/` under the workspace root, where `<revision>` is the store revision at the export and a numeric suffix is added when that directory exists. `--destination` stays free so that a reviewer can run outside the workspace. Each artifact is copied from a verified private copy, the manifest is written last, and the directory is renamed into place only when it is complete, so a failure leaves no partial delivery. One exception: an object that a completion check sealed (see "Exploratory computation") is not copied; the packet keeps its hash, size and media type, with `sealed_path` in place of `path`. The manifest is a neutral packet: no revision labels, request identities, launcher tokens, author names, assessment history, prior scores or verdicts. A readiness packet carries the candidate, branches, plans, assessments, checkpoints, sources and synthesis sections that the six checks need. A branch of `review_inputs.branches` whose plan disclosed runs also carries `program_probes`: for each disclosed run its `program`, `inputs`, `interpreter`, `context`, `program_run` (the observed times, output hashes and read status), `outputs`, `stdout`, `stderr`, `exit_status`, `elapsed_seconds`, a `statement` of whether the outputs were read, and `admitted_runs`, which lists each admission of the plan with its `program_sha256`, `earlier_version` (true when the hashes differ) and a unified `program_diff` of the two programs when both are UTF-8 text.
 
 A manuscript packet carries the exact PDF, abstract, bibliography and optional source archive. It derives a separate claims file for the reviewer. This file contains current claims, with `revised` metadata and `superseded` entries omitted. The evidence map and its source/result closure contain only those current claims. The packet also carries the selected field standards. The derived claims file has its own content hash and exists only in the delivery directory. The original ledger and bundle digest remain unchanged. Give this directory to the separate reviewer. A digest list alone is insufficient. Export does not certify comprehension or independence.
 
@@ -2151,9 +2311,9 @@ A bundle that `manuscript` pins since 0.65.0 carries `review_inputs_artifact` an
 
 Under `lineage-v1` the manuscript gate also checks the pinned bibliography for every `lineage` and `classic` entry. It reads the same citation evidence as `citation_accounting`. A BibTeX entry cites the work when it carries the work's arXiv identifier in family form, its DOI or a DOI of a provider alias, as a whole identifier. A bibliography that cites one version cites the work. An entry also cites the work when its title field equals the work's title of two or more words; a one-word title is too common to stand as evidence. Another bibliography format cites the work when its text carries an identifier or contains the title. A work with no such evidence keeps `lineage_citation_missing` until the bibliography carries it. Since 0.43.0, a DOI that only starts another DOI is not evidence, and in a BibTeX bibliography a title inside a longer title is not evidence. The bibliography is read for citation evidence, not validated: undecodable bytes become replacement characters instead of a failure.
 
-`exactory-draft package --output PATH [--bundle ID_OR_DIGEST] [--include PATH ...]` writes a ZIP of the code, data and records behind a pinned manuscript, from one authenticated snapshot, and changes nothing in the store. It runs in any directory of the workspace. Without `--bundle` it reads the selected bundle; `--bundle` names any recorded bundle by its id or its digest (`publication_bundle_missing` otherwise). The archive holds `README.txt`, one sentence that names the manifests; `claims.json`, the pinned claim registry; `claim-evidence.json`, the pinned evidence map; `package.json`; `data/INDEX.json`; `runs/`; `data/`; and `managed-record/`. For each execution that the evidence map cites, `runs/run-<admission id>/` holds the admitted program at its bound script path and each admitted input at its bound path, at the version of that run, with empty `logs/`, `results/` and `plots/` directories. `package.json` lists the run with its `execution_id`, `cycle_id`, `origin`, `command`, `admission_id`, `directory`, `argv` (the runtime path, the script and the bound input paths), `runtime`, `script`, `inputs`, `declared_outputs` and `outputs`, each output with its member `archive`, `data/execution-<execution id>/output-<output id>.<suffix>`. Imported history keeps its recorded outputs with a null `admission_id`, `directory` and `argv`. Every other stored object that the evidence map or a record references, followed through JSON objects, is `data/objects/<sha256>`, and `data/INDEX.json` maps each object path under `research/sources/objects/` to its member. `managed-record/<kind>/<id>.json` holds every record of the kinds `cycle`, `cycle_plan`, `development_scope`, `strategy_account`, `execution_admission`, `execution_binding`, `execution_prelaunch`, `execution_claim`, `execution`, `execution_observation`, `execution_outcome`, `cycle_assessment`, `checkpoint`, `development_selection`, `bundle_selection`, `readiness_review`, `manuscript_review`, `manuscript_prediction`, `contribution_analysis`, `round_decision`, `round_review`, `source_deferral`, `workspace_decision`, `publication_bundle`, `publication_selection` and `local_artifact`, with the recorded values unchanged, and `package.json` maps each kind and id to its member. Each `--include PATH` adds a workspace file, or every regular file under a directory, at its own relative path and lists it under `supplements` with its `sha256` and `size`; a symlink or another special file is `unsafe_path`. `package.json` is `{schema: 1, revision, bundle: {id, digest}, runs, records, supplements}`. The result is `{revision, bundle_digest, runs, artifacts, members, mechanical_only: true, path, size}`. The command refuses, and leaves no file at the destination: `package_destination_exists` for an existing file or link at `--output`; `package_member_conflict` for a supplement named `package.json` or `data/INDEX.json`, under `runs/`, or at the name of an archive member or directory; `package_binding_missing` for a cited managed execution without its admission and binding; `execution_identity_mismatch` for a binding whose paths or inputs differ from the admission; `result_evidence_mismatch` for claim evidence that names no recorded output; `publication_claims_missing` for a bundle without the claims file or the evidence map; `artifact_corrupt` for a stored object whose bytes differ from its hash. The same snapshot and bundle give the same ZIP bytes. Pass the file to `exactory-draft deposit --sources`; a managed deposit requires it to equal the `sources` file that the reviewed bundle pinned, inside the workspace (`publication_artifact_mismatch` otherwise, and the deposit takes the direct path).
+`exactory-draft package --output PATH [--bundle ID_OR_DIGEST] [--include PATH ...]` writes a ZIP of the code, data and records behind a pinned manuscript, from one authenticated snapshot, and changes nothing in the store. It runs in any directory of the workspace. Without `--bundle` it reads the selected bundle; `--bundle` names any recorded bundle by its id or its digest (`publication_bundle_missing` otherwise). The archive holds `README.txt`, one sentence that names the manifests; `claims.json`, the pinned claim registry; `claim-evidence.json`, the pinned evidence map; `package.json`; `data/INDEX.json`; `runs/`; `data/`; and `managed-record/`. For each execution that the evidence map cites, `runs/run-<admission id>/` holds the admitted program at its bound script path and each admitted input at its bound path, at the version of that run, with empty `logs/`, `results/` and `plots/` directories. `package.json` lists the run with its `execution_id`, `cycle_id`, `origin`, `command`, `admission_id`, `directory`, `argv` (the runtime path, the script and the bound input paths), `runtime`, `script`, `inputs`, `declared_outputs` and `outputs`, each output with its member `archive`, `data/execution-<execution id>/output-<output id>.<suffix>`. Imported history keeps its recorded outputs with a null `admission_id`, `directory` and `argv`. Every other stored object that the evidence map or a record references, followed through JSON objects, is `data/objects/<sha256>`, and `data/INDEX.json` maps each object path under `research/sources/objects/` to its member. `managed-record/<kind>/<id>.json` holds every record of the kinds `cycle`, `cycle_plan`, `development_scope`, `strategy_account`, `execution_admission`, `execution_binding`, `execution_prelaunch`, `execution_claim`, `execution`, `execution_observation`, `execution_outcome`, `cycle_assessment`, `checkpoint`, `development_selection`, `bundle_selection`, `readiness_review`, `manuscript_review`, `manuscript_prediction`, `contribution_analysis`, `round_decision`, `round_review`, `source_deferral`, `workspace_decision`, `publication_bundle`, `publication_selection` and `local_artifact`, with the recorded values unchanged, and `package.json` maps each kind and id to its member. Each `--include PATH` adds a workspace file, or every regular file under a directory, at its own relative path and lists it under `supplements` with its `sha256` and `size`; a symlink or another special file is `unsafe_path`. `package.json` is `{schema: 1, revision, bundle: {id, digest}, runs, records, supplements}`. The result is `{revision, bundle_digest, runs, artifacts, members, mechanical_only: true, path, size}`. The command refuses, and leaves no file at the destination: `package_destination_exists` for an existing file or link at `--output`; `package_member_conflict` for a supplement named `package.json` or `data/INDEX.json`, under `runs/`, or at the name of an archive member or directory; `package_binding_missing` for a cited managed execution without its admission and binding; `execution_identity_mismatch` for a binding whose paths or inputs differ from the admission; `result_evidence_mismatch` for claim evidence that names no recorded output; `publication_claims_missing` for a bundle without the claims file or the evidence map; `artifact_corrupt` for a stored object whose bytes differ from its hash. Each member is written from a verified private copy of its object, and the archive is published at `--output` only when it is complete. The same snapshot and bundle give the same member names, bytes and order; the container bytes of an archive built again can differ from an earlier archive of the same content, so compare two archives by their members. Pass the file to `exactory-draft deposit --sources`; a managed deposit requires it to equal the `sources` file that the reviewed bundle pinned, inside the workspace (`publication_artifact_mismatch` otherwise, and the deposit takes the direct path).
 
-`exactory-draft deposit` runs from the root of a draft workspace, the directory that holds `.exactory/draft.json`, and its existing options remain available, including sandbox, production, source archive, publication confirmation, and new version. When the workspace's publication gate is ready, the round gate is ready, and the upload matches the exact reviewed bundle, the command saves a remote intent before external writes and uploads those validated bytes; `exactory-draft reconcile INTENT_ID` reconciles an unknown outcome before continuing. Otherwise the command creates the record directly from the given files, writing `.exactory/deposit.json`. A store that refuses the managed record prints one line first, `Managed record skipped (<code>): <message>`, with ` Pending: <codes>.` appended when the refusal carries obligations. A workspace with no store, such as a draft workspace initialized before 0.38.0, takes the direct path with no line. A direct deposit prints `Deposition <id> is open on Zenodo: <url>` before the publish, so a lost publish response leaves a record to open rather than a deposit to repeat. In the two cases where the store keeps no record of the direct deposit, a store that refuses the write and a store file that does not open, the command writes `.exactory/deposit.json`, reports that it holds the only local copy, and exits nonzero after it prints the record. Production runs the offline citation check first; a failing check prints one `Citation report:` line and the deposit continues. Local and remote storage are not an atomic transaction.
+`exactory-draft deposit` runs from the root of a draft workspace, the directory that holds `.exactory/draft.json`, and its existing options remain available, including sandbox, production, source archive, publication confirmation, and new version. When the workspace's publication gate is ready, the round gate is ready, and the upload matches the exact reviewed bundle, the command saves a remote intent before external writes, freezes and verifies each file that it will send before its first remote write, and uploads those validated bytes as streams with their lengths; `exactory-draft reconcile INTENT_ID` reconciles an unknown outcome before continuing. Otherwise the command creates the record directly from the given files, writing `.exactory/deposit.json`. A store that refuses the managed record prints one line first, `Managed record skipped (<code>): <message>`, with ` Pending: <codes>.` appended when the refusal carries obligations. A workspace with no store, such as a draft workspace initialized before 0.38.0, takes the direct path with no line. A direct deposit prints `Deposition <id> is open on Zenodo: <url>` before the publish, so a lost publish response leaves a record to open rather than a deposit to repeat. In the two cases where the store keeps no record of the direct deposit, a store that refuses the write and a store file that does not open, the command writes `.exactory/deposit.json`, reports that it holds the only local copy, and exits nonzero after it prints the record. Production runs the offline citation check first; a failing check prints one `Citation report:` line and the deposit continues. Local and remote storage are not an atomic transaction.
 
 `exactory submit` records a submission receipt when the current published production record matches the reviewed bundle; the receipt keeps Zenodo's concrete record DOI distinct from the concept DOI the server may return, and `exactory reconcile INTENT_ID` reads a later task without repeating the original POST. In any other directory or workspace the command posts the request directly; a store that refuses the receipt prints the same `Managed record skipped` line first, and a directory with no workspace, or a workspace with no store, posts with no line.
 
@@ -2681,10 +2841,11 @@ order. A listed version with no such text is refused with
 with `invalid_input`. Without the
 field the route withholds no full text by priority; the binary originals that a
 text route never carries and the projection of an `openness_delivery` record
-still apply, and a request that stays above the limit is refused before the
-reviewer CLI starts and recorded as a failed attempt with
-`review_input_too_large`, on the Claude route and on the Codex routes alike (the
-visual route counts its image wrappers in its limit). Without `text_priority`, the
+still apply, and a request that stays above the limit is refused by
+`review-run` before an invocation exists, with `review_input_too_large` and
+`phase: "dispatch_preflight"` and nothing recorded, on the Claude route and on
+the Codex routes alike (the visual route counts its image wrappers in its
+limit). Without `text_priority`, the
 export estimates the packet and returns a `review_input_too_large` warning that
 names each registered text route whose limit the estimate exceeds; the estimate
 counts the packet and its UTF-8 evidence as JSON strings, so a delivery
@@ -2835,6 +2996,37 @@ What remains at that point is protected evidence, the statement, and the
 excerpts and passages that the allowances let the chain keep. A new export of
 the same record does not reduce them.
 
+The mandatory final input is measured before the chain reads. Before the
+first reading turn of a new chain writes its part artifacts, and before each
+later turn is planned, the harness measures a lower bound of the final turn's
+input in the route's own request representation: the native context, which no
+turn changes, every evidence body that the final turn cannot withhold (the
+statement record, the bodies that the proof, source and screening contracts
+protect, and the required proof bytes), the excerpts and passages that the
+chain has accumulated so far, and the final prompt; a body that the final
+turn may withhold counts as empty. When that lower bound exceeds the route's
+input limit, `review-assignment` refuses with `review_input_too_large` and
+the details `phase: "final_preflight"`, `measurement_kind:
+"mandatory_input_lower_bound"`, `input_characters`, `input_limit_characters`
+and `mandatory_components`, one entry per component with its `kind`
+(`evidence`, `final_prompt`, `native_context`, `excerpt` or `passage`), its
+`sha256`, its `size_bytes` and its `characters`; an `evidence` entry also
+carries its `encoding` and `delivery`. Nothing is written: no assignment, no
+part artifact and no observation. The refusal means that the chain cannot
+finish on that route with that mandatory material, whichever turns it reads,
+and the components show which bodies to examine; a new export that binds the
+same records measures the same. The measurement is made where the
+representation gives a sound lower bound: `claude_cli_v1`, `codex_cli_v1`
+and `codex_cli_framed_v1` without a text encoding. On the visual route, on
+`codex_cli_framed_v1` with `scientific_context.review_text_encoding`, for a
+packet of a `complete-visible-v1` source delivery and on a route without a
+character limit the measurement is unknown, and the chain is not refused on
+it. A chain that passes the measurement is not thereby known to finish: the
+excerpts and passages that later turns add are counted again before each
+later turn, and the final turn is fitted and refused as above. The projection
+is a diagnostic; it is never stored, sent to a reviewer or counted as a
+delivery.
+
 Run a reading chain turn by turn:
 
 1. Export the packet and assign it as usual, with `context: {native_packet}`.
@@ -2854,10 +3046,20 @@ Run a reading chain turn by turn:
    fitted as described above. When its request does not fit after every
    withholding, `review-assignment` refuses with `review_input_too_large` and
    the four part sizes. A new export does not change them; report the sizes to
-   the owner.
+   the owner. A refusal at step 1 or step 2 with `phase: "final_preflight"`
+   says the same of the mandatory material alone, before that turn is planned;
+   report its `mandatory_components` to the owner.
 4. The final turn returns the native result review, or a reading answer with at
    least one passage request while the passage allowance has characters left. A
-   further final turn, assigned as in step 2, then delivers the passages.
+   further final turn, assigned as in step 2, then delivers the passages. In a
+   chain under `exactory-openness-reading-v4` (every new turn since 0.71.0) at
+   least one of those requests must deliver characters, that is, its anchor is
+   found in a bound body and its characters fit the remaining passage
+   allowance. `review-run` records a reading answer in which no request
+   delivers characters as the output refusal `invalid_reading_response`
+   (`details.path` `/passage_requests`), the turn is not ready, and
+   `review-assignment` does not continue from it; run `review-run` on the same
+   turn again under the ordinary retry rules.
 5. Record the final turn that returned the native result with
    `problem-openness` and its `assignment_id`.
 
@@ -2890,11 +3092,17 @@ authenticated under their own protocol, and a finding recorded from it stays
 current: its chain is verified under that protocol and gives the same
 `reading_turns` entries, `{assignment_id, attempt_id, delivered,
 delivered_parts?}`. Its next assignment continues under the current prompts
-(`exactory-openness-reading-v3`) with the same native packet, first assignment
+(`exactory-openness-reading-v4`) with the same native packet, first assignment
 id, route, reviewer and author. The previous answer is validated under its own
 protocol, and its excerpts and passages are checked by version id as before;
 the carried record becomes the compact form without charging them again, and
-its turns are listed again from the observed outputs of the chain. The harness
+its turns are listed again from the observed outputs of the chain. A chain
+that an earlier release started under `exactory-openness-reading-v3` continues
+in the same way: its next turn records `exactory-openness-reading-v4`, which
+keeps the units, the shape and the identities of v3 and adds the passage rule
+of a final turn (step 4 above). Each turn's output is checked under the
+protocol of its own packet, so a turn built under v3 keeps v3's rules, and its
+recorded turns rebuild byte for byte. The harness
 does not schedule from the earlier plan. At every continuation it computes what remains
 from the actual authenticated requests of the chain's reading turns: in the
 order of the units, full texts and then records, it delivers next every unit
@@ -2922,11 +3130,13 @@ enlarges the chain. There is no statement record: `reading_turn.statement` is
 the native subject, the checkpoint or the closure subject, and
 `reading_turn.formulations` holds the statement and the neighbours of the
 minimum. The turn packets, the reading record, the budget, the parts, the
-excerpt and passage rules and the final turn are those of the problem chain.
+excerpt and passage rules, the final turn and the measurement of the
+mandatory final input before each turn are those of the problem chain.
 The final turn withholds the full texts largest first, then the captured
 responses, the reading records and the search records, each kind largest first,
 and then the earliest notes. Two rules are added. The first is the passage rule
-of a final turn. A reading answer in a final turn must request at least one
+of a final turn, which a problem chain under `exactory-openness-reading-v4`
+shares since 0.71.0. A reading answer in a final turn must request at least one
 passage that the harness delivers from a bound body within the remaining
 allowance. An answer whose requests are all not found, name no single stored
 body or exceed the allowance is refused with `invalid_reading_response`
@@ -2955,13 +3165,18 @@ Refusal codes of a reading chain:
   final turn, has that many input characters after it withholds every body and
   note that it may withhold, above the route input limit, and names the base
   packet, the notes, the excerpts and the passages; the details give
-  `input_characters`, `input_limit_characters` and `parts`.
+  `input_characters`, `input_limit_characters` and `parts`. Before a turn is
+  planned, the same code with `phase: "final_preflight"` says that the lower
+  bound of the mandatory final input, described above, exceeds the route
+  input limit; the details give `measurement_kind`, `input_characters`,
+  `input_limit_characters` and `mandatory_components`.
 - `invalid_reading_response`: a malformed reading answer, an excerpt or passage
   request with mixed identity fields, a reading answer in a final turn without
   a passage request, one after the passage allowance is used up, or, in a math
-  chain, a reading answer in a final turn whose passage requests all deliver no
-  characters. `review-run` records it as an output refusal, and
-  `review-assignment` refuses to continue from it.
+  chain or a problem chain under `exactory-openness-reading-v4`, a reading
+  answer in a final turn whose passage requests all deliver no characters.
+  `review-run` records it as an output refusal, and `review-assignment`
+  refuses to continue from it.
 - `review_source_continuation_mismatch`: the next turn names another packet,
   reviewer, route or author, or a turn that is not part of a reading chain.
 - `review_source_continuation_fork`: another turn already continues the named
@@ -3253,7 +3468,11 @@ the assessment evidence, including the artifact of a `local_artifact` record
 reference, of the computations and of the formal checks. A shortfall returns
 `problem_evidence_unassessed` for that review with the keys that are absent or
 differ in `missing`, the ids of the undelivered readings in `reading_ids` and
-the digests of the unattached artifacts in `artifact_digests`. Coverage of the
+the digests of the unattached artifacts in `artifact_digests`. The packets are
+decoded from the request of the exact authenticated attempt that produced the
+review; when that delivery cannot be authenticated or decoded, the review
+returns `problem_evidence_unassessed` with the refusal code in `issues`, and no
+saved packet is read in its place. Coverage of the
 bound searches rests on their search records: a text route that withholds the
 bodies of their captured responses at its input limit (reduction step 6) leaves
 the coverage intact, and a route that admits those bodies delivers them.
@@ -3323,8 +3542,9 @@ packet, including a continuation, a refresh or a context repair, carries the
 current `bar_ids`, `bars` and `own_bars`: the reviewer's own bar, or for a
 reviewer that holds the slot through a context repair, the current bar of that
 slot. The bar payloads keep their grades and standards readable, with artifact
-references as templates. A result review names only bars whose
-content an observed packet of its lineage delivered: `value-review` refuses
+references as templates. A result review names only bars whose content the
+request of its exact authenticated attempt delivered, in its current packet or
+in an earlier packet of its session that the request replays: `value-review` refuses
 another with `review_bar_mismatch` naming `bar_ids`, and the post gate reports
 the same code for a recorded review. Each result packet also carries
 `problem_review_currency`, the digest of `{problem_evidence_digest, bar_ids,
@@ -3384,7 +3604,16 @@ with their bounds, an objection's `version_evidence` and
 `version_source_mappings`, a context-repair packet's
 `previously_supplied_evidence` and the reviewer's own session history; a
 reviewer that needs a source that another review cites requests it with
-`source_requests`. A
+`source_requests`. Since 0.71.0 the observed packets of a review are the
+packets that the request of its exact authenticated attempt carried, together
+with the history that the recorded protocol permits: the counted turns and the
+completed earlier series of a result slot delivered in parts (the 0.69.19
+rule), and the accepted task graph of a staged review. A saved packet of the
+lineage that the request did not carry delivers nothing; an output correction
+is checked against the delivery of the original attempt that its diagnostic
+binds; and a delivery that cannot be authenticated or decoded is refused with
+`review_invocation_unverified` or `review_input_unreadable`, with no fallback to
+a saved packet. A
 bar, slate or result review, or a problem adjudicator, cites a record only when one of its observed packets
 carried that record at the cited digest as content; a reference that the
 reviewer received only inside a finding, or as an undelivered entry, does not
@@ -3653,7 +3882,7 @@ example the population of the cohort tool. The post decision is
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. |
-| `review_evidence_undelivered` | The named recorded review cites content that its packets did not deliver (`review_id`, `undelivered_references`). Assign the same reviewer and role again with an empty context to refresh it. |
+| `review_evidence_undelivered` | The named recorded review cites content that the request of its authenticated attempt did not deliver (`review_id`, `undelivered_references`); since 0.71.0 the audit reads that request, so an older review can carry this obligation for content that only a saved packet of its lineage held. Assign the same reviewer and role again with an empty context to refresh it. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
 | `review_sources_pending` | Resolve the reviewers' pending source requests. |
 | `problem_evidence_part_pending` | Continue the named part turn (`assignment_id`, `turn`, `remaining`) with a new assignment of the same reviewer, route and author and `context: {prior_assignment_id}`; the turn after the last part is the final turn, which returns the review. |
@@ -3662,7 +3891,8 @@ example the population of the cohort tool. The post decision is
 | `review_worker_reconciliation_required`, `review_observation_acceptance_pending` | Reconcile the task's worker, or resume the acceptance of its committed capture, with the `review-run` payload in `next`; neither makes a reviewer call. |
 | `review_epoch_stale` | The problem evidence, the subject or the slot head changed under a frozen epoch; open an authorized successor with `context: {staged_upgrade: {assignment_id}}`. |
 | `assessment_incomplete` | A required assessment of an occupied slot is incomplete, or a recording command met one: do the research or recovery work in `next`, never a repeat of an exhausted task. |
-| `review_quality_measurement_pending` | The staged protocol and reviewer configuration have no passing quality measurement; the gate stays not ready for a staged review in this release. |
+| `review_runtime_changed` | The installed runtime of the reviewer adapters in use changed between the start and the end of a `status` read or a review preparation; the command refused and wrote nothing. Run the same command again against the current runtime. |
+| `review_quality_measurement_pending` | The staged protocol and reviewer configuration have no passing quality measurement; the gate stays not ready for a staged review in this release, whether 0.70.0 opened it on assignment or an explicit `staged_upgrade` did. A slot delivered in parts carries no such obligation. |
 | `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. |
 
 `status` and `next` compute milestones from records: `exploration` before
@@ -3969,11 +4199,13 @@ At stage `write`, `status` and `next` also carry one `draft_marker_missing` obli
 
 The optional `--summary` flag on `status` and `next` returns a bounded advisory view. It runs the same current-state evaluation as the default command. It does not change research obligations, authorize a transition, or reduce required reading. `status --summary` is limited to 16 KiB and `next --summary` to 4 KiB of UTF-8 JSON. Counts distinguish displayed and omitted obligations. Hints can omit or truncate details and must not be used directly as mutation payloads. One exception is `next_step` of `next_hint`, the first action of the selected obligation of a staged review, which is copied exactly when it fits in 1,024 bytes and is otherwise null, with `omitted_next_steps` counting the actions not shown; `status --summary` adds `review_slots: {occupied, complete, incomplete, pending}` when the record holds a staged review. `status --summary` also reports `evaluation` counters (objects verified, readings assessed, graph builds, elapsed seconds); they describe this invocation and are never stored. Full reports retain the exact current data; summaries remain advisory views.
 
-`batches --depth abstract --size N --destination DIR [--profile PROFILE] [--screen]` writes the current unread abstracts (cohort members first, then Tier 3 references) as `batch-NNN.json` files with each version's selected complete abstract text, the exact link, and a `README.json` naming the notes shape that `read-batch` accepts. `--profile` defaults to the configured profile. It reads the store and writes only under the new destination directory (`review_destination_exists` when it exists; `migration_required` without a configuration); a reader agent works from one file and returns one notes file, and a single coordinator submits it with `read-batch`. With `--screen` it writes `screen-NNN.json` files of the unscreened members for `screen-batch`, under `screened-v1` only (`policy_inapplicable` otherwise). The `README.json` names the shape of the export's own mode: the screening shape with `--screen`, the loop shape with `--loop`, the placement shape under `sampled-v1`, and the plain notes shape otherwise.
+`batches --depth abstract --size N --destination DIR [--profile PROFILE] [--screen] [--max-input-bytes BYTES] [--max-output-tokens TOKENS --estimated-output-tokens-per-item TOKENS]` writes the current unread abstracts (cohort members first, then Tier 3 references) as `batch-NNN.json` files with each version's selected complete abstract text, the exact link, and a `README.json` naming the notes shape that `read-batch` accepts. `--profile` defaults to the configured profile. It reads the store and writes only under the new destination directory (`review_destination_exists` when it exists; `migration_required` without a configuration); a reader agent works from one file and returns one notes file, and a single coordinator submits it with `read-batch`. With `--screen` it writes `screen-NNN.json` files of the unscreened members for `screen-batch`, under `screened-v1` only (`policy_inapplicable` otherwise). The `README.json` names the shape of the export's own mode: the screening shape with `--screen`, the loop shape with `--loop`, the placement shape under `sampled-v1`, and the plain notes shape otherwise.
 
 `batches --loop [--candidates FILE]` writes the loop's unread abstracts instead, under `lineage-v1` only (`policy_inapplicable` otherwise): the found works of the selected searches that carry no loop reading yet, followed by the caller's candidates. `--candidates` reads a JSON file that is either a `population-query` result or a plain list of version ids (`invalid_input` for anything else), and it needs `--loop` (`invalid_input` without it). The exported `README.json` carries the loop item shape, `{loop: {purposes, disposition, source}, innovation_candidate}`, and the note that `innovation_candidate` marks one of the current required innovation candidates and stays out of every other item. Under `lineage-v1` a plain export is refused with `policy_inapplicable`, because this policy asks for no reading of the enumerated population: its abstracts come out with `--loop`.
 
-`population-query --terms TERM [TERM ...] [--limit N]` is read-only. It ranks the enumerated population's stored abstracts by how many of the terms appear in the title or the saved abstract, each term matched as a whole word or the start of one and ignoring case, and returns `{terms, population, matches, read_only}` with each match as `{version_id, work_id, title, matched_terms, score}`, highest score first. `--limit` is positive and at most the current `loop_abstracts` amount (default 100), and defaults to 30. The result is the local source of the lineage loop: pass it straight to `batches --loop --candidates`.
+Each batch file is bounded by its items and by its bytes. `--size N` bounds the items of a file (default 60, at most 100). `--max-input-bytes BYTES` (default 262,144) bounds the complete encoded batch file, its wrapper and metadata included. `--max-output-tokens TOKENS` with `--estimated-output-tokens-per-item TOKENS`, given together (`invalid_input` for one without the other), add an item ceiling of their quotient; an allowance below one item's estimate is refused with `batch_output_budget_too_small`. The entries are packed in the existing order, and each batch file is written as soon as it is full, so an export that fails later leaves the earlier files usable. One entry that alone exceeds the byte bound is refused with `batch_item_too_large`, whose details name its `version_id`, its `input_bytes`, the `max_input_bytes` bound and the `parameters` that would admit it; an abstract is never cut. Both refusals carry under `recovery` a runnable `batches` command with bounds that admit the work. `manifest.json` in the destination is written with `complete: false` before the first batch file and set to `complete: true` only after the whole enumeration. It carries the `revision`, `counts: {candidate, exported, missing, skipped}`, the `files` with their entries, input bytes and estimated output tokens, `selection_coverage` (the profile, the preparation policy, the mode, the requested candidates, the selected `version_ids`, the `missing_version_ids` and the `skipped_candidate_ids`) and `capacity` (`max_items`, `effective_max_items`, `max_input_bytes`, the two output options and `output_capacity`, `estimated` with them and `unknown` without them). A selected member without a saved abstract is counted as missing, and a candidate outside the store as skipped. When `--candidates` holds a `population-query` result, `selection_coverage` adds `query_coverage` (`complete` for a first page that omitted no match, `partial` for any other page, `unknown` when the file carries no consistent counts) and the query result without its matches under `population_query`. Read the manifest before the batches: while it is not complete, or while a missing count is above zero or the query coverage is partial, the files are not the whole selection. Inputs within the defaults produce the same files as before. The result is `{revision, entries, files, manifest, mechanical_only}`.
+
+`population-query --terms TERM [TERM ...] [--limit N] [--cursor CURSOR]` is read-only. It ranks the enumerated population's stored abstracts by how many of the terms appear in the title or the saved abstract, each term matched as a whole word or the start of one and ignoring case, and returns one page of the ranked matches, highest score first: `{terms, population, matches, read_only, revision, query_digest, ranking_version, total_matches, returned, offset, omitted, remaining, bound_reached, next_cursor, searchable, unavailable}` with each match as `{version_id, work_id, title, matched_terms, score}`. `total_matches` counts every member that matches a term, `returned` the matches of the page, `offset` the position of the page, `omitted` the matches outside the page, `remaining` the matches after the page, `bound_reached` whether the page filled `--limit`, `searchable` the members with a saved abstract and `unavailable` the members without one. `--limit` is positive and at most the current `loop_abstracts` amount (default 100), and defaults to 30. While matches remain, `next_cursor` is a string, and `--cursor CURSOR` continues the same query from it; on the last page it is null. A page is not the whole matching population: read `remaining` and `next_cursor` before treating the matches as complete. The cursor binds the store revision, the digest of the terms, the ranking version and the offset. A cursor from another query or ranking fails with `invalid_input`, and a cursor from an older revision with `stale_cursor`; both refusals carry under `recovery` the command that restarts the query from its first page. Ranking and the `--limit` bound do not change with a cursor. The result is the local source of the lineage loop: pass it straight to `batches --loop --candidates`, which records the page's coverage in its manifest.
 
 Under `screened-v1` the cohort gate requires a screening for every member (`screening_missing`), an abstract reading for every `promote`, `doctrine` and (until saturation) `pending` member, an audit reading with `audit: {relevance, reason}` for a deterministic sample of at most 150 excluded members per collection (`screening_audit_reading_missing`; any accepted reading of the version can carry the audit; a `strong` audit judgment is `screening_audit_failed` until the paper is promoted and every excluded member is re-screened in a round above the audited one), and at least 8 read `doctrine` or `promote` members per calendar month of the window, or every member of a smaller month (`doctrine_coverage_missing`). Tier 3 references need a screening keyed by family with `context`; excluded references are sampled the same way. `require-fulltext` families and unresolved references keep their obligations whatever their screening says. `batches --screen` exports the unscreened members for `screen-batch`.
 
@@ -3993,7 +4225,7 @@ SQLite is authoritative. Workspace JSON, decision logs, and the output views in 
 
 `final/` and `intermediate/` are generated views of the records, in the workspace root: the directory of the store, or, for a store at a math-solver controller root, that root's parent. `final/` holds the current step results and `final/history/` the superseded and historical ones, in the same layout: `reviews/incomplete/<id>.json` for an incomplete assessment of a staged review (current while its epoch is the slot head); `reviews/<role>/<record id>.json` for the recorded reviews and adjudications (a `value_review` under the role of its assignment, `review_adjudication` under `adjudicator`, `manuscript_review` under `manuscript`, `manuscript_prediction` under `prediction`, `readiness_review` under `readiness`, `scoped_readiness_review` under `scoped-readiness`, `round_review` under `round`); `problem/<kind>/<record id>.json` for the current statement and the latest slate, attempt, openness finding, value, assessment, decision, formal checks and post (`statements/`, `slates/`, `attempts/`, `openness/`, `values/`, `assessments/`, `decisions/`, `formal-checks/`, `posts/`); `study/<kind>/<record id>.json` for the current round admissions, round decisions, round assessments, round factual assessments, research decisions, cycle assessments, contribution analyses, checkpoints and receipts (`round-admissions/`, `round-decisions/`, `round-assessments/`, `round-factual-assessments/`, `decisions/`, `cycle-assessments/`, `contribution-analyses/`, `checkpoints/`, `receipts/`); `study/manuscripts/<bundle id>/bundle.json` with the pinned files under `files/`, for the selected bundle and the bundle of the latest deposit receipt; `study/deposits/<intent id>/receipt.json`, `read-back.json` and the uploaded files under `files/`; `verification/verdicts/` and `verification/tasks/`; `math/deliveries/attempts/` and `math/deliveries/closures/`; and `math/<rel>/`, which the math-solver controller renders (its `SEARCH.md`, "Locked command construction and recoverable projections"). A record whose canonical JSON exceeds 1 MiB is shown as a summary, `{summary: true, kind, id, recorded_revision, status, bytes, sha256, fields}`, in which a field over 64 KiB is `{omitted: true, bytes, sha256}`.
 
-`intermediate/` holds every other output. `reviews/<role>/<root assignment id>/series.json` and `<NN>-<assignment id>.<run id>.json` show each reviewer series, the turns of one lineage (an adjudicator's turns are grouped by session): `series.json` lists each turn with its link, slot, packet reference, runs, their status, error, usage, refusal and correction, the selected run and the record that adopted the turn, and the file of a run holds its output; a correction's output is `<NN>-<assignment id>.<correction id>.json`. A controller's turn of a staged review adds `raw_output_digest` and `effective`, with its effective output in `<NN>-<assignment id>.effective.json`, and a child's turn names its `task_id`; `reviews/staged/<kind>/<id>.json` holds the records of the staged reviews (epochs, tasks, execution plans, task executions, reservations, observations, acceptance receipts, pool memberships, the capacity policy, slot heads, dispatch records and composition plans). The other entries are `reviews/routes/<route id>/route.json` and `probes/<probe id>.json`; `reviews/packets/<assignment id>/` and `reviews/packets/<kind>-r<revision>/`, the default destinations of the packet exports, with a numeric suffix when the directory exists; `problem/candidates/<record id>.json`; `lab/probes/<probe id>/probe.json`, `lab/artifacts/<id>.json` for a local artifact that no pin ties to a probe, `lab/runs/<admission id>/run.json`, `result.json` and `log.txt`, and `lab/executions/<id>.json` for an execution that no outcome names; `study/bundles/<bundle id>.json` for the bundles that were neither selected nor deposited, `study/score-history.json` (every recorded manuscript review in recorded order), `study/remote-intents/` and `study/remote-observations/`; `checks/citation-check.json` and `checks/derivation-check.json`, copies of the reports in `.exactory/`; `literature/exports/`, the destination of `export --kind foundation`; `legacy/<original path>/`, the copies that a session moved there once; and `math/<rel>/`, rendered by the controller. A run output of at most 1 MiB is copied; a larger, sealed, missing or corrupt one is listed in `series.json` with `output_listed` set to `over_1_mib`, `sealed`, `artifact_missing` or `artifact_corrupt`.
+`intermediate/` holds every other output. `reviews/<role>/<root assignment id>/series.json` and `<NN>-<assignment id>.<run id>.json` show each reviewer series, the turns of one lineage (an adjudicator's turns are grouped by session): `series.json` lists each turn with its link, slot, packet reference, runs, their status, error, usage, refusal and correction, the selected run and the record that adopted the turn, and the file of a run holds its output; a correction's output is `<NN>-<assignment id>.<correction id>.json`. A controller's turn of a staged review adds `raw_output_digest` and `effective`, with its effective output in `<NN>-<assignment id>.effective.json`, and a child's turn names its `task_id`; `reviews/staged/<kind>/<id>.json` holds the records of the staged reviews (epochs, tasks, execution plans, task executions, reservations, observations, acceptance receipts, pool memberships, the capacity policy, slot heads, dispatch records and composition plans) and, under `review_call_observation`, the captured answers of the ordinary reviewer calls. The other entries are `reviews/routes/<route id>/route.json` and `probes/<probe id>.json`; `reviews/usage.json`, the review call usage with the allowance, the charged calls and the remaining calls under `review_budget`; `reviews/packets/<assignment id>/` and `reviews/packets/<kind>-r<revision>/`, the default destinations of the packet exports, with a numeric suffix when the directory exists; `problem/candidates/<record id>.json`; `lab/probes/<probe id>/probe.json`, `lab/artifacts/<id>.json` for a local artifact that no pin ties to a probe, `lab/runs/<admission id>/run.json`, `result.json` and `log.txt`, and `lab/executions/<id>.json` for an execution that no outcome names; `study/bundles/<bundle id>.json` for the bundles that were neither selected nor deposited, `study/score-history.json` (every recorded manuscript review in recorded order), `study/remote-intents/` and `study/remote-observations/`; `checks/citation-check.json` and `checks/derivation-check.json`, copies of the reports in `.exactory/`; `literature/exports/`, the destination of `export --kind foundation`; `legacy/<original path>/`, the copies that a session moved there once; and `math/<rel>/`, rendered by the controller. A run output of at most 1 MiB is copied; a larger, sealed, missing or corrupt one is listed in `series.json` with `output_listed` set to `over_1_mib`, `sealed`, `artifact_missing` or `artifact_corrupt`.
 
 Each folder has `README.md` and `index.json`. The index lists every file with its `type` (`view`, `controller`, `export`, `legacy`), the `kind`, `id`, `recorded_revision` and `status` of its record (`current`, `superseded`, `historical`, `not_selected`), an `error` when the file could not be written, and every other file under `unowned`. The marker `.exactory/output-views.json` records the rendered revision, the digest of the event at that revision, the plugin version and the size, modification time and digest of every owned file. Each recording command of `exactory-research`, `exactory-lab`, `exactory-draft`, `exactory-cohort` and `exactory` (`submit`, `verify`, `reconcile`) renders once after its last commit, outside every store lock, under `.exactory/output-views.lock`; read commands and `--check` render nothing. A render writes only the files whose bytes differ and removes the owned files that the model no longer produces; it never overwrites a file that it does not own (`output_view_conflict` on the entry). A failed render prints one warning line on stderr and leaves the command's result and exit status unchanged. `export --kind outputs` renders every view again and returns `{revision, files: {final, intermediate}, errors}`. `status` and `next` carry `advisories` with one `output_views_stale` entry while the views may not show the current records; its `reason` is `shared_workspace_root` (a store at a controller root whose parent also holds a store renders nothing), `marker_unreadable`, `render_failed` (with `path` and `error`), `file_errors` (the first path with an error), `not_rendered`, `plugin_changed`, `history_changed`, `behind` or `render_deferred` (a render waited more than one second for the renderer lock, so it left the dirty marker `.exactory/output-views-dirty.json`, named in `path`; the next recording command or `export --kind outputs` renders every view again); a field that does not apply to the reason is null. `status --summary` and `next --summary` add `advisories: [{code, reason}]` only when the list is not empty. The advisory never changes `ready`, `obligations`, `counts` or `next`, and no gate reads it. The guard hook refuses `Write`, `Edit` and `NotebookEdit` into `<workspace root>/final/` and `<workspace root>/intermediate/` (only these two direct children, so `draft/final/` is not guarded), except `intermediate/legacy/`, when the workspace root holds `.exactory/output-views.json`, or a folder in it holds `.search/output-views.json` (a controller root), or a controller root in it (`.search/tree.json`) holds `.exactory/output-views.json` (a research store located at the controller root); shell commands are not inspected, and each render checks the files it owns.
 

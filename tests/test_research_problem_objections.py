@@ -3,6 +3,7 @@
 import json
 from unittest.mock import patch
 
+from research_harness.review_bodies import read_history
 from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -816,8 +817,8 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         self.assertEqual(assignment["session_id"], previous["session_id"])
         attempt = records["review_attempt"]["focused-attempt"]
         request = json.loads(self.artifacts.read(attempt["request"]))
-        self.assertEqual(assignment["history"][:-1], request["input"])
-        self.assertEqual(json.loads(assignment["history"][-1]["content"])["disposition"], "upheld")
+        self.assertEqual(read_history(self.artifacts, assignment)[:-1], request["input"])
+        self.assertEqual(json.loads(read_history(self.artifacts, assignment)[-1]["content"])["disposition"], "upheld")
         self.assertNotEqual(refreshed["problem_evidence_digest"], original["problem_evidence_digest"])
         self.assert_error("review_adjudicator_fixed", lambda: self.observe_adjudication(
             identifier="resampled-focused", review_ids=original_pair))

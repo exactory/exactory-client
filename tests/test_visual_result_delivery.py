@@ -142,23 +142,38 @@ class VisualResultDeliveryTests(unittest.TestCase):
         wider['payload']['value']['evidence'].append({'kind': 'source', 'link': link})
         self.assertTrue(decisions.find_undelivered_review_references(records, self.artifacts, wider))
 
-    def test_omitted_whole_pdf_reference_is_refused_by_public_recording_and_final_delivery_gate(self):
-        output = self.observe([self.pdf['original']])
+    def assert_omitted_reference_is_refused_at_recording_and_the_gate(self, output, reference):
         with self.assertRaises(ResearchError) as failure:
             self.record(output)
         self.assertEqual(failure.exception.code, 'review_evidence_undelivered')
-        review = {'subject': self.assignment['subject'], 'assignment_id': self.assignment['id'], 'payload': output}
-        missing = decisions.find_undelivered_review_references(self.case.read_records(), self.artifacts, review)
-        self.assertTrue(any(row.get('sha256') == self.pdf['original']['sha256'] for row in missing))
+        self.assertEqual(failure.exception.details['sha256'], reference['sha256'])
+        records = self.case.read_records()
+        from research_harness.review_delivered_evidence import read_attempt_delivery
+        delivery = read_attempt_delivery(records, self.artifacts, self.assignment,
+            records['review_attempt']['actual-visual-attempt'])['citation_history']
+        missing = decisions.find_review_undelivered_references(records, self.artifacts, [reference], delivery,
+                                                              require_complete_artifacts=True)
+        self.assertTrue(any(row.get('sha256') == reference['sha256'] for row in missing))
+        # A recorded refusal removes this attempt from scientific selection. An older
+        # recorded review must therefore surface the missing authenticated binding at the gate.
+        review = dict(records['value_review']['review-legacy'], id='legacy-visual-result',
+                      assignment_id=self.assignment['id'], payload=output)
+        records['value_review'][review['id']] = review
+        with self.assertRaises(ResearchError) as unverified:
+            decisions.find_undelivered_review_references(records, self.artifacts, review)
+        self.assertEqual(unverified.exception.code, 'review_invocation_unverified')
+        audited = decisions.assess_problem_reviews(records, self.artifacts, review_ids=[review['id']])
+        self.assertFalse(audited['ready'])
+        self.assertIn(('review_invocation_unverified', review['id']),
+                      [(row['code'], row.get('review_id')) for row in audited['obligations']])
+
+    def test_omitted_whole_pdf_reference_is_refused_by_public_recording_and_final_delivery_gate(self):
+        output = self.observe([self.pdf['original']])
+        self.assert_omitted_reference_is_refused_at_recording_and_the_gate(output, self.pdf['original'])
 
     def test_omitted_whole_html_reference_is_refused_even_when_its_exact_span_was_supplied(self):
         output = self.observe([self.html['original']])
-        with self.assertRaises(ResearchError) as failure:
-            self.record(output)
-        self.assertEqual(failure.exception.code, 'review_evidence_undelivered')
-        review = {'subject': self.assignment['subject'], 'assignment_id': self.assignment['id'], 'payload': output}
-        missing = decisions.find_undelivered_review_references(self.case.read_records(), self.artifacts, review)
-        self.assertTrue(any(row.get('sha256') == self.html['original']['sha256'] for row in missing))
+        self.assert_omitted_reference_is_refused_at_recording_and_the_gate(output, self.html['original'])
 
 
 if __name__ == '__main__':

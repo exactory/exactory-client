@@ -7,6 +7,7 @@ read-batch, which validates every item against the saved bytes.
 """
 
 import json
+from itertools import chain
 from pathlib import Path
 
 from .artifacts import ArtifactStore
@@ -21,6 +22,7 @@ from .reading import NOTE_FIELDS, selected_abstract
 from .sampling import POSITIONS, SAMPLED
 from .screening import SCREENED
 from .source_links import span_locator
+from .workspace import json_projection, write_projection
 
 
 NOTES_SHAPE = {"id": "batch-001", "depth": "abstract",
@@ -67,7 +69,7 @@ def unread_abstracts(records, evaluation, profile, *, screen=False, loop=False, 
     # Screened and sampled preparation each name the members they owe; every other policy reads the cohort whole.
     read_everything = not screen and not counts.get("screening") and not counts.get("sample")
     for item in cohort.get("inventory", []):
-        if item["artifact"] is not None and (item["version_id"] in pending or (read_everything and item["reading_id"] is None)):
+        if item["version_id"] in pending or (read_everything and item["reading_id"] is None):
             versions.append(item["version_id"])
     if records.get("literature_scope", {}).get(profile):
         for item in foundation_state(records, evaluation, profile)["obligations"]:
@@ -96,11 +98,27 @@ def _build_notes_shape(screen, loop, policy):
     return dict(NOTES_SHAPE, items=[dict(NOTES_SHAPE["items"][0], **extra)])
 
 
-def export_batches(store, *, depth="abstract", size=60, destination, profile=None, screen=False, loop=False, candidates=()):
+def export_batches(store, *, depth="abstract", size=60, destination, profile=None, screen=False, loop=False, candidates=(),
+                   max_input_bytes=262144, max_output_tokens=None, estimated_output_tokens_per_item=None,
+                   candidate_coverage=None):
     if depth != "abstract":
         raise ResearchError("invalid_input", "Batches export abstract readings")
     if type(size) is not int or not 1 <= size <= 100:
         raise ResearchError("invalid_input", "Batch size must be between 1 and 100")
+    if type(max_input_bytes) is not int or max_input_bytes < 1:
+        raise ResearchError("invalid_input", "Maximum input bytes must be a positive integer")
+    if (max_output_tokens is None) != (estimated_output_tokens_per_item is None):
+        raise ResearchError("invalid_input", "Output allowance and estimated tokens per item must be supplied together")
+    item_limit = size
+    if max_output_tokens is not None:
+        if (type(max_output_tokens) is not int or max_output_tokens < 1
+                or type(estimated_output_tokens_per_item) is not int or estimated_output_tokens_per_item < 1):
+            raise ResearchError("invalid_input", "Output allowance and estimated tokens per item must be positive integers")
+        item_limit = min(size, max_output_tokens // estimated_output_tokens_per_item)
+        if item_limit < 1:
+            raise ResearchError("batch_output_budget_too_small", "The output allowance is below one item's estimate",
+                                {"max_output_tokens": max_output_tokens,
+                                 "estimated_output_tokens_per_item": estimated_output_tokens_per_item})
     destination = Path(destination).absolute()
     if destination.exists() or destination.is_symlink():
         raise ResearchError("review_destination_exists", "Export batches into a new directory")
@@ -118,31 +136,81 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
     if policy == LINEAGE and not loop:
         raise ResearchError("policy_inapplicable", "Under lineage-v1 export the loop's abstracts with --loop")
     candidates = strings(list(candidates), "Candidates")
-    evaluation = Evaluation(records, ArtifactStore(store.root))
-    entries = []
-    for version in unread_abstracts(records, evaluation, profile, screen=screen, loop=loop, candidates=candidates):
-        entry = _entry(records, evaluation, version)
-        if entry is None:
+    evaluation = Evaluation(records, ArtifactStore(store.root), retention_budget_bytes=0)
+    versions = unread_abstracts(records, evaluation, profile, screen=screen, loop=loop, candidates=candidates)
+    selected = set(versions)
+    skipped = [version for version in candidates if version not in selected]
+    destination.mkdir(parents=True, mode=0o700)
+    manifest = {"version": 1, "revision": snapshot["revision"], "complete": False,
+                "counts": {"candidate": len(versions) + len(skipped), "exported": 0, "missing": 0, "skipped": len(skipped)},
+                "files": [],
+                "selection_coverage": {"profile": profile, "preparation_policy": policy, "screen": screen, "loop": loop,
+                                       "requested_candidates": candidates, "version_ids": versions,
+                                       "missing_version_ids": [], "skipped_candidate_ids": skipped,
+                                       **(candidate_coverage or {})},
+                "capacity": {"max_items": size, "effective_max_items": item_limit, "max_input_bytes": max_input_bytes,
+                             "max_output_tokens": max_output_tokens,
+                             "estimated_output_tokens_per_item": estimated_output_tokens_per_item,
+                             "output_capacity": "unknown" if max_output_tokens is None else "estimated"}}
+    json_projection(destination, "manifest.json", manifest)
+    files = []
+    entries, encoded = [], b""
+    prefix = "screen-%03d" if screen else "batch-%03d"
+    number = 1
+    # The sentinel publishes the final partial batch through the same atomic path.
+    for version in chain(versions, (None,)):
+        entry = None if version is None else _entry(records, evaluation, version)
+        if entry is None and version is not None:
+            manifest["counts"]["missing"] += 1
+            manifest["selection_coverage"]["missing_version_ids"].append(version)
+            json_projection(destination, "manifest.json", manifest)
             continue
-        if screen:
+        if entry is not None and screen:
             work = records["work"][version]
             entry["work_id"] = work["work_id"]
             entry["collection_id"] = next((m["collection_id"] for m in records.get("cohort_member", {}).values()
                                            if m["work_id"] == work["work_id"]), None)
-        entries.append(entry)
-    destination.mkdir(parents=True, mode=0o700)
-    files = []
-    for number, start in enumerate(range(0, len(entries), size), 1):
-        prefix = "screen-%03d" if screen else "batch-%03d"
-        name = prefix % number + ".json"
-        content = {"id": prefix % number, "depth": depth, "revision": snapshot["revision"],
-                   "screen": screen, "items": entries[start:start + size]}
-        (destination / name).write_text(json.dumps(content, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        files.append(str(destination / name))
+        while True:
+            if entry is not None:
+                proposed = (json.dumps({"id": prefix % number, "depth": depth, "revision": snapshot["revision"],
+                                        "screen": screen, "items": entries + [entry]},
+                                       indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+                if len(proposed) <= max_input_bytes:
+                    entries.append(entry)
+                    encoded, proposed, entry = proposed, None, None
+                    if len(entries) < item_limit:
+                        break
+                elif not entries:
+                    parameters = {"size": 1, "max_input_bytes": len(proposed)}
+                    if max_output_tokens is not None:
+                        parameters.update(max_output_tokens=max_output_tokens,
+                                          estimated_output_tokens_per_item=estimated_output_tokens_per_item)
+                    raise ResearchError("batch_item_too_large", "The complete encoded singleton exceeds the input byte bound",
+                                        {"version_id": version, "input_bytes": len(proposed),
+                                         "max_input_bytes": max_input_bytes, "parameters": parameters})
+                # A byte overflow publishes the preceding batch, then retries this entry with the next file's ID.
+                proposed = None
+            if entries:
+                name = prefix % number + ".json"
+                write_projection(destination, name, encoded)
+                files.append(str(destination / name))
+                manifest["files"].append({"path": name, "id": prefix % number, "entries": len(entries),
+                                          "input_bytes": len(encoded), "estimated_output_tokens": None
+                                          if estimated_output_tokens_per_item is None
+                                          else len(entries) * estimated_output_tokens_per_item})
+                manifest["counts"]["exported"] += len(entries)
+                json_projection(destination, "manifest.json", manifest)
+                entries, encoded = [], b""
+                number += 1
+            if entry is None:
+                break
     readme = {"notes_shape": _build_notes_shape(screen, loop, policy),
               "submit": "exactory-research " + ("screen-batch" if screen else "read-batch") + " --file NOTES.json --expected-revision REVISION --request-id ID"}
     if loop:
         readme["innovation_candidate"] = ("Set innovation_candidate to true on a reading that names one of the "
                                           + str(resolve_innovation_candidates(records)) + " innovation candidates; leave the key out otherwise.")
-    (destination / "README.json").write_text(json.dumps(readme, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return {"revision": snapshot["revision"], "entries": len(entries), "files": files, "mechanical_only": True}
+    json_projection(destination, "README.json", readme)
+    manifest["complete"] = True
+    json_projection(destination, "manifest.json", manifest)
+    return {"revision": snapshot["revision"], "entries": manifest["counts"]["exported"], "files": files,
+            "manifest": str(destination / "manifest.json"), "mechanical_only": True}

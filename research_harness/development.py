@@ -1554,6 +1554,11 @@ def checkpoint(store, payload, *, expected_revision, request_id):
 
 def _branch_inputs(context):
     branches = {}
+    admissions_by_cycle, checkpoints_by_cycle = {}, {}
+    for identifier, admission in context.records.get("execution_admission", {}).items():
+        admissions_by_cycle.setdefault(admission["cycle_id"], {})[identifier] = admission
+    for identifier, saved in context.records.get("checkpoint", {}).items():
+        checkpoints_by_cycle.setdefault(saved["cycle_id"], {})[identifier] = saved
     for identifier, cycle in context.records.get("cycle", {}).items():
         plan = context.records["cycle_plan"][identifier]
         context.verify_plan_digest(plan)
@@ -1563,8 +1568,8 @@ def _branch_inputs(context):
         branches[identifier] = {"cycle": cycle, "plan": plan,
             "plan_evidence": _plan_evidence(_Evidence(context), plan["payload"]),
             "executions": executions, "assessment": context.assess_record(cycle["assessment_id"]) if cycle["assessment_id"] is not None else None,
-            "admissions": {i: a for i, a in context.records.get("execution_admission", {}).items() if a["cycle_id"] == identifier},
-            "checkpoints": {i: c for i, c in context.records.get("checkpoint", {}).items() if c["cycle_id"] == identifier}}
+            "admissions": admissions_by_cycle.get(identifier, {}),
+            "checkpoints": checkpoints_by_cycle.get(identifier, {})}
         probes = build_program_probe_inventory(context.records, context.artifacts, plan,
                                                branches[identifier]["admissions"])
         if probes:

@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch
 
 from openness_reading_fixtures import OpennessReadingCase, build_theorem
+from research_harness.review_bodies import read_history
 from research_harness import openness_reading, review_excerpts, review_protocol as protocol
 from research_harness import review_transport as transport
 from research_harness import review_codex_transport as codex
@@ -30,9 +31,10 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.limit_input()
         assignment = self.assign('turn-1', self.export())
         self.assertEqual(assignment['reading_chain'], {'first_assignment_id': 'turn-1', 'turn': 1})
-        self.assertEqual((assignment['history'], assignment['session_id']), ([], 'turn-1'))
-        self.assertEqual(assignment['prompt']['template_id'], openness_reading.PROTOCOL + '/reading')
-        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', reading_stage='reading'))
+        self.assertEqual((read_history(self.artifacts, assignment), assignment['session_id']), ([], 'turn-1'))
+        self.assertEqual(assignment['prompt']['template_id'], openness_reading.PROTOCOL_V4 + '/reading')
+        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', reading_stage='reading',
+                                                                  reading_protocol=openness_reading.PROTOCOL_V4))
         packet = self.read_packet('turn-1')
         self.assertNotIn('native', packet)
         turn = packet['reading_turn']
@@ -52,7 +54,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
                                                                        self.search['id'])]
                          + [('record', None, 'reading', 'read-%d' % number) for number in (1, 2, 3)]
                          + [('record', None, 'problem_statement', self.selected['id'])])
-        self.assertEqual(turn['reading_record'], {'protocol': openness_reading.PROTOCOL, 'turns': [], 'sources': [],
+        self.assertEqual(turn['reading_record'], {'protocol': openness_reading.PROTOCOL_V4, 'turns': [], 'sources': [],
                                                   'excerpts': [], 'passages': [],
                                                   'allowances': {'excerpts': {'characters': 200000, 'used': 0},
                                                                  'passages': {'characters': 100000, 'used': 0}}})
@@ -221,7 +223,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         final = turns[-1]
         assignment = self.store.snapshot()['records']['review_assignment'][final]
         self.assertEqual(assignment['reading_chain'], {'first_assignment_id': 'turn-1', 'turn': len(turns)})
-        self.assertEqual(assignment['prompt']['template_id'], openness_reading.PROTOCOL + '/final')
+        self.assertEqual(assignment['prompt']['template_id'], openness_reading.PROTOCOL_V4 + '/final')
         self.assertTrue(assignment['prompt']['text'].startswith(protocol.canonical_prompt('native_math')['text']))
         packet = self.read_packet(final)
         native = json.loads(self.artifacts.read(native_packet))
@@ -257,7 +259,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         further = self.assign('turn-further', native_packet, prior=final)
         self.assertEqual(further['reading_chain'],
                          {'first_assignment_id': 'turn-1', 'turn': int(final.rsplit('-', 1)[1]) + 1})
-        self.assertEqual(further['prompt']['template_id'], openness_reading.PROTOCOL + '/final')
+        self.assertEqual(further['prompt']['template_id'], openness_reading.PROTOCOL_V4 + '/final')
         record = self.read_packet('turn-further')['reading_record']
         [answer] = record['passages']
         body = self.artifacts.read(self.texts[self.versions[1]]).decode()
@@ -354,7 +356,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.assert_error('review_source_continuation_mismatch',
                           lambda: self.assign('turn-2', native_packet, prior='turn-1'))
 
-    def test_a_final_turn_that_does_not_fit_names_its_parts(self):
+    def test_an_impossible_final_turn_names_its_mandatory_components_before_building(self):
         self.limit_input()
         native_packet = self.export()
         final = self.run_reading_turns(native_packet, turn_count=8)[-1]
@@ -364,9 +366,11 @@ class OpennessReadingChainTests(OpennessReadingCase):
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 2000), self.assertRaises(Exception) as raised:
             self.assign('turn-further', native_packet, prior=final)
         self.assertEqual(raised.exception.code, 'review_input_too_large')
-        parts = raised.exception.details['parts']
-        self.assertEqual(sorted(parts), ['base_packet', 'excerpts', 'notes', 'passages'])
-        self.assertEqual(sum(parts.values()), raised.exception.details['input_characters'])
+        details = raised.exception.details
+        self.assertEqual(details['phase'], 'final_preflight')
+        self.assertEqual(details['measurement_kind'], 'mandatory_input_lower_bound')
+        self.assertGreater(details['input_characters'], details['input_limit_characters'])
+        self.assertTrue({'final_prompt', 'passage'} <= {row['kind'] for row in details['mandatory_components']})
         self.assertNotIn('turn-further', self.store.snapshot()['records']['review_assignment'])
 
     def test_a_text_that_does_not_fit_alone_fails_the_assignment(self):

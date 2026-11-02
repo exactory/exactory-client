@@ -30,7 +30,10 @@ in `depth_values`; the saved batch records `effective_depth`.
 Tool records grant no approval; a claim's
 fixed minimum and independent assessment determine sufficiency. Managed
 `status` marks preparation `advisory: true` and `next` names the current
-milestone's missing condition. Verification retains its fixed contract.
+milestone's missing condition. A verification raises only its hits per query,
+its search readings and its core full texts, through a depth plan with
+`profile: verification`, a reason and a stopping criterion, and never below
+their defaults.
 
 ## Search, read and expand
 
@@ -73,7 +76,13 @@ same version, with `pdf` locators, can complete. Keep source bytes and exact
 inspection locations as `span` locators (offsets and the hash of the exact
 substring), never as whole-document quotes. Read the extraction
 diagnostics on a capture before dispatching a reader; re-capture with
-`extraction_options` when layout padding makes the text unreadable. A download is
+`extraction_options` when layout padding makes the text unreadable. Acquire a
+large original, or a transfer or extraction that a single `fulltext` call
+cannot finish within its limits, as a full-text job: `fulltext-start` records
+the job, `fulltext-resume` runs it in bounded invocations until it is
+complete, and `fulltext-status --job-id ID` shows its state and the next
+action. A pending job is not a capture and grants no reading credit; the
+finished capture is read like any other. A download is
 acquisition; a source-linked reading records the actual inspection. A reading
 stays current while its bundle's units are unchanged; parsed bibliography entries
 do not require re-reading. Record critical missing sources as pending.
@@ -141,9 +150,15 @@ keeps those source judgments distinct from independent support/value approval.
 Stage 1 is the five captured searches above plus two local sources. The first is
 `exactory-research population-query --terms TERM [TERM ...] --limit N`, which
 ranks the enumerated population's stored abstracts by terms taken from the
-complete objective and the parent's title and abstract; pass its result straight
+complete objective and the parent's title and abstract. Its result is one page:
+`remaining` counts the matches after it, and `--cursor` with its `next_cursor`
+returns the next page of the same query, so a first page with matches remaining
+is not the whole matching population. Pass the result straight
 to `exactory-research batches --destination DIR --loop --candidates FILE`, which
-exports the selected searches' unread hits together with those candidates. The
+exports the selected searches' unread hits together with those candidates and
+records the page's coverage in its `manifest.json`. Read that manifest before
+the batch files: it is complete only after the whole export, and it counts the
+members without an abstract as missing. The
 second is the papers that cite the parent within the window, an OpenAlex query
 with the filter `cites:<parent id>` saved with `import-response` and recorded as
 a `recent` search response. Bind the whole filter value as that response's
@@ -187,10 +202,12 @@ Use the [direction decision contract](../../docs/research-decisions.md#before-ta
 when the orchestration commits a direction. Two assessors establish the Q1 bar
 before receiving the slate. Recording a version-2 investigate/pivot decision and
 committing a target require the minimum and source content actually delivered
-in each reviewer's observed history. Complete inspected ranges and every image
-asset named by an inspection are required. Missing ranges or image bytes keep
-`direction_evidence_unassessed`. Inventory, reading notes and chronology alone
-supply no delivery coverage; qualifying historical attachments remain usable. The decision binds `direction_evidence_digest`; newly read decisive
+in the request of each reviewer's own authenticated review. Complete inspected
+ranges and every image asset named by an inspection are required. Missing
+ranges or image bytes keep `direction_evidence_unassessed`. Inventory, reading
+notes, chronology and saved packets that the request did not carry supply no
+delivery coverage; a qualifying historical attachment remains usable when the
+request carried it. The decision binds `direction_evidence_digest`; newly read decisive
 evidence needs a new decision with reviews that saw it. `q1_venue` assesses
 potential in slate reviews and realized supported advance at results.
 Target commitment retains its exact approved content and source-impact declaration.
@@ -244,5 +261,7 @@ When relevant sources or claim scope change, revisit affected evidence and its
 gate. Unrelated reading, synthesis or constitution changes leave a claim current.
 Preserve full dependency maps and historical inputs for audit and compatibility.
 Resume retained collection IDs at eligible retry times and preserve failed access
-and reading gaps. A pause, availability
+and reading gaps. A `rate_limited` refusal sends nothing and names the provider
+group and the next eligible time; the arXiv interval and every `Retry-After`
+cooldown are shared by all processes and workspaces of this user on the machine. A pause, availability
 qualification, old receipt, or completed form does not discharge current work.

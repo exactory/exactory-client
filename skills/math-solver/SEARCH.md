@@ -643,8 +643,20 @@ finish paths' child checks remain unchanged.
 
 Native observations retain cash-out stages, actual local finish, failure and
 stagnation facts. Exact controlled producer receipts/results request verification,
-snapshot or acceptance without conferring proof credit. Checkpoint and acceptance
-transactions refresh those observations. A same-claim historical checkpoint with
+snapshot or acceptance without conferring proof credit. The observations are
+scoped to the node that produced the work. The acknowledgment of a journal or
+native command is recorded alone; the facts of the producing node are then
+observed in a separate event (`integration.refresh_producers`). When that
+observation fails, the acknowledgment stays recorded, and the command returns
+`recovery_required` with the node IDs to refresh under `node_ids` and the
+`reason`; `search refresh` with those IDs completes the observation. A
+checkpoint or an acceptance whose origin is a journal move observes its origin
+node in its own event, and one whose origin is an external result observes no
+node. Ordinary `reconcile` observes, in a separate event, the producers of the
+acknowledgments it recorded and of the runs that became terminal. Stop observes
+every admitted node ([Hook lifecycle](#hook-lifecycle-and-supported-host-boundary)),
+and `search refresh` observes a named batch
+([Filesystem service and CLI](#filesystem-service-and-cli)). A same-claim historical checkpoint with
 another move, run or input snapshot cannot advance the current result frontier.
 Begin may service an exact verification frontier, but not a snapshot/acceptance
 frontier. Local finish is separate from root proof closure. Bounded read-only
@@ -1142,16 +1154,26 @@ which can no longer run or be continued (`review_assignment_replaced`). The
 first turn has no `prior_assignment_id`. When it cannot run again, export a new
 packet under a new assignment id and start a new chain, and the final output's
 `attestation_id` then names the new first turn. A turn whose invocation is
-pending, because the process stopped during the call or the finishing write
-stayed refused, can be neither run nor replaced until `review-attempt` imports
-a `failed` attempt with `output: null` under the `id` of that `review-run`
+pending can be neither run nor replaced. When the process stopped after the
+reviewer answered, or the finishing write stayed refused, run that `review-run`
+again with the same payload and request id: it records the captured answer
+without a second call. When the process stopped before the answer was captured,
+reconcile the call, or for a call of 0.69.x import a `failed` attempt with
+`output: null` under the `id` of that `review-run` with `review-attempt`
 ([the shared route instructions](../../docs/research-decisions.md#commands-and-shared-state)).
 A second live continuation of one turn
 is refused with `review_source_continuation_fork`. When the first unit of a
 reading turn does not fit the route alone, or the final turn does not fit after
 every withholding, `review-assignment` refuses with `review_input_too_large`.
 For the final turn the details give the sizes of the base packet, the notes, the
-excerpts and the passages. Submit the native output of the final turn unchanged.
+excerpts and the passages. Before each turn is planned, the harness also
+measures a lower bound of the mandatory final input (the required proof bytes
+and the protected bodies, the excerpts and passages so far and the final
+prompt) and refuses with the same code and `phase: "final_preflight"` when it
+exceeds the route limit; nothing is written, `mandatory_components` names each
+body, and the chain cannot finish on that route with that material
+([CLI reference](../../docs/research-cli.md#problem-creation)). Submit the
+native output of the final turn unchanged.
 Its `attestation_id` names the first turn, the assignment id chosen before the
 export. `accept` and `complete` follow the chain from that turn to its terminal
 turn and verify every turn.
@@ -1730,7 +1752,9 @@ blocker.
 
 ## Node facts, retreat and replanning
 
-`NodeFacts` are internal observations from journal/stage reconciliation:
+`NodeFacts` are internal observations from journal/stage reconciliation; the
+commands that record them, each for the nodes it observes, are listed under
+[Metered execution and native integration](#metered-execution-and-native-integration):
 
 ```text
 node_id: NodeID
@@ -1986,6 +2010,7 @@ Public command specs are closed records:
 | interpret ID | The interpretation record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
 | accept ID | `{obligation_id: ID|null, outcome: Outcome, dependency_ids: [ID], route_bindings: [RouteBinding], review: ResultReview, inputs: [Input]}`, optionally `claims_openness: Boolean` |
+| refresh | `{node_ids: [NodeID]}`: 1 to 256 distinct IDs of nodes admitted through a proposal, in any order |
 | complete | `{subject: ClosureSubject, review: ResultReview, inputs: [Input]}` |
 | deliver-closure | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
 | deliver-attempt | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
@@ -1996,9 +2021,14 @@ Public command specs are closed records:
 | focus | `{focus: "focused"|"ambiguous"|"unrelated", provenance: Provenance, session_id: Text}` |
 | side-interval ID | `{max_moves: Integer[1,24], message_id: Text, instruction: Text, provenance: Provenance}` |
 | pause, resume, hook-stop | The respective `ControlInput` without `action` |
-| audit, render, status, next, strategy-context | `{}`; no spec file |
+| audit, render, status, guard-status, next, strategy-context | `{}`; no spec file |
 
-`status`, `next`, and `strategy-context` are read-only and need no revision or request ID.
+`status`, `guard-status`, `next`, and `strategy-context` are read-only and need no revision or request ID.
+`guard-status` is the hooks' query: a full replay and the optional `--objective-id` and
+`--contract-digest` identity checks, returning only `{protocol:
+"exactory-search-guard-status-v1", objective_id, contract_digest, revision}`, with no
+audit, observation, view scan, rendering or write, and no execution authority or
+proof credit.
 `review-packet` exports immutable evidence and likewise needs no revision or request ID.
 Every other public command uses the current `--expected-revision` and a unique
 `--request-id`. Commands whose table row defines a nonempty spec require
@@ -2017,8 +2047,27 @@ exactory-math --attack-root attack search status --json
 exactory-math --attack-root attack search next --json
 ```
 
-Every command except `status`, `next` and `strategy-context` also has the
-`--check` flag. On those three it is an argument error (`invalid_command`).
+`search refresh --spec FILE --expected-revision N --request-id ID` records the
+current facts of the named nodes. The spec is exactly `{"node_ids": [...]}`
+with 1 to 256 distinct IDs of nodes admitted through a proposal; a node of
+imported history is refused with `admission_required`, an unknown ID with
+`dangling_reference`, and an empty, duplicated or larger batch or another
+field with `invalid_record`, each before any node is observed. It is refused
+with `recovery_required` while a native intent, a legacy intent, a reserved
+move or a workload is pending; reconcile them first. It observes the named
+nodes in node-ID order and commits one event whose operations are the
+`node_facts_recorded` facts that changed, in that order, and nothing else;
+when no fact changed, the event carries no operation. A failed observation
+commits nothing. Its receipt is the ordinary mutation receipt. A replay with
+the same request ID returns the original response without observing again, a
+changed spec under the same request ID fails with `request_id_conflict`, and a
+stale revision with `revision_conflict`. `--check` is refused with
+`check_unsupported`, as for every command outside the five below. Use it with
+the `node_ids` of a `recovery_required` error: after a failed producer
+observation, and after a Stop that found more than 255 changed nodes.
+
+Every command except `status`, `guard-status`, `next` and `strategy-context` also
+has the `--check` flag. On those four it is an argument error (`invalid_command`).
 Only `pause`, `side-interval`, `retreat`, `interpret` and `render` accept
 `--check` and run the check, with the same spec, `--expected-revision` and
 `--request-id` as the write. The
@@ -2158,14 +2207,24 @@ status-only questions, retrospective requests, compaction, and session resume
 without transcript interpretation. Hooks never infer user authorization.
 
 Stop makes one bounded `search hook-stop --internal` call. Only this internal CLI
-route may omit the expected revision; it reads the revision and invokes the
-validated service in that process. A fresh transaction request ID is separate
+route may omit the expected revision; it reads the revision with `guard-status`
+and invokes the validated service in that process. The internal call keeps the
+ownership checks, the recovery precedence of native and journal intents, the
+local observation, the duplicate-delivery accounting, pause, resume and the
+continuation cap of 40, and renders no view: after it, `search status` and
+`search next` report `output_views_stale` with the reason `behind` and the
+action `exactory-math search render`, which repairs the views, as does the next
+command that commits. A fresh transaction request ID is separate
 from the optional host delivery ID. Concurrent revision conflicts return recovery
 guidance without unlimited retry. Before control accounting, the service derives
-changed local observations through `integration.observe_node`, replays them into
-the prospective state, then derives the decision. Unchanged observations do not
-add operations. Native and journal intents retain recovery precedence, and the
-256-operation bound is enforced with an explicit recovery error. Advisory activity
+the changed local observations of every admitted node through
+`integration.observe_nodes`, replays them into the prospective state, then
+derives the decision. Unchanged observations do not add operations. Native and
+journal intents retain recovery precedence. When more than 255 nodes changed,
+Stop fails with `recovery_required`, the first 255 changed node IDs in ID order
+under `node_ids` and `has_more: true`; it records nothing, uses no
+continuation and spends no Stop count. `search refresh` with those IDs records
+them, and the next Stop call observes the remaining nodes and proceeds. Advisory activity
 logs cannot grant proof credit. Newly managed-node shell activity records only a
 relative target or native command name and slug, not raw shell arguments; existing
 unmanaged advisory formatting and authoritative controlled-run argv are unchanged.
@@ -2178,8 +2237,14 @@ include `--check` leaves no entry, because a check writes nothing. An ordinary
 shell command that names a path under the workspace is recorded only after a
 harness-command entry of the same session. A null identity never admits one, and a
 harness command on another attack does not admit inspection of this one. The log
-keeps the last 200 entries of all sessions. When a session's harness entry leaves
-the window, its ordinary calls stop being recorded until its next harness command.
+keeps the last 200 entries of all sessions and, for each identified session that
+has an entry among those 200, its most recent harness-command entry in its
+original position, so a session that keeps working in the attack keeps its
+ordinary shell activity recorded. A session with no entry among the last 200
+loses that entry, and its ordinary calls are not recorded until its next harness
+command. An exclusive lock on the attack directory itself covers each read,
+append and rewrite of the log, so no lock file is added to the attack, and the
+rewrite replaces the file atomically.
 The recorder splits a command with the guard's lexer settings and attributes a
 compound command to each workspace once. Quoted or escaped separators do not make
 a harness call. Only the direct command that the host reports is seen, not programs
@@ -2207,13 +2272,21 @@ characters.
 The hooks read a record with the controller of their own plugin. Read, Glob, Grep,
 WebSearch and WebFetch calls make no controller call, but discovery runs before
 that exemption, so a malformed or conflicting discovery registry denies them
-too. A Write, Edit or Delete under a
-registered root, and a supported shell command that names a path under it, call
-the controller first. When that call fails, the hook confirms the failure with one
-plain `search status --json` call inside the same 20-second deadline. If the status
+too. The pre-tool guard checks every target of a call, both ends of a move in a
+patch included, with the protected-path and native-record checks above, and
+then queries each distinct registered root that a target lies under once, with
+the read-only `search guard-status --json` and the root's registered
+`--objective-id` and `--contract-digest`. One 20-second deadline covers the
+queries for all roots and the diagnostic fallback below; the host's hook
+timeout stays 30 seconds. A Codex `apply_patch` reaches the guard as one call
+that carries every file of the patch; the other hooks still receive one payload
+per file. A failure of the guard's own checks that it did not expect denies the
+call with a message that names the error and asks that it be reported to the
+user. When a controller query fails, the hook confirms the failure with one
+plain `search guard-status --json` call inside the same deadline. If that call
 succeeds, the record is readable and the message keeps its operational diagnostic,
 `Controller recovery required: DIAGNOSTIC`, for example a focus or revision
-conflict. If the status fails too, the hook compares `.search/writer-runtime.json`
+conflict. If that call fails too, the hook compares `.search/writer-runtime.json`
 with the installed runtime. A different `plugin_version` or `controller_digest`
 gives `The installed controller Exactory VERSION (controller sha256 DIGEST,
 launcher PATH) cannot read a record written by Exactory VERSION (...): DIAGNOSTIC.
@@ -2642,15 +2715,25 @@ currently relies on: `index.json`, `objective.json`, `admissions/`,
 `intermediate/math/<rel>/` (`proposals/` not admitted, `checkpoints/`,
 `invalidated/<acceptance id>/`, `replans/`, `retreats/`, `amendments/`,
 `runs/<run id>/`, `nodes/<slug>/index.json`). A render runs once per command,
-after its last commit and outside every controller lock: at the end of the
+after its last commit and outside the writer lock: at the end of the
 mutating path of `Controller.command`, after `deliver-attempt` and
 `deliver-closure`, and at the end of every managed native `attack.py` command.
-Read-only commands and check mode render nothing. The render skips when the
-marker `.search/output-views.json` already shows the document's last event under
-the installed plugin version; otherwise it builds the whole model from the
-replayed state, writes only the files whose bytes differ, and removes the owned
-files that the model no longer produces, under the lock
-`.search/output-views.lock`. An artifact of at most 1 MiB is copied; a larger,
+Read-only commands, check mode and the internal Stop call render nothing. The
+render holds the render lock `.search/output-views.lock` (`lock_timeout` after
+30 seconds) and selects the event document under it: the state that the
+command replayed is reused only while that document is still the current one
+and is replayed again otherwise, so an older render never overwrites a newer
+one. A pending initialization effect fails the render (`recovery_required`)
+until it is applied. Under the lock the render first repairs the generated
+Markdown, `SEARCH_TREE.md` and each `LINEAGE.md`, also when the marker
+`.search/output-views.json` already shows the document's last event under the
+installed plugin version and when the controller root has the reserved name
+below; only the render of `init`, when the document holds that one event and a
+`SEARCH_TREE.md` is already in place, keeps that handwritten file. When the
+marker is current, the JSON views stay as they are; otherwise the render
+builds the whole model from the replayed state, writes only the files whose
+bytes differ, and removes the owned files that the model no longer produces.
+An artifact of at most 1 MiB is copied; a larger,
 missing or corrupt one is listed by digest with its reason. A failed render never
 changes the command's result: it prints one stderr line, `Output views were not
 rendered (<code>: <message>); the command's result stands. Run exactory-math

@@ -126,7 +126,7 @@ class TestVerifyStatuses(_CheckTestCase):
         self.assertEqual(statuses["example2024deterministic"], "verified")
         self.assertEqual(statuses["instance2023predicting"], "verified")
         self.assertEqual(statuses["nobody2022invented"], "unresolved")
-        self.assertEqual(report["counts"], {"verified": 2, "blocking": 1, "warning": 0})
+        self.assertEqual(report["counts"], {"verified": 2, "blocking": 1, "warning": 0, "incomplete": 0})
         self.assertEqual(report["blocking"], 1)
         self.assertFalse(report["nothing_verified"])
         self.assertFalse(report["ok"])
@@ -143,7 +143,7 @@ class TestVerifyStatuses(_CheckTestCase):
         )
         report = self._lookup(["--bib", str(bib_path)], 1)
         self.assertEqual(report["entries"][0]["status"], "title_mismatch")
-        self.assertEqual(report["counts"], {"verified": 0, "blocking": 1, "warning": 0})
+        self.assertEqual(report["counts"], {"verified": 0, "blocking": 1, "warning": 0, "incomplete": 0})
 
     def test_author_mismatch_blocks(self) -> None:
         _check._open_url = _route_fixture_registry
@@ -157,7 +157,7 @@ class TestVerifyStatuses(_CheckTestCase):
         )
         report = self._lookup(["--bib", str(bib_path)], 1)
         self.assertEqual(report["entries"][0]["status"], "author_mismatch")
-        self.assertEqual(report["counts"], {"verified": 0, "blocking": 1, "warning": 0})
+        self.assertEqual(report["counts"], {"verified": 0, "blocking": 1, "warning": 0, "incomplete": 0})
 
     def test_year_mismatch_warns_without_blocking(self) -> None:
         _check._open_url = _route_fixture_registry
@@ -179,8 +179,11 @@ class TestVerifyStatuses(_CheckTestCase):
         report = self._lookup(["--bib", str(bib_path)], None)
         statuses = [entry["status"] for entry in report["entries"]]
         self.assertEqual(statuses, ["verified", "year_mismatch"])
-        self.assertEqual(report["counts"], {"verified": 1, "blocking": 0, "warning": 1})
+        self.assertEqual(report["counts"], {"verified": 1, "blocking": 0, "warning": 1, "incomplete": 0})
         self.assertTrue(report["ok"])
+        self.assertTrue(report["lookup_complete"])
+        self.assertFalse(report["all_verified"])
+        self.assertEqual(report["incomplete_keys"], [])
 
     def test_network_failure_is_never_treated_as_fabrication(self) -> None:
         _check._open_url = _refuse_network
@@ -232,15 +235,16 @@ class TestReportSchema(_CheckTestCase):
         self.assertEqual(
             set(report),
             {"version", "bib_sha256", "checked_at", "entries", "counts",
-             "blocking", "nothing_verified", "ok", "manuscript"},
+             "blocking", "nothing_verified", "ok", "manuscript", "lookup_complete",
+             "all_verified", "incomplete_keys"},
         )
         self.assertEqual(set(report["manuscript"]),
                          {"main", "tex_sha256", "uncited_keys", "prior_art_without_citation"})
-        self.assertEqual(report["version"], 1)
+        self.assertEqual(report["version"], 2)
         self.assertRegex(report["checked_at"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
         for entry in report["entries"]:
-            self.assertEqual(set(entry), {"key", "doi", "arxiv_id", "title", "status", "detail"})
-        self.assertEqual(set(report["counts"]), {"verified", "blocking", "warning"})
+            self.assertEqual(set(entry), {"key", "doi", "arxiv_id", "title", "status", "detail", "searches"})
+        self.assertEqual(set(report["counts"]), {"verified", "blocking", "warning", "incomplete"})
 
     def test_bib_sha256_is_the_hash_of_the_exact_file_checked(self) -> None:
         _check._open_url = _route_fixture_registry
@@ -278,15 +282,17 @@ class TestCacheRoundTrip(_CheckTestCase):
         # Positive-only: the unresolved entry never enters the cache.
         self.assertFalse([key for key in cache if "invented" in key])
 
-        # Offline, the cached entries still verify and the network failure on the
-        # uncached one is a warning, not a blocking status, so the check passes.
+        # Positive cache hits do not make an uncached failed lookup complete.
         _check._open_url = _refuse_network
-        report = self._lookup(["--bib", str(bib_path)], None)
+        report = self._lookup(["--bib", str(bib_path)], 1)
         statuses = {entry["key"]: entry["status"] for entry in report["entries"]}
         self.assertEqual(statuses["example2024deterministic"], "verified")
         self.assertEqual(statuses["instance2023predicting"], "verified")
         self.assertEqual(statuses["nobody2022invented"], "network_error")
         self.assertFalse(report["nothing_verified"])
+        self.assertFalse(report["lookup_complete"])
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["incomplete_keys"], ["nobody2022invented"])
 
 
 class TestRefsJsonInput(_CheckTestCase):
@@ -308,12 +314,16 @@ class TestRefsJsonInput(_CheckTestCase):
                 "bibliography": {"doi": None, "authors": [], "year": None},
             },
         ]))
-        report = self._lookup(["--refs-json", str(refs_path)], None)
+        report = self._lookup(["--refs-json", str(refs_path)], 1)
         self.assertEqual([entry["key"] for entry in report["entries"]], ["ref-1", "ref-2"])
         self.assertEqual(
             [entry["status"] for entry in report["entries"]], ["verified", "no_query"]
         )
-        self.assertEqual(report["counts"], {"verified": 1, "blocking": 0, "warning": 1})
+        self.assertEqual(report["counts"], {"verified": 1, "blocking": 0, "warning": 0, "incomplete": 1})
+        self.assertFalse(report["ok"])
+        self.assertFalse(report["lookup_complete"])
+        self.assertFalse(report["all_verified"])
+        self.assertEqual(report["incomplete_keys"], ["ref-2"])
         self.assertEqual(
             report["bib_sha256"], hashlib.sha256(refs_path.read_bytes()).hexdigest()
         )
@@ -433,16 +443,28 @@ class TestGateSubcommand(_CheckTestCase):
     def _write_report(self, blocking: int, nothing_verified: bool,
                       bib_sha256: str | None = None) -> None:
         main, sources = _check._read_manuscript_sources(self.scratch_dir / "draft", None)
+        entries = [{"key": entry["key"], "status": "verified"}
+                   for entry in _check._parse_bib(self.bib_path.read_text())]
+        if entries and blocking:
+            entries[-1]["status"] = "unresolved"
+        if nothing_verified:
+            for entry in entries:
+                entry["status"] = "no_query"
         report = {
-            "version": 1,
+            "version": 2,
             "bib_sha256": bib_sha256 if bib_sha256 is not None
             else hashlib.sha256(self.bib_path.read_bytes()).hexdigest(),
             "checked_at": "2026-08-08T00:00:00Z",
-            "entries": [],
-            "counts": {"verified": 1, "blocking": blocking, "warning": 0},
+            "entries": entries,
+            "counts": {"verified": sum(entry["status"] == "verified" for entry in entries),
+                       "blocking": blocking, "warning": 0,
+                       "incomplete": len(entries) if nothing_verified else 0},
             "blocking": blocking,
             "nothing_verified": nothing_verified,
             "ok": blocking == 0 and not nothing_verified,
+            "lookup_complete": not nothing_verified,
+            "all_verified": not blocking and not nothing_verified,
+            "incomplete_keys": [entry["key"] for entry in entries] if nothing_verified else [],
             "manuscript": {"main": main, "tex_sha256": _check._hash_manuscript_sources(sources)},
         }
         self.report_path.write_text(json.dumps(report))
@@ -460,6 +482,47 @@ class TestGateSubcommand(_CheckTestCase):
         self._write_passing_state()
         output = self._gate(None)
         self.assertIn("Citation gate: pass", output)
+
+    def test_a_version_one_report_requires_a_fresh_lookup(self) -> None:
+        self._write_passing_state()
+        report = json.loads(self.report_path.read_text())
+        report["version"] = 1
+        self.report_path.write_text(json.dumps(report))
+        self.assertIn("version 2", self._gate(1))
+
+    def test_gate_derives_incompleteness_from_entries_despite_passing_flags(self) -> None:
+        for status in ("no_query", "network_error", "search_incomplete", "unrecognized"):
+            with self.subTest(status=status):
+                self._write_passing_state()
+                report = json.loads(self.report_path.read_text())
+                report["entries"][-1]["status"] = status
+                self.report_path.write_text(json.dumps(report))
+                self._gate(1)
+
+    def test_gate_rejects_omitted_entries_and_hidden_mismatches(self) -> None:
+        for change in ("omit", "mismatch", "malformed"):
+            with self.subTest(change=change):
+                self._write_passing_state()
+                report = json.loads(self.report_path.read_text())
+                if change == "omit":
+                    report["entries"].pop()
+                elif change == "mismatch":
+                    report["entries"][-1]["status"] = "author_mismatch"
+                else:
+                    report["entries"] = {"status": "verified"}
+                self.report_path.write_text(json.dumps(report))
+                self._gate(1)
+
+    def test_gate_passes_a_complete_lookup_with_a_year_warning(self) -> None:
+        self._write_passing_state()
+        report = json.loads(self.report_path.read_text())
+        report["entries"][-1]["status"] = "year_mismatch"
+        report["all_verified"] = False
+        report["counts"]["verified"] -= 1
+        report["counts"]["warning"] = 1
+        self.report_path.write_text(json.dumps(report))
+        output = self._gate(None)
+        self.assertIn("warning", output.lower())
 
     def test_a_missing_references_file_fails(self) -> None:
         output = self._gate(1)
@@ -704,7 +767,7 @@ class TestManuscriptChecks(_CheckTestCase):
                                   "% \\cite{instance2023predicting} in a comment only\n", 1)
         self.assertEqual(report["manuscript"]["uncited_keys"], ["instance2023predicting"])
         self.assertEqual(report["blocking"], 1)
-        self.assertEqual(report["counts"], {"verified": 2, "blocking": 0, "warning": 0})
+        self.assertEqual(report["counts"], {"verified": 2, "blocking": 0, "warning": 0, "incomplete": 0})
         self.assertFalse(report["ok"])
         output = self._run_command(["lookup", "--out", str(self.out_path), "--bib", str(self.bib_path)], 1)
         self.assertIn("uncited: instance2023predicting", output)

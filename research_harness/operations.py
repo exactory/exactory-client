@@ -12,7 +12,7 @@ import math
 
 from .errors import ResearchError
 from .provenance import runtime_provenance
-from .storage import _canonical, _PreparedSnapshot, _text
+from .storage import _canonical, _PreparedSnapshot, _ScopedPreparation, _text
 
 
 def fields(value, required, optional=(), *, code="invalid_input", path=None):
@@ -146,13 +146,15 @@ def immutable_record(records, kind, key, value):
     return kind, key, value
 
 
-def prepared_task_mutation(store, operation, payload, prepare, *, request_id, expected_revision=None, finalize=None):
+def prepared_task_mutation(store, operation, payload, prepare, *, request_id, expected_revision=None, finalize=None,
+                           _snapshot=None, validate_commit=None):
     """Prepare a tracked task patch; finalize(changes, result, commit_revision) may stamp commit fields."""
     text(request_id, "Request ID")
     if not isinstance(payload, dict):
         raise ResearchError("invalid_input", "A domain mutation requires a JSON object")
     payload = json.loads(_canonical(payload))
-    snapshot = store._read_scoped_preparation()
+    snapshot = (_snapshot if isinstance(_snapshot, _ScopedPreparation) and _snapshot._store is store
+                and _snapshot.records is not None else store._read_scoped_preparation())
     if snapshot.has_request(request_id):
         return store.mutate_scoped(operation, payload, lambda tx, revision: None,
                                    request_id=request_id, expected_revision=expected_revision,
@@ -178,6 +180,8 @@ def prepared_task_mutation(store, operation, payload, prepare, *, request_id, ex
             current_changes, current_result = finalize(current_changes, current_result, revision)
             if tuple((kind, key) for kind, key, _ in current_changes) != write_targets:
                 raise ResearchError("invalid_preparation", "Commit finalization cannot change prepared write targets")
+        if validate_commit is not None:
+            validate_commit(transaction, current_result, revision)
         for kind, key, value in current_changes:
             transaction.put(kind, key, value)
         transaction.put("literature_operation", request_id, {"operation": operation, "runtime": runtime})

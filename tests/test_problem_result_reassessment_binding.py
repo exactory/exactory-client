@@ -5,6 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from research_harness.review_bodies import read_history
 from research_harness import research_decisions as decisions
 from research_harness import review_protocol as protocol, review_refusal as refusal
 from research_harness.errors import ResearchError
@@ -53,8 +54,22 @@ class ResultReassessmentBindingTests(unittest.TestCase):
             'reason': 'The exact scientific assessment remains unchanged.', 'evidence': [copy.deepcopy(self.reference)]}]}
 
     def contract(self, output=None, assignment=None):
-        return decisions.validate_review_contract(self.fixture.read_records(), self.fixture.artifacts,
-            assignment or self.assignment, output or self.output)
+        records, artifacts = self.fixture.read_records(), self.fixture.artifacts
+        assignment = dict(assignment or self.assignment)
+        output = output or self.output
+        assignment['prompt_hash'] = digest(assignment['prompt']['text'])
+        records['review_assignment'][assignment['id']] = assignment
+        route = records['review_route'][assignment['route_id']]
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        from research_harness import review_transport
+        request = review_transport.request_body(route, assignment['prompt']['text'], packet, read_history(self.fixture.artifacts, assignment))
+        attempt = dict(id='contract-attempt', assignment_id=assignment['id'], status='completed', origin='instrumented',
+            runtime=route['runtime'], route_digest=digest(route), packet_digest=assignment['packet_digest'],
+            prompt_hash=assignment['prompt_hash'], request=protocol._put_json(artifacts, request),
+            request_digest=digest(request), output=protocol._put_json(artifacts, output),
+            response=protocol._put_json(artifacts, self.fixture.build_provider_response(output)), recorded_revision=1000)
+        records.setdefault('review_attempt', {})[attempt['id']] = attempt
+        return decisions.validate_review_contract(records, artifacts, assignment, output, attempt=attempt)
 
     def observe(self, output, identifier='repair-attempt'):
         fixture = self.fixture

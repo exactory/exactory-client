@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from research_harness import review_delivery, review_input_projection, review_protocol, review_transport
 from research_harness import review_supplied_evidence
+from research_harness import review_delivered_evidence
 from research_harness import research_decisions
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
@@ -94,8 +95,10 @@ class ResultDescriptorAliasTests(unittest.TestCase):
             packet = {"evidence": [{"artifact": ref, "encoding": "base64",
                                     "content": base64.b64encode(PNG).decode("ascii")} for ref in references]}
             with self.subTest(references=references), patch.object(
-                    review_supplied_evidence, "lineage_packets", return_value=[packet]):
-                supplied, mappings = review_supplied_evidence.supplied_context({}, self.artifacts, ["original"])
+                    research_decisions, "read_review_citation_delivery", return_value=
+                        review_delivered_evidence.project_delivery_view({}, self.artifacts, [packet])):
+                supplied, mappings = review_supplied_evidence.supplied_context(
+                    {'review_assignment': {'original': {'id': 'original'}}}, self.artifacts, ["original"])
                 self.assertCountEqual(list(supplied.values()), references)
                 review_supplied_evidence.validate_correction({}, self.artifacts, references, supplied, mappings)
 
@@ -114,8 +117,10 @@ class ResultDescriptorAliasTests(unittest.TestCase):
         reference = self.artifacts.put(PNG, "image/png")
         packet = {"evidence": [{"artifact": reference, "encoding": "omitted", "content": "",
                                 "delivery": "bytes-omitted-on-text-route"}]}
-        with patch.object(review_supplied_evidence, "lineage_packets", return_value=[packet]):
-            supplied, mappings = review_supplied_evidence.supplied_context({}, self.artifacts, ["original"])
+        with patch.object(research_decisions, "read_review_citation_delivery", return_value=
+                review_delivered_evidence.project_delivery_view({}, self.artifacts, [packet])):
+            supplied, mappings = review_supplied_evidence.supplied_context(
+                {'review_assignment': {'original': {'id': 'original'}}}, self.artifacts, ["original"])
         with self.assertRaises(ResearchError) as raised:
             review_supplied_evidence.validate_correction({}, self.artifacts, [reference], supplied, mappings)
         self.assertEqual(raised.exception.code, "invalid_review_correction")

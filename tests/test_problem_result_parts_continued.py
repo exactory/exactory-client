@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
+from research_harness.review_bodies import read_history
 from research_harness import review_problem_parts as parts, review_protocol as protocol
 from research_harness import review_excerpts, review_transport as transport
 from research_harness import research_decisions as decisions, review_supplied_evidence as supplied
@@ -152,9 +153,12 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertIn(('local_artifact', record['id'], record['digest'], record['record'], record['artifacts']),
                       list(protocol._list_packet_records(packet)))
         self.assertIn(nested, list(supplied.collect_qualified_objections(packet)))
-        with patch.object(supplied, 'lineage_packets', return_value=[packet]):
-            received, mappings = supplied.supplied_context(self.case.read_records(), self.case.artifacts, [], frozen=True)
-            _, current_mappings = supplied.supplied_context(self.case.read_records(), self.case.artifacts, [])
+        from research_harness import review_delivered_evidence
+        delivery = review_delivered_evidence.project_delivery_view(self.case.read_records(), self.case.artifacts, [packet])
+        records = dict(self.case.read_records(), review_assignment={'fixture': {'id': 'fixture'}})
+        with patch.object(decisions, 'read_review_citation_delivery', return_value=delivery):
+            received, mappings = supplied.supplied_context(records, self.case.artifacts, ['fixture'], frozen=True)
+            _, current_mappings = supplied.supplied_context(records, self.case.artifacts, ['fixture'])
         self.assertEqual(mappings, [mapping])
         self.assertEqual(current_mappings, [supplied.deliver_passage(self.case.read_records(), self.case.artifacts, mapping)])
         self.assertIn(references[1], received.values())
@@ -183,13 +187,13 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         uncompressed = self.packet(final)
         uncompressed['material_objections'] = objections
         uncompressed['digest'] = digest({key: value for key, value in uncompressed.items() if key != 'digest'})
-        full_size = parts._measure(route, transport.request_body(route, final['prompt']['text'], uncompressed, final['history']))
+        full_size = parts._measure(route, transport.request_body(route, final['prompt']['text'], uncompressed, read_history(self.case.artifacts, final)))
         compact_size = parts._measure(route, request)
         self.assertGreater(full_size, compact_size + 20000)
         limit = transport.local_input_limit(route)
         self.assertLessEqual(compact_size, limit)
         self.assertGreater(full_size, limit)
-        self.assertFalse(parts._fits(self.case.artifacts, route, final['prompt'], uncompressed, final['history'], references)[0])
+        self.assertFalse(parts._fits(self.case.artifacts, route, final['prompt'], uncompressed, read_history(self.case.artifacts, final), references)[0])
         output = self.final_output()
         output['value']['objection_findings'] = [{'id': objection['id'], 'status': 'continuing',
             'reason': 'The shared delivered record retains this limitation.', 'evidence': [
@@ -446,7 +450,7 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertTrue(has_attachment(artifacts, sent, bodies[2]))
         route = records['review_route']['route']
         self.assertLessEqual(parts._measure(route, request), transport.local_input_limit(route))
-        self.assertTrue(parts._fits(artifacts, route, final['prompt'], self.packet(final), final['history'],
+        self.assertTrue(parts._fits(artifacts, route, final['prompt'], self.packet(final), read_history(self.case.artifacts, final),
                                     bodies[2:])[0])
 
     def test_invalid_body_only_part_response_gives_no_objection_body_credit(self):
@@ -471,7 +475,7 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertEqual(parts.find_credited_objection_bodies(full, parts._artifact_turns(observed)), set())
         value = {'id': 'retry-body-part', 'role': 'result', 'context': {'prior_assignment_id': body_part['id']}}
         planned = parts.prepare_packet(records, artifacts, value, records['review_route']['route'], full,
-                                       body_part['prompt'], body_part['history'])
+                                       body_part['prompt'], read_history(self.case.artifacts, body_part))
         self.assertEqual(planned[KEY]['stage'], 'part')
         self.assertEqual(planned[KEY]['turn'], packet[KEY]['turn'])
         self.assertEqual(planned[KEY]['objection_bodies'], bodies)
@@ -607,7 +611,11 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         observations = parts.observe_series(self.case.read_records(), self.case.artifacts, last['id'])
         self.assertIn(digest(references[0]), parts._artifact_turns(observations))
         self.case.expected['computations'] = []
-        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+        # Since 0.71.0 a new series whose ordinary request fits and carries every body is delivered whole, as 0.70.x
+        # delivered it on local routes; the planner, which this test exercises, serves one whose ordinary request
+        # does not carry every evidence body.
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit, \
+                patch.object(parts, 'preserves_ordinary_packet', return_value=False):
             final = self.assign('refreshed-final', last['id'])
         self.assertEqual(fit.call_args.args[-1], [references[0]])
         sent = self.sent(final)
@@ -982,7 +990,10 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertLess(full_size, pending_size)
         limit = (full_size + pending_size) // 2
         value = {'id': 'tiny-part', 'role': 'result', 'context': {'prior_assignment_id': first['id']}}
-        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', limit), patch.object(parts, 'PART_UNIT_CHARACTERS', 1000):
+        # The ordinary request is smaller than any part projection, so it fits under this limit. The planner
+        # serves a new series whose ordinary request does not carry every evidence body.
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', limit), patch.object(parts, 'PART_UNIT_CHARACTERS', 1000), \
+                patch.object(parts, 'preserves_ordinary_packet', return_value=False):
             planned = parts.prepare_packet(records, artifacts, value, route, packet, prompt, [])
             request = transport.request_body(route, prompt['text'], planned)
         sent = review_excerpts.read_sent_packet(request)

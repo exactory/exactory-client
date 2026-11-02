@@ -11,10 +11,11 @@ from .execution_evidence import author_readiness_state
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
+from .file_streams import freeze_file
 from .graph import find_active_requirements, obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .storage import _canonical, _check_stored_bounds
-from .workspace import read_file, strict_json
+from .workspace import open_file, read_file, strict_json
 
 
 FILE_TYPES = {"pdf": "application/pdf", "abstract": "text/plain", "bibliography": "text/plain",
@@ -244,6 +245,13 @@ def find_selected_bundle(records):
     return records["publication_bundle"][selected["id"]] if selected else None
 
 
+def _matches_file(artifacts, path, reference):
+    store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
+    with open_file(artifacts.root, path) as source, freeze_file(source) as frozen:
+        store.verify(reference)
+        return frozen.size == reference["size"] and frozen.sha256 == reference["sha256"]
+
+
 def _bundle(records, artifacts):
     bundle = find_selected_bundle(records)
     if bundle is None:
@@ -276,7 +284,7 @@ def _bundle(records, artifacts):
         if key + "_artifact" in bundle:
             artifacts.read(bundle[key + "_artifact"])
     for item in bundle["files"].values():
-        if item is not None and read_file(artifacts.root, item["path"]) != artifacts.read(item["artifact"]):
+        if item is not None and not _matches_file(artifacts, item["path"], item["artifact"]):
             raise ResearchError("publication_artifact_changed", "The manuscript or its supporting files changed after preparation",
                                 {"path": item["path"]})
     return bundle
@@ -479,7 +487,7 @@ def publication_report(store, action="publication"):
 
 def validate_upload(store, pdf, abstract, sources):
     snapshot = store.snapshot()
-    artifacts = Evaluation(snapshot["records"], store.build_artifact_store())
+    artifacts = Evaluation(snapshot["records"], store.build_artifact_store(), retention_budget_bytes=0)
     report = publication_state(snapshot["records"], artifacts)
     if not report["ready"]:
         raise ResearchError("readiness_required", "Publication requires the exact manuscript and dual review gate", {"obligations": report["obligations"]})
@@ -496,6 +504,6 @@ def validate_upload(store, pdf, abstract, sources):
             if not ancestors:
                 raise ResearchError("publication_artifact_mismatch", "Upload files must belong to the reviewed workspace")
             relative = selected.relative_to(ancestors[0]).as_posix()
-            if read_file(store.root, relative) != artifacts.read(pinned["artifact"]):
+            if not _matches_file(artifacts, relative, pinned["artifact"]):
                 raise ResearchError("publication_artifact_mismatch", "The selected upload differs from the reviewed manuscript", {"kind": kind})
     return dict(report, revision=snapshot["revision"])

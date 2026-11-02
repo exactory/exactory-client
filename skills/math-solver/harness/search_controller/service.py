@@ -9,7 +9,7 @@ from .admission import reference
 from .errors import SearchError
 from .evidence import import_inputs, proposal_inputs, audit_admission, audit_state, audit_checkpoint, audit_local_delivery
 from .model import apply_event, initial_state, replay
-from .render import render, replace_text
+from .render import replace_text
 from .scheduler import next_action
 from .storage import Store, canonical_bytes, safe_path, _strict_json
 
@@ -82,6 +82,12 @@ class Controller:
             delivered = deliver_attempt(self, spec, expected_revision, request_id)
             render_after_command(self)
             return delivered
+        if name == "guard-status":
+            s.require(set(spec) <= {"objective_id", "contract_digest"}, "Unknown read-only validation field")
+            state = replay(self.store.read())
+            self._validate_routing_identity(state, spec)
+            return {"protocol": "exactory-search-guard-status-v1", "objective_id": state["objective_id"],
+                    "contract_digest": state["contract_digest"], "revision": state["revision"]}
         if name in {"status", "next", "strategy-context"}:
             s.require(set(spec) <= {"session_id", "focus_request_id", "objective_id", "contract_digest"}, "Unknown read-only validation field")
             state = self.status()
@@ -169,20 +175,26 @@ class Controller:
             launch(self, state["runs"][run_id])
         elif name == "reconcile" and not spec:
             from .execution import reconcile_runs
-            from .integration import recover_journal_effects
+            from .integration import recover_journal_effects, refresh_producers
+            recovered = replay(self.store.read())
+            producers = set()
+            if built:
+                for operation in event["payload"]["operations"]:
+                    if operation["kind"] == "journal_acknowledged":
+                        producers.add(operation["payload"]["node_id"])
+                    elif operation["kind"] == "native_acknowledged":
+                        producers.add(recovered["service"]["native_receipts"][operation["payload"]["id"]]["node_id"])
             reconcile_runs(self)
             recover_journal_effects(self)
+            current = replay(self.store.read())
+            producers.update(run["node_id"] for identity, run in current["runs"].items()
+                             if run["status"] == "terminal" and recovered["runs"].get(identity, {}).get("status") != "terminal")
+            refresh_producers(self, producers)
         with self.store._writer_lock():
             document = self.store.read()
             state = replay(document)
             if not operator_recovery:
                 self._recover_effects(state)
-            render_ready = not operator_recovery or all(
-                safe_path(self.store.root, "effect-" + s.digest(effect) + ".json").exists()
-                for effect in state["service"]["effects"])
-            manual = safe_path(self.root, "SEARCH_TREE.md")
-            if render_ready and (name != "init" or not manual.exists()):
-                render(self.root, state)
             if routing is not None:
                 from .discovery import publish
                 try:
@@ -192,8 +204,10 @@ class Controller:
                         "inspect the conflict and use a fresh explicit focus if superseded", {"request_id": request_id,
                         "revision": event["sequence"], "reason": str(error)}) from error
         # Every lock is released here. A replayed request renders too, which catches up a render that a crash interrupted.
-        render_after_command(self, (document, state))
-        old = replay(dict(document, events=document["events"][:event["sequence"]]))
+        if name != "hook-stop" or hook_session is None:
+            render_after_command(self, (document, state), preserve_manual=name == "init")
+        old = state if event["sequence"] == state["revision"] else replay(
+            dict(document, events=document["events"][:event["sequence"]]))
         response = {"objective_id": old["objective_id"], "revision": old["revision"],
                     "proof_status": old["proof_status"], "command": name}
         if name == "hook-stop":
@@ -410,23 +424,27 @@ class Controller:
                 s.require(validate_session(state, spec.get("session_id"), validation.get("focus_request_id")),
                           "Explicit matching session focus is required; run search focus", "focus_required")
                 if not state["service"]["legacy_intents"] and not state["control"]["pending_moves"]:
-                    from .integration import observe_node
-                    from .model import EVENT_HANDLERS
+                    from .integration import observe_nodes
                     prospective = copy.deepcopy(state)
-                    for node in list(prospective["nodes"].values()):
-                        if node["proposal_id"] is None:
-                            continue
-                        facts = observe_node(self, prospective, node, content)
-                        old_facts = prospective["control"]["node_facts"].get(node["id"], {})
-                        if facts != {key: old_facts.get(key) for key in facts}:
-                            s.require(len(operations) < 255,
-                                      "Too many changed local observations; recover through bounded native reconciliation", "recovery_required")
-                            emit("node_facts_recorded", {"facts": facts})
-                            EVENT_HANDLERS["node_facts_recorded"](prospective, {"facts": facts})
+                    operations.extend(observe_nodes(self, prospective,
+                        [node["id"] for node in prospective["nodes"].values() if node["proposal_id"] is not None],
+                        content, maximum=255))
             control_spec = {key: value for key, value in spec.items() if name != "focus" or key != "session_id"}
             emit("control_recorded", dict(control_spec, action=name.replace("-", "_")))
             if routing is not None:
                 emit("discovery_recorded", routing)
+        elif name == "refresh":
+            s.require(not state["control"]["pending_moves"] and not state["service"]["legacy_intents"]
+                      and not any(run["status"] != "terminal" for run in state["runs"].values()),
+                      "Reconcile pending moves and workloads before refreshing local observations", "recovery_required")
+            s.closed(spec, "node_ids")
+            s.strings(spec["node_ids"], nonempty=True)
+            s.require(len(spec["node_ids"]) <= 256, "Refresh needs at most 256 distinct admitted nodes")
+            for node_id in spec["node_ids"]:
+                node = reference(state["nodes"], node_id, "refresh node")
+                s.require(node["proposal_id"] is not None, "Imported history cannot receive local observations", "admission_required")
+            from .integration import observe_nodes
+            operations.extend(observe_nodes(self, state, spec["node_ids"], content))
         elif name == "checkpoint":
             s.closed(spec, "checkpoint inputs")
             checkpoint = copy.deepcopy(spec["checkpoint"])
@@ -527,16 +545,14 @@ class Controller:
             from .research import needs_review_workspace
             if needs_review_workspace(state):
                 emit("review_workspace_recorded", {"workspace": "."})
-        if name in {"checkpoint", "accept", "reconcile"}:
+        if name in {"checkpoint", "accept"}:
             from .model import EVENT_HANDLERS
-            from .integration import observe_node
+            from .integration import observe_nodes
             prospective = copy.deepcopy(state)
             for operation in operations:
                 EVENT_HANDLERS[operation["kind"]](prospective, operation["payload"])
-            initializing_slugs = {effect["slug"] for effect in effects if effect["kind"] == "initialize_workspace"}
-            for node in prospective["nodes"].values():
-                if node["proposal_id"] is not None and node["attack_slug"] not in initializing_slugs:
-                    emit("node_facts_recorded", {"facts": observe_node(self, prospective, node, content)})
+            if checkpoint["origin"]["kind"] == "journal_move":
+                operations.extend(observe_nodes(self, prospective, [checkpoint["origin"]["node_id"]], content))
         paths = {"SEARCH_TREE.md"} | {n["attack_slug"] + "/LINEAGE.md" for n in state["nodes"].values()}
         if name == "admit":
             paths.add(proposal["attack_slug"] + "/LINEAGE.md")

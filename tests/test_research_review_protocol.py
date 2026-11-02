@@ -449,10 +449,10 @@ class ReviewProtocolTests(LiteratureCase):
         self.assertEqual(failures, [])
         self.assertTrue(p.assignment_state(self.records(), self.artifacts, 'assignment')['ready'])
 
-    def test_refused_finish_leaves_review_and_probe_pending_without_dispatch(self):
+    def test_refused_finish_recovers_review_and_probe_without_dispatch(self):
         from research_harness.storage import Store
         p = self.protocol(); self.route(); self.run_probe(); self.assign()
-        mutate = self.store.mutate
+        mutate = self.store.mutate_scoped
         for operation, function, payload in [
                 ('review.invoke', p.invoke_assignment, {'id': 'attempt', 'assignment_id': 'assignment'}),
                 ('review.route_probe', p.probe_route, {'id': 'later-probe', 'route_id': 'route'})]:
@@ -462,7 +462,7 @@ class ReviewProtocolTests(LiteratureCase):
                     if name == operation:
                         raise ResearchError('storage_io', 'Finishing write refused')
                     return mutate(name, *args, **kwargs)
-                with patch.object(self.store, 'mutate', side_effect=refuse), \
+                with patch.object(self.store, 'mutate_scoped', side_effect=refuse), \
                         patch('research_harness.review_transport.send_request',
                               return_value=self.response({'verdict': 'original'})) as send:
                     with self.assertRaises(ResearchError) as caught:
@@ -470,10 +470,9 @@ class ReviewProtocolTests(LiteratureCase):
                 self.assertEqual(caught.exception.code, 'storage_io')
                 self.assertEqual(send.call_count, 1)
                 with patch('research_harness.review_transport.send_request', side_effect=AssertionError('Must not resend')):
-                    with self.assertRaises(ResearchError) as pending:
-                        function(Store(self.root), payload, expected_revision=revision, request_id=operation)
-                self.assertEqual(pending.exception.code, 'review_invocation_pending')
-        self.assertNotIn('attempt', self.records().get('review_attempt', {}))
+                    result = function(Store(self.root), payload, expected_revision=revision, request_id=operation)
+                self.assertEqual(result['result']['status'], 'completed')
+        self.assertIn('attempt', self.records()['review_attempt'])
 
     def test_a_workspace_file_cannot_complete_a_pending_review(self):
         # A pending invocation's outcome is unknown to the store. Bytes that anyone can write into the workspace are no
@@ -481,15 +480,15 @@ class ReviewProtocolTests(LiteratureCase):
         from research_harness.evidence import digest
         p = self.protocol(); self.route(); self.run_probe(); self.assign()
         payload = {'id': 'attempt', 'assignment_id': 'assignment'}
-        revision, mutate, observe, observed = self.store.revision, self.store.mutate, p._observed, []
+        revision, mutate, observe, observed = self.store.revision, self.store.mutate_scoped, p._observed, []
         def capture(*args, **kwargs):
             observed.append(observe(*args, **kwargs))
             return observed[-1]
         def refuse(operation, *args, **kwargs):
-            if operation == 'review.invoke':
-                raise ResearchError('storage_io', 'Finishing write refused')
+            if operation == 'review.call_capture':
+                raise ResearchError('storage_io', 'Capture write refused')
             return mutate(operation, *args, **kwargs)
-        with patch.object(self.store, 'mutate', side_effect=refuse), patch.object(p, '_observed', side_effect=capture), \
+        with patch.object(self.store, 'mutate_scoped', side_effect=refuse), patch.object(p, '_observed', side_effect=capture), \
                 patch('research_harness.review_transport.send_request',
                       return_value=self.response({'verdict': 'unfavorable'})):
             with self.assertRaises(ResearchError):
@@ -509,9 +508,9 @@ class ReviewProtocolTests(LiteratureCase):
         self.assertEqual(caught.exception.code, 'review_invocation_pending')
         self.assertNotIn('attempt', self.records().get('review_attempt', {}))
 
-    def test_exhausted_busy_finish_leaves_the_invocation_pending_without_dispatch(self):
+    def test_exhausted_busy_finish_recovers_the_invocation_without_dispatch(self):
         p = self.protocol(); self.route(); self.run_probe()
-        mutate = self.store.mutate
+        mutate = self.store.mutate_scoped
         for failed in (True, False):
             with self.subTest(failed=failed):
                 # A pending invocation keeps its assignment pending, so each case has its own assignment.
@@ -524,7 +523,7 @@ class ReviewProtocolTests(LiteratureCase):
                         refusals.append(operation)
                         raise ResearchError('store_busy', 'Writer remains busy')
                     return mutate(operation, *args, **kwargs)
-                with patch.object(self.store, 'mutate', side_effect=refuse), \
+                with patch.object(self.store, 'mutate_scoped', side_effect=refuse), \
                         patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001), \
                         patch('research_harness.review_transport.send_request',
                               side_effect=TimeoutError('Original transport failure') if failed else None,
@@ -536,9 +535,8 @@ class ReviewProtocolTests(LiteratureCase):
                 self.assertGreater(len(refusals), 8, 'a finished reviewer call waits longer than other writes')
                 self.assertLessEqual(len(refusals), p._FINISH_ATTEMPT_COUNT)
                 with patch('research_harness.review_transport.send_request', side_effect=AssertionError('Must not resend')):
-                    with self.assertRaises(ResearchError) as pending:
-                        p.invoke_assignment(self.store, payload, expected_revision=revision, request_id=request_id)
-                self.assertEqual(pending.exception.code, 'review_invocation_pending')
+                    result = p.invoke_assignment(self.store, payload, expected_revision=revision, request_id=request_id)
+                self.assertEqual(result['result']['status'], 'failed' if failed else 'completed')
 
     def test_invalid_request_ids_are_refused_before_reserving_or_dispatching(self):
         p = self.protocol(); self.route(); self.run_probe()

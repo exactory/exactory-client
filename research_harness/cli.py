@@ -10,6 +10,8 @@ import time
 from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions,
                 principles, reading, resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
+from . import fulltext_jobs
+from .import_io import read_import_input
 from .check_mode import check_mutation
 from .drafting import find_draft_obligations
 from .errors import ResearchError
@@ -29,6 +31,7 @@ from .publication_scope import record_publication_scope, select_publication_scop
 from .workspace import find_workspace, strict_json
 from . import research_decisions, review_protocol, strategy
 from .depth import record_depth
+from .review_budget import record_budget
 from .probe import record_probe_intent, record_probe, summarize_probes
 from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata
 
@@ -53,6 +56,7 @@ OPERATIONS = {
     "constitution": principles.revalidate_constitution,
     "policy": principles.change_policy,
     "depth": record_depth,
+    "review-budget": record_budget,
     "probe": record_probe,
     "probe-intent": record_probe_intent,
     "roots": graph.set_roots,
@@ -202,7 +206,7 @@ from .publication_files import find_bundle_drift, restore_bundle
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
-ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "import-oai-cohort", "visual")
+ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
 
 
@@ -299,6 +303,11 @@ def build_parser():
         if command == "import-response":
             item.add_argument("--preview", action="store_true",
                               help="Report new DOI-family conflicts without writing the import.")
+    job_status = commands.add_parser("fulltext-status", allow_abbrev=False)
+    job_status.add_argument("--workspace", default=".")
+    job_status.add_argument("--job-id", required=True)
+    job_status.add_argument("--cursor", type=int, default=0)
+    job_status.add_argument("--limit", type=int, default=30)
     for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
                     "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
@@ -330,6 +339,9 @@ def build_parser():
         if command == "batches":
             item.add_argument("--depth", choices=("abstract",), default="abstract")
             item.add_argument("--size", type=int, default=60, help="Items per batch file, 1 to 100.")
+            item.add_argument("--max-input-bytes", type=int, default=262144)
+            item.add_argument("--max-output-tokens", type=int)
+            item.add_argument("--estimated-output-tokens-per-item", type=int)
             item.add_argument("--destination", required=True, help="New directory for batch-NNN.json files.")
             item.add_argument("--profile", choices=("research", "verification"), help="Defaults to the configured profile.")
             item.add_argument("--screen", action="store_true", help="Export the unscreened members for screen-batch instead of unread abstracts.")
@@ -338,6 +350,7 @@ def build_parser():
         if command == "population-query":
             item.add_argument("--terms", nargs="+", required=True, help="Query terms taken from the target statement and the parent's title and abstract.")
             item.add_argument("--limit", type=int, default=30, help="Matches to return, 1 to 100.")
+            item.add_argument("--cursor")
         if command == "policy-report":
             item.add_argument("--policy", choices=principles.POLICIES, help="Report a hypothetical policy instead of the recorded one.")
             item.add_argument("--reference", help="JSON file {prior_art, contradictions, methods, doctrine} of family ids for recall.")
@@ -395,7 +408,7 @@ def build_parser():
     return parser
 
 
-def acquisition_command(store, command, payload, identity, *, preview=False):
+def acquisition_command(store, command, payload, identity, *, preview=False, response_bytes=None):
     if command == "collect":
         fields(payload, ("definition",), ("max_requests", "page_size"))
         return acquisition.collect_cohort(store, **payload, **identity)
@@ -403,7 +416,7 @@ def acquisition_command(store, command, payload, identity, *, preview=False):
         fields(payload, ("collection_id", "pages"))
         return acquisition.import_oai_cohort(store, **payload, **identity)
     if command == "resume":
-        fields(payload, ("collection_id",), ("max_requests",))
+        fields(payload, ("collection_id",), ("max_requests", "recheck"))
         return acquisition.resume_cohort(store, **payload, **identity)
     if command in ("acquire", "expand"):
         fields(payload, ("identifier",), ("provider", "max_requests"))
@@ -413,16 +426,28 @@ def acquisition_command(store, command, payload, identity, *, preview=False):
     if command == "fulltext":
         fields(payload, ("identifier", "url"), ("max_requests", "extraction_options", "component"))
         return acquisition.acquire_fulltext(store, **payload, **identity)
+    if command == "fulltext-start":
+        fields(payload, ("identifier",), ("url", "source_id", "extraction_options", "allowances", "use_ranges"))
+        return fulltext_jobs.start_job(store, **payload, **identity)
+    if command == "fulltext-resume":
+        fields(payload, ("job_id",), ("max_requests", "max_pages", "allowances", "reason"))
+        return fulltext_jobs.resume_job(store, **payload, **identity)
     if command == "visual":
         fields(payload, ("link", "url"), ("max_requests",))
         return visual_assets.acquire_visual_asset(store, **payload, **identity)
     fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
     text(payload["response_file"], "Response file")
     values = dict(payload)
-    values["response"] = Path(values.pop("response_file")).read_bytes()
+    if response_bytes is not None:
+        values.pop("response_file")
+        values["response"] = response_bytes
+        if preview:
+            return acquisition.preview_import_response(store, **values)
+        return acquisition.import_response(store, **values, **identity)
     if preview:
+        values["response"] = read_import_input(values.pop("response_file"), input_kind="response")
         return acquisition.preview_import_response(store, **values)
-    return acquisition.import_response(store, **values, **identity)
+    return acquisition.import_response_file(store, **values, **identity)
 
 
 def _review_status(records, artifacts):
@@ -457,117 +482,140 @@ def _review_status(records, artifacts):
 
 
 def status_report(store, *, counters=False):
+    from .review_state_evaluation import runtime_scope
     started = time.monotonic()
     snapshot = store.snapshot()
-    records = snapshot["records"]
-    evaluation = Evaluation(records, ArtifactStore(store.root))
-    # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
-    advisories = find_view_advisories(store, snapshot["revision"])
-    if "problem" in records.get("workspace", {}):
-        report = gate_state(records, evaluation, "post")
-        if records.get("review_epoch"):
-            report = dict(report, obligations=order_obligations(report["obligations"]))
-        slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
-        # A stale slate decides nothing; its stale obligation leads the report instead.
-        if current_slate is not None and not current_slate["selected"]:
-            upcoming = {"code": "problem_no_post", "reason": current_slate["reason"],
-                        "explanation": "The latest slate selects no candidate; a new slate that selects one reopens the post path."}
-        elif report["obligations"]:
-            upcoming = report["obligations"][0]
-        else:
-            upcoming = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
-        return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
-                    problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
-                    limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
-                    # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
-                    literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
-                    candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
-                    next=upcoming, review=_review_status(records, evaluation), advisories=advisories)
-    config = records.get("configuration", {}).get("research")
-    profile = config["profile"] if config else "research"
-    study = records.get("workspace", {}).get("study")
-    action = "verification" if profile == "verification" else "readiness"
-    from .publication_scope import has_publication_scope
-    scoped_report = gate_state(records, evaluation, "manuscript-readiness") if has_publication_scope(records) else None
-    report = scoped_report if scoped_report is not None and action == "readiness" else gate_state(records, evaluation, action, profile=profile)
-    round_report = None
-    if config is not None and profile == "research":
-        from .rounds import round_state, round_summary
-        round_report = round_state(records, evaluation)
-        if study and study["stage"] == "evaluate":
-            # At evaluate the study is led first through the manuscript measurement, then to the round decision.
-            from .publication import publication_state
-            merged = report["obligations"] + publication_state(records, evaluation, "publication")["obligations"] + round_report["obligations"]
-            obligations = order_obligations({digest(o): o for o in merged}.values())
-            report = dict(report, ready=not obligations, obligations=obligations, counts=dict(report["counts"], obligations=len(obligations)))
-    # Before later gates are applicable, expose the actual next unread cohort
-    # abstract instead of asking for a root or completed development too early.
-    preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
-    from .claim_dependencies import uses_claim_dependencies
-    managed = uses_claim_dependencies(records)
-    if managed:
-        preparation = dict(preparation, advisory=True)
-        milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
-        if milestone is not None:
-            report = gate_state(records, evaluation, milestone, profile=profile)
-    draft_pending = find_draft_obligations(records, store.root)
-    if draft_pending:
-        obligations = report["obligations"] + draft_pending
-        report = dict(report, ready=False, obligations=obligations,
-                      counts=dict(report["counts"], obligations=len(obligations)))
-    # The cohort inventory names the next unread abstract; every other stage
-    # takes the highest-priority current obligation in preparation order.
-    upcoming = preparation.get("next") if not managed and study and study["stage"] == "cohort" else None
-    obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
-    current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
-    tool_status = {}
-    tool_status["bundle_drift"] = find_bundle_drift(records, evaluation) if profile == "research" else None
-    diagnostics = {"evaluation": dict(evaluation.counters,
-                                     elapsed_seconds=round(time.monotonic() - started, 3))} if counters else {}
-    if records.get("probe_intent") or records.get("probe"):
-        tool_status["probes"] = summarize_probes(records)
-    provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
-    if provisional:
-        tool_status["provisional_searches"] = [{"id": search["id"], "question": search["question"], "profile": search["profile"]}
-                                                for search in provisional]
-    scope_status = {}
-    if scoped_report is not None:
-        scope_status = {key: scoped_report[key] for key in ("manuscript_ready", "manuscript_obligations", "objective_complete",
-                                                           "objective_obligations", "scientific_target_digest", "remaining_obligations")}
-        scope_status["scope_contract_id"] = scoped_report["selected_contract_id"]
-        scope_status["historical_publications"] = list_publication_receipts(records)
-        scope_status["historical_submissions"] = list(records.get("submission_receipt", {}).values())
-        if scoped_report["contract"] is not None:
-            flags = ["--managed-only", "--scope-contract-id", scoped_report["contract"]["id"],
-                     "--scope-target-digest", scoped_report["scientific_target_digest"]]
-            scope_status["publication_commands"] = {"deposit": ["exactory-draft", "deposit"] + flags,
-                                                    "submit": ["exactory", "submit"] + flags}
-    return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
-                source_deferrals=assess_deferrals(records, evaluation, profile),
-                deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
-                study=study, preparation=preparation, resources=resources.account_report(records, profile),
-                limits=limits_report(records), **tool_status, **diagnostics, **scope_status,
-                round=round_summary(round_report) if round_report else None,
-                grand_challenge=current_challenge["payload"] if current_challenge else None,
-                next=draft_pending[0] if draft_pending else (
-                    upcoming or (order_obligations(obligations)[0] if obligations else None)),
-                pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
-                remote_intents=list(records.get("remote_intent", {}).values()),
-                remote_observations=list(records.get("remote_observation", {}).values()),
-                historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=_review_status(records, evaluation),
-                advisories=advisories)
+    evaluation = Evaluation(snapshot['records'], ArtifactStore(store.root))
+    with runtime_scope(snapshot['records'], evaluation):
+        records = snapshot["records"]
+        # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
+        advisories = find_view_advisories(store, snapshot["revision"])
+        if "problem" in records.get("workspace", {}):
+            report = gate_state(records, evaluation, "post")
+            if records.get("review_epoch"):
+                report = dict(report, obligations=order_obligations(report["obligations"]))
+            slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
+            # A stale slate decides nothing; its stale obligation leads the report instead.
+            if current_slate is not None and not current_slate["selected"]:
+                upcoming = {"code": "problem_no_post", "reason": current_slate["reason"],
+                            "explanation": "The latest slate selects no candidate; a new slate that selects one reopens the post path."}
+            elif report["obligations"]:
+                upcoming = report["obligations"][0]
+            else:
+                upcoming = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
+            return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
+                        problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
+                        limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
+                        # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
+                        literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
+                        candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
+                        next=upcoming, review=_review_status(records, evaluation), advisories=advisories)
+        config = records.get("configuration", {}).get("research")
+        profile = config["profile"] if config else "research"
+        study = records.get("workspace", {}).get("study")
+        action = "verification" if profile == "verification" else "readiness"
+        from .publication_scope import has_publication_scope
+        scoped_report = gate_state(records, evaluation, "manuscript-readiness") if has_publication_scope(records) else None
+        report = scoped_report if scoped_report is not None and action == "readiness" else gate_state(records, evaluation, action, profile=profile)
+        round_report = None
+        if config is not None and profile == "research":
+            from .rounds import round_state, round_summary
+            round_report = round_state(records, evaluation)
+            if study and study["stage"] == "evaluate":
+                # At evaluate the study is led first through the manuscript measurement, then to the round decision.
+                from .publication import publication_state
+                merged = report["obligations"] + publication_state(records, evaluation, "publication")["obligations"] + round_report["obligations"]
+                obligations = order_obligations({digest(o): o for o in merged}.values())
+                report = dict(report, ready=not obligations, obligations=obligations, counts=dict(report["counts"], obligations=len(obligations)))
+        # Before later gates are applicable, expose the actual next unread cohort
+        # abstract instead of asking for a root or completed development too early.
+        preparation = gate_state(records, evaluation, "cohort" if study and study["stage"] == "cohort" else "preparation", profile=profile)
+        from .claim_dependencies import uses_claim_dependencies
+        managed = uses_claim_dependencies(records)
+        if managed:
+            preparation = dict(preparation, advisory=True)
+            milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
+            if milestone is not None:
+                report = gate_state(records, evaluation, milestone, profile=profile)
+        draft_pending = find_draft_obligations(records, store.root)
+        if draft_pending:
+            obligations = report["obligations"] + draft_pending
+            report = dict(report, ready=False, obligations=obligations,
+                          counts=dict(report["counts"], obligations=len(obligations)))
+        # The cohort inventory names the next unread abstract; every other stage
+        # takes the highest-priority current obligation in preparation order.
+        upcoming = preparation.get("next") if not managed and study and study["stage"] == "cohort" else None
+        obligations = current_obligations({"obligations": report["obligations"], "preparation": preparation})
+        current_challenge = challenge.find_current_challenge(records) if profile == "research" else None
+        tool_status = {}
+        tool_status["bundle_drift"] = find_bundle_drift(records, evaluation) if profile == "research" else None
+        diagnostics = {"evaluation": dict(evaluation.counters,
+                                         elapsed_seconds=round(time.monotonic() - started, 3),
+                                         retention=evaluation.retention_report())} if counters else {}
+        if records.get("probe_intent") or records.get("probe"):
+            tool_status["probes"] = summarize_probes(records)
+        provisional = [search for search in records.get("literature_search", {}).values() if search.get("provisional")]
+        if provisional:
+            tool_status["provisional_searches"] = [{"id": search["id"], "question": search["question"], "profile": search["profile"]}
+                                                    for search in provisional]
+        scope_status = {}
+        if scoped_report is not None:
+            scope_status = {key: scoped_report[key] for key in ("manuscript_ready", "manuscript_obligations", "objective_complete",
+                                                               "objective_obligations", "scientific_target_digest", "remaining_obligations")}
+            scope_status["scope_contract_id"] = scoped_report["selected_contract_id"]
+            scope_status["historical_publications"] = list_publication_receipts(records)
+            scope_status["historical_submissions"] = list(records.get("submission_receipt", {}).values())
+            if scoped_report["contract"] is not None:
+                flags = ["--managed-only", "--scope-contract-id", scoped_report["contract"]["id"],
+                         "--scope-target-digest", scoped_report["scientific_target_digest"]]
+                scope_status["publication_commands"] = {"deposit": ["exactory-draft", "deposit"] + flags,
+                                                        "submit": ["exactory", "submit"] + flags}
+        return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
+                    source_deferrals=assess_deferrals(records, evaluation, profile),
+                    deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
+                    study=study, preparation=preparation, resources=resources.account_report(records, profile),
+                    limits=limits_report(records), **tool_status, **diagnostics, **scope_status,
+                    round=round_summary(round_report) if round_report else None,
+                    grand_challenge=current_challenge["payload"] if current_challenge else None,
+                    next=draft_pending[0] if draft_pending else (
+                        upcoming or (order_obligations(obligations)[0] if obligations else None)),
+                    pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
+                    remote_intents=list(records.get("remote_intent", {}).values()),
+                    remote_observations=list(records.get("remote_observation", {}).values()),
+                    historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=_review_status(records, evaluation),
+                    advisories=advisories)
 
 
-def load_candidates(path):
-    """Read a --candidates file as version ids: a population-query result's matches, or a plain list of ids."""
+def load_candidates(path, *, include_coverage=False):
+    """Read candidate IDs, optionally with the query's coverage for the export manifest."""
     loaded = strict_json(Path(path).read_bytes())
     if isinstance(loaded, dict):
         matches = loaded.get("matches")
         if isinstance(matches, list) and all(isinstance(m, dict) and isinstance(m.get("version_id"), str) for m in matches):
-            return [m["version_id"] for m in matches]
+            versions = [m["version_id"] for m in matches]
+            if not include_coverage:
+                return versions
+            coverage = {"query_coverage": "unknown",
+                        "population_query": {key: value for key, value in loaded.items() if key != "matches"}}
+            keys = ("total_matches", "returned", "offset", "omitted", "remaining")
+            if all(type(loaded.get(key)) is int and loaded[key] >= 0 for key in keys):
+                total, returned, offset, omitted, remaining = (loaded[key] for key in keys)
+                if returned == len(versions) and omitted == total - returned and remaining == total - offset - returned:
+                    coverage["query_coverage"] = "complete" if offset == 0 and omitted == 0 else "partial"
+            return versions, coverage
     elif isinstance(loaded, list) and all(isinstance(item, str) for item in loaded):
-        return loaded
+        return (loaded, {"query_coverage": "unknown", "population_query": None}) if include_coverage else loaded
     raise ResearchError("invalid_input", "The candidates file is a population-query result or a list of version ids")
+
+
+def describe_review_budget_refusal(error):
+    """Attach the same allowance recovery to recording and check-mode refusals."""
+    if error.code == "review_budget_below_charged":
+        error.details = dict(error.details, minimum_max_calls=error.details["charged_calls"],
+                             recovery=["exactory-research", "review-budget", "--file", "FILE",
+                                       "--expected-revision", "CURRENT_REVISION", "--request-id", "NEW_ID"])
+        error.message += "; retry with max_calls at least " + str(error.details["charged_calls"]) + " or null"
+    return error
 
 
 def run(args):
@@ -582,8 +630,18 @@ def run(args):
             and (args.expected_revision is None or args.request_id is None)):
         raise ResearchError("invalid_input", "An import requires --expected-revision and --request-id")
     root = Path(args.workspace).absolute()
+    response_bytes = None
     if args.command in OPERATIONS or args.command in ACQUISITION:
-        payload = strict_json(Path(args.file).read_bytes())
+        if args.command == "import-response":
+            existing = find_workspace(root, required=False)
+            original = (Store(existing).committed_request(args.request_id)
+                        if not preview and existing is not None and args.request_id else None)
+            if original is not None and original["operation"] != "response.import":
+                raise ResearchError("request_id_conflict", "Request ID was committed for another operation")
+            raw = Path(args.file).read_bytes() if original is not None else read_import_input(args.file, input_kind="payload")
+            payload = strict_json(raw)
+        else:
+            payload = strict_json(Path(args.file).read_bytes())
         bounded_payload = (review_protocol.drop_repeated_bundle(payload)
                            if args.command == "review-assignment" else payload)
         if getattr(args, "check", False):
@@ -598,9 +656,14 @@ def run(args):
                 def replay_reconciliation(store, value, **identity):
                     return record_reconciliation(store, value, None, **identity)
                 replay = replay_reconciliation
-            return check_mutation(Store(find_workspace(root)), operation, payload,
-                                  expected_revision=args.expected_revision, request_id=args.request_id,
-                                  bounded_payload=bounded_payload, replay=replay)
+            try:
+                return check_mutation(Store(find_workspace(root)), operation, payload,
+                                      expected_revision=args.expected_revision, request_id=args.request_id,
+                                      bounded_payload=bounded_payload, replay=replay)
+            except ResearchError as error:
+                if args.command == "review-budget":
+                    describe_review_budget_refusal(error)
+                raise
         try:
             # A paper review assignment repeats a stored bundle, which the store bounds already hold.
             check_command_bounds(bounded_payload)
@@ -614,6 +677,10 @@ def run(args):
             if (existing_workspace is None or not (existing_workspace / ".exactory/research.sqlite3").exists()
                     or Store(existing_workspace).committed_request(args.request_id) is None):
                 raise
+    if args.command == "import-response" and original is None:
+        fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
+        text(payload["response_file"], "Response file")
+        response_bytes = read_import_input(payload["response_file"], input_kind="response")
     if args.command in ("init", "adopt", "problem-init"):
         root = find_workspace(root, required=False) or root
         store = Store(root, create=True)
@@ -638,21 +705,30 @@ def run(args):
     if args.command in OPERATIONS or args.command in ACQUISITION:
         identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
         if args.command in OPERATIONS:
-            return OPERATIONS[args.command](store, payload, **identity)
-        return acquisition_command(store, args.command, payload, identity, preview=preview)
+            try:
+                return OPERATIONS[args.command](store, payload, **identity)
+            except ResearchError as error:
+                if args.command == "review-budget":
+                    describe_review_budget_refusal(error)
+                raise
+        return acquisition_command(store, args.command, payload, identity, preview=preview, response_bytes=response_bytes)
+    if args.command == "fulltext-status":
+        return fulltext_jobs.read_job_status(store, args.job_id, cursor=args.cursor, limit=args.limit)
     if args.command in ("research-decision-assess", "strategy-packet", "review-route-assess"):
         snapshot = store.snapshot()
         artifacts = Evaluation(snapshot["records"], ArtifactStore(root))
-        if args.command == "research-decision-assess":
-            return dict(research_decisions.decision_state(snapshot["records"], artifacts, args.boundary,
-                                                         decision_id=args.decision_id), revision=snapshot["revision"])
-        if args.command == "review-route-assess":
-            return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id), revision=snapshot["revision"])
-        context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
-        if not isinstance(context, dict):
-            raise ResearchError("invalid_input", "Reviewer context must be a JSON object")
-        return review_protocol.build_packet(snapshot["records"], artifacts, args.dossier_id, args.role,
-                                            args.reviewer_id, **context)
+        from .review_state_evaluation import runtime_scope
+        with runtime_scope(snapshot["records"], artifacts):
+            if args.command == "research-decision-assess":
+                return dict(research_decisions.decision_state(snapshot["records"], artifacts, args.boundary,
+                                                             decision_id=args.decision_id), revision=snapshot["revision"])
+            if args.command == "review-route-assess":
+                return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id), revision=snapshot["revision"])
+            context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
+            if not isinstance(context, dict):
+                raise ResearchError("invalid_input", "Reviewer context must be a JSON object")
+            return review_protocol.build_packet(snapshot["records"], artifacts, args.dossier_id, args.role,
+                                                args.reviewer_id, **context)
     if args.command in ("status", "next"):
         report = status_report(store, counters=args.summary or args.counters)
         if args.summary:
@@ -671,11 +747,44 @@ def run(args):
         from .batches import export_batches
         if args.candidates and not args.loop:
             raise ResearchError("invalid_input", "--candidates needs --loop")
-        return export_batches(store, depth=args.depth, size=args.size, destination=args.destination, profile=args.profile,
-                              screen=args.screen, loop=args.loop,
-                              candidates=load_candidates(args.candidates) if args.candidates else ())
+        if (args.max_output_tokens is None) != (args.estimated_output_tokens_per_item is None):
+            raise ResearchError("invalid_input", "Supply --max-output-tokens and --estimated-output-tokens-per-item together")
+        candidates, coverage = load_candidates(args.candidates, include_coverage=True) if args.candidates else ((), None)
+        destination = Path(args.destination).absolute()
+        try:
+            return export_batches(store, depth=args.depth, size=args.size, destination=destination, profile=args.profile,
+                                  screen=args.screen, loop=args.loop, candidates=candidates,
+                                  max_input_bytes=args.max_input_bytes, max_output_tokens=args.max_output_tokens,
+                                  estimated_output_tokens_per_item=args.estimated_output_tokens_per_item,
+                                  candidate_coverage=coverage)
+        except ResearchError as error:
+            if error.code in ("batch_item_too_large", "batch_output_budget_too_small"):
+                parameters = (error.details.get("parameters", {}) if error.code == "batch_item_too_large" else
+                              {"max_output_tokens": args.estimated_output_tokens_per_item})
+                recovery = ["exactory-research", "batches", "--workspace", str(root), "--destination", "NEW_DIRECTORY",
+                            "--size", str(parameters.get("size", args.size)), "--max-input-bytes",
+                            str(parameters.get("max_input_bytes", args.max_input_bytes))]
+                if args.max_output_tokens is not None:
+                    recovery.extend(["--max-output-tokens", str(parameters.get("max_output_tokens", args.max_output_tokens)),
+                                     "--estimated-output-tokens-per-item", str(args.estimated_output_tokens_per_item)])
+                for option in ("profile", "candidates"):
+                    if getattr(args, option):
+                        recovery.extend(["--" + option, getattr(args, option)])
+                for option in ("screen", "loop"):
+                    if getattr(args, option):
+                        recovery.append("--" + option)
+                error.details = dict(error.details, recovery=recovery)
+                if error.code == "batch_item_too_large":
+                    error.details["manifest"] = str(destination / "manifest.json")
+            raise
     if args.command == "population-query":
-        return lineage.population_query(store, args.terms, limit=args.limit)
+        try:
+            return lineage.population_query(store, args.terms, limit=args.limit, cursor=args.cursor)
+        except ResearchError as error:
+            if error.code in ("stale_cursor", "invalid_input"):
+                error.details = dict(error.details or {}, recovery=["exactory-research", "population-query",
+                                                                   "--workspace", str(root), "--terms", *args.terms])
+            raise
     if args.command == "policy-report":
         reference = strict_json(Path(args.reference).read_bytes()) if args.reference else None
         return screening.policy_report(store, policy=args.policy, reference=reference)

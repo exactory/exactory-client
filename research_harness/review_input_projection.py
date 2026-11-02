@@ -45,24 +45,52 @@ def find_attachment(attached, reference):
     return None
 
 
-def _require_problem_packet(packet):
+def _require_review_packet(packet, assignments=None):
     """A packet label cannot stand in for a native scientific review identity."""
     subject = packet.get('subject') if isinstance(packet, dict) else None
     identifier = packet.get('digest') if isinstance(packet, dict) else None
     valid = (isinstance(packet, dict)
-             and packet.get('protocol') in ('exactory-problem-review-v1', 'exactory-problem-review-v2')
-             and packet.get('role') in ('bar', 'slate', 'result')
              and isinstance(packet.get('reviewer_id'), str) and bool(packet['reviewer_id'].strip())
-             and 'dossier_id' in packet and packet['dossier_id'] is None
-             and isinstance(subject, dict) and set(subject) == {'kind', 'statement_id'}
-             and subject['kind'] == 'problem'
-             and (isinstance(subject['statement_id'], str) or subject['statement_id'] is None)
-             and (packet['role'] != 'result' or bool(subject['statement_id']))
              and isinstance(identifier, str) and len(identifier) == 64
              and all(character in '0123456789abcdef' for character in identifier)
              and isinstance(packet.get('evidence', []), list))
+    if valid:
+        protocol, role = packet.get('protocol'), packet.get('role')
+        problem = (protocol in ('exactory-problem-review-v1', 'exactory-problem-review-v2')
+                   and 'dossier_id' in packet and packet['dossier_id'] is None
+                   and isinstance(subject, dict) and set(subject) == {'kind', 'statement_id'}
+                   and subject['kind'] == 'problem'
+                   and (isinstance(subject['statement_id'], str) or subject['statement_id'] is None)
+                   and (role != 'result' or bool(subject['statement_id'])))
+        study = (protocol in ('exactory-independent-review-v1', 'exactory-independent-review-sources-v2')
+                 and isinstance(packet.get('dossier_id'), str) and bool(packet['dossier_id'].strip())
+                 and 'subject' not in packet)
+        valid = (problem or study) and role in ('bar', 'slate', 'result', 'adjudicator')
+        if role == 'adjudicator':
+            assessments, objection = packet.get('assessments'), packet.get('objection')
+            valid = (valid and protocol != 'exactory-independent-review-sources-v2'
+                     and isinstance(assessments, list) and len(assessments) >= 2
+                     and all(isinstance(row, dict) and isinstance(row.get('id'), str) and row['id'].strip()
+                             for row in assessments)
+                     and len({row['id'] for row in assessments}) == len(assessments)
+                     and isinstance(objection, dict) and isinstance(objection.get('id'), str)
+                     and bool(objection['id'].strip()))
+    if valid and assignments is not None:
+        from .review_context_repair import is_same_subject
+        bound = [assignment for assignment in assignments
+                 if packet['digest'] == assignment.get('packet_digest')
+                 and all(packet.get(key) == assignment.get(key)
+                         for key in ('role', 'reviewer_id', 'dossier_id'))
+                 and (assignment.get('subject') is None or isinstance(assignment['subject'], dict))
+                 and is_same_subject(packet, assignment)]
+        if packet['role'] == 'adjudicator':
+            bound = [assignment for assignment in bound
+                     if packet['objection']['id'] == assignment.get('context', {}).get('objection_id')
+                     and [row['id'] for row in packet['assessments'][:2]]
+                     == assignment.get('context', {}).get('review_ids')]
+        valid = bool(bound)
     if not valid:
-        raise ResearchError('review_input_unreadable', 'Use a native problem review packet with its exact identity')
+        raise ResearchError('review_input_unreadable', 'Use a native review packet with its exact bound identity')
 
 
 def project_evidence(packet, attached):
@@ -107,7 +135,7 @@ def project_evidence(packet, attached):
             entry['delivery'] = 'bytes-absent-from-actual-native-input'
 
 
-def packets_from_request(request, *, native_attachments=False):
+def packets_from_request(request, *, native_attachments=False, assignments=None):
     """Decode exact logical input without consulting saved packets or local source bytes.
 
     A descriptor or base64 string inside JSON does not establish a native file
@@ -132,7 +160,7 @@ def packets_from_request(request, *, native_attachments=False):
         if set(packet) == {'delivery', 'packet_digest', 'history_delivery', 'note'} and packet['delivery'] == 'packet-elided-route-limit':
             # An earlier turn that the route limit reduced to its packet digest delivers nothing at this position.
             continue
-        _require_problem_packet(packet)
+        _require_review_packet(packet, assignments)
         # A native compaction marker delivers no content at this position.
         # Only an actual later packet can supply the omitted part.
         repeated = {'delivery': 'repeated-in-the-current-packet', 'note': transport.REPEATED_PART_NOTE}
@@ -143,14 +171,14 @@ def packets_from_request(request, *, native_attachments=False):
     return packets
 
 
-def packets_from_visual_request(request):
+def packets_from_visual_request(request, *, assignments=None):
     """Restore only PNG bytes explicitly attached to this exact visual invocation."""
     from .review_visual_inputs import project_request
     actual = project_request(request)
     images = {entry['artifact']['sha256']: entry for entry in actual['images']}
     packets = []
     for index, message in enumerate(actual['messages']):
-        visible = packets_from_request({'input': [message]})
+        visible = packets_from_request({'input': [message]}, assignments=assignments)
         allowed = actual['packet_images'].get(index, ())
         for packet in visible:
             for entry in packet.get('evidence', []):

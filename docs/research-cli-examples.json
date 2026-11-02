@@ -3905,6 +3905,10 @@
       "wall_seconds": null
     }
   },
+  "review-budget": {
+    "max_calls": 20,
+    "reason": "Bound cumulative review calls."
+  },
   "budget": {
     "profile": "research",
     "purpose": "literature",
@@ -4542,5 +4546,23 @@
     "exit_status": 0,
     "elapsed_seconds": 0.25,
     "observation": "The finite example fit; this remains exploratory."
+  },
+  "fulltext-start": {
+    "identifier": "arxiv:2601.00001v1",
+    "url": "https://arxiv.org/pdf/2601.00001v1",
+    "allowances": {
+      "original_bytes": 536870912,
+      "retained_bytes": 4294967296,
+      "text_bytes": 268435456,
+      "network_attempts": 100,
+      "invocation_seconds": 120,
+      "pages_per_resume": 20,
+      "range_bytes": 8388608
+    }
+  },
+  "fulltext-resume": {
+    "job_id": "fulltext:JOB_DIGEST",
+    "max_requests": 2,
+    "max_pages": 10
   }
 }

@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
+from research_harness.review_bodies import read_history
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
@@ -20,7 +21,7 @@ class AssignmentPreparationEvaluationTests(ResultPartsCase):
         assignment = self.assign('native-dispatch')
         output = self.case.build_review_output('result')
         snapshot = self.case.store.snapshot
-        prepare = protocol.prepared_mutation
+        prepare = protocol.prepared_task_mutation
         started = {'committed': False}
         def read_after_start():
             if not started['committed']:
@@ -32,7 +33,7 @@ class AssignmentPreparationEvaluationTests(ResultPartsCase):
                 started['committed'] = True
             return result
         with patch.object(self.case.store, 'snapshot', side_effect=read_after_start), \
-                patch.object(protocol, 'prepared_mutation', side_effect=prepare_and_observe_start):
+                patch.object(protocol, 'prepared_task_mutation', side_effect=prepare_and_observe_start):
             invoked = self.invoke(assignment, output=output)
         self.assertEqual(invoked['result']['status'], 'completed')
         saved = self.case.read_records()['review_attempt']['attempt-native-dispatch']
@@ -119,6 +120,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
 
     def test_changing_input_history_does_not_change_the_memoized_request(self):
         self.records['review_attempt'] = {}
+        self.assignment.pop('history_ref', None)
         self.assignment['history'] = [
             {'role': 'user', 'content': 'An earlier supplied question.'},
             {'role': 'assistant', 'content': 'An earlier canonical assessment.'}]
@@ -135,7 +137,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
         recorded = json.loads(self.case.artifacts.read(attempt['request']))
         packet = json.loads(self.case.artifacts.read(self.assignment['packet']))
         rebuilt = next(transport.list_built_requests(self.records['review_route'][self.assignment['route_id']],
-                       self.assignment['prompt']['text'], packet, self.assignment.get('history', ())))
+                       self.assignment['prompt']['text'], packet, read_history(self.case.artifacts, self.assignment)))
         request = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
         self.assertEqual(request, recorded)
         self.assertEqual(request, rebuilt)
@@ -219,7 +221,7 @@ class VisualAssignmentRequestTests(unittest.TestCase):
                 source.write_bytes(original + b'\n# A changed native emitter implementation.\n')
                 with self.assertRaises(ResearchError) as direct_failure:
                     next(transport.list_built_requests(route, self.assignment['prompt']['text'], packet,
-                                                       self.assignment.get('history', ())))
+                                                       read_history(self.fixture.artifacts, self.assignment)))
                 self.assertEqual(direct_failure.exception.code, 'review_visual_repair_mismatch')
                 with self.assertRaises(ResearchError) as failure:
                     protocol.build_assignment_request(self.records, self.evaluation, self.assignment)

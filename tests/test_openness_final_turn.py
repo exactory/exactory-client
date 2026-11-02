@@ -62,7 +62,8 @@ class FinalTurnCase(OpennessReadingCase):
 
     def measure(self, packet):
         """The input characters of a packet's request as the Codex route measures them."""
-        prompt = protocol.canonical_prompt('native_math', reading_stage=openness_reading.find_stage(packet))['text']
+        prompt = protocol.canonical_prompt('native_math', reading_stage=openness_reading.find_stage(packet),
+                                           reading_protocol=openness_reading.find_protocol(packet))['text']
         return len(codex.packet_text(transport.request_body(self.read_route(), prompt, packet)))
 
     def run_chain(self, native_packet, respond, turn_count=30, stop_before_final=False):
@@ -137,7 +138,7 @@ class RecordUnitTests(FinalTurnCase):
                                      (1, 1, 0, len(content), len(content)))
         final = turns[-1]
         record = self.read_packet(final)['reading_record']
-        self.assertEqual(record['protocol'], openness_reading.PROTOCOL)
+        self.assertEqual(record['protocol'], openness_reading.PROTOCOL_V4)
         names = ([self.unit_identity(version) for version in self.versions]
                  + [{'kind': 'record', 'record_kind': kind, 'record_id': identifier}
                     for kind, identifier in self.list_record_names()])
@@ -341,12 +342,12 @@ class ContinuedChainTests(FinalTurnCase):
         turns = self.continue_chain(native_packet, turns, lambda packet, number: self.build_reading_response(packet))
         records = self.store.snapshot()['records']
         next_turn = records['review_assignment'][turns[2]]
-        self.assertEqual(next_turn['prompt']['template_id'], openness_reading.PROTOCOL + '/reading')
+        self.assertEqual(next_turn['prompt']['template_id'], openness_reading.PROTOCOL_V4 + '/reading')
         self.assertEqual([(row['kind'], row['record_kind'], row['record_id'])
                           for row in self.list_delivered(turns[2:])],
                          [('record',) + name for name in self.list_record_names()])
         record = self.read_packet(turns[2])['reading_turn']['reading_record']
-        self.assertEqual(record['protocol'], openness_reading.PROTOCOL)
+        self.assertEqual(record['protocol'], openness_reading.PROTOCOL_V4)
         self.assertEqual([turn['delivered_units'] for turn in record['turns']],
                          [[self.unit_identity(version) for version in self.versions[:2]],
                           [self.unit_identity(self.versions[2])]])
@@ -359,7 +360,7 @@ class ContinuedChainTests(FinalTurnCase):
             self.assertTrue(state['ready'], state['obligations'])
         final = turns[-1]
         self.assertEqual(records['review_assignment'][final]['prompt']['template_id'],
-                         openness_reading.PROTOCOL + '/final')
+                         openness_reading.PROTOCOL_V4 + '/final')
         self.invoke(final, self.build_native_result(self.read_packet(final)))
         saved = self.record_openness(final)
         self.assertEqual(saved['reading_turns'][:2], [
@@ -580,7 +581,7 @@ class ReadingPromptTests(unittest.TestCase):
         self.assertEqual(openness_reading.PROTOCOL, 'exactory-openness-reading-v3')
         self.assertEqual(sorted(openness_reading.PROMPTS),
                          sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2, openness_reading.PROTOCOL,
-                                 openness_reading.MATH_PROTOCOL]))
+                                 openness_reading.PROTOCOL_V4, openness_reading.MATH_PROTOCOL]))
         for stage in openness_reading.STAGES:
             prompt = protocol.canonical_prompt('native_math', reading_stage=stage)
             self.assertEqual(prompt['template_id'], openness_reading.PROTOCOL + '/' + stage)

@@ -2,7 +2,6 @@
 
 import copy
 import json
-import os
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
@@ -123,7 +122,7 @@ def _prepare_packet(records, artifacts, assignment_id):
     for index in changed:
         diagnostic_copy['reassessment']['findings'][index]['disposition'] = 'revised'
     # This copy is only an admission test. It is never saved as a reviewer output.
-    validate_review_contract(records, artifacts, assignment, diagnostic_copy)
+    validate_review_contract(records, artifacts, assignment, diagnostic_copy, attempt=latest)
     diagnostic = {'assignment_id': assignment_id, 'attempt_id': latest['id'],
         'original_output_sha256': latest['output']['sha256'], 'original_output_digest': digest(output),
         'original_request_digest': latest['request_digest'], 'reviewer_id': assignment['reviewer_id'],
@@ -157,7 +156,10 @@ def validate_output(records, artifacts, assignment, packet, output):
             raise ResearchError('review_correction_invalid', 'Correct only the diagnosed findings in their original order.')
         text(actual['reason'], 'Correction reason', code='review_correction_invalid')
         expected['reassessment']['findings'][finding['index']].update(disposition='revised', reason=actual['reason'])
-    validate_review_contract(records, artifacts, assignment, expected)
+    attempt = records.get('review_attempt', {}).get(packet['diagnostic']['attempt_id'])
+    if attempt is None:
+        raise ResearchError('review_invocation_unverified', 'The correction must retain its original scientific attempt.')
+    validate_review_contract(records, artifacts, assignment, expected, attempt=attempt)
     return expected
 
 
@@ -206,23 +208,27 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
         assignment = records['review_assignment'][value['assignment_id']]
         route = _route(records, evaluation, assignment, value['route_id'])
         request = transport.request_body(route, PROMPT, packet)
+        from . import review_preflight
+        preflight = review_preflight.check_request(
+            review_preflight.build_report(records, evaluation, route, assignment['role'], PROMPT, packet, request),
+            request, correction_packet=packet)
         invocation = dict(value, protocol=PROTOCOL, diagnostic=packet['diagnostic'], packet_digest=digest(packet),
+            preflight=preflight,
             prompt_hash=digest(PROMPT), route_digest=digest(route), request=protocol._put_json(artifacts, request),
             recorded_revision=expected_revision + 1)
         return [immutable_record(records, 'review_output_correction_invocation', value['id'], invocation)], invocation
 
     def finish(records, value, invocation, observation, revision):
         result = dict(observation, **value, origin='instrumented', invocation_id=invocation['id'],
+                      preflight=invocation['preflight'],
                       protocol=PROTOCOL, diagnostic=invocation['diagnostic'],
                       recorded_revision=revision, correction_status='failed', correction_error=None,
                       corrected_output=None, composition='original-output-plus-observed-metadata-delta')
         if observation['status'] == 'completed':
             try:
-                if records['review_route'][invocation['route_id']]['adapter'] == 'codex_cli_v1':
-                    from . import review_codex_transport as codex
-                    response = protocol._read_json(artifacts, observation['response'])
-                    events = codex._rollout(response['id'], codex.clean_environment(os.environ))
-                    result['native_rollout'] = protocol._put_json(artifacts, events)
+                if observation.get('native_rollout_error') is not None:
+                    error = observation['native_rollout_error']
+                    raise ResearchError(error['code'], error['reason'])
                 evaluation = Evaluation.of(records, artifacts)
                 assignment, packet, output = _authenticate_observation(records, evaluation, invocation, result)
                 if set(output) == {'correction', 'reason'} and output['correction'] == 'declined':

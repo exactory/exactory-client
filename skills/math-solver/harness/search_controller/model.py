@@ -31,6 +31,7 @@ def service_operation(state, payload):
         "adopt": {"legacy_imported", "legacy_import_version_recorded", "adoption_allowance_recorded"},
         "review": {"review_recorded"}, "admit": {"proposal_admitted"},
         "checkpoint": {"checkpoint_recorded", "node_facts_recorded"}, "accept": {"result_accepted", "node_facts_recorded"},
+        "refresh": {"node_facts_recorded"},
         "complete": {"objective_completed"}, "audit": {"evidence_invalidated"},
         "retreat": {"node_retreated"}, "replan": {"replan_recorded"},
         "focus": {"control_recorded", "discovery_recorded"}, "pause": {"control_recorded"},
@@ -97,6 +98,11 @@ def initial_state(contract, objective_id):
 
 
 def apply_event(state, event):
+    return _reduce_event(copy.deepcopy(state), event)
+
+
+def _reduce_event(state, event):
+    """Validate and reduce an event into state owned exclusively by the caller."""
     s.canonical_bytes(event)
     s.closed(event, "sequence request_id kind payload")
     s.integer(event["sequence"], 1)
@@ -109,11 +115,10 @@ def apply_event(state, event):
     s.require(event["sequence"] == state["revision"] + 1, "Events must have contiguous sequence numbers", "revision_conflict")
     s.require(event["request_id"] not in state["requests"], "Event request ID is already recorded", "request_conflict")
     s.require(event["kind"] in EVENT_HANDLERS, "Unknown or unavailable event kind", "unknown_event")
-    result = copy.deepcopy(state)
-    EVENT_HANDLERS[event["kind"]](result, copy.deepcopy(event["payload"]))
-    result["revision"] = event["sequence"]
-    result["requests"][event["request_id"]] = s.digest(event)
-    return result
+    EVENT_HANDLERS[event["kind"]](state, copy.deepcopy(event["payload"]))
+    state["revision"] = event["sequence"]
+    state["requests"][event["request_id"]] = s.digest(event)
+    return state
 
 
 def replay(document):
@@ -123,5 +128,5 @@ def replay(document):
     s.records(document["events"])
     state = initial_state(document["contract"], document["objective_id"])
     for event in document["events"]:
-        state = apply_event(state, event)
+        _reduce_event(state, event)
     return state

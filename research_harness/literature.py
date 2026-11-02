@@ -260,9 +260,15 @@ def _search_response(records, artifacts, response, scope):
         if len(imports) != 1:
             raise ResearchError("invalid_search", "Import the original tool response and result mappings first")
         imported = imports[0]
-        pointers = {m["id"] for m in imported["mappings"]}
         prefix = response["results_pointer"].rstrip("/") + "/"
-        if len(imported["mappings"]) != len(raw) or any(not any(p.startswith(prefix + str(i) + "/") for p in pointers) for i in range(len(raw))):
+        covered = set()
+        for mapping in imported["mappings"]:
+            pointer = mapping["id"]
+            if pointer.startswith(prefix):
+                index, separator, _ = pointer[len(prefix):].partition("/")
+                if separator:
+                    covered.add(index)
+        if len(imported["mappings"]) != len(raw) or covered != {str(i) for i in range(len(raw))}:
             raise ResearchError("invalid_search", "Preserve an explicit imported work mapping for every returned result")
         found, pending = imported["work_ids"], list(imported["failures"])
     else:
@@ -527,12 +533,7 @@ def record_search(store, payload, *, expected_revision, request_id):
             if overrides is not None and not isinstance(overrides, dict):
                 raise ResearchError("invalid_input", "Depth overrides must map supported amounts to positive integers")
             overrides = dict(overrides or {}, hits_per_query=value["hits_per_query"])
-        depth_records = records
-        if value["profile"] == "verification":
-            configured = records.get("configuration", {})
-            depth_records = dict(records, configuration=dict(configured, research=dict(
-                configured.get("research", {}), profile="verification")))
-        effective = resolve_depth_values(depth_records, overrides, keys=("hits_per_query",))
+        effective = resolve_depth_values(records, overrides, keys=("hits_per_query",), profile=value["profile"])
         amount = effective["hits_per_query"]
         bounded = preparation_policy(records) in (LINEAGE, SAMPLED)
         for response in value["responses"]:
