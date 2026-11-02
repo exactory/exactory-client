@@ -3048,35 +3048,47 @@ def adjudication_state(records, artifacts, adjudication_id):
 
 def usage_report(records, dossier_id=None):
     """Count every started call; unknown usage never becomes a measured zero."""
+    from .review_budget import collect_charge_inventory, read_budget_usage
+    from .review_task_execution import read_call_kinds
     metrics = ('input_tokens', 'output_tokens', 'cost_usd', 'wall_seconds')
     observed, unknown = {k: 0 for k in metrics}, {k: 0 for k in metrics}
     calls, pending, failed = [], 0, 0
-    if dossier_id is None:
-        for identifier, start in records.get('review_probe_invocation', {}).items():
-            calls.append((identifier, records.get('review_route_probe', {}).get(identifier)))
-    starts = dict(records.get('review_invocation', {}))
-    for identifier, attempt in records.get('review_attempt', {}).items():
-        starts.setdefault(identifier, attempt)
-    for identifier, start in starts.items():
-        assignment = records.get('review_assignment', {}).get(start['assignment_id'], {})
-        if dossier_id is not None and assignment.get('dossier_id') != dossier_id:
-            continue
-        calls.append((identifier, records.get('review_attempt', {}).get(identifier)))
-    for identifier, start in records.get('review_output_correction_invocation', {}).items():
-        assignment = records.get('review_assignment', {}).get(start['assignment_id'], {})
-        if dossier_id is None or assignment.get('dossier_id') == dossier_id:
-            calls.append((identifier, records.get('review_output_correction', {}).get(identifier)))
+    staged_attempts = {row['reservation_id']: row for row in records.get('review_attempt', {}).values()
+                       if row.get('reservation_id')}
+    for operation, identifier in collect_charge_inventory(records):
+        if operation == 'review.task_reserve':
+            reservation = records.get('review_reservation', {}).get(identifier, {})
+            capture = records.get('review_observation', {}).get(identifier, {})
+            result = staged_attempts.get(identifier) or capture.get('observation')
+            epoch = records.get('review_epoch', {}).get(reservation.get('epoch_id'), {})
+            assignment_id = (staged_attempts.get(identifier) or {}).get('assignment_id', epoch.get('controller_assignment_id'))
+            if result is None and reservation.get('state') in ('unknown', 'known_failure'):
+                result = {'status': 'failed'}
+        else:
+            invocation_kind, completion_kind = read_call_kinds(operation)
+            result = records.get(completion_kind, {}).get(identifier)
+            if operation == 'review.invoke' and result is not None and result.get('reservation_id'):
+                result = None
+            start = records.get(invocation_kind, {}).get(identifier) or result or {}
+            assignment_id = start.get('assignment_id')
+        if dossier_id is not None:
+            assignment = records.get('review_assignment', {}).get(assignment_id, {})
+            if operation == 'review.route_probe' or assignment.get('dossier_id') != dossier_id:
+                continue
+        calls.append((identifier, result))
     for _, result in calls:
         if result is None:
             pending += 1
         elif result['status'] != 'completed':
             failed += 1
+        usage = (result or {}).get('usage')
         for metric in metrics:
-            amount = (result or {}).get('usage', {}).get(metric)
+            amount = usage.get(metric) if isinstance(usage, dict) else None
             if type(amount) in (int, float) and amount >= 0:
                 observed[metric] += amount
             else:
                 unknown[metric] += 1
-    return {'calls': len(calls), 'pending_calls': pending, 'failed_calls': failed,
+    return {'review_budget': read_budget_usage(records),
+            'calls': len(calls), 'pending_calls': pending, 'failed_calls': failed,
             'observed': observed, 'unknown': unknown, 'call_ids': [identifier for identifier, _ in calls],
             'scope': 'all review calls including shared route probes' if dossier_id is None else 'dossier calls excluding shared route probes'}
