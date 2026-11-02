@@ -6,6 +6,7 @@ import json
 from strategy_fixtures import StrategyCase
 import test_research_bar_sources as source_fixtures
 import test_research_repair_source_pending as repair_fixtures
+from research_harness.review_bodies import read_history
 from research_harness import reading, review_protocol
 
 
@@ -50,7 +51,7 @@ class RepairSuppliedEvidenceTests(StrategyCase):
         delivered = [part['image_url'] for message in observed['input'] if isinstance(message['content'], list)
                      for part in message['content'] if part['type'] == 'input_image']
         self.assertEqual(delivered, ['data:image/png;base64,' + base64.b64encode(self.artifacts.read(image)).decode()])
-        self.assertEqual(records['review_assignment']['repair']['history'], [])
+        self.assertEqual(read_history(self.artifacts, records['review_assignment']['repair']), [])
         self.assertIn(image, [entry['artifact'] for entry in self.packet('repair')['evidence']])
 
     def test_exact_prior_excerpt_is_redelivered_without_unsupplied_original_tail(self):

@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import test_research_problem_reviews as fixtures
 from problem_parts_fixtures import KEY as PARTS_KEY, ResultPartsCase
+from research_harness.review_bodies import read_history
 from research_harness import direction_reviews, review_protocol as protocol
 from research_harness import research_decisions as decisions, review_transport as transport
 from research_harness.errors import ResearchError
@@ -89,8 +90,8 @@ class ProblemResultContractTests(unittest.TestCase):
         for key in ('route_id', 'reviewer_id', 'author_id', 'session_id', 'slot_id', 'subject'):
             self.assertEqual(successor[key], prior[key])
         self.assertEqual(successor['history_assignment_id'], prior['id'])
-        self.assertEqual(successor['history'][:-1], transport.logical_messages(request))
-        self.assertEqual(successor['history'][-1], {'role': 'assistant', 'content': json.dumps(output, sort_keys=True)})
+        self.assertEqual(read_history(self.case.artifacts, successor)[:-1], transport.logical_messages(request))
+        self.assertEqual(read_history(self.case.artifacts, successor)[-1], {'role': 'assistant', 'content': json.dumps(output, sort_keys=True)})
         packet = json.loads(case.artifacts.read(successor['packet']))
         refresh = packet['problem_refresh']
         self.assertEqual(refresh['reason'], 'prompt_contract_changed')

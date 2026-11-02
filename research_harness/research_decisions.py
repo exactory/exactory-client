@@ -12,6 +12,7 @@ from functools import partial
 from .artifacts import ArtifactStore
 from .claim_dependencies import verify_record_dependency
 from .errors import ResearchError, describe_error_at
+from .review_bodies import read_history
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, strings, text
@@ -359,7 +360,7 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     elif visual:
         from . import review_transport
         from .review_input_projection import packets_from_visual_request
-        request = review_transport.request_body(route, assignment['prompt']['text'], frozen, assignment.get('history', ()))
+        request = review_transport.request_body(route, assignment['prompt']['text'], frozen, read_history(artifacts, assignment))
         # Attempt authentication independently requires these exact request bytes.
         # Avoid assignment_state here: its refusal classifier invokes this validator.
         packets = list(reversed(packets_from_visual_request(request)))

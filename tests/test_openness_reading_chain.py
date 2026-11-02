@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch
 
 from openness_reading_fixtures import OpennessReadingCase, build_theorem
+from research_harness.review_bodies import read_history
 from research_harness import openness_reading, review_excerpts, review_protocol as protocol
 from research_harness import review_transport as transport
 from research_harness import review_codex_transport as codex
@@ -30,7 +31,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.limit_input()
         assignment = self.assign('turn-1', self.export())
         self.assertEqual(assignment['reading_chain'], {'first_assignment_id': 'turn-1', 'turn': 1})
-        self.assertEqual((assignment['history'], assignment['session_id']), ([], 'turn-1'))
+        self.assertEqual((read_history(self.artifacts, assignment), assignment['session_id']), ([], 'turn-1'))
         self.assertEqual(assignment['prompt']['template_id'], openness_reading.PROTOCOL_V4 + '/reading')
         self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', reading_stage='reading',
                                                                   reading_protocol=openness_reading.PROTOCOL_V4))

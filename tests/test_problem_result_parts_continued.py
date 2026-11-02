@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
+from research_harness.review_bodies import read_history
 from research_harness import review_problem_parts as parts, review_protocol as protocol
 from research_harness import review_excerpts, review_transport as transport
 from research_harness import research_decisions as decisions, review_supplied_evidence as supplied
@@ -186,13 +187,13 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         uncompressed = self.packet(final)
         uncompressed['material_objections'] = objections
         uncompressed['digest'] = digest({key: value for key, value in uncompressed.items() if key != 'digest'})
-        full_size = parts._measure(route, transport.request_body(route, final['prompt']['text'], uncompressed, final['history']))
+        full_size = parts._measure(route, transport.request_body(route, final['prompt']['text'], uncompressed, read_history(self.case.artifacts, final)))
         compact_size = parts._measure(route, request)
         self.assertGreater(full_size, compact_size + 20000)
         limit = transport.local_input_limit(route)
         self.assertLessEqual(compact_size, limit)
         self.assertGreater(full_size, limit)
-        self.assertFalse(parts._fits(self.case.artifacts, route, final['prompt'], uncompressed, final['history'], references)[0])
+        self.assertFalse(parts._fits(self.case.artifacts, route, final['prompt'], uncompressed, read_history(self.case.artifacts, final), references)[0])
         output = self.final_output()
         output['value']['objection_findings'] = [{'id': objection['id'], 'status': 'continuing',
             'reason': 'The shared delivered record retains this limitation.', 'evidence': [

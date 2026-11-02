@@ -4,6 +4,7 @@ import json
 
 from . import review_context_repair, review_problem_parts as parts, review_transport as transport
 from .errors import ResearchError
+from .review_bodies import read_history
 from .evaluation import Evaluation
 from .evidence import digest
 from .operations import normalized_text
@@ -62,7 +63,7 @@ def _map_history(records, artifacts, chain, history):
         user, assistant = history[2 * index:2 * index + 2]
         if not isinstance(user, dict) or not isinstance(assistant, dict):
             return None
-        stored = assignment.get('history', [])
+        stored = read_history(artifacts, assignment)
         content, output = user.get('content'), assistant.get('content')
         if (not isinstance(stored, list) or len(stored) != 2 * index or user.get('role') != 'user'
                 or assistant.get('role') != 'assistant' or not isinstance(content, str)

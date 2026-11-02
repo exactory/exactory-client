@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 from problem_parts_fixtures import ResultPartsCase
+from research_harness.review_bodies import read_history
 from research_harness import review_protocol as protocol
 from research_harness import problem_rubric, research_decisions as decisions
 from research_harness.errors import ResearchError
@@ -714,7 +715,7 @@ class ProblemReviewTests(LiteratureCase):
         self.assertEqual(result["session_id"], bar["session_id"])
         self.assertEqual(result["history_assignment_id"], bar["id"])
         self.assertEqual(result["slot_id"], bar["slot_id"])
-        self.assertEqual([turn["role"] for turn in result["history"]], ["user", "assistant"])
+        self.assertEqual([turn["role"] for turn in read_history(self.artifacts, result)], ["user", "assistant"])
 
     def test_marker_authors_are_the_independence_authority(self):
         self.prepare_review_route()
@@ -1008,7 +1009,7 @@ class ProblemOpennessReviewTests(ProblemCase):
             self.assertEqual(packet["problem_refresh"]["assignment_id"], original["id"])
             self.assertNotEqual(packet["problem_evidence_digest"], before["problem_evidence_digest"])
             if reviewer == "first":
-                self.assertIn("PRIVATE_PRIOR_RESULT_OBJECTION", json.dumps(refreshed["history"]))
+                self.assertIn("PRIVATE_PRIOR_RESULT_OBJECTION", json.dumps(read_history(self.artifacts, refreshed)))
             self.assert_error("review_resampling_forbidden", lambda: self.assign("result", reviewer,
                 identifier="same-evidence-" + reviewer))
             self.assert_error("review_resampling_forbidden", lambda: self.assign("result", reviewer,

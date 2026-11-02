@@ -5,6 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from research_harness.review_bodies import read_history
 from research_harness import research_decisions, review_protocol as protocol, review_transport as transport
 from research_harness import review_codex_transport as codex, review_source_complete as complete
 from research_harness.evidence import digest
@@ -91,7 +92,7 @@ class NativeCompleteSourceTests(unittest.TestCase):
         self.fixture.capture(self.version, body='A later complete HTML representation. ' * 240)
         records = self.store.snapshot()['records']
         self.assertEqual(transport.request_body(records['review_route']['route'], assignment['prompt']['text'],
-            self.packet(assignment), assignment['history']), before)
+            self.packet(assignment), read_history(self.artifacts, assignment)), before)
         self.assertTrue(protocol.authenticate_attempt(records, self.artifacts, assignment, attempt))
         successor = self.assign('next', prior='complete')
         self.assertEqual(successor['context']['source_delivery'], complete.MODE)

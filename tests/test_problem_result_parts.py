@@ -7,6 +7,7 @@ import random
 from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, SPLIT_KEYS, ResultPartsCase, indices, note_units
+from research_harness.review_bodies import read_history
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import research_decisions as decisions, review_excerpts, review_refusal
 from research_harness import review_codex_transport as codex, review_claude_transport as claude
@@ -68,7 +69,7 @@ class ProblemResultPartsTests(ResultPartsCase):
         self.assertEqual(assignment['prompt'], prompt)
         self.assertNotIn(KEY, self.packet(assignment))
         self.assertEqual(self.request(assignment), transport.request_body(records['review_route']['route'],
-            prompt['text'], expected, assignment['history']))
+            prompt['text'], expected, read_history(self.case.artifacts, assignment)))
 
     def test_oversized_searches_take_the_longest_fitting_prefix_and_empty_final(self):
         self.oversized()
@@ -91,7 +92,7 @@ class ProblemResultPartsTests(ResultPartsCase):
         next_packet.pop('digest')
         next_packet['digest'] = digest(next_packet)
         larger = transport.request_body(self.case.read_records()['review_route']['route'], first['prompt']['text'],
-                                       next_packet, first['history'])
+                                       next_packet, read_history(self.case.artifacts, first))
         self.assertGreater(len(codex.packet_text(larger)), transport.CODEX_INPUT_LIMIT_CHARS)
         all_parts, final = self.finish_parts(first)
         for assignment in all_parts + [final]:

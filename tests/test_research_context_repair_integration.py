@@ -3,6 +3,7 @@
 import json
 from unittest.mock import patch
 
+from research_harness.review_bodies import read_history
 from research_harness.errors import ResearchError
 
 from strategy_fixtures import StrategyCase
@@ -78,7 +79,7 @@ class ContextRepairIntegrationTests(StrategyCase):
     def test_repair_uses_the_original_slot_and_retains_adverse_scientific_content(self):
         saved = self.prepare_repair()
         packet = self.packet()
-        self.assertEqual(saved["history"], [])
+        self.assertEqual(read_history(self.artifacts, saved), [])
         self.assertEqual(packet["context_repair"]["slot_id"], "assignment-bar-a")
         self.assertEqual(review_context_repair.slot_id(self.store.snapshot()["records"], saved), "assignment-bar-a")
         self.assertIn("explicit reassessment", saved["prompt"]["text"])

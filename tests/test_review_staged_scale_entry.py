@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from problem_parts_fixtures import KEY, ResultPartsCase
+from research_harness.review_bodies import read_history
 from research_harness import review_problem_parts as parts, review_protocol as protocol
 from research_harness import review_staged as staged, review_staged_protocol as producer
 from research_harness import review_transport as transport
@@ -81,12 +82,12 @@ class StagedScaleEntryTests(ResultPartsCase):
         legacy = load_legacy_parts()
         expected = legacy.prepare_packet(records, self.case.artifacts,
             dict(id=assignment['id'], role='result', context={}), records['review_route']['route'], packets[-1],
-            protocol.canonical_prompt('result', orchestration='problem_creation'), assignment['history'])
+            protocol.canonical_prompt('result', orchestration='problem_creation'), read_history(self.case.artifacts, assignment))
         self.assertEqual(_canonical(recorded[KEY]), _canonical(expected[KEY]))
         self.assertEqual(assignment['packet'], protocol._put_json(self.case.artifacts, expected))
         self.assertEqual(assignment['prompt'], protocol.canonical_prompt(
             'result', orchestration='problem_creation', excerpts=True, evidence_parts='part'))
-        self.assertTrue(assignment['history'])
+        self.assertTrue(read_history(self.case.artifacts, assignment))
 
     def test_explicit_under_bound_entry_preflights_and_freezes_manifest_once(self):
         self.install_scale_packet(large=False)
@@ -215,11 +216,11 @@ class StagedOmittedBodyEntryTests(ResultPartsCase):
         assignment = self.assign('omitted-body-fallback')
         route = records['review_route']['route']
         prompt = protocol.canonical_prompt('result', orchestration='problem_creation')
-        ordinary = transport.request_body(route, prompt['text'], packet, assignment['history'])
+        ordinary = transport.request_body(route, prompt['text'], packet, read_history(self.case.artifacts, assignment))
         self.assertLessEqual(parts._measure(route, ordinary), transport.local_input_limit(route))
         self.assertFalse(parts.preserves_ordinary_packet(self.case.artifacts, packet, ordinary))
         legacy = load_legacy_parts().prepare_packet(records, self.case.artifacts,
-            dict(id=assignment['id'], role='result', context={}), route, packet, prompt, assignment['history'])
+            dict(id=assignment['id'], role='result', context={}), route, packet, prompt, read_history(self.case.artifacts, assignment))
         self.assertEqual(legacy, packet)
         prepared = self.packet(assignment)
         self.assertNotIn('staged_review', prepared)

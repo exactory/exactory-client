@@ -25,6 +25,7 @@ from . import openness_reading
 from . import review_excerpts
 from . import review_problem_parts
 from . import review_problem_history
+from .review_bodies import read_history, write_history
 from . import review_context_repair as context_repair
 from . import review_supplied_evidence as supplied_evidence
 from . import problem_rubric
@@ -1516,7 +1517,7 @@ def build_assignment_request(records, artifacts, assignment):
                     for attempt in attempts
                     if attempt['status'] == 'completed' and attempt.get('request')]
         built = transport.list_built_requests(route, assignment['prompt']['text'], packet,
-                                              assignment.get('history', ()))
+                                              read_history(evaluation, assignment))
         current = next(built)
         if not recorded or current in recorded:
             return current
@@ -2670,6 +2671,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                       history=history, session_id=session_id, history_assignment_id=history_assignment_id,
                       reassessment_required=reassessment_required,
                       recorded_revision=expected_revision + 1)
+        if not controller and route['adapter'] != 'codex_cli_visual_v1':
+            previous = records.get('review_assignment', {}).get(history_assignment_id)
+            record['history_ref'] = write_history(artifacts, record, history, previous=previous)
+            record.pop('history')
         if slot_identifier is not None:
             record['slot_id'] = slot_identifier
         changes = []
@@ -2803,7 +2808,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         invocation = dict(value, request=_put_json(artifacts, request), route_id=assignment['route_id'],
                           preflight=preflight,
                           route_digest=digest(route), packet_digest=assignment['packet_digest'],
-                          prompt_hash=assignment['prompt_hash'], invocation_mode='explicit-bar-continuation' if assignment.get('history') else 'fresh-explicit-input',
+                          prompt_hash=assignment['prompt_hash'], invocation_mode='explicit-bar-continuation' if read_history(artifacts, assignment) else 'fresh-explicit-input',
                           session_id=assignment['session_id'],
                           recorded_revision=expected_revision + 1)
         return [immutable_record(records, 'review_invocation', value['id'], invocation)], invocation
@@ -2844,7 +2849,7 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
                 and attempt.get('runtime') == route['runtime']
                 and attempt.get('route_digest') == digest(route)
                 and any(request == built for built in transport.list_built_requests(
-                    route, assignment['prompt']['text'], packet, assignment.get('history', ())))
+                    route, assignment['prompt']['text'], packet, read_history(artifacts, assignment)))
                 and attempt.get('packet_digest') == assignment['packet_digest']
                 and attempt.get('prompt_hash') == assignment['prompt_hash']
                 and transport.response_output(response) == output)

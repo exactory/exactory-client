@@ -4,6 +4,7 @@ import copy
 import json
 from unittest.mock import patch
 
+from research_harness.review_bodies import read_history
 from research_harness import problem_candidates
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness.errors import ResearchError
@@ -37,7 +38,7 @@ class AdjudicatorCurrentSourceTests(delivery_fixtures.ProblemDeliveryCase):
         self.assertEqual(manifest["protocol"], "focused-current-sources-v1")
         self.assertEqual({row["id"] for row in manifest["readings"]}, {"read-full", "read-new-comparator"})
         request = transport.request_body(self.read_records()["review_route"][assignment["route_id"]],
-            assignment["prompt"]["text"], packet, assignment.get("history", ()))
+            assignment["prompt"]["text"], packet, read_history(self.artifacts, assignment))
         actual = json.loads(transport.logical_messages(request)[-1]["content"].removeprefix(transport.PACKET_LABEL))
         body = next(row for row in actual["evidence"] if row["artifact"] == self.new_source)
         self.assertEqual(body["encoding"], "utf-8")

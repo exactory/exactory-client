@@ -11,6 +11,7 @@ from unittest.mock import patch
 import test_review_staged_protocol as staged_fixtures
 
 # Load the module before fixtures snapshot sys.modules and before state mocks.
+from research_harness.review_bodies import read_history
 from research_harness import direction_reviews, review_protocol as protocol, review_transport as transport
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
@@ -333,7 +334,7 @@ class DeliveredEvidenceTests(unittest.TestCase):
         changed = dict(final, packet=protocol._put_json(builder.case.artifacts, packet), packet_digest=packet['digest'])
         records['review_assignment'][final['id']] = changed
         attempt = dict(records['review_attempt']['attempt-' + final['id']], packet_digest=packet['digest'])
-        request = transport.request_body(records['review_route']['route'], changed['prompt']['text'], packet, changed['history'])
+        request = transport.request_body(records['review_route']['route'], changed['prompt']['text'], packet, read_history(builder.case.artifacts, changed))
         attempt.update(request=protocol._put_json(builder.case.artifacts, request), request_digest=digest(request))
         from codex_route_fixtures import build_codex_response
         output = protocol._read_json(builder.case.artifacts, attempt['output'])

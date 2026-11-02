@@ -5,6 +5,7 @@ import json
 import unittest
 from unittest.mock import patch
 
+from research_harness.review_bodies import read_history
 from research_harness import research_decisions as decisions
 from research_harness import review_protocol as protocol, review_refusal as refusal
 from research_harness.errors import ResearchError
@@ -61,7 +62,7 @@ class ResultReassessmentBindingTests(unittest.TestCase):
         route = records['review_route'][assignment['route_id']]
         packet = protocol._read_json(artifacts, assignment['packet'])
         from research_harness import review_transport
-        request = review_transport.request_body(route, assignment['prompt']['text'], packet, assignment['history'])
+        request = review_transport.request_body(route, assignment['prompt']['text'], packet, read_history(self.fixture.artifacts, assignment))
         attempt = dict(id='contract-attempt', assignment_id=assignment['id'], status='completed', origin='instrumented',
             runtime=route['runtime'], route_digest=digest(route), packet_digest=assignment['packet_digest'],
             prompt_hash=assignment['prompt_hash'], request=protocol._put_json(artifacts, request),

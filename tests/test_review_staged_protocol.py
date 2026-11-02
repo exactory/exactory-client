@@ -8,6 +8,7 @@ import types
 from unittest.mock import patch
 
 from problem_parts_fixtures import ResultPartsCase
+from research_harness.review_bodies import read_history
 from research_harness import review_problem_parts as parts, review_protocol as protocol
 from research_harness import review_transport as transport, review_excerpts
 from research_harness import review_staged, review_worker, review_task_execution
@@ -48,7 +49,7 @@ class StagedEntryTests(ResultPartsCase):
         assignment = self.assign('ordinary')
         self.assertEqual(self.packet(assignment), expected)
         self.assertEqual(assignment['prompt'], protocol.canonical_prompt('result', orchestration='problem_creation'))
-        self.assertTrue(assignment['history'])
+        self.assertTrue(read_history(self.case.artifacts, assignment))
 
     def test_explicit_oversized_upgrade_is_a_controller_with_immutable_frame_children(self):
         self.oversized()
