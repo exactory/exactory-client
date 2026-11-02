@@ -31,7 +31,10 @@ the record, not an order of tools: every tool is available at every milestone, a
 Every `exactory-research` mutation below takes `--file FILE --expected-revision REVISION
 --request-id ID`. Read `exactory-research status` before each mutation and use its revision.
 Retry an interrupted mutation with its original request id, revision and payload: the harness
-returns the original receipt. `exactory-research example OPERATION` prints a complete example
+returns the original receipt. The same retry finishes a `review-run`, `review-probe` or
+`review-output-correction` whose process stopped after the reviewer answered: the harness records
+the captured answer without a second call, and until then refuses a new run of that assignment
+with `review_invocation_pending`. `exactory-research example OPERATION` prints a complete example
 payload. `exactory-research next` names the first missing condition with the action that clears
 it. Add `--check` to validate a payload without writing: the harness reports the first refusal
 or `{check: "accepted", revision, recorded: false, ...}` from one snapshot of the store and

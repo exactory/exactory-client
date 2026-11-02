@@ -655,42 +655,63 @@ then create independent assignments. `review-probe` uses `{"id": "probe-id",
 identity flags. These commands perform real provider calls; run them only within
 the user's authorized resources. Load a needed credential into that process,
 never into a payload or artifact. A replay of a completed request returns its
-recorded result without a new call. Since 0.67.0 the finishing write of
-`review-probe`, `review-run` and `review-output-correction`, the write that
-records the reviewer's answer, is tried again after `store_busy`,
-`stale_revision` or, since 0.71.0, `review_task_dependency_changed`. It is
-tried at most 600 times within 600 seconds and never
-calls the reviewer again. Every attempt computes its change from the current
-records. The harness keeps the observation only in the process that called the
-reviewer and writes no file for a later process to read it from. A file in the
-workspace is no evidence of what the reviewer returned, so the harness never
-completes a pending invocation from disk. When the process stops during the
-call, or when the finishing write is still refused after that wait, the
-invocation remains pending. The run that waited exits with the last of those
-refusals. Then a replay with the original request ID
-refuses with `review_invocation_pending`, and every `review-run` of that
-assignment refuses in the same way. The harness does not silently call the
-reviewer again. The refusals say to reconcile the invocation, and the step is
-`review-attempt`. An invocation is pending while no `review_attempt` record has
-its id, which is the `id` of the `review-run` payload, the attempt id.
+recorded result without a new call. Since 0.71.0 `review-probe`, `review-run`
+and `review-output-correction` capture the reviewer's answer before they record
+it: when the transport returns, the process that made the call commits one
+immutable `review_call_observation` record. The capture binds the operation and
+the invocation, the original request ID and the digest of the payload, the
+route and the request, the reservation and the calling process, and holds the
+exact observation with its artifacts; for a correction on a `codex_cli_v1`
+route it also retains the native rollout of the turn, read once at capture.
+The finishing write, the write that records the reviewer's answer, reads the
+committed capture and is tried again after `store_busy`, `stale_revision` or
+`review_task_dependency_changed`, at most 600 times within 600 seconds, and
+never calls the reviewer again. Every attempt computes its change from the
+current records. The run that waited exits with the last of those refusals,
+and the capture stays. A file in the workspace is no evidence of what the
+reviewer returned: no command accepts an observation file, and the harness
+completes a pending invocation only from the committed capture. When the
+process stopped after the capture committed, or when the finishing write
+stayed refused, repeat the command with the same payload and the original
+request ID: it returns the recorded receipt when one exists and otherwise
+finishes from the capture without a second call. Until then the invocation is
+pending: a `review-run` of the assignment under another `id` refuses with
+`review_invocation_pending` and says to repeat the original command, and
+`review-attempt` refuses an import under that `id`. When the process stopped
+before the capture committed, the answer is lost and the outcome unknown: a
+replay with the original request ID refuses with `review_invocation_pending`,
+and every `review-run` of that assignment refuses in the same way. The harness
+does not silently call the reviewer again. The refusals say to reconcile the
+invocation: `review-run` with `{"action": "reconcile", "operation":
+OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a
+run, `review.route_probe` for a probe or `review.output_correction` for a
+correction and the id is the `id` of the original payload, releases the
+capacity of the call once its process and its transport processes have ended,
+and for a call without a capture records the unknown outcome as a `failed`
+attempt, probe or correction with the error `review_invocation_interrupted`,
+which ends the pending state. A call that 0.69.x started has no reservation
+and no capture; its step is `review-attempt` under the attempt id, which is
+the `id` of the `review-run` payload.
 `review-attempt` with `{"id": "attempt-id", "assignment_id": "assignment-id",
 "status": "failed", "output": null, "reason": "the process stopped during the
 call", "usage": {"input_tokens": null, "output_tokens": null, "cost_usd": null,
 "wall_seconds": null}}` imports an attempt under that id, marked
 `origin: "imported"`, which never counts as observed transport. The import ends
-the pending state. A `review-run` of the assignment under a new `id` and
-request ID is then permitted, while the replay of the original request ID stays
-refused. In a reading chain the turn then counts as ended without output: the
-same assignment can run again, and a turn after the first can be replaced by
-assigning the next turn again with the same `prior_assignment_id`. A blank
-request ID is refused before the call (`invalid_input`).
+the pending state. After either step a `review-run` of the assignment under a
+new `id` and request ID is permitted, while the replay of the original request
+ID stays refused. In a reading chain the turn then counts as ended without
+output: the same assignment can run again, and a turn after the first can be
+replaced by assigning the next turn again with the same `prior_assignment_id`.
+A blank request ID is refused before the call (`invalid_input`).
 
 From 0.70.0, shared store and route capacity counts only calls with a
 `review_pool_membership` that have not been released. Calls started by 0.69.x
 have no membership and do not count, including probes and corrections. An open
-ordinary invocation still blocks its own assignment until a same-ID attempt
-exists; the `review-attempt` procedure above remains available for it. An import
-under an owned invocation ID is refused until termination is confirmed.
+ordinary invocation of 0.69.x still blocks its own assignment until a same-ID
+attempt exists; the `review-attempt` procedure above remains available for it.
+An import under an owned invocation ID is refused while its termination is not
+confirmed or its captured answer is not recorded; after reconciliation the
+owned call has its record, so no import is needed.
 Historical reconciliation with a same-ID attempt records `historical_closed`,
 an unknown outcome and no termination proof. A historical call still running
 during upgrade can temporarily run alongside the configured capacity.

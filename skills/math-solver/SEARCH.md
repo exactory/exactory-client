@@ -1154,9 +1154,12 @@ which can no longer run or be continued (`review_assignment_replaced`). The
 first turn has no `prior_assignment_id`. When it cannot run again, export a new
 packet under a new assignment id and start a new chain, and the final output's
 `attestation_id` then names the new first turn. A turn whose invocation is
-pending, because the process stopped during the call or the finishing write
-stayed refused, can be neither run nor replaced until `review-attempt` imports
-a `failed` attempt with `output: null` under the `id` of that `review-run`
+pending can be neither run nor replaced. When the process stopped after the
+reviewer answered, or the finishing write stayed refused, run that `review-run`
+again with the same payload and request id: it records the captured answer
+without a second call. When the process stopped before the answer was captured,
+reconcile the call, or for a call of 0.69.x import a `failed` attempt with
+`output: null` under the `id` of that `review-run` with `review-attempt`
 ([the shared route instructions](../../docs/research-decisions.md#commands-and-shared-state)).
 A second live continuation of one turn
 is refused with `review_source_continuation_fork`. When the first unit of a
