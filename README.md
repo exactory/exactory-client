@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.71.3](docs/releases/0.71.3.md) reads a rollback journal that a committing writer has just unlinked as absent, so a store reader no longer reports `store_busy` while another process commits.
+
 Version [0.71.2](docs/releases/0.71.2.md) lets a full-text job finish for a work that is not an arXiv version, such as a DOI work whose PDF comes from its publisher, and corrects seven texts of 0.71.0 that agents read.
 
 Version [0.71.1](docs/releases/0.71.1.md) lets a store reader retry when a committing writer deletes the rollback journal while the reader checks it, instead of reporting an unsafe path.

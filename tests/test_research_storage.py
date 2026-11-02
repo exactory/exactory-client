@@ -883,7 +883,7 @@ print("committed", flush=True)
         self.assert_error("unsafe_path", lambda: self.snapshot_after_writer_deletes_journal(
             lambda journal: journal.mkdir()))
 
-    def test_snapshot_bounds_revalidation_of_zero_link_journals(self):
+    def test_snapshot_treats_a_persistently_unlinked_journal_as_absent(self):
         store = Store(self.workspace, create=True)
         journal = Path(str(self.database) + "-journal")
         journal.write_bytes(b"unlinked journal")
@@ -898,12 +898,12 @@ print("committed", flush=True)
             nonlocal reads
             if name == journal.name and kwargs.get("dir_fd") is not None:
                 reads += 1
-                self.assertLess(reads, 10, "Journal revalidation must be bounded")
                 return unlinked
             return original_stat(name, *args, **kwargs)
 
         with mock.patch("research_harness.storage.os.stat", side_effect=stat_unlinked_journal):
-            self.assert_error("store_busy", store.snapshot)
+            self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})
+        self.assertEqual(reads, 2, "Each of the two checks reads the journal once")
 
     def test_hot_journal_needs_explicit_recovery_and_preserves_committed_state(self):
         store = Store(self.workspace, create=True)
