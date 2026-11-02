@@ -15,6 +15,13 @@ PART_OUTPUT_NOTE = (
     'space. The original output stays in the record. review_id identifies the recorded review that closed that '
     'series. That review is delivered in the packet field historical_reviews. The omission resolves no objection. '
     'The current series must assess its own evidence in full.')
+SUPERSEDED_PART_OUTPUT_NOTE = (
+    'Harness placeholder, not your text: this part output from an earlier series is omitted from the replay to save '
+    'space. The original output stays in the record. That series ended without a recorded final review when the '
+    'problem evidence changed. review_id identifies a recorded final review from a later series of this same slot '
+    'in the review history replayed here. That review is delivered in the packet field historical_reviews. Do not '
+    'assume that review summarizes this omitted output. '
+    'The omission resolves no objection. The current series must assess its own evidence in full.')
 FINAL_OUTPUT_NOTE = (
     'Harness placeholder, not your text: this earlier final output is omitted from the replay to save space. The '
     'original output stays in the record. The recorded review identified by review_id is delivered in the packet '
@@ -50,7 +57,7 @@ def _map_history(records, artifacts, chain, history):
     if chain is None or not isinstance(history, list) or len(history) != 2 * len(chain):
         return None
     ancestors = {row['id'] for row in chain}
-    mapped = []
+    mapped, superseded = [], []
     for index, assignment in enumerate(chain):
         user, assistant = history[2 * index:2 * index + 2]
         if not isinstance(user, dict) or not isinstance(assistant, dict):
@@ -95,31 +102,40 @@ def _map_history(records, artifacts, chain, history):
                 return None
             closing_packet = _read_object(artifacts.read(closing['packet']))
             closing_plan = closing_packet.get(parts.KEY) if closing_packet is not None else None
-            if (not isinstance(closing_plan, dict) or parts.find_stage(closing_packet) != 'final'
-                    or closing_plan.get('series_assignment_id') != plan.get('series_assignment_id')
-                    or plan.get('stage') == 'final' and closing['id'] != assignment['id']):
+            if not isinstance(closing_plan, dict) or parts.find_stage(closing_packet) != 'final':
+                return None
+            if 'superseded' in omitted:
+                if omitted['superseded'] is not True or plan.get('stage') != 'part':
+                    return None
+                superseded.append((assignment['id'], omitted['review_id']))
+            elif (closing_plan.get('series_assignment_id') != plan.get('series_assignment_id')
+                  or plan.get('stage') == 'final' and closing['id'] != assignment['id']):
                 return None
         mapped.append((assignment, frozen, state, placeholder))
+    if superseded:
+        parent, packet = mapped[-1][:2]
+        current_series = packet.get(parts.KEY, {}).get('series_assignment_id', parent['id'])
+        _, recorded = _find_eligible_reviews(records, artifacts, parent, packet, mapped, current_series)
+        allowed = _find_superseded_parts(records, artifacts, parent, packet, mapped, current_series, recorded)
+        if any(review_id not in allowed.get(assignment_id, []) for assignment_id, review_id in superseded):
+            return None
     return mapped
 
 
-def _compact_history(records, artifacts, value, packet, history, mapped):
-    """Return history with shorter eligible outputs replaced, or the unchanged history."""
+def _matches_slot(records, assignment, value, packet, parent):
+    return (assignment['role'] == 'result' and assignment['subject'] == packet['subject']
+            and assignment['route_id'] == value['route_id'] and assignment['session_id'] == parent['session_id']
+            and review_context_repair.slot_id(records, assignment) == review_context_repair.slot_id(records, parent)
+            and all(normalized_text(assignment[key]) == normalized_text(value[key])
+                    for key in ('reviewer_id', 'author_id')))
+
+
+def _find_eligible_reviews(records, artifacts, value, packet, mapped, current_series):
+    """Find authenticated recorded finals in ancestry order under the original eligibility rule."""
     from .review_protocol import deliver_review
-    parent = mapped[-1][0]
-    slot = review_context_repair.slot_id(records, parent)
-    previous = mapped[-1][1] if value['context'].get('prior_assignment_id') else {}
-    refreshed = any(review['assignment_id'] == parent['id'] for review in records.get('value_review', {}).values())
-    continuing = (parts.find_stage(previous) is not None and not refreshed
-                  and previous.get('problem_evidence_digest') == packet['problem_evidence_digest'])
-    current_series = previous[parts.KEY]['series_assignment_id'] if continuing else value['id']
     recorded = []
     for assignment, frozen, state, _ in mapped:
-        if (assignment['role'] != 'result' or assignment['subject'] != packet['subject']
-                or assignment['route_id'] != value['route_id'] or assignment['session_id'] != parent['session_id']
-                or review_context_repair.slot_id(records, assignment) != slot
-                or any(normalized_text(assignment[key]) != normalized_text(value[key])
-                       for key in ('reviewer_id', 'author_id')) or not state['ready']):
+        if not _matches_slot(records, assignment, value, packet, mapped[-1][0]) or not state['ready']:
             continue
         reviews = [review for review in records.get('value_review', {}).values()
                    if review['assignment_id'] == assignment['id']]
@@ -131,10 +147,10 @@ def _compact_history(records, artifacts, value, packet, history, mapped):
         if state['output_digest'] == review['output_digest'] and state['output'] == response:
             recorded.append((assignment, frozen, review))
     if not recorded:
-        return history
+        return None, []
     latest_id = recorded[-1][2]['id']
     ancestors = {row[0]['id'] for row in mapped}
-    eligible = {}
+    eligible = []
     for assignment, frozen, review in recorded:
         if (parts.find_stage(frozen) != 'final'
                 or frozen[parts.KEY]['series_assignment_id'] == current_series
@@ -147,16 +163,66 @@ def _compact_history(records, artifacts, value, packet, history, mapped):
         observed = parts.observe_series(records, artifacts, assignment['id'])
         if identifiers != [row['receipt']['assignment_id'] for row in observed]:
             continue
+        eligible.append((assignment, review, series))
+    return latest_id, eligible
+
+
+def _find_superseded_parts(records, artifacts, value, packet, mapped, current_series, recorded):
+    """Bind fully observed abandoned parts to later eligible finals across an explicit evidence change."""
+    groups = {}
+    positions = {row[0]['id']: index for index, row in enumerate(mapped)}
+    for assignment, frozen, state, _ in mapped:
+        if parts.find_stage(frozen) is not None:
+            groups.setdefault(frozen[parts.KEY]['series_assignment_id'], []).append((assignment, frozen, state))
+    groups = list(groups.values())
+    reviewed = {review['assignment_id'] for review in records.get('value_review', {}).values()}
+    eligible = {}
+    for group, following in zip(groups, groups[1:]):
+        last, frozen, _ = group[-1]
+        identifiers = [row[0]['id'] for row in group]
+        if (frozen[parts.KEY]['series_assignment_id'] == current_series or reviewed.intersection(identifiers)
+                or any(not state['ready'] or not _matches_slot(records, member, value, packet, mapped[-1][0])
+                       for member, _, state in group)
+                or not _matches_slot(records, following[0][0], value, packet, mapped[-1][0])
+                or frozen.get('problem_evidence_digest') == following[0][1].get('problem_evidence_digest')):
+            continue
+        series = parts._list_series(records, artifacts, last['id'])
+        if identifiers != [member['id'] for member, _ in series]:
+            continue
+        observed = parts.observe_series(records, artifacts, last['id'])
+        if identifiers != [row['receipt']['assignment_id'] for row in observed]:
+            continue
+        later = [review['id'] for closing, review, _ in recorded if positions[closing['id']] > positions[last['id']]]
+        if later:
+            for member, member_packet in series:
+                if parts.find_stage(member_packet) == 'part':
+                    eligible[member['id']] = later
+    return eligible
+
+
+def _compact_history(records, artifacts, value, packet, history, mapped):
+    """Return history with shorter eligible outputs replaced, or the unchanged history."""
+    parent = mapped[-1][0]
+    previous = mapped[-1][1] if value['context'].get('prior_assignment_id') else {}
+    refreshed = any(review['assignment_id'] == parent['id'] for review in records.get('value_review', {}).values())
+    continuing = (parts.find_stage(previous) is not None and not refreshed
+                  and previous.get('problem_evidence_digest') == packet['problem_evidence_digest'])
+    current_series = previous[parts.KEY]['series_assignment_id'] if continuing else value['id']
+    latest_id, recorded = _find_eligible_reviews(records, artifacts, value, packet, mapped, current_series)
+    eligible = {}
+    for assignment, review, series in recorded:
         for member, member_packet in series:
             if parts.find_stage(member_packet) == 'part':
-                eligible[member['id']] = (review['id'], None)
+                eligible[member['id']] = (review['id'], None, False)
         if review['id'] != latest_id:
-            eligible[assignment['id']] = (review['id'], latest_id)
+            eligible[assignment['id']] = (review['id'], latest_id, False)
+    superseded = _find_superseded_parts(records, artifacts, value, packet, mapped, current_series, recorded)
+    eligible.update({identifier: (later[0], None, True) for identifier, later in superseded.items()})
     reduced = list(history)
     for index, (assignment, frozen, state, placeholder) in enumerate(mapped):
         if placeholder or assignment['id'] not in eligible:
             continue
-        review_id, later_id = eligible[assignment['id']]
+        review_id, later_id, superseded = eligible[assignment['id']]
         plan = frozen[parts.KEY]
         omitted = {'protocol': PROTOCOL, 'delivery': DELIVERY, 'assignment_id': assignment['id'],
                    'series_assignment_id': plan['series_assignment_id'], 'turn': plan['turn'],
@@ -164,6 +230,8 @@ def _compact_history(records, artifacts, value, packet, history, mapped):
                    'review_id': review_id, 'note': PART_OUTPUT_NOTE if plan['stage'] == 'part' else FINAL_OUTPUT_NOTE}
         if later_id is not None:
             omitted['later_review_id'] = later_id
+        if superseded:
+            omitted.update(superseded=True, note=SUPERSEDED_PART_OUTPUT_NOTE)
         content = json.dumps(omitted, sort_keys=True, ensure_ascii=True, allow_nan=False)
         position = 2 * index + 1
         if len(content) < len(history[position]['content']):
