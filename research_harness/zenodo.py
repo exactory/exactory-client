@@ -1,7 +1,6 @@
 """Deposit reviewed immutable bytes with persisted remote-step reconciliation."""
 
-from contextlib import contextmanager
-import hashlib
+from contextlib import contextmanager, ExitStack
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
@@ -149,7 +148,8 @@ def _files_match(document, binding, artifacts):
     saved = {item.get("filename", item.get("key")): item for item in document.get("files", [])}
     for item in binding["uploads"]:
         remote = saved.get(item["name"])
-        expected = hashlib.md5(artifacts.read(item["artifact"]), usedforsecurity=False).hexdigest()
+        with artifacts.open_verified(item["artifact"]) as frozen:
+            expected = frozen.md5
         if remote is None or remote.get("checksum", "").removeprefix("md5:") != expected:
             return False
     return True
@@ -262,7 +262,7 @@ def own_workspace_deposits(root):
 
 
 def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=False):
-    with _owner(store.root, "remote:" + identifier):
+    with _owner(store.root, "remote:" + identifier), ExitStack() as snapshots:
         intent = get_intent(store, identifier)
         if intent["status"] == "complete":
             records = store.snapshot()["records"]
@@ -285,6 +285,11 @@ def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=
                                 "The record of this deposit is not published. Run exactory-draft deposit to finish it.",
                                 {"request_id": identifier})
         binding = intent["binding"]
+        _current(store, binding)
+        artifacts = ArtifactStore(store.root)
+        uploads = [None if "upload:" + item["name"] in intent["responses"] else
+                   snapshots.enter_context(artifacts.open_verified(item["artifact"]))
+                   for item in binding["uploads"]]
         checked_revision = _current(store, binding)
         base = binding["base_url"]
         metadata = dict(binding["metadata"], notes="Exactory publication intent " + identifier)
@@ -303,12 +308,14 @@ def continue_deposit(store, identifier, client, *, reconcile=False, finish_only=
         deposition = remote_step(store, identifier, "create", {"metadata": metadata, "new_version": binding["new_version"], "prior": binding["prior"]}, create,
                                  expected_revision=checked_revision)
         bucket = deposition["links"]["bucket"]
-        artifacts = ArtifactStore(store.root)
-        for item in binding["uploads"]:
+        for item, frozen in zip(binding["uploads"], uploads):
             checked_revision = _current(store, binding)
-            data = artifacts.read(item["artifact"])
+            if frozen is None:
+                continue
             remote_step(store, identifier, "upload:" + item["name"], item,
-                        lambda item=item, data=data: client("PUT", bucket + "/" + item["name"], file_bytes=data), expected_revision=checked_revision)
+                        lambda item=item, frozen=frozen: client("PUT", bucket + "/" + item["name"],
+                                                               file_stream=frozen.stream, file_size=frozen.size),
+                        expected_revision=checked_revision)
         checked_revision = _current(store, binding)
         remote_step(store, identifier, "metadata", {"metadata": metadata},
                     lambda: client("PUT", base + "/deposit/depositions/" + str(deposition["id"]), json_body={"metadata": metadata}), expected_revision=checked_revision)

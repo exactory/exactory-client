@@ -40,10 +40,11 @@ import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import NamedTuple
+from typing import BinaryIO, NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
+from research_harness.file_streams import freeze_file
 from research_harness.exactory_api import UUID_RE, read_api_base_url
 from research_harness.integration import (command_identity, current_store, export_workspace,
                                           initialization_payload, initialize_workspace, record_direct_deposit)
@@ -254,7 +255,8 @@ def _call_zenodo(method: str, url: str, token: str,
                  accept: str | None = None,
                  failure_advice: _FailureAdvice = _PLAIN_FAILURE_ADVICE,
                  *, environment: str, is_missing_error_propagated: bool = False,
-                 address_source_name: str = "a Zenodo answer") -> dict:
+                 address_source_name: str = "a Zenodo answer",
+                 file_stream: BinaryIO | None = None, file_size: int | None = None) -> dict:
     """Send one request to the Zenodo API and return its JSON body. Exits with
     Zenodo's own error message on failure, and never echoes the token. The
     caller names the advice that each end of the request earns, because only the
@@ -278,9 +280,14 @@ def _call_zenodo(method: str, url: str, token: str,
     if json_body is not None:
         data = json.dumps(json_body).encode()
         headers["Content-Type"] = "application/json"
+    elif file_stream is not None:
+        data = file_stream
+        headers["Content-Type"] = "application/octet-stream"
+        headers["Content-Length"] = str(file_size)
     elif file_bytes is not None:
         data = file_bytes
         headers["Content-Type"] = "application/octet-stream"
+        headers["Content-Length"] = str(len(file_bytes))
     try:
         return _open_url(urllib.request.Request(url, method=method, data=data, headers=headers))
     except RefusedRedirectError as error:
@@ -340,7 +347,7 @@ def _build_zenodo_client(environment: str, token: str, failure_advice: _FailureA
     advice that each end of each request earns. The managed deposit sends every request through
     one, and the direct deposit every request after its creation except the publish."""
     def call(method: str, url: str, **kwargs) -> dict:
-        if kwargs.get("file_bytes") is not None:
+        if kwargs.get("file_stream") is not None or kwargs.get("file_bytes") is not None:
             bucket_url, _, upload_name = url.rpartition("/")
             url = bucket_url + "/" + urllib.parse.quote(upload_name, safe="")
         if method == "POST" and url.endswith("/actions/newversion"):
@@ -449,14 +456,15 @@ def _read_abstract_text(path: Path) -> str:
     return abstract_text
 
 
-def _read_upload_bytes(path: Path) -> bytes:
-    """The bytes of a file the user named for upload. The direct path uploads
-    from disk, so an unreadable path stops the command instead of the runtime."""
+@contextlib.contextmanager
+def _freeze_upload(path: Path):
+    """Own a verified snapshot of a direct upload until the command finishes."""
     try:
-        return path.read_bytes()
+        source = path.open("rb")
     except OSError as error:
         _exit_with_error(f"The client cannot read the file {path}. Cause: {error}.", 2)
-    raise AssertionError("unreachable")
+    with source, freeze_file(source) as frozen:
+        yield frozen
 
 
 def _has_exactory_authorship_evidence(pdf_path: Path) -> bool:
@@ -691,97 +699,95 @@ def _deposit_managed(store, report: dict, args: argparse.Namespace, base_url: st
 
 def _deposit_directly(store, store_open_error, args: argparse.Namespace, base_url: str, environment: str,
                       pdf_path: Path, sources_path: Path | None, token: str, *, prepare_deposit) -> None:
-    # Every local input is read before the first remote write, like the rest of
-    # this command, so an unreadable path leaves no draft record on Zenodo. The
-    # bytes were already held in full for the upload, so peak memory is the same.
-    pdf_bytes = _read_upload_bytes(pdf_path)
-    sources_bytes = _read_upload_bytes(sources_path) if sources_path is not None else None
-    if args.new_version:
-        prior, deposition, recorded_deposition_id = _read_new_version_prior(
-            base_url, environment, token, store, store_open_error)
-    metadata, problem_target = prepare_deposit()
-    if args.new_version:
-        if deposition is None:
-            # Repeating this action reopens the same unpublished version draft
-            # (https://developers.zenodo.org, checked 2026-10-16).
-            created = _call_zenodo(
-                "POST", f"{base_url}/deposit/depositions/{prior['deposition_id']}/actions/newversion", token,
-                environment=environment, address_source_name="the workspace's record")
-            new_draft_url = created.get("links", {}).get("latest_draft", "")
-            if new_draft_url == "":
-                _exit_with_error("Zenodo returned no new-version draft link.")
-            deposition = _call_zenodo("GET", new_draft_url, token, environment=environment)
-            expected_id = urllib.parse.urlsplit(new_draft_url).path.rstrip("/").rsplit("/", 1)[-1]
-            _require_deposition_answer(deposition, expected_id,
-                                        f"Run the same command again with --new-version. It reopens the version draft"
-                                        f" and reads deposition {expected_id} back from Zenodo.")
-        next_step_msg = _build_new_version_draft_next_step_msg(recorded_deposition_id)
-    else:
-        creation_advice = _FailureAdvice(uncertain_msg=_UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE.format(
-            zenodo_site=get_origin(base_url)))
-        deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={},
-                                  failure_advice=creation_advice, environment=environment)
-        next_step_msg = _build_fresh_draft_next_step_msg()
-    # The record exists from here on. A second plain publish without a journal creates
-    # and publishes a second permanent record; --new-version reads back a recorded
-    # unsettled deposition instead. The user reads the id and draft link first, so a lost response
-    # leaves a record to open instead of a deposit to repeat, and every failure
-    # from here on names the draft of this run.
-    draft_url = deposition.get("links", {}).get("html", "")
-    print(f"Deposition {deposition['id']} is open on Zenodo: {draft_url}")
-    draft_advice_msg = _build_draft_of_this_run_advice(deposition["id"], draft_url, next_step_msg)
-    call_draft = _build_zenodo_client(environment, token, _FailureAdvice(
-        uncertain_msg=draft_advice_msg, unsent_msg=draft_advice_msg, refused_msg=draft_advice_msg))
-    bucket_url = deposition["links"]["bucket"]
-    call_draft("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", file_bytes=pdf_bytes)
-    if sources_path is not None:
-        call_draft("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", file_bytes=sources_bytes)
-    call_draft("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", json_body={"metadata": metadata})
-    _mark_paper_as_preview(call_draft, base_url, deposition["id"])
-    state = {"environment": environment, "deposition_id": deposition["id"], "draft_url": draft_url}
-    if args.new_version:
-        # The published workspace record supplies this marker, not a field of Zenodo's draft.
-        # It distinguishes a version draft from a fresh draft made by a plain run (ruling 2026-10-16).
-        state["concept_doi"] = prior.get("concept_doi", "")
-    journal = None
-    if args.publish and problem_target is not None:
-        # A fresh operation id tells this publication from a retry of an earlier one, and the next
-        # run settles it before anything else (design 2026-10-12 §17).
-        journal = {"operation_id": uuid.uuid4().hex, "path": "direct", "environment": environment,
-                   "base_url": base_url, "deposition_id": deposition["id"], "draft_url": draft_url,
-                   "math_problem": problem_target, "settled": False, "attached": False}
-        _write_problem_journal(journal, f"The recovery record of deposition {deposition['id']} could not be"
-                                        f" written, so it was not published. It stays a draft on Zenodo: {draft_url}.",
-                               write_failure_advice_msg=next_step_msg)
-    with _explain_unsettled_journal(journal):
-        if args.publish:
-            # Every publishing direct deposit keeps its local record before the publish call
-            # (design 2026-10-12 §26.11).
-            _record_pending_deposit(store, state)
-            # The publish answer supplies the DOI values. The concept DOI used to recognize
-            # a version draft comes from the published workspace record, as ruled 2026-10-16.
-            publish_response = _call_zenodo(
-                "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token,
-                failure_advice=_build_publish_request_advice_set(deposition["id"], draft_url, problem_target,
-                                                                 is_new_version=args.new_version),
-                environment=environment)
-            retry_msg = (f"Run the same command again. It reads deposition {deposition['id']} back from Zenodo."
-                         if problem_target is not None else _build_recorded_deposition_retry_msg(deposition["id"]))
-            _require_deposition_answer(publish_response, deposition["id"], retry_msg, published=True)
-            state["doi"] = publish_response.get("doi", "")
-            state["concept_doi"] = publish_response.get("conceptdoi", "")
-            state["record_url"] = publish_response.get("links", {}).get("record_html", "")
-            print(f"The record is published: {state['record_url']}")
+    with contextlib.ExitStack() as snapshots:
+        pdf = snapshots.enter_context(_freeze_upload(pdf_path))
+        sources = snapshots.enter_context(_freeze_upload(sources_path)) if sources_path is not None else None
+        if args.new_version:
+            prior, deposition, recorded_deposition_id = _read_new_version_prior(
+                base_url, environment, token, store, store_open_error)
+        metadata, problem_target = prepare_deposit()
+        if args.new_version:
+            if deposition is None:
+                # Repeating this action reopens the same unpublished version draft
+                # (https://developers.zenodo.org, checked 2026-10-16).
+                created = _call_zenodo(
+                    "POST", f"{base_url}/deposit/depositions/{prior['deposition_id']}/actions/newversion", token,
+                    environment=environment, address_source_name="the workspace's record")
+                new_draft_url = created.get("links", {}).get("latest_draft", "")
+                if new_draft_url == "":
+                    _exit_with_error("Zenodo returned no new-version draft link.")
+                deposition = _call_zenodo("GET", new_draft_url, token, environment=environment)
+                expected_id = urllib.parse.urlsplit(new_draft_url).path.rstrip("/").rsplit("/", 1)[-1]
+                _require_deposition_answer(deposition, expected_id,
+                                            f"Run the same command again with --new-version. It reopens the version draft"
+                                            f" and reads deposition {expected_id} back from Zenodo.")
+            next_step_msg = _build_new_version_draft_next_step_msg(recorded_deposition_id)
         else:
-            print(f"The draft deposit is created. Review it at: {state['draft_url']}")
-        # The user reads the record before the local record is kept, so a store that
-        # refuses the write still leaves the DOI on the screen.
-        print(json.dumps(state, indent=2))
-        _save_deposit_state(store, store_open_error, state)
+            creation_advice = _FailureAdvice(uncertain_msg=_UNCERTAIN_DIRECT_CREATION_ADVICE_TEMPLATE.format(
+                zenodo_site=get_origin(base_url)))
+            deposition = _call_zenodo("POST", f"{base_url}/deposit/depositions", token, json_body={},
+                                      failure_advice=creation_advice, environment=environment)
+            next_step_msg = _build_fresh_draft_next_step_msg()
+        # The record exists from here on. A second plain publish without a journal creates
+        # and publishes a second permanent record; --new-version reads back a recorded
+        # unsettled deposition instead. The user reads the id and draft link first, so a lost response
+        # leaves a record to open instead of a deposit to repeat, and every failure
+        # from here on names the draft of this run.
+        draft_url = deposition.get("links", {}).get("html", "")
+        print(f"Deposition {deposition['id']} is open on Zenodo: {draft_url}")
+        draft_advice_msg = _build_draft_of_this_run_advice(deposition["id"], draft_url, next_step_msg)
+        call_draft = _build_zenodo_client(environment, token, _FailureAdvice(
+            uncertain_msg=draft_advice_msg, unsent_msg=draft_advice_msg, refused_msg=draft_advice_msg))
+        bucket_url = deposition["links"]["bucket"]
+        call_draft("PUT", f"{bucket_url}/{PAPER_UPLOAD_NAME}", file_stream=pdf.stream, file_size=pdf.size)
+        if sources_path is not None:
+            call_draft("PUT", f"{bucket_url}/{_name_sources_upload(sources_path)}", file_stream=sources.stream, file_size=sources.size)
+        call_draft("PUT", f"{base_url}/deposit/depositions/{deposition['id']}", json_body={"metadata": metadata})
+        _mark_paper_as_preview(call_draft, base_url, deposition["id"])
+        state = {"environment": environment, "deposition_id": deposition["id"], "draft_url": draft_url}
+        if args.new_version:
+            # The published workspace record supplies this marker, not a field of Zenodo's draft.
+            # It distinguishes a version draft from a fresh draft made by a plain run (ruling 2026-10-16).
+            state["concept_doi"] = prior.get("concept_doi", "")
+        journal = None
+        if args.publish and problem_target is not None:
+            # A fresh operation id tells this publication from a retry of an earlier one, and the next
+            # run settles it before anything else (design 2026-10-12 §17).
+            journal = {"operation_id": uuid.uuid4().hex, "path": "direct", "environment": environment,
+                       "base_url": base_url, "deposition_id": deposition["id"], "draft_url": draft_url,
+                       "math_problem": problem_target, "settled": False, "attached": False}
+            _write_problem_journal(journal, f"The recovery record of deposition {deposition['id']} could not be"
+                                            f" written, so it was not published. It stays a draft on Zenodo: {draft_url}.",
+                                   write_failure_advice_msg=next_step_msg)
+        with _explain_unsettled_journal(journal):
+            if args.publish:
+                # Every publishing direct deposit keeps its local record before the publish call
+                # (design 2026-10-12 §26.11).
+                _record_pending_deposit(store, state)
+                # The publish answer supplies the DOI values. The concept DOI used to recognize
+                # a version draft comes from the published workspace record, as ruled 2026-10-16.
+                publish_response = _call_zenodo(
+                    "POST", f"{base_url}/deposit/depositions/{deposition['id']}/actions/publish", token,
+                    failure_advice=_build_publish_request_advice_set(deposition["id"], draft_url, problem_target,
+                                                                     is_new_version=args.new_version),
+                    environment=environment)
+                retry_msg = (f"Run the same command again. It reads deposition {deposition['id']} back from Zenodo."
+                             if problem_target is not None else _build_recorded_deposition_retry_msg(deposition["id"]))
+                _require_deposition_answer(publish_response, deposition["id"], retry_msg, published=True)
+                state["doi"] = publish_response.get("doi", "")
+                state["concept_doi"] = publish_response.get("conceptdoi", "")
+                state["record_url"] = publish_response.get("links", {}).get("record_html", "")
+                print(f"The record is published: {state['record_url']}")
+            else:
+                print(f"The draft deposit is created. Review it at: {state['draft_url']}")
+            # The user reads the record before the local record is kept, so a store that
+            # refuses the write still leaves the DOI on the screen.
+            print(json.dumps(state, indent=2))
+            _save_deposit_state(store, store_open_error, state)
+            if journal is not None:
+                journal = _mark_journal_settled(journal, state)
         if journal is not None:
-            journal = _mark_journal_settled(journal, state)
-    if journal is not None:
-        _attach_recorded_record(journal)
+            _attach_recorded_record(journal)
 
 
 def _build_draft_of_this_run_advice(deposition_id: int, draft_url: str, next_step_msg: str) -> str:

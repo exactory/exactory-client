@@ -86,6 +86,16 @@ class _FakeZenodoApi:
         self.requests = []
 
     def __call__(self, request):
+        if hasattr(request.data, "read"):
+            # Consume the body while its command owns the stream, like urllib.
+            # Keep received bytes for the existing recovery assertions.
+            chunks = []
+            while True:
+                chunk = request.data.read(65536)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            request.data = b"".join(chunks)
         self.requests.append(request)
         url = request.full_url
         method = request.get_method()
