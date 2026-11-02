@@ -53,9 +53,11 @@ class ProblemReviewTests(LiteratureCase):
             key: statement[key] for key in ("statement", "resolution_criteria")})
         claims.describe_problem_evidence = lambda records, artifacts: copy.deepcopy(self.expected)
         claims.compute_problem_evidence_digest = lambda records, artifacts: digest(self.expected)
-        replacement = patch.dict(sys.modules, {"research_harness.problem_claims": claims})
-        replacement.start()
-        self.addCleanup(replacement.stop)
+        # Replace and restore only this entry. Restoring the whole of sys.modules would drop every module that the test
+        # imported first, and a later import would create a second module object under the same name.
+        original = sys.modules["research_harness.problem_claims"]
+        sys.modules["research_harness.problem_claims"] = claims
+        self.addCleanup(sys.modules.__setitem__, "research_harness.problem_claims", original)
         install_rubric_anchors(self)
 
     def put(self, kind, identifier, value):

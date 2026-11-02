@@ -24,11 +24,16 @@ class ProblemResultPartsTests(ResultPartsCase):
         self.addCleanup(source_case.doCleanups)
         # This transport fixture substitutes the claim validator. Build the reading
         # and its metadata with the real operations before delivering their projection.
-        with patch.dict(sys.modules, {"research_harness.problem_claims": cli.problem_claims}):
+        # Swap only this entry, so that the modules first imported meanwhile stay in sys.modules.
+        replaced = sys.modules["research_harness.problem_claims"]
+        sys.modules["research_harness.problem_claims"] = cli.problem_claims
+        try:
             source_case.setUp()
             source_case.record_metadata()
             records = source_case.store.snapshot()["records"]
             evidence = describe_evidence(records, source_case.artifacts)
+        finally:
+            sys.modules["research_harness.problem_claims"] = replaced
         for reference in protocol.collect_references(records):
             self.assertEqual(self.case.artifacts.put(source_case.artifacts.read(reference), reference['media_type']), reference)
         for kind in ('work', 'source', 'source_bundle', 'reading', 'problem_citation_metadata'):

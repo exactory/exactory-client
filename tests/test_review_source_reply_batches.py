@@ -271,7 +271,10 @@ class SourceReplyBatchTests(StrategyCase):
         legacy_packet.pop('digest')
         legacy_packet['digest'] = digest(legacy_packet)
         frozen_bytes = json.dumps(legacy_packet, sort_keys=True, ensure_ascii=False).encode('utf-8')
-        legacy = dict(assignment, id='legacy', packet=self.artifacts.put(frozen_bytes, 'application/json'),
+        # A recorded assignment of an earlier release carries its history inline; since 0.71.0 a new one stores
+        # history_ref, which the copy leaves out.
+        legacy = dict({key: value for key, value in assignment.items() if key != 'history_ref'}, id='legacy',
+                      packet=self.artifacts.put(frozen_bytes, 'application/json'),
                       packet_digest=legacy_packet['digest'], history=request['input'])
         original = transport.request_body(records['review_route']['route'], legacy['prompt']['text'],
                                           legacy_packet, legacy['history'])
