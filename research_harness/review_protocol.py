@@ -2544,6 +2544,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
                 packet.pop('digest')
                 packet['digest'] = digest(packet)
+        from .review_source_batches import plan_packet
+        packet = plan_packet(records, artifacts, route, packet, prompt, history)
         controller = packet.get('staged_review', {}).get('kind') == 'controller'
         record = dict(value, packet=None if controller else _put_json(artifacts, packet), packet_digest=packet['digest'],
                       prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'], route_digest=digest(route),

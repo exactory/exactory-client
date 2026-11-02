@@ -46,6 +46,9 @@ class SourceCapacityPendingTests(StrategyCase):
         self.limit = patch.object(review_transport, 'CODEX_INPUT_LIMIT_CHARS', 105000)
         self.limit.start()
         self.addCleanup(self.limit.stop)
+        planner_limit = patch.object(review_transport, 'local_input_limit', return_value=105000)
+        planner_limit.start()
+        self.addCleanup(planner_limit.stop)
         # These tests exercise the batching by the input limit. A turn's reading budget of new full text would otherwise
         # defer the second and third source before the input limit applies.
         budget = patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 10 ** 6)
@@ -67,7 +70,7 @@ class SourceCapacityPendingTests(StrategyCase):
         self.assertLessEqual(len(packet_text(request)), 105000)
         packet = json.loads(request['input'][-1]['content'].split('\n', 1)[1])
         self.assertTrue(packet['pending_source_requests'])
-        self.assertEqual(self.packet('batch')['pending_source_requests'], [])
+        self.assertEqual(self.packet('batch')['pending_source_requests'], packet['pending_source_requests'])
         return output, packet
 
     def record_final(self, output, assignment='batch'):
