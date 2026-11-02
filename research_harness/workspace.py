@@ -58,11 +58,24 @@ def checked_parent(root, relative, *, create=False):
             yield descriptor, parts[-1]
 
 
-def read_file(root, relative):
+@contextmanager
+def open_file(root, relative):
+    """Open a checked regular file without following path or final-entry links."""
     try:
         with checked_parent(root, relative) as (directory, name):
-            with os.fdopen(_regular_file(directory, name), "rb") as source:
-                return source.read()
+            source = os.fdopen(_regular_file(directory, name), "rb")
+    except FileNotFoundError as error:
+        raise ResearchError("artifact_missing", "Required workspace file is missing", {"path": relative}) from error
+    except OSError as error:
+        raise _filesystem_error(error) from error
+    with source:
+        yield source
+
+
+def read_file(root, relative):
+    try:
+        with open_file(root, relative) as source:
+            return source.read()
     except FileNotFoundError as error:
         raise ResearchError("artifact_missing", "Required workspace file is missing", {"path": relative}) from error
     except OSError as error:
