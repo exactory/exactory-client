@@ -225,8 +225,9 @@ The preparation policy is a preset of the research depth plan. `depth` records
 changed defaults and their reason; consuming calls can state overrides and retain
 their effective amounts. Saved work uses its recorded amounts. Research studies
 can keep Version 6 or adopt Version 7 without changing a claim through adoption
-alone. Verification retains Version 6 and its fixed contract; its adoption is
-out of scope for this release.
+alone. Verification retains Version 6; its adoption of Version 7 is out of
+scope for this release, and a verification depth plan raises only its three
+literature amounts (the CLI reference, "Depth plan").
 
 Keep full dependency maps for audit. Claim currency follows objective, scope,
 assumptions, plan, executions, supporting evidence and cited sources, inheritance,

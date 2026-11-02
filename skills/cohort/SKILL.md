@@ -68,7 +68,10 @@ reading obligation. Incomplete acquisition stays visible as a notice, and the
 Use stored abstracts as a local search source with
 `exactory-research population-query --terms TERM [TERM ...] --limit N`, then
 `exactory-research batches --destination DIR --loop --candidates FILE`.
-Terms follow the objective and parent's title and abstract. A plain export
+Terms follow the objective and parent's title and abstract. The query returns
+one page; `remaining` counts the matches after it, and `--cursor` with its
+`next_cursor` returns the next page of the same query. The export records the
+page's coverage in its `manifest.json` (below). A plain export
 without `--loop` returns `policy_inapplicable` under this preset. Loop readings
 retain their purposes, dispositions and source.
 
@@ -83,7 +86,15 @@ The prediction derives from these placements; each verification draws its own
 sample.
 
 Under `exhaustive-v1`, every member owes its complete captured abstract.
-`batches` exports unread abstracts as reader files. Each reader returns one
+`batches` exports unread abstracts as reader files, each bounded by its items
+(`--size`, default 60) and by its bytes (`--max-input-bytes`, default 262,144
+for the complete encoded file); an abstract is never cut, and one entry above
+the byte bound is refused with `batch_item_too_large` and a runnable command
+that admits it. The export writes `manifest.json` first and marks it
+`complete: true` only after the whole enumeration; read it before the batch
+files, and treat them as the whole selection only when it is complete, its
+`counts.missing` (the members without an abstract) is zero and its
+`selection_coverage` shows no partial query. Each reader returns one
 notes file with the seven source-grounded fields; one coordinator records it
 with `read-batch`, which validates the whole-abstract inspection against saved
 bytes. A single `read` with a `span` locator is also supported. Resolve a

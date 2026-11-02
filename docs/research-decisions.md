@@ -759,9 +759,9 @@ not rewritten, and the Codex transports and the pins of their routes are
 unchanged.
 
 The packet text of a Codex route is limited to 1,048,576 characters. A larger
-request is refused before the CLI starts and recorded as a failed attempt with
-the error code `review_input_too_large`; no CLI output is involved, so no JSON
-decoding error is recorded for it. When the CLI exits with a nonzero code or at
+request is refused by `review-run` before an invocation exists, with the error
+code `review_input_too_large` and `phase: "dispatch_preflight"`, and nothing
+is recorded; the CLI receives nothing. When the CLI exits with a nonzero code or at
 the timeout, `execution.stderr_tail` of the attempt's response keeps the last 20
 lines of its standard error, at most 4,096 UTF-8 bytes; it is empty after a zero
 exit. Read it before a retry: it holds what the CLI printed, which the attempt
@@ -824,7 +824,8 @@ that fails its digest or bounds (`review_system_events_invalid`). A truncated
 prefix says nothing about the omitted events. `effort` is one of `low`,
 `medium`, `high`, `xhigh` or `max`; `timeout_seconds` is at most 3600. The
 route limit is 1,300,000 characters of input; a larger request is refused before
-the CLI runs and recorded as a failed attempt. The recorded runtime names the
+an invocation exists, with `review_input_too_large` and `phase:
+"dispatch_preflight"`, and nothing is recorded. The recorded runtime names the
 isolation flags, not the installed CLI version, which is recorded with each
 invocation instead, so a CLI update does not invalidate earlier reviews. The
 runtime also names the digest of the adapter module, which the route pins. After
@@ -839,9 +840,10 @@ to replay the session's earlier turns without long evidence bodies, without the
 packets of a scientific history and without the parts the current packet
 repeats. The Codex route additionally elides re-delivered and prioritized text
 bodies until the input fits the app-server limit of 1,048,576 characters. An
-input that no elision fits is refused before the CLI starts and recorded as a
-failed attempt with `review_input_too_large`; the visual route counts its native
-text and image wrappers against the same limit.
+input that no elision fits is refused before an invocation exists, with
+`review_input_too_large` and `phase: "dispatch_preflight"`, and nothing is
+recorded; the visual route counts its native text and image wrappers against
+the same limit.
 
 A route can be retired: an account closes, a model is withdrawn, or the owner
 forbids the route. Record `review-context` with `kind: "route_retired"` on the

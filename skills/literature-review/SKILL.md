@@ -30,7 +30,10 @@ in `depth_values`; the saved batch records `effective_depth`.
 Tool records grant no approval; a claim's
 fixed minimum and independent assessment determine sufficiency. Managed
 `status` marks preparation `advisory: true` and `next` names the current
-milestone's missing condition. Verification retains its fixed contract.
+milestone's missing condition. A verification raises only its hits per query,
+its search readings and its core full texts, through a depth plan with
+`profile: verification`, a reason and a stopping criterion, and never below
+their defaults.
 
 ## Search, read and expand
 
@@ -141,9 +144,15 @@ keeps those source judgments distinct from independent support/value approval.
 Stage 1 is the five captured searches above plus two local sources. The first is
 `exactory-research population-query --terms TERM [TERM ...] --limit N`, which
 ranks the enumerated population's stored abstracts by terms taken from the
-complete objective and the parent's title and abstract; pass its result straight
+complete objective and the parent's title and abstract. Its result is one page:
+`remaining` counts the matches after it, and `--cursor` with its `next_cursor`
+returns the next page of the same query, so a first page with matches remaining
+is not the whole matching population. Pass the result straight
 to `exactory-research batches --destination DIR --loop --candidates FILE`, which
-exports the selected searches' unread hits together with those candidates. The
+exports the selected searches' unread hits together with those candidates and
+records the page's coverage in its `manifest.json`. Read that manifest before
+the batch files: it is complete only after the whole export, and it counts the
+members without an abstract as missing. The
 second is the papers that cite the parent within the window, an OpenAlex query
 with the filter `cites:<parent id>` saved with `import-response` and recorded as
 a `recent` search response. Bind the whole filter value as that response's

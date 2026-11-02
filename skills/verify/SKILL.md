@@ -163,7 +163,15 @@ members the target could not be placed against, or was placed below; hits of a t
 search judged `relevant` or `contradictory`. Run a targeted search only for a specific
 finding: each captured query keeps its top 10 hits, and one verification registers at
 most 20 abstract readings from search hits, each carrying `search_hit: true`
-(`search_reading_limit_reached` beyond that). A native capture also enumerates
+(`search_reading_limit_reached` beyond that). The ten core papers, the ten hits and
+the twenty search readings are defaults.
+When a finding needs more, record a depth plan before that work with
+`exactory-research depth` and the payload `{id, profile: "verification", values,
+reason, stopping_criterion}`: `values` holds only `hits_per_query`,
+`search_readings` and `core_fulltexts`, each at least its default (a smaller value
+is `invalid_input`, another key `profile_inapplicable`), and the stopping criterion
+says when the deeper reading ends. Later searches, readings and requirements use
+the plan's amounts; the recorded ones keep theirs. A native capture also enumerates
 completely, so write the query narrow enough to return at most ten results in total,
 or import the results as a mapped capture and acquire each kept hit with `acquire`
 before it is read.

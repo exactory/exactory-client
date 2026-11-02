@@ -87,6 +87,10 @@ bounded five-purpose loop with default limit 100 abstracts and default amounts
 of five innovation cases from ten candidates); pass `--preparation-policy exhaustive-v1` or
 `--preparation-policy screened-v1` only when the user chose them, and record the
 approved resource budget with `exactory-research budget` before costly calls.
+Reviewer calls stay outside that budget; when the user sets a ceiling on their
+number, record it with `exactory-research review-budget` and `{max_calls,
+reason}`, and a run refused with `review_budget_exhausted` waits for a larger
+allowance from the user.
 Change research amounts through `depth` with a reason or explicit per-call
 overrides; record effective amounts and keep claim minimums fixed. Change into
 that workspace. Read the user's context and resource limits, preserve original

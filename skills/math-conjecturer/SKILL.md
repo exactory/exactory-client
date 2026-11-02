@@ -113,7 +113,10 @@ closes it. It has a budget, and it has a legitimate outcome in which nothing is 
 2. Run `exactory-research problem-init --file init.json --expected-revision 0 --request-id init`.
 3. Before the first costly call, record the exploration budget with `exactory-research budget`
    (profile `research`; purpose `literature`, `screening` or `experiment`). To spend beyond it,
-   record a new budget with the reason.
+   record a new budget with the reason. Reviewer calls stay outside that budget; when the user
+   sets a ceiling on their number, record it with `exactory-research review-budget` and
+   `{max_calls, reason}`, and a run refused with `review_budget_exhausted` waits for a larger
+   allowance from the user.
 
 One principle of problem selection is absolute, and no rubric grade, review or other
 consideration outweighs it. When a counterexample or another proof refutes a conjecture, the
@@ -682,7 +685,8 @@ accepted tasks of the epoch instead of one request. The
    `context.review_ids`. An adjudication of A7 decides only whether the question is of the
    excluded kind. Run the assignment with `review-run` and record the observed finding with
    `review-adjudication`. An adjudication whose packet does not fit one input stays an ordinary
-   assignment, and its run is refused with `review_input_too_large`; an explicit `staged_upgrade`
+   assignment, and `review-run` refuses its run before an invocation exists, with
+   `review_input_too_large` and `phase: "dispatch_preflight"`, recording nothing; an explicit `staged_upgrade`
    that names that assignment, as in step 3, opens a staged review with the objection's claim,
    reason, resolution condition and correction request as its claims; the disposition is the
    terminal choice of its final task, and `review-adjudication` records the controller's

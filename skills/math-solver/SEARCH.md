@@ -2223,8 +2223,14 @@ include `--check` leaves no entry, because a check writes nothing. An ordinary
 shell command that names a path under the workspace is recorded only after a
 harness-command entry of the same session. A null identity never admits one, and a
 harness command on another attack does not admit inspection of this one. The log
-keeps the last 200 entries of all sessions. When a session's harness entry leaves
-the window, its ordinary calls stop being recorded until its next harness command.
+keeps the last 200 entries of all sessions and, for each identified session that
+has an entry among those 200, its most recent harness-command entry in its
+original position, so a session that keeps working in the attack keeps its
+ordinary shell activity recorded. A session with no entry among the last 200
+loses that entry, and its ordinary calls are not recorded until its next harness
+command. An exclusive lock on the attack directory itself covers each read,
+append and rewrite of the log, so no lock file is added to the attack, and the
+rewrite replaces the file atomically.
 The recorder splits a command with the guard's lexer settings and attributes a
 compound command to each workspace once. Quoted or escaped separators do not make
 a harness call. Only the direct command that the host reports is seen, not programs

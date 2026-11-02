@@ -31,7 +31,7 @@ with actual evidence before recording a call.
 | Run | Current admitted prospective plan, pinned program and inputs, exact runtime, outputs, validation and resource reservation. | `cycle`, `admit`, `bind-run`, `exactory-lab run`, `reconcile-run`, `assess`, `checkpoint`. | `cycle_plan`, `execution_admission`, binding and execution observations, `cycle_assessment` and checkpoints preserve authority, original outcomes, sealed outputs, actual usage, validity, scope, failures and next questions. Acceptance of a result uses the orchestration's gate. |
 | Synthesis notes | Exact supporting sources, field and applicability, claim scope, rationale, innovation cases and context; reading and analysis allowance. Innovation calls state candidate and case counts. | `standards`, `rationale`, `innovation`, `context`. | Selected immutable `synthesis` sections bind their own evidence and assessments. Innovation retains the effective candidate and case amounts. Notes inform claims; the direction gate checks the standards it needs. |
 | Challenges ahead | Ultimate and nearer goals, advance criteria, exact full-read evidence and reason for a changed direction; source and analysis allowance. | `grand-challenge`. | `grand_challenge` and its current selection retain goals, criteria and evidence for the study. This study record is distinct from a challenge posted on exactory. It belongs to ai-science's direction minimum. |
-| Depth plan | Default amounts and a reason for each change, within authorized resource budgets. | `depth`. | Immutable `depth_plan` with `{id, values, reason, revision}` and `depth_plan_selection` selecting the current plan. The plan stays outside configuration and claim dependency digests. |
+| Depth plan | Default amounts and a reason for each change, within authorized resource budgets; for a verification, also the stopping criterion of the deeper reading. | `depth`. | Immutable `depth_plan` with `{id, profile, values, reason, revision}` and `stopping_criterion` (required for verification), and `depth_plan_selection` selecting the current plan of each profile. The plan stays outside configuration and claim dependency digests. |
 
 Tool budgets use the existing `budget` operation and `resource_budget` and
 `resource_account` records. The purposes are `literature`, `screening`,
@@ -199,11 +199,15 @@ plan records the reason and all resolved defaults:
 exactory-research depth --file depth.json --expected-revision REVISION --request-id set-depth-002
 ```
 
-With a selected plan, `status` exposes `limits.depth: {plan_id, values}`.
-Stores without a selected plan retain their existing report shape. Depth changes
-need no constitution revalidation, including in research studies retaining Version 6.
-Verification depth changes are out of scope for this release; verification keeps
-its fixed contract and `depth` returns `profile_inapplicable` there.
+With a selected plan, `status` exposes `limits.depth: {plan_id, profile,
+stopping_criterion, values}`. Stores without a selected plan retain their
+existing report shape. Depth changes need no constitution revalidation,
+including in research studies retaining Version 6. A verification plan carries
+`profile: verification`, a reason and a nonempty `stopping_criterion`, and
+raises only `hits_per_query`, `search_readings` and `core_fulltexts`, never
+below their defaults of 10, 20 and 10; the selection is kept per profile, so
+a research plan never changes a verification search. The
+[CLI reference](research-cli.md#depth-plan-depth) gives the rules.
 
 Each consuming call accepts an optional `depth` object for its applicable keys:
 `search`, `sample`, `require-fulltext` for `core`, `innovation` and
