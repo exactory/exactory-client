@@ -59,10 +59,30 @@ class ProblemResultHistoryTests(ResultPartsCase):
                      'superseded', 'many-superseded'):
             builder = cls()
             try:
-                builder.setUp()
                 if name == 'legacy':
-                    builder.record_series((2, 2, 2), 300000, note_size=12000, limit=500000, final_size=14000)
-                elif name == 'ledger':
+                    # This fixture stands for a 0.69.18 store, whose request the frozen fixture of
+                    # test_recorded_06918_request_rebuilds_byte_for_byte binds with its records' revisions. Such a
+                    # store has no reviewer call captures (0.71.0), so its bars and series are recorded without them:
+                    # the observation stays in this process, as it did then. The module is the one that
+                    # review_protocol's relative import resolves, as for review_problem_history below.
+                    review_call_capture = importlib.import_module('research_harness.review_call_capture')
+                    held = {}
+
+                    def keep_observation(store, operation, payload, invocation, route, observation, **kwargs):
+                        held[operation, payload['id']] = (invocation, observation)
+
+                    def read_observation(records, artifacts, operation, payload, request_id):
+                        return held[operation, payload['id']]
+
+                    with patch.object(review_call_capture, 'capture_call', side_effect=keep_observation), \
+                            patch.object(review_call_capture, 'read_call_observation', side_effect=read_observation):
+                        ResultPartsCase.setUp(builder)
+                        install_codex_runtime(builder)
+                        builder.record_series((2, 2, 2), 300000, note_size=12000, limit=500000, final_size=14000)
+                    builder.save_fixture(name)
+                    continue
+                builder.setUp()
+                if name == 'ledger':
                     builder.record_ledger_series()
                 else:
                     if name == 'owned':
