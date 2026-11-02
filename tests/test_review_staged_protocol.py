@@ -2,6 +2,7 @@
 
 import copy
 import json
+from pathlib import Path
 from unittest.mock import patch
 
 from problem_parts_fixtures import ResultPartsCase
@@ -16,6 +17,7 @@ from research_harness.errors import ResearchError
 _WORKER_SCRIPT = '''
 import sys
 from pathlib import Path
+sys.path[:0] = %r
 from research_harness import review_worker, review_protocol, review_transport, review_codex_transport, review_excerpts
 from codex_route_fixtures import build_codex_response
 review_codex_transport.runtime = lambda: {'adapter':'codex_cli_v1','fixture':'reviewer-excerpt-test'}
@@ -30,7 +32,7 @@ def send(route, request, credential):
     return build_codex_response(route, request, {'claims':claims, 'conditions':[], 'dependencies':[], 'unresolved':[]})
 review_transport.send_request = send
 review_worker.run_worker(Path(sys.argv[1]), sys.argv[2], sys.argv[3], int(sys.argv[4]))
-'''
+''' % [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
 
 class StagedEntryTests(ResultPartsCase):
     staged_entry = True

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -80,6 +81,15 @@ class CodexProcessTimeoutTests(unittest.TestCase):
     def live(self, pid):
         return probe_supervision.find_process_identity(pid) is not None
 
+    def wait_for_exit(self, processes):
+        deadline = time.monotonic() + 3
+        while True:
+            surviving = [role for role, item in processes.items() if self.live(item["pid"])]
+            remaining = deadline - time.monotonic()
+            if not surviving or remaining <= 0:
+                return surviving
+            time.sleep(min(0.05, remaining))
+
     def invoke(self):
         with patch.object(transport.shutil, "which", return_value=str(self.program)):
             return transport.send_request(self.route, self.request)
@@ -106,7 +116,7 @@ class CodexProcessTimeoutTests(unittest.TestCase):
         self.assertEqual(set(processes), {"wrapper", "child", "grandchild"})
         self.assertFalse(watchdog_fired.is_set(), "The adapter must finish without the test watchdog")
         self.assertIsNone(unrelated.poll(), "An unrelated process must retain its own lifetime")
-        surviving = [role for role, item in processes.items() if self.live(item["pid"])]
+        surviving = self.wait_for_exit(processes)
         self.assertEqual(surviving, [], "A timed-out wrapper must not leave its native descendants running")
         self.assertEqual({item["pgid"] for item in processes.values()}, {processes["wrapper"]["pid"]})
         for role in ("child", "grandchild"):
@@ -132,10 +142,24 @@ class CodexProcessTimeoutTests(unittest.TestCase):
         response = self.invoke()
         processes = self.processes()
         self.assertEqual(set(processes), {"wrapper", "child", "grandchild"})
-        surviving = [role for role, item in processes.items() if self.live(item["pid"])]
+        surviving = self.wait_for_exit(processes)
         self.assertEqual(surviving, [], "Closed output pipes do not establish that native work stopped")
         for role in ("child", "grandchild"):
             self.assertTrue((self.root / (role + ".term")).is_file())
         self.assertTrue(response["execution"]["timeout"])
         self.assertIsNone(response["execution"]["returncode"])
         self.assertEqual(response["usage"], {})
+
+    def test_closed_pipe_timeout_waits_for_asynchronous_sigkill_delivery(self):
+        signal_group = transport._signal_group
+
+        def send_signal(process, requested_signal):
+            if requested_signal != signal.SIGKILL:
+                return signal_group(process, requested_signal)
+            delivery = threading.Timer(0.25, signal_group, args=(process, requested_signal))
+            delivery.start()
+            self.addCleanup(delivery.join)
+            return True
+
+        with patch.object(transport, "_signal_group", side_effect=send_signal):
+            self.test_timeout_stops_descendants_that_do_not_hold_the_output_pipes()

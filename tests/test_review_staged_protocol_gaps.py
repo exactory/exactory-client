@@ -1,6 +1,7 @@
 """Integration contracts between staged planning, packets and observed outputs."""
 
 import copy
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
@@ -338,6 +339,7 @@ class StagedObservedGapTests(ResultPartsCase):
         script = '''
 import copy, sys
 from pathlib import Path
+sys.path[:0] = %r
 from research_harness import review_worker, review_transport, review_codex_transport, review_excerpts
 from codex_route_fixtures import build_codex_response
 review_codex_transport.runtime = lambda: {'adapter':'codex_cli_v1','fixture':'reviewer-excerpt-test'}
@@ -359,7 +361,7 @@ def send(route, request, credential):
     return build_codex_response(route, request, output)
 review_transport.send_request = send
 review_worker.run_worker(Path(sys.argv[1]), sys.argv[2], sys.argv[3], int(sys.argv[4]))
-'''
+''' % [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
         for index, assigned in enumerate(planned):
             child = self.case.assign('result', 'first', identifier='page-child-' + str(index),
                 controller_assignment_id=controller['id'], task_id=assigned['id'], task=assigned, composition_plan=plan)

@@ -5,7 +5,7 @@ import unittest
 
 from research_harness import review_staged as staged
 from research_harness.evidence import digest
-from tests.test_review_staged_fixtures import epoch, full_card, observation, profile, selection, task
+from test_review_staged_fixtures import epoch, full_card, observation, profile, selection, task
 
 
 class StagedClaimGraphTests(unittest.TestCase):
