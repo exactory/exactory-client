@@ -92,8 +92,13 @@ Do not run `post-challenge` until every locator resolves.
    `exactory-check lookup --refs-json challenge-refs.json --out challenge-citation-report.json`.
    Always give `--out`: the default report path belongs to a draft
    workspace's citation gate, and this check must not overwrite it.
-3. The command exits non-zero when a reference blocks. Correct or remove
-   every blocking entry, then run it again until all entries verify.
+3. The command exits non-zero when a reference blocks, and while an entry is
+   incomplete (`no_query`, `network_error` or `search_incomplete`). Correct or
+   remove every blocking entry, then run it again until all entries verify. A
+   `search_incomplete` entry is a title search that stopped at its page bound;
+   the output prints the command with twice the pages (`--search-pages`), but
+   the reliable fix is the DOI or the arXiv id in `bibliography`, which is
+   resolved without a search.
 4. For an https URL locator, fetch the URL and confirm it returns the cited
    document. A URL that does not resolve is corrected or removed.
 

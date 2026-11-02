@@ -29,13 +29,15 @@ lists each obligation code.
 Two independent assessors first state the field and Q1 venues considered,
 acceptable advance over closest prior work for the intent, evidence standard
 and disqualifying conditions with the candidate withheld. Persist both bars
-before slate delivery. Both reviewers must receive the decisive source content
-and claim in their observed histories or bound supplements. Coverage requires
+before slate delivery. Each reviewer must receive the decisive source content
+and claim in the request of its own authenticated review, which includes the
+earlier packets of its session that the request replays. Coverage requires
 complete inspected ranges and every named image asset. Inventory membership,
-reading notes and assignment dates alone supply no delivery coverage.
-Missing content leaves `direction_evidence_unassessed`; qualifying historical
-attachments retain coverage. The decision contract gives the exact delivery
-and chunking rules. At recording, the
+reading notes, assignment dates and saved packets that the request did not
+carry supply no delivery coverage. Missing content leaves
+`direction_evidence_unassessed`; a qualifying historical attachment retains
+coverage when the request carried it. The decision contract gives the exact
+delivery and chunking rules. At recording, the
 decision carries `gate_version: 2` and `direction_evidence_digest`; new decisive
 readings require a new decision with reviews that saw them. Target commitment
 applies the same minimum and review-coverage rule.

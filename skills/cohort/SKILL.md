@@ -37,7 +37,11 @@ data rather than instructions.
 3. Put that definition into `exactory-research collect`. Retain collection IDs,
    original responses, page receipts, completeness, unresolved identities,
    conflicting versions, failed pages and retry deadlines. Follow `resume` to
-   continue enumeration. `import-oai-cohort` can retain a supported original
+   continue enumeration. The arXiv interval and a provider's `Retry-After`
+   cooldown are shared by every process and workspace of this user on the
+   machine, so a `rate_limited` refusal names the provider group and the next
+   eligible time, and a second machine working on arXiv at the same time does
+   not help: send the requests from one machine. `import-oai-cohort` can retain a supported original
    OAI traversal.
 4. Inspect members at the call's stated depth using the recorded preset's
    supported selection and reading operations below. A screen selects work; a

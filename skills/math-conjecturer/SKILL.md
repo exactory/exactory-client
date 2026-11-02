@@ -593,7 +593,9 @@ field blind; now they grade the realized statement against their own bar, on the
 evidence that each reviewer's actual request delivers. The post gate's result coverage check
 (`problem_evidence_unassessed`) requires that request to carry every part of the current
 evidence, deliver every reading and attach the bytes of the artifacts of the assessment
-evidence, the computations and the formal checks. The search records in that evidence satisfy
+evidence, the computations and the formal checks; a saved packet that the request did not
+carry credits nothing, and the same request bounds what the review may cite
+(`review_evidence_undelivered`). The search records in that evidence satisfy
 the check for the bound searches, so a text route may withhold the bodies of their captured
 responses at its input limit. For a review performed in stages (step 3), the check reads the
 accepted tasks of the epoch instead of one request. The
@@ -756,7 +758,11 @@ Check every citation locator before posting, exactly as `/exactory:propose-grand
    If the citation names a title, include it as `bibliography.title`.
 2. Run `exactory-check lookup --refs-json problem-refs.json --out problem-citation-report.json`.
    Always give `--out`. The default path belongs to a draft workspace's citation gate.
-3. Fix or remove every blocking entry. Run the check again until all entries pass.
+3. Fix or remove every blocking entry. Run the check again until all entries pass. The check
+   also fails while an entry is incomplete (`no_query`, `network_error` or `search_incomplete`).
+   A `search_incomplete` entry is a title search that stopped at its page bound; the output
+   prints the command with twice the pages (`--search-pages`), but the reliable fix is the DOI
+   or the arXiv id in `bibliography`, which is resolved without a search.
 4. Fetch every https locator. Check that it returns the cited document.
 
 Check that the problem is not already posted:

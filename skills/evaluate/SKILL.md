@@ -62,11 +62,16 @@ outside a draft workspace with no BibTeX, build a JSON list in the shape
 ```
 
 A reference with no DOI needs at least a `title` or an `arxivId` to be checkable;
-without one its status is `no_query`. Run
+without one its status is `no_query`, an incomplete result that fails the lookup. Run
 `exactory-check lookup --refs-json <path>`. Inside a workspace this path does not
 apply: `draft/references.bib` is the contract the gate hashes.
 
-The report lands in `.exactory/citation-check.json`. Act on the statuses:
+The report lands in `.exactory/citation-check.json` as a version 2 report:
+`lookup_complete` says that every entry got a conclusive result, `all_verified`
+that every entry is `verified`, `incomplete_keys` names the entries without a
+conclusive result, and `counts` gives `verified`, `blocking`, `warning` and
+`incomplete`. The gate reads only a version 2 report; a report that an earlier
+release wrote is produced again with `lookup`. Act on the statuses:
 
 - **Blocking** (`not_found`, `unresolved`, `title_mismatch`, `author_mismatch`): the
   reference itself is wrong. Fix it at the reference: replace the entry with one the
@@ -74,8 +79,20 @@ The report lands in `.exactory/citation-check.json`. Act on the statuses:
   mistyped identifier, or drop the citation together with the sentence that leaned on
   it. Then re-run `exactory-check lookup`. Never fix a blocking entry by editing the report. The
   report is a measurement; editing it is fabrication.
-- **Warnings** (`year_mismatch`, `no_query`, `network_error`): judgment calls. A
-  network failure is never evidence of fabrication; re-run when the network returns.
+- **Warnings** (`year_mismatch`): a judgment call; a lookup can be complete while
+  `all_verified` is false.
+- **Incomplete** (`no_query`, `network_error`, `search_incomplete`): the entry got no
+  conclusive result, so `lookup_complete` is false and the lookup and the gate fail.
+  A network failure is never evidence of fabrication; re-run when the network
+  returns. `search_incomplete` means that the title search (Crossref, then
+  OpenAlex, five results per page) stopped at its page bound before a match or a
+  complete traversal of both registries; the entry's `searches` records each
+  provider's pages, inspected and reported counts, omitted count, next cursor and
+  termination reason, and the output prints the same command with twice the pages
+  (`--search-pages N`, default 1). A relevance-ranked title search usually reports
+  far more results than any page bound reaches, so an unmatched title is often
+  `search_incomplete`: the fix is an identifier for the entry (a DOI, an arXiv id
+  or a PMID) or a corrected title, not a larger page count again and again.
 - **Manuscript findings** (inside a workspace, from `draft/paper.tex` and the
   files that it includes): an entry under `manuscript.uncited_keys` is blocking.
   Cite it where it supports a statement, or remove it. `\nocite` does not count

@@ -59,11 +59,14 @@ readings of all relevant or contradictory hits and roots, applicable source-vali
 `standards`, and a current Grand Challenge record. A deferred decisive source
 remains a gap. Two assessors establish the Q1 bar with the candidate withheld:
 field and venues, acceptable advance over closest prior work, evidence standard
-and disqualifying conditions. Both reviewers must receive complete inspected
-ranges and every named image asset in observed packets or bound supplements.
-Coverage checks the delivered source bytes and provenance. Missing content leaves
-`direction_evidence_unassessed`; reading records and inventory alone grant no
-coverage. Qualifying historical attachments retain coverage.
+and disqualifying conditions. Each reviewer must receive complete inspected
+ranges and every named image asset in the request of its own authenticated
+review, which includes the earlier packets of its session that the request
+replays. Coverage checks the delivered source bytes and provenance. Missing
+content leaves `direction_evidence_unassessed`; reading records, inventory,
+descriptors and saved packets that the request did not carry grant no
+coverage. A qualifying historical attachment retains coverage when the request
+carried it.
 
 New decisions carry `gate_version: 2`. Recording `investigate` or `pivot` and
 committing a target require the minimum and reviewed evidence. The decision's

@@ -187,10 +187,12 @@ Use the [direction decision contract](../../docs/research-decisions.md#before-ta
 when the orchestration commits a direction. Two assessors establish the Q1 bar
 before receiving the slate. Recording a version-2 investigate/pivot decision and
 committing a target require the minimum and source content actually delivered
-in each reviewer's observed history. Complete inspected ranges and every image
-asset named by an inspection are required. Missing ranges or image bytes keep
-`direction_evidence_unassessed`. Inventory, reading notes and chronology alone
-supply no delivery coverage; qualifying historical attachments remain usable. The decision binds `direction_evidence_digest`; newly read decisive
+in the request of each reviewer's own authenticated review. Complete inspected
+ranges and every image asset named by an inspection are required. Missing
+ranges or image bytes keep `direction_evidence_unassessed`. Inventory, reading
+notes, chronology and saved packets that the request did not carry supply no
+delivery coverage; a qualifying historical attachment remains usable when the
+request carried it. The decision binds `direction_evidence_digest`; newly read decisive
 evidence needs a new decision with reviews that saw it. `q1_venue` assesses
 potential in slate reviews and realized supported advance at results.
 Target commitment retains its exact approved content and source-impact declaration.
@@ -244,5 +246,7 @@ When relevant sources or claim scope change, revisit affected evidence and its
 gate. Unrelated reading, synthesis or constitution changes leave a claim current.
 Preserve full dependency maps and historical inputs for audit and compatibility.
 Resume retained collection IDs at eligible retry times and preserve failed access
-and reading gaps. A pause, availability
+and reading gaps. A `rate_limited` refusal sends nothing and names the provider
+group and the next eligible time; the arXiv interval and every `Retry-After`
+cooldown are shared by all processes and workspaces of this user on the machine. A pause, availability
 qualification, old receipt, or completed form does not discharge current work.

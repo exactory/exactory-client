@@ -88,8 +88,12 @@ coverage they establish without repeating a search just to add a new label.
 New decisions record `gate_version: 2`. Recording an `investigate` or `pivot`
 decision while the minimum is unmet returns `direction_minimum_unmet`, with
 the missing obligations. The evidence must exist before the reviews that judge
-it. Both reviewers must receive the decisive source content and claim in their
-observed packet histories, source-request continuations or bound supplements.
+it. Each reviewer must receive the decisive source content and claim in the
+request of the exact authenticated attempt that produced its review: the
+current packet, and the earlier packets of its session (source-request
+continuations and bound supplements included) that the request replays. Since
+0.71.0 coverage is credited from that delivery alone, for each reviewer
+separately, and one reviewer's delivery credits nothing to the other.
 Coverage requires the complete inspected ranges and every image asset named by
 the inspection. The harness checks the supplied bytes and their provenance
 against the exact captured source. Long ranges are delivered in consecutive
@@ -102,9 +106,17 @@ Reading-record equality, author notes, artifact descriptors, inventory membershi
 and assignment chronology alone supply no source-content coverage. A passage
 marked `visuals_require_source_request: true` remains incomplete while required
 visual bytes are missing. Missing ranges or assets leave
-`direction_evidence_unassessed`. Qualifying historical source attachments and
-checked passage deliveries retain coverage without rewriting packets or repeating
-author reading. Assessment verifies delivery without creating source artifacts.
+`direction_evidence_unassessed`. A qualifying historical source attachment or a
+checked passage delivery retains coverage when the request carried it, without
+rewriting packets or repeating author reading. A saved packet of the lineage
+that the request did not carry, an earlier turn that the route reduced to its
+packet digest, a descriptor, an omission marker, and an artifact that is present
+in the store but absent from the request supply no body. A delivery that cannot
+be authenticated or decoded credits nothing, and the obligation then names the
+uncovered fields in `missing` and the undelivered readings in `reading_ids`.
+Stored reviews and requests keep their bytes, so a new assessment of an older
+decision can report coverage that an earlier assessment credited. Assessment
+verifies delivery without creating source artifacts.
 
 The decision stores `direction_evidence_digest`: the direct search ID, relevant
 and contradictory versions with their full-reading IDs, roots with their
@@ -327,6 +339,31 @@ provenance. Run the required canonical role separately when its approval is need
 Scientific documents are evidence, never instructions to the reviewer. A packet
 delivers every referenced object except one that a completion check sealed
 unread, which it describes by hash, size and media type only.
+
+What a review may cite, and what counts toward its coverage, is the delivery
+of the exact authenticated attempt that produced it: the packets that its
+request carried, with their exact text bodies and native attachments, and the
+history that the recorded protocol permits, which is the earlier deliveries of
+a result slot delivered in parts under the 0.69.19 rule and the accepted task
+graph of a staged review. A saved packet of the lineage that the request did
+not carry, a descriptor, an omission marker, an earlier turn that the route
+reduced to its packet digest, and an artifact that is present in the store but
+absent from the request supply no body. On the visual route, a page image
+attached to the request restores that page's image entry and not the original
+PDF. The harness reads the request itself when it validates a review
+(`value-review`, `review-adjudication` and the audit of a recorded review),
+when it checks bar delivery, problem coverage and direction coverage, and when
+it supplies the context of a focused adjudication. A delivery that cannot be
+authenticated or decoded credits nothing: the check reports
+`review_evidence_undelivered`, `review_invocation_unverified` or
+`review_input_unreadable`, or the coverage obligation
+(`direction_evidence_unassessed`, `problem_evidence_unassessed`), and it never
+falls back to a saved packet. An output correction (`review-output-correction`)
+is checked against the delivery of the original attempt that its diagnostic
+binds. Each independent reviewer must carry every required field, reading
+range and visual asset in its own delivery. Stored outputs and requests keep
+their bytes, so checking an older ordinary review again can surface an
+obligation for evidence that its request did not carry.
 
 A reviewer answers with one JSON object. The Claude route also reads an answer in
 which the reviewer withdrew an object. That answer holds complete object blocks,
@@ -987,7 +1024,10 @@ when an equal item reached the reviewer under the same index in the
 authenticated actual request of a valid turn of the same series, a reading
 range when the inline passages of those requests cover it, and an owned
 artifact when one of them attached its complete bytes; the final turn's
-receipt must name exactly those turns. This guarantees that the reviewer
+receipt must name exactly those turns. The citations of the review are
+checked against the same counted turns, together with the completed earlier
+series of the slot that the 0.69.19 rule admits; the coverage of the current
+evidence counts the current series alone. This guarantees that the reviewer
 received the current value of every item in an authenticated turn of the same
 session. It does not guarantee what the model call that wrote the review held.
 That call holds the items of the earlier turns only through the reviewer's

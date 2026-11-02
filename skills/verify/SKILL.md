@@ -190,7 +190,13 @@ in your verdict which one moved you:
   ```
 
   A fabricated reference is strong evidence against the paper. A reference that fails
-  only because the network failed is evidence of nothing.
+  only because the network failed is evidence of nothing, and neither is
+  `search_incomplete`: the title search stopped at its page bound before a match or a
+  complete traversal of Crossref and OpenAlex. The output prints the same command
+  with twice the pages (`--search-pages`); an entry with a DOI, an arXiv id or a PMID
+  is resolved without a search, so give the identifier that the paper prints. A
+  conclusive mismatch speaks against the reference: `not_found`, `title_mismatch`,
+  `author_mismatch`, or `unresolved` after a complete search of both registries.
 - **The math holds, when the argument rests on it.** Run
   `exactory-derive check --steps-file steps.json`. A step that comes back `invalid`
   carries a counterexample point. An `unparseable` step was not checked.
