@@ -468,6 +468,7 @@ class ResearchStorePreparationTests(unittest.TestCase):
         script = '''
 import builtins
 import json
+import os
 from pathlib import Path
 import signal
 import sys
@@ -475,7 +476,9 @@ from research_harness import cli
 from research_harness.storage import Store
 boundary, marker, arguments = sys.argv[1:]
 def hold(value):
-    Path(marker).write_text(value)
+    # The parent kills this process as soon as the marker exists, so the marker appears only with its content.
+    Path(marker + ".tmp").write_text(value)
+    os.replace(marker + ".tmp", marker)
     signal.pause()
 if boundary == "stdout":
     builtins.print = lambda value, **kwargs: hold(value)
