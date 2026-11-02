@@ -400,7 +400,10 @@ class ExtractionUnitsTests(unittest.TestCase):
             constructor = "PdfExtractor(executable=str(root / 'pdftotext'), pdfinfo_executable=str(root / 'pdfinfo'))"
         options = extractor.get_page_options()
         self.build_engine(extractor=extractor)
+        # CI runs discovery without PYTHONPATH: the child puts the tests directory and the root on its path.
+        paths = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
         script = (
+            "import sys\nsys.path[:0] = %r\n" % paths +
             "from pathlib import Path\n"
             "from test_research_extraction_units import DiskUnits\n"
             "from research_harness.artifacts import ArtifactStore\n"

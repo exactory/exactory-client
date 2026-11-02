@@ -148,8 +148,11 @@ class FulltextTransferTests(unittest.TestCase):
     def test_second_process_reuses_committed_ranges_and_hashes_whole_original(self):
         outputs = []
         for maximum in (1, 2, 0):
-            command = [sys.executable, "-c", "from test_research_fulltext_transfer import resume_worker; "
-                       "import sys; resume_worker(sys.argv[1], int(sys.argv[2]))", str(self.root), str(maximum)]
+            # CI runs discovery without PYTHONPATH: the child puts the tests directory and the root on its path.
+            paths = [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
+            command = [sys.executable, "-c", "import sys; sys.path[:0] = %r; " % paths +
+                       "from test_research_fulltext_transfer import resume_worker; "
+                       "resume_worker(sys.argv[1], int(sys.argv[2]))", str(self.root), str(maximum)]
             process = subprocess.run(command, capture_output=True, text=True, check=True)
             outputs.append(json.loads(process.stdout))
         self.assertEqual(outputs[0]["error"], "request_budget")
