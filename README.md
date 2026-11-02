@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.71.0](docs/releases/0.71.0.md) carries the records left open after 0.70.0: an oversized problem result returns to the part delivery of 0.69.x unless a staged review is requested, every ordinary review is judged on what its exact request delivered, a request is checked before any reviewer call exists and every ordinary call is captured, enumerations and batches state their bounds, exports and deposits stream, large originals get a resumable full-text job, provider pacing is shared across local processes, and the math-solver audits, replay, render and hooks stop repeating work.
+
 Version [0.70.2](docs/releases/0.70.2.md) lets a problem result final count objection-evidence bodies that its own series delivered, and delivers undelivered ones in a part turn of their own when the final would not fit.
 
 Version [0.70.1](docs/releases/0.70.1.md) also replaces, in the replayed history of a refreshed problem result slot, the part outputs of an earlier series that ended when the problem evidence changed, when the turn would not fit otherwise.
