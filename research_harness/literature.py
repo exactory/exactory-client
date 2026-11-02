@@ -260,9 +260,15 @@ def _search_response(records, artifacts, response, scope):
         if len(imports) != 1:
             raise ResearchError("invalid_search", "Import the original tool response and result mappings first")
         imported = imports[0]
-        pointers = {m["id"] for m in imported["mappings"]}
         prefix = response["results_pointer"].rstrip("/") + "/"
-        if len(imported["mappings"]) != len(raw) or any(not any(p.startswith(prefix + str(i) + "/") for p in pointers) for i in range(len(raw))):
+        covered = set()
+        for mapping in imported["mappings"]:
+            pointer = mapping["id"]
+            if pointer.startswith(prefix):
+                index, separator, _ = pointer[len(prefix):].partition("/")
+                if separator:
+                    covered.add(index)
+        if len(imported["mappings"]) != len(raw) or covered != {str(i) for i in range(len(raw))}:
             raise ResearchError("invalid_search", "Preserve an explicit imported work mapping for every returned result")
         found, pending = imported["work_ids"], list(imported["failures"])
     else:

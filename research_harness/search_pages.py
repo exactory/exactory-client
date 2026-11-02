@@ -203,21 +203,29 @@ def build_search_coverage(queries, requested_k, captures, page_groups, pending):
     Inspected counts are distinct returned works whose dispositions the recorder
     validates. They grant no abstract or full-text reading credit.
     """
+    captures_by_query, groups_by_query, failures_by_group = {}, {}, {}
+    for capture in captures:
+        captures_by_query.setdefault(capture["query"], []).append(capture)
+    for group in page_groups:
+        groups_by_query.setdefault(group["query"], []).append(group)
+    for failure in pending:
+        failures_by_group.setdefault(failure.get("group_id"), []).append(failure)
     coverage = []
     for query in queries:
-        members = [capture for capture in captures if capture["query"] == query]
-        groups = [group for group in page_groups if group["query"] == query]
+        members = captures_by_query.get(query, [])
+        groups = groups_by_query.get(query, [])
         providers = sorted({capture["source"]["provider"] for capture in members})
         provider = providers[0] if len(providers) == 1 else providers or None
-        positions, seen, returned = [], set(), 0
+        positions, seen_positions, seen, returned = [], set(), set(), 0
         found, orders = set(), []
         for capture in members:
             source, page = capture["source"], capture["page"]
             found.update(capture["found"])
             if page is not None:
                 identity = digest([page["group"], page["position"], page["sha256"]])
-                if page["position"] not in positions:
+                if page["position"] not in seen_positions:
                     positions.append(page["position"])
+                    seen_positions.add(page["position"])
                 ordering = find_captured_ordering(source["provider"], page["group"]["parameters"])
             else:
                 identity = digest([source["id"], capture.get("results_pointer")])
@@ -229,7 +237,7 @@ def build_search_coverage(queries, requested_k, captures, page_groups, pending):
         ordering = orders[0] if orders and all(order == orders[0] for order in orders) else None
         native = bool(members) and all(capture["page"] is not None for capture in members)
         group_ids = {group["id"] for group in groups}
-        failures = [failure for failure in pending if failure.get("group_id") in group_ids]
+        failures = [failure for group_id in group_ids for failure in failures_by_group.get(group_id, [])]
         intact = not any(failure["code"] != "search_response_incomplete" for failure in failures)
         if native and groups and all(group["complete"] for group in groups):
             kind = "complete"
