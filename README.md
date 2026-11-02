@@ -49,7 +49,7 @@ Version [0.69.18](docs/releases/0.69.18.md) registers the record kind and the co
 
 Version [0.69.17](docs/releases/0.69.17.md) makes `minimum.text_priority` of an openness export name the full texts that the packet carries, and refuses a listed version without one.
 
-Version [0.69.16](docs/releases/0.69.16.md) treats every BibTeX directive head as a boundary (so `@comment`, `@string` and `@preamble` text is never evidence) and normalizes titles in linear time without cutting combining marks.
+Version [0.69.16](docs/releases/0.69.16.md) treats a BibTeX directive head at the start of a line as a boundary (so the text of a braced `@comment`, `@string` or `@preamble` that starts a line is not evidence) and normalizes titles in linear time without cutting combining marks; 0.71.0 lists the directive forms that it does not cover.
 
 Version [0.69.15](docs/releases/0.69.15.md) adds `problem-citation-metadata`, which gives a `url:` work of a problem record its citation title and authors from exact byte spans of retained captures.
 
