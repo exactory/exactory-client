@@ -1030,14 +1030,15 @@ def resolve_original_calibrations(records, artifacts, review_ids):
     """The standards the adjudicated pair was graded against, by bar id: for a bar pair the two bars, for a result pair
     the bars that its recorded bar_ids name, as the results' observed packets delivered them. A recorded bar id that
     no observed packet delivered was never a standard the result saw."""
-    from .direction_reviews import collect_observed_packets
+    from .research_decisions import read_review_citation_delivery
     reviews = [_get(records, 'value_review', identifier) for identifier in review_ids]
     if all(review['payload']['stage'] == 'bar' for review in reviews):
         return sorted((describe_calibration(deliver_review(records, _payload(review))) for review in reviews),
                       key=lambda bar: bar['id'])
     calibrations = {}
     for review in reviews:
-        delivered = {bar['id']: bar for _, observed in collect_observed_packets(records, artifacts, review['assignment_id'])
+        delivered = {bar['id']: bar for observed in read_review_citation_delivery(
+                         records, artifacts, records['review_assignment'][review['assignment_id']])['packets']
                      for bar in observed.get('bars', [])}
         calibrations.update((identifier, delivered[identifier])
                             for identifier in review['payload']['value']['bar_ids'] if identifier in delivered)
@@ -1113,8 +1114,9 @@ def _list_projected_records(packet):
 def collect_carried_records(records, artifacts, assignment_id, *, packets=None):
     """The records that the observed packets of an assignment's lineage carried, as rows of _list_packet_records."""
     if packets is None:
-        from .direction_reviews import collect_observed_packets
-        packets = [observed for _, observed in collect_observed_packets(records, artifacts, assignment_id)]
+        from .research_decisions import read_review_citation_delivery
+        return read_review_citation_delivery(records, artifacts,
+            records['review_assignment'][assignment_id])['carried_records']
     return [row for observed in packets for row in _list_packet_records(observed)]
 
 
@@ -2898,7 +2900,7 @@ def collect_adjudication_evidence(output):
                                  for reference in finding['evidence']]
 
 
-def validate_adjudication_contract(records, artifacts, assignment, packet, output):
+def validate_adjudication_contract(records, artifacts, assignment, packet, output, *, attempt=None):
     """Validate only the focused output and the adjudicator's frozen delivery."""
     from .review_refusal import contract_check, validate_evidence_contract
     staged = assignment.get('staged_review')
@@ -2941,7 +2943,7 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
                 validate_evidence_contract(r, a, values, packets=packets, **kwargs))
     if packet.get('subject', {}).get('kind') == 'problem':
         missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, assignment['id'],
-            collect_adjudication_evidence(output), frozen=True)
+            collect_adjudication_evidence(output), frozen=True, attempt=attempt)
         if missing:
             with contract_check('adjudication.evidence_delivery'):
                 raise ResearchError('review_evidence_undelivered',
@@ -2965,11 +2967,11 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         packet = _read_json(artifacts, assignment['packet'])
         from .review_adjudicator_sources import validate_observed as validate_current_sources
-        validate_current_sources(records, artifacts, assignment, state.get('attempt_id'))
         response = {k: v for k, v in value.items() if k not in ('id', 'assignment_id')}
         if response != output:
             raise ResearchError('review_output_mismatch', 'Record the exact observed adjudicator response')
         validate_adjudication_contract(records, artifacts, assignment, packet, response)
+        validate_current_sources(records, artifacts, assignment, state.get('attempt_id'))
         if packet.get('subject', {}).get('kind') == 'problem':
             from .strategy import evidence
             evidence(records, artifacts, collect_adjudication_evidence(response))
@@ -3030,8 +3032,6 @@ def adjudication_state(records, artifacts, adjudication_id):
             missing = supplied_evidence.adjudicator_undelivered_references(records, artifacts, saved['assignment_id'],
                 collect_adjudication_evidence(response))
         except ResearchError as error:
-            if assignment.get('staged_review') is None:
-                raise
             obligations.append(obligation(error.code, error.message, **(error.details or {})))
             missing = []
         if missing:

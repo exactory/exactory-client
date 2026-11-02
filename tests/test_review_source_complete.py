@@ -7,6 +7,8 @@ from unittest.mock import patch
 from literature_fixtures import LiteratureCase
 from research_harness import bar_sources, review_protocol, review_transport
 from research_harness import review_supplied_evidence
+from research_harness import review_delivered_evidence
+from research_harness import research_decisions
 from research_harness import review_source_complete as complete
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -127,11 +129,14 @@ class CompleteSourceTests(LiteratureCase):
         for entry in omitted['evidence']:
             if entry['artifact']['sha256'] == alternate:
                 entry.update(content='', encoding='omitted', delivery=complete.ALTERNATE)
-        with patch.object(review_supplied_evidence, 'lineage_packets', return_value=[omitted]):
-            references, _ = review_supplied_evidence.supplied_context(self.records, self.artifacts, ['new'], frozen=True)
+        records = dict(self.records, review_assignment={'new': {'id': 'new'}})
+        with patch.object(research_decisions, 'read_review_citation_delivery', return_value=
+                review_delivered_evidence.project_delivery_view(records, self.artifacts, [omitted])):
+            references, _ = review_supplied_evidence.supplied_context(records, self.artifacts, ['new'], frozen=True)
             self.assertNotIn(alternate, references)
-        with patch.object(review_supplied_evidence, 'lineage_packets', return_value=[omitted, original]):
-            references, _ = review_supplied_evidence.supplied_context(self.records, self.artifacts, ['new'], frozen=True)
+        with patch.object(research_decisions, 'read_review_citation_delivery', return_value=
+                review_delivered_evidence.project_delivery_view(records, self.artifacts, [omitted, original])):
+            references, _ = review_supplied_evidence.supplied_context(records, self.artifacts, ['new'], frozen=True)
             self.assertIn(alternate, references)
 
 

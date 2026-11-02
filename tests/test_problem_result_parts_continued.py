@@ -152,9 +152,12 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertIn(('local_artifact', record['id'], record['digest'], record['record'], record['artifacts']),
                       list(protocol._list_packet_records(packet)))
         self.assertIn(nested, list(supplied.collect_qualified_objections(packet)))
-        with patch.object(supplied, 'lineage_packets', return_value=[packet]):
-            received, mappings = supplied.supplied_context(self.case.read_records(), self.case.artifacts, [], frozen=True)
-            _, current_mappings = supplied.supplied_context(self.case.read_records(), self.case.artifacts, [])
+        from research_harness import review_delivered_evidence
+        delivery = review_delivered_evidence.project_delivery_view(self.case.read_records(), self.case.artifacts, [packet])
+        records = dict(self.case.read_records(), review_assignment={'fixture': {'id': 'fixture'}})
+        with patch.object(decisions, 'read_review_citation_delivery', return_value=delivery):
+            received, mappings = supplied.supplied_context(records, self.case.artifacts, ['fixture'], frozen=True)
+            _, current_mappings = supplied.supplied_context(records, self.case.artifacts, ['fixture'])
         self.assertEqual(mappings, [mapping])
         self.assertEqual(current_mappings, [supplied.deliver_passage(self.case.read_records(), self.case.artifacts, mapping)])
         self.assertIn(references[1], received.values())

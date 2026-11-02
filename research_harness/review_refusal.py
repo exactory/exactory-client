@@ -221,10 +221,10 @@ def classify_observed_output(records, artifacts, attempt_id):
                 if scientific is not None:
                     _validate_staged_final(records, artifacts, assignment, packet, epoch, scientific)
         elif assignment['role'] in ('bar', 'slate', 'result'):
-            validate_review_contract(records, artifacts, assignment, output)
+            validate_review_contract(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'adjudicator':
             packet = json.loads(artifacts.read(assignment['packet']))
-            validate_adjudication_contract(records, artifacts, assignment, packet, output)
+            validate_adjudication_contract(records, artifacts, assignment, packet, output, attempt=attempt)
         elif assignment['role'] == 'native_math':
             from .native_review import validate_output
             from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,

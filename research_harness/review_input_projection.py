@@ -76,10 +76,13 @@ def _require_review_packet(packet, assignments=None):
                      and isinstance(objection, dict) and isinstance(objection.get('id'), str)
                      and bool(objection['id'].strip()))
     if valid and assignments is not None:
+        from .review_context_repair import is_same_subject
         bound = [assignment for assignment in assignments
                  if packet['digest'] == assignment.get('packet_digest')
                  and all(packet.get(key) == assignment.get(key)
-                         for key in ('role', 'reviewer_id', 'dossier_id', 'subject'))]
+                         for key in ('role', 'reviewer_id', 'dossier_id'))
+                 and (assignment.get('subject') is None or isinstance(assignment['subject'], dict))
+                 and is_same_subject(packet, assignment)]
         if packet['role'] == 'adjudicator':
             bound = [assignment for assignment in bound
                      if packet['objection']['id'] == assignment.get('context', {}).get('objection_id')

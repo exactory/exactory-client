@@ -13,6 +13,7 @@ from research_harness import review_codex_transport as codex
 from research_harness import review_input_projection as projection
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness import research_decisions as decisions
+from research_harness import review_delivered_evidence
 from research_harness.artifacts import ArtifactStore, describe_artifact
 from research_harness.errors import ResearchError
 from test_research_codex_visual_transport import png
@@ -132,14 +133,20 @@ class VisualContractIntegrationTests(unittest.TestCase):
 
     def test_visual_output_contract_refuses_an_omitted_whole_pdf_reference(self):
         case, records, assignment, request, output = self.contract_fixture(image=False)
-        with patch.object(transport, 'request_body', return_value=request):
+        delivery = review_delivered_evidence.project_delivery_view(records, case.artifacts,
+            projection.packets_from_visual_request(request, assignments=[assignment]))
+        with patch.object(transport, 'request_body', return_value=request), patch.object(
+                decisions, 'read_review_citation_delivery', return_value=delivery):
             with self.assertRaises(ResearchError) as failure:
                 decisions.validate_review_contract(records, case.artifacts, assignment, output)
         self.assertEqual(failure.exception.code, 'review_evidence_undelivered')
 
     def test_visual_output_contract_accepts_exact_attached_png_reference(self):
         case, records, assignment, request, output = self.contract_fixture(image=True)
-        with patch.object(transport, 'request_body', return_value=request):
+        delivery = review_delivered_evidence.project_delivery_view(records, case.artifacts,
+            projection.packets_from_visual_request(request, assignments=[assignment]))
+        with patch.object(transport, 'request_body', return_value=request), patch.object(
+                decisions, 'read_review_citation_delivery', return_value=delivery):
             decisions.validate_review_contract(records, case.artifacts, assignment, output)
 
 

@@ -135,6 +135,7 @@ class SessionBudgetTests(SessionBudgetHelpers, ExcerptSessionCase):
         self.assign('a')
         self.invoke('a', self.build_request_turn(self.requests[:1]))
         self.assign('b', prior_assignment_id='a')
+        self.invoke('b', self.build_request_turn(self.requests[:1]))
         records = self.store.snapshot()['records']
         stored = review_excerpts.find_fulltext(records, self.versions[0])
         source_id = next(capture['source_id'] for capture in records['work'][self.versions[0]]['fulltexts']

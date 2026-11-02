@@ -123,7 +123,7 @@ def _prepare_packet(records, artifacts, assignment_id):
     for index in changed:
         diagnostic_copy['reassessment']['findings'][index]['disposition'] = 'revised'
     # This copy is only an admission test. It is never saved as a reviewer output.
-    validate_review_contract(records, artifacts, assignment, diagnostic_copy)
+    validate_review_contract(records, artifacts, assignment, diagnostic_copy, attempt=latest)
     diagnostic = {'assignment_id': assignment_id, 'attempt_id': latest['id'],
         'original_output_sha256': latest['output']['sha256'], 'original_output_digest': digest(output),
         'original_request_digest': latest['request_digest'], 'reviewer_id': assignment['reviewer_id'],
@@ -157,7 +157,10 @@ def validate_output(records, artifacts, assignment, packet, output):
             raise ResearchError('review_correction_invalid', 'Correct only the diagnosed findings in their original order.')
         text(actual['reason'], 'Correction reason', code='review_correction_invalid')
         expected['reassessment']['findings'][finding['index']].update(disposition='revised', reason=actual['reason'])
-    validate_review_contract(records, artifacts, assignment, expected)
+    attempt = records.get('review_attempt', {}).get(packet['diagnostic']['attempt_id'])
+    if attempt is None:
+        raise ResearchError('review_invocation_unverified', 'The correction must retain its original scientific attempt.')
+    validate_review_contract(records, artifacts, assignment, expected, attempt=attempt)
     return expected
 
 

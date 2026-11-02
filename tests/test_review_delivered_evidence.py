@@ -90,6 +90,29 @@ class DeliveredEvidenceTests(unittest.TestCase):
         packet = self.build_packet('focused')
         self.assertEqual(packets_from_request({'input': [self.build_message(packet)]}), [packet])
 
+    def test_bar_slot_repaired_after_the_statement_keeps_its_actual_input_readable(self):
+        field = {'kind': 'problem', 'statement_id': None}
+        original, _ = self.record_attempt(self.build_packet(role='bar', subject=field), 'original-bar')
+        body = self.artifacts.put(b'The field standard predates the selected statement.', 'text/plain')
+        packet = self.build_packet(role='bar', subject=field, reviewer_id='replacement',
+                                  evidence=protocol._evidence(self.artifacts, [body]))
+        repaired, attempt = self.record_attempt(packet, 'repaired-bar',
+            subject={'kind': 'problem', 'statement_id': 'statement'},
+            context={'context_repair': {'assignment_id': original['id']}})
+        with patch.object(protocol, 'assignment_state', side_effect=AssertionError('Recursive selection')):
+            delivered = self.read_delivery(repaired, attempt)
+        self.assertEqual(delivered['current_input']['packets'][0]['subject'], field)
+        self.assertEqual(delivered['current_input']['artifacts'][body['sha256']], body)
+
+    def test_bar_subject_matching_rejects_malformed_assignment_subjects(self):
+        for subject in ('problem', ['problem'], 1):
+            packet = self.build_packet(role='bar', subject={'kind': 'problem', 'statement_id': None})
+            assignment, attempt = self.record_attempt(packet, subject=subject)
+            with self.subTest(subject=subject):
+                with self.assertRaises(ResearchError) as error:
+                    self.read_delivery(assignment, attempt)
+                self.assertEqual(error.exception.code, 'review_input_unreadable')
+
     def test_family_identity_rejects_malformed_and_cross_family_values(self):
         for family, changes in (
                 ('study', {'protocol': 'invented'}), ('study', {'dossier_id': None}),

@@ -119,29 +119,19 @@ def register_supplied_artifact(references, reference):
 
 
 def supplied_context(records, artifacts, assignment_ids, *, frozen=False):
-    """The artifacts that the packets of the assignments' lineages attached, and the passage mappings they delivered:
+    """The artifacts that the assignments' authenticated requests attached, and the passage mappings they delivered:
     prior context, an adjudicator's original and version passages, and passages delivered with a material objection or
     an objection of a historical review. Two descriptors of the same bytes are both kept: the one whose digest sorts
     first is the entry of the SHA-256, and every other one is an entry of the SHA-256 joined with its own digest.
-    Focused refreshes and corrections retain their packet lineage."""
+    Historical deliveries follow the recorded citation contract."""
     references, mappings = {}, []
-    from .review_source_capacity import BODY_DELIVERY
-    from .review_source_complete import ALTERNATE
-    for packet in lineage_packets(records, artifacts, assignment_ids):
-        for entry in packet.get('evidence', []):
-            if entry.get('delivery') in (BODY_DELIVERY, ALTERNATE) or entry.get('encoding') == 'omitted':
-                continue
-            reference = entry['artifact']
+    from .research_decisions import read_review_citation_delivery
+    for assignment_id in assignment_ids:
+        delivery = read_review_citation_delivery(records, artifacts, records['review_assignment'][assignment_id])
+        for reference in delivery['artifacts'].values():
             artifacts.read(reference)
             register_supplied_artifact(references, reference)
-        delivered = (packet.get('prior_context', []) + packet.get('version_source_mappings', [])
-                     + packet.get('supplied_source_mappings', []))
-        delivered += [mapping for objection in list_delivered_objections(packet)
-                      for mapping in resolved_objection_entries(packet, objection, 'version_source_mappings')]
-        delivered += list_delivered_parts(packet)
-        for entry in delivered:
-            if 'origin' not in entry or 'excerpt' not in entry:
-                continue
+        for entry in delivery['source_mappings']:
             # Legacy mappings, with or without a saved citation, meet the receiving role's evidence contract.
             if not frozen:
                 entry = deliver_passage(records, artifacts, entry)
@@ -296,15 +286,17 @@ def undelivered_references(records, artifacts, evidence, carried, references, ma
     return missing
 
 
-def adjudicator_undelivered_references(records, artifacts, assignment_id, evidence, *, frozen=False):
+def adjudicator_undelivered_references(records, artifacts, assignment_id, evidence, *, frozen=False, attempt=None):
     """Check the adjudicator's actual packet delivery, including its focused refresh/correction ancestry."""
-    from .review_protocol import collect_carried_records
-    staged = records['review_assignment'][assignment_id].get('staged_review') is not None
-    packets = lineage_packets(records, artifacts, [assignment_id]) if frozen or staged else None
-    carried = collect_carried_records(records, artifacts, assignment_id, packets=packets)
-    references, mappings = supplied_context(records, artifacts, [assignment_id], frozen=frozen)
-    return undelivered_references(records, artifacts, evidence, carried, references, mappings, frozen=frozen,
-                                  packets=packets if staged else ())
+    from .review_delivered_evidence import project_delivery_view
+    from .research_decisions import find_review_undelivered_references, read_review_citation_delivery
+    assignment = records['review_assignment'][assignment_id]
+    if assignment.get('staged_review', {}).get('kind') == 'controller':
+        delivery = project_delivery_view(records, artifacts, lineage_packets(records, artifacts, [assignment_id]))
+    else:
+        delivery = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)
+    return find_review_undelivered_references(records, artifacts, evidence, delivery,
+        require_complete_artifacts=assignment.get('staged_review') is not None)
 
 
 def validate_correction(records, artifacts, evidence, references, mappings):

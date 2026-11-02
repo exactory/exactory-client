@@ -255,10 +255,68 @@ def collect_delivery_packets(records, artifacts, assignment, packets, series):
     return packets + (review_problem_parts.collect_earlier_series_packets(records, artifacts, assignment) if series else [])
 
 
-def validate_review_contract(records, artifacts, assignment, output):
-    """Pure review checks against this assignment's frozen contract and delivered lineage."""
+def read_review_citation_delivery(records, artifacts, assignment, *, attempt=None):
+    """Read authenticated citation history independently of current scientific readiness."""
+    from . import review_problem_parts as parts, review_protocol as protocol
+    from .review_delivered_evidence import project_delivery_view, read_attempt_delivery
+    frozen = protocol._read_json(artifacts, assignment['packet'])
+    if assignment.get('staged_review', {}).get('kind') == 'controller':
+        from .direction_reviews import collect_selected_task_graph
+        graph = collect_selected_task_graph(records, artifacts, assignment['id'])
+        if not graph['completion']['complete']:
+            raise ResearchError('review_invocation_unverified', 'Citation history requires the completed selected task graph')
+        packets = [packet for _, packet in graph['packets']]
+        if graph.get('frame_packet') is not None:
+            packets.append(graph['frame_packet'])
+        return project_delivery_view(records, artifacts, packets)
+    if parts.find_stage(frozen) is None:
+        if attempt is None:
+            state = protocol.assignment_state(records, artifacts, assignment['id'])
+            attempt = records.get('review_attempt', {}).get(state.get('attempt_id'))
+        if attempt is None:
+            raise ResearchError('review_invocation_unverified', 'Citation history requires its exact scientific attempt')
+        return read_attempt_delivery(records, artifacts, assignment, attempt)['citation_history']
+    if attempt is None:
+        packets = parts.collect_contract_packets(records, artifacts, assignment)
+    else:
+        if (records.get('review_assignment', {}).get(assignment['id']) != assignment
+                or records.get('review_attempt', {}).get(attempt.get('id')) != attempt
+                or attempt.get('assignment_id') != assignment['id'] or attempt.get('status') != 'completed'
+                or not protocol.authenticate_attempt(records, artifacts, assignment, attempt)):
+            raise ResearchError('review_invocation_unverified', 'Bind the exact completed series attempt')
+        from .review_input_projection import packets_from_request
+        raw = protocol.read_raw_observation(records, artifacts, attempt['id'])
+        if raw['request_digest'] != attempt.get('request_digest'):
+            raise ResearchError('review_invocation_unverified', 'Bind the exact recorded series request digest')
+        route = records['review_route'][assignment['route_id']]
+        packets = list(reversed(packets_from_request(protocol._read_json(artifacts, raw['request']),
+            native_attachments=route['adapter'] == 'openai_responses_v1')))
+        if not packets or packets[0]['digest'] != assignment['packet_digest']:
+            raise ResearchError('review_input_unreadable', 'The series request must carry its exact current packet')
+        prior = assignment.get('history_assignment_id')
+        if prior is not None:
+            packets += list(reversed(parts.collect_series_packets(records, artifacts, prior)))
+    if not packets:
+        raise ResearchError('review_invocation_unverified', 'A series review requires its authenticated actual input')
+    return project_delivery_view(records, artifacts,
+        collect_delivery_packets(records, artifacts, assignment, packets, True))
+
+
+def find_review_undelivered_references(records, artifacts, evidence, delivery, *, require_complete_artifacts=False):
+    """Keep ordinary raw descriptors scoped to delivered passages, while checking source locators against actual input."""
+    from .review_supplied_evidence import undelivered_references
+    missing = []
+    for reference in evidence:
+        packets = delivery['packets'] if require_complete_artifacts or reference.get('kind') == 'source' else ()
+        missing.extend(undelivered_references(records, artifacts, [reference], delivery['carried_records'],
+            delivery['artifacts'], delivery['source_mappings'], frozen=True, packets=packets))
+    return missing
+
+
+def validate_review_contract(records, artifacts, assignment, output, *, attempt=None):
+    """Check the frozen scientific contract and the exact attempt's permitted delivery."""
     from . import bar_sources, review_context_repair, review_excerpts, review_supplied_evidence
-    from .review_protocol import has_problem_result_rubric, is_previous_prompt, collect_carried_records
+    from .review_protocol import has_problem_result_rubric, is_previous_prompt
     from . import review_problem_parts
     staged_binding = assignment.get('staged_review')
     if staged_binding is not None and staged_binding.get('kind') == 'task':
@@ -396,13 +454,14 @@ def validate_review_contract(records, artifacts, assignment, output):
         review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False, packet=repair_packet,
                                                     evidence_validator=contract_evidence)
     if problem:
-        delivery_packets = collect_delivery_packets(records, artifacts, assignment, packets, series)
-        carried = collect_carried_records(records, artifacts, assignment["id"], packets=delivery_packets)
-        supplied, mappings = (_visual_supplied_context(records, artifacts, delivery_packets) if visual or series else
-                              review_supplied_evidence.supplied_context(records, artifacts, [assignment["id"]], frozen=True))
+        from .review_delivered_evidence import project_delivery_view
+        if staged_binding is not None:
+            delivery = project_delivery_view(records, artifacts, packets)
+        else:
+            delivery = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)
         for path, evidence in evidence_arrays(output, with_paths=True):
-            missing = review_supplied_evidence.undelivered_references(records, artifacts, evidence, carried, supplied, mappings,
-                                                                     frozen=True, packets=delivery_packets if visual or series or staged_binding else ())
+            missing = find_review_undelivered_references(records, artifacts, evidence, delivery,
+                require_complete_artifacts=bool(visual or series or staged_binding))
             if missing:
                 details = missing[0]
                 description = (details["record_kind"] + " " + details["id"] + " at the cited digest"
@@ -815,7 +874,7 @@ def collect_problem_slot_outcomes(records, artifacts, subject, *, stage='result'
 
 
 def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_digest):
-    from .direction_reviews import collect_actual_input_packets
+    from .review_delivered_evidence import read_selected_delivery
     from .direction_sources import find_delivered_readings, has_attachment
     from .evaluation import Evaluation
     from .review_protocol import collect_references
@@ -824,11 +883,17 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
     readings = [records['reading'][item['id']] for item in expected['readings']]
     obligations = []
     for review in reviews:
-        packets = collect_actual_input_packets(records, evaluation, review['assignment_id'])
+        try:
+            delivery = read_selected_delivery(records, evaluation, review['assignment_id'])
+        except ResearchError as error:
+            obligations.append(obligation('problem_evidence_unassessed',
+                'Obtain authenticated actual input before crediting problem coverage.',
+                review_id=review['id'], issues=[dict(code=error.code, **(error.details or {}))]))
+            continue
+        packets = delivery['coverage_witnesses']['packets']
         assignment = records.get('review_assignment', {}).get(review['assignment_id'], {})
         if assignment.get('staged_review') is not None:
-            from .direction_reviews import collect_selected_task_graph
-            graph = collect_selected_task_graph(records, evaluation, review['assignment_id'])
+            graph = delivery['task_graph']
             frozen = read_assignment_packet(records, evaluation, assignment['id'])
             if (not graph['completion']['complete'] or frozen.get('problem_evidence_digest') != evidence_digest):
                 obligations.append(obligation('problem_evidence_unassessed',
@@ -840,9 +905,10 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
                              records, evaluation, review['assignment_id'])) is not None)
         series = []
         if series_review:
-            series = review_problem_parts.collect_series_packets(records, evaluation, review['assignment_id'])
-            series = review_problem_parts.verified_coverage_packets(records, evaluation, review['assignment_id'], series)
-            packets = [packet for packet in packets if review_problem_parts.KEY not in packet] + series
+            selected = review_problem_parts.collect_series_packets(records, evaluation, review['assignment_id'])
+            selected = review_problem_parts.verified_coverage_packets(records, evaluation, review['assignment_id'], selected)
+            packets = [packet for packet in packets if packet in selected]
+            series = [packet for packet in packets if review_problem_parts.KEY in packet]
         current = [packet for packet in packets if packet.get('problem_evidence_digest') == evidence_digest]
         current_evidence = [packet.get('problem_evidence', {}) for packet in current]
         keys = ('claim', 'openness', 'openness_searches', 'value', 'assessment', 'assessment_evidence', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
@@ -1086,38 +1152,23 @@ def find_undelivered_adjudication_keys(records, artifacts, assignment_id, *, rub
 def find_undelivered_bar_ids(records, artifacts, assignment_id, bar_ids, *, packets=None):
     """The named bars whose content no observed packet of the reviewer's lineage delivered."""
     if packets is None:
-        from .direction_reviews import collect_observed_packets
-        packets = [packet for _, packet in collect_observed_packets(records, artifacts, assignment_id)]
+        packets = read_review_citation_delivery(records, artifacts, records['review_assignment'][assignment_id])['packets']
     delivered = {bar['id'] for packet in packets for bar in packet.get('bars', [])}
     return sorted(set(bar_ids) - delivered)
 
 
 def find_undelivered_review_references(records, artifacts, review):
-    """Audit a recorded problem review against its frozen assignment delivery."""
-    from . import review_supplied_evidence
-    from .review_protocol import collect_carried_records
-    from . import review_problem_parts
+    """Audit a recorded problem review against its selected scientific delivery."""
     if review.get('subject', {}).get('kind') != 'problem':
         return []
-    assignment_id = review['assignment_id']
-    assignment = records['review_assignment'][assignment_id]
-    visual = records['review_route'][assignment['route_id']]['adapter'] == 'codex_cli_visual_v1'
-    series = ('evidence_parts' in assignment.get('prompt', {}).get('parameters', {})
-              and review_problem_parts.find_stage(json.loads(artifacts.read(assignment['packet']))) is not None)
-    if visual or series:
-        from .direction_reviews import collect_actual_input_packets
-        packets = collect_actual_input_packets(records, artifacts, assignment_id)
-        if series:
-            packets += review_problem_parts.collect_series_packets(records, artifacts, assignment_id)
-    else:
-        packets = review_supplied_evidence.lineage_packets(records, artifacts, [assignment_id])
-    delivery_packets = collect_delivery_packets(records, artifacts, assignment, packets, series)
-    carried = collect_carried_records(records, artifacts, assignment_id, packets=delivery_packets)
-    supplied, mappings = (_visual_supplied_context(records, artifacts, delivery_packets) if visual or series else
-                          review_supplied_evidence.supplied_context(records, artifacts, [assignment_id], frozen=True))
+    assignment = records['review_assignment'][review['assignment_id']]
+    delivery = read_review_citation_delivery(records, artifacts, assignment)
+    from . import review_problem_parts as parts
+    complete = (records['review_route'][assignment['route_id']]['adapter'] == 'codex_cli_visual_v1'
+                or assignment.get('staged_review') is not None
+                or parts.find_stage(read_assignment_packet(records, artifacts, assignment['id'])) is not None)
     evidence = [reference for array in evidence_arrays(review['payload']) for reference in array]
-    return review_supplied_evidence.undelivered_references(
-        records, artifacts, evidence, carried, supplied, mappings, frozen=True, packets=delivery_packets if visual or series else ())
+    return find_review_undelivered_references(records, artifacts, evidence, delivery, require_complete_artifacts=complete)
 
 
 def assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest):
@@ -1219,7 +1270,11 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
                 review_id=review['id'], assurances=pending))
         if set(findings['bar_ids']) != set(bar_review_ids):
             obligations.append(obligation('review_bar_mismatch', 'Both problem results must assess the selected independent bars.', review_id=review['id']))
-        undelivered = find_undelivered_bar_ids(records, artifacts, review['assignment_id'], findings['bar_ids'])
+        try:
+            undelivered = find_undelivered_bar_ids(records, artifacts, review['assignment_id'], findings['bar_ids'])
+        except ResearchError as error:
+            obligations.append(obligation(error.code, str(error), review_id=review['id'], **(error.details or {})))
+            continue
         if undelivered:
             obligations.append(obligation('review_bar_mismatch', 'Each problem result must receive the bars it assesses.',
                                           review_id=review['id'], bar_ids=undelivered))
