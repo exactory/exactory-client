@@ -63,7 +63,8 @@ def extraction_measures(text, original_size):
 class PdfExtractor:
     name = "pdftotext"
 
-    def __init__(self, *, executable=None, timeout=30, max_text_bytes=32 * 1024 * 1024, layout=True):
+    def __init__(self, *, executable=None, timeout=30, max_text_bytes=32 * 1024 * 1024, layout=True,
+                 pdfinfo_executable=None):
         if not isinstance(timeout, (float, int)) or not math.isfinite(timeout) or timeout <= 0:
             raise ResearchError("invalid_input", "PDF extraction timeout must be positive and finite")
         if type(max_text_bytes) is not int or max_text_bytes < 0:
@@ -72,6 +73,7 @@ class PdfExtractor:
             raise ResearchError("invalid_input", "PDF layout mode must be a boolean")
         self.executable = executable if executable is not None else shutil.which("pdftotext")
         self.timeout, self.max_text_bytes, self.layout = timeout, max_text_bytes, layout
+        self.pdfinfo_executable = pdfinfo_executable if pdfinfo_executable is not None else shutil.which("pdfinfo")
 
     def version(self):
         """The extractor's reported version, or None when it cannot be determined."""
@@ -84,6 +86,33 @@ class PdfExtractor:
             return None
         match = re.search(r"version\s+(\S+)", result.stdout + result.stderr)
         return match.group(1) if match else None
+
+    def get_page_options(self):
+        return {"layout": self.layout}
+
+    def read_page_tool_versions(self, *, run=None, deadline=None):
+        from .ocr import read_pdf_tool_versions
+        return read_pdf_tool_versions({"pdfinfo": self.pdfinfo_executable, "pdftotext": self.executable},
+                                      run=run, deadline=deadline)
+
+    def count_pages(self, original, *, run=None, deadline=None):
+        from .ocr import count_pdf_pages
+        return count_pdf_pages(original, self.pdfinfo_executable, run=run,
+                               deadline=deadline if deadline is not None else time.monotonic() + self.timeout)
+
+    def extract_page(self, original, page, *, run=None, deadline=None):
+        """Extract one path-backed page; a successful blank page returns an empty string."""
+        from .ocr import run_page_tool
+        if type(page) is not int or page < 1:
+            raise ResearchError("invalid_input", "PDF page index must be a positive integer")
+        deadline = min(deadline, time.monotonic() + self.timeout) if deadline is not None else time.monotonic() + self.timeout
+        argv = [self.executable, "-enc", "UTF-8"] + (["-layout"] if self.layout else [])
+        argv += ["-f", str(page), "-l", str(page), str(original), "-"]
+        data = run_page_tool(argv, self.max_text_bytes, deadline, run=run)
+        # A single-page pdftotext result ends with one form feed. The protocol
+        # supplies its own separator, including for a page with no output.
+        text = data.decode("utf-8")
+        return text[:-1] if text.endswith("\f") else text
 
     def __call__(self, data):
         if not self.executable:
