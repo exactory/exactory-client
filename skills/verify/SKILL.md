@@ -172,9 +172,10 @@ reason, stopping_criterion}`: `values` holds only `hits_per_query`,
 is `invalid_input`, another key `profile_inapplicable`), and the stopping criterion
 says when the deeper reading ends. Later searches, readings and requirements use
 the plan's amounts; the recorded ones keep theirs. A native capture also enumerates
-completely, so write the query narrow enough to return at most ten results in total,
-or import the results as a mapped capture and acquire each kept hit with `acquire`
-before it is read.
+completely, so write the query narrow enough to return no more than the search's
+effective `hits_per_query` (10 by default, raised by a verification depth plan or by
+`hits_per_query` in the search payload), or import the results as a mapped capture and
+acquire each kept hit with `acquire` before it is read.
 
 ### 3. Judge it
 

@@ -32,11 +32,14 @@ Every `exactory-research` mutation below takes `--file FILE --expected-revision 
 --request-id ID`. Read `exactory-research status` before each mutation and use its revision.
 Retry an interrupted mutation with its original request id, revision and payload: the harness
 returns the original receipt. The same retry finishes a `review-run`, `review-probe` or
-`review-output-correction` whose process stopped after the reviewer answered: the harness records
-the captured answer without a second call, and until then refuses a new run of that assignment
-with `review_invocation_pending`. `exactory-research example OPERATION` prints a complete example
-payload. `exactory-research next` names the first missing condition with the action that clears
-it. Add `--check` to validate a payload without writing: the harness reports the first refusal
+`review-output-correction` whose process stopped after its `review_call_observation` committed:
+the harness records the captured answer without a second call, and until then refuses a new run
+of that assignment with `review_invocation_pending`. A process that stopped before the capture
+committed, even after the reviewer answered, leaves the invocation pending without a capture;
+reconcile it as the `review-run` row of the
+[CLI reference](../../docs/research-cli.md#scientific-contribution-decisions) describes.
+`exactory-research example OPERATION` prints a complete example payload. `exactory-research next`
+names the first missing condition with the action that clears it. Add `--check` to validate a payload without writing: the harness reports the first refusal
 or `{check: "accepted", revision, recorded: false, ...}` from one snapshot of the store and
 records nothing, so an accepted check is no evidence for any gate, and the write validates
 again. `review-probe` and `review-run` refuse the flag for a new request, and so does every
@@ -688,8 +691,11 @@ accepted tasks of the epoch instead of one request. The
    without output, for example at the route timeout, assign a new continuation of the same
    parent: it replaces the failed one. When `review-assignment` refuses a continuation with
    `review_source_no_progress`, the reviewer repeated requests that the harness already answered
-   with nothing new; do not continue the session with the same requests: record the reviewer's
-   output as it stands, or change the evidence first, for example by acquiring the source.
+   with nothing new; do not continue the session with the same requests. `review-run` already
+   keeps the observed output, and `value-review` refuses a final assessment while the inherited
+   requests stay pending (`review_sources_pending`). Change the source state first, for example
+   by acquiring the missing source, and then continue the session, or report the unresolved
+   source gap to the user.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
    repaired with evidence changes the evidence digest, and the result reviews are refreshed for
    the same reviewers.
