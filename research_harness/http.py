@@ -342,6 +342,7 @@ class HttpClient:
                 attempts.append(attempt)
                 self._last_request[host] = self.clock.monotonic()
                 response = None
+                body = bytearray()
                 try:
                     remaining = min(self.timeout, deadline - self.clock.monotonic())
                     if remaining <= 0:
@@ -367,7 +368,6 @@ class HttpClient:
                         raise ResearchError("response_too_large", "Response length exceeds the configured bound or is invalid")
                     if all_headers.get("content-encoding", "identity").lower() != "identity":
                         raise ResearchError("unsupported_encoding", "Response ignored the identity encoding request")
-                    body = bytearray()
                     while True:
                         if self.clock.monotonic() >= deadline:
                             raise socket.timeout()
@@ -376,7 +376,6 @@ class HttpClient:
                             break
                         room = self.max_bytes - len(body)
                         body.extend(chunk[:room])
-                        attempt["body"] = bytes(body)
                         if len(chunk) > room:
                             raise ResearchError("response_too_large", "Response exceeds the configured byte limit")
                     if self.clock.monotonic() >= deadline:
@@ -389,8 +388,8 @@ class HttpClient:
                     if retries >= self.max_retries:
                         raise ResearchError("timeout", "HTTP operation timed out") from error
                 except http.client.IncompleteRead as error:
-                    room = self.max_bytes - len(attempt["body"])
-                    attempt["body"] += error.partial[:room]
+                    room = self.max_bytes - len(body)
+                    body.extend(error.partial[:room])
                     attempt["complete"] = False
                     attempt["error"] = "response_too_large" if len(error.partial) > room else "incomplete_response"
                     if len(error.partial) > room:
@@ -405,6 +404,7 @@ class HttpClient:
                     attempt["error"] = error.code
                     raise
                 finally:
+                    attempt["body"] = bytes(body)
                     if response is not None:
                         response.close()
                 if attempt["error"]:
