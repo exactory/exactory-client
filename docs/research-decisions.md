@@ -572,7 +572,7 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-lead` | Versioned discrepancy provenance and research disposition. |
 | `review-route` | Actual route and versioned configuration. |
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
-| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result or adjudicator packet that does not fit one input opens a staged review when its scale preflight admits the slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
+| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result packet that does not fit one input is delivered in parts, an adjudicator packet keeps its ordinary packet, and a staged review opens only through an explicit `staged_upgrade` of a recorded slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
 | `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a staged task: the owned worker's call, its committed capture and its acceptance. |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |
@@ -995,14 +995,21 @@ own notes, its verified excerpts and the earlier packets that the replayed
 history still holds. This is the standard of the openness reading chain, whose
 chain check counts a unit delivered complete in an observed reading turn, and
 it applies only to a session that is a series. A session becomes a series when
-a first packet does not fit one input, and it stays in parts after a changed
-evidence digest or a refresh, also when the new evidence fits. A session that
+a first packet does not fit one input; a changed evidence digest or a refresh
+is measured again, and the session stays in parts only when the complete
+request does not fit. A session that
 is not a series delivers the whole evidence in one request, as before.
 
-Since 0.70.0 this delivery serves only a session that is already a series. A
-first result request that does not fit one input, a focused adjudication or a
-context repair that does not fit, and a session that an explicit upgrade
-moves, are staged reviews, described in the next section. A context repair of
+This delivery serves a first result request that does not fit one input, or
+whose fitted request would withhold an evidence body, and a session that is
+already a series. 0.70.0 staged such a request when it was assigned, and
+0.71.0 returned it to this delivery: a staged review has no passing quality
+measurement, so its result cannot post, while a series completes (owner
+decision 2, task D1-1, of
+`misc/harness-improvement/20261101173008-release-0-71-0-remaining-records` in
+the exactory repository). A session that an explicit upgrade moves is a staged
+review, described in the next section, and a focused adjudication or a
+context repair that does not fit keeps its ordinary packet. A context repair of
 a part series keeps its part turns as intermediate outputs in the scientific
 history. Repeated records inside a series, for example the search records that
 both `openness_searches` and `assessment_evidence` carry, are still delivered
@@ -1010,9 +1017,12 @@ under each index.
 
 ## Staged problem reviews
 
-A problem result review or a focused adjudication whose request does not fit
-one input of a local route, or whose fitted request would withhold an
-evidence body, is performed in stages since 0.70.0. The design, its reviews
+A problem result review or a focused adjudication can be performed in stages.
+0.70.0 staged every such review whose request did not fit one input of a
+local route, or whose fitted request would withhold an evidence body, when it
+was assigned; since 0.71.0 a staged review starts only through an explicit
+`staged_upgrade` of a recorded slot, the slots that 0.70.0 staged continue,
+and an oversized result request is delivered in parts. The design, its reviews
 and the owner's direction are recorded in
 `misc/harness-improvement/20261031190348-part-delivery-quality-equivalence` of
 the exactory repository, and the
@@ -1054,15 +1064,14 @@ call whose outcome the record already holds.
 
 Scale that the task contracts cannot carry. The contracts of this release
 require one full card to judge every claim of the epoch and later tasks to
-carry every claim id and context root. Before an epoch is frozen, the harness
-measures that envelope against the route's input limit and the smallest such
-card against the output allowance (`max_output_tokens` minus the planner's
-margin). A slot that cannot fit is not staged, and nothing is written.
-Automatic entry then keeps the delivery of 0.69.18: a result slot in parts from
-part turn 1, a focused adjudication or a context repair with its ordinary
-packet. An explicit `staged_upgrade` of such a slot is refused with
-`review_staged_scale_unsupported`, whose details carry `claims`, `occurrences`,
-`envelope_characters`, `input_limit`, `card_output_tokens` and
+carry every claim id and context root. Before the epoch of an upgrade is
+frozen, the harness measures that envelope against the route's input limit
+and the smallest such card against the output allowance (`max_output_tokens`
+minus the planner's margin). An upgrade of a slot that cannot fit is refused
+with `review_staged_scale_unsupported`, and nothing is written; the slot keeps
+its delivery, a result slot in parts and a focused adjudication or a context
+repair with its ordinary packet. The details of the refusal carry `claims`,
+`occurrences`, `envelope_characters`, `input_limit`, `card_output_tokens` and
 `output_allowance`, so the operator can see which bound was exceeded and by how
 much. The measured shape that met this limit, 15,389 frame leaves and 106
 occurrences of one record, is in the

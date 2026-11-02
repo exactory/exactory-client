@@ -432,6 +432,15 @@ result and its source; start no solver work to reproduce an established result.
      remains is protected evidence, the statement, and the excerpts and passages that the
      allowances let the chain keep; a new export does not reduce it. Report the four sizes to the
      owner and wait for the owner's decision.
+   - When `review-assignment` refuses a turn with `review_input_too_large` and `phase:
+     "final_preflight"`, before that turn is planned, the mandatory final input already exceeds
+     the route's limit: the statement record, the protected source and screening bodies, the
+     required proof bytes, the excerpts and passages gathered so far and the final prompt. The
+     chain cannot finish on that route with that material, whichever turns it reads, and nothing
+     was written. `mandatory_components` names each body with its kind, SHA-256 and size, and a
+     new export of the same record measures the same; a registered route with a larger input
+     limit can hold a new chain. Report the components to the owner and wait for the owner's
+     decision.
 7. Record the observed finding with `exactory-research problem-openness` and
    `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
    native result. For a chain, the record adds `reading_turns`, and every unit of the packet, full
@@ -608,10 +617,22 @@ accepted tasks of the epoch instead of one request. The
    the readings with their inline passages, the computations, the formal checks, and every
    applicable objection. Run the assignment with `review-run` and record the observed review
    with `value-review`. When the result packet does not fit one input of the route, or its fitted
-   request would withhold an evidence body, the assignment becomes the controller of a staged
-   review: the harness freezes an epoch (the evidence, the claims and the budgets), plans every
-   task itself and performs the review in tasks, each a fresh call. Follow `next`:
-   `review-assignment {controller_assignment_id}` plans and assigns the next task, then
+   request would withhold an evidence body, the harness delivers the evidence in parts
+   (`exactory-problem-evidence-parts-v1`): continue each part turn with a new assignment of the
+   same role, route and reviewer and `context: {prior_assignment_id}`, as in step 4, until a turn
+   returns the review; `next` lists `problem_evidence_part_pending` while a part turn waits, and
+   `value-review` records only the turn that returned the review. A session that was already a
+   series continues the same way, and a completed series can make the gate ready. A staged
+   review, in which the harness freezes an epoch (the evidence, the claims and the budgets),
+   plans every task itself and performs the review in tasks, each a fresh call, starts only when
+   `review-assignment` is given `context: {staged_upgrade: {assignment_id}}` for a recorded slot;
+   the slots that 0.70.0 staged on assignment continue in it. Its result cannot post before the
+   quality measurement: every staged review lists `review_quality_measurement_pending`, because
+   the measurement of its quality against a single-input review has not run, so the gate stays
+   not ready for a staged review in this release; report that to the user instead of working
+   around it, since in this release only an ordinary review or a series reaches the post. In a
+   staged review, follow
+   `next`: `review-assignment {controller_assignment_id}` plans and assigns the next task, then
    `review-run {assignment_id, epoch_id, task_id}` runs it, and the two alternate until `next`
    is the `value-review` payload; `action: "accept"` resumes an interrupted acceptance and
    `action: "reconcile"` reconciles a worker, neither with a reviewer call. A refused output
@@ -619,15 +640,7 @@ accepted tasks of the epoch instead of one request. The
    hand. The review is the controller's effective result, and `value-review` records it naming
    the controller's assignment id. An assessment that the reviewer cannot complete, or that the
    bounded execution cannot finish, is recorded as `assessment_incomplete`: the slot stays
-   occupied, `next` names the research or recovery work, and no second reviewer replaces it.
-   Every staged review also lists
-   `review_quality_measurement_pending`: the measurement of its quality against a single-input
-   review has not run, so the gate stays not ready for a staged review in this release; report
-   that to the user instead of working around it. A session that was already a series in parts
-   under 0.69.x continues in parts: continue each part turn with a new assignment of the same
-   role, route and reviewer and `context: {prior_assignment_id}`, as in step 4, until a turn
-   returns the review; `next` lists `problem_evidence_part_pending` while a part turn waits, and
-   `value-review` records only the turn that returned the review. The
+   occupied, `next` names the research or recovery work, and no second reviewer replaces it. The
    [CLI reference](../../docs/research-cli.md#staged-problem-reviews) states the records, the
    codes and the recovery steps. Replace a recorded version 1 result review, which has no rubric
    grades, before the post (`problem_rubric_review_required`). When the gate or `next` lists
@@ -666,10 +679,12 @@ accepted tasks of the epoch instead of one request. The
    `attempt` or `calibration`, and name both original result review ids in
    `context.review_ids`. An adjudication of A7 decides only whether the question is of the
    excluded kind. Run the assignment with `review-run` and record the observed finding with
-   `review-adjudication`. An adjudication whose packet does not fit one input becomes a staged
-   review as in step 3, with the objection's claim, reason, resolution condition and correction
-   request as its claims; the disposition is the terminal choice of its final task, and
-   `review-adjudication` records the controller's effective result. An incomplete adjudication
+   `review-adjudication`. An adjudication whose packet does not fit one input stays an ordinary
+   assignment, and its run is refused with `review_input_too_large`; an explicit `staged_upgrade`
+   that names that assignment, as in step 3, opens a staged review with the objection's claim,
+   reason, resolution condition and correction request as its claims; the disposition is the
+   terminal choice of its final task, and `review-adjudication` records the controller's
+   effective result. An incomplete adjudication
    leaves the objection open (`assessment_incomplete`); do the recovery work that `next` names.
 7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
    as a resolution of that one item.

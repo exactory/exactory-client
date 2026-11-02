@@ -643,8 +643,20 @@ finish paths' child checks remain unchanged.
 
 Native observations retain cash-out stages, actual local finish, failure and
 stagnation facts. Exact controlled producer receipts/results request verification,
-snapshot or acceptance without conferring proof credit. Checkpoint and acceptance
-transactions refresh those observations. A same-claim historical checkpoint with
+snapshot or acceptance without conferring proof credit. The observations are
+scoped to the node that produced the work. The acknowledgment of a journal or
+native command is recorded alone; the facts of the producing node are then
+observed in a separate event (`integration.refresh_producers`). When that
+observation fails, the acknowledgment stays recorded, and the command returns
+`recovery_required` with the node IDs to refresh under `node_ids` and the
+`reason`; `search refresh` with those IDs completes the observation. A
+checkpoint or an acceptance whose origin is a journal move observes its origin
+node in its own event, and one whose origin is an external result observes no
+node. Ordinary `reconcile` observes, in a separate event, the producers of the
+acknowledgments it recorded and of the runs that became terminal. Stop observes
+every admitted node ([Hook lifecycle](#hook-lifecycle-and-supported-host-boundary)),
+and `search refresh` observes a named batch
+([Filesystem service and CLI](#filesystem-service-and-cli)). A same-claim historical checkpoint with
 another move, run or input snapshot cannot advance the current result frontier.
 Begin may service an exact verification frontier, but not a snapshot/acceptance
 frontier. Local finish is separate from root proof closure. Bounded read-only
@@ -1151,7 +1163,14 @@ is refused with `review_source_continuation_fork`. When the first unit of a
 reading turn does not fit the route alone, or the final turn does not fit after
 every withholding, `review-assignment` refuses with `review_input_too_large`.
 For the final turn the details give the sizes of the base packet, the notes, the
-excerpts and the passages. Submit the native output of the final turn unchanged.
+excerpts and the passages. Before each turn is planned, the harness also
+measures a lower bound of the mandatory final input (the required proof bytes
+and the protected bodies, the excerpts and passages so far and the final
+prompt) and refuses with the same code and `phase: "final_preflight"` when it
+exceeds the route limit; nothing is written, `mandatory_components` names each
+body, and the chain cannot finish on that route with that material
+([CLI reference](../../docs/research-cli.md#problem-creation)). Submit the
+native output of the final turn unchanged.
 Its `attestation_id` names the first turn, the assignment id chosen before the
 export. `accept` and `complete` follow the chain from that turn to its terminal
 turn and verify every turn.
@@ -1730,7 +1749,9 @@ blocker.
 
 ## Node facts, retreat and replanning
 
-`NodeFacts` are internal observations from journal/stage reconciliation:
+`NodeFacts` are internal observations from journal/stage reconciliation; the
+commands that record them, each for the nodes it observes, are listed under
+[Metered execution and native integration](#metered-execution-and-native-integration):
 
 ```text
 node_id: NodeID
@@ -1986,6 +2007,7 @@ Public command specs are closed records:
 | interpret ID | The interpretation record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
 | accept ID | `{obligation_id: ID|null, outcome: Outcome, dependency_ids: [ID], route_bindings: [RouteBinding], review: ResultReview, inputs: [Input]}`, optionally `claims_openness: Boolean` |
+| refresh | `{node_ids: [NodeID]}`: 1 to 256 distinct IDs of nodes admitted through a proposal, in any order |
 | complete | `{subject: ClosureSubject, review: ResultReview, inputs: [Input]}` |
 | deliver-closure | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
 | deliver-attempt | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
@@ -2016,6 +2038,25 @@ exactory-math --attack-root attack search admit proposal-000001 \
 exactory-math --attack-root attack search status --json
 exactory-math --attack-root attack search next --json
 ```
+
+`search refresh --spec FILE --expected-revision N --request-id ID` records the
+current facts of the named nodes. The spec is exactly `{"node_ids": [...]}`
+with 1 to 256 distinct IDs of nodes admitted through a proposal; a node of
+imported history is refused with `admission_required`, an unknown ID with
+`dangling_reference`, and an empty, duplicated or larger batch or another
+field with `invalid_record`, each before any node is observed. It is refused
+with `recovery_required` while a native intent, a legacy intent, a reserved
+move or a workload is pending; reconcile them first. It observes the named
+nodes in node-ID order and commits one event whose operations are the
+`node_facts_recorded` facts that changed, in that order, and nothing else;
+when no fact changed, the event carries no operation. A failed observation
+commits nothing. Its receipt is the ordinary mutation receipt. A replay with
+the same request ID returns the original response without observing again, a
+changed spec under the same request ID fails with `request_id_conflict`, and a
+stale revision with `revision_conflict`. `--check` is refused with
+`check_unsupported`, as for every command outside the five below. Use it with
+the `node_ids` of a `recovery_required` error: after a failed producer
+observation, and after a Stop that found more than 255 changed nodes.
 
 Every command except `status`, `next` and `strategy-context` also has the
 `--check` flag. On those three it is an argument error (`invalid_command`).
@@ -2162,10 +2203,14 @@ route may omit the expected revision; it reads the revision and invokes the
 validated service in that process. A fresh transaction request ID is separate
 from the optional host delivery ID. Concurrent revision conflicts return recovery
 guidance without unlimited retry. Before control accounting, the service derives
-changed local observations through `integration.observe_node`, replays them into
-the prospective state, then derives the decision. Unchanged observations do not
-add operations. Native and journal intents retain recovery precedence, and the
-256-operation bound is enforced with an explicit recovery error. Advisory activity
+the changed local observations of every admitted node through
+`integration.observe_nodes`, replays them into the prospective state, then
+derives the decision. Unchanged observations do not add operations. Native and
+journal intents retain recovery precedence. When more than 255 nodes changed,
+Stop fails with `recovery_required`, the first 255 changed node IDs in ID order
+under `node_ids` and `has_more: true`; it records nothing, uses no
+continuation and spends no Stop count. `search refresh` with those IDs records
+them, and the next Stop call observes the remaining nodes and proceeds. Advisory activity
 logs cannot grant proof credit. Newly managed-node shell activity records only a
 relative target or native command name and slug, not raw shell arguments; existing
 unmanaged advisory formatting and authoritative controlled-run argv are unchanged.
