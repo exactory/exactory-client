@@ -8,7 +8,7 @@ from http.client import IncompleteRead
 from unittest.mock import patch
 
 from research_harness import http
-from research_fixtures import Clock
+from research_fixtures import Clock, make_http_client
 
 
 class ChunkStream(io.BytesIO):
@@ -40,7 +40,7 @@ class HttpLinearTests(unittest.TestCase):
                 copied.append(len(value))
             return builtins.bytes(value)
 
-        client = http.HttpClient(clock=Clock(), resolver=lambda host, timeout: ["93.184.216.34"],
+        client = make_http_client(clock=Clock(), resolver=lambda host, timeout: ["93.184.216.34"],
                                  transport=lambda *args, **kwargs: raw.pop(0), **bounds)
         with patch.object(http, "bytes", materialize, create=True):
             if code is None:

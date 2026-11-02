@@ -2,6 +2,8 @@
 
 import io
 import json
+import tempfile
+import weakref
 from datetime import datetime, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -39,11 +41,22 @@ class Wire:
         return RawResponse(status, headers, io.BytesIO(body), peer)
 
 
-def client(responses, **kwargs):
+def make_http_client(**kwargs):
     from research_harness.http import HttpClient
+    from research_harness.provider_pacing import ProviderPacing
+    clock = kwargs.setdefault("clock", Clock())
+    if kwargs.get("pacing") is None:
+        directory = tempfile.TemporaryDirectory(prefix="exactory-provider-test-")
+        pacing = ProviderPacing(clock=clock, state_dir=directory.name)
+        weakref.finalize(pacing, directory.cleanup)
+        kwargs["pacing"] = pacing
+    return HttpClient(**kwargs)
+
+
+def client(responses, **kwargs):
     wire = Wire(responses)
     clock = Clock()
-    return HttpClient(transport=wire, resolver=lambda host, timeout: ["93.184.216.34"],
+    return make_http_client(transport=wire, resolver=lambda host, timeout: ["93.184.216.34"],
                       clock=clock, **kwargs), wire, clock
 
 

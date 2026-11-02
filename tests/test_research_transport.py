@@ -12,8 +12,8 @@ from pathlib import Path
 from research_harness.artifacts import ArtifactStore
 from research_harness.evidence import prepare_sources
 from research_harness.errors import ResearchError
-from research_harness.http import HttpClient, HttpFailure, RequestBudget, RawResponse, safe_url
-from research_fixtures import Clock, client
+from research_harness.http import HttpFailure, RequestBudget, RawResponse, safe_url
+from research_fixtures import Clock, client, make_http_client
 
 
 class TransportTests(unittest.TestCase):
@@ -125,7 +125,7 @@ class TransportTests(unittest.TestCase):
                 def transport(url, headers, **kwargs):
                     requests.append(url)
                     return responses.pop(0)
-                http = HttpClient(clock=Clock(), transport=transport,
+                http = make_http_client(clock=Clock(), transport=transport,
                                   resolver=lambda host, timeout: ["93.184.216.34"])
                 with self.assertRaises(HttpFailure) as error:
                     http.get("https://example.org/source", budget=RequestBudget(2))
@@ -180,7 +180,7 @@ class TransportTests(unittest.TestCase):
                 clock.seconds += 4
                 return super().read(1)
 
-        http = HttpClient(clock=clock, timeout=3, total_timeout=5, max_retries=0,
+        http = make_http_client(clock=clock, timeout=3, total_timeout=5, max_retries=0,
                           resolver=lambda host, timeout: ["93.184.216.34"],
                           transport=lambda *args, **kwargs: RawResponse(200, {}, SlowStream(b"abcdef"), "93.184.216.34"))
         with self.assertRaises(HttpFailure) as error:
@@ -241,7 +241,7 @@ class TransportTests(unittest.TestCase):
                         return io.BytesIO(raw)
                 response = HTTPResponse(BufferSocket())
                 response.begin()
-                http = HttpClient(clock=Clock(), max_retries=0,
+                http = make_http_client(clock=Clock(), max_retries=0,
                     resolver=lambda host, timeout: ["93.184.216.34"],
                     transport=lambda *args, **kwargs: RawResponse(response.status, dict(response.getheaders()), response, "93.184.216.34"))
                 with self.assertRaises(HttpFailure) as error:
@@ -262,7 +262,7 @@ class TransportTests(unittest.TestCase):
                 if self.tell() == 0:
                     return super().read(2)
                 raise IncompleteRead(b"c" * 100)
-        http = HttpClient(clock=Clock(), max_retries=0, max_bytes=5,
+        http = make_http_client(clock=Clock(), max_retries=0, max_bytes=5,
             resolver=lambda host, timeout: ["93.184.216.34"],
             transport=lambda *args, **kwargs: RawResponse(200, {}, PartialStream(b"ab"), "93.184.216.34"))
         with self.assertRaises(HttpFailure) as error:
