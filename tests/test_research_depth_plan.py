@@ -29,14 +29,15 @@ class DepthPlanTests(LineageCase):
     def test_partial_plans_retain_current_values_and_immutable_history(self):
         first = self.record_depth_plan({"loop_abstracts": 150})["result"]
         revision = self.store.revision
-        self.assertEqual(first, {"id": "depth-1", "values": dict(DEFAULTS, loop_abstracts=150),
+        self.assertEqual(first, {"id": "depth-1", "profile": "research", "values": dict(DEFAULTS, loop_abstracts=150),
                                  "reason": "Match the question's required depth.", "revision": revision})
         second = self.record_depth_plan({"hits_per_query": 12}, "depth-2")["result"]
         self.assertEqual(second["values"], dict(DEFAULTS, loop_abstracts=150, hits_per_query=12))
         records = self.store.snapshot()["records"]
         self.assertEqual(records["depth_plan"]["depth-1"], first)
-        self.assertEqual(records["depth_plan_selection"]["current"], {"id": "depth-2"})
-        self.assertEqual(limits_report(records)["depth"], {"plan_id": "depth-2", "values": second["values"]})
+        self.assertEqual(records["depth_plan_selection"]["research"], {"id": "depth-2"})
+        self.assertEqual(limits_report(records)["depth"], {"plan_id": "depth-2", "profile": "research",
+                                                        "stopping_criterion": None, "values": second["values"]})
         self.assert_error("record_conflict", lambda: self.record_depth_plan({"loop_abstracts": 160}))
 
     def test_all_eight_accessors_follow_the_plan(self):

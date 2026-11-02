@@ -527,12 +527,7 @@ def record_search(store, payload, *, expected_revision, request_id):
             if overrides is not None and not isinstance(overrides, dict):
                 raise ResearchError("invalid_input", "Depth overrides must map supported amounts to positive integers")
             overrides = dict(overrides or {}, hits_per_query=value["hits_per_query"])
-        depth_records = records
-        if value["profile"] == "verification":
-            configured = records.get("configuration", {})
-            depth_records = dict(records, configuration=dict(configured, research=dict(
-                configured.get("research", {}), profile="verification")))
-        effective = resolve_depth_values(depth_records, overrides, keys=("hits_per_query",))
+        effective = resolve_depth_values(records, overrides, keys=("hits_per_query",), profile=value["profile"])
         amount = effective["hits_per_query"]
         bounded = preparation_policy(records) in (LINEAGE, SAMPLED)
         for response in value["responses"]:

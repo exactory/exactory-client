@@ -523,13 +523,8 @@ def require_fulltext(store, payload, *, expected_revision, request_id):
             iso_date(value["historical_cutoff"])
         if value["purpose"] == "core":
             from .depth import resolve_depth_values
-            from .sampling import CORE_LIMIT, core_requirements
-            if value["profile"] == "verification":
-                if value.get("depth"):
-                    raise ResearchError("profile_inapplicable", "Verification retains its fixed depth contract")
-                depth = {"core_fulltexts": CORE_LIMIT}
-            else:
-                depth = resolve_depth_values(records, value.get("depth"), keys=("core_fulltexts",))
+            from .sampling import core_requirements
+            depth = resolve_depth_values(records, value.get("depth"), keys=("core_fulltexts",), profile=value["profile"])
             limit = depth["core_fulltexts"]
             if len(core_requirements(records, value["profile"])) >= limit:
                 raise ResearchError("core_limit_reached", "A verification reads at most " + str(limit) + " core papers in full",

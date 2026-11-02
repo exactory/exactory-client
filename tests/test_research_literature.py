@@ -117,7 +117,7 @@ class LiteratureTests(LiteratureCase):
         self.mutate(record_search, override)
         self.assertEqual(self.store.snapshot()["records"]["literature_search"]["adjacent"]["coverage"][0]["requested_k"], 7)
 
-    def test_verification_searches_keep_the_fixed_contract_even_with_a_research_plan(self):
+    def test_verification_searches_isolate_research_plans_and_enforce_the_default_floor(self):
         from research_harness.depth import record_depth
         self.mutate(record_depth, {"id": "research-depth", "values": {"hits_per_query": 31}, "reason": "A deeper research search."})
         target = self.verification_target()
@@ -127,7 +127,11 @@ class LiteratureTests(LiteratureCase):
         recorded = self.store.snapshot()["records"]["literature_search"][search["id"]]
         self.assertEqual(recorded["hits_per_query"], 10)
         override = dict(self.search("theory"), profile="verification", depth={"hits_per_query": 2})
-        self.assert_error("profile_inapplicable", lambda: self.mutate(record_search, override))
+        self.assert_error("invalid_input", lambda: self.mutate(record_search, override))
+        override["depth"] = {"hits_per_query": 12}
+        self.mutate(record_search, override)
+        recorded = self.store.snapshot()["records"]["literature_search"][override["id"]]
+        self.assertEqual(recorded["hits_per_query"], 12)
 
     def test_graph_reading_does_not_discharge_all_cohort_abstracts(self):
         collection = self.cohort()
