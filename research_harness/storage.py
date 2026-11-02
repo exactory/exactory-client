@@ -1051,21 +1051,33 @@ class Store:
         if (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino):
             raise ResearchError("unsafe_path", "Research metadata directory changed during access")
         for suffix in ("", "-journal", "-wal", "-shm"):
-            try:
-                info = os.stat(_DATABASE + suffix, dir_fd=directory, follow_symlinks=False)
-                self._check_links(directory, info, database=not suffix)
-                descriptor = _regular_file(directory, _DATABASE + suffix)
-            except FileNotFoundError:
-                if not suffix and required:
-                    raise ResearchError("store_missing", "Research store does not exist; initialize or adopt the workspace")
-                continue
-            with os.fdopen(descriptor, "rb") as source:
-                if not suffix:
-                    header = source.read(100)
-                    if len(header) < 100 or header[:16] != b"SQLite format 3\x00":
-                        raise ResearchError("corrupt_state", "Research database has an invalid SQLite header")
-                    if header[18:20] != b"\x01\x01":
-                        raise ResearchError("corrupt_state", "Research store must use rollback journaling")
+            for _ in range(3):
+                try:
+                    info = os.stat(_DATABASE + suffix, dir_fd=directory, follow_symlinks=False)
+                    # A committing writer can unlink the journal during stat/open.
+                    if suffix == "-journal" and info.st_nlink == 0:
+                        continue
+                    self._check_links(directory, info, database=not suffix)
+                    descriptor = _regular_file(directory, _DATABASE + suffix)
+                except FileNotFoundError:
+                    if not suffix and required:
+                        raise ResearchError("store_missing", "Research store does not exist; initialize or adopt the workspace")
+                    break
+                with os.fdopen(descriptor, "rb") as source:
+                    if suffix:
+                        info = os.fstat(source.fileno())
+                        if suffix == "-journal" and info.st_nlink == 0:
+                            continue
+                        self._check_links(directory, info, database=False)
+                    else:
+                        header = source.read(100)
+                        if len(header) < 100 or header[:16] != b"SQLite format 3\x00":
+                            raise ResearchError("corrupt_state", "Research database has an invalid SQLite header")
+                        if header[18:20] != b"\x01\x01":
+                            raise ResearchError("corrupt_state", "Research store must use rollback journaling")
+                break
+            else:
+                raise ResearchError("store_busy", "Research journal changed during access; retry after the writer finishes")
 
     def _check_path(self, path: Path):
         try:
