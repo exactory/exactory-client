@@ -29,6 +29,7 @@ from .publication_scope import record_publication_scope, select_publication_scop
 from .workspace import find_workspace, strict_json
 from . import research_decisions, review_protocol, strategy
 from .depth import record_depth
+from .review_budget import record_budget
 from .probe import record_probe_intent, record_probe, summarize_probes
 from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata
 
@@ -53,6 +54,7 @@ OPERATIONS = {
     "constitution": principles.revalidate_constitution,
     "policy": principles.change_policy,
     "depth": record_depth,
+    "review-budget": record_budget,
     "probe": record_probe,
     "probe-intent": record_probe_intent,
     "roots": graph.set_roots,
@@ -330,6 +332,9 @@ def build_parser():
         if command == "batches":
             item.add_argument("--depth", choices=("abstract",), default="abstract")
             item.add_argument("--size", type=int, default=60, help="Items per batch file, 1 to 100.")
+            item.add_argument("--max-input-bytes", type=int, default=262144)
+            item.add_argument("--max-output-tokens", type=int)
+            item.add_argument("--estimated-output-tokens-per-item", type=int)
             item.add_argument("--destination", required=True, help="New directory for batch-NNN.json files.")
             item.add_argument("--profile", choices=("research", "verification"), help="Defaults to the configured profile.")
             item.add_argument("--screen", action="store_true", help="Export the unscreened members for screen-batch instead of unread abstracts.")
@@ -338,6 +343,7 @@ def build_parser():
         if command == "population-query":
             item.add_argument("--terms", nargs="+", required=True, help="Query terms taken from the target statement and the parent's title and abstract.")
             item.add_argument("--limit", type=int, default=30, help="Matches to return, 1 to 100.")
+            item.add_argument("--cursor")
         if command == "policy-report":
             item.add_argument("--policy", choices=principles.POLICIES, help="Report a hypothetical policy instead of the recorded one.")
             item.add_argument("--reference", help="JSON file {prior_art, contradictions, methods, doctrine} of family ids for recall.")
@@ -561,16 +567,36 @@ def status_report(store, *, counters=False):
                     advisories=advisories)
 
 
-def load_candidates(path):
-    """Read a --candidates file as version ids: a population-query result's matches, or a plain list of ids."""
+def load_candidates(path, *, include_coverage=False):
+    """Read candidate IDs, optionally with the query's coverage for the export manifest."""
     loaded = strict_json(Path(path).read_bytes())
     if isinstance(loaded, dict):
         matches = loaded.get("matches")
         if isinstance(matches, list) and all(isinstance(m, dict) and isinstance(m.get("version_id"), str) for m in matches):
-            return [m["version_id"] for m in matches]
+            versions = [m["version_id"] for m in matches]
+            if not include_coverage:
+                return versions
+            coverage = {"query_coverage": "unknown",
+                        "population_query": {key: value for key, value in loaded.items() if key != "matches"}}
+            keys = ("total_matches", "returned", "offset", "omitted", "remaining")
+            if all(type(loaded.get(key)) is int and loaded[key] >= 0 for key in keys):
+                total, returned, offset, omitted, remaining = (loaded[key] for key in keys)
+                if returned == len(versions) and omitted == total - returned and remaining == total - offset - returned:
+                    coverage["query_coverage"] = "complete" if offset == 0 and omitted == 0 else "partial"
+            return versions, coverage
     elif isinstance(loaded, list) and all(isinstance(item, str) for item in loaded):
-        return loaded
+        return (loaded, {"query_coverage": "unknown", "population_query": None}) if include_coverage else loaded
     raise ResearchError("invalid_input", "The candidates file is a population-query result or a list of version ids")
+
+
+def describe_review_budget_refusal(error):
+    """Attach the same allowance recovery to recording and check-mode refusals."""
+    if error.code == "review_budget_below_charged":
+        error.details = dict(error.details, minimum_max_calls=error.details["charged_calls"],
+                             recovery=["exactory-research", "review-budget", "--file", "FILE",
+                                       "--expected-revision", "CURRENT_REVISION", "--request-id", "NEW_ID"])
+        error.message += "; retry with max_calls at least " + str(error.details["charged_calls"]) + " or null"
+    return error
 
 
 def run(args):
@@ -601,9 +627,14 @@ def run(args):
                 def replay_reconciliation(store, value, **identity):
                     return record_reconciliation(store, value, None, **identity)
                 replay = replay_reconciliation
-            return check_mutation(Store(find_workspace(root)), operation, payload,
-                                  expected_revision=args.expected_revision, request_id=args.request_id,
-                                  bounded_payload=bounded_payload, replay=replay)
+            try:
+                return check_mutation(Store(find_workspace(root)), operation, payload,
+                                      expected_revision=args.expected_revision, request_id=args.request_id,
+                                      bounded_payload=bounded_payload, replay=replay)
+            except ResearchError as error:
+                if args.command == "review-budget":
+                    describe_review_budget_refusal(error)
+                raise
         try:
             # A paper review assignment repeats a stored bundle, which the store bounds already hold.
             check_command_bounds(bounded_payload)
@@ -641,7 +672,12 @@ def run(args):
     if args.command in OPERATIONS or args.command in ACQUISITION:
         identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
         if args.command in OPERATIONS:
-            return OPERATIONS[args.command](store, payload, **identity)
+            try:
+                return OPERATIONS[args.command](store, payload, **identity)
+            except ResearchError as error:
+                if args.command == "review-budget":
+                    describe_review_budget_refusal(error)
+                raise
         return acquisition_command(store, args.command, payload, identity, preview=preview)
     if args.command in ("research-decision-assess", "strategy-packet", "review-route-assess"):
         snapshot = store.snapshot()
@@ -676,11 +712,44 @@ def run(args):
         from .batches import export_batches
         if args.candidates and not args.loop:
             raise ResearchError("invalid_input", "--candidates needs --loop")
-        return export_batches(store, depth=args.depth, size=args.size, destination=args.destination, profile=args.profile,
-                              screen=args.screen, loop=args.loop,
-                              candidates=load_candidates(args.candidates) if args.candidates else ())
+        if (args.max_output_tokens is None) != (args.estimated_output_tokens_per_item is None):
+            raise ResearchError("invalid_input", "Supply --max-output-tokens and --estimated-output-tokens-per-item together")
+        candidates, coverage = load_candidates(args.candidates, include_coverage=True) if args.candidates else ((), None)
+        destination = Path(args.destination).absolute()
+        try:
+            return export_batches(store, depth=args.depth, size=args.size, destination=destination, profile=args.profile,
+                                  screen=args.screen, loop=args.loop, candidates=candidates,
+                                  max_input_bytes=args.max_input_bytes, max_output_tokens=args.max_output_tokens,
+                                  estimated_output_tokens_per_item=args.estimated_output_tokens_per_item,
+                                  candidate_coverage=coverage)
+        except ResearchError as error:
+            if error.code in ("batch_item_too_large", "batch_output_budget_too_small"):
+                parameters = (error.details.get("parameters", {}) if error.code == "batch_item_too_large" else
+                              {"max_output_tokens": args.estimated_output_tokens_per_item})
+                recovery = ["exactory-research", "batches", "--workspace", str(root), "--destination", "NEW_DIRECTORY",
+                            "--size", str(parameters.get("size", args.size)), "--max-input-bytes",
+                            str(parameters.get("max_input_bytes", args.max_input_bytes))]
+                if args.max_output_tokens is not None:
+                    recovery.extend(["--max-output-tokens", str(parameters.get("max_output_tokens", args.max_output_tokens)),
+                                     "--estimated-output-tokens-per-item", str(args.estimated_output_tokens_per_item)])
+                for option in ("profile", "candidates"):
+                    if getattr(args, option):
+                        recovery.extend(["--" + option, getattr(args, option)])
+                for option in ("screen", "loop"):
+                    if getattr(args, option):
+                        recovery.append("--" + option)
+                error.details = dict(error.details, recovery=recovery)
+                if error.code == "batch_item_too_large":
+                    error.details["manifest"] = str(destination / "manifest.json")
+            raise
     if args.command == "population-query":
-        return lineage.population_query(store, args.terms, limit=args.limit)
+        try:
+            return lineage.population_query(store, args.terms, limit=args.limit, cursor=args.cursor)
+        except ResearchError as error:
+            if error.code in ("stale_cursor", "invalid_input"):
+                error.details = dict(error.details or {}, recovery=["exactory-research", "population-query",
+                                                                   "--workspace", str(root), "--terms", *args.terms])
+            raise
     if args.command == "policy-report":
         reference = strict_json(Path(args.reference).read_bytes()) if args.reference else None
         return screening.policy_report(store, policy=args.policy, reference=reference)

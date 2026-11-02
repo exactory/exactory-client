@@ -3905,6 +3905,10 @@
       "wall_seconds": null
     }
   },
+  "review-budget": {
+    "max_calls": 20,
+    "reason": "Bound cumulative review calls."
+  },
   "budget": {
     "profile": "research",
     "purpose": "literature",

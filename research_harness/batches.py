@@ -99,7 +99,8 @@ def _build_notes_shape(screen, loop, policy):
 
 
 def export_batches(store, *, depth="abstract", size=60, destination, profile=None, screen=False, loop=False, candidates=(),
-                   max_input_bytes=262144, max_output_tokens=None, estimated_output_tokens_per_item=None):
+                   max_input_bytes=262144, max_output_tokens=None, estimated_output_tokens_per_item=None,
+                   candidate_coverage=None):
     if depth != "abstract":
         raise ResearchError("invalid_input", "Batches export abstract readings")
     if type(size) is not int or not 1 <= size <= 100:
@@ -145,7 +146,8 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
                 "files": [],
                 "selection_coverage": {"profile": profile, "preparation_policy": policy, "screen": screen, "loop": loop,
                                        "requested_candidates": candidates, "version_ids": versions,
-                                       "missing_version_ids": [], "skipped_candidate_ids": skipped},
+                                       "missing_version_ids": [], "skipped_candidate_ids": skipped,
+                                       **(candidate_coverage or {})},
                 "capacity": {"max_items": size, "effective_max_items": item_limit, "max_input_bytes": max_input_bytes,
                              "max_output_tokens": max_output_tokens,
                              "estimated_output_tokens_per_item": estimated_output_tokens_per_item,
