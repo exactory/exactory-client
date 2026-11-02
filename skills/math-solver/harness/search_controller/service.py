@@ -9,7 +9,7 @@ from .admission import reference
 from .errors import SearchError
 from .evidence import import_inputs, proposal_inputs, audit_admission, audit_state, audit_checkpoint, audit_local_delivery
 from .model import apply_event, initial_state, replay
-from .render import render, replace_text
+from .render import replace_text
 from .scheduler import next_action
 from .storage import Store, canonical_bytes, safe_path, _strict_json
 
@@ -82,6 +82,12 @@ class Controller:
             delivered = deliver_attempt(self, spec, expected_revision, request_id)
             render_after_command(self)
             return delivered
+        if name == "guard-status":
+            s.require(set(spec) <= {"objective_id", "contract_digest"}, "Unknown read-only validation field")
+            state = replay(self.store.read())
+            self._validate_routing_identity(state, spec)
+            return {"protocol": "exactory-search-guard-status-v1", "objective_id": state["objective_id"],
+                    "contract_digest": state["contract_digest"], "revision": state["revision"]}
         if name in {"status", "next", "strategy-context"}:
             s.require(set(spec) <= {"session_id", "focus_request_id", "objective_id", "contract_digest"}, "Unknown read-only validation field")
             state = self.status()
@@ -189,12 +195,6 @@ class Controller:
             state = replay(document)
             if not operator_recovery:
                 self._recover_effects(state)
-            render_ready = not operator_recovery or all(
-                safe_path(self.store.root, "effect-" + s.digest(effect) + ".json").exists()
-                for effect in state["service"]["effects"])
-            manual = safe_path(self.root, "SEARCH_TREE.md")
-            if render_ready and (name != "init" or not manual.exists()):
-                render(self.root, state)
             if routing is not None:
                 from .discovery import publish
                 try:
@@ -204,8 +204,10 @@ class Controller:
                         "inspect the conflict and use a fresh explicit focus if superseded", {"request_id": request_id,
                         "revision": event["sequence"], "reason": str(error)}) from error
         # Every lock is released here. A replayed request renders too, which catches up a render that a crash interrupted.
-        render_after_command(self, (document, state))
-        old = replay(dict(document, events=document["events"][:event["sequence"]]))
+        if name != "hook-stop" or hook_session is None:
+            render_after_command(self, (document, state), preserve_manual=name == "init")
+        old = state if event["sequence"] == state["revision"] else replay(
+            dict(document, events=document["events"][:event["sequence"]]))
         response = {"objective_id": old["objective_id"], "revision": old["revision"],
                     "proof_status": old["proof_status"], "command": name}
         if name == "hook-stop":

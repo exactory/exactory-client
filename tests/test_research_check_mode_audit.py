@@ -47,7 +47,8 @@ READ_ONLY_COMMANDS = {
     "exactory-lab": frozenset({("keys",), ("state", "show"), ("colab-status",)}),
     "exactory-draft": frozenset(),
     "exactory-math": frozenset({("check-problem",), ("budget",), ("status",), ("task", "list"),
-                                ("search", "status"), ("search", "next"), ("search", "strategy-context")}),
+                                ("search", "status"), ("search", "guard-status"),
+                                ("search", "next"), ("search", "strategy-context")}),
 }
 MATH_STORE_COMMANDS = frozenset({"pause", "side-interval", "retreat", "interpret", "render"})
 

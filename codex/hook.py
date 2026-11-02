@@ -79,12 +79,13 @@ def build_file_payloads(payload: dict, script_name: str) -> list[dict]:
                     "Run check-unit after editing unit.json, then write the draft in a separate patch"
                 )
     is_pre = payload.get("hook_event_name") == "PreToolUse"
-    return [
+    inputs = [
         {**payload, "tool_name": "Write" if operation == "Write" else "Edit",
          "tool_input": {"file_path": path}}
         for path, operation in targets
         if is_pre or operation != "Delete" or script_name == "record_attack_activity.py"
     ]
+    return [{**payload, "_math_guard_batch": inputs}] if script_name == "guard_attack_files.py" else inputs
 
 
 def main() -> None:

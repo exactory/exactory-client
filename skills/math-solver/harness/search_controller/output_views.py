@@ -6,12 +6,11 @@ final/history/math/<rel>/ (earlier results that a later record superseded or tha
 intermediate/math/<rel>/ (every other output). STATE_GROUPS and OPERATION_GROUPS classify every replayed state
 collection and every inner operation kind by the view group that shows it.
 
-A render reads the event document, the controller's content stores and the node workspaces, and writes only these
-folders and its marker and lock in .search/. It runs once per command, after the command's last commit and outside
-every controller lock. It skips when the marker already shows the document's last event under the installed
-plugin version; otherwise it builds the whole model, writes the files whose bytes differ, and removes the owned files
-that the model no longer produces. A failed render never changes the command's result: it prints one warning, and
-search status and search next report output_views_stale.
+A render reads the event document, the controller's content stores and the node workspaces, and publishes Markdown
+and these folders under its render lock, after the command's last commit and outside the writer lock. Markdown is
+repaired even when the JSON marker already shows the last event under the installed plugin version. Otherwise the
+JSON render builds the whole model, writes files whose bytes differ, and removes files no longer produced. A failed
+render never changes the command's result: it prints one warning, and status and next report output_views_stale.
 """
 
 import errno
@@ -25,6 +24,7 @@ import sys
 import time
 
 from . import schema as s
+from . import render as markdown
 from .errors import SearchError
 from .evidence import manifest_closure
 from .model import replay
@@ -576,12 +576,11 @@ def has_reserved_name(root):
     return Path(root).name == RESERVED_ROOT_NAME
 
 
-def render_views(root, store, replayed=None):
-    """Render the views when the marker does not show the document's last event; return the replayed state, or None
-    when the views were already current or the root has the reserved name. replayed is a (document, state) pair the
-    caller already holds; it is used when no later event was committed since."""
-    if has_reserved_name(root):
-        return None
+def render_views(root, store, replayed=None, *, preserve_manual=False):
+    """Repair Markdown, then render JSON if stale; return state when JSON was rendered, or None otherwise.
+
+    Select the document under the render lock. Reuse the supplied (document, state) only if it is still current.
+    """
     descriptor = hold_render_lock(store)
     try:
         marker = read_marker(store)
@@ -590,12 +589,24 @@ def render_views(root, store, replayed=None):
             events = document["events"]
             identity = {"revision": len(events), "event_digest": s.digest(events[-1]) if events else None,
                         "plugin_version": read_runtime_identity()["plugin_version"]}
-            if all(marker.get(key) == value for key, value in identity.items()):
-                return None
             if replayed is not None and replayed[0]["events"][-1:] == events[-1:] and len(replayed[0]["events"]) == len(events):
                 state = replayed[1]
             else:
                 state = replay(document)
+            s.require(all(safe_path(store.root, "effect-" + s.digest(effect) + ".json").exists()
+                          for effect in state["service"]["effects"]),
+                      "Filesystem initialization is pending; run search render", "recovery_required")
+            paths = {"SEARCH_TREE.md"} | {node["attack_slug"] + "/LINEAGE.md" for node in state["nodes"].values()}
+            for relative in paths:
+                s.require(not safe_path(root, relative).is_symlink(), "Generated views cannot be symlinks", "unsafe_path")
+            initial_manual = (preserve_manual and len(events) == 1
+                              and events[0].get("payload", {}).get("command") == "init"
+                              and safe_path(root, "SEARCH_TREE.md").exists())
+            if not initial_manual:
+                markdown.render(root, state)
+            if has_reserved_name(root) or (marker.get("failure") is None
+                                          and all(marker.get(key) == value for key, value in identity.items())):
+                return None
             files = write_views(build_views(root, store, document, state), marker)
             write_marker(store, dict(identity, schema=_MARKER_SCHEMA, files=files, failure=None))
             return state
@@ -629,12 +640,12 @@ def find_research_renderer():
     return getattr(module, "render_workspace_views", None)
 
 
-def render_after_command(controller, replayed=None, *, research=True):
-    """Render after a command's last commit, outside every lock: the controller views, then (for controller commands)
+def render_after_command(controller, replayed=None, *, research=True, preserve_manual=False):
+    """Render after a command's last commit, outside the writer lock: controller views, then (for controller commands)
     the research views of the common review store. A failure prints one warning line and changes nothing else."""
     state = None
     try:
-        state = render_views(controller.root, controller.store, replayed)
+        state = render_views(controller.root, controller.store, replayed, preserve_manual=preserve_manual)
     except Exception as error:
         warn_unrendered(error)
     if not research:

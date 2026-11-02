@@ -303,8 +303,9 @@ def raise_controller_error(root, diagnostic):
     raise ManagedError("Controller recovery required: " + diagnostic)
 
 
-def controller_call(root, command, spec=None, session=None, focus=None, identity=None):
-    deadline = time.monotonic() + CONTROLLER_TIMEOUT
+def controller_call(root, command, spec=None, session=None, focus=None, identity=None, *, deadline=None):
+    if deadline is None:
+        deadline = time.monotonic() + CONTROLLER_TIMEOUT
 
     def invoke_controller(command_argv):
         try:
@@ -330,8 +331,8 @@ def controller_call(root, command, spec=None, session=None, focus=None, identity
         process = invoke_controller(argv)
     if process.returncode:
         diagnostic = process.stderr.strip() or "no diagnostic"
-        if command != "status" or any(value is not None for value in (spec, session, focus, identity)):
-            status_argv = [sys.executable, str(LAUNCHER), "--attack-root", str(root), "search", "status", "--json"]
+        if command != "guard-status" or any(value is not None for value in (spec, session, focus, identity)):
+            status_argv = [sys.executable, str(LAUNCHER), "--attack-root", str(root), "search", "guard-status", "--json"]
             status_process = invoke_controller(status_argv)
             if not status_process.returncode:
                 raise ManagedError("Controller recovery required: " + diagnostic)
@@ -394,63 +395,68 @@ def lifecycle(payload, stop=False):
 
 def guard(payload):
     """Return a managed denial reason, or None; legacy gates handle unmanaged nodes."""
+    deadline = time.monotonic() + CONTROLLER_TIMEOUT
     payload = normalize(payload)
-    tool = payload.get("tool_name")
-    paths = operation_paths(payload)
-    found = discover(payload, paths)
-    cwd = Path(payload.get("cwd") or ".").resolve()
-    raw = payload.get("tool_input")
-    relevant = {root for root in found["roots"] if any(is_same_or_ancestor(root, path) for path in paths)}
-    visible = json.dumps(raw)
-    visible_roots = {root for root in found["roots"] if str(root) in visible
-                     or os.path.relpath(root, cwd) + "/" in visible}
-    if tool in {"Read", "Glob", "Grep", "WebSearch", "WebFetch"}:
-        return None
-    if tool not in _FILE_NAMES | {"Bash"}:
-        if visible_roots or any(is_same_or_ancestor(root, cwd) for root in found["roots"]):
-            return "Unsupported managed payload; use a direct apply_patch or exec_command so its targets can be checked"
-        return None
-    writing = tool in {"Write", "Edit", "Delete"}
-    if tool == "Bash":
-        try:
-            tokens = shell_tokens(raw.get("command") if isinstance(raw, dict) else None)
-        except ValueError as error:
-            if relevant or found["direct"] or visible_roots:
-                return str(error) + "; use a supported direct call"
-            return None
-        if not tokens:
-            return None
-        executable = Path(tokens[0]).name
-        if executable in {"python", "python3"} and len(tokens) > 1 and Path(tokens[1]).name in {"exactory-math", "attack.py"}:
-            executable = "exactory-math"
-        writing = (executable in {"tee", "cp", "mv", "rm", "truncate", "dd"}
-                   or any(token in {">", ">>", ">|"} for token in tokens)
-                   or (executable == "sed" and any(token.startswith("-i") for token in tokens[1:])))
-        simple = not any(token in {";", "&&", "||", "|", "&", "<<", "<<<"} for token in tokens)
-        supported = {"exactory-math", "attack.py", "cat", "ls", "rg", "grep", "head", "tail", "wc", "pwd",
-                     "printf", "echo", "tee", "cp", "mv", "rm", "truncate", "dd", "sed"}
-        if (relevant or found["direct"]) and (not simple or executable not in supported):
-            return "Unsupported managed shell operation; use a direct supported command or controller search run"
-    if writing:
-        for path in paths:
-            if any(path in {pointer, pointer.with_suffix(".lock")} or is_same_or_ancestor(path, pointer)
-                   for pointer in found["registries"]):
-                return "Discovery pointers and locks are owned by search init/focus/resume; use the controller command"
-            for root in relevant:
-                if not is_same_or_ancestor(root, path):
-                    continue
-                relative = path.relative_to(root).as_posix()
-                if (relative == "." or relative == ".search" or relative.startswith(".search/")
-                        or relative == "SEARCH_TREE.md" or re.fullmatch(r"[^/]+/LINEAGE\.md", relative)):
-                    return "Controller snapshots, artifacts, and generated views are owned by search commands; use the controller"
-                workspace = workspace_for(path)
-                if workspace is not None:
-                    native = path.relative_to(workspace).as_posix()
-                    if native == "." or re.fullmatch(
-                            r"journal\.jsonl|openings\.json|parent\.json|tasks\.json|activity\.jsonl|"
-                            r"deterministic/[^/]+/(result\.json|inspection\.log|axioms-check\.lean)|"
-                            r"units/\d+/check-unit\.json|units/FINISHED\.json", native):
-                        return "Native records are owned by their validated exactory-math commands; use the direct controller workflow"
-    for root in relevant:
-        controller_call(root, "status", identity=found["roots"][root])
+    inputs = [normalize(item) for item in payload.get("_math_guard_batch", [payload])]
+    targets = [operation_paths(item) for item in inputs]
+    found = discover(payload, [path for paths in targets for path in paths])
+    queried = set()
+    for item, paths in zip(inputs, targets):
+        tool = item.get("tool_name")
+        cwd = Path(item.get("cwd") or ".").resolve()
+        raw = item.get("tool_input")
+        relevant = {root for root in found["roots"] if any(is_same_or_ancestor(root, path) for path in paths)}
+        visible = json.dumps(raw)
+        visible_roots = {root for root in found["roots"] if str(root) in visible
+                         or os.path.relpath(root, cwd) + "/" in visible}
+        if tool in {"Read", "Glob", "Grep", "WebSearch", "WebFetch"}:
+            continue
+        if tool not in _FILE_NAMES | {"Bash"}:
+            if visible_roots or any(is_same_or_ancestor(root, cwd) for root in found["roots"]):
+                return "Unsupported managed payload; use a direct apply_patch or exec_command so its targets can be checked"
+            continue
+        writing = tool in {"Write", "Edit", "Delete"}
+        if tool == "Bash":
+            try:
+                tokens = shell_tokens(raw.get("command") if isinstance(raw, dict) else None)
+            except ValueError as error:
+                if relevant or found["direct"] or visible_roots:
+                    return str(error) + "; use a supported direct call"
+                continue
+            if not tokens:
+                continue
+            executable = Path(tokens[0]).name
+            if executable in {"python", "python3"} and len(tokens) > 1 and Path(tokens[1]).name in {"exactory-math", "attack.py"}:
+                executable = "exactory-math"
+            writing = (executable in {"tee", "cp", "mv", "rm", "truncate", "dd"}
+                       or any(token in {">", ">>", ">|"} for token in tokens)
+                       or (executable == "sed" and any(token.startswith("-i") for token in tokens[1:])))
+            simple = not any(token in {";", "&&", "||", "|", "&", "<<", "<<<"} for token in tokens)
+            supported = {"exactory-math", "attack.py", "cat", "ls", "rg", "grep", "head", "tail", "wc", "pwd",
+                         "printf", "echo", "tee", "cp", "mv", "rm", "truncate", "dd", "sed"}
+            if (relevant or found["direct"]) and (not simple or executable not in supported):
+                return "Unsupported managed shell operation; use a direct supported command or controller search run"
+        if writing:
+            for path in paths:
+                if any(path in {pointer, pointer.with_suffix(".lock")} or is_same_or_ancestor(path, pointer)
+                       for pointer in found["registries"]):
+                    return "Discovery pointers and locks are owned by search init/focus/resume; use the controller command"
+                for root in relevant:
+                    if not is_same_or_ancestor(root, path):
+                        continue
+                    relative = path.relative_to(root).as_posix()
+                    if (relative == "." or relative == ".search" or relative.startswith(".search/")
+                            or relative == "SEARCH_TREE.md" or re.fullmatch(r"[^/]+/LINEAGE\.md", relative)):
+                        return "Controller snapshots, artifacts, and generated views are owned by search commands; use the controller"
+                    workspace = workspace_for(path)
+                    if workspace is not None:
+                        native = path.relative_to(workspace).as_posix()
+                        if native == "." or re.fullmatch(
+                                r"journal\.jsonl|openings\.json|parent\.json|tasks\.json|activity\.jsonl|"
+                                r"deterministic/[^/]+/(result\.json|inspection\.log|axioms-check\.lean)|"
+                                r"units/\d+/check-unit\.json|units/FINISHED\.json", native):
+                            return "Native records are owned by their validated exactory-math commands; use the direct controller workflow"
+        queried.update(relevant)
+    for root in sorted(queried):
+        controller_call(root, "guard-status", identity=found["roots"][root], deadline=deadline)
     return None

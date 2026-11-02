@@ -25,7 +25,7 @@ class NodeRefreshTests(unittest.TestCase):
         self.controller = service.Controller(self.root)
         # These tests exercise transaction and observation boundaries. Scientific
         # review ingress and advisory publication have separate integration tests.
-        for target in ('search_controller.service.render', 'search_controller.output_views.render_after_command',
+        for target in ('search_controller.output_views.render_after_command',
                        'search_controller.reviewer.validate_submitted'):
             patcher = patch(target)
             patcher.start()
