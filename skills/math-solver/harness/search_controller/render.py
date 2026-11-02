@@ -11,19 +11,25 @@ from .errors import SearchError
 from . import schema as s
 
 
-def strategy_assessment_lines(state, node_id=None):
+def strategy_assessment_lines(state, node_id=None, *, status=None, assessments=None, failures=None):
     from .strategy_refresh import assessment_status
-    status = assessment_status(state)
+    if status is None:
+        status = assessment_status(state)
     policy = state["control"]["strategy_refresh"]
+    if assessments is None:
+        assessments = [(record, [row for row in record["assessment"]["assessments"]
+                                 if node_id is None or row["node_id"] == node_id]) for record in policy["assessments"]]
+    if failures is None:
+        failures = [(identity, failure) for identity, failure in policy["failures"].items()
+                    if node_id is None or failure["node_id"] == node_id]
     prefix = ".search/blobs/" if node_id is None else "../.search/blobs/"
     lines = ["", "## Strategy reassessment", "",
              "Recorded context: " + status["context_digest"],
              "Reassessment required by recorded evidence: " + ("yes" if status["required"] else "no"),
              "Policy recorded as enabled: " + ("yes" if policy["enabled"] else "no; the current service checks new work"),
              "Local plan freshness is checked by search strategy-context and at execution."]
-    for record in policy["assessments"]:
+    for record, rows in assessments:
         value = record["assessment"]
-        rows = [row for row in value["assessments"] if node_id is None or row["node_id"] == node_id]
         if node_id is not None and not rows:
             continue
         lines += ["", "### " + record["id"], "",
@@ -44,8 +50,6 @@ def strategy_assessment_lines(state, node_id=None):
                       "  Failure signal: " + hypothesis["failure_signal"]]
         if value["no_new_hypothesis_reason"] is not None:
             lines.append("Existing hypotheses retained because: " + value["no_new_hypothesis_reason"])
-    failures = [(identity, failure) for identity, failure in policy["failures"].items()
-                if node_id is None or failure["node_id"] == node_id]
     if failures:
         lines += ["", "### Retained strategy failures", ""]
         lines += ["- {}: {}".format(identity, failure["observation"]) for identity, failure in failures]
@@ -75,7 +79,26 @@ def replace_bytes(path, data):
 
 
 def render(root, state):
+    from .strategy_refresh import assessment_status
     root = Path(root)
+    status = assessment_status(state)
+    checkpoints_by_node, assessments_by_node, failures_by_node = {}, {}, {}
+    for checkpoint in state["checkpoints"].values():
+        checkpoints_by_node.setdefault(checkpoint["origin"].get("node_id"), []).append(checkpoint)
+    policy = state["control"]["strategy_refresh"]
+    assessments = []
+    for record in policy["assessments"]:
+        rows, rows_by_node = [], {}
+        for row in record["assessment"]["assessments"]:
+            rows.append(row)
+            rows_by_node.setdefault(row["node_id"], []).append(row)
+        assessments.append((record, rows))
+        for node_id, node_rows in rows_by_node.items():
+            assessments_by_node.setdefault(node_id, []).append((record, node_rows))
+    failures = list(policy["failures"].items())
+    for identity, failure in failures:
+        failures_by_node.setdefault(failure["node_id"], []).append((identity, failure))
+    deferred_node_ids = set(state["control"]["deferred_node_ids"])
     claim = state["contract"]["original_claim"]
     lines = ["# Mathematical search tree", "", "Generated from .search/tree.json; do not edit.", "",
              "Objective: " + state["objective_id"], "", claim["statement"], "",
@@ -100,7 +123,7 @@ def render(root, state):
         workspace = safe_path(root, node["attack_slug"])
         lines.append("- {} ({}): {}; obligation {}; account {}.".format(
             node["id"], node["attack_slug"], node["status"], node["obligation_id"], node["account_id"]))
-        deferred = node["id"] in state["control"]["deferred_node_ids"]
+        deferred = node["id"] in deferred_node_ids
         if deferred:
             lines.append("  {}: deferred from new research selection; its obligation is retained.".format(node["id"]))
         lineage = ["# Investigation lineage", "", "Generated from .search/tree.json; do not edit.", "",
@@ -112,13 +135,14 @@ def render(root, state):
                    "Predecessor checkpoint: " + str(node["checkpoint_id"]),
                    "Native parent: " + str(node["native_parent"]), "Account: " + node["account_id"],
                    "", "Local finish does not imply objective completion.", "", "## Checkpoints", ""]
-        for cp in state["checkpoints"].values():
-            if cp["origin"].get("node_id") == node["id"]:
-                lineage.extend(["- {}: {}".format(cp["id"], cp["what_changed"]),
-                                "  Remaining obligations: " + json.dumps(cp["remaining_obligation_ids"]),
-                                "  Next hypothesis: " + cp["next_hypothesis"]])
-        lineage.extend(strategy_assessment_lines(state, node["id"]))
+        for cp in checkpoints_by_node.get(node["id"], []):
+            lineage.extend(["- {}: {}".format(cp["id"], cp["what_changed"]),
+                            "  Remaining obligations: " + json.dumps(cp["remaining_obligation_ids"]),
+                            "  Next hypothesis: " + cp["next_hypothesis"]])
+        lineage.extend(strategy_assessment_lines(state, node["id"], status=status,
+                                                assessments=assessments_by_node.get(node["id"], []),
+                                                failures=failures_by_node.get(node["id"], [])))
         if workspace.is_dir():
             replace_text(safe_path(workspace, "LINEAGE.md"), "\n".join(lineage) + "\n")
-    lines.extend(strategy_assessment_lines(state))
+    lines.extend(strategy_assessment_lines(state, status=status, assessments=assessments, failures=failures))
     replace_text(safe_path(root, "SEARCH_TREE.md"), "\n".join(lines) + "\n")

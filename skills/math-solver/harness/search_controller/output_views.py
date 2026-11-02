@@ -120,6 +120,7 @@ class Views:
         self.rel = self.root.relative_to(self.workspace).as_posix()
         self.files = {}
         self.adoptions = []
+        self.adoption_keys = set()
 
     def find_base(self, status):
         return _TREES[status] + self.rel
@@ -164,7 +165,9 @@ class Views:
             if attestation.startswith(PREFIX):
                 entry = {"review_id": s.digest(review), "assignment_id": attestation[len(PREFIX):],
                          "adopting_record": {"kind": kind, "id": identity, "status": status, "path": path}}
-                if entry not in self.adoptions:
+                key = (entry["review_id"], entry["assignment_id"], kind, identity, status, path)
+                if key not in self.adoption_keys:
+                    self.adoption_keys.add(key)
                     self.adoptions.append(entry)
 
 
@@ -178,12 +181,16 @@ def build_objective(views):
 def build_admissions(views):
     """Admitted proposals in final/, every other proposal in intermediate/, each with its recorded reviews."""
     state = views.state
+    nodes_by_proposal, reviews_by_proposal = {}, {}
+    for node in state["nodes"].values():
+        nodes_by_proposal.setdefault(node["proposal_id"], node["id"])
+    for review in state["reviews"].values():
+        reviews_by_proposal.setdefault(review["proposal_id"], []).append(review)
     for identity, proposal in state["proposals"].items():
         admitted = proposal["status"] == "admitted"
         status = "current" if admitted else "not_selected"
-        node = next((node["id"] for node in state["nodes"].values() if node["proposal_id"] == identity), None)
-        value = {"proposal": proposal, "node_id": node,
-                 "reviews": [review for review in state["reviews"].values() if review["proposal_id"] == identity]}
+        value = {"proposal": proposal, "node_id": nodes_by_proposal.get(identity),
+                 "reviews": reviews_by_proposal.get(identity, [])}
         kind = "admission" if admitted else "proposal"
         path = views.add_record(status, ("admissions/" if admitted else "proposals/") + identity + ".json",
                                 value, kind, identity)
@@ -249,10 +256,15 @@ def build_closure(views):
 
 def build_imports(views):
     service = views.state["service"]
+    versions_by_import, allowances_by_import = {}, {}
+    for item in service["import_versions"]:
+        versions_by_import.setdefault(item["import_id"], []).append(item)
+    for item in service["adoption_allowances"]:
+        allowances_by_import.setdefault(item["import_id"], []).append(item)
     for identity, record in service["imports"].items():
         value = {"import": record,
-                 "versions": [item for item in service["import_versions"] if item["import_id"] == identity],
-                 "allowances": [item for item in service["adoption_allowances"] if item["import_id"] == identity]}
+                 "versions": versions_by_import.get(identity, []),
+                 "allowances": allowances_by_import.get(identity, [])}
         path = views.add_record("current", "imports/" + identity + ".json", value, "import", identity)
         views.adopt(value, "import", identity, "current", path)
 
@@ -313,10 +325,19 @@ def build_runs(views):
                              identity)
 
 
-def describe_file(views, path):
-    raw = path.read_bytes()
-    return {"path": path.relative_to(views.workspace).as_posix(), "digest": hashlib.sha256(raw).hexdigest(),
-            "size": len(raw)}, raw
+def describe_file(views, path, *, include_body=False):
+    raw = None
+    digest, size = hashlib.sha256(), 0
+    if include_body:
+        raw = path.read_bytes()
+        digest.update(raw)
+        size = len(raw)
+    else:
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+                size += len(chunk)
+    return {"path": path.relative_to(views.workspace).as_posix(), "digest": digest.hexdigest(), "size": size}, raw
 
 
 def list_files(views, directory, excluded=()):
@@ -352,7 +373,7 @@ def build_nodes(views):
             value["workspace_present"] = True
             journal = workspace / "journal.jsonl"
             if is_real_file(journal):
-                listing, raw = describe_file(views, journal)
+                listing, raw = describe_file(views, journal, include_body=True)
                 listing["moves"] = [describe_move(line) for line in raw.splitlines() if line.strip()]
                 value["journal"] = listing
             deterministic = workspace / "deterministic"
