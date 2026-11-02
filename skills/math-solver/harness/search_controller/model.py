@@ -31,6 +31,7 @@ def service_operation(state, payload):
         "adopt": {"legacy_imported", "legacy_import_version_recorded", "adoption_allowance_recorded"},
         "review": {"review_recorded"}, "admit": {"proposal_admitted"},
         "checkpoint": {"checkpoint_recorded", "node_facts_recorded"}, "accept": {"result_accepted", "node_facts_recorded"},
+        "refresh": {"node_facts_recorded"},
         "complete": {"objective_completed"}, "audit": {"evidence_invalidated"},
         "retreat": {"node_retreated"}, "replan": {"replan_recorded"},
         "focus": {"control_recorded", "discovery_recorded"}, "pause": {"control_recorded"},
