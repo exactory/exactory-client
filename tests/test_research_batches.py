@@ -77,6 +77,25 @@ class ReadBatchTests(LiteratureCase):
 
 
 class BatchExportTests(LiteratureCase):
+    def test_export_manifest_counts_cohort_members_without_complete_abstracts(self):
+        from research_fixtures import atom, client, entry, xml_response
+        from research_harness.acquisition import collect_cohort
+        from research_harness.batches import export_batches
+        from research_harness.principles import initialize_research
+
+        self.mutate(initialize_research, {"profile": "research", "target": None, "preparation_policy": "exhaustive-v1"})
+        http, _, _ = client([xml_response(atom([entry("2601.00001v1", abstract=""),
+                                               entry("2601.00002v1", abstract="Complete abstract.")], total=2))])
+        collect_cohort(self.store, {"corpus": "arxiv", "primaryCategory": "cs.LG", "windowStart": "2026-01-01",
+                                   "windowEnd": "2026-01-31"}, http=http, expected_revision=self.store.revision,
+                       request_id="missing-abstract-cohort")
+        result = export_batches(self.store, destination=self.root / "batches")
+        self.assertEqual(result["entries"], 1)
+        manifest = json.loads((self.root / "batches/manifest.json").read_bytes())
+        self.assertTrue(manifest["complete"])
+        self.assertEqual(manifest["counts"], {"candidate": 2, "exported": 1, "missing": 1, "skipped": 0})
+        self.assertEqual(manifest["selection_coverage"]["missing_version_ids"], ["arxiv:2601.00001v1"])
+
     def test_loop_export_notes_state_the_current_candidate_depth(self):
         from research_harness.batches import export_batches
         from research_harness.cli import OPERATIONS
