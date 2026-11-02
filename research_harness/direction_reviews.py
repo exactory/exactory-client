@@ -4,9 +4,11 @@ import copy
 import json
 
 from .direction_sources import find_delivered_readings
+from .errors import ResearchError
 from .evaluation import Evaluation
 from .graph import obligation
 from .review_context_repair import is_same_subject
+from .review_delivered_evidence import read_selected_delivery
 from .review_protocol import assignment_state, describe_direction_evidence
 
 
@@ -243,11 +245,16 @@ def assess_direction_reviews(records, artifacts, dossier, reviews, direction):
     obligations = []
     for review in reviews:
         covered = set()
-        packets = collect_observed_packets(records, evaluation, review["assignment_id"])
+        try:
+            delivery = read_selected_delivery(records, evaluation, review["assignment_id"])
+            packets = delivery['coverage_witnesses']['packets']
+        except ResearchError:
+            # No saved-packet fallback: the obligation below reports what no authenticated delivery carries.
+            packets = []
         delivered = find_delivered_readings(records, evaluation, [records["reading"][identifier] for identifier in readings],
-                                            [packet for _, packet in packets])
+                                            packets)
         missing_readings = set(readings) - delivered
-        for assignment, packet in packets:
+        for packet in packets:
             supplied = packet.get("direction_evidence", {})
             for key in ("claim", "search", "standards", "grand_challenge"):
                 if expected[key] is not None and supplied.get(key) == expected[key]:
