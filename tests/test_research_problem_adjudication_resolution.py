@@ -1854,7 +1854,9 @@ class ReviewOutputRefusalTests(delivery_fixtures.ProblemDeliveryCase):
         self.put("review_attempt", "refused-1", dict(attempt, request_digest="different-request"))
         with self.assertRaises(ResearchError) as caught:
             self.invoke_output(output, attempt="forbidden-2")
-        self.assertEqual(caught.exception.code, "review_request_changed")
+        # Since 0.71.0 a refusal counts only from an attempt whose actual delivery authenticates, and a request digest
+        # that disagrees with its stored request does not; its provenance is unverified, so the retry is forbidden.
+        self.assertEqual(caught.exception.code, "review_resampling_forbidden")
         self.assertNotIn("forbidden-2", self.records()["review_invocation"])
 
     def test_malformed_artifact_descriptor_is_refused_before_byte_availability(self):

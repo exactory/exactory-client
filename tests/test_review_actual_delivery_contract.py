@@ -130,6 +130,26 @@ class ActualDeliveryContractTests(unittest.TestCase):
         self.assertEqual(finding['code'], 'review_evidence_undelivered')
         self.assertEqual(finding['details']['sha256'], withheld['sha256'])
 
+    def test_unverified_delivery_permits_problem_refresh(self):
+        records = self.case.read_records()
+        prior = records['review_assignment']['bar-first']
+        previous = protocol._read_json(self.case.artifacts, prior['packet'])
+        self.assertFalse(protocol._is_problem_refresh(records, self.case.artifacts, prior, previous))
+        records['review_attempt'] = {}
+        self.assertTrue(protocol._is_problem_refresh(records, self.case.artifacts, prior, previous))
+
+    def test_refresh_packet_names_the_review_without_authenticated_delivery(self):
+        records = self.case.read_records()
+        prior = records['review_assignment']['bar-first']
+        state = protocol.assignment_state(records, self.case.artifacts, prior['id'])
+        records['review_attempt'] = {}
+        # Isolate packet planning from the independently checked parent-selection boundary.
+        with patch.object(protocol, '_source_parent', return_value=(prior, state)):
+            packet = protocol.build_packet(records, self.case.artifacts, None, 'bar', 'first',
+                                           prior_assignment_id=prior['id'])
+        self.assertEqual(packet['problem_refresh']['reason'], 'evidence_undelivered')
+        self.assertIn('review-bar-first', packet['problem_refresh']['review_ids'])
+
 
 class FocusedActualDeliveryTests(unittest.TestCase):
     def test_focused_ordinary_adjudicator_cannot_cite_a_withheld_body(self):
@@ -153,8 +173,19 @@ class FocusedActualDeliveryTests(unittest.TestCase):
         with patch.object(transport, 'request_body', side_effect=build), \
                 patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1):
             with patch.object(transport, 'send_request', return_value=case.build_provider_response(output)):
-                case.mutate(protocol.invoke_assignment, dict(id='attempt-focused', assignment_id=assignment['id']),
-                            credential='test-only')
+                # Since 0.71.0 the request that withholds the required body is refused before an invocation exists.
+                with self.assertRaises(ResearchError) as refused:
+                    case.mutate(protocol.invoke_assignment, dict(id='attempt-refused', assignment_id=assignment['id']),
+                                credential='test-only')
+                self.assertEqual(refused.exception.code, 'review_input_too_large')
+                self.assertEqual(refused.exception.details['phase'], 'dispatch_preflight')
+                self.assertEqual(refused.exception.details['delivery_error']['code'], 'review_current_source_incomplete')
+                self.assertNotIn('attempt-refused', case.read_records().get('review_invocation', {}))
+                # An older store dispatched such a request before that check; its output still credits nothing.
+                from research_harness import review_preflight
+                with patch.object(review_preflight, 'check_request', side_effect=lambda report, *args, **kwargs: report):
+                    case.mutate(protocol.invoke_assignment, dict(id='attempt-focused', assignment_id=assignment['id']),
+                                credential='test-only')
             records = case.read_records()
             finding = refusal.classify_observed_output(records, case.artifacts, 'attempt-focused')
             self.assertIsNotNone(finding)

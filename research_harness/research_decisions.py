@@ -1318,11 +1318,16 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
         pending = []
         for shortfall in problem_rubric.assess_grades(findings['rubric']):
             identifier = problem_rubric.rubric_objection_id(review['id'], shortfall['item'])
-            saved = max((row for row in records.get('review_adjudication', {}).values()
-                         if row['objection_id'] == identifier and row.get('subject') == review['subject']
-                         and evidence_digest is not None and row.get('problem_evidence_digest') == evidence_digest
-                         and not find_undelivered_adjudication_keys(records, artifacts, row['assignment_id'], rubric=True)),
-                        key=lambda row: row['recorded_revision'], default=None)
+            try:
+                saved = max((row for row in records.get('review_adjudication', {}).values()
+                             if row['objection_id'] == identifier and row.get('subject') == review['subject']
+                             and evidence_digest is not None and row.get('problem_evidence_digest') == evidence_digest
+                             and not find_undelivered_adjudication_keys(records, artifacts, row['assignment_id'], rubric=True)),
+                            key=lambda row: row['recorded_revision'], default=None)
+            except ResearchError as error:
+                obligations.append(obligation(error.code, str(error), review_id=review['id'], objection_id=identifier))
+                pending.append(shortfall)
+                continue
             resolved = False
             if saved is not None:
                 try:

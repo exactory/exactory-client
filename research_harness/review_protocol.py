@@ -1581,9 +1581,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             elif role in ('slate', 'result'):
                 add_direction_evidence(records, artifacts, packet, dossier_id)
             if problem and refreshed:
-                from .research_decisions import find_undelivered_review_references
                 unsupported = [review['id'] for review in historical if review['assignment_id'] == prior['id']
-                               and find_undelivered_review_references(records, artifacts, review)]
+                               and _is_evidence_refresh_needed(records, artifacts, review)]
                 if unsupported:
                     named = packet['problem_refresh'].get('review_ids', [])
                     packet['problem_refresh'].update(reason='evidence_undelivered',
@@ -2218,12 +2217,22 @@ def _source_parent(records, artifacts, identifier, dossier_id, reviewer_id, role
     return prior, state
 
 
+def _is_evidence_refresh_needed(records, artifacts, review):
+    """Permit reassessment when the review cites undelivered evidence or its delivery cannot be authenticated or read."""
+    from .research_decisions import find_undelivered_review_references
+    try:
+        return bool(find_undelivered_review_references(records, artifacts, review))
+    except ResearchError as error:
+        if error.code not in ('review_invocation_unverified', 'review_input_unreadable', 'artifact_missing'):
+            raise
+        return True
+
+
 def _is_problem_refresh(records, artifacts, prior, previous):
     """Whether a completed problem review no longer binds the current record: a result's review currency changed, a
     slate's candidates or bars changed, or a bar lacks rubric calibration. An exact superseded result prompt also
     permits one prospective contract refresh. Undelivered evidence permits reassessment in the same session and slot."""
-    from .research_decisions import find_undelivered_review_references
-    if any(review['assignment_id'] == prior['id'] and find_undelivered_review_references(records, artifacts, review)
+    if any(review['assignment_id'] == prior['id'] and _is_evidence_refresh_needed(records, artifacts, review)
            for review in records.get('value_review', {}).values()):
         return True
     if prior['role'] == 'result':
