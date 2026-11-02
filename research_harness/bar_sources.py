@@ -398,16 +398,18 @@ def _source(records, artifacts, request, original_rows):
             if capture.get('availability') == 'available':
                 source = captured_source(records, artifacts, capture['source_id'])
                 if (capture.get('requested_version_id') != work['id'] or source.get('requested_identifier') != work['id']
-                        or capture.get('original') != source['response'] or source.get('capture_method') != 'http'
+                        or capture.get('original') != source['response']
+                        or source.get('capture_method') not in ('http', 'http_range_v1')
                         or source.get('origin_verified') is not True or capture.get('extraction_status') != 'extracted'
                         or capture.get('text') is None):
                     raise ResearchError('review_source_binding_mismatch', 'Deliver the exact acquired version, original response and recorded extraction')
                 if source.get('observed_identifier') is not None and source['observed_identifier'] != work['id']:
                     raise ResearchError('review_source_binding_mismatch', 'The observed source version differs from the requested exact version')
-                original = artifacts.read(capture['original'])
+                original_size = (capture['original']['size'] if source.get('capture_method') == 'http_range_v1'
+                                 else len(artifacts.read(capture['original'])))
                 extracted = artifacts.read(capture['text']).decode('utf-8')
                 from .fulltext import extraction_measures
-                if any(capture.get('extraction', {}).get(key) != value for key, value in extraction_measures(extracted, len(original)).items()):
+                if any(capture.get('extraction', {}).get(key) != value for key, value in extraction_measures(extracted, original_size).items()):
                     raise ResearchError('review_source_binding_mismatch', 'The extraction bytes no longer match their recorded native measurements')
                 validate_binding(records, artifacts, work['id'], capture)
                 visual_captures, visual_pending = _html_assets(records, artifacts, work, capture)

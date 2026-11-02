@@ -10,6 +10,8 @@ import time
 from . import (acquisition, challenge, cohort_evidence, contribution, development, graph, lineage, literature, predictions,
                 principles, reading, resources, rounds, sampling, screening, synthesis, visual_assets)
 from .artifacts import ArtifactStore
+from . import fulltext_jobs
+from .import_io import read_import_input
 from .check_mode import check_mutation
 from .drafting import find_draft_obligations
 from .errors import ResearchError
@@ -204,7 +206,7 @@ from .publication_files import find_bundle_drift, restore_bundle
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
-ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-response", "import-oai-cohort", "visual")
+ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
 
 
@@ -301,6 +303,11 @@ def build_parser():
         if command == "import-response":
             item.add_argument("--preview", action="store_true",
                               help="Report new DOI-family conflicts without writing the import.")
+    job_status = commands.add_parser("fulltext-status", allow_abbrev=False)
+    job_status.add_argument("--workspace", default=".")
+    job_status.add_argument("--job-id", required=True)
+    job_status.add_argument("--cursor", type=int, default=0)
+    job_status.add_argument("--limit", type=int, default=30)
     for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
                     "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
@@ -401,7 +408,7 @@ def build_parser():
     return parser
 
 
-def acquisition_command(store, command, payload, identity, *, preview=False):
+def acquisition_command(store, command, payload, identity, *, preview=False, response_bytes=None):
     if command == "collect":
         fields(payload, ("definition",), ("max_requests", "page_size"))
         return acquisition.collect_cohort(store, **payload, **identity)
@@ -409,7 +416,7 @@ def acquisition_command(store, command, payload, identity, *, preview=False):
         fields(payload, ("collection_id", "pages"))
         return acquisition.import_oai_cohort(store, **payload, **identity)
     if command == "resume":
-        fields(payload, ("collection_id",), ("max_requests",))
+        fields(payload, ("collection_id",), ("max_requests", "recheck"))
         return acquisition.resume_cohort(store, **payload, **identity)
     if command in ("acquire", "expand"):
         fields(payload, ("identifier",), ("provider", "max_requests"))
@@ -419,16 +426,28 @@ def acquisition_command(store, command, payload, identity, *, preview=False):
     if command == "fulltext":
         fields(payload, ("identifier", "url"), ("max_requests", "extraction_options", "component"))
         return acquisition.acquire_fulltext(store, **payload, **identity)
+    if command == "fulltext-start":
+        fields(payload, ("identifier",), ("url", "source_id", "extraction_options", "allowances", "use_ranges"))
+        return fulltext_jobs.start_job(store, **payload, **identity)
+    if command == "fulltext-resume":
+        fields(payload, ("job_id",), ("max_requests", "max_pages", "allowances", "reason"))
+        return fulltext_jobs.resume_job(store, **payload, **identity)
     if command == "visual":
         fields(payload, ("link", "url"), ("max_requests",))
         return visual_assets.acquire_visual_asset(store, **payload, **identity)
     fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
     text(payload["response_file"], "Response file")
     values = dict(payload)
-    values["response"] = Path(values.pop("response_file")).read_bytes()
+    if response_bytes is not None:
+        values.pop("response_file")
+        values["response"] = response_bytes
+        if preview:
+            return acquisition.preview_import_response(store, **values)
+        return acquisition.import_response(store, **values, **identity)
     if preview:
+        values["response"] = read_import_input(values.pop("response_file"), input_kind="response")
         return acquisition.preview_import_response(store, **values)
-    return acquisition.import_response(store, **values, **identity)
+    return acquisition.import_response_file(store, **values, **identity)
 
 
 def _review_status(records, artifacts):
@@ -611,8 +630,18 @@ def run(args):
             and (args.expected_revision is None or args.request_id is None)):
         raise ResearchError("invalid_input", "An import requires --expected-revision and --request-id")
     root = Path(args.workspace).absolute()
+    response_bytes = None
     if args.command in OPERATIONS or args.command in ACQUISITION:
-        payload = strict_json(Path(args.file).read_bytes())
+        if args.command == "import-response":
+            existing = find_workspace(root, required=False)
+            original = (Store(existing).committed_request(args.request_id)
+                        if not preview and existing is not None and args.request_id else None)
+            if original is not None and original["operation"] != "response.import":
+                raise ResearchError("request_id_conflict", "Request ID was committed for another operation")
+            raw = Path(args.file).read_bytes() if original is not None else read_import_input(args.file, input_kind="payload")
+            payload = strict_json(raw)
+        else:
+            payload = strict_json(Path(args.file).read_bytes())
         bounded_payload = (review_protocol.drop_repeated_bundle(payload)
                            if args.command == "review-assignment" else payload)
         if getattr(args, "check", False):
@@ -648,6 +677,10 @@ def run(args):
             if (existing_workspace is None or not (existing_workspace / ".exactory/research.sqlite3").exists()
                     or Store(existing_workspace).committed_request(args.request_id) is None):
                 raise
+    if args.command == "import-response" and original is None:
+        fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
+        text(payload["response_file"], "Response file")
+        response_bytes = read_import_input(payload["response_file"], input_kind="response")
     if args.command in ("init", "adopt", "problem-init"):
         root = find_workspace(root, required=False) or root
         store = Store(root, create=True)
@@ -678,7 +711,9 @@ def run(args):
                 if args.command == "review-budget":
                     describe_review_budget_refusal(error)
                 raise
-        return acquisition_command(store, args.command, payload, identity, preview=preview)
+        return acquisition_command(store, args.command, payload, identity, preview=preview, response_bytes=response_bytes)
+    if args.command == "fulltext-status":
+        return fulltext_jobs.read_job_status(store, args.job_id, cursor=args.cursor, limit=args.limit)
     if args.command in ("research-decision-assess", "strategy-packet", "review-route-assess"):
         snapshot = store.snapshot()
         artifacts = Evaluation(snapshot["records"], ArtifactStore(root))

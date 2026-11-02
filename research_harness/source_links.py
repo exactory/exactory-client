@@ -65,7 +65,10 @@ def captured_source(records, artifacts, source_id):
     source = records.get("source", {}).get(source_id)
     if source is None:
         raise ResearchError("unknown_source", "Acquire or import the original source response first", {"source_id": source_id})
-    if source.get("response") is not None:
+    if source.get("capture_method") == "http_range_v1":
+        from .fulltext_jobs import validate_assembly
+        validate_assembly(records, artifacts, source)
+    elif source.get("response") is not None:
         artifacts.read(source["response"])
     if source.get("status") != "captured" or source.get("response_complete") is not True or source.get("response") is None:
         raise ResearchError("source_pending", "A failed, partial or absent response cannot establish a reading",
@@ -258,7 +261,7 @@ def complete_original(context):
     """Only acquired complete originals can establish article-unit scope."""
     source, capture = context["source"], context["capture"]
     return (capture is not None and capture["availability"] == "available"
-            and source["capture_method"] == "http" and source["origin_verified"] is True
+            and source["capture_method"] in ("http", "http_range_v1") and source["origin_verified"] is True
             and source["response_complete"] is True and capture["original"] == source["response"])
 
 

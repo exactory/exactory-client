@@ -42,7 +42,7 @@ OTHER_ARGUMENTS = {
 
 READ_ONLY_COMMANDS = {
     "exactory-research": frozenset((name,) for name in (
-        "status", "next", "obligations", "population-query", "policy-report", "gate", "check-claims", "example",
+        "status", "next", "fulltext-status", "obligations", "population-query", "policy-report", "gate", "check-claims", "example",
         "research-decision-assess", "review-route-assess")),
     "exactory-lab": frozenset({("keys",), ("state", "show"), ("colab-status",)}),
     "exactory-draft": frozenset(),

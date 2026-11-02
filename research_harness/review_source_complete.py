@@ -33,7 +33,7 @@ def _native_alternative(records, artifacts, version, row):
     from .fulltext import extraction_measures
     from .graph import main_captures
     source = captured_source(records, artifacts, row['source_id'])
-    _require(source.get('origin_verified') is True and source.get('capture_method') == 'http'
+    _require(source.get('origin_verified') is True and source.get('capture_method') in ('http', 'http_range_v1')
              and source.get('observed_identifier') == version and row['version_id'] == version,
              'Every alternative must retain an authenticated exact observed version')
     work = records['work'][version]
@@ -46,10 +46,11 @@ def _native_alternative(records, artifacts, version, row):
     _require(capture.get('availability') == 'available' and capture.get('extraction_status') == 'extracted',
              'Select only available native complete extractions')
     validate_binding(records, artifacts, version, capture)
-    original = artifacts.read(capture['original'])
+    original_size = (capture['original']['size'] if source.get('capture_method') == 'http_range_v1'
+                     else len(artifacts.read(capture['original'])))
     extracted = artifacts.read(capture['text']).decode('utf-8')
     _require(all(capture.get('extraction', {}).get(key) == value
-                 for key, value in extraction_measures(extracted, len(original)).items()),
+                 for key, value in extraction_measures(extracted, original_size).items()),
              'Native extraction measurements must match the complete exact bytes')
     main = {(item['source_id'], item['original']['sha256']) for item in main_captures(records, work)}
     _require(row['main_representation'] == ((row['source_id'], row['original_descriptor']['sha256']) in main),
