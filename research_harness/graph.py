@@ -131,22 +131,41 @@ def set_roots(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def selected_bundle(records, version_id, target=None):
+def index_bundles(records):
+    by_version = {}
+    for bundle in records.get("source_bundle", {}).values():
+        entry = by_version.setdefault(bundle["version_id"], {"originals": {}, "supplements": set()})
+        original = bundle["original_sha256"]
+        previous = entry["originals"].get(original)
+        if previous is None or bundle["sequence"] > previous["sequence"]:
+            entry["originals"][original] = bundle
+        entry["supplements"].update(unit["link"]["source_id"] for unit in bundle["units"]
+            if unit["kind"] == "supplement" and unit["link"] is not None
+            and unit["link"]["source_id"] != bundle["source_id"])
+    return by_version
+
+
+def selected_bundle(records, version_id, target=None, *, bundle_index=None):
     selection = records.get("bundle_selection", {}).get(version_id, {})
     selected = records.get("source_bundle", {}).get(selection.get("bundle_id"))
     if target is None or target.get("id") != version_id or target.get("sha256") is None:
         return selected
-    candidates = [b for b in records.get("source_bundle", {}).values()
-                  if b["version_id"] == version_id and b.get("original_sha256") == target["sha256"]]
-    if selected in candidates:
+    if selected is not None and selected["version_id"] == version_id and selected.get("original_sha256") == target["sha256"]:
         return selected
-    return max(candidates, key=lambda b: b["sequence"], default=None)
+    if bundle_index is None:
+        candidates = (bundle for bundle in records.get("source_bundle", {}).values()
+                      if bundle["version_id"] == version_id and bundle.get("original_sha256") == target["sha256"])
+        return max(candidates, key=lambda bundle: bundle["sequence"], default=None)
+    return bundle_index.get(version_id, {}).get("originals", {}).get(target["sha256"])
 
 
-def main_captures(records, work, target=None):
+def main_captures(records, work, target=None, *, bundle_index=None):
     """Distinct available originals, excluding explicitly inventoried supplements."""
-    supplements = {u["link"]["source_id"] for b in records.get("source_bundle", {}).values() if b["version_id"] == work["id"]
-                   for u in b["units"] if u["kind"] == "supplement" and u["link"] is not None and u["link"]["source_id"] != b["source_id"]}
+    if bundle_index is None:
+        supplements = {u["link"]["source_id"] for b in records.get("source_bundle", {}).values() if b["version_id"] == work["id"]
+                       for u in b["units"] if u["kind"] == "supplement" and u["link"] is not None and u["link"]["source_id"] != b["source_id"]}
+    else:
+        supplements = bundle_index.get(work["id"], {}).get("supplements", set())
     captures = {}
     for capture in work["fulltexts"]:
         if is_component(capture) or capture["availability"] != "available" or capture["source_id"] in supplements:
@@ -181,14 +200,13 @@ def citation_graph(records, profile):
     # bundle reads the one selected for each other body instead, such as the saved response of a passage or an
     # original that the bundle of another body links as a supplement. A bundle that a later bundle of the same
     # body replaced is never read, so its occurrences carry no obligation.
-    bodies = {}
-    for bundle in records.get("source_bundle", {}).values():
-        bodies.setdefault(bundle["version_id"], set()).add(bundle["original_sha256"])
+    bundle_index = index_bundles(records)
     read_bundle_ids = set()
-    for version, version_bodies in bodies.items():
+    for version, entry in bundle_index.items():
+        version_bodies = set(entry["originals"])
         acquired_bodies = version_bodies & {c["original"]["sha256"]
-                                            for c in main_captures(records, records["work"][version])}
-        read_bundle_ids.update(selected_bundle(records, version, {"id": version, "sha256": body})["id"]
+                                            for c in main_captures(records, records["work"][version], bundle_index=bundle_index)}
+        read_bundle_ids.update(selected_bundle(records, version, {"id": version, "sha256": body}, bundle_index=bundle_index)["id"]
                                for body in acquired_bodies or version_bodies)
     by_source = {}
     for occurrence in records.get("reference_occurrence", {}).values():
@@ -238,10 +256,10 @@ def citation_graph(records, profile):
                         row["status"] = error.code
                 references[occurrence["id"]] = row
     for version in sorted(processed):
-        captures = main_captures(records, records["work"][version], scope.get("target"))
+        captures = main_captures(records, records["work"][version], scope.get("target"), bundle_index=bundle_index)
         for capture in captures or [None]:
             pin = {"id": version, "sha256": capture["original"]["sha256"]} if capture else scope.get("target")
-            bundle = selected_bundle(records, version, pin)
+            bundle = selected_bundle(records, version, pin, bundle_index=bundle_index)
             if bundle is None or bundle["scope"] != "article" or not bundle.get("bibliography", {}).get("complete"):
                 obligations.append(obligation("bibliography_incomplete", "Import an evidence-linked complete article bibliography; registry counts are insufficient.",
                                               version_id=version, source_id=capture["source_id"] if capture else None))

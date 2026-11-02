@@ -37,7 +37,7 @@ from .errors import ResearchError
 from .components import find_component_page_obligations, is_component
 from .evaluation import Evaluation
 from .evidence import digest
-from .graph import main_captures, obligation, selected_bundle
+from .graph import index_bundles, main_captures, obligation, selected_bundle
 from .operations import (fields, immutable_record, is_finite_number, iso_date, prepared_mutation, profile_name, strings,
                          text)
 from .principles import preparation_policy
@@ -431,29 +431,37 @@ def record_reading_batch(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
-def current_readings(records, artifacts, version_id, *, target=None):
+def current_readings(records, artifacts, version_id, *, target=None, eligible_reading_ids=None):
     """Recheck current source bytes and return complete readings of this version."""
     evaluation = Evaluation.of(records, artifacts)
-    selected = selected_bundle(records, version_id, target)
-    accepted, partial = [], []
-    for value in evaluation.readings_for(version_id):
-        assessment = evaluation.once(("assessed", value["id"]), lambda value=value: _assess(records, evaluation, value))
-        if value["depth"] == "fulltext":
-            # Both digests are recomputed with the current identity function, so
-            # a reading recorded under an earlier representation stays current
-            # while its inspected units are the units required today.
-            own = records.get("source_bundle", {}).get(value.get("bundle_id"))
-            if selected is None or own is None or unit_digest(own, records) != unit_digest(selected, records):
-                partial.append(dict(value, assessment=dict(assessment, status="partial", pending=[obligation(
-                    "reading_bundle_stale", "Inspect the currently required source bundle; historical readings are preserved.", version_id=version_id)])))
+    eligible = None if eligible_reading_ids is None else frozenset(eligible_reading_ids)
+
+    def compute():
+        bundle_index = evaluation.compute_once_in_root(("bundle_index",), lambda: index_bundles(records))
+        selected = selected_bundle(records, version_id, target, bundle_index=bundle_index)
+        accepted, partial = [], []
+        for value in evaluation.readings_for(version_id):
+            if eligible is not None and value["id"] not in eligible:
                 continue
-            if target and target.get("id") == version_id and (target.get("sha256") is None or selected["original_sha256"] != target["sha256"]):
-                continue
-        (accepted if assessment["status"] == "complete" else partial).append(dict(value, assessment=assessment))
-    return sorted(accepted, key=lambda r: r["id"]), partial
+            assessment = evaluation.once(("assessed", value["id"]), lambda value=value: _assess(records, evaluation, value))
+            if value["depth"] == "fulltext":
+                # Both digests are recomputed with the current identity function, so
+                # a reading recorded under an earlier representation stays current
+                # while its inspected units are the units required today.
+                own = records.get("source_bundle", {}).get(value.get("bundle_id"))
+                if selected is None or own is None or unit_digest(own, records) != unit_digest(selected, records):
+                    partial.append(dict(value, assessment=dict(assessment, status="partial", pending=[obligation(
+                        "reading_bundle_stale", "Inspect the currently required source bundle; historical readings are preserved.", version_id=version_id)])))
+                    continue
+                if target and target.get("id") == version_id and (target.get("sha256") is None or selected["original_sha256"] != target["sha256"]):
+                    continue
+            (accepted if assessment["status"] == "complete" else partial).append(dict(value, assessment=assessment))
+        return sorted(accepted, key=lambda r: r["id"]), partial
+
+    return evaluation.compute_once_in_root(("current_readings", version_id, digest(target), eligible), compute)
 
 
-def validate_read_evidence(records, artifacts, link, *, depth="fulltext", target=None):
+def validate_read_evidence(records, artifacts, link, *, depth="fulltext", target=None, eligible_reading_ids=None):
     """Task 4 claim boundary. Verify an anchored link and an applicable reading.
 
 Returns {reading_id, digest, depth, mechanical_only}. This validates documented
@@ -474,8 +482,10 @@ source inspection, not comprehension, entailment, or the truth of a claim.
                     and original_identity(records, u["link"]) == original for u in bundle["units"]):
                 originals.add(bundle["original_sha256"])
         targets = [{"id": link["version_id"], "sha256": sha} for sha in sorted(originals)]
+    eligible_ids = None if eligible_reading_ids is None else frozenset(eligible_reading_ids)
     for pin in targets:
-        readings, _ = current_readings(records, evaluation, link["version_id"], target=pin)
+        readings, _ = current_readings(records, evaluation, link["version_id"], target=pin,
+                                       eligible_reading_ids=eligible_ids)
         for reading in readings:
             eligible = (reading["depth"] == "fulltext" and complete_original(context) if depth == "fulltext" else
                         reading["assessment"]["includes_abstract"] if depth == "abstract" else True)
@@ -485,28 +495,34 @@ source inspection, not comprehension, entailment, or the truth of a claim.
                         {"version_id": link["version_id"], "depth": depth, "path": link["artifact"]["path"]})
 
 
-def fulltext_coverage(records, artifacts, version_id, *, target=None):
+def fulltext_coverage(records, artifacts, version_id, *, target=None, eligible_reading_ids=None):
     """Every distinct available main body needs its current required-unit bundle."""
     evaluation = Evaluation.of(records, artifacts)
-    work = exact_work(records, version_id)
-    accepted, missing = {}, []
-    captures = main_captures(records, work, target)
-    for capture in captures:
-        pin = {"id": version_id, "sha256": capture["original"]["sha256"]}
-        bundle = selected_bundle(records, version_id, pin)
-        readings, partial = current_readings(records, evaluation, version_id, target=pin)
-        full = next((r for r in readings if r["depth"] == "fulltext"), None)
-        if full is not None:
-            accepted[full["id"]] = full
-        else:
-            missing.append({"source_id": capture["source_id"], "original_sha256": capture["original"]["sha256"],
-                            "paths": [capture["original"]["path"], capture["text"]["path"]],
-                            "bundle_id": bundle["id"] if bundle else None,
-                            "pending": [o for r in partial if r.get("bundle_id") == (bundle["id"] if bundle else None)
-                                        for o in r["assessment"]["pending"]]})
-    if not captures:
-        missing.append({"source_id": None, "original_sha256": None, "paths": [], "bundle_id": None, "pending": []})
-    return {"complete": not missing, "readings": accepted, "missing": missing}
+    eligible = None if eligible_reading_ids is None else frozenset(eligible_reading_ids)
+
+    def compute():
+        work = exact_work(records, version_id)
+        accepted, missing = {}, []
+        bundle_index = evaluation.compute_once_in_root(("bundle_index",), lambda: index_bundles(records))
+        captures = main_captures(records, work, target, bundle_index=bundle_index)
+        for capture in captures:
+            pin = {"id": version_id, "sha256": capture["original"]["sha256"]}
+            bundle = selected_bundle(records, version_id, pin, bundle_index=bundle_index)
+            readings, partial = current_readings(records, evaluation, version_id, target=pin, eligible_reading_ids=eligible)
+            full = next((r for r in readings if r["depth"] == "fulltext"), None)
+            if full is not None:
+                accepted[full["id"]] = full
+            else:
+                missing.append({"source_id": capture["source_id"], "original_sha256": capture["original"]["sha256"],
+                                "paths": [capture["original"]["path"], capture["text"]["path"]],
+                                "bundle_id": bundle["id"] if bundle else None,
+                                "pending": [o for r in partial if r.get("bundle_id") == (bundle["id"] if bundle else None)
+                                            for o in r["assessment"]["pending"]]})
+        if not captures:
+            missing.append({"source_id": None, "original_sha256": None, "paths": [], "bundle_id": None, "pending": []})
+        return {"complete": not missing, "readings": accepted, "missing": missing}
+
+    return evaluation.compute_once_in_root(("fulltext_coverage", version_id, digest(target), eligible), compute)
 
 
 def require_fulltext(store, payload, *, expected_revision, request_id):

@@ -1,6 +1,7 @@
 """Validate and deliver the exact readings and empirical support a post cites."""
 
 from .errors import ResearchError
+from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
 from .operations import fields, strings, text
@@ -46,6 +47,7 @@ def collect_value_items(value):
 
 
 def validate_reading(records, artifacts, item):
+    artifacts = Evaluation.of(records, artifacts)
     fields(item, ("kind", "version_id", "reading_id"))
     reading = records.get("reading", {}).get(item["reading_id"])
     from .source_deferrals import assess_deferrals
@@ -57,11 +59,11 @@ def validate_reading(records, artifacts, item):
     if bundle is None or not fulltext_coverage(records, artifacts, item["version_id"])["complete"]:
         raise ResearchError("problem_value_reading_missing", "Complete the current work's required source units", item)
     target = {"id": item["version_id"], "sha256": bundle["original_sha256"]}
-    pinned = dict(records, reading={reading["id"]: reading})
-    if not fulltext_coverage(pinned, artifacts, item["version_id"], target=target)["complete"]:
+    eligible = frozenset((reading["id"],))
+    if not fulltext_coverage(records, artifacts, item["version_id"], target=target, eligible_reading_ids=eligible)["complete"]:
         raise ResearchError("problem_value_reading_missing", "Complete the cited reading's required source units", item)
     for inspection in reading["inspections"]:
-        validate_read_evidence(pinned, artifacts, inspection["link"], target=target)
+        validate_read_evidence(records, artifacts, inspection["link"], target=target, eligible_reading_ids=eligible)
     return reading
 
 
