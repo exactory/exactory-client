@@ -279,7 +279,7 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertTrue(has_attachment(artifacts, packet, body))
         self.assertFalse(has_attachment(artifacts, sent, body))
 
-    def test_final_source_reply_deduplicates_objections_and_keeps_required_bodies(self):
+    def test_final_source_reply_deduplicates_objections_and_credits_earlier_final_bodies(self):
         self.oversized(characters=90000, limit=500000)
         self.case.add_reading_and_computation()
         objections, references = self.shared_objections()
@@ -297,7 +297,18 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertTrue(sent['source_deliveries'])
         self.assertEqual(sent['pending_source_requests'], [])
         self.assertEqual(sent['material_objections'], self.packet(final)['material_objections'])
-        self.assertTrue(all(has_attachment(self.case.artifacts, sent, reference) for reference in references))
+        earlier = parts._artifact_turns(parts.observe_series(
+            self.case.read_records(), self.case.artifacts, final['id']))
+        for reference in references[:2]:
+            self.assertFalse(has_attachment(self.case.artifacts, sent, reference))
+            self.assertEqual([entry for entry in sent['evidence'] if entry['artifact'] == reference],
+                [{'artifact': reference, 'content': '', 'encoding': 'omitted',
+                  'delivery': 'delivered-in-an-earlier-part-turn', 'turn': earlier[digest(reference)],
+                  'note': parts.OMITTED_BODY_NOTE}])
+        self.assertIn(digest(references[2]), earlier)
+        self.assertTrue(has_attachment(self.case.artifacts, sent, references[2]))
+        self.assertTrue(all(has_attachment(self.case.artifacts, sent, reference)
+                            for reference in protocol.collect_references(sent['source_deliveries'])))
 
     def test_recorded_final_with_full_objections_is_not_rewritten(self):
         self.continued_unit(duplicates=3, limit=150000)
@@ -329,7 +340,7 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
             assignment = self.assign('part-' + str(turn + 1), assignment['id'])
         self.fail('Each part must advance the finite unit queue')
 
-    def test_final_refuses_when_transport_elides_objection_body(self):
+    def test_final_refuses_when_not_even_one_objection_body_fits(self):
         self.continued_unit()
         _, references = self.add_material_objection()
         last = self.deliver_units()
@@ -338,12 +349,135 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
             error = self.assert_code('review_input_too_large', lambda: self.assign('final', last['id']))
         self.assertEqual((error.details['stage'], error.details['unit']), ('final', None))
         self.assertEqual(self.case.store.revision, revision)
-        artifacts, route, prompt, packet, history, _ = fit.call_args.args
+        final_call = next(call for call in fit.call_args_list if parts.find_stage(call.args[3]) == 'final')
+        artifacts, route, prompt, packet, history, attached = final_call.args
+        self.assertEqual(attached, references)
         request = transport.request_body(route, prompt['text'], packet, history)
         self.assertLessEqual(parts._measure(route, request), transport.local_input_limit(route))
         self.assertTrue(all(has_attachment(artifacts, packet, reference) for reference in references))
         self.assertFalse(all(has_attachment(artifacts, review_excerpts.read_sent_packet(request), reference)
                              for reference in references))
+        body_calls = [call for call in fit.call_args_list if parts.find_stage(call.args[3]) == 'part']
+        self.assertEqual([call.args[-1] for call in body_calls], [references, references[:1]])
+        for call in body_calls:
+            self.assertEqual(call.args[3][KEY]['objection_bodies'], call.args[-1])
+            self.assertFalse(parts._fits(*call.args)[0])
+
+    def objection_body_series(self, body_characters=24000):
+        self.continued_unit(duplicates=4, limit=80000)
+        bodies = [self.case.artifacts.put(bytes([100 + index]) * body_characters, 'text/plain')
+                  for index in range(3)]
+        objection = {'id': 'body-only-objection', 'claim': 'A material limitation.', 'material_version': '1' * 64,
+                     'version_evidence': [{'kind': 'record', 'record_kind': 'local_artifact', 'id': 'body-record',
+                                          'record': {'reason': 'r' * 22000}, 'artifacts': bodies}],
+                     'version_source_mappings': []}
+        self.install_material_objections([objection])
+        return objection, bodies, self.deliver_units()
+
+    def test_body_only_part_delivers_largest_fitting_prefix_then_final_credits_it(self):
+        objection, bodies, last = self.objection_body_series()
+        records, artifacts = self.case.read_records(), self.case.artifacts
+        earlier = parts.observe_series(records, artifacts, last['id'])
+        self.assertTrue(earlier)
+        self.assertTrue(all(digest(body) not in parts._artifact_turns(earlier) for body in bodies))
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            body_part = self.assign('body-part', last['id'])
+        final_call, full_call, prefix_call = fit.call_args_list
+        self.assertEqual(parts.find_stage(final_call.args[3]), 'final')
+        self.assertEqual(final_call.args[-1], bodies)
+        self.assertFalse(parts._fits(*final_call.args)[0])
+        # The same final frame fits if its objection bodies are left out.
+        frame = copy.deepcopy(final_call.args[3])
+        frame['evidence'] = [entry for entry in frame['evidence'] if entry['artifact'] not in bodies]
+        frame['digest'] = digest({key: value for key, value in frame.items() if key != 'digest'})
+        self.assertTrue(parts._fits(artifacts, final_call.args[1], final_call.args[2], frame,
+                                    final_call.args[4], [])[0])
+        self.assertEqual(full_call.args[-1], bodies)
+        self.assertFalse(parts._fits(*full_call.args)[0])
+        self.assertEqual(prefix_call.args[-1], bodies[:2])
+        self.assertTrue(parts._fits(*prefix_call.args)[0])
+        packet, sent = self.packet(body_part), self.sent(body_part)
+        plan = packet[KEY]
+        self.assertEqual(plan['stage'], 'part')
+        self.assertEqual(plan['series_assignment_id'], self.packet(last)[KEY]['series_assignment_id'])
+        self.assertEqual(plan['turn'], len(earlier) + 1)
+        self.assertEqual(plan['delivered_before'], [row['receipt'] for row in earlier])
+        self.assertEqual(plan['objection_bodies'], bodies[:2])
+        self.assertEqual(sent[KEY], plan)
+        for frame in (packet, sent):
+            self.assertEqual(parts._delivered_units(frame), [])
+            for key in parts.SPLIT_KEYS:
+                self.assertEqual(frame['problem_evidence'][key], [])
+                self.assertEqual(frame[KEY]['delivered_now'][key], [])
+                self.assertEqual(frame[KEY]['remaining'][key], [])
+            self.assertTrue(all(has_attachment(artifacts, frame, body) for body in bodies[:2]))
+            self.assertFalse(has_attachment(artifacts, frame, bodies[2]))
+        self.assertFalse(parts._makes_progress([], bodies[:2], earlier))
+        self.assertTrue(parts.has_new_objection_body(sent, bodies[:2], earlier))
+        self.assertFalse(parts.has_new_objection_body(sent, bodies[2:], earlier))
+        output = {'stage': 'result', 'phase': 'evidence_part', 'part': plan['turn'], 'notes': []}
+        self.assertEqual(self.output(body_part), output)
+        self.invoke(body_part, output)
+        records = self.case.read_records()
+        self.assertTrue(protocol.assignment_state(records, artifacts, body_part['id'])['ready'])
+        observed = parts.observe_series(records, artifacts, body_part['id'])
+        self.assertEqual(observed[:-1], earlier)
+        self.assertEqual(observed[-1]['units'], [])
+        self.assertEqual(observed[-1]['receipt'], {'turn': plan['turn'], 'assignment_id': body_part['id'],
+                         'attempt_id': 'attempt-' + body_part['id'], 'units': plan['delivered_now']})
+        self.assertTrue(all(body in observed[-1]['artifacts'] for body in bodies[:2]))
+        self.assertNotIn(bodies[2], observed[-1]['artifacts'])
+        self.assertFalse(parts.has_new_objection_body(sent, bodies[:2], observed))
+        final = self.assign('final', body_part['id'])
+        request, sent = self.request(final), self.sent(final)
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertEqual(sent[KEY]['series_assignment_id'], plan['series_assignment_id'])
+        self.assertEqual(sent[KEY]['turn'], plan['turn'] + 1)
+        self.assertEqual(sent[KEY]['delivered_before'], [row['receipt'] for row in observed])
+        self.assertEqual(sent['material_objections'], [objection])
+        self.assertEqual(parts.find_credited_objection_bodies(sent, parts._artifact_turns(observed)),
+                         {digest(body) for body in bodies[:2]})
+        for body in bodies[:2]:
+            self.assertFalse(has_attachment(artifacts, sent, body))
+            self.assertEqual([entry for entry in sent['evidence'] if entry['artifact'] == body],
+                [{'artifact': body, 'content': '', 'encoding': 'omitted',
+                  'delivery': 'delivered-in-an-earlier-part-turn', 'turn': plan['turn'],
+                  'note': parts.OMITTED_BODY_NOTE}])
+        self.assertTrue(has_attachment(artifacts, sent, bodies[2]))
+        route = records['review_route']['route']
+        self.assertLessEqual(parts._measure(route, request), transport.local_input_limit(route))
+        self.assertTrue(parts._fits(artifacts, route, final['prompt'], self.packet(final), final['history'],
+                                    bodies[2:])[0])
+
+    def test_invalid_body_only_part_response_gives_no_objection_body_credit(self):
+        _, bodies, last = self.objection_body_series(body_characters=16000)
+        artifacts = self.case.artifacts
+        earlier = parts.observe_series(self.case.read_records(), artifacts, last['id'])
+        body_part = self.assign('invalid-body-part', last['id'])
+        packet = self.packet(body_part)
+        self.assertEqual(packet[KEY]['stage'], 'part')
+        self.assertEqual(packet[KEY]['objection_bodies'], bodies)
+        self.assertEqual(parts._delivered_units(packet), [])
+        self.assertTrue(all(has_attachment(artifacts, self.sent(body_part), body) for body in bodies))
+        output = dict(self.output(body_part), notes=[{'unit': {'key': 'computations', 'index': 0},
+                                                    'note': 'No computation was delivered in this turn.'}])
+        self.assert_code('invalid_value_review', lambda: parts.validate_part_output(packet, output))
+        self.invoke(body_part, output)
+        records = self.case.read_records()
+        self.assertFalse(protocol.assignment_state(records, artifacts, body_part['id'])['ready'])
+        observed = parts.observe_series(records, artifacts, body_part['id'])
+        self.assertEqual(observed, earlier)
+        full = protocol.build_packet(records, artifacts, None, 'result', 'first')
+        self.assertEqual(parts.find_credited_objection_bodies(full, parts._artifact_turns(observed)), set())
+        value = {'id': 'retry-body-part', 'role': 'result', 'context': {'prior_assignment_id': body_part['id']}}
+        planned = parts.prepare_packet(records, artifacts, value, records['review_route']['route'], full,
+                                       body_part['prompt'], body_part['history'])
+        self.assertEqual(planned[KEY]['stage'], 'part')
+        self.assertEqual(planned[KEY]['turn'], packet[KEY]['turn'])
+        self.assertEqual(planned[KEY]['objection_bodies'], bodies)
+        revision = self.case.store.revision
+        self.assert_code('review_source_continuation_unverified', lambda: self.assign('next', body_part['id']))
+        self.assertEqual(self.case.store.revision, revision)
 
     def test_fitting_final_attaches_every_objection_descriptor_in_the_actual_request(self):
         self.continued_unit()
@@ -362,10 +496,180 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertEqual(sent[KEY]['stage'], 'final')
         self.assertTrue(all(has_attachment(self.case.artifacts, sent, reference) for reference in references))
 
-    def test_final_source_reply_requires_objection_bodies_in_the_actual_request(self):
+    def test_final_credits_current_series_objection_bodies_and_records_their_citations(self):
+        references = self.continued_unit()
+        alias = dict(references[0], media_type='text/plain; charset=utf-8')
+        fresh = self.case.artifacts.put(b'New objection evidence for the final.', 'text/plain')
+        objection = {'id': 'shared-with-parts', 'claim': 'A material limitation.', 'material_version': '1' * 64,
+                     'version_evidence': [references[0],
+                         {'kind': 'record', 'record_kind': 'local_artifact', 'id': 'objection-record',
+                          'record': {}, 'artifacts': [references[1]]}, alias, fresh],
+                     'version_source_mappings': []}
+        self.install_material_objections([objection])
+        last = self.deliver_units()
+        observations = parts.observe_series(self.case.read_records(), self.case.artifacts, last['id'])
+        earlier = parts._artifact_turns(observations)
+        self.assertTrue(all(digest(reference) in earlier for reference in references[:2]))
+        self.assertNotIn(digest(alias), earlier)
+        self.assertNotIn(digest(fresh), earlier)
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            final = self.assign('final', last['id'])
+        self.assertEqual(fit.call_args.args[-1], [alias, fresh])
+        packet, sent = self.packet(final), self.sent(final)
+        for frame in (packet, sent):
+            self.assertEqual(frame['material_objections'], [objection])
+            for reference in references[:2]:
+                self.assertFalse(has_attachment(self.case.artifacts, frame, reference))
+                self.assertEqual([entry for entry in frame['evidence'] if entry['artifact'] == reference],
+                    [{'artifact': reference, 'content': '', 'encoding': 'omitted',
+                      'delivery': 'delivered-in-an-earlier-part-turn', 'turn': earlier[digest(reference)],
+                      'note': parts.OMITTED_BODY_NOTE}])
+            self.assertTrue(all(has_attachment(self.case.artifacts, frame, reference) for reference in (alias, fresh)))
+        output = self.final_output()
+        output['value']['objection_findings'] = [{'id': objection['id'], 'status': 'continuing',
+            'reason': 'The evidence delivered across this series retains this limitation.',
+            'evidence': references[:2] + [alias, fresh]}]
+        review = self.record_final(final, output)
+        records = self.case.read_records()
+        request = json.loads(self.case.artifacts.read(records['review_attempt']['attempt-final']['request']))
+        self.assertEqual(review_excerpts.read_sent_packet(request)['evidence'], sent['evidence'])
+        self.assertEqual(decisions.find_undelivered_review_references(records, self.case.artifacts, review), [])
+        self.assertEqual(self.coverage(review), [])
+
+    def test_final_fits_without_repeating_large_objection_bodies_from_its_series(self):
+        references = self.continued_unit(duplicates=3, body_characters=16000, limit=60000)
+        objection = {'id': 'large-shared-objection', 'claim': 'A material limitation.',
+                     'material_version': '1' * 64, 'version_evidence': references, 'version_source_mappings': []}
+        self.install_material_objections([objection])
+        last = self.deliver_units()
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            final = self.assign('final', last['id'])
+        self.assertEqual(fit.call_args.args[-1], [])
+        sent = self.sent(final)
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertEqual(sent['material_objections'], [objection])
+        self.assertFalse(any(has_attachment(self.case.artifacts, sent, reference) for reference in references))
+
+    def test_final_requires_objection_bodies_delivered_only_by_an_invalid_part_attempt(self):
+        references = self.continued_unit()
+        objection = {'id': 'invalid-part-objection', 'claim': 'A material limitation.',
+                     'material_version': '1' * 64, 'version_evidence': references, 'version_source_mappings': []}
+        self.install_material_objections([objection])
+        first = self.assign()
+        self.assertTrue(any(has_attachment(self.case.artifacts, self.sent(first), reference) for reference in references))
+        self.invoke(first, dict(self.output(first), notes=[]))
+        records, artifacts = self.case.read_records(), self.case.artifacts
+        observations = parts.observe_series(records, artifacts, first['id'])
+        self.assertEqual(observations, [])
+        packet = protocol.build_packet(records, artifacts, None, 'result', 'first')
+        projected = parts._project(records, artifacts, packet, [], [], observations, [], first['id'], 'final', 1)
+        sent = review_excerpts.read_sent_packet(transport.request_body(
+            records['review_route']['route'], first['prompt']['text'], projected))
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertEqual(sent['material_objections'], [objection])
+        self.assertTrue(all(has_attachment(artifacts, sent, reference) for reference in references))
+
+    def test_final_requires_objection_bodies_planned_but_not_sent_by_a_valid_part(self):
+        self.continued_unit(duplicates=3, limit=70000)
+        objection, references = self.add_material_objection(body_characters=6000)
+        self.case.expected['citations'] = [{'artifact': reference} for reference in references]
+        with patch.object(parts, 'PART_UNIT_CHARACTERS', 1000):
+            first = self.assign()
+        self.assertTrue(all(has_attachment(self.case.artifacts, self.packet(first), reference) for reference in references))
+        request_body = transport.request_body
+
+        def elide_part_bodies(route, prompt, packet, *args, **kwargs):
+            if parts.find_stage(packet) == 'part':
+                packet = copy.deepcopy(packet)
+                packet['evidence'] = [entry for entry in packet['evidence'] if entry['artifact'] not in references]
+            return request_body(route, prompt, packet, *args, **kwargs)
+
+        patcher = patch.object(transport, 'request_body', side_effect=elide_part_bodies)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            turns, final = self.finish_parts(first)
+        observations = parts.observe_series(self.case.read_records(), self.case.artifacts, turns[-1]['id'])
+        self.assertTrue(observations)
+        self.assertTrue(all(digest(reference) not in parts._artifact_turns(observations) for reference in references))
+        self.assertEqual(fit.call_args.args[-1], references)
+        sent = self.sent(final)
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertEqual(sent['material_objections'], [objection])
+        self.assertTrue(all(has_attachment(self.case.artifacts, sent, reference) for reference in references))
+
+    def test_final_requires_objection_body_delivered_only_in_an_earlier_series(self):
+        references = self.continued_unit()
+        objection = {'id': 'earlier-series-objection', 'claim': 'A material limitation.',
+                     'material_version': '1' * 64, 'version_evidence': [references[0]], 'version_source_mappings': []}
+        self.install_material_objections([objection])
+        last = self.deliver_units()
+        observations = parts.observe_series(self.case.read_records(), self.case.artifacts, last['id'])
+        self.assertIn(digest(references[0]), parts._artifact_turns(observations))
+        self.case.expected['computations'] = []
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            final = self.assign('refreshed-final', last['id'])
+        self.assertEqual(fit.call_args.args[-1], [references[0]])
+        sent = self.sent(final)
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertNotEqual(sent[KEY]['series_assignment_id'], self.packet(last)[KEY]['series_assignment_id'])
+        self.assertEqual(sent[KEY]['delivered_before'], [])
+        self.assertEqual(sent['material_objections'], [objection])
+        self.assertTrue(has_attachment(self.case.artifacts, sent, references[0]))
+
+    def test_final_keeps_objection_body_independently_required_by_a_source_response(self):
+        references = self.continued_unit()
+        objection = {'id': 'requested-again', 'claim': 'A material limitation.', 'material_version': '1' * 64,
+                     'version_evidence': references[:2], 'version_source_mappings': []}
+        self.install_material_objections([objection])
+        last = self.deliver_units()
+        records, artifacts = self.case.read_records(), self.case.artifacts
+        packet = protocol.build_packet(records, artifacts, None, 'result', 'first')
+        packet['source_deliveries'] = [{'status': 'delivered', 'evidence': [references[0]]}]
+        value = {'id': 'source-final', 'role': 'result', 'context': {'prior_assignment_id': last['id']}}
+        route = records['review_route']['route']
+        with patch.object(parts, '_fits', wraps=parts._fits) as fit:
+            planned = parts.prepare_packet(records, artifacts, value, route, packet, last['prompt'], [])
+        self.assertEqual(fit.call_args.args[-1], [references[0]])
+        sent = review_excerpts.read_sent_packet(transport.request_body(route, last['prompt']['text'], planned))
+        self.assertEqual(sent['source_deliveries'], packet['source_deliveries'])
+        self.assertTrue(has_attachment(artifacts, sent, references[0]))
+        self.assertFalse(has_attachment(artifacts, sent, references[1]))
+        earlier = parts._artifact_turns(parts.observe_series(records, artifacts, last['id']))
+        self.assertEqual(parts.find_credited_objection_bodies(sent, earlier), {digest(references[1])})
+        self.assertEqual([entry for entry in sent['evidence'] if entry['artifact'] == references[1]],
+            [{'artifact': references[1], 'content': '', 'encoding': 'omitted',
+              'delivery': 'delivered-in-an-earlier-part-turn', 'turn': earlier[digest(references[1])],
+              'note': parts.OMITTED_BODY_NOTE}])
+
+    def test_final_keeps_objection_excerpt_required_by_a_new_source_mapping(self):
+        references = self.continued_unit()
+        objections, _ = self.shared_objections()
+        mapping = objections[0]['version_source_mappings'][0]
+        excerpt = mapping['excerpt']
+        self.case.expected['computations'][0]['execution']['outputs'].append({'id': 'mapped', 'artifact': excerpt})
+        objections[0]['version_evidence'].extend([excerpt, references[0]])
+        self.install_material_objections(objections)
+        last = self.deliver_units()
+        records, artifacts = self.case.read_records(), self.case.artifacts
+        earlier = parts._artifact_turns(parts.observe_series(records, artifacts, last['id']))
+        self.assertIn(digest(excerpt), earlier)
+        self.assertIn(digest(references[0]), earlier)
+        final = self.assign('mapped-final', last['id'])
+        sent = self.sent(final)
+        self.assertTrue(has_attachment(artifacts, sent, excerpt))
+        self.assertFalse(has_attachment(artifacts, sent, references[0]))
+        self.assertEqual(parts.find_credited_objection_bodies(sent, earlier), {digest(references[0])})
+        self.assertEqual([entry for entry in sent['evidence'] if entry['artifact'] == references[0]],
+            [{'artifact': references[0], 'content': '', 'encoding': 'omitted',
+              'delivery': 'delivered-in-an-earlier-part-turn', 'turn': earlier[digest(references[0])],
+              'note': parts.OMITTED_BODY_NOTE}])
+        self.assertIn(mapping, decisions._visual_supplied_context(records, artifacts, [sent])[1])
+
+    def test_final_source_reply_delivers_new_objection_bodies_in_a_body_only_part(self):
         self.oversized()
         self.case.add_reading_and_computation()
-        _, references = self.add_material_objection(body_characters=45000)
+        objection, references = self.add_material_objection(body_characters=45000)
         last = self.deliver_units()
         final = self.assign('final', last['id'])
         self.assertTrue(all(has_attachment(self.case.artifacts, self.sent(final), reference) for reference in references))
@@ -374,12 +678,15 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         output['source_requests'] = [{'id': 'read-source', 'kind': 'source', 'depth': 'fulltext',
                                       'version_id': self.case.expected['readings'][0]['version_id']}]
         self.invoke(final, output)
-        revision = self.case.store.revision
+        fresh = self.case.artifacts.put(b'New objection body.' * 2500, 'text/plain')
+        references = [fresh, dict(fresh, media_type='text/plain; charset=utf-8')]
+        objection['version_evidence'].extend(references)
         with patch.object(parts, '_fits', wraps=parts._fits) as fit:
-            error = self.assert_code('review_input_too_large', lambda: self.assign('source-reply', final['id']))
-        self.assertEqual((error.details['stage'], error.details['unit']), ('final', None))
-        self.assertEqual(self.case.store.revision, revision)
-        artifacts, route, prompt, packet, history, _ = fit.call_args.args
+            body_part = self.assign('source-reply', final['id'])
+        final_call = next(call for call in fit.call_args_list if parts.find_stage(call.args[3]) == 'final')
+        artifacts, route, prompt, packet, history, attached = final_call.args
+        self.assertEqual(attached, references)
+        self.assertFalse(parts._fits(*final_call.args)[0])
         request = transport.request_body(route, prompt['text'], packet, history)
         sent = review_excerpts.read_sent_packet(request)
         self.assertEqual(sent[KEY]['stage'], 'final')
@@ -388,6 +695,28 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
         self.assertLessEqual(parts._measure(route, request), transport.local_input_limit(route))
         # Equal hashes do not supply a missing descriptor: the transport kept only one of the two bodies.
         self.assertEqual(sum(has_attachment(artifacts, sent, reference) for reference in references), 1)
+        packet, sent = self.packet(body_part), self.sent(body_part)
+        self.assertEqual(sent[KEY]['stage'], 'part')
+        self.assertEqual(sent[KEY]['objection_bodies'], references[:1])
+        self.assertEqual(parts._delivered_units(sent), [])
+        self.assertTrue(has_attachment(artifacts, sent, references[0]))
+        self.assertFalse(has_attachment(artifacts, sent, references[1]))
+        self.assertTrue(sent['source_deliveries'])
+        self.assertTrue(all(has_attachment(artifacts, sent, reference)
+                            for reference in protocol.collect_references(sent['source_deliveries'])))
+        self.invoke(body_part)
+        reply = self.assign('source-reply-final', body_part['id'])
+        sent = self.sent(reply)
+        self.assertEqual(sent[KEY]['stage'], 'final')
+        self.assertFalse(has_attachment(artifacts, sent, references[0]))
+        self.assertTrue(has_attachment(artifacts, sent, references[1]))
+        self.assertEqual([entry for entry in sent['evidence'] if entry['artifact'] == references[0]],
+            [{'artifact': references[0], 'content': '', 'encoding': 'omitted',
+              'delivery': 'delivered-in-an-earlier-part-turn', 'turn': packet[KEY]['turn'],
+              'note': parts.OMITTED_BODY_NOTE}])
+        self.assertTrue(all(has_attachment(artifacts, sent, reference)
+                            for reference in protocol.collect_references(sent['source_deliveries'])))
+        self.assertLessEqual(parts._measure(route, self.request(reply)), transport.local_input_limit(route))
 
     def test_fallback_skips_unfittable_body_and_delivers_later_body(self):
         self.oversized()

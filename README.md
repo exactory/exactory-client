@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.70.2](docs/releases/0.70.2.md) lets a problem result final count objection-evidence bodies that its own series delivered, and delivers undelivered ones in a part turn of their own when the final would not fit.
+
 Version [0.70.1](docs/releases/0.70.1.md) also replaces, in the replayed history of a refreshed problem result slot, the part outputs of an earlier series that ended when the problem evidence changed, when the turn would not fit otherwise.
 
 Version [0.70.0](docs/releases/0.70.0.md) performs a problem result review or adjudication that does not fit one input as staged tasks with fresh inputs, and records an assessment that cannot be completed as an occupied slot.

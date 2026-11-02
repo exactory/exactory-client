@@ -289,6 +289,51 @@ def _pending_artifacts(units, attached):
     return list(references.values())
 
 
+def collect_objection_artifacts(packet):
+    """The distinct objection-evidence bodies of a packet."""
+    from .review_protocol import collect_references
+    references = collect_references([
+        resolved_objection_entries(packet, objection, 'version_evidence')
+        for objection in packet.get('material_objections', [])])
+    return list({digest(reference): reference for reference in references}.values())
+
+
+def find_credited_objection_bodies(packet, earlier):
+    """The objection-evidence bodies of a final that an earlier valid frame of its series delivered. Mapping excerpts
+    and source deliveries stay attached, because their citation credit needs them in the packet that carries them."""
+    from .review_protocol import collect_references
+    kept = {digest(reference) for reference in collect_references(packet.get('source_deliveries', []))}
+    kept.update(digest(mapping['excerpt']) for objection in packet.get('material_objections', [])
+                for mapping in resolved_objection_entries(packet, objection, 'version_source_mappings')
+                if isinstance(mapping, dict) and 'excerpt' in mapping)
+    return {digest(reference) for reference in collect_objection_artifacts(packet)
+            if digest(reference) in earlier and digest(reference) not in kept}
+
+
+def has_new_objection_body(packet, attached, observations):
+    """Whether a part turn planned to carry objection-evidence bodies delivered one that no earlier turn delivered."""
+    earlier = _artifact_turns(observations)
+    planned = {digest(reference) for reference in packet.get(KEY, {}).get('objection_bodies', [])}
+    return any(digest(reference) in planned and digest(reference) not in earlier for reference in attached)
+
+
+def plan_objection_body_part(records, artifacts, packet, units, observations, series_id, turn, route, history, pending):
+    """A part turn that carries the largest prefix of the final's undelivered objection-evidence bodies that fits, so
+    that the final can count them as delivered earlier; None when not even one body fits."""
+    from .review_protocol import canonical_prompt
+    prompt = canonical_prompt('result', orchestration='problem_creation', excerpts=True, evidence_parts='part')
+    for count in range(len(pending), 0, -1):
+        bodies = pending[:count]
+        planned = _project(records, artifacts, dict(packet, objection_bodies=bodies), units, [], observations, [],
+                           series_id, 'part', turn, bodies)
+        planned[KEY]['objection_bodies'] = bodies
+        planned['digest'] = digest({key: value for key, value in planned.items() if key != 'digest'})
+        fits, _ = _fits(artifacts, route, prompt, planned, history, bodies)
+        if fits:
+            return planned
+    return None
+
+
 def _completed_units(units, attached):
     return {_unit_key(unit) for unit in units
             if all(digest(reference) in attached for reference in _owned_artifacts(unit['key'], unit['item']))}
@@ -327,7 +372,8 @@ def observe_series(records, artifacts, assignment_id):
             attached = {digest(entry['artifact']): entry['artifact'] for entry in packet.get('evidence', [])
                         if has_attachment(evaluation, packet, entry['artifact'])}
             attached = [attached[key] for key in sorted(attached)]
-            if find_stage(packet) == 'part' and not _makes_progress(units, attached, observations):
+            if (find_stage(packet) == 'part' and not _makes_progress(units, attached, observations)
+                    and not has_new_objection_body(packet, attached, observations)):
                 continue
             receipt = {'turn': plan['turn'], 'assignment_id': assignment['id'], 'attempt_id': attempt['id'],
                        'units': _ranges(units)}
@@ -427,6 +473,8 @@ def _project(records, artifacts, packet, units, selected, observations, remainin
     attached_keys = {digest(reference) for reference in attached}
     omitted = {digest(reference) for reference in _pending_artifacts(selected, ())
                if digest(reference) not in attached_keys}
+    if stage == 'final':
+        omitted.update(find_credited_objection_bodies(candidate, earlier))
     for index, entry in enumerate(candidate['evidence']):
         identity = digest(entry['artifact'])
         if identity in omitted:
@@ -495,7 +543,7 @@ def _preserves_prospective_packet(records, artifacts, route, packet, request, hi
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *, staged_entry=None):
     """Keep ordinary requests complete, enter v2 for new work, or continue the recorded v1 series."""
-    from .review_protocol import canonical_prompt, collect_references
+    from .review_protocol import canonical_prompt
     prior_id = value['context'].get('prior_assignment_id')
     previous = _read_packet(artifacts, records['review_assignment'][prior_id]) if prior_id else {}
     refreshed = any(review['assignment_id'] == prior_id for review in records.get('value_review', {}).values())
@@ -548,15 +596,19 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         return _project(records, artifacts, packet, units, remaining[:count], observations, remaining,
                         series_id, stage, turn, attached)
     frame = candidate(0)
-    objection_artifacts = list(collect_references([
-        resolved_objection_entries(frame, objection, 'version_evidence')
-        for objection in frame.get('material_objections', [])]))
-    objection_artifacts = list({digest(reference): reference for reference in objection_artifacts}.values())
+    credited = find_credited_objection_bodies(frame, earlier)
+    objection_artifacts = [reference for reference in collect_objection_artifacts(frame)
+                           if digest(reference) not in credited]
     fits, frame_characters = _fits(artifacts, route, stage_prompt, frame, history, objection_artifacts)
     if not remaining:
         characters = frame_characters
         if fits:
             return frame
+        if objection_artifacts:
+            planned = plan_objection_body_part(records, artifacts, packet, units, observations, series_id, turn, route,
+                                               history, objection_artifacts)
+            if planned is not None:
+                return planned
         count = 0
     else:
         room = min(PART_UNIT_CHARACTERS, max(0, transport.local_input_limit(route) - frame_characters))
