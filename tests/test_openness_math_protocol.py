@@ -1,6 +1,7 @@
 """The math reading protocol sits beside the problem protocols, whose prompts and passage behavior stay as released."""
 
 import unittest
+from unittest.mock import patch
 
 from openness_reading_fixtures import OpennessReadingCase
 from research_harness import openness_reading, native_review, review_protocol as protocol
@@ -49,7 +50,8 @@ class ProblemPassageBehaviorTests(OpennessReadingCase):
     def test_a_problem_final_reading_response_whose_passage_finds_nothing_continues_as_before(self):
         self.limit_input()
         native_packet = self.export(priority=self.versions)
-        final = self.run_reading_turns(native_packet)[-1]
+        with patch.object(openness_reading, 'find_chain_protocol', return_value=openness_reading.PROTOCOL):
+            final = self.run_reading_turns(native_packet)[-1]
         absent = {'id': 'absent', 'version_id': self.versions[0], 'characters': 90,
                   'anchor': 'This verbatim phrase is absent from every stored text.'}
         self.invoke(final, self.build_reading_response(self.read_packet(final), excerpts=[], passages=[absent]))
@@ -59,7 +61,7 @@ class ProblemPassageBehaviorTests(OpennessReadingCase):
         self.assign('turn-further', native_packet, prior=final)
         [answer] = self.read_packet('turn-further')['reading_record']['passages']
         self.assertEqual((answer['request_id'], answer['status']), ('absent', 'not_found'))
-        self.assertEqual(self.read_packet('turn-further')['reading_record']['protocol'], openness_reading.PROTOCOL)
+        self.assertEqual(self.read_packet('turn-further')['reading_record']['protocol'], openness_reading.PROTOCOL_V4)
 
 
 if __name__ == '__main__':

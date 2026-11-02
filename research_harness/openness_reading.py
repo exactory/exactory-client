@@ -31,12 +31,14 @@ from .operations import fields, normalized_text, text
 
 PROTOCOL_V1 = 'exactory-openness-reading-v1'
 PROTOCOL_V2 = 'exactory-openness-reading-v2'
+# Keep the default reading prompt protocol at v3 for callers that omit reading_protocol.
 PROTOCOL = 'exactory-openness-reading-v3'
+PROTOCOL_V4 = 'exactory-openness-reading-v4'
 # The protocol of a math-solver result review's chain: the units of v3 in the math order, no statement record, and a
 # final passage request that must deliver characters.
 MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
 # The protocols whose units carry the identities of review_excerpts.IDENTITY_FIELDS.
-GENERIC_UNIT_PROTOCOLS = (PROTOCOL, MATH_PROTOCOL)
+GENERIC_UNIT_PROTOCOLS = (PROTOCOL, PROTOCOL_V4, MATH_PROTOCOL)
 TURN_KEY = 'reading_turn'
 RECORD_KEY = 'reading_record'
 STAGES = ('reading', 'final')
@@ -312,9 +314,15 @@ MATH_FINAL_PROMPT = (
     'anchor, names no single stored body, or exceeds the remaining allowance. This turn is then run again. When no '
     'passage allowance remains, return the native result review. Missing decisive evidence remains a gap. An excerpt, '
     'a passage or a descriptor does not establish complete delivery of a unit.')
+# The text author must replace this marker with the final-turn rule: a reading response is accepted only when at
+# least one passage request delivers text, with its anchor found in a bound body and its characters fitting the
+# remaining passage allowance. If all requests miss or exceed that allowance, the response is refused and the chain
+# does not continue. When no passage can help, the reviewer must return the native result review instead.
+FINAL_PROGRESS_RULE_PLACEHOLDER = '\n\n[FINAL_PROGRESS_RULE_PLACEHOLDER]'
 PROMPTS = {PROTOCOL_V1: {'reading': READING_PROMPT_V1, 'final': FINAL_PROMPT_V1},
            PROTOCOL_V2: {'reading': READING_PROMPT_V2, 'final': FINAL_PROMPT_V2},
            PROTOCOL: {'reading': READING_PROMPT, 'final': FINAL_PROMPT},
+           PROTOCOL_V4: {'reading': READING_PROMPT, 'final': FINAL_PROMPT + FINAL_PROGRESS_RULE_PLACEHOLDER},
            MATH_PROTOCOL: {'reading': MATH_READING_PROMPT, 'final': MATH_FINAL_PROMPT}}
 
 
@@ -333,7 +341,7 @@ def is_math_openness_packet(native):
 
 def find_chain_protocol(native):
     """The reading protocol of a new turn of a chain over a native packet."""
-    return MATH_PROTOCOL if is_math_openness_packet(native) else PROTOCOL
+    return MATH_PROTOCOL if is_math_openness_packet(native) else PROTOCOL_V4
 
 
 def find_stage(packet):
@@ -1023,10 +1031,10 @@ def validate_turn_output(packet, output):
 
 
 def has_deliverable_passage(records, artifacts, packet, output):
-    """Whether a valid turn output may continue its chain under the passage-progress rule of the math protocol: a
+    """Whether a valid turn output may continue its chain under the passage-progress rule of v4 and the math protocol: a
     reading response in a final turn must request at least one passage that the harness delivers from a bound body
-    within the remaining passage allowance. Every other output, and every output under a problem protocol, may."""
-    if (find_stage(packet) != 'final' or packet[RECORD_KEY]['protocol'] != MATH_PROTOCOL
+    within the remaining passage allowance. Every other output, including those under v1, v2 and v3, may."""
+    if (find_stage(packet) != 'final' or packet[RECORD_KEY]['protocol'] not in (PROTOCOL_V4, MATH_PROTOCOL)
             or output.get('stage') != 'reading'):
         return True
     allowances = packet[RECORD_KEY]['allowances']

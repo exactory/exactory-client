@@ -206,7 +206,8 @@ class AcceptanceCase(OpennessReadingCase):
 
     def build_request(self, packet, order=()):
         """The Codex request of a packet: by default rendered without any transport reduction."""
-        prompt = protocol.canonical_prompt('native_math', reading_stage=openness_reading.find_stage(packet))['text']
+        prompt = protocol.canonical_prompt('native_math', reading_stage=openness_reading.find_stage(packet),
+                                           reading_protocol=openness_reading.find_protocol(packet))['text']
         return transport.request_body(self.read_route(), prompt, packet, order=order)
 
     def measure(self, packet):
@@ -404,10 +405,11 @@ class KmpShapedChainAcceptanceTests(AcceptanceCase):
             self.assertLessEqual(sum(row['characters'] for row in plan['delivered_now']), TURN_BUDGET_CHARACTERS)
         final = turns[-1]
         records = self.store.snapshot()['records']
-        self.assertEqual(records['review_assignment'][final]['prompt']['template_id'], PROTOCOL_V3 + '/final')
+        self.assertEqual(records['review_assignment'][final]['prompt']['template_id'],
+                         openness_reading.PROTOCOL_V4 + '/final')
         packet = self.read_packet(final)
         record = packet['reading_record']
-        self.assertEqual(record['protocol'], PROTOCOL_V3)
+        self.assertEqual(record['protocol'], openness_reading.PROTOCOL_V4)
         self.assertEqual([turn['assignment_id'] for turn in record['turns']], turns[:-1])
         verified = [entry for entry in record['excerpts'] if entry['status'] == 'verified']
         unmatched = [entry for entry in record['excerpts'] if entry['status'] == 'unmatched']
@@ -459,9 +461,9 @@ class KmpShapedChainAcceptanceTests(AcceptanceCase):
         self.assertEqual([name_unit(row) for row in self.list_delivered_rows(continued)], self.list_record_names())
         records = self.store.snapshot()['records']
         self.assertEqual([records['review_assignment'][identifier]['prompt']['template_id'] for identifier in continued],
-                         [PROTOCOL_V3 + '/reading'] * len(continued))
+                         [openness_reading.PROTOCOL_V4 + '/reading'] * len(continued))
         carried = self.read_packet(continued[0])['reading_turn']['reading_record']
-        self.assertEqual(carried['protocol'], PROTOCOL_V3)
+        self.assertEqual(carried['protocol'], openness_reading.PROTOCOL_V4)
         self.assertEqual([turn['assignment_id'] for turn in carried['turns']], legacy)
         verified = [entry for entry in carried['excerpts'] if entry['status'] == 'verified']
         self.assertEqual(len(verified), KMP_VERIFIED_EXCERPTS)

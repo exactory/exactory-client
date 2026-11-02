@@ -232,7 +232,8 @@ class ReadingBudgetChainTests(OpennessReadingCase):
             assignment = self.assign(turns[-1], native_packet, prior=turns[-2])
             if 'reading_turn' not in self.read_packet(turns[-1]):
                 break
-            self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', reading_stage='reading'))
+            self.assertEqual(assignment['prompt'], protocol.canonical_prompt(
+                'native_math', reading_stage='reading', reading_protocol=openness_reading.PROTOCOL_V4))
             self.invoke(turns[-1], self.build_reading_response(self.read_packet(turns[-1])))
             self.assertLessEqual(len(turns), 8)
         self.assertEqual([[(row['version_id'], row['part'], row['parts']) for row in
@@ -293,4 +294,5 @@ class EarlierPromptTests(unittest.TestCase):
         self.assertNotIn('120,000', review_excerpts.PHASE_PROMPT_V1)
         self.assertEqual(json.dumps(sorted(openness_reading.PROMPTS)),
                          json.dumps(sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2,
-                                            openness_reading.PROTOCOL, openness_reading.MATH_PROTOCOL])))
+                                            openness_reading.PROTOCOL, openness_reading.PROTOCOL_V4,
+                                            openness_reading.MATH_PROTOCOL])))
