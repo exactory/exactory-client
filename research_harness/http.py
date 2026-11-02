@@ -151,6 +151,46 @@ class Fetch:
     attempts: list = field(default_factory=list)
 
 
+@dataclass
+class StreamFetch:
+    url: str
+    status: int
+    headers: dict
+    response: dict
+    attempts: list = field(default_factory=list)
+
+
+class _StreamingReader:
+    """Finish artifact publication of a failed attempt's bounded prefix."""
+
+    def __init__(self, source, clock, deadline, maximum, limit_code):
+        self.source, self.clock, self.deadline = source, clock, deadline
+        self.maximum, self.limit_code = maximum, limit_code
+        self.size, self.error = 0, None
+
+    def read(self, amount):
+        if self.error is not None:
+            return b""
+        try:
+            if self.clock.monotonic() >= self.deadline:
+                raise socket.timeout()
+            chunk = self.source.read(min(amount, 65536, self.maximum + 1 - self.size))
+        except http.client.IncompleteRead as error:
+            chunk, self.error = error.partial, error
+        except (OSError, http.client.HTTPException) as error:
+            self.error = error
+            return b""
+        if not isinstance(chunk, bytes) or len(chunk) > amount:
+            self.error = ResearchError("invalid_input", "Expected a bounded binary response stream")
+            return b""
+        room = self.maximum - self.size
+        if len(chunk) > room:
+            chunk = chunk[:room]
+            self.error = ResearchError(self.limit_code, "Response exceeds the configured byte allowance")
+        self.size += len(chunk)
+        return chunk
+
+
 class HttpFailure(ResearchError):
     def __init__(self, code, message, attempts, details=None):
         super().__init__(code, message, details)
@@ -329,9 +369,36 @@ class HttpClient:
         return float(2 ** retry)
 
     def get(self, url, *, headers=None, accept=(), budget=None, not_before=None):
+        return self._get(url, headers=headers, accept=accept, budget=budget, not_before=not_before)
+
+    def get_stream(self, url, artifacts, *, max_bytes, max_retained_bytes, total_timeout,
+                   headers=None, accept=(), budget=None, not_before=None, validate_response=None):
+        """Retain attempts as artifacts; an optional validator admits partial responses.
+
+        validate_response(url, status, headers) runs before reading a successful
+        body and returns its exact length, or None for a complete response of
+        unknown length. Retained prefixes, redirects and retries share the byte
+        allowance. The caller supplies finite job allowances, independently of
+        the legacy in-memory bound. Attempts use response refs instead of body.
+        """
+        for number in (max_bytes, max_retained_bytes):
+            if type(number) is not int or number < 0:
+                raise HttpFailure("invalid_input", "Stream byte allowances must be nonnegative integers", [])
+        if type(total_timeout) not in (float, int) or not math.isfinite(total_timeout) or total_timeout <= 0:
+            raise HttpFailure("invalid_input", "Stream time allowance must be positive and finite", [])
+        return self._get(url, headers=headers, accept=accept, budget=budget, not_before=not_before,
+                         artifacts=artifacts, max_bytes=max_bytes, max_retained_bytes=max_retained_bytes,
+                         total_timeout=total_timeout, validate_response=validate_response)
+
+    def _get(self, url, *, headers=None, accept=(), budget=None, not_before=None, artifacts=None,
+             max_bytes=None, max_retained_bytes=None, total_timeout=None, validate_response=None):
         budget = budget if budget is not None else RequestBudget()
         attempts, redirects, retries = [], 0, 0
-        deadline = self.clock.monotonic() + self.total_timeout
+        streaming = artifacts is not None
+        maximum = self.max_bytes if not streaming else max_bytes
+        retained = 0
+        retained_refs = set()
+        deadline = self.clock.monotonic() + (self.total_timeout if total_timeout is None else total_timeout)
         request_headers = {"User-Agent": self.user_agent, "Accept-Encoding": "identity"}
         request_headers.update(headers or {})
         if any(not isinstance(k, str) or not isinstance(v, str) or re.search(r"[\x00-\x1f\x7f]", k + v)
@@ -350,6 +417,9 @@ class HttpClient:
                     attempt = {"url": url, "captured_at": self.clock.now(), "status": None,
                                "headers": {}, "body": b"", "complete": False, "error": None,
                                "response_received_at": None, "next_eligible_at": None}
+                    if streaming:
+                        del attempt["body"]
+                        attempt["response"] = None
                     attempts.append(attempt)
                     response = None
                     body = bytearray()
@@ -376,23 +446,54 @@ class HttpClient:
                             not_before = max((time for time in (not_before, attempt["next_eligible_at"]) if time is not None),
                                              key=lambda time: datetime.fromisoformat(time.replace("Z", "+00:00")))
                         length = all_headers.get("content-length")
-                        if length is not None and (not length.isdigit() or int(length) > self.max_bytes):
-                            raise ResearchError("response_too_large", "Response length exceeds the configured bound or is invalid")
+                        if length is not None:
+                            try:
+                                if not length.isascii() or not length.isdigit() or int(length) > maximum:
+                                    raise ValueError()
+                            except ValueError as error:
+                                raise ResearchError("response_too_large", "Response length exceeds the configured bound or is invalid") from error
                         if all_headers.get("content-encoding", "identity").lower() != "identity":
                             raise ResearchError("unsupported_encoding", "Response ignored the identity encoding request")
-                        while True:
-                            if self.clock.monotonic() >= deadline:
-                                raise socket.timeout()
-                            chunk = response.stream.read(min(65536, self.max_bytes + 1 - len(body)))
-                            if not chunk:
-                                break
-                            room = self.max_bytes - len(body)
-                            body.extend(chunk[:room])
-                            if len(chunk) > room:
-                                raise ResearchError("response_too_large", "Response exceeds the configured byte limit")
+                        expected_length = int(length) if length is not None else None
+                        if streaming:
+                            if 200 <= response.status < 300:
+                                if validate_response is not None:
+                                    expected_length = validate_response(url, response.status, attempt["headers"])
+                                elif response.status == 206 or "content-range" in all_headers:
+                                    raise ResearchError("partial_response", "A partial response requires a transfer validator")
+                            available = max_retained_bytes - retained
+                            if length is not None and int(length) > available:
+                                raise ResearchError("fulltext_storage_limit", "Response exceeds the retained-byte allowance")
+                            body_maximum = min(maximum, available)
+                            limit_code = "fulltext_storage_limit" if available < maximum else "response_too_large"
+                            if response.status == 206 and expected_length is not None and expected_length <= body_maximum:
+                                body_maximum, limit_code = expected_length, "fulltext_transfer_changed"
+                            reader = _StreamingReader(response.stream, self.clock, deadline, body_maximum, limit_code)
+                            from .evidence import media_type
+                            attempt["response"] = artifacts.put_stream(reader, media_type(attempt["headers"]))
+                            if attempt["response"]["sha256"] not in retained_refs:
+                                retained += reader.size
+                                retained_refs.add(attempt["response"]["sha256"])
+                            if reader.error is not None:
+                                if isinstance(reader.error, http.client.IncompleteRead):
+                                    raise http.client.IncompleteRead(b"") from reader.error
+                                raise reader.error
+                            body_size = reader.size
+                        else:
+                            while True:
+                                if self.clock.monotonic() >= deadline:
+                                    raise socket.timeout()
+                                chunk = response.stream.read(min(65536, maximum + 1 - len(body)))
+                                if not chunk:
+                                    break
+                                room = maximum - len(body)
+                                body.extend(chunk[:room])
+                                if len(chunk) > room:
+                                    raise ResearchError("response_too_large", "Response exceeds the configured byte limit")
+                            body_size = len(body)
                         if self.clock.monotonic() >= deadline:
                             raise socket.timeout()
-                        if length is not None and len(body) != int(length):
+                        if expected_length is not None and body_size != expected_length:
                             raise ResearchError("incomplete_response", "Response ended before its declared length")
                         attempt["complete"] = True
                     except (socket.timeout, TimeoutError) as error:
@@ -416,7 +517,8 @@ class HttpClient:
                         attempt["error"] = error.code
                         raise
                     finally:
-                        attempt["body"] = bytes(body)
+                        if not streaming:
+                            attempt["body"] = bytes(body)
                         if response is not None:
                             response.close()
                 if attempt["error"]:
@@ -428,7 +530,7 @@ class HttpClient:
                     retries += 1
                     continue
                 status = attempt["status"]
-                if status == 206 or "content-range" in attempt["headers"]:
+                if not streaming and (status == 206 or "content-range" in attempt["headers"]):
                     raise ResearchError("partial_response", "A partial HTTP response cannot satisfy full source capture")
                 if status in (301, 302, 303, 307, 308):
                     if redirects >= self.max_redirects:
@@ -456,6 +558,8 @@ class HttpClient:
                 media_type = attempt["headers"].get("content-type", "application/octet-stream").split(";")[0].lower().strip()
                 if accept and media_type not in accept:
                     raise ResearchError("unexpected_mime", "Provider returned an unexpected media type", {"media_type": media_type})
+                if streaming:
+                    return StreamFetch(url, status, attempt["headers"], attempt["response"], attempts)
                 return Fetch(url, status, attempt["headers"], attempt["body"], attempts)
         except ResearchError as error:
             if attempts and attempts[-1]["error"] is None:
