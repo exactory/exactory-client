@@ -10,6 +10,7 @@ from research_harness import batches
 from research_harness.acquisition import import_response
 from research_harness.errors import ResearchError
 from research_harness.principles import initialize_research
+from test_streamed_exports import assert_no_retention, capture_evaluations
 
 
 class BatchCapacityTests(LiteratureCase):
@@ -35,6 +36,19 @@ class BatchCapacityTests(LiteratureCase):
 
     def read_batches(self, result):
         return [json.loads(Path(filename).read_text(encoding="utf-8")) for filename in result["files"]]
+
+    def test_many_abstracts_retain_no_bytes_or_decoded_text(self):
+        versions = self.register_abstracts([("Complete abstract %d. " % i) * 1000 for i in range(32)])
+        with capture_evaluations(force_budget=64 * 1024 * 1024):
+            before = self.export(versions, "retaining", size=3)
+        with capture_evaluations() as evaluations:
+            after = self.export(versions, "nonretaining", size=3)
+        self.assertEqual([Path(path).read_bytes() for path in after["files"]],
+                         [Path(path).read_bytes() for path in before["files"]])
+        for name in ("manifest.json", "README.json"):
+            self.assertEqual((self.root / "nonretaining" / name).read_bytes(),
+                             (self.root / "retaining" / name).read_bytes())
+        assert_no_retention(self, evaluations)
 
     def test_unicode_complete_encoded_file_at_the_byte_boundary(self):
         text = "雪🐾" * 2000
@@ -275,7 +289,7 @@ class JsonLocatorCapacityTests(LiteratureCase):
                 self.assertTrue((self.root / "batches/batch-001.json").is_file())
             return construct(records, evaluation, version)
 
-        with patch.object(batches, "_entry", side_effect=inspect_construction):
+        with capture_evaluations() as evaluations, patch.object(batches, "_entry", side_effect=inspect_construction):
             result = batches.export_batches(self.store, destination=self.root / "batches", size=1)
         exported = [item for filename in result["files"] for item in json.loads(Path(filename).read_bytes())["items"]]
         self.assertEqual([item["version_id"] for item in exported], versions[3:])
@@ -284,3 +298,4 @@ class JsonLocatorCapacityTests(LiteratureCase):
             "Source 4 studies bounded sequences and reports a finite example.",
             "Source 5 studies bounded sequences and reports a finite example."])
         self.assertTrue(json.loads((self.root / "batches/manifest.json").read_bytes())["complete"])
+        assert_no_retention(self, evaluations)

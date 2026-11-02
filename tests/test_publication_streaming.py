@@ -19,6 +19,7 @@ from research_harness.storage import Store
 from research_harness import workspace
 from test_draft import (_DepositTestCase, _PlainWorkspaceDepositTestCase, _FakeZenodoApi,
                         _draft, prepare_manuscript)
+from test_streamed_exports import assert_no_retention, capture_evaluations
 
 
 class _BoundedReader:
@@ -102,6 +103,34 @@ class ManagedStreamingTests(unittest.TestCase):
     def validate(self):
         return zenodo.validate_deposit(self.store, Path("draft/paper.pdf"), Path("draft/abstract.txt"),
                                        Path("sources.zip"), new_version=False, environment="sandbox")
+
+    def test_validate_upload_retains_no_optional_readiness_or_review_values(self):
+        def validate():
+            return publication.validate_upload(self.store, Path("draft/paper.pdf"), Path("draft/abstract.txt"),
+                                               Path("sources.zip"))
+
+        with capture_evaluations(force_budget=64 * 1024 * 1024):
+            before = validate()
+        with capture_evaluations() as evaluations:
+            after = validate()
+        self.assertEqual(after, before)
+        assert_no_retention(self, evaluations)
+
+    def test_upload_bundle_reads_retain_no_optional_values(self):
+        check_bundle = publication._bundle
+        evaluations = []
+
+        def observe_bundle(records, artifacts):
+            bundle = check_bundle(records, artifacts)
+            evaluations.append(artifacts)
+            return bundle
+
+        with patch.object(publication, "_bundle", side_effect=observe_bundle):
+            report = publication.validate_upload(self.store, Path("draft/paper.pdf"), Path("draft/abstract.txt"),
+                                                 Path("sources.zip"))
+        self.assertTrue(report["ready"])
+        self.assertEqual(report["bundle"], self.bundle)
+        assert_no_retention(self, evaluations)
 
     def begin(self):
         report = self.validate()

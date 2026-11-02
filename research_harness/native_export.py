@@ -28,7 +28,7 @@ def export_native(store, attack_root, destination, *, claim_binding=None):
         raise ResearchError("review_destination_exists", "Export the native foundation into a new directory")
     snapshot = store.snapshot()
     from .evaluation import Evaluation
-    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root), retention_budget_bytes=0)
     config = snapshot["records"].get("configuration", {}).get("research")
     if config is None:
         raise ResearchError("migration_required", "Initialize or adopt the common preparation contract first")

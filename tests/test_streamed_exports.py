@@ -13,6 +13,160 @@ from unittest import mock
 from research_harness import native_export, review_delivery, scientific_delivery
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
+from research_harness.evaluation import Evaluation
+from literature_fixtures import LiteratureCase
+from rounds_fixtures import RoundsCase
+
+
+@contextmanager
+def capture_evaluations(*, force_budget=None):
+    evaluations = []
+    initialize = Evaluation.__init__
+
+    def observe(evaluation, records, artifacts, **kwargs):
+        if force_budget is not None:
+            kwargs["retention_budget_bytes"] = force_budget
+        initialize(evaluation, records, artifacts, **kwargs)
+        evaluations.append(evaluation)
+
+    with mock.patch.object(Evaluation, "__init__", observe):
+        yield evaluations
+
+
+def assert_shared_retains_nothing(case, evaluations):
+    """The non-retaining evaluations of a scientific delivery retain nothing. Each projected source is read through a
+    reader of its own (its byte view refuses any other artifact), so that reader's parse serves only the source's
+    locators and goes with the reader."""
+    shared = [evaluation for evaluation in evaluations if evaluation.retention_budget_bytes == 0]
+    case.assertTrue(shared, "the delivery must read through a non-retaining evaluation")
+    for evaluation in shared:
+        report = evaluation.retention_report()
+        case.assertEqual((report["optional_bytes"], report["optional_entries"]), (0, 0), report)
+
+
+def assert_no_retention(case, evaluations):
+    case.assertTrue(evaluations, "the export must exercise evaluation reads")
+    case.assertGreater(sum(e.counters["reads"] for e in evaluations), 0)
+    for evaluation in evaluations:
+        report = evaluation.retention_report()
+        case.assertEqual(report["optional_bytes"], 0, report)
+        case.assertEqual(report["optional_entries"], 0, report)
+        case.assertEqual(report["budget_bytes"], 0, report)
+
+
+class DeliveryEvaluationRetentionTests(RoundsCase):
+    def collect_files(self, destination):
+        return {path.relative_to(destination).as_posix(): path.read_bytes()
+                for path in destination.rglob("*") if path.is_file()}
+
+    def check_delivery_retention(self, deliver):
+        control, destination = self.root / "retaining", self.root / "nonretaining"
+        with capture_evaluations(force_budget=64 * 1024 * 1024) as baseline:
+            before = deliver(control)
+        self.assertTrue(any(e.retention_report()["optional_bytes"] for e in baseline))
+        with capture_evaluations() as evaluations:
+            after = deliver(destination)
+        self.assertEqual(self.collect_files(destination), self.collect_files(control))
+        self.assertEqual(after["artifacts"], before["artifacts"])
+        assert_no_retention(self, evaluations)
+
+    def test_readiness_construction_retains_no_optional_values(self):
+        self.check_delivery_retention(lambda path: review_delivery.deliver_readiness(self.store, path))
+
+    def test_manuscript_claims_and_packet_retain_no_optional_values(self):
+        self.pin(self.claims(revised=("bound",)), reviews=0, measure=False)
+        self.check_delivery_retention(lambda path: review_delivery.deliver_manuscript(self.store, path))
+
+    def test_round_bundle_and_packet_retain_no_optional_values(self):
+        from research_harness import rounds
+        bundle = self.pin()
+        self.mutate(rounds.record_round, self.decision_payload(bundle, decision="stop"))
+        self.check_delivery_retention(lambda path: review_delivery.deliver_round(self.store, path))
+
+    def test_native_synthesis_retains_no_optional_values(self):
+        attack = self.root / "attack"
+        attack.mkdir()
+        control, destination = attack / "retaining", attack / "nonretaining"
+        with capture_evaluations(force_budget=64 * 1024 * 1024):
+            before = native_export.export_native(self.store, attack, control)
+        with capture_evaluations() as evaluations:
+            after = native_export.export_native(self.store, attack, destination)
+        self.assertEqual((destination / "snapshot.json").read_bytes(), (control / "snapshot.json").read_bytes())
+        self.assertEqual(after["foundation"], before["foundation"])
+        self.assertEqual([(item["kind"], item["digest"]) for item in after["inputs"]],
+                         [(item["kind"], item["digest"]) for item in before["inputs"]])
+        for ref in review_delivery.references(self.store.snapshot()["records"]):
+            self.assertEqual((destination / "artifacts" / ref["sha256"]).read_bytes(),
+                             (control / "artifacts" / ref["sha256"]).read_bytes())
+        assert_no_retention(self, evaluations)
+
+
+class ScientificEvaluationRetentionTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.artifacts = ArtifactStore(Path(temporary.name))
+        self.refs = [self.artifacts.put(json.dumps({"value": i, "padding": "x" * 16000}).encode(),
+                                        "application/json") for i in range(16)]
+        self.locators = [{"kind": "json", "pointer": "/value", "value": i} for i in range(16)]
+        self.contract = {"payload": {"scientific_delivery": [
+            {"original_sha256": ref["sha256"], "disposition": "project", "projection": {
+                "kind": "json_locators", "context": "Exact fixture values.", "locators": [locator]}}
+            for ref, locator in zip(self.refs, self.locators)]}}
+
+    def test_initial_private_and_terminal_reads_do_not_fill_the_supplied_evaluation(self):
+        records = {"readiness_review": {str(i): {"artifact": ref} for i, ref in enumerate(self.refs)},
+                   "execution_observation": {"run": {"terminal": self.refs[0]}}}
+        supplied = Evaluation(records, self.artifacts)
+        with capture_evaluations() as evaluations:
+            projector = scientific_delivery.ScientificDelivery(records, supplied, self.contract, {})
+        self.assertEqual(projector.private_bytes, tuple(self.artifacts.read(ref) for ref in self.refs))
+        self.assertEqual(supplied.retention_report()["optional_bytes"], 0)
+        assert_no_retention(self, evaluations)
+
+    def test_projection_retains_nothing_across_sources(self):
+        def project():
+            projector = scientific_delivery.ScientificDelivery({}, self.artifacts, self.contract, {})
+            results = [projector._project(ref, declaration["projection"])
+                       for ref, declaration in zip(self.refs, self.contract["payload"]["scientific_delivery"])]
+            return results, projector.derived
+
+        with capture_evaluations(force_budget=64 * 1024 * 1024):
+            before = project()
+        with capture_evaluations() as evaluations:
+            after = project()
+        self.assertEqual(after, before)
+        assert_shared_retains_nothing(self, evaluations)
+
+    def test_mapping_and_walk_locator_reads_retain_no_optional_values(self):
+        manifest = {"evidence": [{"artifact": ref, "locator": locator} for ref, locator in zip(self.refs, self.locators)]}
+        with capture_evaluations(force_budget=64 * 1024 * 1024):
+            before = scientific_delivery.project_delivery({}, self.artifacts, self.contract, manifest)
+        supplied = Evaluation({}, self.artifacts)
+        with capture_evaluations() as evaluations:
+            after = scientific_delivery.project_delivery({}, supplied, self.contract, manifest)
+        self.assertEqual(after, before)
+        self.assertEqual([item["locator"]["value"] for item in after[0]["evidence"]], list(range(16)))
+        self.assertEqual(supplied.retention_report()["optional_bytes"], 0)
+        assert_shared_retains_nothing(self, evaluations)
+
+
+class ScientificPublicRetentionTests(LiteratureCase):
+    def test_public_provenance_and_original_component_reads_retain_no_optional_values(self):
+        import test_research_public_source_delivery as fixtures
+        capture, ref, projection = fixtures.PublicSourceDeliveryTests.capture_pdf(self)
+        records = self.store.snapshot()["records"]
+        contract = {"payload": {"scientific_delivery": [{"original_sha256": ref["sha256"],
+            "disposition": "project", "projection": projection}]}}
+        manifest = {"figure": ref, "original": capture["original"]}
+        with capture_evaluations(force_budget=64 * 1024 * 1024):
+            before = scientific_delivery.project_delivery(records, self.artifacts, contract, manifest)
+        supplied = Evaluation(records, self.artifacts)
+        with capture_evaluations() as evaluations:
+            after = scientific_delivery.project_delivery(records, supplied, contract, manifest)
+        self.assertEqual(after, before)
+        self.assertEqual(supplied.retention_report()["optional_bytes"], 0)
+        assert_no_retention(self, evaluations)
 
 
 class BoundedStream:

@@ -15,6 +15,7 @@ import zipfile
 from research_harness import deposit_package
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
+from research_harness.evaluation import Evaluation
 from research_harness.workspace import open_file
 from test_streamed_exports import BoundedStream
 
@@ -68,7 +69,8 @@ class PackageStreamingTests(unittest.TestCase):
     def test_many_binary_artifacts_never_use_whole_object_reads(self):
         self.records["local_artifact"] = {str(i): self.artifacts.put(bytes([i]) * (128 * 1024), "application/octet-stream")
                                           for i in range(24)}
-        with mock.patch.object(ArtifactStore, "read", side_effect=AssertionError("whole-object payload read")):
+        with mock.patch.object(Evaluation, "__init__", side_effect=AssertionError("package must bypass evaluation retention")), \
+                mock.patch.object(ArtifactStore, "read", side_effect=AssertionError("whole-object payload read")):
             destination = self.build()
         with zipfile.ZipFile(destination) as archive:
             for ref in self.records["local_artifact"].values():
@@ -145,6 +147,8 @@ class PackageStreamingTests(unittest.TestCase):
                 destination.unlink()
 
     def test_referenced_json_is_released_before_the_next_parse(self):
+        self.records["local_artifact"] = {str(i): self.artifacts.put(
+            json.dumps({"value": i, "padding": "x" * 16000}).encode(), "application/json") for i in range(24)}
         original = deposit_package.strict_json
         previous = None
 

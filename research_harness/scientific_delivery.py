@@ -194,6 +194,7 @@ def _build_locator_identity(locator):
 class ScientificDelivery:
     def __init__(self, records, artifacts, contract, manifest, *, manuscript_files=(), corrective=False, derived=None):
         from .review_packets import find_round_investigation_responses
+        artifacts = Evaluation.of(records, artifacts, retention_budget_bytes=0)
         self.records, self.artifacts = records, artifacts
         declarations = contract["payload"].get("scientific_delivery", [])
         validate_declarations(declarations)
@@ -471,6 +472,8 @@ class ScientificDelivery:
             selected = {digest(l): l for l in projection["locators"]}
             if not set(self.required.get(ref["sha256"], {})) <= set(selected):
                 raise ResearchError("scientific_projection_incomplete", "Retain every required scientific locator in the typed derivative")
+            # A reader of this one source (Bytes refuses any other artifact): every locator of the source reuses
+            # its parse, and the parse is released with the reader when this projection returns.
             reader = Evaluation({}, Bytes())
             for index, locator in enumerate(selected.values()):
                 value = read_locator(reader, ref, locator)

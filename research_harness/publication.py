@@ -487,7 +487,7 @@ def publication_report(store, action="publication"):
 
 def validate_upload(store, pdf, abstract, sources):
     snapshot = store.snapshot()
-    artifacts = Evaluation(snapshot["records"], store.build_artifact_store())
+    artifacts = Evaluation(snapshot["records"], store.build_artifact_store(), retention_budget_bytes=0)
     report = publication_state(snapshot["records"], artifacts)
     if not report["ready"]:
         raise ResearchError("readiness_required", "Publication requires the exact manuscript and dual review gate", {"obligations": report["obligations"]})

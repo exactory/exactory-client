@@ -144,7 +144,7 @@ def deliver_readiness(store, destination=None):
     snapshot = store.snapshot()
     if destination is None:
         destination = find_packet_destination(store, "readiness-r" + str(snapshot["revision"]))
-    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    evaluation = Evaluation(snapshot["records"], ArtifactStore(store.root), retention_budget_bytes=0)
     from .publication_scope import has_publication_scope, assess_manuscript_readiness
     scoped = has_publication_scope(snapshot["records"])
     report = dict((assess_manuscript_readiness if scoped else author_readiness_state)(snapshot["records"], evaluation), revision=snapshot["revision"])
@@ -194,7 +194,7 @@ def deliver_manuscript(store, destination=None):
     snapshot = store.snapshot()
     if destination is None:
         destination = find_packet_destination(store, "manuscript-r" + str(snapshot["revision"]))
-    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root))
+    artifacts = Evaluation(snapshot["records"], ArtifactStore(store.root), retention_budget_bytes=0)
     report = publication_state(snapshot["records"], artifacts, "manuscript")
     if not report["ready"]:
         raise ResearchError("readiness_required", "Prepare a current manuscript bundle before independent delivery", {"obligations": report["obligations"]})
@@ -217,7 +217,7 @@ def deliver_round(store, destination=None):
     records = snapshot["records"]
     if destination is None:
         destination = find_packet_destination(store, "round-r" + str(snapshot["revision"]))
-    artifacts = Evaluation(records, ArtifactStore(store.root))
+    artifacts = Evaluation(records, ArtifactStore(store.root), retention_budget_bytes=0)
     bundle = _bundle(records, artifacts)
     decisions = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"]]
     if not decisions:

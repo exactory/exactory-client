@@ -136,7 +136,7 @@ def export_batches(store, *, depth="abstract", size=60, destination, profile=Non
     if policy == LINEAGE and not loop:
         raise ResearchError("policy_inapplicable", "Under lineage-v1 export the loop's abstracts with --loop")
     candidates = strings(list(candidates), "Candidates")
-    evaluation = Evaluation(records, ArtifactStore(store.root))
+    evaluation = Evaluation(records, ArtifactStore(store.root), retention_budget_bytes=0)
     versions = unread_abstracts(records, evaluation, profile, screen=screen, loop=loop, candidates=candidates)
     selected = set(versions)
     skipped = [version for version in candidates if version not in selected]
