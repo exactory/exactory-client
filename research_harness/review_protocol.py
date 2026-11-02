@@ -11,12 +11,13 @@ import copy
 import json
 import os
 import uuid
+from collections import ChainMap
 
 from .artifacts import ArtifactStore, describe_artifact, validate_reference
 from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
-from .operations import _read_preparation, fields, immutable_record, normalized_text, prepared_mutation, text
+from .operations import fields, immutable_record, normalized_text, prepared_mutation, prepared_task_mutation, text
 from .finishing import retry_store_write
 from . import review_transport as transport
 from . import bar_sources
@@ -28,7 +29,7 @@ from . import review_context_repair as context_repair
 from . import review_supplied_evidence as supplied_evidence
 from . import problem_rubric
 from .review_refusal import record_refusal_on_error
-from .storage import _canonical
+from .storage import _canonical, read_filtered_records, select_record_groups
 
 ROLES = ('bar', 'slate', 'result', 'adjudicator', 'manuscript', 'standalone', 'verification', 'native_math')
 PAPER_ROLES = ('manuscript', 'standalone')
@@ -507,13 +508,99 @@ def _put_json(artifacts, value):
     return artifacts.put(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False).encode(), 'application/json')
 
 
-def _prepare_review_mutation(store, operation, payload, prepare, **kwargs):
+def _prepare_review_mutation(store, operation, payload, prepare, *, scoped=False, **kwargs):
     """Give each authenticated preparation fresh evaluation and runtime ownership."""
     from .review_state_evaluation import runtime_scope
+    # Diagnostic stores retain the authenticated, non-writing preparation interface.
+    scoped = scoped and callable(getattr(store, '_read_scoped_preparation', None))
     def prepare_scoped(records, value):
+        if scoped and operation in ('review.output_correction_start', 'review.output_correction'):
+            assignment = records.get('review_assignment', {}).get(value.get('assignment_id'))
+            if assignment is not None:
+                records = _read_context_records(records, assignment)
         with runtime_scope(records, store.build_artifact_store()):
             return prepare(records, value)
+    if scoped:
+        if 'expected_revision' in kwargs and kwargs['expected_revision'] is None:
+            raise ResearchError('invalid_input', 'Expected revision must be a nonnegative integer')
+        def finalize(changes, result, revision):
+            for kind, _, record in changes:
+                if kind in ('review_assignment', 'review_invocation', 'review_probe_invocation',
+                            'review_output_correction_invocation', 'review_attempt', 'review_route_probe',
+                            'review_output_correction') and 'recorded_revision' in record:
+                    record['recorded_revision'] = revision
+            if isinstance(result, dict) and 'recorded_revision' in result:
+                result['recorded_revision'] = revision
+            return changes, result
+        return prepared_task_mutation(store, operation, payload, prepare_scoped, finalize=finalize, **kwargs)
     return prepared_mutation(store, operation, payload, prepare_scoped, **kwargs)
+
+
+def _read_review_group(records, artifacts, kind, field, value, *, order=None):
+    """Bind each scoped lookup before using an evaluation's shared ordinary index."""
+    if getattr(records, 'read_filtered_records', None) is not None:
+        rows = list(read_filtered_records(records, kind, **{field: value}).values())
+        return rows if order is None else sorted(rows, key=lambda row: row[order])
+    from .evaluation import Evaluation
+    return Evaluation.of(records, artifacts).index_records(kind, field, order=order).get(value, ())
+
+
+def _read_slot_records(records, assignment, *, slot=None):
+    """Limit slot iteration while retaining exact keyed ancestor lookups."""
+    if assignment['role'] not in context_repair.ROLES or getattr(records, 'read_filtered_records', None) is None:
+        return records
+    where = dict(dossier_id=assignment['dossier_id'], role=assignment['role'])
+    candidates = read_filtered_records(records, 'review_assignment', **(dict(where, slot_id=slot)
+                                      if slot is not None else where))
+    if slot is not None:
+        candidates.update(read_filtered_records(records, 'review_assignment', **dict(where, slot_id=None)))
+    # Scientific ancestors of legacy rows need not carry an explicit slot_id.
+    # Keep those exact identities available without widening the membership.
+    for row in list(candidates.values()) + [assignment]:
+        for ancestor in context_repair._lineage(records, row):
+            if ancestor['id'] != assignment['id'] or ancestor['id'] in candidates:
+                candidates.setdefault(ancestor['id'], ancestor)
+    return ChainMap({'review_assignment': candidates}, records)
+
+
+def _read_context_records(records, assignment):
+    """Scope repair/correction helpers to their slots and complete exposure lineage."""
+    if getattr(records, 'read_filtered_records', None) is None:
+        return records
+    lineage = context_repair._lineage(records, assignment)
+    if not any(row.get('context', {}).get('context_repair') for row in lineage):
+        return records
+    where = dict(role=assignment['role'], dossier_id=assignment['dossier_id'])
+    groups = {'review_assignment': [where]}
+    pending = list(read_filtered_records(records, 'review_assignment', **where).values()) + lineage
+    selected, epochs = {}, set()
+    while pending:
+        row = pending.pop()
+        identifier = row['id']
+        if identifier in selected:
+            continue
+        saved = records.get('review_assignment', {}).get(identifier)
+        if saved is None:
+            continue
+        selected[identifier] = saved
+        groups['review_assignment'].append(dict(id=identifier))
+        parents = (supplied_evidence.find_scientific_predecessor(saved), saved.get('history_assignment_id'))
+        pending.extend(_get(records, 'review_assignment', parent) for parent in dict.fromkeys(parents) if parent is not None)
+        binding = saved.get('staged_review', {})
+        if binding.get('kind') == 'controller':
+            predicate = {'staged_review.controller_assignment_id': identifier}
+            groups['review_assignment'].append(predicate)
+            pending.extend(read_filtered_records(records, 'review_assignment', **predicate).values())
+        epoch = binding.get('epoch_id')
+        if epoch is not None and epoch not in epochs:
+            epochs.add(epoch)
+            predicate = {'staged_review.epoch_id': epoch}
+            groups['review_assignment'].append(predicate)
+            pending.extend(read_filtered_records(records, 'review_assignment', **predicate).values())
+    for kind in ('review_attempt', 'review_invocation', 'review_context_event',
+                 'review_output_correction', 'review_output_correction_invocation'):
+        groups[kind] = [dict(assignment_id=identifier) for identifier in selected]
+    return select_record_groups(records, groups)
 
 
 def _read_json(artifacts, reference):
@@ -1418,15 +1505,15 @@ def build_assignment_request(records, artifacts, assignment):
     evaluation = Evaluation.of(records, artifacts)
     records = evaluation.records
     route = records['review_route'][assignment['route_id']]
+    attempts = _read_review_group(records, evaluation, 'review_attempt', 'assignment_id', assignment['id'])
 
     def build_request():
         packet = _read_json(evaluation, assignment['packet'])
         if assignment.get('staged_review'):
             from .review_staged_protocol import build_assigned_request
             return build_assigned_request(evaluation, route, assignment, packet)
-        attempts_by_assignment = evaluation.index_records('review_attempt', 'assignment_id')
         recorded = [_read_json(evaluation, attempt['request'])
-                    for attempt in attempts_by_assignment.get(assignment['id'], ())
+                    for attempt in attempts
                     if attempt['status'] == 'completed' and attempt.get('request')]
         built = transport.list_built_requests(route, assignment['prompt']['text'], packet,
                                               assignment.get('history', ()))
@@ -1821,7 +1908,8 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
     workspace is no evidence of what the reviewer returned, so a pending invocation is never completed from disk."""
     text(request_id, 'Request ID')
     fields(payload, (), None)
-    snapshot = _read_preparation(store)
+    scoped = callable(getattr(store, '_read_scoped_preparation', None))
+    snapshot = store._read_scoped_preparation() if scoped else store._read_preparation()
     if operation == 'review.invoke':
         assignment = snapshot.records.get('review_assignment', {}).get(payload.get('assignment_id'), {})
         if assignment.get('staged_review'):
@@ -1829,36 +1917,42 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
             return invoke_task(store, payload, expected_revision=expected_revision, request_id=request_id)
     if snapshot.has_request(request_id):
         return _prepare_review_mutation(store, operation, payload, lambda r, v: None,
-                                 expected_revision=expected_revision, request_id=request_id, _snapshot=snapshot)
+                                 expected_revision=expected_revision, request_id=request_id, _snapshot=snapshot, scoped=scoped)
     beginning = request_id + ':start'
     if snapshot.has_request(beginning):
         # Validate request replay/conflict through Store, then retain the unknown result.
         _prepare_review_mutation(store, operation + '_start', payload, lambda r, v: None,
-                          expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot)
+                          expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot, scoped=scoped)
         raise ResearchError('review_invocation_pending', 'The prior invocation is pending; reconcile it before any explicit retry')
     from .review_task_execution import start_call, release_call
     from .review_worker import own_call, _own_transport_processes, _guard_call_termination
     from contextlib import nullcontext
     with own_call(store, operation, text(payload.get('id'), 'Invocation ID')) as authority:
-        invocation = _prepare_review_mutation(store, operation + '_start', payload, start,
+        route = None
+        def prepare_start(records, value):
+            nonlocal route
+            changes, result = start(records, value)
+            route = _get(records, 'review_route', result['route_id'])
+            return changes, result
+        invocation = _prepare_review_mutation(store, operation + '_start', payload, prepare_start,
                                        expected_revision=expected_revision, request_id=beginning,
-                                       _snapshot=snapshot,
-                                       validate_commit=lambda tx, result: start_call(tx, operation, result, authority, expected_revision + 1))['result']
+                                       _snapshot=snapshot, scoped=True,
+                                       validate_commit=lambda tx, result, revision: start_call(tx, operation, result, authority, revision))['result']
         artifacts = store.build_artifact_store()
-        route = _get(store.snapshot()['records'], 'review_route', invocation['route_id'])
         request = _read_json(artifacts, invocation['request'])
         with _own_transport_processes(authority) if route['adapter'] in transport.LOCAL_ADAPTERS else nullcontext():
             observation = _observed(artifacts, route, request, credential)
         authority.finish_transport()
         def commit():
             with _guard_call_termination(store, authority.reservation_id) as termination:
-                revision = store.revision
+                finishing = store._read_scoped_preparation()
                 def prepare(current, value):
-                    return finish(current, value, invocation, observation, revision + 1)
+                    return finish(current, value, invocation, observation, finishing.revision + 1)
                 return _prepare_review_mutation(store, operation, payload, prepare,
-                                         expected_revision=revision, request_id=request_id,
-                                         validate_commit=lambda tx, result: release_call(tx, authority.reservation_id, termination, revision + 1))
-        return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS)
+                                         request_id=request_id, _snapshot=finishing, scoped=True,
+                                         validate_commit=lambda tx, result, revision: release_call(tx, authority.reservation_id, termination, revision))
+        return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS,
+                                 codes=('store_busy', 'stale_revision', 'review_task_dependency_changed'))
 
 
 def probe_route(store, payload, *, expected_revision, request_id, credential=None):
@@ -1919,7 +2013,7 @@ def _route_state(records, artifacts, route_id):
     if route:
         from .evaluation import Evaluation
         evaluation = Evaluation.of(records, artifacts)
-        for saved in evaluation.index_records('review_route_probe', 'route_id', order='recorded_revision').get(route_id, ()):
+        for saved in _read_review_group(records, evaluation, 'review_route_probe', 'route_id', route_id, order='recorded_revision'):
             if saved['route_id'] != route_id or saved.get('route_digest') != digest(route) or saved.get('runtime') != route['runtime']:
                 continue
             status, proof = 'unverified', None
@@ -2165,11 +2259,11 @@ def _repair_packet(records, artifacts, value, repair):
 def has_ended_without_output(records, assignment_id):
     """Whether an assignment ran and every recorded attempt ended without a completed output, with no invocation still
     pending: such a turn, for example one stopped at the route timeout, does not hold its session."""
-    attempts = [attempt for attempt in records.get('review_attempt', {}).values()
+    attempts = [attempt for attempt in read_filtered_records(records, 'review_attempt', assignment_id=assignment_id).values()
                 if attempt['assignment_id'] == assignment_id]
     attempt_ids = records.get('review_attempt', {})
     pending = any(invocation['assignment_id'] == assignment_id and invocation['id'] not in attempt_ids
-                  for invocation in records.get('review_invocation', {}).values())
+                  for invocation in read_filtered_records(records, 'review_invocation', assignment_id=assignment_id).values())
     return bool(attempts) and not pending and all(attempt['status'] != 'completed' for attempt in attempts)
 
 
@@ -2178,7 +2272,8 @@ def find_replacement(records, assignment):
     parent = assignment.get('context', {}).get('prior_assignment_id')
     if parent is None:
         return None
-    return next((other for other in records.get('review_assignment', {}).values()
+    return next((other for other in read_filtered_records(records, 'review_assignment',
+                 role=assignment['role'], **{'context.prior_assignment_id': parent}).values()
                  if other['id'] != assignment['id'] and other['role'] == assignment['role']
                  and other.get('context', {}).get('prior_assignment_id') == parent
                  and other['recorded_revision'] > assignment['recorded_revision']), None)
@@ -2249,7 +2344,8 @@ def _find_problem_refresh_parent(records, artifacts, value):
     """Continue the same reviewer when its completed problem review no longer binds the current record."""
     if value['role'] not in bar_sources.ROLES or value.get('subject', {}).get('kind') != 'problem' or value['context']:
         return None
-    prior = max((saved for saved in records.get('review_assignment', {}).values()
+    prior = max((saved for saved in read_filtered_records(records, 'review_assignment',
+                 role=value['role'], dossier_id=value.get('dossier_id')).values()
                  if saved['role'] == value['role'] and context_repair.is_same_subject(saved, value)
                  and normalized_text(saved['reviewer_id']) == normalized_text(value['reviewer_id'])),
                 key=lambda saved: saved['recorded_revision'], default=None)
@@ -2265,9 +2361,8 @@ def _initial_size_failure(records, artifacts, prior, value):
     if (prior.get('context') or prior.get('staged_review') or prior['route_id'] != value['route_id']
             or any(normalized_text(prior[key]) != normalized_text(value[key]) for key in ('reviewer_id', 'author_id'))):
         return False
-    attempts = [attempt for attempt in records.get('review_attempt', {}).values() if attempt['assignment_id'] == prior['id']]
-    if not attempts and not any(invocation['assignment_id'] == prior['id']
-                                for invocation in records.get('review_invocation', {}).values()):
+    attempts = list(read_filtered_records(records, 'review_attempt', assignment_id=prior['id']).values())
+    if not attempts and not read_filtered_records(records, 'review_invocation', assignment_id=prior['id']):
         from . import review_preflight
         request = build_assignment_request(records, artifacts, prior)
         try:
@@ -2283,8 +2378,9 @@ def _initial_size_failure(records, artifacts, prior, value):
 
 
 def _initial_slot(records, artifacts, value):
+    slot_records = _read_slot_records(records, value)
     slots = {}
-    for prior in records.get('review_assignment', {}).values():
+    for prior in slot_records.get('review_assignment', {}).values():
         if (prior['dossier_id'] == value['dossier_id'] and prior['role'] == value['role']
                 and context_repair.is_same_subject(prior, value)):
             slots.setdefault(context_repair.slot_id(records, prior), []).append(prior)
@@ -2299,9 +2395,9 @@ def _initial_slot(records, artifacts, value):
             raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; record its observed output, or invoke its assignment again after a refusal')
         replaceable_members = True
         for prior in members:
-            attempts = [a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == prior['id']]
+            attempts = list(read_filtered_records(records, 'review_attempt', assignment_id=prior['id']).values())
             pending = any(a['assignment_id'] == prior['id'] and a['id'] not in records.get('review_attempt', {})
-                          for a in records.get('review_invocation', {}).values())
+                          for a in read_filtered_records(records, 'review_invocation', assignment_id=prior['id']).values())
             completed = [a for a in attempts if a['status'] == 'completed']
             exhausted = (value['role'] == 'bar' and len(completed) >= 2
                          and len(refused_attempts(records, artifacts, completed)) == len(completed))
@@ -2363,7 +2459,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         refresh_parent = _find_problem_refresh_parent(records, artifacts, value) if problem and upgrade is None else None
         if refresh_parent is not None:
             value = dict(value, context={'prior_assignment_id': refresh_parent})
-        repair = (context_repair.prepare_repair(records, artifacts, value)
+        repair_records = _read_context_records(records, value)
+        repair = (context_repair.prepare_repair(repair_records, Evaluation.of(repair_records, artifacts), value)
                   if value['role'] in bar_sources.ROLES or
                   value['role'] == 'adjudicator' and 'context_repair' in value['context'] else None)
         parent = None
@@ -2381,7 +2478,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             # A continuation whose attempts all ended without output does not hold the session: this one replaces it.
             if any(prior.get('context', {}).get('prior_assignment_id') == parent['id']
                    and not has_ended_without_output(records, prior['id'])
-                   for prior in records.get('review_assignment', {}).values()):
+                   for prior in read_filtered_records(records, 'review_assignment',
+                       **{'context.prior_assignment_id': parent['id']}).values()):
                 raise ResearchError('review_source_continuation_fork', 'Continue the latest source turn without forking the reviewer session')
             if parent.get('context', {}).get('source_delivery') and 'source_delivery' not in value['context']:
                 value = dict(value, context=dict(value['context'], source_delivery=parent['context']['source_delivery']))
@@ -2423,7 +2521,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             require_assignment_identity(openness_reading.find_binding(packet), value)
         focused_parent = None
         if value['role'] == 'adjudicator':
-            previous_assignments = [] if upgrade is not None else [previous for previous in records.get('review_assignment', {}).values()
+            previous_assignments = [] if upgrade is not None else [previous for previous in read_filtered_records(
+                records, 'review_assignment', role='adjudicator', dossier_id=value['dossier_id']).values()
                 if previous['role'] == 'adjudicator' and previous['dossier_id'] == value['dossier_id']
                 and previous['context'].get('objection_id') == value['context'].get('objection_id')
                 and (not problem or previous.get('subject') == value['subject'])]
@@ -2480,7 +2579,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                         packet['evidence'] = _evidence(artifacts, packet, records=records)
                         packet['digest'] = digest(packet)
                         continue
-                attempts = [a for a in records.get('review_attempt', {}).values() if a['assignment_id'] == previous['id']]
+                attempts = list(read_filtered_records(records, 'review_attempt', assignment_id=previous['id']).values())
                 failed = attempts and all(a['status'] in ('failed', 'incomplete') for a in attempts)
                 contaminated = previous_state['context_status'] == 'contaminated'
                 if not failed and not contaminated and not (correction and correction['prior_adjudication_id']):
@@ -2565,7 +2664,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
         return changes + [immutable_record(records, 'review_assignment', value['id'], record)], record
-    result = _prepare_review_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id)
+    result = _prepare_review_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id, scoped=True)
     if 'scheduler' in payload:
         from .review_task_execution import record_capacity
         capacity = record_capacity(store, payload['scheduler'], request_id=request_id + ':capacity')
@@ -2629,7 +2728,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         if find_replacement(records, assignment) is not None:
             raise ResearchError('review_assignment_replaced', 'This turn ended without output and a later '
                                 'continuation replaced it; run the replacement')
-        completed = [a for a in artifacts.index_records('review_attempt', 'assignment_id').get(value['assignment_id'], ())
+        completed = [a for a in _read_review_group(records, artifacts, 'review_attempt', 'assignment_id', value['assignment_id'])
                      if a['status'] == 'completed'
                      and _context_observed(artifacts, a)]
         if completed:
@@ -2639,10 +2738,11 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                 raise ResearchError('review_resampling_forbidden', 'A completed output that is recordable, or whose provenance is unverified, cannot be sampled again; record the observed output')
             if len(refused) >= 2:
                 raise ResearchError('review_slot_exhausted', 'Two refused outputs exhaust this assignment; an exhausted initial bar slot takes a new reviewer')
-        context_repair.require_current_slot(records, assignment)
+        context_repair.require_current_slot(_read_slot_records(
+            records, assignment, slot=context_repair.slot_id(records, assignment)), assignment)
         from .review_task_execution import build_historical_attempt_step, has_call_terminated, identify_call
         memberships = records.get('review_pool_membership', {})
-        pending = [a for a in records.get('review_invocation', {}).values()
+        pending = [a for a in read_filtered_records(records, 'review_invocation', assignment_id=value['assignment_id']).values()
                    if a['assignment_id'] == value['assignment_id']
                    and (not has_call_terminated(records, 'review.invoke', a['id'])
                         if identify_call('review.invoke', a['id']) in memberships
@@ -2665,7 +2765,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
         validate_assignment_inventories(records, artifacts, assignment['id'])
-        context_repair.validate_repair_binding(records, artifacts, assignment)
+        repair_records = _read_context_records(records, assignment)
+        context_repair.validate_repair_binding(repair_records, Evaluation.of(repair_records, artifacts), assignment)
         history_parent = assignment.get('history_assignment_id')
         if history_parent is not None and not assignment_state(records, artifacts, history_parent)['ready']:
             raise ResearchError('review_source_continuation_unverified', 'The exact earlier scientific history must remain verified before dispatch')
@@ -2781,7 +2882,7 @@ def _selected_attempt(records, artifacts, assignment_id):
     """Keep the native fixed binding and its exact observed-refusal diagnostics."""
     from .evaluation import Evaluation
     evaluation = Evaluation.of(records, artifacts)
-    attempts = sorted(evaluation.index_records('review_attempt', 'assignment_id').get(assignment_id, ()),
+    attempts = sorted(_read_review_group(records, evaluation, 'review_attempt', 'assignment_id', assignment_id),
                       key=lambda a: a['recorded_revision'])
     completed = [a for a in attempts if a['status'] == 'completed']
     assignment = records.get('review_assignment', {}).get(assignment_id, {})
@@ -2823,7 +2924,7 @@ def _assignment_state(records, artifacts, assignment_id):
         if review_problem_parts.find_stage(packet) is not None:
             state[review_problem_parts.KEY] = {key: packet[review_problem_parts.KEY][key]
                                              for key in ('series_assignment_id', 'stage', 'turn')}
-    events = [event for event in records.get('review_context_event', {}).values()
+    events = [event for event in read_filtered_records(records, 'review_context_event', assignment_id=assignment_id).values()
               if event['assignment_id'] == assignment_id and event['kind'] == 'contamination']
     if assignment['context_state']['context_status'] != 'verified_for_route':
         state['context_status'] = 'unverified'
@@ -2838,7 +2939,9 @@ def _assignment_state(records, artifacts, assignment_id):
     if state['context_status'] != 'verified_for_route':
         state['obligations'].append(obligation('review_context_' + state['context_status'], 'Independent approval requires this actual tested route and uncontaminated context.', assignment_id=assignment_id))
     try:
-        context_repair.validate_repair_binding(records, artifacts, assignment)
+        from .evaluation import Evaluation
+        repair_records = _read_context_records(records, assignment)
+        context_repair.validate_repair_binding(repair_records, Evaluation.of(repair_records, artifacts), assignment)
     except ResearchError as error:
         state['obligations'].append(obligation(error.code, str(error)))
         if error.code == 'review_context_repair_stale':
@@ -2870,7 +2973,9 @@ def _assignment_state(records, artifacts, assignment_id):
             state['obligations'].append(obligation('review_output_unavailable', 'Verify the exact packet, request, and output artifact bytes.'))
     elif completed:
         from .review_output_correction import selected_correction
-        correction = selected_correction(records, artifacts, assignment_id)
+        correction_records = select_record_groups(_read_context_records(records, assignment), {
+            'review_output_correction_invocation': [dict(assignment_id=assignment_id)]})
+        correction = selected_correction(correction_records, artifacts, assignment_id)
         if correction is None:
             state['obligations'].append(obligation('review_output_refused', 'Every observed output of this assignment failed its output contract; invoke the assignment again.',
                                                    refused_attempts=state['refused_attempts']))
@@ -2910,7 +3015,7 @@ def retired_routes(records):
     """The routes that a recorded retirement event withdrew: no new assignment or run uses them, and an assignment on
     one of them without an observed output is dead. Observed outputs on a retired route stay verified."""
     assignments = records.get('review_assignment', {})
-    return {assignments[event['assignment_id']]['route_id'] for event in records.get('review_context_event', {}).values()
+    return {assignments[event['assignment_id']]['route_id'] for event in read_filtered_records(records, 'review_context_event', kind='route_retired').values()
             if event['kind'] == 'route_retired' and event['assignment_id'] in assignments}
 
 

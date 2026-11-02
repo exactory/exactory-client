@@ -20,7 +20,7 @@ class AssignmentPreparationEvaluationTests(ResultPartsCase):
         assignment = self.assign('native-dispatch')
         output = self.case.build_review_output('result')
         snapshot = self.case.store.snapshot
-        prepare = protocol.prepared_mutation
+        prepare = protocol.prepared_task_mutation
         started = {'committed': False}
         def read_after_start():
             if not started['committed']:
@@ -32,7 +32,7 @@ class AssignmentPreparationEvaluationTests(ResultPartsCase):
                 started['committed'] = True
             return result
         with patch.object(self.case.store, 'snapshot', side_effect=read_after_start), \
-                patch.object(protocol, 'prepared_mutation', side_effect=prepare_and_observe_start):
+                patch.object(protocol, 'prepared_task_mutation', side_effect=prepare_and_observe_start):
             invoked = self.invoke(assignment, output=output)
         self.assertEqual(invoked['result']['status'], 'completed')
         saved = self.case.read_records()['review_attempt']['attempt-native-dispatch']

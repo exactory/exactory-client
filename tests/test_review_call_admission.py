@@ -58,7 +58,7 @@ class CallAdmissionTests(TaskExecutionFixture):
         self.assertEqual(self.reserve()['result']['state'], 'reserved')
 
     def test_ordinary_dispatch_and_replay_use_one_preparation_read(self):
-        read = self.store._read_preparation
+        read = self.store._read_scoped_preparation
         reads_before_start = []
 
         def prepare():
@@ -67,10 +67,10 @@ class CallAdmissionTests(TaskExecutionFixture):
                 reads_before_start.append(snapshot.revision)
             return snapshot
 
-        with patch.object(self.store, '_read_preparation', side_effect=prepare):
+        with patch.object(self.store, '_read_scoped_preparation', side_effect=prepare):
             first = self.invoke(*CALLS[0])
         self.assertEqual(len(reads_before_start), 1)
-        with patch.object(self.store, '_read_preparation', wraps=read) as replay:
+        with patch.object(self.store, '_read_scoped_preparation', wraps=read) as replay:
             self.assertEqual(self.invoke(*CALLS[0]), first)
         self.assertEqual(replay.call_count, 1)
 

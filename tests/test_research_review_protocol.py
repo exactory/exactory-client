@@ -452,7 +452,7 @@ class ReviewProtocolTests(LiteratureCase):
     def test_refused_finish_leaves_review_and_probe_pending_without_dispatch(self):
         from research_harness.storage import Store
         p = self.protocol(); self.route(); self.run_probe(); self.assign()
-        mutate = self.store.mutate
+        mutate = self.store.mutate_scoped
         for operation, function, payload in [
                 ('review.invoke', p.invoke_assignment, {'id': 'attempt', 'assignment_id': 'assignment'}),
                 ('review.route_probe', p.probe_route, {'id': 'later-probe', 'route_id': 'route'})]:
@@ -462,7 +462,7 @@ class ReviewProtocolTests(LiteratureCase):
                     if name == operation:
                         raise ResearchError('storage_io', 'Finishing write refused')
                     return mutate(name, *args, **kwargs)
-                with patch.object(self.store, 'mutate', side_effect=refuse), \
+                with patch.object(self.store, 'mutate_scoped', side_effect=refuse), \
                         patch('research_harness.review_transport.send_request',
                               return_value=self.response({'verdict': 'original'})) as send:
                     with self.assertRaises(ResearchError) as caught:
@@ -481,7 +481,7 @@ class ReviewProtocolTests(LiteratureCase):
         from research_harness.evidence import digest
         p = self.protocol(); self.route(); self.run_probe(); self.assign()
         payload = {'id': 'attempt', 'assignment_id': 'assignment'}
-        revision, mutate, observe, observed = self.store.revision, self.store.mutate, p._observed, []
+        revision, mutate, observe, observed = self.store.revision, self.store.mutate_scoped, p._observed, []
         def capture(*args, **kwargs):
             observed.append(observe(*args, **kwargs))
             return observed[-1]
@@ -489,7 +489,7 @@ class ReviewProtocolTests(LiteratureCase):
             if operation == 'review.invoke':
                 raise ResearchError('storage_io', 'Finishing write refused')
             return mutate(operation, *args, **kwargs)
-        with patch.object(self.store, 'mutate', side_effect=refuse), patch.object(p, '_observed', side_effect=capture), \
+        with patch.object(self.store, 'mutate_scoped', side_effect=refuse), patch.object(p, '_observed', side_effect=capture), \
                 patch('research_harness.review_transport.send_request',
                       return_value=self.response({'verdict': 'unfavorable'})):
             with self.assertRaises(ResearchError):
@@ -511,7 +511,7 @@ class ReviewProtocolTests(LiteratureCase):
 
     def test_exhausted_busy_finish_leaves_the_invocation_pending_without_dispatch(self):
         p = self.protocol(); self.route(); self.run_probe()
-        mutate = self.store.mutate
+        mutate = self.store.mutate_scoped
         for failed in (True, False):
             with self.subTest(failed=failed):
                 # A pending invocation keeps its assignment pending, so each case has its own assignment.
@@ -524,7 +524,7 @@ class ReviewProtocolTests(LiteratureCase):
                         refusals.append(operation)
                         raise ResearchError('store_busy', 'Writer remains busy')
                     return mutate(operation, *args, **kwargs)
-                with patch.object(self.store, 'mutate', side_effect=refuse), \
+                with patch.object(self.store, 'mutate_scoped', side_effect=refuse), \
                         patch('research_harness.storage._BUSY_TIMEOUT_SECONDS', 0.001), \
                         patch('research_harness.review_transport.send_request',
                               side_effect=TimeoutError('Original transport failure') if failed else None,

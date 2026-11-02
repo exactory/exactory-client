@@ -662,46 +662,125 @@ class _ScopedProof(NamedTuple):
     prefix: bytes
     reads: tuple
     memberships: tuple
-    epoch_tasks: tuple
+    filtered_memberships: tuple
     global_revision: bool
 
 
+# Equality predicates only; no caller code runs while validating a proof.
+_FILTER_FIELDS = {
+    'review_task': {'epoch_id'},
+    'review_attempt': {'assignment_id'},
+    'review_invocation': {'assignment_id'},
+    'review_probe_invocation': {'route_id'},
+    'review_route_probe': {'route_id'},
+    'review_assignment': {'id', 'dossier_id', 'role', 'subject', 'slot_id', 'context.prior_assignment_id',
+                          'context.context_repair.assignment_id', 'staged_review.controller_assignment_id',
+                          'staged_review.epoch_id'},
+    'review_context_event': {'assignment_id', 'kind'},
+    'review_output_correction': {'assignment_id'},
+    'review_output_correction_invocation': {'assignment_id'},
+    'review_selection': {'controller_assignment_id'},
+}
+
+
+def _encode_record_filter(kind, where):
+    _text(kind, 'Record kind')
+    if not where or not where.keys() <= _FILTER_FIELDS.get(kind, set()):
+        raise ResearchError('invalid_input', 'Unsupported filtered record predicate', {'kind': kind})
+    return _canonical(where)
+
+
+def _matches_record_filter(record, where):
+    for field, expected in where.items():
+        value = record
+        for part in field.split('.'):
+            value = value.get(part) if isinstance(value, dict) else None
+        if value != expected:
+            return False
+    return True
+
+
+def read_filtered_records(records, record_kind, **where):
+    """Read an allowlisted equality group, binding its identities and returned content."""
+    predicate = _encode_record_filter(record_kind, where)
+    read = getattr(records, 'read_filtered_records', None)
+    if read is not None:
+        return read(record_kind, **json.loads(predicate))
+    return {key: row for key, row in records.get(record_kind, {}).items() if _matches_record_filter(row, where)}
+
+
+def select_record_groups(records, groups):
+    """Give an audited consumer filtered iteration and fully tracked keyed reads."""
+    if not isinstance(records, _ScopedRecords):
+        return records
+    selected = dict(records._groups)
+    for kind, predicates in groups.items():
+        selected[kind] = selected.get(kind, ()) + tuple(
+            json.loads(_encode_record_filter(kind, where)) for where in predicates)
+    return _ScopedRecords(records._scope, selected)
+
+
 class _ScopedKind(Mapping):
-    def __init__(self, scope, kind):
+    def __init__(self, scope, kind, predicates=None):
         self._scope, self._kind = scope, kind
+        self._predicates = predicates
 
     def __getitem__(self, key):
+        if not self.check_key(key):
+            raise KeyError(key)
         self._scope.bind_record(self._kind, key)
         return copy.deepcopy(self._scope._source.get(self._kind, {})[key])
 
     def __contains__(self, key):
+        if not self.check_key(key):
+            return False
         self._scope.bind_record(self._kind, key)
         return key in self._scope._source.get(self._kind, {})
 
     def __iter__(self):
-        return iter(self._scope.bind_membership(self._kind))
+        return iter(self.read_keys())
 
     def __len__(self):
-        return len(self._scope.bind_membership(self._kind))
+        return len(self.read_keys())
+
+    def check_key(self, key):
+        self._scope.check_open()
+        hash(key)
+        try:
+            _text(key, 'Record key')
+        except ResearchError:
+            # Such a selector cannot name a valid store row. Preserve normal
+            # mapping lookup behavior until the domain validates the input.
+            return False
+        return True
+
+    def read_keys(self):
+        if self._predicates is None:
+            return self._scope.bind_membership(self._kind)
+        selected = set()
+        for where in self._predicates:
+            selected.update(self._scope.bind_filtered_membership(self._kind, where))
+        return tuple(key for key in self._scope._source.get(self._kind, {}) if key in selected)
 
 
 class _ScopedRecords(Mapping):
-    def __init__(self, scope):
+    def __init__(self, scope, groups=None):
         self._scope = scope
+        self._groups = {} if groups is None else groups
 
     def __getitem__(self, kind):
         self._scope.check_open()
-        if kind not in self._scope._source:
+        if kind not in self._scope._source and kind not in self._groups:
             self._scope.bind_membership(kind)
             raise KeyError(kind)
-        return _ScopedKind(self._scope, kind)
+        return _ScopedKind(self._scope, kind, self._groups.get(kind))
 
     def get(self, kind, default=None):
         self._scope.check_open()
         # The ordinary records.get(kind, {}).get(key) idiom must bind a key's
         # absence even when no sibling has created its kind yet.
-        if kind in self._scope._source or isinstance(default, Mapping) and not default:
-            return _ScopedKind(self._scope, kind)
+        if kind in self._scope._source or kind in self._groups or isinstance(default, Mapping) and not default:
+            return _ScopedKind(self._scope, kind, self._groups.get(kind))
         self._scope.bind_membership(kind)
         return default
 
@@ -726,8 +805,21 @@ class _ScopedRecords(Mapping):
         return self._scope.revision
 
     def read_epoch_tasks(self, epoch_id):
-        keys = self._scope.bind_epoch_tasks(epoch_id)
-        return {key: self['review_task'][key] for key in keys}
+        return self.read_filtered_records('review_task', epoch_id=epoch_id)
+
+    def read_filtered_records(self, record_kind, **where):
+        keys = self._scope.bind_filtered_membership(record_kind, where)
+        return {key: _ScopedKind(self._scope, record_kind)[key] for key in keys}
+
+    def __getattr__(self, name):
+        if name in ('read_record', 'read_snapshot', 'verify_record_version', '_history', '_current_source', '_cache'):
+            self._scope.check_open()
+            value = getattr(self._scope._source, name)
+            # Historical consumers can depend on any part of the authenticated
+            # history. Retain the conservative boundary of that access.
+            self._scope._global_revision = True
+            return value
+        raise AttributeError(name)
 
 
 def read_epoch_tasks(records, epoch_id):
@@ -755,7 +847,7 @@ class _ScopedPreparation:
                 raise _refuse_snapshot_identity(self._revision, self._revision)
         self._source = snapshot["records"]
         self._records = _ScopedRecords(self)
-        self._reads, self._memberships, self._epoch_tasks = {}, {}, {}
+        self._reads, self._memberships, self._filtered_memberships = {}, {}, {}
         self._requests = frozenset(requests)
         self._global_revision = False
 
@@ -785,18 +877,22 @@ class _ScopedPreparation:
             self._memberships[kind] = tuple(sorted(self._source.get(kind, {})))
         return self._memberships[kind]
 
-    def bind_epoch_tasks(self, epoch_id):
+    def bind_filtered_membership(self, kind, where):
         self.check_open()
-        _text(epoch_id, "Epoch ID")
-        if epoch_id not in self._epoch_tasks:
-            self._epoch_tasks[epoch_id] = tuple(sorted(read_epoch_tasks(self._source, epoch_id)))
-        return self._epoch_tasks[epoch_id]
+        predicate = _encode_record_filter(kind, where)
+        identity = (kind, predicate)
+        if identity not in self._filtered_memberships:
+            self._filtered_memberships[identity] = tuple(key for key, row in self._source.get(kind, {}).items()
+                                                        if _matches_record_filter(row, where))
+        return self._filtered_memberships[identity]
 
     def release_proof(self):
         self.check_open()
         proof = _ScopedProof(self._store, self._identity, self.revision, self._prefix,
                              tuple((kind, key, value) for (kind, key), value in sorted(self._reads.items())),
-                             tuple(sorted(self._memberships.items())), tuple(sorted(self._epoch_tasks.items())),
+                             tuple(sorted(self._memberships.items())),
+                             tuple((kind, predicate, keys) for (kind, predicate), keys in
+                                   sorted(self._filtered_memberships.items())),
                              self._global_revision)
         self._records = self._source = None
         return proof
@@ -808,12 +904,12 @@ def _revalidate_scoped(store, connection, proof, revision):
     if (proof.identity != store._read_database_identity() or revision < proof.revision
             or proof.prefix != _scoped_prefix(connection, proof.revision)):
         raise _refuse_snapshot_identity(proof.revision, revision)
-    changed, task_epochs = set(), {}
+    changed, filtered_changes = set(), {}
     for row in connection.execute("SELECT changes FROM events WHERE revision > ? ORDER BY revision", (proof.revision,)):
         for item in _load(row["changes"], list):
             changed.add((item["kind"], item["key"]))
-            if item['kind'] == 'review_task':
-                task_epochs[item['key']] = item['value'].get('epoch_id')
+            if item['kind'] in _FILTER_FIELDS:
+                filtered_changes.setdefault(item['kind'], []).append((item['key'], item['value']))
     invalid = []
     for kind, key, identity in proof.reads:
         row = connection.execute("SELECT digest FROM records WHERE kind = ? AND key = ?", (kind, key)).fetchone()
@@ -824,17 +920,20 @@ def _revalidate_scoped(store, connection, proof, revision):
             "SELECT key FROM records WHERE kind = ? ORDER BY key", (kind,)))
         if current != keys:
             invalid.append({"kind": kind, "predicate": "membership"})
-    for epoch_id, keys in proof.epoch_tasks:
-        # The authenticated append-only suffix contains every membership change.
-        # Apply its task moves without requiring optional SQLite JSON functions.
+    for kind, predicate, keys in proof.filtered_memberships:
+        # Full replay has authenticated the suffix, including intermediate moves
+        # into and out of a group. No SQLite JSON extension is required.
+        where = _load(predicate, dict)
         current = set(keys)
-        for key, task_epoch in task_epochs.items():
-            if task_epoch == epoch_id:
+        inserted = False
+        for key, value in filtered_changes.get(kind, ()):
+            if _matches_record_filter(value, where):
+                inserted = inserted or key not in current
                 current.add(key)
             else:
                 current.discard(key)
-        if current != set(keys):
-            invalid.append({'kind': 'review_task', 'epoch_id': epoch_id, 'predicate': 'membership'})
+        if inserted or current != set(keys):
+            invalid.append({'kind': kind, 'where': where, 'predicate': 'membership'})
     if invalid or proof.global_revision and proof.revision != revision:
         raise ResearchError("review_task_dependency_changed", "Task dependencies changed; prepare acceptance again",
                             {"dependencies": invalid, "prepared_revision": proof.revision, "revision": revision})
@@ -1132,6 +1231,27 @@ class Store:
             revision = _validate(connection, replay=False)
             records = {kind: {row["key"]: _load(row["value"], dict) for row in connection.execute(
                 "SELECT key, value FROM records WHERE kind = ? ORDER BY key", (kind,))} for kind in kinds}
+            return revision, _read_event_digests(connection, (revision,))[revision], records
+
+    def read_records(self, keys):
+        """Read keyed advisory rows at one revision, without authenticating history."""
+        selected = []
+        for pair in keys:
+            if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+                raise ResearchError('invalid_input', 'Advisory record keys must be (kind, key) pairs')
+            kind, key = pair
+            _text(kind, 'Record kind')
+            _text(key, 'Record key')
+            selected.append((kind, key))
+        with self._connection() as connection:
+            revision = _validate(connection, replay=False)
+            records = {}
+            for kind, key in dict.fromkeys(selected):
+                rows = records.setdefault(kind, {})
+                row = connection.execute('SELECT value FROM records WHERE kind = ? AND key = ?',
+                                         (kind, key)).fetchone()
+                if row is not None:
+                    rows[key] = _load(row['value'], dict)
             return revision, _read_event_digests(connection, (revision,))[revision], records
 
     def committed_request(self, request_id: str) -> Optional[dict]:
