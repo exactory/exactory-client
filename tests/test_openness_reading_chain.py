@@ -354,7 +354,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.assert_error('review_source_continuation_mismatch',
                           lambda: self.assign('turn-2', native_packet, prior='turn-1'))
 
-    def test_a_final_turn_that_does_not_fit_names_its_parts(self):
+    def test_an_impossible_final_turn_names_its_mandatory_components_before_building(self):
         self.limit_input()
         native_packet = self.export()
         final = self.run_reading_turns(native_packet, turn_count=8)[-1]
@@ -364,9 +364,11 @@ class OpennessReadingChainTests(OpennessReadingCase):
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 2000), self.assertRaises(Exception) as raised:
             self.assign('turn-further', native_packet, prior=final)
         self.assertEqual(raised.exception.code, 'review_input_too_large')
-        parts = raised.exception.details['parts']
-        self.assertEqual(sorted(parts), ['base_packet', 'excerpts', 'notes', 'passages'])
-        self.assertEqual(sum(parts.values()), raised.exception.details['input_characters'])
+        details = raised.exception.details
+        self.assertEqual(details['phase'], 'final_preflight')
+        self.assertEqual(details['measurement_kind'], 'mandatory_input_lower_bound')
+        self.assertGreater(details['input_characters'], details['input_limit_characters'])
+        self.assertTrue({'final_prompt', 'passage'} <= {row['kind'] for row in details['mandatory_components']})
         self.assertNotIn('turn-further', self.store.snapshot()['records']['review_assignment'])
 
     def test_a_text_that_does_not_fit_alone_fails_the_assignment(self):

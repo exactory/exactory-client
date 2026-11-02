@@ -645,23 +645,77 @@ def _build_reading_turn(artifacts, route, packet, record, delivered, candidates,
     return chosen
 
 
+def _list_withholding_candidates(packet, rows):
+    """The carried rows structurally eligible for final-body withholding, without delivery credit."""
+    from .problem_openness_sources import protected_evidence, required_proof
+    protected = set(protected_evidence(packet)) | required_proof(packet['native'])
+    carried = {entry['artifact']['sha256'] for entry in packet['evidence']}
+    return [row for row in rows if row.get('record_kind') != 'problem_statement'
+            and row['artifact']['sha256'] not in protected and row['artifact']['sha256'] in carried]
+
+
+def preflight_final_input(route, input_limit, packet, rows, record):
+    """Measure a diagnostic mandatory-final-input floor, or return unknown for unsupported representations.
+
+    No artifacts, observations or deliverable packets are produced. The projection keeps the immutable native
+    context, mandatory bodies and existing excerpts/passages, but drops optional bodies and all other chain
+    metadata. JSON text serialization is monotone under these removals; encoded/framed representations need a
+    separate proof before their projected size can establish impossibility.
+    """
+    from .review_protocol import canonical_prompt
+    from .review_source_complete import MARKER
+    report = {'phase': 'final_preflight', 'measurement_kind': 'mandatory_input_lower_bound',
+              'status': 'unknown', 'input_characters': None, 'input_limit_characters': input_limit,
+              'mandatory_components': []}
+    if input_limit is None:
+        return dict(report, reason='The route has no character input limit.')
+    if (route['adapter'] not in ('codex_cli_v1', 'codex_cli_framed_v1', 'claude_cli_v1') or MARKER in packet
+            or route['adapter'] == 'codex_cli_framed_v1'
+            and 'review_text_encoding' in packet['native']['scientific_context']):
+        return dict(report, reason='No sound mandatory-input lower bound is established for this representation.')
+    candidate = copy.deepcopy(packet)
+    optional = {row['artifact']['sha256'] for row in _list_withholding_candidates(packet, rows)}
+    for entry in candidate['evidence']:
+        if entry['artifact']['sha256'] in optional:
+            entry['content'] = ''
+    candidate[RECORD_KEY] = {key: copy.deepcopy(record[key]) for key in ('protocol', 'excerpts', 'passages')}
+    prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
+    request = _render(route, prompt, candidate)
+    report.update(status='measured', input_characters=_measure(route, request))
+    # Inspect construction's actual alternative/contained and binary projections for the component inventory.
+    supplied = review_excerpts.read_sent_packet(request)
+    for entry in supplied['evidence']:
+        if entry['artifact']['sha256'] not in optional:
+            report['mandatory_components'].append({'kind': 'evidence', 'sha256': entry['artifact']['sha256'],
+                'size_bytes': entry['artifact']['size'], 'characters': len(entry.get('content', '')),
+                'encoding': entry.get('encoding'), 'delivery': entry.get('delivery')})
+    components = [('final_prompt', prompt), ('native_context', json.dumps(candidate['native'], sort_keys=True,
+                                                                         ensure_ascii=False))]
+    for kind, key in (('excerpt', 'excerpts'), ('passage', 'passages')):
+        components.extend((kind, json.dumps(item, sort_keys=True, ensure_ascii=False)) for item in record[key])
+    for kind, content in components:
+        data = content.encode('utf-8')
+        report['mandatory_components'].append({'kind': kind, 'sha256': hashlib.sha256(data).hexdigest(),
+                                               'size_bytes': len(data), 'characters': len(content)})
+    if report['input_characters'] > input_limit:
+        raise ResearchError('review_input_too_large',
+                            'The mandatory final input of the reading chain exceeds the route input limit.', report)
+    return report
+
+
 def _list_withholdable_bodies(packet, rows, spans, observations):
     """The bodies that the final turn may withhold, in the order in which it withholds them, each as its SHA-256 and
     the reading turns that delivered it: the full texts from the end of text_delivery_priority, then the other full
     texts, the captured responses, the reading records and the search records, each kind largest first. A body
     qualifies when the actual requests of reading turns delivered it complete, whole or in all of its parts. The
     statement record and the bodies that proof, source or screening contracts protect stay."""
-    from .problem_openness_sources import protected_evidence, required_proof
     native = packet['native']
-    protected = set(protected_evidence(packet)) | required_proof(native)
-    carried = {entry['artifact']['sha256'] for entry in packet['evidence']}
     priority = native['scientific_context'].get('text_delivery_priority', [])
     whole, parts = _collect_coverage(observations)
     ranked = []
-    for row in rows:
+    for row in _list_withholding_candidates(packet, rows):
         key, sha256 = review_excerpts.find_identity(row), row['artifact']['sha256']
-        if (row.get('record_kind') == 'problem_statement' or sha256 in protected or sha256 not in carried
-                or not _is_complete(key, spans[key], whole, parts)):
+        if not _is_complete(key, spans[key], whole, parts):
             continue
         if row['kind'] == 'fulltext' and sha256 in priority:
             rank = (0, -priority.index(sha256))
@@ -890,6 +944,7 @@ def prepare_packet(records, artifacts, value, route, packet):
             return packet, None
         record = _create_record(find_chain_protocol(native))
         chain = {'first_assignment_id': value['id'], 'turn': 1}
+        preflight_final_input(route, transport.local_input_limit(route), packet, rows, record)
         return _build_reading_turn(artifacts, route, packet, record, [], list_reading_units(artifacts, rows), 1), chain
     prior, prior_packet, state = _read_prior(records, artifacts, value, prior_id)
     rows = list_reading_rows(records, artifacts, native)
@@ -897,6 +952,7 @@ def prepare_packet(records, artifacts, value, route, packet):
     observations = _observe_turns(records, artifacts, _list_chain(records, prior), rows, spans)
     record = _extend_record(records, artifacts, prior_packet, state, rows, observations, find_chain_protocol(native))
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
+    preflight_final_input(route, transport.local_input_limit(route), packet, rows, record)
     remaining = _list_remaining_units(artifacts, rows, spans, observations)
     if remaining:
         delivered = [dict({key: item for key, item in row.items() if key != 'artifact'},
