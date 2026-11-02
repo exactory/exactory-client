@@ -165,12 +165,20 @@ def read_call_termination(store, lifecycle_id):
 
 
 class _CallAuthority:
-    """Invocation-local ownership; no response or recovery state lives in files."""
+    """Live inline ownership for ordinary capture and guarded termination."""
 
     def __init__(self, store, operation, lifecycle_id, descriptor, ownership):
         self.root, self.operation, self.reservation_id = store.root, operation, lifecycle_id
         self.descriptor, self.token, self.identity = descriptor, uuid.uuid4().hex, _identity()
         self._ownership = ownership
+
+    def verify(self, store, membership):
+        if (self.root != store.root or self.identity['pid'] != os.getpid() or self.identity != _identity()
+                or membership['id'] != self.reservation_id or membership['operation'] != self.operation
+                or membership['owner'] != self.identity or membership['token'] != self.token
+                or membership['released']):
+            raise ResearchError('review_instrumented_capture_required', 'Capture belongs to a different live call')
+        _WorkerAuthority._check_lock(self)
 
     def finish_transport(self):
         # Close our inherited descriptor before checking for surviving owners.

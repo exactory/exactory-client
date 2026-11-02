@@ -1897,15 +1897,32 @@ def _observed(artifacts, route, request, credential):
     return record
 
 
-# A finished reviewer call waits for a busy store for up to ten minutes, because its observation cannot be recorded
-# later by another process.
+# Retain the live observation through busy-store retries; committed captures can finish in a later process.
 _FINISH_ATTEMPT_COUNT = 600
 _FINISH_WAIT_SECONDS = 600.0
 
 
+def _finish_call(store, payload, operation, finish, *, request_id):
+    from .review_call_capture import read_call_observation
+    from .review_task_execution import identify_call, release_call
+    from .review_worker import _guard_call_termination
+    lifecycle_id = identify_call(operation, payload['id'])
+    def commit():
+        with _guard_call_termination(store, lifecycle_id) as termination:
+            finishing = store._read_scoped_preparation()
+            def prepare(current, value):
+                invocation, observation = read_call_observation(current, store.build_artifact_store(),
+                                                                 operation, value, request_id)
+                return finish(current, value, invocation, observation, finishing.revision + 1)
+            return _prepare_review_mutation(store, operation, payload, prepare,
+                request_id=request_id, _snapshot=finishing, scoped=True,
+                validate_commit=lambda tx, result, revision: release_call(tx, lifecycle_id, termination, revision))
+    return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS,
+                             codes=('store_busy', 'stale_revision', 'review_task_dependency_changed'))
+
+
 def _invoke_once(store, payload, operation, start, finish, *, expected_revision, request_id, credential):
-    """Reserve before I/O; a retry never repeats an uncertain call. The observation stays in this process: a file in the
-    workspace is no evidence of what the reviewer returned, so a pending invocation is never completed from disk."""
+    """Admit once, capture through live ownership, and finish from authenticated committed observations."""
     text(request_id, 'Request ID')
     fields(payload, (), None)
     scoped = callable(getattr(store, '_read_scoped_preparation', None))
@@ -1920,12 +1937,20 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
                                  expected_revision=expected_revision, request_id=request_id, _snapshot=snapshot, scoped=scoped)
     beginning = request_id + ':start'
     if snapshot.has_request(beginning):
-        # Validate request replay/conflict through Store, then retain the unknown result.
+        from .review_task_execution import identify_call
+        from .review_worker import _owner
+        lifecycle_id = identify_call(operation, text(payload.get('id'), 'Invocation ID'))
+        captured = snapshot.records.get('review_call_observation', {}).get(lifecycle_id)
+        # Validate the exact original operation and payload before attempting recovery.
         _prepare_review_mutation(store, operation + '_start', payload, lambda r, v: None,
                           expected_revision=expected_revision, request_id=beginning, _snapshot=snapshot, scoped=scoped)
+        if captured is not None:
+            with _owner(store.root, lifecycle_id):
+                return _finish_call(store, payload, operation, finish, request_id=request_id)
         raise ResearchError('review_invocation_pending', 'The prior invocation is pending; reconcile it before any explicit retry')
-    from .review_task_execution import start_call, release_call
-    from .review_worker import own_call, _own_transport_processes, _guard_call_termination
+    from .review_task_execution import start_call
+    from .review_worker import own_call, _own_transport_processes
+    from .review_call_capture import capture_call
     from contextlib import nullcontext
     with own_call(store, operation, text(payload.get('id'), 'Invocation ID')) as authority:
         route = None
@@ -1942,17 +1967,10 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
         request = _read_json(artifacts, invocation['request'])
         with _own_transport_processes(authority) if route['adapter'] in transport.LOCAL_ADAPTERS else nullcontext():
             observation = _observed(artifacts, route, request, credential)
+        capture_call(store, operation, payload, invocation, route, observation,
+                     request_id=request_id, _authority=authority)
         authority.finish_transport()
-        def commit():
-            with _guard_call_termination(store, authority.reservation_id) as termination:
-                finishing = store._read_scoped_preparation()
-                def prepare(current, value):
-                    return finish(current, value, invocation, observation, finishing.revision + 1)
-                return _prepare_review_mutation(store, operation, payload, prepare,
-                                         request_id=request_id, _snapshot=finishing, scoped=True,
-                                         validate_commit=lambda tx, result, revision: release_call(tx, authority.reservation_id, termination, revision))
-        return retry_store_write(commit, attempts=_FINISH_ATTEMPT_COUNT, seconds=_FINISH_WAIT_SECONDS,
-                                 codes=('store_busy', 'stale_revision', 'review_task_dependency_changed'))
+        return _finish_call(store, payload, operation, finish, request_id=request_id)
 
 
 def probe_route(store, payload, *, expected_revision, request_id, credential=None):
@@ -2679,10 +2697,13 @@ def record_attempt(store, payload, *, expected_revision, request_id):
         fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'))
         _get(records, 'review_assignment', value['assignment_id'])
         from .review_task_execution import has_call_terminated, identify_call
-        if (value['id'] in records.get('review_invocation', {})
-                and identify_call('review.invoke', value['id']) in records.get('review_pool_membership', {})
-                and not has_call_terminated(records, 'review.invoke', value['id'])):
-            raise ResearchError('review_invocation_pending', 'An imported attempt cannot occupy an active instrumented completion ID')
+        if value['id'] in records.get('review_invocation', {}):
+            lifecycle_id = identify_call('review.invoke', value['id'])
+            captured_pending = (lifecycle_id in records.get('review_call_observation', {})
+                                and value['id'] not in records.get('review_attempt', {}))
+            if (lifecycle_id in records.get('review_pool_membership', {})
+                    and (captured_pending or not has_call_terminated(records, 'review.invoke', value['id']))):
+                raise ResearchError('review_invocation_pending', 'An imported attempt cannot occupy an active instrumented completion ID')
         if value['status'] not in ('failed', 'incomplete', 'completed'):
             raise ResearchError('invalid_review_attempt', 'An attempt status must be failed, incomplete, or completed')
         text(value['reason'], 'Import reason')
@@ -2744,9 +2765,11 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         memberships = records.get('review_pool_membership', {})
         pending = [a for a in read_filtered_records(records, 'review_invocation', assignment_id=value['assignment_id']).values()
                    if a['assignment_id'] == value['assignment_id']
-                   and (not has_call_terminated(records, 'review.invoke', a['id'])
+                   and ((identify_call('review.invoke', a['id']) in records.get('review_call_observation', {})
+                         and a['id'] not in records.get('review_attempt', {}))
+                        or (not has_call_terminated(records, 'review.invoke', a['id'])
                         if identify_call('review.invoke', a['id']) in memberships
-                        else a['id'] not in records.get('review_attempt', {}))]
+                        else a['id'] not in records.get('review_attempt', {})))]
         if pending:
             invocation = pending[0]
             details = dict(invocation_id=invocation['id'], assignment_id=invocation['assignment_id'])

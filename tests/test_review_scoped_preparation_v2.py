@@ -95,7 +95,7 @@ class ScopedPreparationTests(LiteratureCase):
         self.assertEqual(records['review_pool_membership'][identify_call('review.invoke', 'attempt')]['recorded_revision'],
                          result['revision'])
         self.assertEqual(result['result']['recorded_revision'], result['revision'])
-        self.assertEqual(result['revision'], before + 5)
+        self.assertEqual(result['revision'], before + 6)
 
     def test_relevant_attempt_inserted_after_empty_lookup_invalidates_start(self):
         self.run_probe()

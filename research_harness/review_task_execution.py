@@ -362,7 +362,7 @@ def reconcile_call(store, payload, *, request_id, expected_revision=None):
                 if current["released"] or termination is None:
                     return current
                 invocation = _get(records, kind, invocation_id)
-                if tx.get(completed, invocation_id) is None:
+                if tx.get(completed, invocation_id) is None and tx.get('review_call_observation', lifecycle_id) is None:
                     failure = dict(invocation, origin="execution", status="failed", output=None, response=None,
                                    usage={}, reason="Owned execution terminated before its observation committed; outcome unknown",
                                    error={"code": "review_invocation_interrupted", "message": "No committed observation"},

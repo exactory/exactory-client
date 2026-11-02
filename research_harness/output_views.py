@@ -688,7 +688,7 @@ _STAGED_KINDS = ("review_epoch", "review_task", "assessment_incomplete", "review
                  "review_task_acceptance_index", "review_epoch_discoveries", "review_resource_ledger",
                  "review_execution_exhaustion", "review_capture_attempt",
                  "review_pool_membership", "review_capacity_policy", "review_slot_head", "review_task_dispatch",
-                 "review_composition_plan")
+                 "review_composition_plan", "review_call_observation")
 
 
 def _build_staged_records(records, artifacts, inputs):

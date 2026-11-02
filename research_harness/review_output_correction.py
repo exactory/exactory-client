@@ -2,7 +2,6 @@
 
 import copy
 import json
-import os
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
@@ -227,11 +226,9 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
                       corrected_output=None, composition='original-output-plus-observed-metadata-delta')
         if observation['status'] == 'completed':
             try:
-                if records['review_route'][invocation['route_id']]['adapter'] == 'codex_cli_v1':
-                    from . import review_codex_transport as codex
-                    response = protocol._read_json(artifacts, observation['response'])
-                    events = codex._rollout(response['id'], codex.clean_environment(os.environ))
-                    result['native_rollout'] = protocol._put_json(artifacts, events)
+                if observation.get('native_rollout_error') is not None:
+                    error = observation['native_rollout_error']
+                    raise ResearchError(error['code'], error['reason'])
                 evaluation = Evaluation.of(records, artifacts)
                 assignment, packet, output = _authenticate_observation(records, evaluation, invocation, result)
                 if set(output) == {'correction', 'reason'} and output['correction'] == 'declined':
