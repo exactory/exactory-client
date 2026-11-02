@@ -106,6 +106,9 @@ class CallCaptureRecoveryTests(LiteratureCase):
                 protocol.invoke_assignment(self.store, dict(payload, id='another-output'),
                     expected_revision=self.store.revision, request_id='another-output')
         self.assertEqual(pending.exception.code, 'review_invocation_pending')
+        # A captured call is finished by its own command, not by reconciliation or an import.
+        self.assertIn('original request id', str(pending.exception))
+        self.assertEqual(pending.exception.details['invocation_id'], 'ordinary')
         result = self.run_process('review-run', payload, request_id, revision, 'resume')
         self.assertEqual(result['result']['output'], captured['observation']['output'])
         self.assertEqual(self.records()['review_call_observation'][captured['id']], captured)

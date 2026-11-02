@@ -2779,7 +2779,10 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
             invocation = pending[0]
             details = dict(invocation_id=invocation['id'], assignment_id=invocation['assignment_id'])
             message = 'Reconcile the pending attempt before an explicit retry'
-            if identify_call('review.invoke', invocation['id']) not in memberships:
+            if identify_call('review.invoke', invocation['id']) in records.get('review_call_observation', {}):
+                message = ('The reviewer output of this invocation is captured; run review-run again with this '
+                           'invocation id and its original request id to record it')
+            elif identify_call('review.invoke', invocation['id']) not in memberships:
                 details['next'] = build_historical_attempt_step(invocation)
                 message = 'Import the interrupted invocation with review-attempt before an explicit retry'
             raise ResearchError('review_invocation_pending', message, details)
