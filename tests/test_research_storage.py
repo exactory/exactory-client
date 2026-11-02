@@ -6,6 +6,7 @@ import gc
 import hashlib
 import json
 import os
+import select
 import sqlite3
 import subprocess
 import sys
@@ -773,6 +774,136 @@ store.mutate("crash", {}, crash, expected_revision=0, request_id="crash")
         store = Store(self.workspace)
         self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})
         self.assertEqual(self.add(store, request="crash")["revision"], 1)
+
+    def snapshot_after_writer_deletes_journal(self, replace_journal=None):
+        store = Store(self.workspace, create=True)
+        journal = Path(str(self.database) + "-journal")
+        script = """
+import sys
+from pathlib import Path
+from research_harness.storage import Store
+store = Store(Path(sys.argv[1]))
+def apply(tx):
+    tx.put("work", "paper", {"title": "Committed"})
+    print("journal ready", flush=True)
+    if sys.stdin.readline().strip() != "commit":
+        raise RuntimeError("Test did not release writer")
+store.mutate("add", {}, apply, expected_revision=0, request_id="add")
+print("committed", flush=True)
+"""
+        with subprocess.Popen([sys.executable, "-c", script, str(self.workspace)],
+                              cwd=Path(__file__).resolve().parent.parent,
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True) as writer:
+            try:
+                self.assertTrue(select.select([writer.stdout], [], [], 10)[0], "Writer did not start")
+                self.assertEqual(writer.stdout.readline().strip(), "journal ready")
+                original_stat = os.stat
+                intercepted = False
+
+                def stat_after_commit(name, *args, **kwargs):
+                    nonlocal intercepted
+                    if name == journal.name and kwargs.get("dir_fd") is not None and not intercepted:
+                        intercepted = True
+                        descriptor = os.open(journal, os.O_RDONLY | os.O_NOFOLLOW)
+                        try:
+                            writer.stdin.write("commit\n")
+                            writer.stdin.flush()
+                            self.assertTrue(select.select([writer.stdout], [], [], 10)[0],
+                                            "Writer did not commit")
+                            self.assertEqual(writer.stdout.readline().strip(), "committed")
+                            self.assertEqual(writer.wait(timeout=10), 0, writer.stderr.read())
+                            info = os.fstat(descriptor)
+                            self.assertEqual(info.st_nlink, 0)
+                            if replace_journal is not None:
+                                replace_journal(journal)
+                            return info
+                        finally:
+                            os.close(descriptor)
+                    return original_stat(name, *args, **kwargs)
+
+                with mock.patch("research_harness.storage.os.stat", side_effect=stat_after_commit):
+                    return store.snapshot()
+            finally:
+                if writer.poll() is None:
+                    writer.kill()
+                writer.communicate(timeout=5)
+
+    def test_snapshot_revalidates_a_journal_unlinked_by_its_writer(self):
+        self.assertEqual(self.snapshot_after_writer_deletes_journal(), {
+            "revision": 1, "records": {"work": {"paper": {"title": "Committed"}}}})
+
+    def test_snapshot_rejects_a_hardlinked_journal_replacing_the_unlinked_inode(self):
+        outside = Path(self.temporary.name) / "outside-journal"
+        outside.write_bytes(b"external journal data")
+        self.assert_error("unsafe_path", lambda: self.snapshot_after_writer_deletes_journal(
+            lambda journal: os.link(outside, journal)))
+        self.assertEqual(outside.read_bytes(), b"external journal data")
+
+    def test_snapshot_checks_the_opened_replacement_journals_links(self):
+        from research_harness import storage
+        outside = Path(self.temporary.name) / "outside-journal"
+        original_open = storage._regular_file
+
+        def open_then_link(directory, name):
+            descriptor = original_open(directory, name)
+            if name.endswith("-journal"):
+                os.link(name, outside, src_dir_fd=directory)
+            return descriptor
+
+        with mock.patch.object(storage, "_regular_file", side_effect=open_then_link):
+            self.assert_error("unsafe_path", lambda: self.snapshot_after_writer_deletes_journal(
+                lambda journal: journal.write_bytes(b"replacement journal data")))
+        self.assertEqual(outside.read_bytes(), b"replacement journal data")
+
+    def test_snapshot_revalidates_a_journal_unlinked_after_open(self):
+        from research_harness import storage
+        original_open = storage._regular_file
+
+        def open_then_unlink(directory, name):
+            descriptor = original_open(directory, name)
+            if name.endswith("-journal"):
+                os.unlink(name, dir_fd=directory)
+            return descriptor
+
+        with mock.patch.object(storage, "_regular_file", side_effect=open_then_unlink):
+            snapshot = self.snapshot_after_writer_deletes_journal(
+                lambda journal: journal.write_bytes(b"replacement journal data"))
+        self.assertEqual(snapshot, {
+            "revision": 1, "records": {"work": {"paper": {"title": "Committed"}}}})
+
+    def test_snapshot_rejects_a_symlink_replacing_the_unlinked_journal(self):
+        outside = Path(self.temporary.name) / "outside-journal"
+        outside.write_bytes(b"external journal data")
+        self.assert_error("unsafe_path", lambda: self.snapshot_after_writer_deletes_journal(
+            lambda journal: journal.symlink_to(outside)))
+        self.assertEqual(outside.read_bytes(), b"external journal data")
+
+    def test_snapshot_rejects_a_directory_replacing_the_unlinked_journal(self):
+        self.assert_error("unsafe_path", lambda: self.snapshot_after_writer_deletes_journal(
+            lambda journal: journal.mkdir()))
+
+    def test_snapshot_bounds_revalidation_of_zero_link_journals(self):
+        store = Store(self.workspace, create=True)
+        journal = Path(str(self.database) + "-journal")
+        journal.write_bytes(b"unlinked journal")
+        with journal.open("rb") as source:
+            journal.unlink()
+            unlinked = os.fstat(source.fileno())
+        self.assertEqual(unlinked.st_nlink, 0)
+        original_stat = os.stat
+        reads = 0
+
+        def stat_unlinked_journal(name, *args, **kwargs):
+            nonlocal reads
+            if name == journal.name and kwargs.get("dir_fd") is not None:
+                reads += 1
+                self.assertLess(reads, 10, "Journal revalidation must be bounded")
+                return unlinked
+            return original_stat(name, *args, **kwargs)
+
+        with mock.patch("research_harness.storage.os.stat", side_effect=stat_unlinked_journal):
+            self.assert_error("store_busy", store.snapshot)
 
     def test_hot_journal_needs_explicit_recovery_and_preserves_committed_state(self):
         store = Store(self.workspace, create=True)

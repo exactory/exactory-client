@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.71.1](docs/releases/0.71.1.md) lets a store reader retry when a committing writer deletes the rollback journal while the reader checks it, instead of reporting an unsafe path.
+
 Version [0.71.0](docs/releases/0.71.0.md) carries the records left open after 0.70.0: an oversized problem result returns to the part delivery of 0.69.x unless a staged review is requested, every ordinary review is judged on what its exact request delivered, a request is checked before any reviewer call exists and every ordinary call is captured, enumerations and batches state their bounds, exports and deposits stream, large originals get a resumable full-text job, provider pacing is shared across local processes, and the math-solver audits, replay, render and hooks stop repeating work.
 
 Version [0.70.2](docs/releases/0.70.2.md) lets a problem result final count objection-evidence bodies that its own series delivered, and delivers undelivered ones in a part turn of their own when the final would not fit.
