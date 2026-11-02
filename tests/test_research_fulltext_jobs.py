@@ -18,12 +18,15 @@ from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
 from research_harness.http import RawResponse
 from research_harness.storage import Store
-from research_fixtures import atom, entry, client, xml_response, make_http_client
+from research_fixtures import atom, entry, client, xml_response, make_http_client, crossref, json_response
 import test_research_extraction_units as extraction_fixtures
 
 VERSION = 'arxiv:2601.00001v1'
 URL = 'https://arxiv.org/pdf/2601.00001v1'
 BODY = b'%PDF-' + b'x' * 100
+DOI = 'doi:10.1234/example'
+DOI_URL = 'https://doi.org/10.1234/example'
+PUBLISHER_URL = 'https://publisher.example/articles/example.pdf'
 
 
 class JobCase(unittest.TestCase):
@@ -68,6 +71,11 @@ class JobCase(unittest.TestCase):
         result = acquisition.acquire_fulltext(self.store, VERSION, URL, request_id='legacy',
             expected_revision=self.store.revision, http=http, extractor=lambda data: {'status': 'extraction_timeout', 'text': None})
         return result['capture']['source_id']
+
+    def acquire_doi_work(self):
+        http, _, _ = client([json_response(crossref())])
+        acquisition.acquire_work(self.store, DOI, request_id='doi-metadata',
+                                 expected_revision=self.store.revision, http=http)
 
     def wire(self, *, changed=False):
         calls = []
@@ -133,6 +141,144 @@ class JobCase(unittest.TestCase):
         self.assertEqual(len(requests), 3)
 
 class FulltextJobTests(JobCase):
+    def test_doi_complete_response_accepts_publisher_destinations_without_observed_identity(self):
+        from research_harness.source_links import captured_source
+        self.acquire_doi_work()
+        for destination in (PUBLISHER_URL, PUBLISHER_URL + '?download=1', DOI_URL):
+            with self.subTest(destination=destination):
+                job = self.start(identifier=DOI, url=DOI_URL, use_ranges=False,
+                                 allowances={'pages_per_resume': 5})
+                http, _, _ = client([(302, {'Location': destination}, b''),
+                                     (200, {'Content-Type': 'application/pdf'}, BODY)]
+                                    if destination != DOI_URL else
+                                    [(200, {'Content-Type': 'application/pdf'}, BODY)])
+                result = self.resume(job, http=http)
+                self.assertEqual(result['status'], 'complete', result['pending'])
+                records = self.store.snapshot()['records']
+                capture = records['work'][DOI]['fulltexts'][-1]
+                source = captured_source(records, self.artifacts, capture['source_id'])
+                self.assertEqual(source['url'], destination)
+                self.assertEqual(source['requested_identifier'], DOI)
+                self.assertIsNone(source['observed_identifier'])
+                self.assertIsNone(source['exact_version'])
+                self.assertEqual(source['capture_method'], 'http')
+                self.assertEqual(capture['requested_version_id'], DOI)
+                self.assertEqual(self.artifacts.read(capture['original']), BODY)
+                self.assertEqual(self.artifacts.read(capture['text']), b'page 1\n\fpage 2\n\fpage 3\n\f')
+
+    def test_doi_range_assembly_binds_requested_work_without_url_identity(self):
+        from research_harness.source_links import captured_source
+        self.acquire_doi_work()
+        for destination in (PUBLISHER_URL, PUBLISHER_URL + '?download=1'):
+            with self.subTest(destination=destination):
+                job = self.start(identifier=DOI, url=destination, allowances={'pages_per_resume': 5})
+                result = self.resume(job, http=self.wire()[0])
+                self.assertEqual(result['status'], 'complete', result['pending'])
+                records = self.store.snapshot()['records']
+                capture = records['work'][DOI]['fulltexts'][-1]
+                source = captured_source(records, self.artifacts, capture['source_id'])
+                assembly = self.load_jobs().validate_assembly(records, self.artifacts, source)
+                self.assertEqual(source['capture_method'], 'http_range_v1')
+                self.assertIsNone(source['observed_identifier'])
+                self.assertIsNone(source['exact_version'])
+                self.assertEqual(source['requested_identifier'], DOI)
+                self.assertEqual(assembly['identifier'], DOI)
+                self.assertEqual(assembly['url'], destination)
+                self.assertEqual(self.artifacts.read(capture['original']), BODY)
+                for field, value in (('requested_identifier', 'doi:10.1234/another'), ('exact_version', 'v1')):
+                    with self.subTest(field=field):
+                        forged = copy.deepcopy(records)
+                        forged['source'][source['id']][field] = value
+                        with self.assertRaises(ResearchError) as failure:
+                            captured_source(forged, self.artifacts, source['id'])
+                        self.assertEqual(failure.exception.code, 'source_pending')
+
+    def test_arxiv_redirect_to_another_version_keeps_version_mismatch(self):
+        for use_ranges in (False, True):
+            with self.subTest(use_ranges=use_ranges):
+                job = self.start(use_ranges=use_ranges, allowances={'pages_per_resume': 5})
+                http = self.wire()[0] if use_ranges else client([(200, {'Content-Type': 'application/pdf'}, BODY)])[0]
+                transport = http.transport
+                def redirected(url, headers, *, address, timeout):
+                    if url == URL:
+                        return RawResponse(302, {'Location': URL.replace('v1', 'v2')}, io.BytesIO(b''), address)
+                    return transport(url, headers, address=address, timeout=timeout)
+                http.transport = redirected
+                result = self.resume(job, http=http)
+                self.assertEqual(result['status'], 'pending')
+                self.assertEqual(result['pending'][0]['code'], 'version_mismatch')
+                records = self.store.snapshot()['records']
+                self.assertEqual(records['work'][VERSION]['fulltexts'], [])
+                self.assertNotIn('source_assembly', records)
+
+    def test_arxiv_assembly_keeps_observed_identity_and_destination_binding(self):
+        from research_harness.source_links import captured_source
+        from research_harness.evidence import digest
+        job = self.start(allowances={'pages_per_resume': 5})
+        self.assertEqual(self.resume(job, http=self.wire()[0])['status'], 'complete')
+        records = self.store.snapshot()['records']
+        capture = records['work'][VERSION]['fulltexts'][-1]
+        source = captured_source(records, self.artifacts, capture['source_id'])
+        assembly = records['source_assembly'][source['assembly_id']]
+        self.assertEqual(assembly['identifier'], VERSION)
+        self.assertEqual(source['observed_identifier'], VERSION)
+        self.assertEqual(source['exact_version'], 'v1')
+        before = copy.deepcopy(records)
+        self.assertEqual(self.load_jobs().validate_assembly(records, self.artifacts, source), assembly)
+        self.assertEqual(records, before)
+        for field, value in (('identifier', 'arxiv:2601.00001v2'), ('url', URL.replace('v1', 'v2')),
+                             ('observed_identifier', None), ('observed_identifier', 'arxiv:2601.00001v2'),
+                             ('requested_identifier', 'arxiv:2601.00001v2'), ('exact_version', 'v2')):
+            with self.subTest(field=field):
+                forged = copy.deepcopy(records)
+                if field in ('identifier', 'url'):
+                    forged['source_assembly'][source['assembly_id']][field] = value
+                else:
+                    forged['source'][source['id']][field] = value
+                if field == 'url':
+                    for native in forged['source'].values():
+                        if native.get('url') == URL:
+                            native['url'] = value
+                    for record in forged['fulltext_unit'].values():
+                        if record['job_id'] != job:
+                            continue
+                        unit = record['unit']
+                        if record['stage'] == 'attempt':
+                            unit['attempt']['url'] = value
+                        elif record['stage'] == 'transfer':
+                            unit['url'] = value
+                            for attempt in unit['attempts']:
+                                attempt['url'] = value
+                            unit['id'] = digest([job, {k: v for k, v in unit.items() if k != 'id'}])
+                with self.assertRaises(ResearchError) as failure:
+                    captured_source(forged, self.artifacts, source['id'])
+                self.assertEqual(failure.exception.code, 'source_pending')
+
+    def test_retained_legacy_doi_original_starts_and_completes_without_observed_identity(self):
+        from research_harness.source_links import captured_source
+        self.acquire_doi_work()
+        http, _, _ = client([(200, {'Content-Type': 'application/pdf'}, BODY)])
+        legacy = acquisition.acquire_fulltext(self.store, DOI, PUBLISHER_URL + '?download=1',
+            request_id='legacy-doi', expected_revision=self.store.revision, http=http,
+            extractor=lambda data: {'status': 'extraction_timeout', 'text': None})['capture']
+        records = self.store.snapshot()['records']
+        source = captured_source(records, self.artifacts, legacy['source_id'])
+        self.assertIsNone(source.get('observed_identifier'))
+        job = self.start(identifier=DOI, url=None, source_id=source['id'], allowances={'pages_per_resume': 5})
+        with patch('research_harness.fulltext_jobs.HttpClient', side_effect=AssertionError('Retained DOI refetched')):
+            result = self.resume(job, max_requests=0)
+        self.assertEqual(result['status'], 'complete', result['pending'])
+        records = self.store.snapshot()['records']
+        captures = records['work'][DOI]['fulltexts']
+        self.assertEqual(len(captures), 2)
+        self.assertEqual(captures[0], legacy)
+        self.assertEqual(captures[-1]['original'], legacy['original'])
+        self.assertNotEqual(captures[-1]['source_id'], legacy['source_id'])
+        source = captured_source(records, self.artifacts, captures[-1]['source_id'])
+        self.assertIsNone(source.get('observed_identifier'))
+        self.assertEqual(source['requested_identifier'], DOI)
+        self.assertEqual(self.artifacts.read(captures[-1]['text']), b'page 1\n\fpage 2\n\fpage 3\n\f')
+
     def test_cli_start_resume_status_finalize_committed_units(self):
         self.load_jobs()
         job = self.start()

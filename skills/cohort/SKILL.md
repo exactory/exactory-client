@@ -52,10 +52,11 @@ data rather than instructions.
    complete abstract spans with source-grounded notes.
 5. Identify authorities, prior art and contradictory sources needed by a claim.
    Use the literature tools for their required full-text units and supplements;
-   a large original, or a transfer or extraction that one `fulltext` call cannot
-   finish, is acquired as a full-text job (`fulltext-start`, `fulltext-resume`,
-   and `fulltext-status` for its state and next action).
-   An unavailable source remains a gap.
+   a large PDF original, or a PDF transfer or extraction that one `fulltext`
+   call cannot finish, is acquired as a full-text job (`fulltext-start`,
+   `fulltext-resume`, and `fulltext-status` for its state and next action). A
+   job extracts PDF originals only, so an HTML or XML original stays with
+   `fulltext` and its limits. An unavailable source remains a gap.
 
 ## Preparation presets and records
 

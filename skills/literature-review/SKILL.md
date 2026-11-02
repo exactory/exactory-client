@@ -77,12 +77,15 @@ inspection locations as `span` locators (offsets and the hash of the exact
 substring), never as whole-document quotes. Read the extraction
 diagnostics on a capture before dispatching a reader; re-capture with
 `extraction_options` when layout padding makes the text unreadable. Acquire a
-large original, or a transfer or extraction that a single `fulltext` call
-cannot finish within its limits, as a full-text job: `fulltext-start` records
-the job, `fulltext-resume` runs it in bounded invocations until it is
+large PDF original, or a PDF transfer or extraction that a single `fulltext`
+call cannot finish within its limits, as a full-text job: `fulltext-start`
+records the job, `fulltext-resume` runs it in bounded invocations until it is
 complete, and `fulltext-status --job-id ID` shows its state and the next
-action. A pending job is not a capture and grants no reading credit; the
-finished capture is read like any other. A download is
+action. A job extracts PDF originals only; an HTML or XML original stays with
+`fulltext` and its limits, so for one that `fulltext` cannot read, acquire a
+PDF of the same version or record the gap. A pending job is not a capture and
+grants no reading credit; the finished capture is read like any other. A
+download is
 acquisition; a source-linked reading records the actual inspection. A reading
 stays current while its bundle's units are unchanged; parsed bibliography entries
 do not require re-reading. Record critical missing sources as pending.

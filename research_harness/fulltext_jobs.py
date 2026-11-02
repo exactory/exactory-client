@@ -282,7 +282,8 @@ def start_job(store, identifier, *, request_id, expected_revision, url=None, sou
         captures = [c for c in work['fulltexts'] if c.get('source_id') == source_id]
         prior_job = scope.records.get('fulltext_job', {}).get(source.get('job_id')) if source.get('job_id') else None
         if (source.get('origin_verified') is not True or source.get('capture_method') not in ('http', 'http_range_v1')
-                or source.get('observed_identifier') != identifier or source.get('requested_identifier') != identifier
+                or source.get('requested_identifier') != identifier
+                or identifier.startswith('arxiv:') and source.get('observed_identifier') != identifier
                 or not (any(c.get('original') == source['response'] for c in captures)
                         or prior_job is not None and prior_job['identifier'] == identifier
                         and prior_job['original'] == source['response'] and prior_job['source_id'] == source_id)):
@@ -379,10 +380,11 @@ def resume_job(store, job_id, *, request_id, expected_revision, max_requests=Non
                             commit_job(store, job_id, 'fulltext.attempts', {'attempts': tail},
                                        derived_id(request_id, 'attempts'), retain)
                         raise
-                    # A requested identifier never substitutes for an observed exact version.
-                    observed = normalize_identifier(transfer['url'])
-                    if observed != initial['identifier'] or observed.startswith('arxiv:') and version_of(observed) is None:
-                        raise ResearchError('version_mismatch', 'Full-text destination differs from the exact job version')
+                    observed = None
+                    if initial['identifier'].startswith('arxiv:'):
+                        observed = normalize_identifier(transfer['url'])
+                        if observed != initial['identifier'] or version_of(observed) is None:
+                            raise ResearchError('version_mismatch', 'Full-text destination differs from the exact job version')
                     def retain_original(transaction, job, revision):
                         source_id = derived_id(job_id, 'representation')
                         source = dict(transfer, id=source_id, provider='fulltext', operation_id=request_id, job_id=job_id,
@@ -395,7 +397,7 @@ def resume_job(store, job_id, *, request_id, expected_revision, max_requests=Non
                             assembly = dict(id=assembly_id, job_id=job_id, original=transfer['response'],
                                             requested_url=job['url'], url=transfer['url'], etag=transfer['etag'],
                                             encoding='identity', total=transfer['total'], unit_count=job['transfer_units'],
-                                            identifier=observed)
+                                            identifier=job['identifier'])
                             transaction.put('source_assembly', assembly_id, assembly)
                             source['assembly_id'] = assembly_id
                             job['assembly_id'] = assembly_id
@@ -500,14 +502,16 @@ def validate_assembly(records, artifacts, source):
                       'total', 'unit_count', 'identifier'), code='source_pending')
     job_id = assembly['job_id']
     require(assembly.get('id') == source.get('assembly_id') and assembly.get('original') == source.get('response')
-            and assembly.get('identifier') == source.get('observed_identifier') == source.get('requested_identifier')
+            and assembly.get('identifier') == source.get('requested_identifier')
             and source.get('response_complete') is True and source.get('origin_verified') is True
             and source.get('http_status') is None and source.get('content_scope') == 'representation'
             and assembly.get('encoding') == 'identity' and assembly.get('total') == source['response']['size']
             and assembly.get('url') == source.get('url') and type(assembly.get('unit_count')) is int
             and assembly['unit_count'] > 0)
-    require(normalize_identifier(assembly['url']) == assembly['identifier']
-            and source.get('exact_version') == version_of(assembly['identifier']))
+    require(source.get('exact_version') == version_of(assembly['identifier']))
+    if assembly['identifier'].startswith('arxiv:'):
+        require(source.get('observed_identifier') == assembly['identifier']
+                and normalize_identifier(assembly['url']) == assembly['identifier'])
     from .fulltext_transfer import _STRONG_ETAG, _CONTENT_RANGE
     require(isinstance(assembly.get('etag'), str) and _STRONG_ETAG.fullmatch(assembly['etag']) is not None)
     cursor, hasher = 0, hashlib.sha256()
