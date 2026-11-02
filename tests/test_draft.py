@@ -344,18 +344,21 @@ def _write_passing_citation_report(workspace_dir: Path) -> None:
         "}\n"
     )
     report = {
-        "version": 1,
+        "version": 2,
         "bib_sha256": hashlib.sha256(bib_path.read_bytes()).hexdigest(),
         "checked_at": "2026-08-08T00:00:00Z",
         "entries": [{
             "key": "instance2023predicting", "doi": "10.1234/exact.5678", "arxiv_id": "",
             "title": "Predicting Citation Impact with Cohort Percentiles",
-            "status": "verified", "detail": "",
+            "status": "verified", "detail": "", "searches": [],
         }],
-        "counts": {"verified": 1, "blocking": 0, "warning": 0},
+        "counts": {"verified": 1, "blocking": 0, "warning": 0, "incomplete": 0},
         "blocking": 0,
         "nothing_verified": False,
         "ok": True,
+        "lookup_complete": True,
+        "all_verified": True,
+        "incomplete_keys": [],
         # What lookup records for a draft whose manuscript is paper.tex alone, or none.
         "manuscript": {
             "main": "paper.tex" if (bib_path.parent / "paper.tex").is_file() else None,
