@@ -1,5 +1,6 @@
 """Lineage preparation (lineage-v1): the bounded five-purpose loop, innovation candidates, the population query."""
 
+import json
 import re
 
 from .artifacts import ArtifactStore
@@ -22,6 +23,7 @@ INNOVATION_CANDIDATES = 10
 INNOVATION_CASES = 5
 LOOP_SOURCES = ("search", "population", "citing", "author")
 COVERING = ("relevant", "contradictory")
+POPULATION_QUERY_RANKING_VERSION = 1
 
 
 def resolve_loop_limit(records):
@@ -154,15 +156,35 @@ def loop_obligations(records, profile="research"):
     return []
 
 
-def population_query(store, terms, *, limit=30):
+def population_query(store, terms, *, limit=30, cursor=None):
     """Rank the enumerated population's stored abstracts by how many of the terms they contain (read-only)."""
     strings(terms, "Query terms", nonempty=True)
-    records = store.snapshot()["records"]
+    snapshot = store.snapshot()
+    records = snapshot["records"]
     if type(limit) is not int or not 1 <= limit <= resolve_loop_limit(records):
         raise ResearchError("invalid_input", "The limit is between 1 and " + str(resolve_loop_limit(records)))
+    binding = {"version": 1, "revision": snapshot["revision"], "query_digest": digest(terms),
+               "ranking_version": POPULATION_QUERY_RANKING_VERSION}
+    offset = 0
+    if cursor is not None:
+        if not isinstance(cursor, str):
+            raise ResearchError("invalid_input", "The population cursor must be a JSON string")
+        try:
+            position = json.loads(cursor)
+        except (ValueError, RecursionError) as error:
+            raise ResearchError("invalid_input", "The population cursor must be valid JSON") from error
+        fields(position, ("version", "revision", "query_digest", "ranking_version", "offset"))
+        if (any(type(position[key]) is not int for key in ("version", "revision", "ranking_version", "offset"))
+                or position["revision"] < 0 or position["offset"] < 0
+                or any(position[key] != binding[key] for key in ("version", "query_digest", "ranking_version"))):
+            raise ResearchError("invalid_input", "The population cursor does not match this query or ranking")
+        if position["revision"] != snapshot["revision"]:
+            raise ResearchError("stale_cursor", "The store changed; restart the population query",
+                                {"revision": snapshot["revision"]})
+        offset = position["offset"]
     evaluation = Evaluation(records, ArtifactStore(store.root))
     patterns = {t: re.compile(r"\b" + re.escape(t) + r"\w*", re.IGNORECASE) for t in terms}
-    matches = []
+    matches, searchable = [], 0
     for member in records.get("cohort_member", {}).values():
         version = member["version_ids"][-1]
         work = records.get("work", {}).get(version)
@@ -170,9 +192,24 @@ def population_query(store, terms, *, limit=30):
         if abstract is None:
             continue
         content = work.get("title", "") + "\n" + evaluation.text(abstract["artifact"])
+        searchable += 1
         matched = [t for t in terms if patterns[t].search(content)]
         if matched:
             matches.append({"version_id": version, "work_id": member["work_id"], "title": work.get("title"),
                             "matched_terms": matched, "score": len(matched)})
     matches.sort(key=lambda m: (-m["score"], m["version_id"]))
-    return {"terms": terms, "population": len(records.get("cohort_member", {})), "matches": matches[:limit], "read_only": True}
+    total = len(matches)
+    if offset > total:
+        raise ResearchError("invalid_input", "The population cursor offset exceeds the matching population")
+    page = matches[offset:offset + limit]
+    returned = len(page)
+    remaining = total - offset - returned
+    next_cursor = json.dumps(dict(binding, offset=offset + returned), sort_keys=True,
+                             separators=(",", ":")) if remaining else None
+    population = len(records.get("cohort_member", {}))
+    return {"terms": terms, "population": population, "matches": page, "read_only": True,
+            "revision": snapshot["revision"], "query_digest": binding["query_digest"],
+            "ranking_version": POPULATION_QUERY_RANKING_VERSION, "total_matches": total,
+            "returned": returned, "offset": offset, "omitted": total - returned, "remaining": remaining,
+            "bound_reached": returned == limit, "next_cursor": next_cursor,
+            "searchable": searchable, "unavailable": population - searchable}
