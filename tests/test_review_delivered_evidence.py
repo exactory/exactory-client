@@ -350,7 +350,7 @@ class DeliveredEvidenceTests(unittest.TestCase):
         self.addCleanup(builder.doCleanups)
         builder.setUp()
         builder.oversized()
-        controller = builder.assign('controller')
+        controller = builder.assign_staged('controller')
         child = builder.case.assign('result', 'first', identifier='child',
             controller_assignment_id=controller['id'], task_id=controller['staged_review']['task_ids'][0])
         with patch.object(review_worker, '_entry_command',
