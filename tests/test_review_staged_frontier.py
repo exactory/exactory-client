@@ -2,6 +2,7 @@
 
 import copy
 import json
+from pathlib import Path
 import sys
 from unittest.mock import patch
 
@@ -15,6 +16,7 @@ from test_review_staged_fixtures import epoch, profile
 WORKER = '''
 import sys
 from pathlib import Path
+sys.path[:0] = %r
 from research_harness import review_worker, review_transport, review_codex_transport, review_excerpts
 from codex_route_fixtures import build_codex_response
 from test_review_staged_frontier import build_output
@@ -29,7 +31,7 @@ def send(route, request, credential):
     return build_codex_response(route, request, output)
 review_transport.send_request = send
 review_worker.run_worker(Path(sys.argv[1]), sys.argv[2], sys.argv[3], int(sys.argv[4]))
-'''
+''' % [str(Path(__file__).resolve().parent), str(Path(__file__).resolve().parents[1])]
 
 
 def build_output(body, root):
