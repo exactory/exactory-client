@@ -1,15 +1,17 @@
 """Export current complete preparation and all original bytes for native review."""
 
-import hashlib
+import json
 import os
 from pathlib import Path
+import tempfile
 
-from .artifacts import ArtifactStore, _Workspace
+from .artifacts import ArtifactStore, _Workspace, _filesystem_error
 from .errors import ResearchError
-from .review_delivery import references
-from .storage import _canonical
+from .file_streams import _copy_stream, freeze_file
+from .review_delivery import _stage_delivery, references
+from .storage import _canonical, _json_types
 from .synthesis import synthesis_state
-from .workspace import write_projection
+from .workspace import checked_parent, write_projection
 
 
 def export_native(store, attack_root, destination, *, claim_binding=None):
@@ -35,23 +37,49 @@ def export_native(store, attack_root, destination, *, claim_binding=None):
         raise ResearchError("readiness_required", "Native admission requires current complete preparation", {"obligations": report["obligations"]})
     value = {"schema_version": 1, "profile": config["profile"], "research_revision": snapshot["revision"],
              "preparation": report, "records": snapshot["records"]}
-    raw = _canonical(value).encode()
-    reference = {"schema_version": 1, "workspace": os.path.relpath(store.root, attack_root),
-                 "profile": config["profile"], "revision": snapshot["revision"],
-                 "snapshot_digest": hashlib.sha256(raw).hexdigest(), "preparation_digest": report["digest"],
-                 "claim_binding": claim_binding}
-    inputs = [{"path": relative + "/snapshot.json", "kind": "blob", "digest": reference["snapshot_digest"]}]
-    originals = [(ref, artifacts.read(ref)) for ref in references(value)]
-    written = set()
-    for ref, data in originals:
-        if ref["path"] in written:
-            continue
-        written.add(ref["path"])
-        path = relative + "/artifacts/" + ref["sha256"]
-        write_projection(attack_root, path, data)
-        inputs.append({"path": path, "kind": "artifact", "digest": ref["sha256"]})
-    write_projection(attack_root, inputs[0]["path"], raw)
-    result = {"foundation": reference, "inputs": inputs, "revision": snapshot["revision"],
-              "mechanical_only": True, "native_proof_acceptance": False}
-    write_projection(attack_root, relative + "/manifest.json", (_canonical(result) + "\n").encode())
+    encoder = json.JSONEncoder(sort_keys=True, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+    try:
+        _json_types(value)
+        with tempfile.TemporaryFile(mode="w+b") as source:
+            for piece in encoder.iterencode(value):
+                source.write(piece.encode("utf-8"))
+            source.seek(0)
+            with freeze_file(source) as snapshot_file, _stage_delivery(attack_root, relative) as staging:
+                reference = {"schema_version": 1, "workspace": os.path.relpath(store.root, attack_root),
+                             "profile": config["profile"], "revision": snapshot["revision"],
+                             "snapshot_digest": snapshot_file.sha256, "preparation_digest": report["digest"],
+                             "claim_binding": claim_binding}
+                inputs = [{"path": relative + "/snapshot.json", "kind": "blob", "digest": reference["snapshot_digest"]}]
+                written = set()
+                originals = ArtifactStore(store.root)
+                for ref in references(value):
+                    if ref["path"] in written:
+                        continue
+                    with originals.open_verified(ref) as frozen:
+                        written.add(ref["path"])
+                        path = "artifacts/" + ref["sha256"]
+                        with checked_parent(staging, path, create=True) as (directory, name):
+                            descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+                                                 0o600, dir_fd=directory)
+                            with os.fdopen(descriptor, "wb") as target:
+                                _copy_stream(frozen.stream, target, ref)
+                                target.flush()
+                                os.fsync(target.fileno())
+                            os.fsync(directory)
+                        inputs.append({"path": relative + "/" + path, "kind": "artifact", "digest": ref["sha256"]})
+                with checked_parent(staging, "snapshot.json") as (directory, name):
+                    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                                         0o600, dir_fd=directory)
+                    with os.fdopen(descriptor, "wb") as target:
+                        _copy_stream(snapshot_file.stream, target,
+                                     {"path": "snapshot.json", "sha256": snapshot_file.sha256, "size": snapshot_file.size})
+                        target.flush()
+                        os.fsync(target.fileno())
+                result = {"foundation": reference, "inputs": inputs, "revision": snapshot["revision"],
+                          "mechanical_only": True, "native_proof_acceptance": False}
+                write_projection(staging, "manifest.json", (_canonical(result) + "\n").encode())
+    except (TypeError, ValueError, UnicodeError, RecursionError) as error:
+        raise ResearchError("invalid_input", "Expected finite JSON data with string object keys") from error
+    except OSError as error:
+        raise _filesystem_error(error) from error
     return result

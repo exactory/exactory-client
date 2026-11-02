@@ -294,6 +294,7 @@ class ScientificDelivery:
         return True
 
     def _check_public_reference(self, ref, *, original_pdf=False):
+        self._check_declared_size(ref)
         if ref["sha256"] in self.private:
             raise ResearchError(_PRIVATE, "An internal artifact cannot become a public source by alias")
         key = (digest(ref), original_pdf)
@@ -313,6 +314,9 @@ class ScientificDelivery:
         if not candidates:
             raise ResearchError(_PRIVATE, "Nested provenance must exactly identify an established public source artifact")
         for _, source_id, work, capture in candidates:
+            response = self.records.get("source", {}).get(source_id, {}).get("response")
+            if response is not None:
+                self._check_declared_size(response)
             source = captured_source(self.records, self.artifacts, source_id)
             if source["response"]["sha256"] in self.private:
                 raise ResearchError(_PRIVATE, "A public extraction cannot declassify its internally classified original")
@@ -399,7 +403,13 @@ class ScientificDelivery:
             if self.output_bytes > _MAX_OUTPUT_BYTES:
                 raise ResearchError(_CODE, "The total scientific delivery exceeds its 512 MiB output bound")
 
+    def _check_declared_size(self, ref):
+        validate_reference(ref)
+        if ref["size"] > _MAX_BYTES:
+            raise ResearchError(_CODE, "Scientific source exceeds the projection byte bound")
+
     def _project(self, ref, projection, data=None):
+        self._check_declared_size(ref)
         data = self.artifacts.read(ref) if data is None else data
         if len(data) > _MAX_BYTES:
             raise ResearchError(_CODE, "Scientific source exceeds the projection byte bound")
@@ -410,6 +420,7 @@ class ScientificDelivery:
             if not originals:
                 raise ResearchError(_PRIVATE, "An exact source component requires an established original capture")
             source_ref = originals[0]
+            self._check_declared_size(source_ref)
             self._check_public_reference(source_ref, original_pdf=True)
             source = self.artifacts.read(source_ref)
             self._check_bytes(source)
@@ -486,6 +497,7 @@ class ScientificDelivery:
                          and declaration["projection"]["kind"] == "result_output")
         recorded_output = result_output and descriptor_digest in self.result_outputs
         if result_output and not recorded_output:
+            self._check_declared_size(ref)
             # Verify the descriptor's stored size and hash before resolving its observation alias.
             self.artifacts.read(ref)
             recorded = self.result_aliases.get(descriptor_digest)
@@ -503,6 +515,8 @@ class ScientificDelivery:
             raise ResearchError(_CODE, "Scientific artifact references must not form a recursive byte closure")
         self.visiting.add(identifier)
         try:
+            if identifier not in self.generated:
+                self._check_declared_size(ref)
             data = self.artifacts.read(ref)
             if identifier in self.generated:
                 mapped = self._emit({"derivative": True, "original_sha256": identifier,
