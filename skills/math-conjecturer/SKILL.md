@@ -401,10 +401,13 @@ result and its source; start no solver work to reproduce an established result.
    - Assign the next turn with the same reviewer, route, author and packet and
      `context: {native_packet, prior_assignment_id}`, where `prior_assignment_id` names the turn
      that just ran. Run it with `review-run`. Repeat while the new assignment is a reading turn
-     (prompt template `exactory-openness-reading-v3/reading`). A text of 300,000 characters takes
+     (prompt template `exactory-openness-reading-v4/reading`). A text of 300,000 characters takes
      three reading turns, so a chain over several long texts and their records has many turns. A
-     chain that 0.64.2 to 0.66.2 started continues in the same way: its next turns read the
-     units that no reading turn delivered, full texts first and then the records.
+     chain that an earlier release started, under `exactory-openness-reading-v3` or before,
+     continues in the same way: its next turn records `exactory-openness-reading-v4`, and its next
+     turns read the units that no reading turn delivered, full texts first and then the records.
+     Each turn's answer is checked under the protocol of its own packet, so a turn built under v3
+     keeps v3's rules.
    - When a turn's run ends without output, for example at the route timeout, assign the next
      turn again with the same `prior_assignment_id`. The new assignment replaces the failed turn,
      which can no longer be run or continued (`review_assignment_replaced`). When the first turn
@@ -422,14 +425,19 @@ result and its source; start no solver work to reproduce an established result.
      by a sibling turn (`review_source_continuation_fork`): export the packet again under a new
      assignment id and start a new chain, and keep both diagnostics in your report.
    - The assignment after the last reading turn is the final turn (prompt template
-     `exactory-openness-reading-v3/final`): the native packet with the reading record of the
+     `exactory-openness-reading-v4/final`): the native packet with the reading record of the
      earlier turns. To fit the route's input limit it withholds, only as far as needed, the bodies
      that reading turns delivered complete (full texts from the end of `text_priority`, then the
      other full texts, the reading records and the search records, largest first within each
      kind), each replaced by a note naming the turns that delivered it, and then the notes of the
      earliest turns, oldest first. It never withholds an excerpt, a passage, the statement or the
      formulations. When it returns a reading answer with passage requests, assign one more final
-     turn in the same way.
+     turn in the same way. Under `exactory-openness-reading-v4` at least one of those requests
+     must deliver characters: its anchor is found in a bound body, and its characters fit the
+     remaining passage allowance. A reading answer in which no request delivers characters is an
+     output refusal (`invalid_reading_response`, `path` `/passage_requests`), handled as above:
+     run `review-run` on the same turn again, and the chain does not continue from the refused
+     answer.
    - When `review-assignment` refuses the final turn with `review_input_too_large`, the refusal
      names the size of each part: the base packet, the notes, the excerpts and the passages. What
      remains is protected evidence, the statement, and the excerpts and passages that the
@@ -670,10 +678,15 @@ accepted tasks of the epoch instead of one request. The
    repair `review_evidence_undelivered`.
 4. Answer a reviewer's source request with a continuation assignment of the same role, route and
    reviewer. One continuation delivers at most 120,000 characters of new full text, so long
-   requested texts arrive in parts and the other requests wait (`deferred_reading_budget`); keep
-   assigning continuations while requests stay pending. When a continuation's run ends without
-   output, for example at the route timeout, assign a new continuation of the same parent: it
-   replaces the failed one.
+   requested texts arrive in parts and the other requests wait (`deferred_reading_budget`); a
+   reply that the route's input cannot hold beside the others waits too (`deferred_capacity`),
+   chosen when `review-assignment` records the turn, and stays in `pending_source_requests`.
+   Keep assigning continuations while requests stay pending. When a continuation's run ends
+   without output, for example at the route timeout, assign a new continuation of the same
+   parent: it replaces the failed one. When `review-assignment` refuses a continuation with
+   `review_source_no_progress`, the reviewer repeated requests that the harness already answered
+   with nothing new; do not continue the session with the same requests: record the reviewer's
+   output as it stands, or change the evidence first, for example by acquiring the source.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
    repaired with evidence changes the evidence digest, and the result reviews are refreshed for
    the same reviewers.

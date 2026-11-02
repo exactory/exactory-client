@@ -60,11 +60,11 @@ name every such node, and `search status` and `search next` report them as
 The hooks read a record with the controller of their own plugin. When a
 controller call fails, the refusal says which case it is.
 `Controller recovery required: DIAGNOSTIC` has two sources. When a plain
-`search status --json` still succeeds, the installed controller reads the
+`search guard-status --json` still succeeds, the installed controller reads the
 record, whichever runtime wrote it, and the operation itself failed. The
 diagnostic names the failure, for example a missing focus, a discovery
 conflict or a revision conflict. No writer identity is compared, so act on the
-diagnostic. When the status call fails too and the recorded plugin version and
+diagnostic. When that call fails too and the recorded plugin version and
 controller digest equal the installed ones, the installed controller cannot
 replay the record, and the record needs recovery. `Controller recovery
 required after bounded invocation failed: ...` means that a controller call

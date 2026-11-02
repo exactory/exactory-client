@@ -314,15 +314,16 @@ MATH_FINAL_PROMPT = (
     'anchor, names no single stored body, or exceeds the remaining allowance. This turn is then run again. When no '
     'passage allowance remains, return the native result review. Missing decisive evidence remains a gap. An excerpt, '
     'a passage or a descriptor does not establish complete delivery of a unit.')
-# The text author must replace this marker with the final-turn rule: a reading response is accepted only when at
-# least one passage request delivers text, with its anchor found in a bound body and its characters fitting the
-# remaining passage allowance. If all requests miss or exceed that allowance, the response is refused and the chain
-# does not continue. When no passage can help, the reviewer must return the native result review instead.
-FINAL_PROGRESS_RULE_PLACEHOLDER = '\n\n[FINAL_PROGRESS_RULE_PLACEHOLDER]'
+# The final-turn passage rule that v4 adds to the v3 final prompt (has_deliverable_passage enforces it).
+FINAL_PROGRESS_RULE = (
+    '\n\nAt least one of your passage requests must deliver characters: its anchor is found in a bound body, and its '
+    'characters fit the remaining passage allowance. The harness refuses a reading response in which no request '
+    'delivers characters, because every request misses its anchor or exceeds the remaining allowance, and the chain '
+    'does not continue from it. When no passage can help you judge, return the native result review instead.')
 PROMPTS = {PROTOCOL_V1: {'reading': READING_PROMPT_V1, 'final': FINAL_PROMPT_V1},
            PROTOCOL_V2: {'reading': READING_PROMPT_V2, 'final': FINAL_PROMPT_V2},
            PROTOCOL: {'reading': READING_PROMPT, 'final': FINAL_PROMPT},
-           PROTOCOL_V4: {'reading': READING_PROMPT, 'final': FINAL_PROMPT + FINAL_PROGRESS_RULE_PLACEHOLDER},
+           PROTOCOL_V4: {'reading': READING_PROMPT, 'final': FINAL_PROMPT + FINAL_PROGRESS_RULE},
            MATH_PROTOCOL: {'reading': MATH_READING_PROMPT, 'final': MATH_FINAL_PROMPT}}
 
 

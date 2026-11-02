@@ -74,7 +74,7 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. A `status` read or a review preparation observes the installed runtime of the adapters in use at its start and at its end; when it changed in between, the command refuses with `review_runtime_changed` and writes nothing, and the same command run again reads the current runtime. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. |
 | `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. A problem `result` packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, is delivered in parts ([Problem evidence in parts](#problem-evidence-in-parts)), and an `adjudicator` packet stays an ordinary assignment, also when its request does not fit. A staged review starts only through `context: {staged_upgrade: {assignment_id}}`, which opens one in a recorded slot; `{controller_assignment_id}` alone then plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A problem `result` assignment that the part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series ([Problem evidence in parts](#problem-evidence-in-parts)). |
-| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy` or `stale_revision`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last `store_busy` or `stale_revision`. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. The write that records the run is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last of those refusals. A run interrupted during the call, or whose write is still refused after that wait, leaves its invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`. The refusals say to reconcile it, and the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload). That import ends the pending state, and a `review-run` of the assignment under a new `id` and request ID is then permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
 | `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. The finding's citations are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). |
@@ -184,7 +184,44 @@ for a recorded bar, slate or result review. Under the excerpt rules:
   valid only in a turn under the excerpt rules.
 
 A final phase assessment still needs every pending request settled.
-`already_delivered` answers and passage answers are settled and never pending.
+`already_delivered` answers and the passage answers `delivered`, `not_found`
+and `over_allowance` are settled and never pending; a passage reply that a
+turn defers for capacity (below) stays pending until a later turn includes it.
+
+The source reply batch. When `review-assignment` records a continuation that
+answers source requests, or a `complete-visible-v1` assignment, it plans the
+replies of that turn against the complete reviewer request: the prompt, the
+history, the metadata of every reply (an inventory page or query, an abstract,
+a full text or a passage) and the native attachments, measured in the route's
+own representation. It includes whole replies in request order while the
+request fits the route's input limit; the exact full-text parts of the reading
+budget stay the only subdivision of a reply. A reply that does not fit is
+deferred with status `deferred_capacity` and stays in
+`pending_source_requests`, a passage included, and the passage allowance of
+the session is charged only for the passages that the turn includes. A reply
+counts as delivered only when its metadata, its provenance and its required
+bodies survive the construction of the request. The choice is frozen in the
+packet under `source_reply_batch` (protocol
+`exactory-review-source-batch-v1`) with `included_request_ids`,
+`deferred_request_ids`, the requests themselves and the measurement; the
+marker's `guidance` tells the reviewer which replies the turn includes and
+defers, that a deferred request stays pending and need not be repeated, and
+that a pending request its assessment needs keeps the response unresolved
+with `support: null`. A reply that cannot fit on its own refuses the
+assignment with `review_input_too_large` and the details `limiting_component:
+"source_reply"`, `source_request`, `measurement` and
+`input_limit_characters`; a `complete-visible-v1` closure that does not fit
+refuses the assignment before any invocation, with `limiting_component:
+"complete_visible_closure"`, and never becomes a partial review. A
+continuation whose inherited unavailable requests and bound source state are
+unchanged, compared by the meaning of each request and the state of its
+source rather than by request id, is refused with
+`review_source_no_progress` before any reviewer call, and its pending
+requests stay as they were: the reviewer repeated requests that the harness
+already answered with nothing new, so do not continue the session with the
+same requests; record the reviewer's output as it stands, or change the
+evidence first, for example by acquiring the source. A packet recorded before
+0.71.0 rebuilds unchanged and gains no batch.
 
 A continuation whose recorded attempts all ended without a completed output,
 for example because the run was stopped at the route timeout, does not hold the
@@ -238,7 +275,10 @@ Steps 4 to 6, 9 and 11 keep every protected body and every source that the turn
 delivers on request. A requested source loses a body only in step 3, where its
 HTML original is withheld while its complete extraction is delivered, and in
 step 10, where a whole source is deferred as pending. Each withheld body names
-its delivery and a note. [Problem creation](#problem-creation) states which
+its delivery and a note. Since 0.71.0 the whole replies of a new continuation
+or `complete-visible-v1` assignment are chosen when `review-assignment`
+records it (the source reply batch, above), and the replies that it includes
+survive this fitting whole. [Problem creation](#problem-creation) states which
 records, readings and artifact bytes each result reviewer's actual request must
 deliver for the post gate's result coverage check, and how that check treats a
 body that step 6 withholds. A request that still does not fit is refused by
@@ -311,6 +351,8 @@ context repair of an ordinary slot, a continuation with
 ordinary packet, whatever its size; when the request does not fit,
 `review-run` refuses it before an invocation exists with
 `review_input_too_large` (the dispatch preflight, above) and records nothing,
+except that a `complete-visible-v1` closure that does not fit is refused by
+`review-assignment` (the source reply batch, above),
 and a recorded `result` or
 `adjudicator` assignment can be the predecessor of an explicit upgrade
 (Upgrading a recorded session, below). 0.70.0 opened a staged review for every
@@ -500,7 +542,11 @@ its claims in `context_roots`. A task planned under an older version is
 superseded (`task_supersessions`, reason `context_expanded`) once current
 tasks cover every obligation it held, and it leaves the frontier; a child
 assignment of such a task is refused with `review_task_dependency_changed`,
-and so is its run. A frame task's claims, conditions, dependencies and
+and so is its run. Since 0.71.0 the same code refuses an ordinary review
+assignment, run, probe or output correction when another process's commit
+changed a record that its preparation read (an unrelated commit leaves the
+preparation valid, and the finishing commit of a run tries again by itself),
+and the repair is to run the same command again. A frame task's claims, conditions, dependencies and
 unresolved items enter the claim graph, and an unresolved item must be
 answered by a grounded `answers` entry of a later task before the completion
 check passes.
@@ -1043,7 +1089,13 @@ its complete required source units, the same reviewer then receives one complete
 authenticated main text per exact version, in a visible reversible encoding of
 the logical messages. An incomplete or unavailable request stays pending, and
 further source requests remain actionable. Such a continuation and a visual
-route do not use the reductions above.
+route do not use the reductions above. The complete texts of such a
+continuation are planned as one closure when `review-assignment` records it
+(the source reply batch in
+[Scientific contribution decisions](#scientific-contribution-decisions)): a
+closure that does not fit the route's input limit is refused there with
+`review_input_too_large` and `limiting_component: "complete_visible_closure"`,
+before any invocation, and never becomes a partial review.
 
 A final assessment binds its assignment. `value-review` and `review-adjudication`
 check the observed output against its output contract: the shape of the payload,
@@ -1264,7 +1316,7 @@ A check opens the store read-only, reads one snapshot, and runs the operation's 
 
 A check refuses with `check_unsupported` when the operation acts outside the store:
 
-- `collect`, `resume`, `acquire`, `expand`, `fulltext`, `import-response`, `import-oai-cohort` and `visual`, which acquire sources; `review-probe`, `review-run` and `review-output-correction`, which call a reviewer; and `reconcile-run`. A new request is refused before any effect. A request already recorded returns its receipt.
+- `collect`, `resume`, `acquire`, `expand`, `fulltext`, `fulltext-start`, `fulltext-resume`, `import-response`, `import-oai-cohort` and `visual`, which acquire sources; `review-probe`, `review-run` and `review-output-correction`, which call a reviewer; and `reconcile-run`. A new request is refused before any effect. A request already recorded returns its receipt. `fulltext-status` only reads and has no `--check` flag.
 - `batches`, `export`, `recover` and `restore`, which write files or recovery state, and `strategy-packet`, which can store a file in the artifact store while it builds the packet, for example a projected claim file, without a revision change. These five refuse before they open the workspace.
 - `exactory-lab init`, `run`, `probe` and `colab-serve`, and every `exactory-draft` command: `init`, `package`, `deposit`, `reconcile` and `attach-problem`. They create a workspace, run a program, write an archive or call Zenodo or exactory, and they refuse before they read anything.
 - A preparation that needs the installed reviewer CLI: `review-route` with a local adapter (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1` or `codex_cli_visual_v1`), and, in a workspace that holds a route of a local adapter, every command whose validation evaluates a route or an assignment state, for example `review-assignment`, `value-review`, `review-adjudication` and `problem-openness`. That evaluation reads the installed runtime of each local adapter in use, and reading a Codex runtime runs the Codex CLI.
@@ -1394,10 +1446,12 @@ The example for each operation contains all its required keys and shows the comp
 | `constitution` | `previous_sha256`, `reason` | Adopts the current distributed policy. Research adoption of Version 7 alone leaves claims current. An adopted Version 6 can remain in use without revalidation; verification retains Version 6 in this release. |
 | `artifact` | `id`, `path`, `media_type` | The local path must remain inside the workspace without traversing symlinks. |
 | `collect` | `definition: {corpus, primaryCategory, windowStart, windowEnd}` | `max_requests`, `page_size`; current corpus is `arxiv`. Dates are ISO calendar dates. |
-| `resume` | `collection_id` | `max_requests`; resumes retained collection/page evidence. |
+| `resume` | `collection_id` | `max_requests`, `recheck`; resumes retained collection/page evidence. A partition at the minimum width (one minute) whose reported total still reaches the provider's query ceiling keeps a permanent `query_ceiling` diagnosis in `pending`, and an ordinary `resume` leaves it as it is; `recheck: true` asks the provider for that partition again, from its first page. |
 | `acquire`, `expand` | `identifier` | `provider`, `max_requests`; expansion acquires an unresolved identifier without asserting its bibliography has been read. An old arXiv archive name without its hyphen, as in `arxiv:astroph/0410063`, is read as the hyphenated archive (`arxiv:astro-ph/0410063`). |
-| `fulltext` | `identifier`, `url` | Optional `component` declares a pinned supplement relationship (see below). The response is read when its reported media type, without parameters such as `charset`, is PDF (`application/pdf`), HTML (`text/html`, `application/xhtml+xml`) or XML (`application/xml`, `text/xml`). A body served as `application/octet-stream` or `binary/octet-stream` is read as a PDF when its bytes start with the PDF signature. Without that signature it is `unsupported_fulltext`. A response of any other type is recorded `pending` with `unexpected_mime`. XML is read as a JATS article when its root element is `article`. Element names are matched by their local name, so a namespaced document reads the same. The Europe PMC endpoint `https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML` (for example `PMC13104172`) serves such a document for an open-access article. The extractor `jats` saves the text of the whole article (front matter, body and back matter) with a line break at each block element. `includes_abstract` is true when the abstract has text. The capture field `visual_asset_names` lists the `graphic` references of each `fig`, in document order and without repeats. These are names only: no image is fetched, and `visual` acquires images from an HTML original only. The extraction status depends on body content: text in a paragraph, list item, table cell or similar element inside `body`, outside headings, abstracts and metadata. An `article` without such text is `landing_page`, and an XML document whose root is not `article` is `unsupported_fulltext`. The parser loads no external DTD or entity and expands no declared entity. A document that declares an internal entity is `xml_internal_entity`. A document that refers to an external entity is `xml_external_entity`. So is a document that refers to a named entity that only an external DTD defines (for example `&nbsp;` from the JATS DTD). Invalid XML is `malformed_xml`. Predefined entities and numeric character references read normally. The extractor is bounded: at most 200,000 elements (`xml_element_limit`), a nesting depth of at most 256 (`xml_depth_limit`), at most 33,554,432 characters of decoded markup and text (`xml_text_limit`, a bound on characters, not on bytes) and ten seconds for the whole extraction (`xml_timeout`). Each of these XML statuses leaves the capture `pending` with that code as `extraction_status` and keeps the original bytes. A pending capture has no text to read. Acquire another supported original of the work with a new `fulltext` request, for example the publisher's PDF or HTML page, and read that capture. `max_requests` bounds the HTTP attempts of the capture, and each redirect and each retry is one attempt, so set it for the whole chain of a link that redirects: a publisher PDF link that was redirected three times before it served the file needed four attempts. When the budget runs out, the capture is recorded as `pending` with `extraction_status` `request_budget` and stays in the record; a new `fulltext` request with its own request id and a larger `max_requests` tries again. `extraction_options: {"layout": bool}` (default true) chooses the PDF extractor's layout mode. For scanned PDFs, `extraction_options: {"ocr": true}` uses bounded English OCR with pdfinfo, pdftoppm and Tesseract, retaining every PDF page boundary and actual tool versions. OCR has a 600-second deadline, 200-page limit, 5000-pixel maximum page dimension, and 32 MiB limits for each rendered page and total text. OCR and layout options are mutually exclusive. Interpret OCR text against the original page images; the harness records the tools and does not check the text. An original up to 128 MiB is captured; a larger response fails with `response_too_large`. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. A capture with other options is a distinct capture of the same original; a reading on any capture of that original satisfies its full-text coverage. |
-| `import-response` | `provider`, `response_file`, `source_url`, `captured_at` | `media_type`, `mappings`; `web`/`mcp` mappings use JSON pointers into the original saved response for every work. The result of a new import carries `identity_conflicts`: each DOI of the batch that the import makes ambiguous, as `{identifier, existing_families, incoming_families, candidates}` with sorted arrays, including a conflict between two works of one batch; an assertion that repeats a recorded family adds none. The import continues, the field is advisory, and the original result of an earlier import replays without it. `--preview` on the command line reports the same for the payload without writing: `{status: "preview", scope: "metadata_import", revision, work_ids, pending, warnings, identity_conflicts}` from the current snapshot, with no record, artifact, receipt or charge. It needs an existing store and takes no `--expected-revision` or `--request-id`. |
+| `fulltext` | `identifier`, `url` | Optional `component` declares a pinned supplement relationship (see below). The response is read when its reported media type, without parameters such as `charset`, is PDF (`application/pdf`), HTML (`text/html`, `application/xhtml+xml`) or XML (`application/xml`, `text/xml`). A body served as `application/octet-stream` or `binary/octet-stream` is read as a PDF when its bytes start with the PDF signature. Without that signature it is `unsupported_fulltext`. A response of any other type is recorded `pending` with `unexpected_mime`. XML is read as a JATS article when its root element is `article`. Element names are matched by their local name, so a namespaced document reads the same. The Europe PMC endpoint `https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML` (for example `PMC13104172`) serves such a document for an open-access article. The extractor `jats` saves the text of the whole article (front matter, body and back matter) with a line break at each block element. `includes_abstract` is true when the abstract has text. The capture field `visual_asset_names` lists the `graphic` references of each `fig`, in document order and without repeats. These are names only: no image is fetched, and `visual` acquires images from an HTML original only. The extraction status depends on body content: text in a paragraph, list item, table cell or similar element inside `body`, outside headings, abstracts and metadata. An `article` without such text is `landing_page`, and an XML document whose root is not `article` is `unsupported_fulltext`. The parser loads no external DTD or entity and expands no declared entity. A document that declares an internal entity is `xml_internal_entity`. A document that refers to an external entity is `xml_external_entity`. So is a document that refers to a named entity that only an external DTD defines (for example `&nbsp;` from the JATS DTD). Invalid XML is `malformed_xml`. Predefined entities and numeric character references read normally. The extractor is bounded: at most 200,000 elements (`xml_element_limit`), a nesting depth of at most 256 (`xml_depth_limit`), at most 33,554,432 characters of decoded markup and text (`xml_text_limit`, a bound on characters, not on bytes) and ten seconds for the whole extraction (`xml_timeout`). Each of these XML statuses leaves the capture `pending` with that code as `extraction_status` and keeps the original bytes. A pending capture has no text to read. Acquire another supported original of the work with a new `fulltext` request, for example the publisher's PDF or HTML page, and read that capture. `max_requests` bounds the HTTP attempts of the capture, and each redirect and each retry is one attempt, so set it for the whole chain of a link that redirects: a publisher PDF link that was redirected three times before it served the file needed four attempts. When the budget runs out, the capture is recorded as `pending` with `extraction_status` `request_budget` and stays in the record; a new `fulltext` request with its own request id and a larger `max_requests` tries again. `extraction_options: {"layout": bool}` (default true) chooses the PDF extractor's layout mode. For scanned PDFs, `extraction_options: {"ocr": true}` uses bounded English OCR with pdfinfo, pdftoppm and Tesseract, retaining every PDF page boundary and actual tool versions. OCR has a 600-second deadline, 200-page limit, 5000-pixel maximum page dimension, and 32 MiB limits for each rendered page and total text. OCR and layout options are mutually exclusive. Interpret OCR text against the original page images; the harness records the tools and does not check the text. An original up to 128 MiB is captured; a larger response fails with `response_too_large`. Preserves the exact original and extraction result, and records `extraction` (extractor, version, options, text bytes, page count, longest line, whitespace fraction, expansion ratio) on the capture. A capture with other options is a distinct capture of the same original; a reading on any capture of that original satisfies its full-text coverage. An original larger than 128 MiB, or a transfer or extraction that one `fulltext` call cannot finish within its limits, is acquired as a full-text job (`fulltext-start`, below). |
+| `fulltext-start` | `identifier`, and exactly one of `url` or `source_id` | `extraction_options`, `allowances`, `use_ranges`. Records a durable full-text job for the exact version and returns `{job_id, status: "pending", pending: [{code: "fulltext_job_pending"}], revision}`; the transfer and the extraction run in `fulltext-resume`. `url` names the original to transfer; `source_id` names a retained complete original of the exact version, for example the original of a `fulltext` capture, which the job extracts without a transfer. `use_ranges` (default true) transfers in verified byte ranges that a later resume continues; false transfers the original whole. `allowances` are the job's limits: `original_bytes` (default 512 MiB), `retained_bytes` (4 GiB of retained transfer and extraction artifacts), `text_bytes` (256 MiB of extracted text), `network_attempts` (100), `invocation_seconds` (120 per resume), `unit_seconds` (30 per transfer unit or extraction page), `unit_output_bytes` and `unit_image_bytes` (32 MiB each), `pages_per_resume` (20) and `range_bytes` (8 MiB). See "Full-text jobs" below. |
+| `fulltext-resume` | `job_id` | `max_requests`, `max_pages`, `allowances`, `reason`. Runs the job within its allowances: the next transfer units (`max_requests` bounds the network attempts of this invocation) and then the next extraction pages (`max_pages`, 1 to `pages_per_resume`), each recorded durably as it completes. `allowances` raises one or more limits of the job, never lowers one, and then needs `reason`; the expenditure so far is kept. The result is `{job_id, status, pending, completed_pages, page_count, attempts_used, next_unit, revision}`, and `fulltext-status` shows the next action. |
+| `import-response` | `provider`, `response_file`, `source_url`, `captured_at` | `media_type`, `mappings`; `web`/`mcp` mappings use JSON pointers into the original saved response for every work. A request already committed is replayed first, from its recorded receipt, before the response is parsed. A new response, or the import payload, above 8 MiB is refused with `import_input_too_large` before it is parsed. The result of a new import carries `identity_conflicts`: each DOI of the batch that the import makes ambiguous, as `{identifier, existing_families, incoming_families, candidates}` with sorted arrays, including a conflict between two works of one batch; an assertion that repeats a recorded family adds none. The import continues, the field is advisory, and the original result of an earlier import replays without it. `--preview` on the command line reports the same for the payload without writing: `{status: "preview", scope: "metadata_import", revision, work_ids, pending, warnings, identity_conflicts}` from the current snapshot, with no record, artifact, receipt or charge. It needs an existing store and takes no `--expected-revision` or `--request-id`. |
 | `import-oai-cohort` | `collection_id`, `pages: [{response_file, source_url, captured_at}]` | Existing arXiv math-ph collection only. Each file is an original XML response at a checked workspace-relative path. Supply the complete ordered arXivRaw whole-set token chain; no authored works, totals, flags or HTTP receipts. |
 | `roots` | `profile`, `roots: string[]`, `collection_ids: string[]` | `target` is required for verification; optional `historical_cutoff`. Research objective identity is set by `target`, not by this scope. |
 | `bundle` | `id`, `version_id`, `source_id`, `scope`, `completeness`, `units`, `inventory`, `bibliography`, `resolutions` | Each unit has `id`, `kind`, `required`, `link`, and optional `reason`/`url`; inventory and bibliography must reflect the original article. The citation graph reads every registry occurrence and, for each acquired original of the version that has a bundle, the bibliography occurrences of that original's latest bundle, unless the version's last `bundle` import named an earlier bundle of that original. An acquired original is an available main original of the version, so an original that a bundle of another of the version's bodies links as a `supplement` unit is another body. Only a version none of whose acquired originals has a bundle reads, by the same rule, the bundles of its other bodies, such as the saved response of a passage or such a supplement. A bundle of another body, such as a passage on a saved tool response or a bundle whose body is such a supplement, is therefore not read once a bundle of an acquired original exists, whichever was imported first, while a passage bundle whose body is an acquired original is read as that original's bundle. A new bundle for the same body replaces the occurrences of the earlier one, so their obligations end with it. A verification target reads the bundle of each acquired original whatever its pin. `resolutions` account for earlier occurrences that the graph still reads, such as registry observations. An entry or a resolution of kind `paper` can add `target_family`: the canonical id of an acquired family that an assertion of its `target` names, chosen with the entry's own `link` and `reason`. A DOI target can choose its own family or an asserted arXiv family; an exact arXiv target of the chosen family keeps its version. An unknown, unrelated, versioned, noncanonical or malformed choice is `invalid_family_selection`, and nothing is written. The choice binds that occurrence or resolution only: earlier bundles and reading units keep their digests, and an occurrence without a choice stays `reference_identity_ambiguous` while its target has conflicting assertions. A resolution with a choice resolves an occurrence of an earlier bundle. |
@@ -1437,6 +1491,43 @@ The example for each operation contains all its required keys and shows the comp
 | `round-review` | `id`, `round_id`, `round_digest`, `assessor`, `verdict`, `checks`, `limitations` | `verdict` is `approved`, `not_approved`, or `unresolved`. For a `continue` decision the checks are `impact`, `demand`, `novelty_risk`, `feasibility`, `distinctness`, `continuity`, `grand_challenge`; for `stop` they are `stop` and `demand`; each is addressed once with `status` (`passed`, `failed`, `unresolved`), a reason and evidence. One review per assessor per decision (`round_review_duplicate`); the assessor is not a cycle author. |
 | `round-admit` | `id`, `round_id`, `review_id`, `reason` | Opens the round of an approved `continue` decision on the current bundle. Records the round's number, goal, objective, limits and opening state; applies a widened objective through its lineage. While the round runs, its receipt is the only output that reports the admitted goal (see "Development rounds"). |
 | `round-assess` | `id`, `round_id`, `bundle_digest`, `criteria`, `stop_conditions`, `summary` | Judges every success criterion and stop condition of the admitted goal once with `status` (`observed`, `not_observed`, `unresolved`), an explanation and evidence, on the exact current bundle. The harness derives and stores the round's progress with the record. |
+
+Full-text jobs. A job acquires a full text that a single `fulltext` call
+cannot finish: an original above 128 MiB, up to the job's `original_bytes`, or
+a transfer or a PDF extraction that would otherwise be lost at an interruption
+or a time limit. `fulltext-start` records the job, and each `fulltext-resume`
+runs it within the invocation allowances and records every completed transfer
+unit, network attempt and `pdf-pages-v1` extraction page durably as a
+`fulltext_unit` record, so an interrupted resume loses no completed unit and
+the next resume continues from the verified byte ranges already transferred
+and from the next page. The job publishes its capture only when it is
+complete, as a `source_assembly` with the capture method `http_range_v1`,
+which the readers of captures accept where they accept `http`. A pending job
+grants no reading, availability or delivery credit, and a complete capture
+keeps the visual-inspection and reading obligations of every other capture.
+`fulltext-status --job-id ID [--cursor N] [--limit N]` is read-only and takes
+no `--expected-revision`, `--request-id` or `--check`: it returns the job
+record (`status`, `pending`, `next_unit`, `capture`, the allowances and the
+counts) with `next_action` (`fulltext-resume` while the job is pending,
+`complete` when it is) and one page of its units as `units`, `total_units`
+and `next_cursor`, with `--limit` from 1 to 100 (default 30). The job codes
+are `fulltext_job_pending` (the job is not complete after this invocation,
+because its time, page or request allowance for the invocation ended or an
+earlier worker has not terminated; resume it), `fulltext_transfer_changed`
+(the server's response no longer matches the committed transfer units, for
+example another validator, size or range), `fulltext_resume_unsupported` (the
+transfer cannot continue where it stopped: the server answered the range
+continuation with a whole response or without a strong ETag, or a whole
+transfer was interrupted; start a new job, with `use_ranges: false` and a
+larger `invocation_seconds` when the server serves no ranges),
+`fulltext_unit_limit` (a unit's output or the extracted text exceeds its
+allowance) and `fulltext_storage_limit` (the retained artifacts or the scratch
+space exceed the storage allowance); `unknown_fulltext_job` names a job id
+that no record has. Every acquisition command for one target (an identifier,
+a cohort definition or collection, a source URL or a job) holds a lock while
+it runs, so a second command for the same target is refused with
+`acquisition_in_progress`, whose details name the running operation; a replay
+of a committed request takes no lock.
 
 Source deferral requires an explicit authorization artifact and the actual retained
 retrieval evidence. It creates no HTTP failure, availability qualification or
@@ -2960,7 +3051,15 @@ Run a reading chain turn by turn:
    report its `mandatory_components` to the owner.
 4. The final turn returns the native result review, or a reading answer with at
    least one passage request while the passage allowance has characters left. A
-   further final turn, assigned as in step 2, then delivers the passages.
+   further final turn, assigned as in step 2, then delivers the passages. In a
+   chain under `exactory-openness-reading-v4` (every new turn since 0.71.0) at
+   least one of those requests must deliver characters, that is, its anchor is
+   found in a bound body and its characters fit the remaining passage
+   allowance. `review-run` records a reading answer in which no request
+   delivers characters as the output refusal `invalid_reading_response`
+   (`details.path` `/passage_requests`), the turn is not ready, and
+   `review-assignment` does not continue from it; run `review-run` on the same
+   turn again under the ordinary retry rules.
 5. Record the final turn that returned the native result with
    `problem-openness` and its `assignment_id`.
 
@@ -2993,11 +3092,17 @@ authenticated under their own protocol, and a finding recorded from it stays
 current: its chain is verified under that protocol and gives the same
 `reading_turns` entries, `{assignment_id, attempt_id, delivered,
 delivered_parts?}`. Its next assignment continues under the current prompts
-(`exactory-openness-reading-v3`) with the same native packet, first assignment
+(`exactory-openness-reading-v4`) with the same native packet, first assignment
 id, route, reviewer and author. The previous answer is validated under its own
 protocol, and its excerpts and passages are checked by version id as before;
 the carried record becomes the compact form without charging them again, and
-its turns are listed again from the observed outputs of the chain. The harness
+its turns are listed again from the observed outputs of the chain. A chain
+that an earlier release started under `exactory-openness-reading-v3` continues
+in the same way: its next turn records `exactory-openness-reading-v4`, which
+keeps the units, the shape and the identities of v3 and adds the passage rule
+of a final turn (step 4 above). Each turn's output is checked under the
+protocol of its own packet, so a turn built under v3 keeps v3's rules, and its
+recorded turns rebuild byte for byte. The harness
 does not schedule from the earlier plan. At every continuation it computes what remains
 from the actual authenticated requests of the chain's reading turns: in the
 order of the units, full texts and then records, it delivers next every unit
@@ -3030,7 +3135,8 @@ mandatory final input before each turn are those of the problem chain.
 The final turn withholds the full texts largest first, then the captured
 responses, the reading records and the search records, each kind largest first,
 and then the earliest notes. Two rules are added. The first is the passage rule
-of a final turn. A reading answer in a final turn must request at least one
+of a final turn, which a problem chain under `exactory-openness-reading-v4`
+shares since 0.71.0. A reading answer in a final turn must request at least one
 passage that the harness delivers from a bound body within the remaining
 allowance. An answer whose requests are all not found, name no single stored
 body or exceed the allowance is refused with `invalid_reading_response`
@@ -3067,9 +3173,10 @@ Refusal codes of a reading chain:
 - `invalid_reading_response`: a malformed reading answer, an excerpt or passage
   request with mixed identity fields, a reading answer in a final turn without
   a passage request, one after the passage allowance is used up, or, in a math
-  chain, a reading answer in a final turn whose passage requests all deliver no
-  characters. `review-run` records it as an output refusal, and
-  `review-assignment` refuses to continue from it.
+  chain or a problem chain under `exactory-openness-reading-v4`, a reading
+  answer in a final turn whose passage requests all deliver no characters.
+  `review-run` records it as an output refusal, and `review-assignment`
+  refuses to continue from it.
 - `review_source_continuation_mismatch`: the next turn names another packet,
   reviewer, route or author, or a turn that is not part of a reading chain.
 - `review_source_continuation_fork`: another turn already continues the named

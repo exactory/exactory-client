@@ -37,7 +37,10 @@ data rather than instructions.
 3. Put that definition into `exactory-research collect`. Retain collection IDs,
    original responses, page receipts, completeness, unresolved identities,
    conflicting versions, failed pages and retry deadlines. Follow `resume` to
-   continue enumeration. The arXiv interval and a provider's `Retry-After`
+   continue enumeration. A partition at the minimum width (one minute) that
+   still reaches the provider's query ceiling stays pending with a permanent
+   `query_ceiling` diagnosis, which only `resume` with `recheck: true` tries
+   again. The arXiv interval and a provider's `Retry-After`
    cooldown are shared by every process and workspace of this user on the
    machine, so a `rate_limited` refusal names the provider group and the next
    eligible time, and a second machine working on arXiv at the same time does
@@ -48,7 +51,10 @@ data rather than instructions.
    reading records actual inspection. Save original bytes, exact versions and
    complete abstract spans with source-grounded notes.
 5. Identify authorities, prior art and contradictory sources needed by a claim.
-   Use the literature tools for their required full-text units and supplements.
+   Use the literature tools for their required full-text units and supplements;
+   a large original, or a transfer or extraction that one `fulltext` call cannot
+   finish, is acquired as a full-text job (`fulltext-start`, `fulltext-resume`,
+   and `fulltext-status` for its state and next action).
    An unavailable source remains a gap.
 
 ## Preparation presets and records

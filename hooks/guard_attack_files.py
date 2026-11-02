@@ -199,4 +199,5 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception as error:
-        _deny("[math-solver] Recovery required before this operation: " + str(error))
+        _deny("[exactory] The plugin's file guard could not check this tool call and stopped it. Report this error"
+              " to the user, because the plugin needs a fix or an update: " + str(error))

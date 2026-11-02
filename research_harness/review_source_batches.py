@@ -12,11 +12,13 @@ from .evidence import digest
 
 PROTOCOL = 'exactory-review-source-batch-v1'
 MARKER = 'source_reply_batch'
-# Text-author placeholder: identify included and deferred replies; requests stay
-# pending across outputs; capacity deferral differs from unavailable evidence;
-# mandatory pending requests require unresolved output with support=null.
-# Preserve old prompts.
-SOURCE_BATCH_GUIDANCE_PLACEHOLDER = 'SOURCE_BATCH_GUIDANCE_PLACEHOLDER'
+# What the reviewer reads in the marker of a batched source continuation.
+SOURCE_BATCH_GUIDANCE = (
+    'This turn includes the replies in included_request_ids and defers those in deferred_request_ids. A deferred reply '
+    'has status deferred_capacity: the reviewer input had no room for it this turn, not that the source is unavailable. '
+    'A deferred request stays in pending_source_requests and is answered in a later turn; do not repeat it. While a '
+    'request your assessment needs is pending, return an unresolved response with support=null and do not judge '
+    'evidence you have not received.')
 
 
 def digest_request_meaning(request):
@@ -193,7 +195,7 @@ def plan_packet(records, artifacts, route, packet, prompt, history):
         rows = candidate['source_deliveries']
         candidate[MARKER] = {'protocol': PROTOCOL, 'route_digest': digest(route),
             'input_limit_characters': limit, 'input_limit_metric': 'rendered_characters',
-            'guidance': SOURCE_BATCH_GUIDANCE_PLACEHOLDER,
+            'guidance': SOURCE_BATCH_GUIDANCE,
             'included_request_ids': list(dict.fromkeys(rows[index]['request']['id'] for index in range(count)
                                                       if index in included)),
             'deferred_request_ids': list(dict.fromkeys(rows[index]['request']['id'] for index in range(count)

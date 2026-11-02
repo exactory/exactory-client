@@ -2018,9 +2018,14 @@ Public command specs are closed records:
 | focus | `{focus: "focused"|"ambiguous"|"unrelated", provenance: Provenance, session_id: Text}` |
 | side-interval ID | `{max_moves: Integer[1,24], message_id: Text, instruction: Text, provenance: Provenance}` |
 | pause, resume, hook-stop | The respective `ControlInput` without `action` |
-| audit, render, status, next, strategy-context | `{}`; no spec file |
+| audit, render, status, guard-status, next, strategy-context | `{}`; no spec file |
 
-`status`, `next`, and `strategy-context` are read-only and need no revision or request ID.
+`status`, `guard-status`, `next`, and `strategy-context` are read-only and need no revision or request ID.
+`guard-status` is the hooks' query: a full replay and the optional `--objective-id` and
+`--contract-digest` identity checks, returning only `{protocol:
+"exactory-search-guard-status-v1", objective_id, contract_digest, revision}`, with no
+audit, observation, view scan, rendering or write, and no execution authority or
+proof credit.
 `review-packet` exports immutable evidence and likewise needs no revision or request ID.
 Every other public command uses the current `--expected-revision` and a unique
 `--request-id`. Commands whose table row defines a nonempty spec require
@@ -2058,8 +2063,8 @@ stale revision with `revision_conflict`. `--check` is refused with
 the `node_ids` of a `recovery_required` error: after a failed producer
 observation, and after a Stop that found more than 255 changed nodes.
 
-Every command except `status`, `next` and `strategy-context` also has the
-`--check` flag. On those three it is an argument error (`invalid_command`).
+Every command except `status`, `guard-status`, `next` and `strategy-context` also
+has the `--check` flag. On those four it is an argument error (`invalid_command`).
 Only `pause`, `side-interval`, `retreat`, `interpret` and `render` accept
 `--check` and run the check, with the same spec, `--expected-revision` and
 `--request-id` as the write. The
@@ -2199,8 +2204,14 @@ status-only questions, retrospective requests, compaction, and session resume
 without transcript interpretation. Hooks never infer user authorization.
 
 Stop makes one bounded `search hook-stop --internal` call. Only this internal CLI
-route may omit the expected revision; it reads the revision and invokes the
-validated service in that process. A fresh transaction request ID is separate
+route may omit the expected revision; it reads the revision with `guard-status`
+and invokes the validated service in that process. The internal call keeps the
+ownership checks, the recovery precedence of native and journal intents, the
+local observation, the duplicate-delivery accounting, pause, resume and the
+continuation cap of 40, and renders no view: after it, `search status` and
+`search next` report `output_views_stale` with the reason `behind` and the
+action `exactory-math search render`, which repairs the views, as does the next
+command that commits. A fresh transaction request ID is separate
 from the optional host delivery ID. Concurrent revision conflicts return recovery
 guidance without unlimited retry. Before control accounting, the service derives
 the changed local observations of every admitted node through
@@ -2258,13 +2269,21 @@ characters.
 The hooks read a record with the controller of their own plugin. Read, Glob, Grep,
 WebSearch and WebFetch calls make no controller call, but discovery runs before
 that exemption, so a malformed or conflicting discovery registry denies them
-too. A Write, Edit or Delete under a
-registered root, and a supported shell command that names a path under it, call
-the controller first. When that call fails, the hook confirms the failure with one
-plain `search status --json` call inside the same 20-second deadline. If the status
+too. The pre-tool guard checks every target of a call, both ends of a move in a
+patch included, with the protected-path and native-record checks above, and
+then queries each distinct registered root that a target lies under once, with
+the read-only `search guard-status --json` and the root's registered
+`--objective-id` and `--contract-digest`. One 20-second deadline covers the
+queries for all roots and the diagnostic fallback below; the host's hook
+timeout stays 30 seconds. A Codex `apply_patch` reaches the guard as one call
+that carries every file of the patch; the other hooks still receive one payload
+per file. A failure of the guard's own checks that it did not expect denies the
+call with a message that names the error and asks that it be reported to the
+user. When a controller query fails, the hook confirms the failure with one
+plain `search guard-status --json` call inside the same deadline. If that call
 succeeds, the record is readable and the message keeps its operational diagnostic,
 `Controller recovery required: DIAGNOSTIC`, for example a focus or revision
-conflict. If the status fails too, the hook compares `.search/writer-runtime.json`
+conflict. If that call fails too, the hook compares `.search/writer-runtime.json`
 with the installed runtime. A different `plugin_version` or `controller_digest`
 gives `The installed controller Exactory VERSION (controller sha256 DIGEST,
 launcher PATH) cannot read a record written by Exactory VERSION (...): DIAGNOSTIC.
@@ -2693,15 +2712,25 @@ currently relies on: `index.json`, `objective.json`, `admissions/`,
 `intermediate/math/<rel>/` (`proposals/` not admitted, `checkpoints/`,
 `invalidated/<acceptance id>/`, `replans/`, `retreats/`, `amendments/`,
 `runs/<run id>/`, `nodes/<slug>/index.json`). A render runs once per command,
-after its last commit and outside every controller lock: at the end of the
+after its last commit and outside the writer lock: at the end of the
 mutating path of `Controller.command`, after `deliver-attempt` and
 `deliver-closure`, and at the end of every managed native `attack.py` command.
-Read-only commands and check mode render nothing. The render skips when the
-marker `.search/output-views.json` already shows the document's last event under
-the installed plugin version; otherwise it builds the whole model from the
-replayed state, writes only the files whose bytes differ, and removes the owned
-files that the model no longer produces, under the lock
-`.search/output-views.lock`. An artifact of at most 1 MiB is copied; a larger,
+Read-only commands, check mode and the internal Stop call render nothing. The
+render holds the render lock `.search/output-views.lock` (`lock_timeout` after
+30 seconds) and selects the event document under it: the state that the
+command replayed is reused only while that document is still the current one
+and is replayed again otherwise, so an older render never overwrites a newer
+one. A pending initialization effect fails the render (`recovery_required`)
+until it is applied. Under the lock the render first repairs the generated
+Markdown, `SEARCH_TREE.md` and each `LINEAGE.md`, also when the marker
+`.search/output-views.json` already shows the document's last event under the
+installed plugin version and when the controller root has the reserved name
+below; only the render of `init`, when the document holds that one event and a
+`SEARCH_TREE.md` is already in place, keeps that handwritten file. When the
+marker is current, the JSON views stay as they are; otherwise the render
+builds the whole model from the replayed state, writes only the files whose
+bytes differ, and removes the owned files that the model no longer produces.
+An artifact of at most 1 MiB is copied; a larger,
 missing or corrupt one is listed by digest with its reason. A failed render never
 changes the command's result: it prints one stderr line, `Output views were not
 rendered (<code>: <message>); the command's result stands. Run exactory-math

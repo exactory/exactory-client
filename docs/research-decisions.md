@@ -469,7 +469,11 @@ reached no reading turn. The final turn is bounded, so that a chain ends in a
 request that fits or in a refusal that names the size of each part: it carries
 a compact reading record and withholds, only as far as its measured request
 needs, the bodies that reading turns delivered complete and then the notes of
-the earliest turns, never an excerpt or a passage.
+the earliest turns, never an excerpt or a passage. Since 0.71.0 the final turn
+of a problem chain keeps the passage rule of the math chain below, under the
+protocol `exactory-openness-reading-v4`, because under
+`exactory-openness-reading-v3` a reviewer could extend a chain with passage
+requests that delivered nothing.
 
 A math-solver result review that binds an openness minimum, a checkpoint review
 or the closure review, reads its packet in the same chain since 0.67.0, under
@@ -653,16 +657,17 @@ the user's authorized resources. Load a needed credential into that process,
 never into a payload or artifact. A replay of a completed request returns its
 recorded result without a new call. Since 0.67.0 the finishing write of
 `review-probe`, `review-run` and `review-output-correction`, the write that
-records the reviewer's answer, is tried again after `store_busy` or
-`stale_revision`. It is tried at most 600 times within 600 seconds and never
+records the reviewer's answer, is tried again after `store_busy`,
+`stale_revision` or, since 0.71.0, `review_task_dependency_changed`. It is
+tried at most 600 times within 600 seconds and never
 calls the reviewer again. Every attempt computes its change from the current
 records. The harness keeps the observation only in the process that called the
 reviewer and writes no file for a later process to read it from. A file in the
 workspace is no evidence of what the reviewer returned, so the harness never
 completes a pending invocation from disk. When the process stops during the
 call, or when the finishing write is still refused after that wait, the
-invocation remains pending. The run that waited exits with the last
-`store_busy` or `stale_revision`. Then a replay with the original request ID
+invocation remains pending. The run that waited exits with the last of those
+refusals. Then a replay with the original request ID
 refuses with `review_invocation_pending`, and every `review-run` of that
 assignment refuses in the same way. The harness does not silently call the
 reviewer again. The refusals say to reconcile the invocation, and the step is
