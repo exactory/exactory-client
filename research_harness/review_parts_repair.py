@@ -313,12 +313,28 @@ def build_continuation_packet(records, artifacts, value, parent):
     return packet
 
 
+def _supports_parts_route(records, value, route, packet):
+    from . import review_transport as transport
+
+    if (route['adapter'] not in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1')
+            or transport.local_input_limit(route) is None):
+        if (value['role'] == 'adjudicator' and (packet.get('subject') or {}).get('kind') == 'problem'
+                and packet.get('context_repair') is not None):
+            predecessor = records.get('review_assignment', {}).get(
+                packet['context_repair'].get('assignment_id'), {})
+            if predecessor.get('staged_review') is None:
+                raise ResearchError('review_parts_route_unsupported',
+                    'Problem adjudicator repairs without a staged predecessor require a supported parts v2 '
+                    'route with a local input limit')
+        return False
+    return True
+
+
 def requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id):
     from . import review_transport as transport
     from .review_problem_parts import _measure, preserves_ordinary_packet
 
-    if (route['adapter'] not in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1')
-            or transport.local_input_limit(route) is None):
+    if not _supports_parts_route(records, value, route, packet):
         return False
     ordinary = transport.request_body(route, prompt['text'], packet, history)
     return (has_over_cap_attempt(records, value, slot_id, packet.get('context_repair', {}).get('assignment_id'))
@@ -334,8 +350,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     from . import review_transport as transport
     from .review_problem_parts import _measure
 
-    if (route['adapter'] not in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1')
-            or transport.local_input_limit(route) is None):
+    if not _supports_parts_route(records, value, route, packet):
         return packet
     prior = records.get('review_assignment', {}).get(value.get('context', {}).get('prior_assignment_id'))
     continuing = prior is not None and prior.get(parts.KEY, {}).get('adapter') == 'context_repair'

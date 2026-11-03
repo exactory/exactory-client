@@ -305,6 +305,119 @@ class BarRepairJourneyTests(StrategyCase):
 
 
 class AdjudicatorRepairJourneyTests(StrategyCase):
+    def prepare_adjudicator_repair(self, *, staged):
+        import test_research_problem_adjudication_contract as fixtures
+
+        case = fixtures.ProblemAdjudicationContractTests(methodName='runTest')
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        case.prepare_reviews(result_reviewer='first')
+        record_codex_route(case, 'staged-route', output_tokens=128000)
+        value = dict(id='focused', role='adjudicator', route_id='staged-route', dossier_id=None,
+            reviewer_id='focused-third', author_id=case.read_records()['workspace']['problem']['authors'][0],
+            context=dict(review_ids=['review-result-first', 'review-result-second'],
+                         objection_id='unsupported-implication'))
+        if not staged:
+            packet = protocol.build_packet(case.read_records(), case.artifacts, None, 'adjudicator',
+                                           value['reviewer_id'], **value['context'])
+            prompt = protocol.canonical_prompt('adjudicator', orchestration='problem_creation',
+                review_parts=dict(adapter='problem_adjudicator', kind='read'))
+            route = case.read_records()['review_route']['staged-route']
+            measured = legacy._measure(route, protocol.transport.request_body(route, prompt['text'], packet, []))
+            searches = []
+            for number in range(6):
+                search = dict(id='focused-search-' + str(number), queries=['exact implication'], reason='x' * measured)
+                case.put('literature_search', search['id'], search)
+                searches.append(dict(search=search, sources=[]))
+            original_describe = protocol.add_problem_evidence
+
+            def add_evidence(records, artifacts, target):
+                original_describe(records, artifacts, target)
+                if target['role'] == 'adjudicator':
+                    target['problem_evidence']['openness_searches'].extend(copy.deepcopy(searches))
+                    target['problem_evidence_digest'] = digest(target['problem_evidence'])
+
+            active = patch.object(protocol, 'add_problem_evidence', side_effect=add_evidence)
+            active.start()
+            self.addCleanup(active.stop)
+            limit_codex_input(self, measured * 4)
+        original = case.mutate(protocol.record_assignment, value)['result']
+        predecessor = (case.mutate(protocol.record_assignment, dict(value, id='focused-controller',
+            context=dict(staged_upgrade=dict(assignment_id=original['id']))))['result'] if staged else original)
+        case.mutate(protocol.record_context_event, dict(id='exposure', assignment_id=predecessor['id'],
+            kind='contamination', source='author_history', reason='Author context reached the focused review.',
+            evidence=[case.supporting]))
+        return case, predecessor, value
+
+    def test_repair_without_a_local_input_limit_is_refused_before_recording(self):
+        case, predecessor, value = self.prepare_adjudicator_repair(staged=False)
+        self.assertNotIn('staged_review', predecessor)
+        self.assertEqual(predecessor[parts.KEY]['adapter'], 'problem_adjudicator')
+        case.mutate(protocol.record_route, dict(id='repair-route', adapter='openai_responses_v1',
+            model='fixture-model', endpoint='https://api.openai.com/v1/responses',
+            configuration=dict(max_output_tokens=128000, timeout_seconds=5)))
+
+        def respond_to_probe(route, request, credential):
+            packet = json.loads(request['input'][0]['content'][len(protocol.transport.PACKET_LABEL):])
+            return case.build_provider_response(dict(allowed_control=packet['allowed_control'],
+                evidence_control=packet['evidence_control'], excluded_controls=[]))
+
+        with patch.object(protocol.transport, 'send_request', side_effect=respond_to_probe):
+            case.mutate(protocol.probe_route, dict(id='repair-probe', route_id='repair-route'),
+                        credential='test-only')
+        self.assertIsNone(protocol.transport.local_input_limit(case.read_records()['review_route']['repair-route']))
+        before = case.store.snapshot()
+        with self.assertRaises(ResearchError) as caught:
+            case.mutate(protocol.record_assignment, dict(value, id='repair', route_id='repair-route',
+                reviewer_id='replacement', context=dict(context_repair=dict(
+                    assignment_id=predecessor['id'], event_ids=['exposure'], probe_id='repair-probe',
+                    reason='Reassess the exact objection in a fresh context.', evidence=[case.supporting]))))
+        self.assertEqual(case.store.snapshot(), before)
+        self.assertEqual(caught.exception.code, 'review_parts_route_unsupported')
+
+    def test_staged_predecessor_repair_keeps_the_visual_staged_path(self):
+        from research_harness import review_codex_visual_transport as visual
+        from research_harness import review_staged as staged, review_staged_protocol as producer
+        from test_visual_result_delivery import VisualResultDeliveryTests
+
+        case, controller, value = self.prepare_adjudicator_repair(staged=True)
+        self.case = case
+        manifest = staged.build_manifest(dict(statement='The exact quantifier is unsupported.'),
+            [dict(key='original_context', index=0, item=dict(evidence=[case.supporting]),
+                  evidence_class='original_context', artifacts=[case.supporting], source_ids=[])],
+            [producer.make_artifact_source(case.artifacts, case.supporting)])
+
+        def respond_to_probe(route, request, credential):
+            controls = case.read_records()['review_probe_invocation']['visual-probe']['positive_controls']
+            return VisualResultDeliveryTests.response(self, route, request, dict(
+                allowed_control=controls['allowed_control'], evidence_control=controls['evidence_control'],
+                excluded_controls=[]))
+
+        with patch.object(visual, 'runtime', return_value=dict(adapter=visual.ADAPTER, fixture='staged-repair')), \
+                patch.object(producer, 'build_manifest', return_value=manifest):
+            case.mutate(protocol.record_route, dict(id='visual-route', adapter=visual.ADAPTER,
+                model='fixture-model', endpoint='codex://local',
+                configuration=dict(max_output_tokens=128000, timeout_seconds=5)))
+            with patch.object(protocol.transport, 'send_request', side_effect=respond_to_probe):
+                case.mutate(protocol.probe_route, dict(id='visual-probe', route_id='visual-route'),
+                            credential='test-only')
+            self.assertIsNone(protocol.transport.local_input_limit(case.read_records()['review_route']['visual-route']))
+            repaired = case.mutate(protocol.record_assignment, dict(value, id='visual-repair',
+                route_id='visual-route', reviewer_id='replacement', context=dict(context_repair=dict(
+                    assignment_id=controller['id'], event_ids=['exposure'], probe_id='visual-probe',
+                    reason='Reassess the exact objection in a fresh visual context.',
+                    evidence=[case.supporting]))))['result']
+        self.assertEqual(repaired['staged_review']['kind'], 'controller')
+        self.assertNotIn(parts.KEY, repaired)
+        self.assertEqual(repaired['slot_id'], controller['slot_id'])
+        self.assertEqual(repaired['history'], [])
+        records = case.read_records()
+        before = records['review_epoch'][controller['staged_review']['epoch_id']]
+        after = records['review_epoch'][repaired['staged_review']['epoch_id']]
+        self.assertEqual(after['focused_scope'], before['focused_scope'])
+        self.assertEqual(after['predecessor']['assignment_id'], controller['id'])
+        self.assertEqual(after['predecessor']['epoch_id'], before['id'])
+
     def test_registered_adjudicator_can_continue_a_repair_with_ordinary_base_prompt(self):
         import test_research_problem_adjudication_contract as fixtures
         from research_harness import review_context_repair as context_repair
