@@ -1,4 +1,4 @@
-"""Reviewer texts of the parts v2 protocol, placed verbatim from the text author's version 3.1.
+"""Reviewer texts of the parts v2 protocol, placed verbatim from the text author's version 3.2.
 
 Prompt hashes follow these constants. The engine joins the base prompt and each text with a blank
 line; TARGET_LABELS holds one "id: label" line per target that the packet does not label itself.
@@ -414,9 +414,12 @@ TARGET_LABELS = (
     'completion time is claimed; the conjectured answer is kept apart from the question, with its grounds; an '
     'unresolved attempt is not called an obstruction.\n'
     "validity: Readiness check validity: the candidate's claims follow from its recorded executions and sources.\n"
-    'scope: Readiness check scope: the claims stay within the scope that the evidence establishes, with their '
-    'estimands and failure signals.\n'
-    'novelty: Readiness check novelty: the result is new against the nearest prior work in the sources.\n'
+    "scope: Readiness check scope: the candidate's claims stay within its exact scope statement and its scope "
+    'assumptions, and a partial scope keeps its own identity and lists the remaining obligations of the complete '
+    'objective.\n'
+    'novelty: Readiness check novelty: the novelty comparison is current for this exact result claim and scope, '
+    'compares the candidate with actual current full-read sources linked as its evidence, and leaves no unresolved '
+    'gap.\n'
     'contribution: Readiness check contribution: the contribution statement is supported by the evidence.\n'
     'development: Readiness check development: the proposed development (bottleneck change, next question, strategy '
     'and alternatives) follows from the result.\n'
