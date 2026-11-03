@@ -711,16 +711,18 @@ def _build_reading_turn(artifacts, route, packet, record, delivered, candidates,
     return chosen
 
 
-def _list_withholding_candidates(packet, rows):
+def _list_withholding_candidates(packet, rows, eligible_texts=()):
     """The carried rows structurally eligible for final-body withholding, without delivery credit."""
     from .problem_openness_sources import protected_evidence, required_proof
     protected = set(protected_evidence(packet)) | required_proof(packet['native'])
+    if find_protocol(packet) == PROTOCOL_V5:
+        protected.difference_update(eligible_texts)
     carried = {entry['artifact']['sha256'] for entry in packet['evidence']}
     return [row for row in rows if row.get('record_kind') != 'problem_statement'
             and row['artifact']['sha256'] not in protected and row['artifact']['sha256'] in carried]
 
 
-def preflight_final_input(route, input_limit, packet, rows, record):
+def preflight_final_input(route, input_limit, packet, rows, record, *, eligible_texts=(), delivered=None):
     """Measure a diagnostic mandatory-final-input floor, or return unknown for unsupported representations.
 
     No artifacts, observations or deliverable packets are produced. The projection keeps the immutable native
@@ -733,6 +735,14 @@ def preflight_final_input(route, input_limit, packet, rows, record):
     report = {'phase': 'final_preflight', 'measurement_kind': 'mandatory_input_lower_bound',
               'status': 'unknown', 'input_characters': None, 'input_limit_characters': input_limit,
               'mandatory_components': []}
+    v5 = record['protocol'] == PROTOCOL_V5
+    if v5:
+        report.update(headroom_upper_bound_characters=None, planned_removable_texts=[
+            dict(_describe_identity(row), artifact=row['artifact'],
+                 deliveries=(delivered or {}).get(row['artifact']['sha256'], {}).get('deliveries', []))
+            for row in rows if row['kind'] == 'fulltext' and row['artifact']['sha256'] in eligible_texts],
+            remaining_allowances={kind: value['characters'] - value['used']
+                                  for kind, value in record['allowances'].items()}, capacity_warning=None)
     if input_limit is None:
         return dict(report, reason='The route has no character input limit.')
     if (route['adapter'] not in ('codex_cli_v1', 'codex_cli_framed_v1', 'claude_cli_v1') or MARKER in packet
@@ -742,18 +752,27 @@ def preflight_final_input(route, input_limit, packet, rows, record):
     candidate = copy.deepcopy(packet)
     if record['protocol'] == PROTOCOL_V5:
         _project_search_delivery(candidate, record)
-    optional = {row['artifact']['sha256'] for row in _list_withholding_candidates(packet, rows)}
+    candidate[RECORD_KEY] = record
+    optional = {row['artifact']['sha256'] for row in _list_withholding_candidates(candidate, rows, eligible_texts)}
     for entry in candidate['evidence']:
-        if entry['artifact']['sha256'] in optional:
+        if entry['artifact']['sha256'] in optional - set(eligible_texts):
             entry['content'] = ''
     candidate[RECORD_KEY] = {key: copy.deepcopy(record[key]) for key in ('protocol', 'excerpts', 'passages')}
     if record['protocol'] == PROTOCOL_V5:
         candidate[RECORD_KEY]['search_delivery'] = copy.deepcopy(record['search_delivery'])
     prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
     request = _render(route, prompt, candidate)
-    report.update(status='measured', input_characters=_measure(route, request))
     # Inspect construction's actual alternative/contained and binary projections for the component inventory.
     supplied = review_excerpts.read_sent_packet(request)
+    if v5:
+        # Diagnostic only: first validate and project the complete source contract normally, then remove texts
+        # that the chain must deliver before its final turn. This creates neither a receipt nor a usable packet.
+        for entry in supplied['evidence']:
+            if entry['artifact']['sha256'] in eligible_texts:
+                entry['content'] = ''
+        request['input'][-1]['content'] = transport.PACKET_LABEL + json.dumps(supplied, sort_keys=True,
+                                                                            ensure_ascii=False)
+    report.update(status='measured', input_characters=_measure(route, request))
     for entry in supplied['evidence']:
         if entry['artifact']['sha256'] not in optional:
             report['mandatory_components'].append({'kind': 'evidence', 'sha256': entry['artifact']['sha256'],
@@ -761,29 +780,37 @@ def preflight_final_input(route, input_limit, packet, rows, record):
                 'encoding': entry.get('encoding'), 'delivery': entry.get('delivery')})
     components = [('final_prompt', prompt), ('native_context', json.dumps(candidate['native'], sort_keys=True,
                                                                          ensure_ascii=False))]
+    if v5:
+        components.append(('search_manifest', json.dumps(record['search_delivery'], sort_keys=True,
+                                                        ensure_ascii=False)))
     for kind, key in (('excerpt', 'excerpts'), ('passage', 'passages')):
         components.extend((kind, json.dumps(item, sort_keys=True, ensure_ascii=False)) for item in record[key])
     for kind, content in components:
         data = content.encode('utf-8')
         report['mandatory_components'].append({'kind': kind, 'sha256': hashlib.sha256(data).hexdigest(),
                                                'size_bytes': len(data), 'characters': len(content)})
+    if v5:
+        headroom = input_limit - report['input_characters']
+        report.update(headroom_upper_bound_characters=headroom,
+                      capacity_warning=headroom < sum(report['remaining_allowances'].values()))
     if report['input_characters'] > input_limit:
         raise ResearchError('review_input_too_large',
                             'The mandatory final input of the reading chain exceeds the route input limit.', report)
     return report
 
 
-def _list_withholdable_bodies(packet, rows, spans, observations):
+def _list_withholdable_bodies(packet, rows, spans, observations, eligible_texts=()):
     """The bodies that the final turn may withhold, in the order in which it withholds them, each as its SHA-256 and
     the reading turns that delivered it: the full texts from the end of text_delivery_priority, then the other full
     texts, the captured responses, the reading records and the search records, each kind largest first. A body
     qualifies when the actual requests of reading turns delivered it complete, whole or in all of its parts. The
-    statement record and the bodies that proof, source or screening contracts protect stay."""
+    statement record and independently protected bodies stay. Eligible v5 selected texts use the same complete
+    reading-delivery rule as the other full texts."""
     native = packet['native']
     priority = native['scientific_context'].get('text_delivery_priority', [])
     whole, parts = _collect_coverage(observations)
     ranked = []
-    for row in _list_withholding_candidates(packet, rows):
+    for row in _list_withholding_candidates(packet, rows, eligible_texts):
         key, sha256 = review_excerpts.find_identity(row), row['artifact']['sha256']
         if not _is_complete(key, spans[key], whole, parts):
             continue
@@ -802,7 +829,7 @@ def _list_withholdable_bodies(packet, rows, spans, observations):
     return bodies
 
 
-def _build_final_turn(route, packet, record, rows, spans, observations):
+def _build_final_turn(route, packet, record, rows, spans, observations, eligible_texts=()):
     """The native packet with the reading record, withholding only as far as its request needs to fit the route."""
     from .review_protocol import canonical_prompt
     value = {key: item for key, item in packet.items() if key != 'digest'}
@@ -810,7 +837,7 @@ def _build_final_turn(route, packet, record, rows, spans, observations):
     if record['protocol'] == PROTOCOL_V5:
         value = copy.deepcopy(value)
         _project_search_delivery(value, record)
-    bodies = _list_withholdable_bodies(value, rows, spans, observations)
+    bodies = _list_withholdable_bodies(value, rows, spans, observations, eligible_texts)
     prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
     return _fit_turn(route, prompt, value, bodies)[0]
 
@@ -1081,7 +1108,8 @@ def prepare_packet(records, artifacts, value, route, packet):
     a math result, stays a single turn when one input of the route holds every reading unit complete and its units
     total at most one turn's reading budget. Otherwise the first assignment is reading turn 1; a turn that continues a
     chain is the next reading turn while a required unit has not reached a reading turn complete, and then the final
-    turn."""
+    turn. V5 planning diagnostics accompany the returned chain metadata; record_assignment removes them before
+    saving the chain and returns them separately from the scientific packet."""
     native = packet['native']
     prior_id = value['context'].get('prior_assignment_id')
     if prior_id is None:
@@ -1099,7 +1127,11 @@ def prepare_packet(records, artifacts, value, route, packet):
         record = _create_record(protocol, plan['manifest'] if plan is not None else None,
                                 excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
         chain = {'first_assignment_id': value['id'], 'turn': 1}
-        preflight_final_input(route, transport.local_input_limit(route), packet, rows, record)
+        selected = _classify_final_texts(records, artifacts, native, rows, protocol)
+        report = preflight_final_input(route, transport.local_input_limit(route), packet, rows, record,
+                                       eligible_texts=selected)
+        if protocol == PROTOCOL_V5:
+            chain['diagnostics'] = {'final_input': report}
         if plan is not None:
             for content in plan['bodies'].values():
                 artifacts.put(content, 'application/json')
@@ -1117,14 +1149,31 @@ def prepare_packet(records, artifacts, value, route, packet):
         _require_problem_continuity(records, artifacts, native, prior_chain, rows, observations, manifest)
     record = _extend_record(records, artifacts, prior_packet, state, rows, observations, protocol)
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
-    preflight_final_input(route, transport.local_input_limit(route), packet, rows, record)
+    selected = _classify_final_texts(records, artifacts, native, rows, protocol)
+    delivered_bodies = (_collect_delivered_bodies(delivery_rows, spans, observations)
+                        if protocol == PROTOCOL_V5 else None)
+    report = preflight_final_input(route, transport.local_input_limit(route), packet, rows, record,
+                                   eligible_texts=selected, delivered=delivered_bodies)
+    if protocol == PROTOCOL_V5:
+        chain['diagnostics'] = {'final_input': report}
     remaining = _list_remaining_units(artifacts, delivery_rows, spans, observations)
     if remaining:
         delivered = [dict({key: item for key, item in row.items() if key != 'artifact'},
                           artifact_descriptor=descriptor(row['artifact']))
                      for observation in observations for row in observation['delivered_now']]
         return _build_reading_turn(artifacts, route, packet, record, delivered, remaining, chain['turn']), chain
-    return _build_final_turn(route, packet, record, rows, _compute_spans(artifacts, rows), observations), chain
+    return _build_final_turn(route, packet, record, rows, _compute_spans(artifacts, rows), observations, selected), chain
+
+
+def _classify_final_texts(records, artifacts, native, rows, protocol):
+    """Selected full texts without any independent protection role, only for the v5 final planner."""
+    if protocol != PROTOCOL_V5:
+        return set()
+    from .problem_openness_sources import classify_selected_texts
+    contained = {span['sha256'] for span in native['scientific_context'].get(
+        'openness_delivery', {}).get('contained_sources', [])}
+    return {sha256 for sha256, reasons in classify_selected_texts(records, artifacts, native, rows).items()
+            if reasons == {'selected_text'} and sha256 not in contained}
 
 
 def _require(condition, message, **details):
@@ -1308,12 +1357,12 @@ def _project_withheld_notes(expected, carried):
     return projected
 
 
-def _require_withheld_bodies(packet, rows, spans, observations):
+def _require_withheld_bodies(packet, rows, spans, observations, eligible_texts=()):
     """A final turn withholds a prefix of the bodies that it may withhold, in the withholding order, each with the note
     that names the reading turns that delivered it."""
     withheld = {entry['artifact']['sha256']: entry['note'] for entry in packet['evidence']
                 if entry.get('delivery') == BODY_WITHHELD_DELIVERY}
-    allowed = _list_withholdable_bodies(packet, rows, spans, observations)[:len(withheld)]
+    allowed = _list_withholdable_bodies(packet, rows, spans, observations, eligible_texts)[:len(withheld)]
     if withheld != {sha256: BODY_WITHHELD_NOTE.format(', '.join(delivering)) for sha256, delivering in allowed}:
         raise ResearchError('openness_reading_incomplete', 'A final turn withholds only a prefix of the bodies that '
                             'its reading turns delivered complete, in the withholding order, each with the note that '
@@ -1451,7 +1500,8 @@ def _require_problem_continuity(records, artifacts, native, chain, rows, observa
                         if entry.get('delivery') == SEARCH_DELIVERY} != omitted):
                 raise ResearchError('openness_reading_incomplete', 'The v5 final search omissions must match the '
                                     'frozen manifest exactly')
-            _require_withheld_bodies(packet, rows, spans, observations[:index])
+            selected = _classify_final_texts(records, artifacts, native, rows, PROTOCOL_V5)
+            _require_withheld_bodies(packet, rows, spans, observations[:index], selected)
         validate_turn_output(packet, output)
         terminal = stage == 'final' and output.get('stage') != 'reading'
         if terminal != (final and index + 1 == len(chain)):

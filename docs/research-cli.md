@@ -3354,7 +3354,7 @@ and `delivery: "search-rebuilt-from-reading-turns"`; the manifest and verified
 receipts describe its complete original delivery. It never expands those
 searches again. Bytes with an independent protected role, including required
 proof, retain their existing final-input treatment even when their digest also
-names a factored search. All other bodies retain their existing final-input rules.
+names a factored search.
 The harness builds the final with every other body and every note and
 measures the exact request that the route sends. While that request exceeds
 the input limit, it withholds content in this order, one item at a time, and
@@ -3372,8 +3372,17 @@ stops at the first request that fits:
 Within a kind, equal sizes go by identity and then by artifact SHA-256. A body
 counts as delivered only when the actual authenticated requests of the reading
 turns carried it whole or in all of its parts; a plan entry or a claimed
-delivery does not count. Protected bodies (required proof bytes, selected
-source texts and screening evidence) are never withheld. A withheld body keeps
+delivery does not count. In a v5 chain, a selected text of the unchanged
+`openness_delivery` contract may also be withheld in this order when it is an
+exact full-text reading unit, earlier authenticated reading turns delivered it
+whole or in every part, and the chain retains its native packet, reviewer,
+author and route. Its digest must have no other protected role: required proof,
+screening evidence, an original, a figure, table, equation, supplement or
+inspection asset. Eligibility uses complete metadata on both text-only and
+other routes. Source validation derives coverage again from authenticated
+requests; saved receipts alone give no credit. Existing proof-container
+containment still applies. Generic route fitting continues to protect selected
+texts, and v4 and math chains retain their existing rules. A withheld body keeps
 its artifact reference and encoding, with `content: ""`,
 `delivery: "body-delivered-in-reading-turns"` and a note that names the turns
 that delivered it. A withheld note is replaced by `notes_withheld` in this
@@ -3420,6 +3429,28 @@ excerpts and passages that later turns add are counted again before each
 later turn, and the final turn is fitted and refused as above. The projection
 is a diagnostic; it is never stored, sent to a reviewer or counted as a
 delivery.
+
+Every successful `review-assignment` of a v5 chain returns
+`result.diagnostics.final_input`, before the reviewer invocation. The report
+stays outside the saved assignment and scientific packet. It includes the
+route limit (`input_limit_characters`), the measured mandatory floor
+(`input_characters`), and `headroom_upper_bound_characters`, the limit minus
+that floor. `mandatory_components` also identifies the `search_manifest`.
+`planned_removable_texts` lists each eligible selected text by its full-text
+identity and artifact descriptor; `deliveries` lists its verified contributing
+assignments, attempts and whole-body or part receipts, or is empty until
+complete delivery. `remaining_allowances` gives the remaining excerpt and
+passage content characters separately. `capacity_warning: true` means that
+the headroom cannot hold both remaining content allowances, even before their
+serialization overhead. Low headroom warns and does not refuse the assignment.
+An unsupported representation retains `status: "unknown"`, with a null floor,
+headroom and warning. A sound floor above the route limit still refuses.
+
+For this prospective v5 measurement, the harness first projects the complete
+source contract normally, then counts eligible selected texts as empty because
+the chain must deliver them before reaching its final. That diagnostic
+assumption neither authorizes withholding an unread text nor creates a
+delivery receipt. The same projection is checked again before invocation.
 
 Run a reading chain turn by turn:
 

@@ -137,6 +137,49 @@ def protected_evidence(supplied):
     return screening | required_proof(packet) | set(delivery["protected_source_digests"])
 
 
+def classify_selected_texts(records, artifacts, packet, rows):
+    """Keep every independent protection reason for selected full-text units, using complete source metadata.
+
+    This classification grants no delivery credit and does not change the schema-1 contract or generic fitting.
+    Binary originals and source-unit assets must be considered even on a text-only reviewer route.
+    """
+    from .bar_sources import _source
+    from .problem_openness_screening import required_evidence
+    from .review_transport import text_only_delivery
+    context = packet['scientific_context']
+    delivery = context.get('openness_delivery')
+    if delivery is None:
+        return {}
+    fulltexts = {(row['version_id'], row['text_sha256']) for row in rows if row['kind'] == 'fulltext'}
+    reasons = {source['selected_text_sha256']: {'selected_text'} for source in delivery['sources']
+               if (source['version_id'], source['selected_text_sha256']) in fulltexts}
+
+    def protect(identities, reason):
+        for identity in reasons.keys() & set(identities):
+            reasons[identity].add(reason)
+
+    protect(required_proof(packet), 'required_proof')
+    protect(required_evidence(context), 'screening')
+    for source in delivery['sources']:
+        protect((row['original_descriptor']['sha256'] for row in source['representations']), 'original')
+        with text_only_delivery(False):
+            complete = _source(records, artifacts, {'id': 'openness-source', 'kind': 'source',
+                'version_id': source['version_id'], 'depth': 'fulltext'}, {})
+        for bundle in complete['declared_bundles']:
+            for unit in bundle['units']:
+                if unit['link'] is not None and unit['kind'] in {'figure', 'table', 'equation', 'supplement'}:
+                    protect([unit['link']['artifact_descriptor']['sha256']] + [identity
+                        for row in complete['source_provenance']
+                        if row.get('bundle_id') == bundle['id'] and row.get('unit_id') == unit['id']
+                        for identity in row['delivered_sha256']], unit['kind'])
+    minimum = context['openness_minimum']
+    for row in records.get('reading', {}).values():
+        if digest(row) in minimum['reading_digests']:
+            protect((asset['artifact']['sha256'] for inspection in row['inspections']
+                     for asset in inspection['link']['locator'].get('assets', [])), 'inspection_asset')
+    return reasons
+
+
 def _complete(entry):
     from .review_transport import is_binary_evidence
     require(entry is not None and entry.get("encoding") == "utf-8" and isinstance(entry.get("content"), str),
@@ -149,7 +192,12 @@ def _complete(entry):
     return data
 
 
-def _projection(supplied, *, projected):
+def _projection(supplied, *, projected, withheld_texts=None):
+    """Check source presentation; actual v5 omissions require a freshly authenticated coverage map.
+
+    Construction preserves an explicit final-planner receipt. It grants no credit to a missing body or to the
+    receipt itself; validation must supply the complete eligible units derived from this chain's requests.
+    """
     packet = supplied.get("native") or {}
     delivery = packet.get("scientific_context", {}).get("openness_delivery")
     if delivery is None:
@@ -164,11 +212,12 @@ def _projection(supplied, *, projected):
     alternate = set(delivery["alternate_body_digests"])
     protected = set(delivery["protected_source_digests"])
     require(not alternate & (required | protected | selected), "Required and selected sources cannot be omitted as alternatives")
-    allowed_alternates = set()
+    allowed_alternates, selected_descriptors = set(), {}
     for source in delivery["sources"]:
         choices = [row for row in source["representations"] if row["source_id"] == source["selected_source_id"]]
         require(len(choices) == 1, "Select one exact main source identity")
         choice = choices[0]
+        selected_descriptors[source['selected_text_sha256']] = choice['extraction_descriptor']
         require(choice["main_representation"] and not choice["source_scope_pending"]
                 and choice["version_id"] == source["version_id"] and choice["origin_verified"] is True
                 and choice["capture_method"] == "http"
@@ -207,8 +256,24 @@ def _projection(supplied, *, projected):
             require(entries[identity].get("delivery") == CONTAINED and entries[identity].get("content") == "",
                     "Identify each contained source explicitly in the actual request")
         spans[identity] = span
+    from .openness_reading import BODY_WITHHELD_DELIVERY, BODY_WITHHELD_NOTE, PROTOCOL_V5
+    final = supplied.get('reading_record', {}).get('protocol') == PROTOCOL_V5
     for identity in selected - set(spans):
-        _complete(entries.get(identity))
+        entry = entries.get(identity)
+        if final and entry is not None and entry.get('delivery') == BODY_WITHHELD_DELIVERY:
+            require(entry.get('content') == '' and identity not in required,
+                    'Only an explicitly withheld v5 selected text may use earlier reading delivery')
+            from .bar_sources import descriptor
+            require(descriptor(entry['artifact']) == selected_descriptors[identity],
+                    'A withheld selected text must retain its exact source descriptor')
+            if projected:
+                require(identity in (withheld_texts or {}),
+                        'A withheld selected text needs fresh authenticated complete reading coverage')
+                delivering = list(dict.fromkeys(row['assignment_id'] for row in withheld_texts[identity]))
+                require(entry.get('note') == BODY_WITHHELD_NOTE.format(', '.join(delivering)),
+                        'The selected-text receipt must name its authenticated delivering turns')
+        else:
+            _complete(entry)
     if projected:
         for identity in alternate:
             require(entries[identity].get("delivery") == ALTERNATE and entries[identity].get("content") == "",
@@ -217,7 +282,7 @@ def _projection(supplied, *, projected):
 
 
 def apply_delivery(supplied):
-    """Project only an explicit new openness contract; retain every evidence descriptor."""
+    """Project the source contract, retaining descriptors and explicit v5 final-planner withholding receipts."""
     projection = _projection(supplied, projected=False)
     if projection is None:
         return
@@ -237,5 +302,14 @@ def validate_delivery(records, artifacts, packet, state):
     require(delivery == build_delivery(records, artifacts, packet), "Reassess changed source captures, readings or containment")
     from .problem_openness_reviews import actual_delivery
     supplied = actual_delivery(records, artifacts, state, packet, required_proof(packet))
-    _projection(supplied, projected=True)
+    from .openness_reading import PROTOCOL_V5, list_reading_rows, verify_problem_coverage
+    withheld = {}
+    if supplied.get('reading_record', {}).get('protocol') == PROTOCOL_V5:
+        attempt = records['review_attempt'][state['attempt_id']]
+        assignment = records['review_assignment'][attempt['assignment_id']]
+        coverage = verify_problem_coverage(records, artifacts, assignment, final=True)
+        reasons = classify_selected_texts(records, artifacts, packet, list_reading_rows(records, artifacts, packet))
+        withheld = {row['artifact']['sha256']: row['deliveries'] for row in coverage['units']
+                    if reasons.get(row['artifact']['sha256']) == {'selected_text'}}
+    _projection(supplied, projected=True, withheld_texts=withheld)
     return delivery

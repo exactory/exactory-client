@@ -111,8 +111,15 @@ def build_assignment_report(records, artifacts, assignment, request=None):
             rows = reading.list_reading_rows(records, artifacts, native)
             record = (packet.get(reading.TURN_KEY, {}).get('reading_record') or packet.get(reading.RECORD_KEY)
                       or reading._create_record(reading.find_chain_protocol(native)))
+            selected = reading._classify_final_texts(records, artifacts, native, rows, record['protocol'])
+            delivered = {}
+            prior = assignment['context'].get('prior_assignment_id')
+            if record['protocol'] == reading.PROTOCOL_V5 and prior is not None:
+                coverage = reading.verify_problem_coverage(records, artifacts, records['review_assignment'][prior])
+                delivered = {row['artifact']['sha256']: row for row in coverage['units']}
             try:
-                floor = reading.preflight_final_input(route, transport.local_input_limit(route), complete, rows, record)
+                floor = reading.preflight_final_input(route, transport.local_input_limit(route), complete, rows, record,
+                                                      eligible_texts=selected, delivered=delivered)
             except ResearchError as error:
                 if error.code != 'review_input_too_large':
                     raise
