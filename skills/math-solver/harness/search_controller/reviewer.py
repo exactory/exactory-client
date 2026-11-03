@@ -390,8 +390,8 @@ def validate_packet_context(supplied, expected, state):
 def require_review(root, state, content, value, *, subject=None, new=False, common_guard=None, record=None):
     """Check actual invocation and exact native evidence, not self-attestation.
 
-    An attestation that names the first turn of an openness reading chain stands for the chain's effective terminal
-    turn: the whole chain is verified, and the result carries its reading_turns receipts. record is the recorded
+    An attestation naming the first turn of a reading chain or parts series stands for its effective terminal
+    turn: the whole series is verified, and the result carries its reading_turns receipts. record is the recorded
     acceptance or closure that relies on this review; its reading_turns must equal the receipts verified now.
     """
     from research_harness.artifacts import ArtifactStore
@@ -400,6 +400,7 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
     from research_harness.openness_reading import find_final_assignment, verify_chain
     from research_harness.operations import normalized_text
     from research_harness.review_protocol import assignment_state
+    from research_harness import review_parts
     from research_harness.storage import Store
     identifier = value.get("reviewer", {}).get("attestation_id", "")
     if not isinstance(identifier, str) or not identifier.startswith(PREFIX):
@@ -421,11 +422,28 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             assignment = find_final_assignment(records, artifacts, identifier)
             current = dict(assignment_state(records, artifacts, assignment["id"]),
                            reading_turns=verify_chain(records, artifacts, assignment))
+        elif review_parts.KEY in assignment:
+            from research_harness import review_parts_native
+            assignment = review_parts_native.find_final_assignment(records, artifacts, identifier)
+            verified = review_parts.verify_series(records, artifacts, assignment['id'])
+            s.require(verified['complete'], 'The native review parts series is incomplete',
+                      'review_parts_incomplete')
+            current = assignment_state(records, artifacts, assignment['id'])
+            header = verified['packets'][-1][review_parts.KEY]
+            receipts = header['receipts'] + [dict(assignment_id=assignment['id'], attempt_id=current['attempt_id'])]
+            # Native parts have no openness reading units; the verified series supplies their coverage.
+            current = dict(current, reading_turns=[dict(assignment_id=receipt['assignment_id'],
+                attempt_id=receipt['attempt_id'], delivered_units=[]) for receipt in receipts])
         s.require(current["output"] == value, "Use the observed native review without author changes", "review_output_mismatch")
         if record is not None:
             s.require(record.get("reading_turns") == current.get("reading_turns"),
-                      "The recorded reading turns changed", "openness_reading_incomplete")
+                      "The recorded reading turns changed",
+                      "review_parts_incomplete" if review_parts.KEY in assignment else "openness_reading_incomplete")
         supplied = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
+        if review_parts.KEY in assignment:
+            logical = review_parts.read_logical_packet(artifacts, header)
+            s.require(supplied == logical['native'], 'The native packet differs from the observed series',
+                      'review_packet_mismatch')
         s.require(supplied["root"] == str(Path(root).resolve()) and supplied["objective_id"] == state["objective_id"]
                   and supplied["contract"] == state["contract"] and supplied["reviewer"] == value["reviewer"]
                   and supplied["kind"] == kind(value) and supplied["subject_digest"] == value["subject_digest"]

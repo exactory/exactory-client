@@ -1622,8 +1622,10 @@ def verify_series(records, artifacts, final_assignment_id):
                 issues=dict(count=issue_count, examples=issues))
 
 
-def _find_replacement(records, artifacts, value, adapter, series_key, slot_id, prior_id, output_tokens):
+def _find_replacement(records, artifacts, value, adapter, series_key, slot_id, prior_id, output_tokens,
+                      *, logical_packet=None):
     from .operations import normalized_text
+    from .review_parts_roles import get_adapter
     from .workspace import strict_json
 
     replacement = None
@@ -1639,7 +1641,7 @@ def _find_replacement(records, artifacts, value, adapter, series_key, slot_id, p
             continue
         packet = strict_json(artifacts.read(failed['packet']))
         header = packet.get(KEY, {})
-        if find_kind(packet) != 'read' or header.get('adapter') != adapter or header.get('series_key') != series_key:
+        if find_kind(packet) != 'read' or header.get('adapter') != adapter:
             continue
         attempts = [attempt for attempt in records.get('review_attempt', {}).values()
                     if attempt['assignment_id'] == failed['id']]
@@ -1649,6 +1651,11 @@ def _find_replacement(records, artifacts, value, adapter, series_key, slot_id, p
                        or (attempt.get('error') or {}).get('code') == 'review_incomplete'
                        for attempt in attempts)
         if over_cap:
+            if header.get('series_key') != series_key:
+                replacement_key = get_adapter(adapter).get('replacement_key')
+                if (prior_id is not None or logical_packet is None or replacement_key is None
+                        or replacement_key(read_logical_packet(artifacts, header)) != replacement_key(logical_packet)):
+                    continue
             replacement = dict(unit_characters=header['unit_characters'], over_cap=True)
     return replacement
 
@@ -1743,7 +1750,7 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     packet['digest'] = digest(packet)
     logical_reference = artifacts.put(_dump(packet).encode('utf-8'), 'application/json')
     replacement = _find_replacement(records, artifacts, value, adapter, series_key, slot_id,
-                                    prior_id, route['configuration']['max_output_tokens'])
+                                    prior_id, route['configuration']['max_output_tokens'], logical_packet=packet)
 
     def measure(candidate):
         turn_prompt = build_turn_prompt(value['role'], base_prompt_parameters, candidate[KEY])

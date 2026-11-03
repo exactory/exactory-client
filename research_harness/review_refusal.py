@@ -194,7 +194,7 @@ def _validate_staged_pages(records, assignment, epoch, task, output):
 
 def classify_observed_output(records, artifacts, attempt_id):
     """Return the first pure failure of an authenticated attempt's own saved output."""
-    from . import review_protocol as protocol
+    from . import review_parts, review_protocol as protocol
     from .review_protocol import authenticate_attempt, validate_adjudication_contract
     from .research_decisions import validate_review_contract
     attempt = records.get('review_attempt', {}).get(attempt_id)
@@ -220,6 +220,11 @@ def classify_observed_output(records, artifacts, attempt_id):
                 scientific = _project_staged_final(assignment['role'], output)
                 if scientific is not None:
                     _validate_staged_final(records, artifacts, assignment, packet, epoch, scientific)
+        elif (review_parts.find_kind(packet) is not None
+              and (review_parts.find_kind(packet) != 'final'
+                   or isinstance(output, dict) and output.get('kind') == 'requests')):
+            with contract_check('review.shape'):
+                review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
         elif assignment['role'] in ('bar', 'slate', 'result'):
             validate_review_contract(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'adjudicator':

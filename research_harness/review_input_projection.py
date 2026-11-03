@@ -75,6 +75,40 @@ def _require_review_packet(packet, assignments=None):
                      and len({row['id'] for row in assessments}) == len(assessments)
                      and isinstance(objection, dict) and isinstance(objection.get('id'), str)
                      and bool(objection['id'].strip()))
+        if role == 'native_math':
+            from . import native_review, review_parts
+            from .artifacts import validate_reference
+            from .evidence import digest
+            native, header = packet.get('native'), packet.get(review_parts.KEY)
+            valid = (protocol == 'exactory-independent-review-v1'
+                     and 'dossier_id' in packet and packet['dossier_id'] is None and 'subject' not in packet
+                     and isinstance(native, dict) and native.get('protocol') == native_review.PROTOCOL
+                     and isinstance(native.get('kind'), str) and native['kind'] in native_review.KINDS
+                     and isinstance(native.get('subject'), dict)
+                     and native.get('subject_digest') == digest(native['subject'])
+                     and isinstance(native.get('reviewer'), dict)
+                     and isinstance(header, dict) and review_parts.find_kind(packet) is not None
+                     and header.get('adapter') == 'native_math'
+                     and {'inventory', 'inventory_digest', 'logical_packet', 'logical_packet_digest',
+                          'series_key', 'state_digest', 'receipts', 'units'} <= header.keys()
+                     and isinstance(header.get('series_assignment_id'), str)
+                     and bool(header['series_assignment_id'].strip())
+                     and type(header.get('turn')) is int and header['turn'] >= 1
+                     and isinstance(header['receipts'], list) and isinstance(header['units'], list)
+                     and isinstance(packet.get(review_parts.STATE_KEY), dict)
+                     and header['state_digest'] == digest(packet[review_parts.STATE_KEY])
+                     and packet['digest'] == digest({key: value for key, value in packet.items() if key != 'digest'}))
+            if valid:
+                try:
+                    validate_reference(header['inventory'])
+                    validate_reference(header['logical_packet'])
+                    native_review.require_assignment_identity(native, dict(id=header['series_assignment_id'],
+                        reviewer_id=packet['reviewer_id'], dossier_id=None))
+                except ResearchError:
+                    valid = False
+                else:
+                    valid = (header['inventory_digest'] == header['inventory']['sha256']
+                             and header['logical_packet_digest'] == header['logical_packet']['sha256'])
     if valid and assignments is not None:
         from .review_context_repair import is_same_subject
         bound = [assignment for assignment in assignments
@@ -88,6 +122,12 @@ def _require_review_packet(packet, assignments=None):
                      if packet['objection']['id'] == assignment.get('context', {}).get('objection_id')
                      and [row['id'] for row in packet['assessments'][:2]]
                      == assignment.get('context', {}).get('review_ids')]
+        if packet['role'] == 'native_math':
+            bound = [assignment for assignment in bound
+                     if isinstance(assignment.get('review_parts'), dict)
+                     and all(packet['review_parts'].get(key) == assignment['review_parts'].get(key)
+                             for key in ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn',
+                                         'inventory_digest'))]
         valid = bool(bound)
     if not valid:
         raise ResearchError('review_input_unreadable', 'Use a native review packet with its exact bound identity')

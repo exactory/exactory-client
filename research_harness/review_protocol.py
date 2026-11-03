@@ -2666,9 +2666,16 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 from .review_visual_context_repair import prepare as prepare_visual_repair
                 prepare_visual_repair(records, artifacts, value, repair, packet)
             if value['role'] == 'native_math':
-                packet, reading_chain = openness_reading.prepare_packet(records, artifacts, value, route, packet)
-                if reading_chain is not None:
-                    value = dict(value, reading_chain=reading_chain)
+                prior_id = value['context'].get('prior_assignment_id')
+                prior = records.get('review_assignment', {}).get(prior_id)
+                if prior is not None and review_parts.KEY in prior:
+                    from .review_parts_native import read_prior_assignment
+                    parent = read_prior_assignment(records, artifacts, value)
+                    value = dict(value, **{review_parts.KEY: parent[review_parts.KEY]})
+                else:
+                    packet, reading_chain = openness_reading.prepare_packet(records, artifacts, value, route, packet)
+                    if reading_chain is not None:
+                        value = dict(value, reading_chain=reading_chain)
         if value['role'] == 'native_math':
             from .native_review import require_assignment_identity
             require_assignment_identity(openness_reading.find_binding(packet), value)

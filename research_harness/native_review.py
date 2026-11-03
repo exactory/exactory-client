@@ -178,8 +178,9 @@ def load_packet(artifacts, reference, reviewer_id):
 
 
 def require_assignment_identity(packet, assignment):
-    """The packet names the exact assignment, or for a turn of an openness reading chain the chain's first turn."""
-    first = assignment.get("reading_chain", {}).get("first_assignment_id", assignment["id"])
+    """The packet names the assignment, or the first turn of its reading or parts series."""
+    first = assignment.get("reading_chain", {}).get("first_assignment_id",
+        assignment.get("review_parts", {}).get("series_assignment_id", assignment["id"]))
     expected = {"source": "host", "actor_id": assignment["reviewer_id"],
                 "attestation_id": ATTESTATION_PREFIX + first}
     if packet["reviewer"] != expected or assignment["dossier_id"] is not None:
