@@ -463,16 +463,20 @@ def _review_status(records, artifacts):
     result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
-    for assignment in sorted(records.get('review_assignment', {}).values(),
-                             key=lambda row: row['recorded_revision']):
-        if review_parts.KEY not in assignment:
-            continue
+    parts_assignments = sorted((assignment for assignment in records.get('review_assignment', {}).values()
+                                if review_parts.KEY in assignment),
+                               key=lambda row: row['recorded_revision'])
+    latest_turns = {assignment[review_parts.KEY]['series_assignment_id']: assignment
+                    for assignment in parts_assignments}
+    series_results = {identifier: review_parts.verify_series(records, artifacts, assignment['id'])
+                      for identifier, assignment in latest_turns.items()}
+    for assignment in parts_assignments:
         identifier = assignment['id']
         try:
             state = review_protocol.assignment_state(records, artifacts, identifier)
         except (ResearchError, json.JSONDecodeError):
             state = dict(ready=False)
-        series = review_parts.verify_series(records, artifacts, identifier)
+        series = series_results[assignment[review_parts.KEY]['series_assignment_id']]
         result['assignments'][identifier]['review_parts'] = describe_parts_turn(
             assignment, state, series,
             ended_without_output=review_protocol.has_ended_without_output(records, identifier))

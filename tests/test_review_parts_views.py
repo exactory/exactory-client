@@ -59,6 +59,37 @@ class PartsViewCase(PartsResultCase):
 
 
 class PartsStatusTests(PartsViewCase):
+    def test_status_does_not_offer_to_rerun_an_observed_earlier_turn(self):
+        self.prepare_parts()
+        first = self.assign()
+        self.invoke(first)
+        second = self.assign('next-read', first['id'])
+        self.invoke(second)
+        pending = self.assign('pending-turn', second['id'])
+        report = cli._review_status(self.case.read_records(), self.case.artifacts)
+        earlier = report['assignments'][first['id']]['review_parts']
+        self.assertEqual(earlier['next'][0]['workflow'], 'review-assignment')
+        self.assertEqual(earlier['next'][0]['scope']['prior_assignment_id'], first['id'])
+        latest = report['assignments'][pending['id']]['review_parts']
+        self.assertEqual(latest['next'][0]['workflow'], 'review-run')
+        self.assertEqual(latest['next'][0]['scope']['assignment_id'], pending['id'])
+
+    def test_status_verifies_each_series_once_from_its_latest_turn(self):
+        self.prepare_parts()
+        turns, final = self.finish_series()
+        self.record_final(final)
+        records = self.case.read_records()
+        with mock.patch.object(parts, 'verify_series', wraps=parts.verify_series) as verify, \
+                mock.patch.object(report_views, 'describe_parts_turn',
+                                  wraps=report_views.describe_parts_turn) as describe:
+            report = cli._review_status(records, self.case.artifacts)
+        self.assertEqual([call.args[2] for call in verify.call_args_list], [final['id']])
+        descriptions = [call for call in describe.call_args_list
+                        if call.args[0]['id'] in {turn['id'] for turn in turns + [final]}]
+        self.assertEqual(len(descriptions), len(turns) + 1)
+        self.assertTrue(all(call.args[2] is descriptions[0].args[2] for call in descriptions))
+        self.assertTrue(report['assignments'][final['id']]['review_parts']['complete'])
+
     def test_status_and_next_follow_the_last_turn_then_run_its_successor(self):
         self.prepare_parts()
         first = self.assign()

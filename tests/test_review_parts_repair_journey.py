@@ -9,6 +9,7 @@ from codex_route_fixtures import (build_codex_response, invoke_codex, limit_code
 from research_harness import review_parts as parts, review_problem_parts as legacy
 from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness.evidence import digest
+from research_harness.errors import ResearchError
 from review_parts_fixtures import PartsResultCase, make_output
 from strategy_fixtures import StrategyCase
 import test_research_context_repair_integration as repair_fixtures
@@ -66,6 +67,15 @@ class ResultRepairJourneyTests(PartsResultCase):
                 turns.append(assignment)
                 prior = assignment['id']
         binding = self.contaminate(turns[-1])
+        revision = self.case.store.revision
+        with self.assertRaises(ResearchError) as refused:
+            self.repair_assignment(turns[-1], binding)
+        self.assertEqual(refused.exception.code, 'review_parts_inventory_too_large')
+        details = refused.exception.details
+        self.assertGreater(details['minimum_read_turns'] * 4000, details['card_budget'])
+        self.assertEqual(self.case.store.revision, revision)
+        self.assertNotIn('repair', self.case.read_records()['review_assignment'])
+        limit_codex_input(self, measured * 16)
         repaired = self.repair_assignment(turns[-1], binding)
         packet = self.packet(repaired)
         self.assertEqual(packet[parts.KEY]['adapter'], 'context_repair')
@@ -81,7 +91,7 @@ class ResultRepairJourneyTests(PartsResultCase):
         texts = [body['content'] for unit in units for body in unit['bodies']]
         for ancestor in turns:
             state = protocol.assignment_state(self.case.read_records(), self.case.artifacts, ancestor['id'])
-            self.assertIn(parts._dump(state['output']), texts)
+            self.assertIn(parts.render_json(state['output']), texts)
         final = self.finish_repair(repaired)
         output = self.final_output()
         output['reassessment'] = dict(assignment_id=turns[-1]['id'], findings=[])
@@ -190,7 +200,6 @@ class BarRepairJourneyTests(StrategyCase):
             protocol.invoke_assignment(self.store, dict(id='child-over-cap', assignment_id=child['id']),
                 credential='fixture', expected_revision=self.store.revision, request_id='child-over-cap')
         if completed:
-            from research_harness.errors import ResearchError
             with self.assertRaises(ResearchError) as refused:
                 self.mutate(decisions.record_value_review, dict(stage='bar', id='capped-child-final',
                     dossier_id='dossier-1', assignment_id=child['id']))
@@ -232,7 +241,6 @@ class BarRepairJourneyTests(StrategyCase):
             result = protocol.invoke_assignment(self.store, dict(id='refused-over-cap', assignment_id=first['id']),
                 credential='fixture', expected_revision=self.store.revision, request_id='refused-over-cap')
         self.assertEqual(result['result']['status'], 'completed')
-        from research_harness.errors import ResearchError
         with self.assertRaises(ResearchError):
             self.mutate(decisions.record_value_review, dict(stage='bar', id='refused-final',
                 dossier_id='dossier-1', assignment_id=first['id']))
@@ -265,8 +273,8 @@ class BarRepairJourneyTests(StrategyCase):
             assignment = self.mutate(protocol.record_assignment, payload)['result']
         self.assertEqual(packet[parts.KEY]['kind'], 'final')
         series_id = packet[parts.KEY]['series_assignment_id']
-        request = self.review_response('bar', status='unresolved')
-        request['source_requests'] = [dict(id='page', kind='inventory_page', page=0)]
+        request = dict(kind='requests', unit_requests=[],
+                       source_requests=[dict(id='page', kind='inventory_page', page=0)])
         response = invoke_codex(self, assignment['id'], request)
         self.assertNotIn('output_refusal', response)
         state = protocol.assignment_state(self.store.snapshot()['records'], self.artifacts, assignment['id'])
@@ -299,7 +307,8 @@ class BarRepairJourneyTests(StrategyCase):
 class AdjudicatorRepairJourneyTests(StrategyCase):
     def test_registered_adjudicator_can_continue_a_repair_with_ordinary_base_prompt(self):
         import test_research_problem_adjudication_contract as fixtures
-        from research_harness import review_parts_roles as roles, review_parts_problem_result as result
+        from research_harness import review_context_repair as context_repair
+        from research_harness import review_parts_roles as roles
         from research_harness import review_parts_prompts as prompts
         case = fixtures.ProblemAdjudicationContractTests(methodName='runTest')
         case.setUp()
@@ -315,15 +324,7 @@ class AdjudicatorRepairJourneyTests(StrategyCase):
         read_prompt = protocol.canonical_prompt('adjudicator', orchestration='problem_creation',
             review_parts=dict(adapter='context_repair', kind='read'))
         measured = legacy._measure(route, protocol.transport.request_body(route, read_prompt['text'], packet, []))
-        # The registry stand-in supplies only the sibling lane's interface; all
-        # packets, observations, repairs and final validation use production code.
-        adapter = dict(result.ADAPTER,
-            applies=lambda value, packet: value.get('role') == 'adjudicator' and 'context_repair' not in packet,
-            enumerate_units=lambda packet: [source for source in result.list_units(packet)
-                if source['occurrences'][0]['path'] == ['problem_evidence', 'openness_searches']],
-            citations=lambda source: [dict(citation, digest=digest(source['item']['search']))
-                                      for citation in result.list_citations(source)],
-            final_prompt=prompts.FINAL_ADJUDICATOR, source_requests=False)
+        self.assertIn('problem_adjudicator', roles.ADAPTERS)
         searches = []
         for number in range(6):
             search = dict(id='adjudication-search-' + str(number), queries=['exact implication'],
@@ -338,14 +339,29 @@ class AdjudicatorRepairJourneyTests(StrategyCase):
                 target['problem_evidence']['openness_searches'].extend(copy.deepcopy(searches))
                 target['problem_evidence_digest'] = digest(target['problem_evidence'])
         limit_codex_input(self, measured * 4)
-        with patch.dict(roles.ADAPTERS, fixture_adjudicator=adapter), \
-                patch.object(protocol, 'add_problem_evidence', side_effect=add_evidence):
-            original = case.mutate(protocol.record_assignment, dict(id='original-focused', route_id='fresh-route',
-                dossier_id=None, role='adjudicator', reviewer_id='focused-third',
-                author_id=case.read_records()['workspace']['problem']['authors'][0], context=context))['result']
-            packet = json.loads(case.artifacts.read(original['packet']))
-            self.assertEqual(packet[parts.KEY]['kind'], 'read')
-            invoke_codex(case, original['id'], make_output(packet))
+        with patch.object(protocol, 'add_problem_evidence', side_effect=add_evidence):
+            original_value = dict(id='original-focused', route_id='fresh-route', dossier_id=None,
+                role='adjudicator', reviewer_id='focused-third',
+                author_id=case.read_records()['workspace']['problem']['authors'][0], context=context)
+            original = case.mutate(protocol.record_assignment, original_value)['result']
+            for number in range(30):
+                packet = json.loads(case.artifacts.read(original['packet']))
+                self.assertEqual(packet[parts.KEY]['adapter'], 'problem_adjudicator')
+                if packet[parts.KEY]['kind'] == 'final':
+                    break
+                response = invoke_codex(case, original['id'], make_output(packet))
+                self.assertNotIn('output_refusal', response)
+                original = case.mutate(protocol.record_assignment, dict(original_value,
+                    id='original-focused-' + str(number),
+                    context=dict(context, prior_assignment_id=original['id'])))['result']
+            self.assertEqual(packet[parts.KEY]['kind'], 'final')
+            original_output = dict(objection_id='unsupported-implication', disposition='unresolved',
+                reason='The original source leaves the exact implication unresolved.',
+                evidence=[case.supporting], correction_admissible=None)
+            response = invoke_codex(case, original['id'], original_output)
+            self.assertNotIn('output_refusal', response)
+            case.mutate(protocol.record_adjudication, dict(original_output, id='original-adjudication',
+                                                          assignment_id=original['id']))
             case.mutate(protocol.record_context_event, dict(id='focused-exposure', assignment_id=original['id'],
                 kind='contamination', source='author_history', reason='Observed author input.', evidence=[case.supporting]))
             record_codex_route(case, 'new-focused-route', output_tokens=128000)
@@ -358,6 +374,7 @@ class AdjudicatorRepairJourneyTests(StrategyCase):
                 packet = json.loads(case.artifacts.read(repaired['packet']))
                 self.assertTrue(repaired['prompt']['text'].startswith(prompt['text']))
                 self.assertTrue(protocol._prompt_matches(repaired))
+                self.assertEqual(packet[parts.KEY]['adapter'], 'context_repair')
                 if packet[parts.KEY]['kind'] == 'final':
                     break
                 response = invoke_codex(case, repaired['id'], make_output(packet))
@@ -365,17 +382,31 @@ class AdjudicatorRepairJourneyTests(StrategyCase):
                 repaired = case.mutate(protocol.record_assignment, dict(value, id='focused-repair-' + str(number),
                     context=dict(prior_assignment_id=repaired['id'])))['result']
             self.assertEqual(packet[parts.KEY]['kind'], 'final')
+            self.assertTrue(repaired['prompt']['text'].endswith(
+                prompts.FINAL_ADJUDICATOR + '\n\n' + prompts.FINAL_REPAIR))
+            self.assertTrue(protocol._matches_current_problem_adjudicator_prompt(repaired['prompt']))
             refused = invoke_codex(case, repaired['id'], dict(kind='requests', unit_requests=[],
                 source_requests=[dict(id='page', kind='inventory_page', page=0)]), 'focused-source-refused')
             self.assertIn(refused['output_refusal']['code'],
                           ('invalid_value_review', 'invalid_review_source_request'))
             inventory = parts.read_inventory(case.artifacts, packet[parts.KEY]['inventory'])
             citations = {digest(citation): citation for row in inventory['units'] for citation in row['citations']}
+            from research_harness.review_delivered_evidence import project_delivery_view
+            records = case.read_records()
+            final_delivery = project_delivery_view(records, case.artifacts, [packet])
+            earlier_citations = [citation for citation in citations.values()
+                if decisions.find_review_undelivered_references(records, case.artifacts,
+                                                                [citation], final_delivery)]
+            self.assertTrue(earlier_citations)
             output = dict(objection_id='unsupported-implication', disposition='unresolved',
                 reason='The supplied evidence leaves this exact implication unresolved.',
                 evidence=list(citations.values()), correction_admissible=None,
-                reassessment=dict(assignment_id=original['id'], findings=[]))
+                reassessment=dict(assignment_id=original['id'], findings=[dict(
+                    review_id='original-adjudication', disposition='unresolved',
+                    reason='The exact implication remains unsettled after reading the retained evidence.',
+                    evidence=earlier_citations)]))
             response = invoke_codex(case, repaired['id'], output)
             self.assertNotIn('output_refusal', response)
             case.mutate(protocol.record_adjudication, dict(output, id='repaired-adjudication', assignment_id=repaired['id']))
+            context_repair.validate_reassessment(case.read_records(), case.artifacts, repaired, output)
             self.assertTrue(parts.verify_series(case.read_records(), case.artifacts, repaired['id'])['complete'])

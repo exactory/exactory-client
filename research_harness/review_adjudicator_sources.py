@@ -176,7 +176,7 @@ def validate_request(artifacts, frozen, request, *, has_delivery=None):
                 _incomplete({'reason': 'The actual parts input differs from its declared delivery.'})
             inventory = parts.read_inventory(artifacts, actual[parts.KEY]['inventory'],
                                              actual[parts.KEY]['inventory_digest'])
-            parts._validate_deliveries(actual, inventory)
+            parts.validate_deliveries(actual, inventory)
             if has_delivery is not None and parts.find_kind(actual) == 'final':
                 validate(artifacts, parts.read_logical_packet(artifacts, actual[parts.KEY]),
                          has_delivery=has_delivery)

@@ -109,7 +109,7 @@ class RevisedOutputTests(unittest.TestCase):
         output['cards'][0]['statements'] = [dict(text='x' * 30, why='The exact item text.')]
         statement = parts.validate_output(packet, output, packet['_test_inventory'])['cards'][0]['statements'][0]
         item = packet['problem_evidence']['openness_searches'][0]
-        start = parts._dump(item).index('x' * 30)
+        start = parts.render_json(item).index('x' * 30)
         self.assertEqual(statement['at'], dict(unit='u1', item=True, start=start, end=start + 30))
 
     def test_verified_statements_keep_whole_body_offsets_from_a_segment(self):

@@ -79,6 +79,19 @@ class AdjudicationPartsCase(PartsResultCase):
 
 
 class AdjudicationJourneyTests(AdjudicationPartsCase):
+    def test_final_validates_its_parts_contract_once(self):
+        self.oversized()
+        _, final = self.finish_series()
+        output = self.final_output()
+        self.invoke(final, output)
+        records = self.case.read_records()
+        attempt = records['review_attempt']['attempt-' + final['id']]
+        with patch.object(parts, 'validate_turn_output', wraps=parts.validate_turn_output) as validate:
+            protocol.validate_adjudication_contract(records, self.case.artifacts, final,
+                self.packet(final), output, attempt=attempt)
+        calls = [call for call in validate.call_args_list if call.args[2]['id'] == final['id']]
+        self.assertEqual(len(calls), 1)
+
     def test_oversized_enters_parts_and_fitting_packet_keeps_single_contract(self):
         assignment = self.assign()
         self.assertNotIn(parts.KEY, self.packet(assignment))

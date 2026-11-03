@@ -25,7 +25,7 @@ STATEMENT_CHARACTERS = 6000
 STATEMENTS_CHARACTERS = 40000
 
 
-def _dump(value):
+def render_json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False,
                       separators=(',', ':'))
 
@@ -99,12 +99,12 @@ def enumerate_units(packet, adapter, previous=None):
     handles = {unit['digest']: 'u' + str(index + 1) for index, unit in enumerate(units)}
     for unit in units:
         unit['handle'] = handles[unit['digest']]
-        unit['text'] = _dump(unit['item'])
+        unit['text'] = render_json(unit['item'])
         unit['item_characters'] = len(unit['text'])
         if unit.get('carded_under'):
             unit['carded_under'] = handles[unit['carded_under']]
         unit['characters'] = unit['item_characters'] + sum(
-            len(_dump(body['content'])) for body in unit['bodies'])
+            len(render_json(body['content'])) for body in unit['bodies'])
     return units
 
 
@@ -112,7 +112,7 @@ def _describe_unit(unit):
     row = {key: copy.deepcopy(unit[key]) for key in
            ('handle', 'digest', 'occurrences', 'item_characters', 'characters', 'citations')}
     row['bodies'] = [dict(sha256=body['artifact']['sha256'], kind=body['encoding'],
-                          characters=len(_dump(body['content'])), length=len(body['content']),
+                          characters=len(render_json(body['content'])), length=len(body['content']),
                           artifact=copy.deepcopy(body['artifact']),
                           aliases=copy.deepcopy(body.get('aliases', [])))
                      for body in unit['bodies']]
@@ -147,7 +147,7 @@ def build_inventory(packet, adapter, previous=None):
         for body in unit['bodies']:
             identity = body['artifact']['sha256']
             if identity not in seen_bodies:
-                characters += len(_dump(body['content']))
+                characters += len(render_json(body['content']))
                 seen_bodies.add(identity)
     return dict(protocol=PROTOCOL, adapter=adapter, units=rows, characters=characters,
                 additional_occurrences=additional)
@@ -264,7 +264,7 @@ def _find_body_spans(packets, sha256):
     return _merge_spans(spans)
 
 
-def _is_unit_complete(unit, packets):
+def is_unit_complete(unit, packets):
     if _find_gaps(unit['item_characters'], _find_item_spans(packets, unit)):
         return False
     for body in unit['bodies']:
@@ -286,7 +286,7 @@ def _count_content(units, packets):
             seen_bodies.add(identity)
             spans = _find_body_spans(packets, identity)
             for start, end in spans:
-                total += len(_dump(body['content'][:end])) - len(_dump(body['content'][:start]))
+                total += len(render_json(body['content'][:end])) - len(render_json(body['content'][:start]))
             if spans:
                 total += 2
     return total
@@ -305,7 +305,7 @@ def _make_segment(unit, content, start, end, *, body=None):
     return entry
 
 
-def _describe_selections(selections):
+def describe_selections(selections):
     return [{key: value for key, value in selection.items()
              if key in ('unit', 'body', 'item', 'start', 'end')}
             for selection in selections]
@@ -366,7 +366,7 @@ def project_packet(frame, units, selections, header, state, *, parent_characters
     delivered = [unit['handle'] for unit in units if unit['handle'] in selected | card_parents]
     packet[KEY].update(delivered_units=delivered, delivered_items=manifest,
                        units=[_describe_unit(by_handle[handle]) for handle in delivered],
-                       originals=_describe_selections(selections), state_digest=digest(state))
+                       originals=describe_selections(selections), state_digest=digest(state))
     packet[STATE_KEY] = copy.deepcopy(state)
     packet['digest'] = digest(packet)
     return packet
@@ -376,7 +376,7 @@ def _find_span_end(content, start, end, allowance, item=False):
     left, right = start, min(end, start + allowance)
     while left < right:
         middle = (left + right + 1) // 2
-        characters = middle - start if item else len(_dump(content[start:middle]))
+        characters = middle - start if item else len(render_json(content[start:middle]))
         if characters <= allowance:
             left = middle
         else:
@@ -415,7 +415,7 @@ def select_originals(units, allowance, packets=(), requests=None, *, distinct=Fa
                 if not body['content'] and not body_spans:
                     gaps = [[0, 0]]
                 pieces.extend(('body', body, start, end) for start, end in gaps)
-        costs = [(end - start if kind == 'item' else len(_dump(body['content'][start:end])))
+        costs = [(end - start if kind == 'item' else len(render_json(body['content'][start:end])))
                  for kind, body, start, end in pieces]
         if not pieces:
             continue
@@ -462,7 +462,7 @@ def select_originals(units, allowance, packets=(), requests=None, *, distinct=Fa
                 entry['body'] = body['artifact']['sha256']
                 entry['repeat_item'] = unit['item_characters'] <= allowance
             selected.append(entry)
-            used += stop - start if kind == 'item' else len(_dump(content[start:stop]))
+            used += stop - start if kind == 'item' else len(render_json(content[start:stop]))
             if stop < end:
                 break
         break
@@ -477,7 +477,7 @@ def build_state(observations):
         state['findings'].extend(copy.deepcopy(observation['delta']['findings']))
         for combination in observation['delta']['combinations']:
             identity = digest([sorted(combination['units']), sorted(
-                (_dump(original) for original in combination['read']))])
+                (render_json(original) for original in combination['read']))])
             if identity not in combinations:
                 combinations.add(identity)
                 state['combinations'].append(copy.deepcopy(combination))
@@ -496,7 +496,7 @@ def _has_original(request, packets, units):
         body = next(body for body in unit['bodies'] if body['artifact']['sha256'] == request['body'])
         return not _find_gaps(len(body['content']), _find_body_spans(packets, request['body']),
                               request['start'], request['end'])
-    return _is_unit_complete(unit, packets)
+    return is_unit_complete(unit, packets)
 
 
 @dataclass
@@ -533,7 +533,7 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
     frame = build_frame(packet, units)
     state = build_state(observations)
     reads = [row['packet'] for row in observations if find_kind(row['packet']) == 'read']
-    remaining = [unit for unit in units if not _is_unit_complete(unit, reads)]
+    remaining = [unit for unit in units if not is_unit_complete(unit, reads)]
     allowance = READ_CHARACTERS
     for observation in observations:
         if find_kind(observation['packet']) != 'read':
@@ -570,7 +570,7 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
     room = input_limit - final_frame
     _require(room > 0, 'The frame leaves no route room', 'review_parts_frame_too_large',
              frame_characters=final_frame, input_limit_characters=input_limit,
-             largest_fields=sorted(((key, len(_dump(value))) for key, value in frame.items()),
+             largest_fields=sorted(((key, len(render_json(value))) for key, value in frame.items()),
                                    key=lambda row: row[1], reverse=True)[:10])
     budgets = dict(cards=room // 2, combinations=room // 10, findings=room // 5)
     header['state_budget'] = budgets
@@ -594,11 +594,11 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
                 candidate = context.render('read', [dict(unit=unit['handle'], body=body['artifact']['sha256'])],
                                            state=empty)
                 _require(_read_entry_bytes(body) is not None
-                         and len(_dump(body['content'])) <= min(allowance, room)
+                         and len(render_json(body['content'])) <= min(allowance, room)
                          and measure(candidate) <= input_limit,
                          'A non-text body cannot fit whole', 'review_parts_inventory_too_large',
                          unit=unit['handle'], body=body['artifact']['sha256'],
-                         body_characters=len(_dump(body['content'])), input_limit_characters=input_limit)
+                         body_characters=len(render_json(body['content'])), input_limit_characters=input_limit)
     return context
 
 
@@ -632,7 +632,7 @@ def plan_read(context):
     empty = dict(cards=[], combinations=[], findings=[])
     before = _count_content(context.units, context.read_packets)
     remaining_characters = max(1, context.inventory['characters'] - before)
-    available = context.budgets['cards'] - len(_dump(context.state['cards']))
+    available = context.budgets['cards'] - len(render_json(context.state['cards']))
     _require(available >= 4000, 'The remaining card budget is below its floor',
              'review_parts_inventory_too_large', card_budget_remaining=available)
     allowance = context.header['plan']['unit_allowance']
@@ -723,7 +723,7 @@ def _render_combine(context, cards, blocks, pair, previous):
     selected_cards = [cards[index] for index in indices]
     seen_blocks = {block for packet in previous for block in packet[KEY].get('within_blocks', [])}
     within = [block for block in dict.fromkeys(pair) if block not in seen_blocks]
-    available = context.budgets['combinations'] - len(_dump(context.state['combinations']))
+    available = context.budgets['combinations'] - len(render_json(context.state['combinations']))
     allowance = min(OUTPUT_CHARACTERS, max(0, available // (len(pairs) - len(previous))))
     check_frame = context.render('check', state=dict(cards=cards, combinations=[], findings=[]))
     check_room = max(0, context.input_limit - context.measure(check_frame)
@@ -794,7 +794,7 @@ def _select_combination_state(context, combinations):
 
 def plan_check(context):
     pending = [entry for entry in context.state['combinations'] if not entry['checked']]
-    available = context.budgets['findings'] - len(_dump(context.state['findings']))
+    available = context.budgets['findings'] - len(render_json(context.state['findings']))
     _require(2000 * len(pending) <= available,
              'The findings floors exceed the remaining budget', 'review_parts_inventory_too_large',
              combinations_remaining=len(pending), findings_budget_remaining=available)
@@ -851,7 +851,7 @@ def plan_final(context):
     _require(context.measure(base) <= context.input_limit,
              'The final frame and state exceed this route', 'review_parts_final_too_large',
              final_frame_characters=context.header['final_frame_characters'],
-             state_characters=len(_dump(context.state)))
+             state_characters=len(render_json(context.state)))
     if requested:
         _require(not finals or any(not _has_original(original, [finals[-1]], context.units)
                                   for original in requested) or request.get('source_requests'),
@@ -879,10 +879,10 @@ def plan_final(context):
                                        requests=[entry for entry in _list_final_priority(context)
                                                  if entry['unit'] not in answered_handles])
         selections = answered + fill
-        extra['fill'] = _describe_selections(fill)
+        extra['fill'] = describe_selections(fill)
         extra['original_characters'] = characters + filled
         if request:
-            extra['answered'] = _describe_selections(answered)
+            extra['answered'] = describe_selections(answered)
             extra['unanswered'] = [dict(request=original, reason=prompts.SEGMENT_NOTE)
                                    for original in requested if original['unit'] not in answered_handles]
         result = context.render('final', selections, **extra)
@@ -930,7 +930,7 @@ def _validate_original(request, inventory, *, requested=False):
     return scope['end'] - scope['start']
 
 
-def _validate_deliveries(packet, inventory):
+def validate_deliveries(packet, inventory):
     by_handle = {row['handle']: row for row in inventory['units']}
     delivered = packet[KEY]['delivered_units']
     _require(isinstance(delivered, list) and len(delivered) == len(set(delivered))
@@ -987,7 +987,7 @@ def _list_delivered_texts(packet, handle, inventory):
     texts = []
     for unit, item in read_delivered_items(packet).items():
         if unit in covered:
-            texts.append(dict(content=_dump(item), at=dict(unit=unit, item=True), offset=0))
+            texts.append(dict(content=render_json(item), at=dict(unit=unit, item=True), offset=0))
     body_ids = {body['sha256'] for unit in covered for body in by_handle[unit]['bodies']}
     for entry in packet.get('evidence', []):
         original = entry.get('original_artifact', entry.get('artifact', {}))
@@ -1037,7 +1037,11 @@ def _verify_statements(packet, handle, statements, inventory, used):
 def project_source_output(output, role='result'):
     if output.get('kind') != 'requests':
         return output
-    return dict(stage=role, support=None, value=dict(status='unresolved'),
+    value = dict(status='unresolved')
+    if role == 'bar':
+        value.update(objective_adequacy='not_assessed', method_adequacy='not_assessed',
+                     bar_ids=[], work_items=[], assurances=[], objection_findings=[])
+    return dict(stage=role, support=None, value=value,
                 source_requests=copy.deepcopy(output.get('source_requests', [])))
 
 
@@ -1045,7 +1049,7 @@ def _validate_read(packet, output, inventory):
     header = packet[KEY]
     fields(output, ('kind', 'turn', 'cards', 'unborne'), code='invalid_value_review')
     _require(isinstance(output['cards'], list), 'Cards are an array')
-    _require(len(_dump(output['cards'])) <= header['output_allowance'], 'Cards exceed their allowance')
+    _require(len(render_json(output['cards'])) <= header['output_allowance'], 'Cards exceed their allowance')
     by_handle = {row['handle']: row for row in inventory['units']}
     expected = {by_handle[handle].get('carded_under', handle) for handle in header['delivered_units']}
     targets = {row['id'] for row in header['targets']}
@@ -1092,7 +1096,7 @@ def _validate_read(packet, output, inventory):
         _require_text(entry['reason'], '/unborne/reason')
         unborne.add(entry['target'])
     _require(unborne == targets - borne, 'Unborne names exactly the targets without a bearing')
-    _require(len(_dump(cards)) <= header['card_budget_remaining'],
+    _require(len(render_json(cards)) <= header['card_budget_remaining'],
              'The carried cards exceed the remaining state budget')
     return dict(cards=cards, combinations=[], findings=[])
 
@@ -1131,7 +1135,7 @@ def _validate_combine(packet, output, inventory):
                      'Internal combinations belong to the first turn holding their block')
         combinations.append(dict(copy.deepcopy(combination), id='c%d-%d' % (packet[KEY]['turn'], index + 1),
                                  turn=packet[KEY]['turn'], checked=False))
-    _require(len(_dump(combinations)) <= packet[KEY]['combination_budget_remaining'],
+    _require(len(render_json(combinations)) <= packet[KEY]['combination_budget_remaining'],
              'Combinations exceed their carried state budget')
     return dict(cards=[], combinations=combinations, findings=[])
 
@@ -1167,7 +1171,7 @@ def _validate_check(packet, output, inventory):
         findings.append(dict(copy.deepcopy(finding), turn=packet[KEY]['turn'],
                              statements=statements, unverified_statements=unmatched))
     _require(seen == expected, 'Supply exactly one finding per delivered combination')
-    _require(len(_dump(findings)) <= packet[KEY]['findings_budget_remaining'],
+    _require(len(render_json(findings)) <= packet[KEY]['findings_budget_remaining'],
              'Findings exceed the remaining carried state budget')
     return dict(cards=[], combinations=[], findings=findings)
 
@@ -1180,7 +1184,7 @@ def _validate_requests(packet, output, inventory):
     fields(output, ('kind', 'unit_requests', 'source_requests'), code='invalid_value_review')
     _require(isinstance(output['unit_requests'], list) and isinstance(output['source_requests'], list)
              and (output['unit_requests'] or output['source_requests']), 'A request names originals or sources')
-    _require(len(_dump(output)) <= OUTPUT_CHARACTERS, 'The request exceeds its character allowance')
+    _require(len(render_json(output)) <= OUTPUT_CHARACTERS, 'The request exceeds its character allowance')
     requested = []
     for original in output['unit_requests']:
         _validate_original(original, inventory, requested=True)
@@ -1231,7 +1235,7 @@ def covers_original(originals, requested, inventory):
 
 def validate_output(packet, output, inventory):
     """Check this turn only; its explicit attempt supplies scientific delivery."""
-    _validate_deliveries(packet, inventory)
+    validate_deliveries(packet, inventory)
     _require(isinstance(output, dict), 'A parts output is an object')
     kind = find_kind(packet)
     if kind == 'final':
@@ -1241,7 +1245,7 @@ def validate_output(packet, output, inventory):
     _require(output.get('kind') == kind and type(output.get('turn')) is int
              and output['turn'] == packet[KEY]['turn'], 'The output names this exact kind and turn')
     if kind != 'read':
-        _require(len(_dump(output)) <= packet[KEY]['output_allowance'], 'The output exceeds its allowance')
+        _require(len(render_json(output)) <= packet[KEY]['output_allowance'], 'The output exceeds its allowance')
     return {'read': _validate_read, 'combine': _validate_combine,
             'check': _validate_check}[kind](packet, output, inventory)
 
@@ -1258,7 +1262,7 @@ def _reconstruct_items(packets, inventory):
         text = _join_segments(entries, unit['item_characters'])
         if text is not None and hashlib.sha256(text.encode('utf-8')).hexdigest() == unit['digest']:
             item = json.loads(text)
-            if _dump(item) == text:
+            if render_json(item) == text:
                 items[unit['handle']] = item
     return items
 
@@ -1356,7 +1360,7 @@ def has_series_reference(artifacts, packets, reference):
 
 # Store and transport boundaries. Planners and validators above use only values.
 def store_inventory(artifacts, inventory):
-    return artifacts.put(_dump(inventory).encode('utf-8'), 'application/json')
+    return artifacts.put(render_json(inventory).encode('utf-8'), 'application/json')
 
 
 def read_inventory(artifacts, reference, expected_digest=None):
@@ -1622,7 +1626,7 @@ def verify_series(records, artifacts, final_assignment_id):
                 issues=dict(count=issue_count, examples=issues))
 
 
-def _find_replacement(records, artifacts, value, adapter, series_key, slot_id, prior_id, output_tokens,
+def find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id, prior_id, output_tokens,
                       *, logical_packet=None):
     from .operations import normalized_text
     from .review_parts_roles import get_adapter
@@ -1748,8 +1752,8 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     packet = dict(packet)
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
-    logical_reference = artifacts.put(_dump(packet).encode('utf-8'), 'application/json')
-    replacement = _find_replacement(records, artifacts, value, adapter, series_key, slot_id,
+    logical_reference = artifacts.put(render_json(packet).encode('utf-8'), 'application/json')
+    replacement = find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id,
                                     prior_id, route['configuration']['max_output_tokens'], logical_packet=packet)
 
     def measure(candidate):

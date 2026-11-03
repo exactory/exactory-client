@@ -28,7 +28,7 @@ class ReviewEntryPolicyTests(ResultPartsCase):
 
 
 class ReviewEntryPostGateTests(unittest.TestCase):
-    def test_new_oversized_focused_assignment_records_an_ordinary_upgrade_anchor(self):
+    def prepare_oversized_focused_assignment(self):
         from test_research_problem_adjudication_contract import ProblemAdjudicationContractTests
 
         case = ProblemAdjudicationContractTests()
@@ -41,7 +41,40 @@ class ReviewEntryPostGateTests(unittest.TestCase):
         value = dict(id='focused-anchor', role='adjudicator', reviewer_id='focused-third',
             author_id='problem-author', dossier_id=None, route_id='local-route', context=dict(
                 review_ids=['review-result-first', 'review-result-second'], objection_id='unsupported-implication'))
-        assignment = case.mutate(protocol.record_assignment, value)['result']
+        return case, value
+
+    def test_new_oversized_focused_assignment_refuses_an_indivisible_frame(self):
+        import json
+        from research_harness import review_parts
+        from research_harness.errors import ResearchError
+
+        case, value = self.prepare_oversized_focused_assignment()
+        before = case.store.snapshot()
+        with self.assertRaises(ResearchError) as raised:
+            case.mutate(protocol.record_assignment, value)
+        self.assertEqual(raised.exception.code, 'review_parts_frame_too_large')
+        details = raised.exception.details
+        self.assertGreater(details['frame_characters'], details['input_limit_characters'])
+        records = case.read_records()
+        self.assertEqual(details['input_limit_characters'],
+                         transport.local_input_limit(records['review_route']['local-route']))
+        packet = protocol.build_packet(records, case.artifacts, None, 'adjudicator',
+                                       value['reviewer_id'], **value['context'])
+        frame = review_parts.build_frame(packet, review_parts.enumerate_units(packet, 'problem_adjudicator'))
+        largest = sorted(((key, len(json.dumps(item, ensure_ascii=False, sort_keys=True,
+                                               allow_nan=False, separators=(',', ':'))))
+                          for key, item in frame.items()), key=lambda row: row[1], reverse=True)[:10]
+        self.assertEqual(details['largest_fields'], largest)
+        self.assertGreater(dict(largest)['objection'], 1100000)
+        self.assertEqual(case.store.snapshot(), before)
+
+    def test_pre_072_oversized_focused_anchor_keeps_its_staged_upgrade(self):
+        from research_harness import review_parts
+
+        case, value = self.prepare_oversized_focused_assignment()
+        with patch.object(review_parts, 'prepare_packet', side_effect=lambda records, artifacts,
+                          value, route, packet, prompt, history, **kwargs: packet):
+            assignment = case.mutate(protocol.record_assignment, value)['result']
         self.assertNotIn('staged_review', assignment)
         records = case.read_records()
         self.assertEqual(records['review_assignment'][assignment['id']], assignment)

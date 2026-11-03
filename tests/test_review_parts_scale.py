@@ -29,7 +29,7 @@ class ScaleTests(unittest.TestCase):
             self.assertLessEqual(measure(clean),1300000)
             if turn['review_parts']['kind']=='read':read_characters.append(turn['review_parts']['unit_characters'])
             sizes.append(len(json.dumps(turn['review_parts'])))
-            canonical_headers.append(len(parts._dump(turn['review_parts'])))
+            canonical_headers.append(len(parts.render_json(turn['review_parts'])))
             request_sizes.append(measure(clean))
             if turn['review_parts']['kind']=='final':break
             observations.append(observe(turn))

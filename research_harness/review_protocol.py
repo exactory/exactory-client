@@ -3375,8 +3375,6 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
     if parts_kind is not None:
         with contract_check('adjudication.shape'):
             review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
-            if output.get('kind') == 'requests' and output.get('source_requests'):
-                raise ResearchError('invalid_value_review', 'A focused adjudicator requests only originals')
         if parts_kind != 'final' or output.get('kind') == 'requests':
             return
     staged = assignment.get('staged_review')
@@ -3388,12 +3386,7 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
                 validate_task_output(assignment['staged_task'], output, manifest=epoch['manifest'])
             return
         _validate_staged_adjudication_scope(records, artifacts, assignment, packet)
-    parts_kind = review_parts.find_kind(packet)
     if parts_kind is not None:
-        with contract_check('adjudication.shape'):
-            review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
-        if parts_kind != 'final' or output.get('kind') == 'requests':
-            return
         from .research_decisions import read_review_citation_delivery
         packets = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)['packets']
     else:

@@ -1,7 +1,6 @@
 """Scientific units and completion gates for verification and study readiness."""
 
 import copy
-import re
 
 from . import review_parts as parts, review_parts_prompts as prompts
 from .errors import ResearchError
@@ -153,16 +152,18 @@ def require_complete_series(records, artifacts, assignment_id):
 
 
 def list_bearing_references(series, references):
-    """A bearing names an exact candidate reference by its complete canonical digest."""
+    """Credit exact inventory citations of units assessed against readiness targets."""
+    from .development import _REVIEW_CHECKS
+
     candidates = {digest(reference): reference for reference in references}
     credited = set()
     final = series['packets'][-1]
-    targets = {target['id'] for target in final[parts.KEY]['targets']}
+    targets = {target['id'] for target in final[parts.KEY]['targets']} & set(_REVIEW_CHECKS)
     for card in final[parts.STATE_KEY]['cards']:
-        named = {name for bearing in card['bearing'] if bearing['target'] in targets
-                 for name in re.findall(r'\b[0-9a-f]{64}\b', bearing['reason'])}
+        if not any(bearing['target'] in targets for bearing in card['bearing']):
+            continue
         citations = {digest(reference) for reference in card['citations']}
-        credited.update(named & citations & candidates.keys())
+        credited.update(citations & candidates.keys())
     return [candidates[name] for name in sorted(credited)]
 
 

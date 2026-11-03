@@ -72,7 +72,7 @@ def describe_parts_turn(assignment, state, series, *, ended_without_output=False
         originals = [original for packet in reads
                      for original in packet[review_parts.KEY]['originals']]
         carded = 0
-        for row in inventory['units']:
+        for row in inventory['units'][:total]:
             item = dict(unit=row['handle'], item=True, start=0, end=row['item_characters'])
             if (review_parts.covers_original(originals, item, inventory)
                     and all(review_parts.has_series_attachment(None, reads, body['artifact'])
@@ -82,7 +82,7 @@ def describe_parts_turn(assignment, state, series, *, ended_without_output=False
     result['complete'] = series['complete']
     result['issues'] = copy.deepcopy(series['issues'])
     result['next'] = []
-    observed = bool(packets and packets[-1][review_parts.KEY]['turn'] == header['turn'])
+    observed = any(packet[review_parts.KEY]['turn'] == header['turn'] for packet in packets)
     blocking_code = next((item['code'] for item in state.get('obligations', [])
                           if item['code'] not in ('review_output_pending', 'review_output_refused')), None)
     invalid_code = next((item['reason'] for item in series['issues']['examples']

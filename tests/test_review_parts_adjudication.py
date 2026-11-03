@@ -88,7 +88,7 @@ class AdjudicationAdapterTests(unittest.TestCase):
         packet['evidence'].append(dict(artifact=second, content=text, encoding='utf-8'))
         packet['problem_evidence']['computations'] = [dict(z=first, a=second)]
         inventory = parts.build_inventory(packet, 'problem_adjudicator')
-        rebuilt = parts.build_inventory(json.loads(parts._dump(packet)), 'problem_adjudicator')
+        rebuilt = parts.build_inventory(json.loads(parts.render_json(packet)), 'problem_adjudicator')
         self.assertEqual(inventory, rebuilt)
 
     def test_non_utf8_owned_body_is_never_segmented(self):

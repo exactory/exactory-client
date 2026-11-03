@@ -36,7 +36,7 @@ class RepairAdapterTests(StrategyCase):
         packet = parts.project_packet(parts.build_frame(logical, units), units,
             [dict(unit=unit['handle']) for unit in units], dict(kind='read'),
             dict(cards=[], combinations=[], findings=[]))
-        self.assertTrue(all(parts._is_unit_complete(unit, [packet]) for unit in units))
+        self.assertTrue(all(parts.is_unit_complete(unit, [packet]) for unit in units))
         from research_harness.review_delivered_evidence import project_delivery_view
         delivery = project_delivery_view({}, self.artifacts, [packet])
         self.assertNotIn(current_pdf, delivery['artifacts'].values())
@@ -66,7 +66,7 @@ class RepairAdapterTests(StrategyCase):
         units = parts.enumerate_units(logical, 'context_repair', inventory)
         header = dict(protocol=parts.PROTOCOL, adapter='context_repair', kind='read',
             units=inventory['units'], logical_packet_digest=digest(logical),
-            logical_packet=self.artifacts.put(parts._dump(logical).encode(), 'application/json'))
+            logical_packet=self.artifacts.put(parts.render_json(logical).encode(), 'application/json'))
         packet = parts.project_packet(parts.build_frame(logical, units), units,
             [dict(unit=unit['handle']) for unit in units], header,
             dict(cards=[], combinations=[], findings=[]))
@@ -101,9 +101,9 @@ class RepairAdapterTests(StrategyCase):
         self.assertTrue(all(row['citations'] for row in inventory['units']))
         units = parts.enumerate_units(logical, 'context_repair')
         texts = [body['content'] for unit in units for body in unit['bodies']]
-        self.assertIn(parts._dump(output), texts)
+        self.assertIn(parts.render_json(output), texts)
         self.assertEqual(logical['context_repair'], packet['context_repair'])
-        self.assertEqual(json.loads(parts._dump(logical)), logical)
+        self.assertEqual(json.loads(parts.render_json(logical)), logical)
 
     def test_adjudicator_wrapping_uses_registry_and_role_final_text(self):
         from research_harness import review_parts_repair as repair
@@ -115,11 +115,11 @@ class RepairAdapterTests(StrategyCase):
                           final_prompt=prompts.FINAL_ADJUDICATOR, source_requests=False)
         packet = dict(role='adjudicator', subject=dict(kind='problem'),
                       context_repair=dict(assignment_id='old'), scientific_history=[])
-        with patch.dict(roles.ADAPTERS, fixture_adjudicator=definition):
+        with patch.dict(roles.ADAPTERS, problem_adjudicator=definition):
             key = repair.compute_series_key(packet)
             self.assertEqual(key['role'], dict(objection='version'))
             assignment = dict(id='repair', role='adjudicator',
-                packet=self.artifacts.put(parts._dump(packet).encode(), 'application/json'))
+                packet=self.artifacts.put(parts.render_json(packet).encode(), 'application/json'))
             with patch.object(protocol, 'validate_adjudication_contract',
                               side_effect=AssertionError('Use the registered role validator')):
                 self.assertEqual(repair.validate_final({}, self.artifacts, assignment, {}), 'role-validated')
@@ -166,14 +166,14 @@ class RepairAdapterTests(StrategyCase):
             evidence=[dict(artifact=self.evidence, content=self.artifacts.read(self.evidence).decode(),
                            encoding='utf-8')])
         inventory = parts.build_inventory(logical, 'context_repair')
-        logical_reference = self.artifacts.put(parts._dump(logical).encode(), 'application/json')
+        logical_reference = self.artifacts.put(parts.render_json(logical).encode(), 'application/json')
         header = dict(protocol=parts.PROTOCOL, adapter='context_repair', kind='final',
             series_assignment_id='repaired', inventory=parts.store_inventory(self.artifacts, inventory),
             inventory_digest=digest(inventory), logical_packet=logical_reference,
             logical_packet_digest=digest(logical))
         packet = dict(logical, review_parts=header, review_parts_state=dict(cards=[], combinations=[], findings=[]))
         assignment = dict(id='repaired', role='bar', review_parts=dict(adapter='context_repair'),
-            context={}, packet=self.artifacts.put(parts._dump(packet).encode(), 'application/json'))
+            context={}, packet=self.artifacts.put(parts.render_json(packet).encode(), 'application/json'))
         records = dict(review_assignment={'repaired': assignment})
         finding = dict(review_id='first', disposition='revised', reason='Rechecked the supplied originals.',
                        evidence=[self.evidence])
@@ -258,13 +258,13 @@ class RepairAdapterTests(StrategyCase):
         logical = dict(correction=protocol._reference_templates(correction),
             assessments=[dict(id='first'), dict(id='second')], objection=dict(id='objection'),
             context_repair=dict(assignment_id='original'), scientific_history=[], historical_reviews=[])
-        reference = self.artifacts.put(parts._dump(logical).encode(), 'application/json')
+        reference = self.artifacts.put(parts.render_json(logical).encode(), 'application/json')
         frozen = dict(review_parts=dict(logical_packet=reference, logical_packet_digest=digest(logical)))
         original = dict(id='original', context=dict(review_ids=['first', 'second'],
                                                    objection_id='objection', correction=correction))
         parent = dict(id='repair', context=dict(context_repair=dict(assignment_id='original'),
                       review_ids=['first', 'second'], objection_id='objection'),
-                      packet=self.artifacts.put(parts._dump(frozen).encode(), 'application/json'))
+                      packet=self.artifacts.put(parts.render_json(frozen).encode(), 'application/json'))
         records = dict(review_assignment={row['id']: row for row in (original, parent)})
         value = dict(dossier_id=None, role='adjudicator', reviewer_id='replacement')
         def build(records, artifacts, dossier, role, reviewer, **context):
@@ -307,20 +307,16 @@ class RepairAdapterTests(StrategyCase):
             self.assertEqual(raised.exception.code, 'review_context_repair_history_unrecorded')
 
     def test_adjudicator_repair_final_keeps_current_prompt_rules(self):
-        adapter = dict(applies=lambda value, packet: value.get('role') == 'adjudicator'
-                       and 'context_repair' not in packet,
-                       final_prompt=prompts.FINAL_ADJUDICATOR)
-        with patch.dict(roles.ADAPTERS, fixture_adjudicator=adapter):
-            for kind in ('read', 'combine', 'check', 'final'):
-                prompt = protocol.canonical_prompt('adjudicator', orchestration='problem_creation',
-                    review_parts=dict(adapter='context_repair', kind=kind))
-                self.assertEqual(protocol._matches_current_problem_adjudicator_prompt(prompt), kind == 'final')
+        for kind in ('read', 'combine', 'check', 'final'):
+            prompt = protocol.canonical_prompt('adjudicator', orchestration='problem_creation',
+                review_parts=dict(adapter='context_repair', kind=kind))
+            self.assertEqual(protocol._matches_current_problem_adjudicator_prompt(prompt), kind == 'final')
 
     def test_v2_history_keeps_actual_delivery_and_old_handle_bindings(self):
         from research_harness import review_parts_repair as repair
         logical = make_packet(2, 100)
         inventory = parts.build_inventory(logical, 'problem_result')
-        logical_reference = self.artifacts.put(parts._dump(logical).encode(), 'application/json')
+        logical_reference = self.artifacts.put(parts.render_json(logical).encode(), 'application/json')
         header = dict(protocol=parts.PROTOCOL, kind='read', adapter='problem_result',
             logical_packet=logical_reference, logical_packet_digest=digest(logical),
             inventory=parts.store_inventory(self.artifacts, inventory), inventory_digest=digest(inventory),

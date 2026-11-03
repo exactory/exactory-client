@@ -150,8 +150,8 @@ class PlanningTests(unittest.TestCase):
                                      input_limit=input_limit, measure=measure_packet, output_tokens=128000)
         empty = context.render('combine', state=dict(cards=[], combinations=[], findings=[]))
         cards = observation['delta']['cards']
-        pair_room = max(4 * max(len(parts._dump(card)) for card in cards),
-                        3 * len(parts._dump(cards)) // 4)
+        pair_room = max(4 * max(len(parts.render_json(card)) for card in cards),
+                        3 * len(parts.render_json(cards)) // 4)
         combine_overhead = input_limit - measure_packet(empty) - pair_room
         def measure(candidate):
             extra = combine_overhead if candidate['review_parts']['kind'] == 'combine' else 0
@@ -446,15 +446,15 @@ class RevisedPlanningTests(unittest.TestCase):
         artifacts.read.return_value = json.dumps(packet).encode()
         attempt = dict(assignment_id='failed', output=None, usage={}, error=dict(code='review_incomplete'))
         records = dict(review_assignment={'failed': failed}, review_attempt={'attempt': attempt})
-        result = parts._find_replacement(records, artifacts, value, 'problem_result', series_key,
+        result = parts.find_failed_replacement(records, artifacts, value, 'problem_result', series_key,
                                          'slot-A', None, 128000)
         self.assertEqual(result, dict(unit_characters=30000, over_cap=True))
-        self.assertIsNone(parts._find_replacement(records, artifacts, value, 'problem_result', series_key,
+        self.assertIsNone(parts.find_failed_replacement(records, artifacts, value, 'problem_result', series_key,
                                                  'slot-B', None, 128000))
-        self.assertIsNone(parts._find_replacement(records, artifacts, value, 'problem_result', dict(binding='changed'),
+        self.assertIsNone(parts.find_failed_replacement(records, artifacts, value, 'problem_result', dict(binding='changed'),
                                                  'slot-A', None, 128000))
         attempt['error'] = dict(code='unrelated', message='review_incomplete')
-        self.assertIsNone(parts._find_replacement(records, artifacts, value, 'problem_result', series_key,
+        self.assertIsNone(parts.find_failed_replacement(records, artifacts, value, 'problem_result', series_key,
                                                  'slot-A', None, 128000))
 
     def test_frame_with_less_than_one_card_floor_refuses_as_final_too_large(self):

@@ -66,34 +66,45 @@ class StudyAdapterTests(unittest.TestCase):
                 packet['readiness']['inputs'],
                 candidate=dict(digest='changed'))))))
 
-    def test_bearing_credit_requires_the_exact_reference_and_its_digest_token(self):
+    def test_bearing_credit_requires_an_exact_citation_and_a_readiness_target(self):
         from research_harness import review_parts_study as study
         reference = dict(kind='source', link=dict(version_id='v', source_id='s'))
-        name = digest(reference)
-        card = dict(citations=[reference], bearing=[dict(target='validity', reason=name)])
+        card = dict(citations=[reference], bearing=[dict(target='validity', relation='context',
+                                                       reason='This unit bears on validity.')])
         final = {parts.KEY: dict(targets=[dict(id='validity')]),
                  parts.STATE_KEY: dict(cards=[card])}
         series = dict(packets=[final])
         self.assertEqual(study.list_bearing_references(series, [reference]), [reference])
+        for relation in ('supports', 'qualifies', 'contradicts', 'context'):
+            card['bearing'][0]['relation'] = relation
+            self.assertEqual(study.list_bearing_references(series, [reference]), [reference])
         for mutate in (lambda: card.update(citations=[]),
-                       lambda: card['bearing'][0].update(reason=name + 'a'),
-                       lambda: card['bearing'][0].update(target='unknown')):
+                       lambda: card.update(citations=[dict(reference, link=dict(version_id='other', source_id='s'))]),
+                       lambda: card['bearing'][0].update(target='unknown'),
+                       lambda: final[parts.KEY].update(targets=[dict(id='unknown')])):
             changed = copy.deepcopy(series)
             mutate()
             self.assertEqual(study.list_bearing_references(series, [reference]), [])
             card.clear()
             card.update(changed['packets'][0][parts.STATE_KEY]['cards'][0])
+            final[parts.KEY] = changed['packets'][0][parts.KEY]
 
     def test_actual_reader_recognizes_only_bound_verification_parts(self):
         from research_harness.review_input_projection import _require_review_packet
+        artifact = dict(path='research/sources/objects/' + 'b' * 64, sha256='b' * 64, size=2,
+                        media_type='application/json')
+        state = dict(cards=[], combinations=[], findings=[])
         header = dict(protocol=parts.PROTOCOL, adapter='study_verification', kind='read',
-                      series_assignment_id='a', turn=1, inventory_digest='b' * 64)
+                      series_assignment_id='a', turn=1, inventory_digest='b' * 64,
+                      inventory=artifact, logical_packet=artifact, logical_packet_digest='b' * 64,
+                      series_key='c' * 64, receipts=[], units=[], state_digest=digest(state))
         packet = dict(protocol=protocol.PROTOCOL, role='verification', reviewer_id='verifier',
                       dossier_id=None, paper=dict(kind='verification', task_digest='a' * 64),
-                      evidence=[], review_parts=header)
+                      evidence=[], review_parts=header, review_parts_state=state)
         packet['digest'] = digest(packet)
         assignment = dict(id='a', role='verification', reviewer_id='verifier', dossier_id=None,
-                          packet_digest=packet['digest'], review_parts=copy.deepcopy(header),
+                          packet_digest=packet['digest'], review_parts={key: header[key] for key in
+                              ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest')},
                           context=dict(verification_task_id='a' * 64))
         _require_review_packet(packet, [assignment])
         for change in (dict(role='manuscript'), dict(dossier_id='dossier'),
@@ -191,10 +202,9 @@ class StudyPartsCase(unittest.TestCase):
             if bearings and parts.find_kind(packet) == 'read':
                 rows = {row['handle']: row for row in packet[parts.KEY]['units']}
                 for card in output['cards']:
-                    names = [digest(ref) for ref in rows[card['unit']]['citations']]
-                    if names:
+                    if rows[card['unit']]['citations']:
                         card['bearing'] = [dict(target='validity', relation='context',
-                                                reason='Exact references: ' + ' '.join(names))]
+                                                reason='The delivered unit bears on candidate validity.')]
                 if any(card['bearing'] for card in output['cards']):
                     output['unborne'] = [entry for entry in output['unborne']
                                          if entry['target'] != 'validity']

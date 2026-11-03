@@ -46,6 +46,36 @@ def find_attachment(attached, reference):
     return None
 
 
+def _has_parts_binding(packet, adapter):
+    """Check the same frozen artifact, state and series identities for both roles."""
+    from . import review_parts
+    from .artifacts import validate_reference
+
+    header = packet.get(review_parts.KEY)
+    state = packet.get(review_parts.STATE_KEY)
+    if not (isinstance(header, dict) and review_parts.find_kind(packet) is not None
+            and header.get('adapter') == adapter
+            and {'inventory', 'inventory_digest', 'logical_packet', 'logical_packet_digest',
+                 'series_key', 'state_digest', 'receipts', 'units'} <= header.keys()
+            and isinstance(header.get('series_assignment_id'), str)
+            and bool(header['series_assignment_id'].strip())
+            and type(header.get('turn')) is int and header['turn'] >= 1
+            and isinstance(header['series_key'], str) and len(header['series_key']) == 64
+            and all(character in '0123456789abcdef' for character in header['series_key'])
+            and isinstance(header['receipts'], list) and isinstance(header['units'], list)
+            and isinstance(state, dict) and header['state_digest'] == digest(state)
+            and packet['digest'] == digest({key: value for key, value in packet.items()
+                                             if key != 'digest'})):
+        return False
+    try:
+        validate_reference(header['inventory'])
+        validate_reference(header['logical_packet'])
+    except ResearchError:
+        return False
+    return (header['inventory_digest'] == header['inventory']['sha256']
+            and header['logical_packet_digest'] == header['logical_packet']['sha256'])
+
+
 def _require_review_packet(packet, assignments=None):
     """A packet label cannot stand in for a native scientific review identity."""
     subject = packet.get('subject') if isinstance(packet, dict) else None
@@ -68,8 +98,6 @@ def _require_review_packet(packet, assignments=None):
                  and 'subject' not in packet)
         valid = (problem or study) and role in ('bar', 'slate', 'result', 'adjudicator')
         if role == 'verification':
-            from .review_parts import KINDS, PROTOCOL
-            header = packet.get('review_parts')
             paper = packet.get('paper')
             task = paper.get('task_digest') if isinstance(paper, dict) else None
             valid = (protocol == 'exactory-independent-review-v1'
@@ -77,15 +105,7 @@ def _require_review_packet(packet, assignments=None):
                      and 'subject' not in packet and isinstance(paper, dict)
                      and paper.get('kind') == 'verification' and isinstance(task, str)
                      and len(task) == 64 and all(character in '0123456789abcdef' for character in task)
-                     and isinstance(header, dict) and header.get('protocol') == PROTOCOL
-                     and header.get('adapter') == 'study_verification' and header.get('kind') in KINDS
-                     and type(header.get('turn')) is int and header['turn'] > 0
-                     and isinstance(header.get('series_assignment_id'), str)
-                     and bool(header['series_assignment_id'].strip())
-                     and isinstance(header.get('inventory_digest'), str)
-                     and len(header['inventory_digest']) == 64
-                     and all(character in '0123456789abcdef' for character in header['inventory_digest'])
-                     and digest({key: value for key, value in packet.items() if key != 'digest'}) == identifier)
+                     and _has_parts_binding(packet, 'study_verification'))
         if role == 'adjudicator':
             assessments, objection = packet.get('assessments'), packet.get('objection')
             valid = (valid and protocol != 'exactory-independent-review-sources-v2'
@@ -97,8 +117,6 @@ def _require_review_packet(packet, assignments=None):
                      and bool(objection['id'].strip()))
         if role == 'native_math':
             from . import native_review, review_parts
-            from .artifacts import validate_reference
-            from .evidence import digest
             native, header = packet.get('native'), packet.get(review_parts.KEY)
             valid = (protocol == 'exactory-independent-review-v1'
                      and 'dossier_id' in packet and packet['dossier_id'] is None and 'subject' not in packet
@@ -107,28 +125,13 @@ def _require_review_packet(packet, assignments=None):
                      and isinstance(native.get('subject'), dict)
                      and native.get('subject_digest') == digest(native['subject'])
                      and isinstance(native.get('reviewer'), dict)
-                     and isinstance(header, dict) and review_parts.find_kind(packet) is not None
-                     and header.get('adapter') == 'native_math'
-                     and {'inventory', 'inventory_digest', 'logical_packet', 'logical_packet_digest',
-                          'series_key', 'state_digest', 'receipts', 'units'} <= header.keys()
-                     and isinstance(header.get('series_assignment_id'), str)
-                     and bool(header['series_assignment_id'].strip())
-                     and type(header.get('turn')) is int and header['turn'] >= 1
-                     and isinstance(header['receipts'], list) and isinstance(header['units'], list)
-                     and isinstance(packet.get(review_parts.STATE_KEY), dict)
-                     and header['state_digest'] == digest(packet[review_parts.STATE_KEY])
-                     and packet['digest'] == digest({key: value for key, value in packet.items() if key != 'digest'}))
+                     and _has_parts_binding(packet, 'native_math'))
             if valid:
                 try:
-                    validate_reference(header['inventory'])
-                    validate_reference(header['logical_packet'])
                     native_review.require_assignment_identity(native, dict(id=header['series_assignment_id'],
                         reviewer_id=packet['reviewer_id'], dossier_id=None))
                 except ResearchError:
                     valid = False
-                else:
-                    valid = (header['inventory_digest'] == header['inventory']['sha256']
-                             and header['logical_packet_digest'] == header['logical_packet']['sha256'])
     if valid and assignments is not None:
         from .review_context_repair import is_same_subject
         bound = [assignment for assignment in assignments
@@ -142,17 +145,15 @@ def _require_review_packet(packet, assignments=None):
                      if packet['objection']['id'] == assignment.get('context', {}).get('objection_id')
                      and [row['id'] for row in packet['assessments'][:2]]
                      == assignment.get('context', {}).get('review_ids')]
-        elif packet['role'] == 'native_math':
+        elif packet['role'] in ('native_math', 'verification'):
             bound = [assignment for assignment in bound
                      if isinstance(assignment.get('review_parts'), dict)
                      and all(packet['review_parts'].get(key) == assignment['review_parts'].get(key)
                              for key in ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn',
                                          'inventory_digest'))]
-        elif packet['role'] == 'verification':
-            keys = ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest')
+        if packet['role'] == 'verification':
             bound = [assignment for assignment in bound
-                     if assignment.get('review_parts') == {key: packet['review_parts'][key] for key in keys}
-                     and assignment.get('context', {}).get('verification_task_id')
+                     if assignment.get('context', {}).get('verification_task_id')
                      == packet['paper']['task_digest']]
         valid = bool(bound)
     if not valid:

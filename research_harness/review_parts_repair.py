@@ -14,13 +14,13 @@ def applies(value, packet):
 
 
 def find_role_adapter(packet):
-    from .review_parts_roles import ADAPTERS
+    from .review_parts_roles import find_adapter, get_adapter
 
     ordinary = dict(packet)
     ordinary.pop('context_repair', None)
     value = dict(role=packet.get('role'), context={})
-    return next((adapter for name, adapter in ADAPTERS.items()
-                 if name != 'context_repair' and adapter['applies'](value, ordinary)), None)
+    name = find_adapter(value, ordinary)
+    return get_adapter(name) if name is not None else None
 
 
 def list_role_units(packet):
@@ -99,7 +99,7 @@ def prepare_history(records, artifacts, packet, history=None):
                       'effective_binding', 'selected_observations', 'intermediate_findings')
                      if ancestor.get(key) is not None)
         for collection, (content, owned) in texts:
-            rendered = parts._dump(content)
+            rendered = parts.render_json(content)
             reference = artifacts.put(rendered.encode('utf-8'), 'application/json')
             entry = dict(artifact=reference, content=rendered, encoding='utf-8')
             bodies[digest(reference)] = entry
@@ -187,7 +187,7 @@ def prioritize_fill(packet, inventory, planned, measure, input_limit):
         selections, characters = parts.select_originals(units, allowance, requests=priorities)
         if any(not parts.covers_original(selections, original, inventory) for original in answered):
             return planned
-        header['fill'] = parts._describe_selections([entry for entry in selections
+        header['fill'] = parts.describe_selections([entry for entry in selections
                                                    if entry['unit'] not in answered_handles])
         header['original_characters'] = characters
         candidate = parts.project_packet(frame, units, selections, header, planned[parts.STATE_KEY])
@@ -400,10 +400,10 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     packet = dict(packet)
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
-    logical_reference = artifacts.put(parts._dump(packet).encode('utf-8'), 'application/json')
+    logical_reference = artifacts.put(parts.render_json(packet).encode('utf-8'), 'application/json')
     inventory_reference = parts.store_inventory(artifacts, inventory)
     series_id = observations[0]['packet'][parts.KEY]['series_assignment_id'] if observations else value['id']
-    replacement = parts._find_replacement(records, artifacts, value, 'context_repair', series_key,
+    replacement = parts.find_failed_replacement(records, artifacts, value, 'context_repair', series_key,
         slot_id, value.get('context', {}).get('prior_assignment_id'), route['configuration']['max_output_tokens'])
 
     def measure(candidate):

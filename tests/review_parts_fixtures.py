@@ -76,8 +76,9 @@ class PartsResultCase(ResultPartsCase):
     """Use the real prospective path; the parent only supplies observed bar fixtures."""
     use_parts_v2 = True
 
-    def oversized(self, count=6, characters=24000, room=110000):
-        return super().oversized(count=count, characters=characters, limit=measure_input_limit(room))
+    def oversized(self, count=6, characters=24000, room=110000, limit=None):
+        return super().oversized(count=count, characters=characters,
+                                 limit=measure_input_limit(room) if limit is None else limit)
 
     def output(self, assignment):
         return make_output(self.packet(assignment))
