@@ -8,10 +8,12 @@ stop while an attack is open.
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import importlib.util
 import io
 import json
+import os
 import runpy
 import subprocess
 import sys
@@ -199,6 +201,70 @@ class TestGuardAttackFiles(unittest.TestCase):
             "cwd": str(self.root),
         })
         self.assertEqual(completed.stdout, "")
+
+
+def _load_math_search():
+    spec = importlib.util.spec_from_file_location("math_search", _PLUGIN_ROOT / "hooks/math_search.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestFileStatusChecks(unittest.TestCase):
+    """The discovery checks answer False for an absent path and raise for a path they cannot check, on every
+    Python version; pathlib's own checks return False on every OSError from 3.14 on."""
+
+    def setUp(self) -> None:
+        scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(scratch.cleanup)
+        self.root = Path(scratch.name)
+        module = _load_math_search()
+        self.checks = (module.path_exists, module.is_regular_file, module.is_directory, module.is_symlink)
+
+    def test_absent_and_present_paths(self) -> None:
+        file_path = self.root / "problem.json"
+        file_path.write_text("{}")
+        directory = self.root / "attack"
+        directory.mkdir()
+        link = self.root / "link.json"
+        link.symlink_to(file_path)
+        broken = self.root / "broken.json"
+        broken.symlink_to(self.root / "missing.json")
+        loop = self.root / "loop"
+        loop.symlink_to(loop)
+        # (path_exists, is_regular_file, is_directory, is_symlink)
+        expectations = (
+            (self.root / "missing.json", (False, False, False, False)),
+            (file_path, (True, True, False, False)),
+            (directory, (True, False, True, False)),
+            (link, (True, True, False, True)),
+            (broken, (False, False, False, True)),
+            (loop, (False, False, False, True)),
+            (file_path / "child", (False, False, False, False)),
+            (Path("nul\0l"), (False, False, False, False)),
+        )
+        for path, expected in expectations:
+            with self.subTest(path=str(path)):
+                self.assertEqual(tuple(check(path) for check in self.checks), expected)
+
+    def test_an_overlong_component_raises_enametoolong(self) -> None:
+        over_long = self.root / ("x" * 300) / "problem.json"
+        for check in self.checks:
+            with self.subTest(check=check.__name__):
+                with self.assertRaises(OSError) as raised:
+                    check(over_long)
+                self.assertEqual(raised.exception.errno, errno.ENAMETOOLONG)
+
+    @unittest.skipIf(os.geteuid() == 0, "root ignores directory permission bits")
+    def test_a_directory_without_permissions_raises(self) -> None:
+        blocked = self.root / "blocked"
+        blocked.mkdir()
+        blocked.chmod(0)
+        self.addCleanup(blocked.chmod, 0o700)
+        for check in self.checks:
+            with self.subTest(check=check.__name__):
+                with self.assertRaises(PermissionError):
+                    check(blocked / "problem.json")
 
 
 class TestEnforceUnitFlow(unittest.TestCase):

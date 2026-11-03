@@ -7,11 +7,13 @@ and arbitrary JavaScript or shell programs are not an enforcement boundary.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 from pathlib import Path
 import re
 import shlex
+import stat
 import subprocess
 import sys
 import tempfile
@@ -36,6 +38,44 @@ class ManagedError(ValueError):
 
 class ControllerReadError(ManagedError):
     """The installed runtime cannot read a record of unknown or different origin."""
+
+
+# Up to Python 3.13, pathlib's exists(), is_file(), is_dir() and is_symlink() raised every OSError except these
+# four errnos; from 3.14 on they return False on every OSError (the pathlib reference, "Querying file type and
+# status"). Discovery must tell an absent path from one it cannot check, so it uses these functions on every
+# version: an absent path is False, and a check that fails for any other reason raises.
+_ABSENT_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP})
+
+
+def _read_mode(path, follow_symlinks=True):
+    """The st_mode of `path`, or None when nothing is there; a failure other than absence propagates."""
+    try:
+        return os.stat(path, follow_symlinks=follow_symlinks).st_mode
+    except OSError as error:
+        if error.errno in _ABSENT_ERRNOS:
+            return None
+        raise
+    except ValueError:
+        return None  # a path the OS cannot represent, such as one with an embedded null byte
+
+
+def path_exists(path):
+    return _read_mode(path) is not None
+
+
+def is_regular_file(path):
+    mode = _read_mode(path)
+    return mode is not None and stat.S_ISREG(mode)
+
+
+def is_directory(path):
+    mode = _read_mode(path)
+    return mode is not None and stat.S_ISDIR(mode)
+
+
+def is_symlink(path):
+    mode = _read_mode(path, follow_symlinks=False)
+    return mode is not None and stat.S_ISLNK(mode)
 
 
 def _unique(pairs):
@@ -204,15 +244,16 @@ def discover(payload, paths=None):
             if parent in visited:
                 continue
             visited.add(parent)
-            if (parent / ".search/tree.json").exists() or (parent / ".search/tree.json").is_symlink():
+            tree = parent / ".search/tree.json"
+            if path_exists(tree) or is_symlink(tree):
                 canonical = parent.resolve()
                 roots.setdefault(canonical, None)
                 direct.add(canonical)
             pointer = parent / ".exactory/math-search.json"
             explicit_registration = pointer in paths or pointer.with_suffix(".lock") in paths
-            if not pointer.exists() and not pointer.is_symlink():
+            if not path_exists(pointer) and not is_symlink(pointer):
                 continue
-            if pointer.parent.is_symlink():
+            if is_symlink(pointer.parent):
                 if parent != cwd and not explicit_registration:
                     continue
                 raise ManagedError("Discovery directory is a symlink; recover registration")
@@ -267,8 +308,8 @@ def is_same_or_ancestor(root, path):
 
 def workspace_for(path):
     for directory in (path, *path.parents):
-        if (directory / "problem.json").is_file() and (directory.parent.name == "attack"
-                or (directory.parent / ".search/tree.json").exists()):
+        if is_regular_file(directory / "problem.json") and (directory.parent.name == "attack"
+                or path_exists(directory.parent / ".search/tree.json")):
             return directory
     return None
 
