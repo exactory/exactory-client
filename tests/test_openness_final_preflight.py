@@ -103,6 +103,12 @@ def build_before_preflight(*args):
     return namespace['prepare_packet'](*args)
 
 
+def create_legacy_record(protocol, **options):
+    """Pin the pre-0.72 retention shape while comparing historical preflight builders."""
+    return {'protocol': protocol, 'turns': [], 'sources': [], 'excerpts': [], 'passages': [],
+            'allowances': reading.review_excerpts.create_allowances()}
+
+
 class FinalPreflightCase(OpennessReadingCase):
     text_sizes = (125000, 9000, 9000)
     input_limit = 160000
@@ -203,7 +209,7 @@ class EarlyRefusalTests(FinalPreflightCase):
         self.assign('turn-1', native)
         packet = self.read_packet('turn-1')
         content = self.artifacts.read(self.texts[self.versions[0]]).decode()
-        excerpts = [{'version_id': self.versions[0], 'text': content[1000:7000],
+        excerpts = [{'version_id': self.versions[0], 'text': content[1000:7000 - number],
                      'purpose': 'Mandatory excerpt %d.' % number} for number in range(25)]
         self.invoke('turn-1', self.build_reading_response(packet, excerpts=excerpts))
         details = self.assert_refused_without_writes(native, prior='turn-1')
@@ -223,6 +229,12 @@ class EarlyRefusalTests(FinalPreflightCase):
 
 
 class CompatibilityTests(FinalPreflightCase):
+    def setUp(self):
+        super().setUp()
+        legacy = patch.object(reading, '_create_record', side_effect=create_legacy_record)
+        legacy.start()
+        self.addCleanup(legacy.stop)
+
     def test_fitting_chain_preserves_prompts_packets_and_requests(self):
         self.limit_input(self.input_limit)
         native, _ = self.build_native(proof_characters=1000)
@@ -325,6 +337,9 @@ class LowerBoundTests(unittest.TestCase):
 
 class RepresentationCompatibilityTests(unittest.TestCase):
     def setUp(self):
+        legacy = patch.object(reading, '_create_record', side_effect=create_legacy_record)
+        legacy.start()
+        self.addCleanup(legacy.stop)
         import test_problem_openness_source_delivery as fixtures
         from codex_route_fixtures import record_codex_route
         self.fixture = fixtures.SourceDeliveryTests()

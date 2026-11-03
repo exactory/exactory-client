@@ -20,6 +20,10 @@ from .operations import describe_received_value, fields, text
 KEY = 'reviewer_excerpts'
 PROTOCOL_V1 = 'exactory-review-excerpts-v1'
 PROTOCOL = 'exactory-review-excerpts-v2'
+# Retention is versioned separately from the unchanged reviewer instructions.
+SESSION_PROTOCOL = 'exactory-review-excerpts-v3'
+DIAGNOSTIC_HEAD_CHARACTERS = 200
+PURPOSE_CHARACTERS = 500
 # The characters of new full text that one turn delivers at most, so that a reviewer can read it and record excerpts
 # within the route's time limit. A longer text arrives in parts of at most this size.
 TURN_FULLTEXT_CHARACTERS = 120000
@@ -256,16 +260,45 @@ def _describe_span(source, start, end):
             'artifact_descriptor': descriptor(source['reference'])}
 
 
-def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=None):
+def _describe_bounded_text(value):
+    """Identify the complete submitted text while retaining only its first 200 characters."""
+    return {'sha256': hashlib.sha256(value.encode('utf-8')).hexdigest(), 'characters': len(value),
+            'head': value[:DIAGNOSTIC_HEAD_CHARACTERS]}
+
+
+def _find_entry_key(entry):
+    """Bind copies by their text digest, and text-free diagnostics by their exact retained form."""
+    sha256 = (entry.get('locator') or {}).get('sha256') or entry.get('sha256')
+    if sha256 is None:
+        value = entry['text'] if 'text' in entry else json.dumps(
+            {key: item for key, item in entry.items() if key != 'note'}, sort_keys=True)
+        sha256 = hashlib.sha256(value.encode('utf-8')).hexdigest()
+    return find_identity(entry), sha256, entry['status']
+
+
+def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=None, protocol=PROTOCOL, retained=()):
     """Check excerpts in output order against the stored text that each names, found as find_source_reference finds
     it. A verified excerpt carries the original characters of its first match; the session allowance counts the
-    characters of verified excerpts. Return the checked entries and the allowances after them."""
+    characters of verified excerpts. Return the checked entries and the allowances after them.
+
+    In SESSION_PROTOCOL, drop entries whose source binding, text digest and status match a retained entry or an
+    earlier entry of this output; verified duplicates do not charge the allowance. Text-free diagnostics use their
+    retained fields for the digest. An unmatched entry keeps its status, the submitted text's SHA-256 and character
+    length, and its first 200 characters. A purpose longer than 500 characters keeps its first 500 characters plus
+    the full purpose's SHA-256 and character length. Verified spans and text-free over-allowance diagnostics otherwise
+    keep their existing forms. Earlier protocols keep their original forms and duplicates."""
     allowance = dict(allowances['excerpts'])
     sources = _read_sources(records, artifacts, {find_identity(excerpt) for excerpt in excerpts}, unit_sources)
     checked = []
+    bounded = protocol == SESSION_PROTOCOL
+    seen = {_find_entry_key(entry) for entry in retained} if bounded else set()
     for excerpt in excerpts:
         identity = find_identity(excerpt)
         entry = dict(identity[1:], purpose=excerpt['purpose'])
+        if bounded and len(entry['purpose']) > PURPOSE_CHARACTERS:
+            purpose = entry['purpose']
+            entry.update(purpose=purpose[:PURPOSE_CHARACTERS], purpose_characters=len(purpose),
+                         purpose_sha256=hashlib.sha256(purpose.encode('utf-8')).hexdigest())
         source = sources.get(identity)
         phrase, _ = normalize_with_offsets(excerpt['text'])
         span = None
@@ -278,21 +311,34 @@ def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=Non
             reason = ('not_found' if span is None else
                       'too_long' if span[1] - span[0] > EXCERPT_CHARACTERS else None)
         if reason is not None:
-            checked.append(dict(entry, status='unmatched', reason=reason, text=excerpt['text'], checked=False,
-                                note=UNCHECKED_NOTE))
-        elif allowance['used'] + span[1] - span[0] > allowance['characters']:
-            checked.append(dict(entry, status='over_allowance', characters=span[1] - span[0],
-                                note=EXCERPT_OVER_ALLOWANCE_NOTE))
+            entry.update(status='unmatched', reason=reason, checked=False, note=UNCHECKED_NOTE)
+            entry.update(_describe_bounded_text(excerpt['text']) if bounded else {'text': excerpt['text']})
         else:
-            allowance['used'] += span[1] - span[0]
-            checked.append(dict(entry, status='verified', **_describe_span(source, *span)))
+            verified = dict(entry, status='verified', **_describe_span(source, *span))
+            if bounded and _find_entry_key(verified) in seen:
+                continue
+            if allowance['used'] + span[1] - span[0] > allowance['characters']:
+                entry.update(status='over_allowance', characters=span[1] - span[0], note=EXCERPT_OVER_ALLOWANCE_NOTE)
+            else:
+                allowance['used'] += span[1] - span[0]
+                entry = verified
+        if bounded:
+            key = _find_entry_key(entry)
+            if key in seen:
+                continue
+            seen.add(key)
+        checked.append(entry)
     return checked, dict(allowances, excerpts=allowance)
 
 
-def answer_passages(records, artifacts, requests, allowances, *, unit_sources=None):
+def answer_passages(records, artifacts, requests, allowances, *, unit_sources=None, protocol=PROTOCOL):
     """Answer passage requests in order: the original text that starts at the first occurrence of the anchor and has
     at most the requested number of characters, within the session allowance; the stored text is found as for
-    check_excerpts. Return the answers and the allowances after them."""
+    check_excerpts. Return the answers and the allowances after them.
+
+    In SESSION_PROTOCOL, an answer that was not delivered keeps only the anchor's first 200 characters in its
+    retained request, plus the full anchor's SHA-256 and character length. The answer's other fields and delivered
+    answers keep their existing forms. Earlier protocols keep the complete anchor."""
     allowance = dict(allowances['passages'])
     sources = _read_sources(records, artifacts, {find_identity(request) for request in requests}, unit_sources)
     answers = []
@@ -301,17 +347,21 @@ def answer_passages(records, artifacts, requests, allowances, *, unit_sources=No
         source = sources.get(find_identity(request))
         span = None if source is None else _locate(source, normalize_with_offsets(request['anchor'])[0])
         if span is None:
-            answers.append(dict(answer, status='not_found', reason='anchor_not_found' if source is not None
-                                else _find_missing_reason(find_identity(request), unit_sources)))
-            continue
-        start = span[0]
-        end = min(start + request['characters'], len(source['text']))
-        if allowance['used'] + end - start > allowance['characters']:
-            answers.append(dict(answer, status='over_allowance', characters=end - start,
-                                note=PASSAGE_OVER_ALLOWANCE_NOTE))
+            answer.update(status='not_found', reason='anchor_not_found' if source is not None
+                          else _find_missing_reason(find_identity(request), unit_sources))
         else:
-            allowance['used'] += end - start
-            answers.append(dict(answer, status='delivered', **_describe_span(source, start, end)))
+            start = span[0]
+            end = min(start + request['characters'], len(source['text']))
+            if allowance['used'] + end - start > allowance['characters']:
+                answer.update(status='over_allowance', characters=end - start, note=PASSAGE_OVER_ALLOWANCE_NOTE)
+            else:
+                allowance['used'] += end - start
+                answer.update(status='delivered', **_describe_span(source, start, end))
+        if protocol == SESSION_PROTOCOL and answer['status'] != 'delivered':
+            anchor = _describe_bounded_text(request['anchor'])
+            answer['request'] = dict(request, anchor=anchor['head'], anchor_sha256=anchor['sha256'],
+                                     anchor_characters=anchor['characters'])
+        answers.append(answer)
     return answers, dict(allowances, passages=allowance)
 
 
@@ -370,11 +420,14 @@ def carry_session(records, artifacts, packet, output):
     record."""
     earlier = packet.get(KEY)
     if earlier is None:
-        return {'protocol': PROTOCOL, 'excerpts': [], 'allowances': create_allowances()}
+        return {'protocol': SESSION_PROTOCOL, 'excerpts': [], 'allowances': create_allowances()}
     excerpts = output.get('excerpts', [])
     validate_excerpts(excerpts, 'invalid_value_review')
-    checked, allowances = check_excerpts(records, artifacts, excerpts, earlier['allowances'])
-    return {'protocol': PROTOCOL, 'excerpts': earlier['excerpts'] + checked, 'allowances': allowances}
+    protocol = SESSION_PROTOCOL if earlier['protocol'] == SESSION_PROTOCOL else PROTOCOL
+    checked, allowances = check_excerpts(records, artifacts, excerpts, earlier['allowances'], protocol=protocol,
+                                         retained=earlier['excerpts'])
+    return {'protocol': protocol, 'excerpts': earlier['excerpts'] + checked,
+            'allowances': allowances}
 
 
 def read_sent_packet(request):

@@ -908,10 +908,13 @@ def _extend_record(records, artifacts, prior_packet, state, rows, observations, 
     earlier = _find_record(prior_packet)
     _require_observed_turns(earlier, observations[:-1])
     unit_sources = _collect_unit_sources(rows) if find_protocol(prior_packet) in GENERIC_UNIT_PROTOCOLS else None
+    excerpt_protocol = earlier.get('excerpt_protocol', review_excerpts.PROTOCOL)
     excerpts, allowances = review_excerpts.check_excerpts(records, artifacts, state['output']['excerpts'],
-                                                          earlier['allowances'], unit_sources=unit_sources)
+                                                          earlier['allowances'], unit_sources=unit_sources,
+                                                          protocol=excerpt_protocol, retained=earlier['excerpts'])
     passages, allowances = review_excerpts.answer_passages(records, artifacts, state['output']['passage_requests'],
-                                                           allowances, unit_sources=unit_sources)
+                                                           allowances, unit_sources=unit_sources,
+                                                           protocol=excerpt_protocol)
     sources = copy.deepcopy(earlier.get('sources', []))
     excerpts = [_compact_entry(entry, sources) for entry in earlier['excerpts'] + excerpts]
     passages = [_compact_entry(entry, sources) for entry in earlier['passages'] + passages]
@@ -923,14 +926,20 @@ def _extend_record(records, artifacts, prior_packet, state, rows, observations, 
     for passage, (assignment_id, _) in zip(passages, requests):
         passage['assignment_id'] = assignment_id
     turns = [dict(observation['turn'], notes=observation['output']['notes']) for observation in observations]
-    return {'protocol': protocol, 'turns': turns, 'sources': sources, 'excerpts': excerpts, 'passages': passages,
-            'allowances': allowances}
+    record = {'protocol': protocol, 'turns': turns, 'sources': sources, 'excerpts': excerpts, 'passages': passages,
+              'allowances': allowances}
+    if 'excerpt_protocol' in earlier:
+        record['excerpt_protocol'] = excerpt_protocol
+    return record
 
 
-def _create_record(protocol):
+def _create_record(protocol, *, excerpt_protocol=None):
     """The reading record that a chain's first turn carries: no turns, sources, excerpts or passages yet."""
-    return {'protocol': protocol, 'turns': [], 'sources': [], 'excerpts': [], 'passages': [],
-            'allowances': review_excerpts.create_allowances()}
+    record = {'protocol': protocol, 'turns': [], 'sources': [], 'excerpts': [], 'passages': [],
+              'allowances': review_excerpts.create_allowances()}
+    if excerpt_protocol is not None:
+        record['excerpt_protocol'] = excerpt_protocol
+    return record
 
 
 def prepare_packet(records, artifacts, value, route, packet):
@@ -951,7 +960,7 @@ def prepare_packet(records, artifacts, value, route, packet):
         if (characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
                 and _fits(route, canonical_prompt('native_math')['text'], packet, [row['artifact'] for row in rows])):
             return packet, None
-        record = _create_record(find_chain_protocol(native))
+        record = _create_record(find_chain_protocol(native), excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
         chain = {'first_assignment_id': value['id'], 'turn': 1}
         preflight_final_input(route, transport.local_input_limit(route), packet, rows, record)
         return _build_reading_turn(artifacts, route, packet, record, [], list_reading_units(artifacts, rows), 1), chain
@@ -1172,7 +1181,9 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
     valid reading response that continued the chain, and the last is a final turn whose output is the native
     result."""
     from .review_protocol import canonical_prompt, find_common_prompt_version
-    first, record = chain[0], _create_record(MATH_PROTOCOL)
+    first = chain[0]
+    first_packet = json.loads(artifacts.read(first['packet']))
+    record = _create_record(MATH_PROTOCOL, excerpt_protocol=_find_record(first_packet).get('excerpt_protocol'))
     for index, (assignment, observation) in enumerate(zip(chain, observations)):
         packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
         stage = find_stage(packet)

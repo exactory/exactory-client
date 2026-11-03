@@ -2256,7 +2256,8 @@ def _repair_packet(records, artifacts, value, repair):
     requested = bar_sources.pending(repair['packet'], output, manifest=epoch.get('manifest'))
     session = review_excerpts.carry_session(records, artifacts, repair['packet'], output)
     answers, session['allowances'] = review_excerpts.answer_passages(
-        records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'])
+        records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'],
+        protocol=session['protocol'])
     packet['source_deliveries'] = packet.get('source_deliveries', []) + answers
     packet['pending_source_requests'] = [request for request in requested if request['kind'] != 'passage']
     packet[review_excerpts.KEY] = session

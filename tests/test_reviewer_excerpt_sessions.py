@@ -89,6 +89,55 @@ class ExcerptSessionCase(StrategyCase):
 
 
 class ExcerptSessionTests(ExcerptSessionCase):
+    def test_a_recorded_v2_session_keeps_its_carry_fitting_and_authenticated_request_bytes(self):
+        from openness_legacy_fixtures import load_0_65_2_openness_reading
+        from research_harness import review_transport as transport
+        from research_harness.review_source_batches import MARKER, project_replies
+        legacy = load_0_65_2_openness_reading().review_excerpts
+        self.assign('a')
+        self.invoke('a', self.build_request_turn(self.requests[:1]))
+        # This source fixture predates bounded retention and runs its own original checker.
+        def answer_legacy(*arguments, **options):
+            options.pop('protocol', None)
+            return legacy.answer_passages(*arguments, **options)
+        with patch.object(review_excerpts, 'carry_session', legacy.carry_session), \
+                patch.object(review_excerpts, 'answer_passages', side_effect=answer_legacy):
+            self.assign('b', prior_assignment_id='a')
+            rejected = {'version_id': self.versions[0], 'text': 'Absent. ' * 1000, 'purpose': 'p' * 5000}
+            passage = {'id': 'absent', 'kind': 'passage', 'version_id': self.versions[0],
+                       'anchor': 'Missing anchor. ' * 1000, 'characters': 100}
+            output = self.build_request_turn([passage], excerpts=[rejected, rejected])
+            self.invoke('b', output)
+            self.assign('c', prior_assignment_id='b')
+            final = self.review_response('bar')
+            self.invoke('c', final)
+        packet = self.packet('c')
+        before = legacy.carry_session(self.store.snapshot()['records'], self.artifacts, self.packet('b'), output)
+        self.assertEqual(review_excerpts.carry_session(self.store.snapshot()['records'], self.artifacts,
+                                                       self.packet('b'), output), before)
+        self.assertEqual(packet[review_excerpts.KEY], before)
+        self.assertEqual([row['text'] for row in before['excerpts']], [rejected['text']] * 2)
+        records = self.store.snapshot()['records']
+        assignment, attempt = records['review_assignment']['c'], records['review_attempt']['attempt-c']
+        saved = self.artifacts.read(attempt['request'])
+        rebuilt = protocol.build_assignment_request(records, self.artifacts, assignment)
+        self.assertEqual(json.loads(saved), rebuilt)
+        self.assertEqual(self.artifacts.read(self.artifacts.put(json.dumps(rebuilt, sort_keys=True).encode(),
+                                                               'application/json')), saved)
+        self.assertTrue(protocol.authenticate_attempt(records, self.artifacts, assignment, attempt))
+        self.assertTrue(self.state('c')['ready'])
+        # Refit the recorded packet with the pre-passage allowance, keeping its full legacy request.
+        fitted = project_replies(records, self.artifacts, packet, {0}, before['allowances'])
+        self.assertEqual(fitted['source_deliveries'], packet['source_deliveries'])
+        route = records['review_route'][assignment['route_id']]
+        fitted['digest'] = packet['digest']
+        if MARKER in packet:
+            fitted[MARKER] = packet[MARKER]
+        self.assertEqual(transport.request_body(route, assignment['prompt']['text'], fitted,
+                                                transport.logical_messages(rebuilt)[:-1]), rebuilt)
+        self.assertEqual(review_excerpts.carry_session(records, self.artifacts, {}, {})['protocol'],
+                         'exactory-review-excerpts-v3')
+
     def test_a_session_beyond_the_route_limit_reaches_a_recordable_final_bar(self):
         limit_codex_input(self, 105000)
         self.assign('a')
@@ -194,7 +243,7 @@ class ExcerptSessionTests(ExcerptSessionCase):
         self.assign('a')
         self.invoke('a', self.build_request_turn(self.requests[:2]))
         self.assign('b', prior_assignment_id='a')
-        self.assertEqual(self.packet('b')[review_excerpts.KEY], {'protocol': review_excerpts.PROTOCOL, 'excerpts': [],
+        self.assertEqual(self.packet('b')[review_excerpts.KEY], {'protocol': review_excerpts.SESSION_PROTOCOL, 'excerpts': [],
                                                                  'allowances': review_excerpts.create_allowances()})
         unmatched = {'version_id': self.versions[0], 'text': 'A sentence that the first source never states anywhere.',
                      'purpose': 'A claim to check against the source later.'}
@@ -205,12 +254,13 @@ class ExcerptSessionTests(ExcerptSessionCase):
         self.assertEqual([(row['status'], row['version_id']) for row in carried['excerpts']],
                          [('verified', self.versions[0]), ('unmatched', self.versions[0])])
         self.assertEqual(carried['excerpts'][0]['text'], build_lemma(1))
-        self.assertEqual(carried['excerpts'][1]['text'], unmatched['text'])
+        self.assertEqual(carried['excerpts'][1]['head'], unmatched['text'])
+        self.assertNotIn('text', carried['excerpts'][1])
         self.assertEqual(carried['allowances']['excerpts']['used'], len(build_lemma(1)))
         self.invoke('c', self.build_request_turn([dict(page, id='page-0-again')], excerpts=[self.copy_lemma(2)]))
         self.assign('d', prior_assignment_id='c')
         carried = self.packet('d')[review_excerpts.KEY]
-        self.assertEqual([row['text'] for row in carried['excerpts']],
+        self.assertEqual([row.get('text', row.get('head')) for row in carried['excerpts']],
                          [build_lemma(1), unmatched['text'], build_lemma(2)])
         self.assertEqual(carried['allowances']['excerpts']['used'], len(build_lemma(1)) + len(build_lemma(2)))
         final = dict(self.review_response('bar'), excerpts=[self.copy_lemma(1)])

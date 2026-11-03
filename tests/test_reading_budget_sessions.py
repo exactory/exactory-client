@@ -178,7 +178,8 @@ class SessionBudgetTests(SessionBudgetHelpers, ExcerptSessionCase):
         self.assign('a')
         self.invoke('a', self.build_request_turn(self.requests[:2]))
         unbounded = patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 10 ** 7)
-        with patch.object(review_excerpts, 'PROTOCOL', review_excerpts.PROTOCOL_V1), unbounded:
+        with patch.object(review_excerpts, 'PROTOCOL', review_excerpts.PROTOCOL_V1), \
+                patch.object(review_excerpts, 'SESSION_PROTOCOL', review_excerpts.PROTOCOL_V1), unbounded:
             earlier = self.assign('b', prior_assignment_id='a')
         self.assertEqual(earlier['prompt'], protocol.canonical_prompt('bar', excerpts=True,
                                                                       excerpt_rules=review_excerpts.PROTOCOL_V1))

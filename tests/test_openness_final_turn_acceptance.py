@@ -347,6 +347,15 @@ class KmpShapedChainAcceptanceTests(AcceptanceCase):
     constants)."""
     text_sizes = KMP_TEXT_SIZES
 
+    def build_text(self, number):
+        """Keep the measured source sizes and theorem statements, with distinct proof text."""
+        body = super().build_text(number)
+        characters = list(body)
+        start = body.index('\n\n') + 2
+        for offset in range(start, len(body) - len('References: none.') - 8, 300):
+            characters[offset:offset + 8] = '%08x' % offset
+        return ''.join(characters)
+
     def build_statement(self, identifier='statement-1', **changes):
         statement = super().build_statement(identifier, **changes)
         missing = KMP_STATEMENT_SIZE - STATEMENT_RECORD_OVERHEAD - len(encode_exported_record(statement)) - 1
@@ -372,7 +381,8 @@ class KmpShapedChainAcceptanceTests(AcceptanceCase):
         body = self.artifacts.read(self.texts[version]).decode('utf-8')
         count = max(0, min(20, KMP_VERIFIED_EXCERPTS - 20 * (number - 1)))
         excerpts = [{'version_id': version, 'purpose': 'A step of the argument.',
-                     'text': body[1000 + 600 * index:1000 + 600 * index + KMP_EXCERPT_CHARACTERS]}
+                     'text': body[1000 + 73 * (number - 1) + 600 * index:
+                                  1000 + 73 * (number - 1) + 600 * index + KMP_EXCERPT_CHARACTERS]}
                     for index in range(count)]
         if number == 1:
             excerpts += [{'version_id': version, 'purpose': 'An observation that stays unchecked.',
@@ -413,14 +423,22 @@ class KmpShapedChainAcceptanceTests(AcceptanceCase):
         self.assertEqual([turn['assignment_id'] for turn in record['turns']], turns[:-1])
         verified = [entry for entry in record['excerpts'] if entry['status'] == 'verified']
         unmatched = [entry for entry in record['excerpts'] if entry['status'] == 'unmatched']
+        bounded = record.get('excerpt_protocol') == review_excerpts.SESSION_PROTOCOL
         self.assertEqual((len(record['excerpts']), len(verified), len(unmatched)),
                          (KMP_VERIFIED_EXCERPTS + 2, KMP_VERIFIED_EXCERPTS, 2))
-        # A first match in the repeated paragraphs can span a paragraph break or not, so a verified span has 582 to
+        self.assertEqual(len({(entry['version_id'], entry['sha256']) for entry in verified}),
+                         KMP_VERIFIED_EXCERPTS)
+        # A selected source span can cross a paragraph break or not, so a verified span has 582 to
         # 586 characters; each keeps its exact source text.
         bodies = {version: self.artifacts.read(self.texts[version]).decode('utf-8') for version in self.versions}
         for entry in verified:
             self.assertEqual(bodies[entry['version_id']][entry['start']:entry['end']], entry['text'])
-        self.assertEqual({len(entry['text']) for entry in unmatched}, {KMP_UNMATCHED_EXCERPT_CHARACTERS})
+        if bounded:
+            self.assertEqual({entry['characters'] for entry in unmatched}, {KMP_UNMATCHED_EXCERPT_CHARACTERS})
+            self.assertEqual({len(entry['head']) for entry in unmatched}, {200})
+            self.assertTrue(all('text' not in entry for entry in unmatched))
+        else:
+            self.assertEqual({len(entry['text']) for entry in unmatched}, {KMP_UNMATCHED_EXCERPT_CHARACTERS})
         self.assertEqual([(entry['status'], len(entry['text'])) for entry in record['passages']],
                          [('delivered', KMP_PASSAGE_CHARACTERS)] * KMP_PASSAGES)
         self.assertEqual(record['allowances']['excerpts']['used'],
@@ -569,11 +587,15 @@ class RecordUnitAcceptanceTests(AcceptanceCase):
                          {'record_id': 'read-a', 'status': 'verified', 'text': body[start:end], 'start': start,
                           'end': end, 'sha256': hash_text(body[start:end]),
                           'purpose': 'The criterion as the record states it.'})
-        self.assertEqual({key: decoded.get(key) for key in ('record_id', 'status', 'reason', 'text')},
-                         {'record_id': 'read-a', 'status': 'unmatched', 'reason': 'not_found', 'text': RECORD_PHRASE})
-        self.assertEqual({key: missing.get(key) for key in ('record_id', 'status', 'reason', 'text')},
+        self.assertEqual({key: decoded.get(key) for key in ('record_id', 'status', 'reason', 'head')},
+                         {'record_id': 'read-a', 'status': 'unmatched', 'reason': 'not_found',
+                          'head': RECORD_PHRASE[:200]})
+        self.assertEqual({key: missing.get(key) for key in ('record_id', 'status', 'reason', 'head')},
                          {'record_id': 'read-z', 'status': 'unmatched', 'reason': 'no_stored_text',
-                          'text': RECORD_PHRASE_JSON})
+                          'head': RECORD_PHRASE_JSON[:200]})
+        for entry, original in ((decoded, RECORD_PHRASE), (missing, RECORD_PHRASE_JSON)):
+            self.assertEqual((entry['sha256'], entry['characters']), (hash_text(original), len(original)))
+            self.assertNotIn('text', entry)
         [passage] = [entry for entry in record['passages'] if entry.get('record_kind') == 'reading']
         self.assertEqual({key: passage.get(key) for key in ('record_id', 'assignment_id', 'request_id', 'status',
                                                              'text', 'start', 'end', 'sha256')},

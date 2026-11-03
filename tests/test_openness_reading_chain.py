@@ -54,7 +54,9 @@ class OpennessReadingChainTests(OpennessReadingCase):
                                                                        self.search['id'])]
                          + [('record', None, 'reading', 'read-%d' % number) for number in (1, 2, 3)]
                          + [('record', None, 'problem_statement', self.selected['id'])])
-        self.assertEqual(turn['reading_record'], {'protocol': openness_reading.PROTOCOL_V4, 'turns': [], 'sources': [],
+        self.assertEqual(turn['reading_record'], {'protocol': openness_reading.PROTOCOL_V4,
+                                                  'excerpt_protocol': review_excerpts.SESSION_PROTOCOL,
+                                                  'turns': [], 'sources': [],
                                                   'excerpts': [], 'passages': [],
                                                   'allowances': {'excerpts': {'characters': 200000, 'used': 0},
                                                                  'passages': {'characters': 100000, 'used': 0}}})

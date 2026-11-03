@@ -176,8 +176,10 @@ class RecordUnitTests(FinalTurnCase):
         self.assertEqual(verified, {'record_kind': 'reading', 'record_id': 'read-2',
                                     'purpose': 'The reading note of the second work.', 'status': 'verified',
                                     'text': phrase, 'start': start, 'end': start + 80, 'sha256': hash_text(phrase)})
-        self.assertEqual((unmatched['status'], unmatched['reason'], unmatched['text']),
+        self.assertEqual((unmatched['status'], unmatched['reason'], unmatched['head']),
                          ('unmatched', 'no_stored_text', phrase))
+        self.assertEqual((unmatched['sha256'], unmatched['characters']), (hash_text(phrase), len(phrase)))
+        self.assertNotIn('text', unmatched)
         [unit] = [row for row in self.list_delivered(turns) if row.get('record_id') == 'read-2']
         self.assertIn({'identities': [{'kind': 'record', 'record_kind': 'reading', 'record_id': 'read-2'}],
                        'artifact_descriptor': openness_reading.descriptor(unit['artifact'])}, record['sources'])
