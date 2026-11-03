@@ -40,15 +40,18 @@ class ControllerReadError(ManagedError):
     """The installed runtime cannot read a record of unknown or different origin."""
 
 
-# Up to Python 3.13, pathlib's exists(), is_file(), is_dir() and is_symlink() raised every OSError except these
-# four errnos; from 3.14 on they return False on every OSError (the pathlib reference, "Querying file type and
-# status"). Discovery must tell an absent path from one it cannot check, so it uses these functions on every
-# version: an absent path is False, and a check that fails for any other reason raises.
-_ABSENT_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP})
+# From Python 3.14 on, pathlib's exists(), is_file(), is_dir() and is_symlink() return False on every OSError
+# (the pathlib reference, "Querying file type and status"). Discovery reads status directly on every version
+# to distinguish expected absence from an unexpected check failure. Absence includes ENAMETOOLONG: a path
+# too long to stat names no existing file. PermissionError and every other unexpected check failure still raise.
+_ABSENT_ERRNOS = frozenset({errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP, errno.ENAMETOOLONG})
 
 
 def _read_mode(path, follow_symlinks=True):
-    """The st_mode of `path`, or None when nothing is there; a failure other than absence propagates."""
+    """The st_mode of `path`, or None for expected absence, including ENAMETOOLONG.
+
+    A path too long to stat names no existing file; unexpected check failures still propagate.
+    """
     try:
         return os.stat(path, follow_symlinks=follow_symlinks).st_mode
     except OSError as error:

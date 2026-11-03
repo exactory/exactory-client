@@ -67,6 +67,19 @@ def _read_denial_reason(test: unittest.TestCase, proc: subprocess.CompletedProce
     return decision["permissionDecisionReason"]
 
 
+def _overlong_paths(root: Path) -> dict[str, Path]:
+    return {
+        "component": root / ("x" * 300) / "notes.md",
+        "whole_path": root.joinpath(*(["segment"] * (os.pathconf(root, "PC_PATH_MAX") // 8 + 1)), "notes.md"),
+    }
+
+
+def _assert_overlong_path(test: unittest.TestCase, path: Path) -> None:
+    with test.assertRaises(OSError) as raised:
+        os.stat(path)
+    test.assertEqual(raised.exception.errno, errno.ENAMETOOLONG)
+
+
 class TestGuardAttackFiles(unittest.TestCase):
     def setUp(self) -> None:
         scratch = tempfile.TemporaryDirectory()
@@ -194,6 +207,65 @@ class TestGuardAttackFiles(unittest.TestCase):
         command = "cat > out.md <<'EOF'\n" + body + "EOF\nprintf '{}' > attack/sample/journal.jsonl\n"
         self.assertIn("journal add", _read_denial_reason(self, self._run_bash(command)))
 
+    def test_allows_an_overlong_whole_path_in_a_single_line_shell_write(self) -> None:
+        path = _overlong_paths(self.root)["whole_path"]
+        _assert_overlong_path(self, path)
+        completed = self._run_bash("printf x > " + str(path))
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, "")
+        self.assertEqual(completed.stderr, "")
+
+    def test_allows_overlong_parent_paths_in_write_and_edit(self) -> None:
+        for kind, path in _overlong_paths(self.root).items():
+            _assert_overlong_path(self, path)
+            for tool in ("Write", "Edit"):
+                with self.subTest(kind=kind, tool=tool):
+                    completed = self._run_file_tool(str(path), tool=tool)
+                    self.assertEqual(completed.returncode, 0)
+                    self.assertEqual(completed.stdout, "")
+                    self.assertEqual(completed.stderr, "")
+
+    def test_allows_overlong_paths_beneath_a_managed_tree(self) -> None:
+        from test_math_search_hooks import managed_objective
+
+        managed_root = self.root / "managed"
+        managed_objective(managed_root)
+        for kind, path in _overlong_paths(managed_root / "attempt").items():
+            _assert_overlong_path(self, path)
+            for tool in ("Bash", "Write", "Edit"):
+                with self.subTest(kind=kind, tool=tool):
+                    completed = (self._run_bash("printf x > " + str(path)) if tool == "Bash"
+                                 else self._run_file_tool(str(path), tool=tool))
+                    self.assertEqual(completed.returncode, 0)
+                    self.assertEqual(completed.stdout, "")
+                    self.assertEqual(completed.stderr, "")
+
+    def test_an_overlong_single_line_word_does_not_hide_a_later_owned_file(self) -> None:
+        for kind, path in _overlong_paths(self.root).items():
+            with self.subTest(kind=kind):
+                _assert_overlong_path(self, path)
+                command = "printf '%s' " + str(path) + " > attack/sample/journal.jsonl"
+                completed = self._run_bash(command)
+                self.assertEqual(completed.returncode, 0)
+                self.assertEqual(completed.stderr, "")
+                self.assertIn("journal add", _read_denial_reason(self, completed))
+
+    def test_an_overlong_batch_target_does_not_hide_a_later_owned_file(self) -> None:
+        for kind, path in _overlong_paths(self.root).items():
+            with self.subTest(kind=kind):
+                _assert_overlong_path(self, path)
+                completed = _run_hook(_GUARD_SCRIPT_PATH, {
+                    "cwd": str(self.root),
+                    "_math_guard_batch": [
+                        {"tool_name": "Write", "tool_input": {"file_path": str(path)}, "cwd": str(self.root)},
+                        {"tool_name": "Write", "tool_input": {"file_path": "attack/sample/journal.jsonl"},
+                         "cwd": str(self.root)},
+                    ],
+                })
+                self.assertEqual(completed.returncode, 0)
+                self.assertEqual(completed.stderr, "")
+                self.assertIn("journal add", _read_denial_reason(self, completed))
+
     def test_other_tools_pass(self) -> None:
         completed = _run_hook(_GUARD_SCRIPT_PATH, {
             "tool_name": "Read",
@@ -218,8 +290,9 @@ class TestFileStatusChecks(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
-        module = _load_math_search()
-        self.checks = (module.path_exists, module.is_regular_file, module.is_directory, module.is_symlink)
+        self.module = _load_math_search()
+        self.checks = (self.module.path_exists, self.module.is_regular_file,
+                       self.module.is_directory, self.module.is_symlink)
 
     def test_absent_and_present_paths(self) -> None:
         file_path = self.root / "problem.json"
@@ -247,13 +320,48 @@ class TestFileStatusChecks(unittest.TestCase):
             with self.subTest(path=str(path)):
                 self.assertEqual(tuple(check(path) for check in self.checks), expected)
 
-    def test_an_overlong_component_raises_enametoolong(self) -> None:
+    def test_an_overlong_component_is_absent(self) -> None:
         over_long = self.root / ("x" * 300) / "problem.json"
+        _assert_overlong_path(self, over_long)
         for check in self.checks:
             with self.subTest(check=check.__name__):
-                with self.assertRaises(OSError) as raised:
-                    check(over_long)
-                self.assertEqual(raised.exception.errno, errno.ENAMETOOLONG)
+                self.assertIs(check(over_long), False)
+
+    def test_an_overlong_whole_path_is_absent(self) -> None:
+        over_long = _overlong_paths(self.root)["whole_path"]
+        _assert_overlong_path(self, over_long)
+        for check in self.checks:
+            with self.subTest(check=check.__name__):
+                self.assertIs(check(over_long), False)
+
+    def test_a_mocked_permission_error_propagates_and_denies_the_hook(self) -> None:
+        with patch.dict(sys.modules, {"math_search": self.module}):
+            gate = runpy.run_path(str(_GUARD_SCRIPT_PATH))
+        probe = self.root / ".search/tree.json"
+        permission_error = PermissionError(errno.EACCES, "Permission denied", str(probe))
+        original_stat = os.stat
+
+        def denied_stat(path, *args, **kwargs):
+            if os.path.realpath(path) == os.path.realpath(probe):
+                raise permission_error
+            return original_stat(path, *args, **kwargs)
+
+        payload = {"tool_name": "Write", "tool_input": {"file_path": "notes.md"}, "cwd": str(self.root)}
+        output, errors = io.StringIO(), io.StringIO()
+        with patch.object(os, "stat", side_effect=denied_stat):
+            for check in self.checks:
+                with self.subTest(check=check.__name__):
+                    with self.assertRaises(PermissionError) as raised:
+                        check(probe)
+                    self.assertIs(raised.exception, permission_error)
+            with patch.object(sys, "stdin", io.StringIO(json.dumps(payload))), \
+                    patch.object(sys, "stdout", output), patch.object(sys, "stderr", errors):
+                with self.assertRaises(SystemExit) as stopped:
+                    gate["main"]()
+        self.assertEqual(stopped.exception.code, 0)
+        self.assertEqual(errors.getvalue(), "")
+        reason = _read_denial_reason(self, subprocess.CompletedProcess([], 0, output.getvalue(), errors.getvalue()))
+        self.assertIn("Recovery required before this managed operation", reason)
 
     @unittest.skipIf(os.geteuid() == 0, "root ignores directory permission bits")
     def test_a_directory_without_permissions_raises(self) -> None:
