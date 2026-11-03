@@ -82,8 +82,8 @@ class RevisedOutputTests(unittest.TestCase):
 
     def test_request_why_and_item_spans_are_validated(self):
         packet = make_packet(1, 8000)
-        read = plan(packet, limit=20000)
-        combined = plan(packet, [observe(read)], limit=20000)
+        read = plan(packet, room=20000)
+        combined = plan(packet, [observe(read)], room=20000)
         combined['review_parts']['originals'] = []
         request = dict(kind='requests', unit_requests=[dict(unit='u1', item=True, start=0, end=40,
                                                            why='Read this item again.')], source_requests=[])
@@ -116,7 +116,7 @@ class RevisedOutputTests(unittest.TestCase):
         packet = make_packet(0, body='prefix\n' + 'filler ' * 9000 + '\nA decisive theorem is here.\n')
         observations = []
         for _ in range(20):
-            turn = plan(packet, observations, limit=35000)
+            turn = plan(packet, observations, room=35000)
             if turn['review_parts']['kind'] != 'read':
                 self.fail('The requested text was never delivered')
             output = make_output(turn)
@@ -144,7 +144,7 @@ class RevisedOutputTests(unittest.TestCase):
     def test_segment_citation_is_confined_to_the_delivered_locator(self):
         import hashlib
         packet = make_packet(0, body='αβγ ' * 20000)
-        turn = plan(packet, limit=40000)
+        turn = plan(packet, room=40000)
         body = packet['evidence'][0]
         segment = next(entry for entry in turn['evidence'] if entry.get('segment') and not entry.get('item'))
         start, end = segment['segment']['start'], segment['segment']['end']

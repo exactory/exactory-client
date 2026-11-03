@@ -5,6 +5,7 @@ import copy
 from . import review_parts_prompts as prompts, review_problem_parts as legacy
 
 from .evidence import digest
+from .errors import ResearchError
 from .problem_rubric import ITEMS, PROBLEM_CHECKS
 
 
@@ -92,8 +93,12 @@ def list_citations(source):
 
 def list_targets(packet):
     labels = dict(line.split(': ', 1) for line in prompts.TARGET_LABELS.splitlines() if ': ' in line)
-    targets = [dict(id=identifier, label=labels.get(identifier, prompts.TARGET_LABELS))
-               for identifier in PROBLEM_CHECKS + ITEMS]
+    targets = []
+    for identifier in PROBLEM_CHECKS + ITEMS:
+        if not labels.get(identifier, '').strip():
+            raise ResearchError('review_parts_target_label_missing',
+                                'A problem review target has no label', {'target': identifier})
+        targets.append(dict(id=identifier, label=labels[identifier]))
     objections = list(packet.get('material_objections', []))
     objections.extend(objection for objection, path in list_historical_objections(packet))
     seen = {row['id'] for row in targets}

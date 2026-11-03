@@ -1,6 +1,5 @@
 """Fresh-input result series and pure planner fixtures."""
 import copy
-import json
 from problem_parts_fixtures import ResultPartsCase
 from research_harness.evidence import digest
 
@@ -41,11 +40,34 @@ def observe(packet, output=None, output_tokens=50000):
     return dict(packet=clean, inventory=packet['_test_inventory'], output=output, delta=delta, receipt=receipt, output_tokens=output_tokens)
 
 
-def plan(packet, observations=(), limit=110000, **kwargs):
+def measure_packet(packet):
+    from research_harness import review_parts as parts, review_transport as transport
+    from research_harness.review_problem_parts import _measure
+    route = dict(adapter='codex_cli_v1', endpoint='codex://local', model='fixture',
+                 configuration=dict(max_output_tokens=128000, timeout_seconds=5))
+    prompt = parts.build_turn_prompt('result', dict(orchestration='problem_creation', excerpts=True),
+                                     packet['review_parts'])
+    return _measure(route, transport.request_body(route, prompt['text'], packet, [], order=()))
+
+
+def measure_input_limit(room):
+    """Allow this much fixture content beyond the actual rendered final frame."""
+    from research_harness import review_parts as parts
+    from research_harness.review_parts_problem_result import list_targets
+    packet = make_packet(0)
+    inventory = parts.build_inventory(packet, 'problem_result')
+    probe = dict(packet, review_parts=dict(adapter='problem_result', kind='final', targets=list_targets(packet)))
+    frame = parts.plan_turn(packet, inventory, [], series_id='a1', input_limit=2 * measure_packet(probe),
+                           measure=measure_packet, output_tokens=128000)
+    return measure_packet(frame) + room
+
+
+def plan(packet, observations=(), room=110000, input_limit=None, **kwargs):
     from research_harness import review_parts as parts
     inventory = parts.build_inventory(packet, 'problem_result', observations[-1].get('inventory') if observations else None)
-    result = parts.plan_turn(packet, inventory, observations, series_id='a1', input_limit=limit,
-                             measure=kwargs.pop('measure',lambda value: len(json.dumps(value, sort_keys=True))), output_tokens=128000, **kwargs)
+    result = parts.plan_turn(packet, inventory, observations, series_id='a1',
+                             input_limit=measure_input_limit(room) if input_limit is None else input_limit,
+                             measure=kwargs.pop('measure', measure_packet), output_tokens=128000, **kwargs)
     result['_test_inventory'] = inventory
     return result
 
@@ -53,6 +75,9 @@ def plan(packet, observations=(), limit=110000, **kwargs):
 class PartsResultCase(ResultPartsCase):
     """Use the real prospective path; the parent only supplies observed bar fixtures."""
     use_parts_v2 = True
+
+    def oversized(self, count=6, characters=24000, room=110000):
+        return super().oversized(count=count, characters=characters, limit=measure_input_limit(room))
 
     def output(self, assignment):
         return make_output(self.packet(assignment))

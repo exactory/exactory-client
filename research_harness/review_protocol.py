@@ -2238,6 +2238,8 @@ def _prompt_matches(assignment):
             base = canonical_prompt(assignment['role'], **base_parameters)
             base_assignment = dict(assignment, prompt=base)
             if base_parameters.get('excerpts') and assignment['role'] in bar_sources.ROLES:
+                # The ordinary excerpt prompt rule requires a source-session parent;
+                # parts keeps that ancestry here while sending no transport history.
                 base_assignment['context'] = dict(assignment.get('context', {}),
                     prior_assignment_id=assignment.get('history_assignment_id'))
             if (base['template_id'] != descriptor.get('template_id')

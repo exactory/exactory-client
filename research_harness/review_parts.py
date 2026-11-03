@@ -1735,8 +1735,8 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
             common_version=parameters.get('common_prompt_version'))
     if value['role'] in ('bar', 'slate', 'result'):
         if review_excerpts.KEY not in packet:
-            packet = dict(packet, **{review_excerpts.KEY: dict(protocol=review_excerpts.PROTOCOL,
-                excerpts=[], allowances=review_excerpts.create_allowances())})
+            packet = dict(packet, **{review_excerpts.KEY:
+                                    review_excerpts.carry_session(records, artifacts, {}, {})})
         base_prompt_parameters['excerpts'] = True
     packet = dict(packet)
     packet.pop('digest', None)

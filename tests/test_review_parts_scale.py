@@ -20,7 +20,7 @@ class ScaleTests(unittest.TestCase):
             return _measure(route,transport.request_body(route,prompt['text'],value,[],order=()))
         observations=[]; sizes=[]; canonical_headers=[]; request_sizes=[]; read_characters=[]; initial_frame=None; worst_turn=0; start=time.monotonic()
         for _ in range(40):
-            before=time.monotonic(); turn=plan(packet,observations,limit=1300000,measure=measure)
+            before=time.monotonic(); turn=plan(packet,observations,input_limit=1300000,measure=measure)
             elapsed=time.monotonic()-before
             worst_turn=max(worst_turn,elapsed)
             self.assertLess(elapsed,10)

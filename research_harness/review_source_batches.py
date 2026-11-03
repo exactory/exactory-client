@@ -195,7 +195,9 @@ def plan_packet(records, artifacts, route, packet, prompt, history):
         previous = source_delivery_packet(records, artifacts, parent)
         if review_excerpts.KEY in packet:
             # The session allowances before this turn's passage replies; only included replies charge them.
+            from .review_parts import project_source_output
             output = assignment_state(records, artifacts, parent['id'])['output']
+            output = project_source_output(output, parent['role'])
             allowances = review_excerpts.carry_session(records, artifacts, previous, output)['allowances']
             from .bar_sources import pending
             passage_requests = [request for request in pending(previous, output) if request['kind'] == 'passage']

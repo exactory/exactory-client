@@ -2,15 +2,16 @@ import json
 import unittest
 from research_harness.errors import ResearchError
 from research_harness import review_parts as parts
-from review_parts_fixtures import make_packet, make_output, plan, observe
+from review_parts_fixtures import make_packet, make_output, plan, observe, measure_packet, measure_input_limit
 
 
 class PlanningTests(unittest.TestCase):
     def test_read_then_combine_then_final_without_history(self):
         packet, observations = make_packet(5), []
+        input_limit = measure_input_limit(110000)
         for _ in range(15):
             turn = plan(packet, observations)
-            self.assertLessEqual(len(json.dumps({k:v for k,v in turn.items() if k != '_test_inventory'}, sort_keys=True)), 110000)
+            self.assertLessEqual(measure_packet({k:v for k,v in turn.items() if k != '_test_inventory'}), input_limit)
             if turn['review_parts']['kind'] == 'final':
                 break
             observations.append(observe(turn))
@@ -30,7 +31,7 @@ class PlanningTests(unittest.TestCase):
         packet = make_packet(0, body='αβγ\n\n' * 35000)
         observations, spans = [], []
         for _ in range(30):
-            turn = plan(packet, observations, limit=55000)
+            turn = plan(packet, observations, room=55000)
             if turn['review_parts']['kind'] != 'read':
                 break
             self.assertEqual(turn['review_parts']['delivered_units'], ['u1'])
@@ -59,18 +60,18 @@ class PlanningTests(unittest.TestCase):
 
     def test_no_progress_and_final_frame_too_large(self):
         with self.assertRaises(ResearchError) as raised:
-            plan(make_packet(1, 200000), limit=20000)
+            plan(make_packet(1, 200000), room=20000)
         self.assertEqual(raised.exception.code,'review_parts_inventory_too_large')
         packet=make_packet(0); packet['large_frame']='x'*200000
         with self.assertRaises(ResearchError) as raised:
-            plan(packet,limit=20000)
+            plan(packet,room=20000)
         self.assertEqual(raised.exception.code,'review_parts_frame_too_large')
 
     def test_check_carries_whole_findings_without_an_original_traffic_cap(self):
         packet = make_packet(2, 1000)
-        read = plan(packet, limit=60000)
+        read = plan(packet, room=60000)
         observations = [observe(read)]
-        combine = plan(packet, observations, limit=60000)
+        combine = plan(packet, observations, room=60000)
         combinations = [dict(units=['u1', 'u2'], question='Joint question ' + str(index),
                              view='A joint check.', read=[dict(unit='u1'), dict(unit='u2')])
                         for index in range(4)]
@@ -78,27 +79,27 @@ class PlanningTests(unittest.TestCase):
         for index, combination in enumerate(combinations):
             combination['read'][0] = dict(unit='u1', item=True, start=index, end=800)
         observations.append(observe(combine, make_output(combine, combinations)))
-        check = plan(packet, observations, limit=60000)
+        check = plan(packet, observations, room=60000)
         self.assertEqual(check['review_parts']['kind'], 'check')
         finding = observe(check)
         self.assertEqual(len(finding['delta']['findings']), 4)
         self.assertFalse(any('complete' in row for row in finding['delta']['findings']))
         observations.append(finding)
-        final = plan(packet, observations, limit=60000)
+        final = plan(packet, observations, room=60000)
         self.assertEqual(final['review_parts']['kind'], 'final')
         self.assertNotIn('unchecked_combinations', final['review_parts'])
 
     def test_final_request_can_return_to_original_and_must_progress(self):
         packet=make_packet(4,15000); observations=[]
         while True:
-            turn=plan(packet,observations,limit=40000)
+            turn=plan(packet,observations,room=40000)
             if turn['review_parts']['kind']=='final':break
             observations.append(observe(turn))
         filled={r['unit'] for r in turn['review_parts']['originals']}
         requested=next(u['handle'] for u in turn['_test_inventory']['units'] if u['handle'] not in filled)
         request=dict(kind='requests',unit_requests=[dict(unit=requested,why='Read the missing original.')],source_requests=[])
         observations.append(observe(turn,request))
-        answer=plan(packet,observations,limit=40000)
+        answer=plan(packet,observations,room=40000)
         self.assertEqual(answer['review_parts']['originals'][0]['unit'],requested)
         with self.assertRaises(ResearchError) as raised:
             observe(answer,request)
@@ -106,27 +107,27 @@ class PlanningTests(unittest.TestCase):
 
     def test_final_fill_prioritizes_bearings_then_combination_originals(self):
         packet = make_packet(3, 10000)
-        read = plan(packet, limit=60000)
+        read = plan(packet, room=60000)
         output = make_output(read)
         target = output['unborne'].pop(0)['target']
         card = next(card for card in output['cards'] if card['unit'] == 'u3')
         card['bearing'] = [dict(target=target, relation='qualifies', reason='The exact condition matters.')]
         card['statements'] = [dict(text='x' * 30, why='This is the exact condition.')]
         observations = [observe(read, output)]
-        combine = plan(packet, observations, limit=60000)
+        combine = plan(packet, observations, room=60000)
         combination = dict(units=['u2'], question='Does this condition hold?',
                            view='Check the original.', read=[dict(unit='u2')])
         observations.append(observe(combine, make_output(combine, [combination])))
-        check = plan(packet, observations, limit=60000)
+        check = plan(packet, observations, room=60000)
         observations.append(observe(check))
-        final = plan(packet, observations, limit=60000)
+        final = plan(packet, observations, room=60000)
         self.assertEqual([entry['unit'] for entry in final['review_parts']['fill']], ['u3', 'u2', 'u1'])
 
     def test_final_body_span_uses_canonical_size_when_it_needs_multiple_turns(self):
         packet = make_packet(0, body='\\' * 50000)
         observations = []
         for _ in range(20):
-            final = plan(packet, observations, limit=60000)
+            final = plan(packet, observations, room=60000)
             if final['review_parts']['kind'] == 'final':
                 break
             observations.append(observe(final))
@@ -134,21 +135,32 @@ class PlanningTests(unittest.TestCase):
         request = dict(kind='requests', unit_requests=[dict(unit='u1', body=body, start=0, end=40000,
                                                            why='Read this exact span.')], source_requests=[])
         observations.append(observe(final, request))
-        answer = plan(packet, observations, limit=60000)
+        answer = plan(packet, observations, room=60000)
         self.assertGreater(answer['review_parts']['answered'][0]['start'], 0)
 
     def test_combine_blocks_cover_every_pair_and_state_stays_fixed(self):
         packet = make_packet(12, 100)
-        read = plan(packet, limit=50000)
-        observation = observe(read)
+        read = plan(packet, room=100000)
+        output = make_output(read)
+        for card in output['cards']:
+            card['summary'] = 'A supported record. ' * 100
+        observation = observe(read, output)
+        input_limit = measure_input_limit(100000)
+        context = parts.prepare_plan(packet, read['_test_inventory'], [observation], series_id='a1',
+                                     input_limit=input_limit, measure=measure_packet, output_tokens=128000)
+        empty = context.render('combine', state=dict(cards=[], combinations=[], findings=[]))
+        cards = observation['delta']['cards']
+        pair_room = max(4 * max(len(parts._dump(card)) for card in cards),
+                        3 * len(parts._dump(cards)) // 4)
+        combine_overhead = input_limit - measure_packet(empty) - pair_room
         def measure(candidate):
-            extra = 43000 if candidate['review_parts']['kind'] == 'combine' else 0
-            return len(parts._dump(candidate)) + extra
+            extra = combine_overhead if candidate['review_parts']['kind'] == 'combine' else 0
+            return measure_packet(candidate) + extra
         observations = [observation]
         pairs = []
         blocks = None
         for _ in range(100):
-            turn = plan(packet, observations, limit=50000, measure=measure)
+            turn = plan(packet, observations, input_limit=input_limit, measure=measure)
             if turn['review_parts']['kind'] != 'combine':
                 break
             pairs.append(tuple(turn['review_parts']['combine_pair']))
@@ -167,14 +179,14 @@ class PlanningTests(unittest.TestCase):
     def test_final_whole_unit_requests_continue_a_segment_after_previous_final(self):
         packet=make_packet(2,100,body='q'*90000);observations=[]
         for _ in range(30):
-            turn=plan(packet,observations,limit=40000)
+            turn=plan(packet,observations,room=40000)
             if turn['review_parts']['kind']=='final':break
             observations.append(observe(turn))
         request=dict(kind='requests',unit_requests=[dict(unit='u3',why='Read the remaining body.')],source_requests=[])
         observations.append(observe(turn,request))
-        first=plan(packet,observations,limit=40000)
+        first=plan(packet,observations,room=40000)
         observations.append(observe(first,request))
-        second=plan(packet,observations,limit=40000)
+        second=plan(packet,observations,room=40000)
         first_spans=[e['segment'] for e in first['evidence'] if 'segment' in e]
         second_spans=[e['segment'] for e in second['evidence'] if 'segment' in e]
         self.assertTrue(first_spans and second_spans)
@@ -184,7 +196,7 @@ class PlanningTests(unittest.TestCase):
         packet = make_packet(0, body='binary bytes')
         packet['evidence'][0].update(content='', encoding='omitted', delivery='bytes-omitted-on-text-route')
         with self.assertRaises(ResearchError) as raised:
-            plan(packet, limit=50000)
+            plan(packet, room=50000)
         self.assertEqual(raised.exception.code, 'review_parts_inventory_too_large')
 
     def test_missing_output_usage_preserves_the_previous_read_allowance(self):
@@ -199,7 +211,7 @@ class RevisedPlanningTests(unittest.TestCase):
         observations = []
         fragments = []
         for _ in range(30):
-            turn = plan(packet, observations, limit=60000)
+            turn = plan(packet, observations, room=60000)
             if turn['review_parts']['kind'] != 'read':
                 break
             fragments.extend(entry for entry in turn['evidence'] if entry.get('item'))
@@ -233,8 +245,8 @@ class RevisedPlanningTests(unittest.TestCase):
 
     def test_read_turn_carries_only_earlier_cards_of_repeated_units(self):
         packet = make_packet(6, 10000)
-        first = plan(packet, limit=40000)
-        second = plan(packet, [observe(first)], limit=40000)
+        first = plan(packet, room=40000)
+        second = plan(packet, [observe(first)], room=40000)
         repeated = set(first['review_parts']['delivered_units']) & set(second['review_parts']['delivered_units'])
         self.assertEqual({card['unit'] for card in second['review_parts_state']['cards']}, repeated)
         self.assertEqual(second['review_parts_state']['combinations'], [])
@@ -249,12 +261,12 @@ class RevisedPlanningTests(unittest.TestCase):
                          media_type='application/octet-stream')
         packet['problem_evidence']['computations'] = [dict(artifact=reference)]
         packet['evidence'] = [dict(artifact=reference, encoding='base64', content=base64.b64encode(data).decode())]
-        first = plan(packet, limit=30000)
-        final = plan(packet, [observe(first)], limit=30000)
+        first = plan(packet, room=30000)
+        final = plan(packet, [observe(first)], room=30000)
         self.assertEqual(final['review_parts']['kind'], 'final')
         packet['evidence'][0]['content'] = 'a' * 90000
         with self.assertRaises(ResearchError) as raised:
-            plan(packet, limit=30000)
+            plan(packet, room=30000)
         self.assertEqual(raised.exception.code, 'review_parts_inventory_too_large')
 
     def test_canonical_unicode_size_is_not_ascii_escape_size(self):
@@ -276,8 +288,9 @@ class RevisedPlanningTests(unittest.TestCase):
                        targets=lambda value: [], series_key=lambda value: 'keyed', final_prompt='')
         with patch.dict(ADAPTERS, keyed=adapter):
             inventory = parts.build_inventory(packet, 'keyed')
-            planned = parts.plan_turn(packet, inventory, [], series_id='keyed-first', input_limit=40000,
-                                      measure=lambda value: len(json.dumps(value)), output_tokens=128000)
+            planned = parts.plan_turn(packet, inventory, [], series_id='keyed-first',
+                                      input_limit=measure_input_limit(40000),
+                                      measure=measure_packet, output_tokens=128000)
             output = make_output(planned)
             self.assertEqual(planned['items'], packet['items'])
             self.assertEqual(len(parts.validate_output(planned, output, inventory)['cards']), 1)
@@ -309,7 +322,7 @@ class RevisedPlanningTests(unittest.TestCase):
         packet['evidence'] = [dict(artifact=reference, encoding='base64', content=base64.b64encode(data).decode())]
         observations = []
         for _ in range(20):
-            turn = plan(packet, observations, limit=30000)
+            turn = plan(packet, observations, room=30000)
             if turn['review_parts']['kind'] == 'final':
                 break
             observations.append(observe(turn))
@@ -332,7 +345,7 @@ class RevisedPlanningTests(unittest.TestCase):
         packet = make_packet(4, 24000)
         observations = []
         for _ in range(20):
-            final = plan(packet, observations, limit=50000)
+            final = plan(packet, observations, room=50000)
             if final['review_parts']['kind'] == 'final':
                 break
             observations.append(observe(final))
@@ -340,7 +353,7 @@ class RevisedPlanningTests(unittest.TestCase):
         observations.append(observe(final, request))
         packet['material_objections'] = [dict(id='late', version_evidence=[dict(reason='Late evidence.')])]
         for _ in range(20):
-            turn = plan(packet, observations, limit=50000)
+            turn = plan(packet, observations, room=50000)
             if turn['review_parts']['kind'] == 'final':
                 break
             observations.append(observe(turn))
@@ -348,7 +361,7 @@ class RevisedPlanningTests(unittest.TestCase):
         self.assertEqual(turn['review_parts']['answered'][0]['unit'], 'u4')
 
     def test_segmented_item_keeps_its_occurrence_binding_in_the_header(self):
-        turn = plan(make_packet(1, 120000), limit=60000)
+        turn = plan(make_packet(1, 120000), room=60000)
         self.assertEqual(turn['problem_evidence']['openness_searches'], [])
         self.assertEqual(turn['review_parts']['units'][0]['occurrences'],
                          [dict(path=['problem_evidence', 'openness_searches'], index=0)])
@@ -359,7 +372,7 @@ class RevisedPlanningTests(unittest.TestCase):
         packet['problem_evidence']['computations'] = [dict(artifact=reference, description='x' * 50000)]
         observations = []
         for _ in range(20):
-            turn = plan(packet, observations, limit=30000)
+            turn = plan(packet, observations, room=30000)
             if turn['review_parts']['kind'] == 'final':
                 break
             observations.append(observe(turn))
@@ -372,7 +385,7 @@ class RevisedPlanningTests(unittest.TestCase):
         packet['problem_evidence']['passages'] = [dict(reading_id='reading', text='p' * 100000)]
         observations = []
         for _ in range(20):
-            turn = plan(packet, observations, limit=60000)
+            turn = plan(packet, observations, room=60000)
             if turn['review_parts']['kind'] == 'final':
                 break
             output = make_output(turn)
@@ -384,17 +397,42 @@ class RevisedPlanningTests(unittest.TestCase):
         self.assertEqual(turn['review_parts']['plan']['units_remaining'], 0)
         request = dict(kind='requests', unit_requests=[dict(unit='u2', why='Read the passage again.')], source_requests=[])
         observations.append(observe(turn, request))
-        answer = plan(packet, observations, limit=60000)
+        answer = plan(packet, observations, room=60000)
         self.assertEqual(answer['review_parts']['answered'][0]['unit'], 'u2')
 
     def test_target_labels_select_the_id_from_the_text_constant(self):
         from unittest.mock import patch
         from research_harness import review_parts_prompts, review_parts_problem_result
-        with patch.object(review_parts_prompts, 'TARGET_LABELS', 'problem_statement: Statement label.\nA1: Precision label.'):
+        lines = [line for line in review_parts_prompts.TARGET_LABELS.splitlines()
+                 if not line.startswith(('problem_statement: ', 'A1: '))]
+        labels_text = '\n'.join(lines + ['problem_statement: Statement label.', 'A1: Precision label.'])
+        with patch.object(review_parts_prompts, 'TARGET_LABELS', labels_text):
             targets = review_parts_problem_result.list_targets(make_packet(0))
         labels = {row['id']: row['label'] for row in targets}
         self.assertEqual(labels['problem_statement'], 'Statement label.')
         self.assertEqual(labels['A1'], 'Precision label.')
+
+    def test_every_problem_check_and_rubric_item_has_a_target_label(self):
+        from research_harness import review_parts_prompts, review_parts_problem_result
+        from research_harness.problem_rubric import PROBLEM_CHECKS, ITEMS
+        labels = dict(line.split(': ', 1) for line in review_parts_prompts.TARGET_LABELS.splitlines()
+                      if ': ' in line)
+        for identifier in PROBLEM_CHECKS + ITEMS:
+            with self.subTest(target=identifier):
+                self.assertTrue(labels[identifier].strip())
+        self.assertEqual({target['id'] for target in review_parts_problem_result.list_targets(make_packet(0))},
+                         set(PROBLEM_CHECKS + ITEMS))
+
+    def test_missing_target_label_is_a_typed_error_naming_the_target(self):
+        from unittest.mock import patch
+        from research_harness import review_parts_prompts, review_parts_problem_result
+        labels_text = '\n'.join(line for line in review_parts_prompts.TARGET_LABELS.splitlines()
+                                if not line.startswith('A1: '))
+        with patch.object(review_parts_prompts, 'TARGET_LABELS', labels_text):
+            with self.assertRaises(ResearchError) as raised:
+                review_parts_problem_result.list_targets(make_packet(0))
+        self.assertEqual(raised.exception.code, 'review_parts_target_label_missing')
+        self.assertEqual(raised.exception.details['target'], 'A1')
 
     def test_replacement_uses_slot_series_key_and_normalized_identity(self):
         from unittest.mock import Mock
@@ -421,5 +459,5 @@ class RevisedPlanningTests(unittest.TestCase):
 
     def test_frame_with_less_than_one_card_floor_refuses_as_final_too_large(self):
         with self.assertRaises(ResearchError) as raised:
-            plan(make_packet(1, 100), limit=10000)
+            plan(make_packet(1, 100), room=7000)
         self.assertEqual(raised.exception.code, 'review_parts_final_too_large')

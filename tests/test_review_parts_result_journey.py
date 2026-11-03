@@ -20,6 +20,27 @@ class ResultJourneyTests(PartsResultCase):
         assignment=self.assign(); self.assertNotIn('review_parts',self.packet(assignment))
         self.assertTrue(read_history(self.case.artifacts,assignment))
 
+    def test_parts_entry_starts_a_bounded_v3_excerpt_session(self):
+        from research_harness import review_excerpts
+        self.oversized()
+        assignment = self.assign()
+        self.assertEqual(self.packet(assignment)[review_excerpts.KEY]['protocol'],
+                         review_excerpts.SESSION_PROTOCOL)
+
+    def test_recorded_parts_prompt_authenticates_after_common_version_changes(self):
+        from unittest.mock import patch
+        with patch.object(protocol, 'COMMON_VERSION', 2):
+            self.oversized()
+            assignment = self.assign()
+            self.invoke(assignment)
+        self.assertEqual(assignment['prompt']['parameters']['base_prompt']['parameters']['common_version'], 2)
+        records = self.case.read_records()
+        attempt = records['review_attempt']['attempt-' + assignment['id']]
+        with patch.object(protocol, 'COMMON_VERSION', 3):
+            self.assertTrue(protocol._prompt_matches(assignment))
+            self.assertTrue(protocol.authenticate_attempt(records, self.case.artifacts, assignment, attempt))
+            self.assertTrue(protocol.assignment_state(records, self.case.artifacts, assignment['id'])['ready'])
+
     def test_series_final_coverage_and_next_obligation(self):
         self.oversized(); first=self.assign(); self.invoke(first)
         pending=problem_delivery.assess_source_requests(self.case.read_records(),self.case.artifacts)
@@ -43,7 +64,7 @@ class ResultJourneyTests(PartsResultCase):
     def test_initial_read_over_cap_replacement_keeps_slot_and_halves_allowance(self):
         from unittest.mock import patch
         from codex_route_fixtures import build_codex_response
-        self.oversized(count=12,characters=10000,limit=80000)
+        self.oversized(count=12,characters=10000,room=80000)
         first=self.assign()
         def incomplete(route,request,credential):
             response=build_codex_response(route,request,{})

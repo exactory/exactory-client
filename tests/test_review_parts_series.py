@@ -30,7 +30,7 @@ class SeriesTests(PartsResultCase):
 
     def test_partial_body_is_carried_in_actual_request_with_exact_segment_bytes(self):
         from research_harness.review_input_projection import packets_from_request
-        self.oversized(count=0,limit=65000)
+        self.oversized(count=0,room=65000)
         reference=self.case.artifacts.put(('λ\n'*60000).encode(),'text/plain')
         self.case.expected['assessment_evidence']=[reference]
         first=self.assign();self.invoke(first)
