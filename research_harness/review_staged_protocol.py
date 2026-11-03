@@ -1750,9 +1750,9 @@ def build_prompt(role, staged_task, *, repair, composed, claim_range, orchestrat
     from . import review_staged_prompts as staged_prompts
     if (type(composed) is not bool or type(claim_range) is not bool
             or orchestration != 'problem_creation' or role not in ('result', 'adjudicator')
-            or common_version != 2 or evidence_parts is not None or reading_stage is not None):
+            or common_version < 2 or evidence_parts is not None or reading_stage is not None):
         raise ResearchError('invalid_review_context', 'Staged prompts require the current problem review contract')
-    base = protocol.canonical_prompt(role, orchestration=orchestration, common_version=2)
+    base = protocol.canonical_prompt(role, orchestration=orchestration, common_version=common_version)
     descriptor = {key: copy.deepcopy(staged_task.get(key)) for key in
                   ('type', 'scope', 'claim_ids', 'occurrence_ids', 'group_ids')}
     parameters = dict(role=role, orchestration=orchestration, staged_task=descriptor,
@@ -1762,7 +1762,7 @@ def build_prompt(role, staged_task, *, repair, composed, claim_range, orchestrat
     suffix = staged_prompts.compose_task_prompt(role, descriptor, repair=repair,
                                                 composed=composed, claim_range=claim_range)
     return protocol._build_prompt(staged_prompts.PROTOCOL + '/' + role + '/' + descriptor['type'],
-                         base['text'] + suffix, parameters, 2)
+                         base['text'] + suffix, parameters, common_version)
 
 
 def build_assigned_request(artifacts, route, assignment, packet):

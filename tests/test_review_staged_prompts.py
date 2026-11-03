@@ -6,6 +6,8 @@ import unittest
 
 from research_harness import review_protocol as protocol
 from research_harness import review_staged_prompts as prompts
+from research_harness import review_staged_protocol
+from research_harness.errors import ResearchError
 
 
 class StagedPromptTests(unittest.TestCase):
@@ -22,7 +24,8 @@ class StagedPromptTests(unittest.TestCase):
 
     def test_composition_order_and_ordinary_final(self):
         prompt = self.build_prompt('final', repair=True)
-        texts = [protocol._COMMON_PROMPTS[2], protocol._PROBLEM_PROMPTS['result'],
+        self.assertEqual(prompt['parameters']['common_version'], protocol.COMMON_VERSION)
+        texts = [protocol._COMMON_PROMPTS[protocol.COMMON_VERSION], protocol._PROBLEM_PROMPTS['result'],
                  prompts.STAGED_SERIES_PROMPT, prompts.STAGED_RESULT_ROLE_PROMPT,
                  prompts.STAGED_SHARED_RECORDS_PROMPT, prompts.STAGED_ORDINARY_FINAL_PROMPT,
                  prompts.RETRIEVAL_RULES_PROMPT, prompts.ASSESSMENT_INCOMPLETE_PROMPT,
@@ -59,6 +62,22 @@ class StagedPromptTests(unittest.TestCase):
         self.assertTrue(protocol._prompt_matches(assignment))
         assignment['prompt'] = dict(prompt, text=prompt['text'] + 'changed')
         self.assertFalse(protocol._prompt_matches(assignment))
+
+    def test_staged_common_version_three_and_recorded_version_two(self):
+        current = self.build_prompt('final')
+        self.assertEqual(current['parameters']['common_version'], 3)
+        self.assertTrue(current['text'].startswith(protocol._COMMON_PROMPTS[3]))
+        for common_version in (2, 3):
+            with self.subTest(common_version=common_version):
+                prompt = self.build_prompt('final', common_version=common_version)
+                assignment = dict(role='result', subject={'kind': 'problem'}, prompt=prompt,
+                                  staged_task=prompt['parameters']['staged_task'])
+                self.assertTrue(review_staged_protocol.matches_prompt(assignment, common_version))
+                self.assertTrue(protocol._prompt_matches(assignment))
+        with self.assertRaises(ResearchError) as refused:
+            self.build_prompt('final', common_version=1)
+        self.assertEqual(refused.exception.code, 'invalid_review_context')
+        self.assertEqual(str(refused.exception), 'Staged prompts require the current problem review contract')
 
 
 if __name__ == '__main__':

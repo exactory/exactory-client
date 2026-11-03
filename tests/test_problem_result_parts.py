@@ -515,7 +515,7 @@ class ProblemResultPartsTests(ResultPartsCase):
     def test_stage_prompts_match_every_supported_excerpt_and_common_version(self):
         for stage in ('part', 'final'):
             for rules in review_excerpts.PHASE_PROMPTS:
-                for common in (1, protocol.COMMON_VERSION):
+                for common in sorted(protocol._COMMON_PROMPTS):
                     prompt = protocol.canonical_prompt('result', orchestration='problem_creation', excerpts=True,
                         evidence_parts=stage, excerpt_rules=rules, common_version=common)
                     assignment = {'role': 'result', 'subject': {'kind': 'problem'}, 'context': {}, 'prompt': prompt}
