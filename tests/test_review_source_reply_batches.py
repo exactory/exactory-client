@@ -202,9 +202,11 @@ class SourceReplyBatchTests(StrategyCase):
                     {'id': 'passage', 'kind': 'passage', 'version_id': version,
                      'anchor': 'Passage anchor with the exact proof.', 'characters': 3000}]
         self.request(requests, 'primed')
-        self.fit_locally(53000)
+        # Keep the reply budget that the 53,000-character fixture had with common text version 2.
+        limit = 53000 + len(protocol._COMMON_PROMPTS[protocol.COMMON_VERSION]) - len(protocol._COMMON_PROMPTS[2])
+        self.fit_locally(limit)
         self.assign('batch', prior_assignment_id='primed')
-        packet = self.assert_batch('batch', requests, 53000)
+        packet = self.assert_batch('batch', requests, limit)
         self.assertEqual(packet[review_excerpts.KEY]['allowances']['passages']['used'], 0)
         self.invoke(self.review_response('bar', status='unresolved'), 'batch')
         with patch.object(transport, 'local_input_limit', return_value=100000):

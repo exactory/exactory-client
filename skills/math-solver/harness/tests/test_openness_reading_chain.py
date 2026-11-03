@@ -309,8 +309,9 @@ class MathOpennessReadingTests(MathOpennessChainCase, unittest.TestCase):
         self.accept_result()
         receipts = self.read_receipts(turns[-1])
         later = dict(protocol._COMMON_PROMPTS)
-        later[3] = later[protocol.COMMON_VERSION] + 'A later release adds this sentence. '
-        with patch.object(protocol, '_COMMON_PROMPTS', later), patch.object(protocol, 'COMMON_VERSION', 3):
+        later_version = protocol.COMMON_VERSION + 1
+        later[later_version] = later[protocol.COMMON_VERSION] + 'A later release adds this sentence. '
+        with patch.object(protocol, '_COMMON_PROMPTS', later), patch.object(protocol, 'COMMON_VERSION', later_version):
             audited = self.controller.status(full_audit=True)
             self.assertEqual(audited['freshness']['status'], 'fresh', audited['freshness']['failures'])
             self.assertEqual(self.read_receipts(turns[-1]), receipts)

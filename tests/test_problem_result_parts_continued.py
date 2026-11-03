@@ -919,7 +919,7 @@ class ProblemResultPartsContinuedTests(ResultPartsCase):
 
     def test_both_prompt_envelopes_authenticate_under_all_common_and_excerpt_versions(self):
         for rules in review_excerpts.PHASE_PROMPTS:
-            for common in (1, protocol.COMMON_VERSION):
+            for common in sorted(protocol._COMMON_PROMPTS):
                 for suffix in (parts.PART_PROMPT_0691, parts.PROMPTS['part']):
                     with self.subTest(rules=rules, common=common, earlier=suffix == parts.PART_PROMPT_0691):
                         prompt = protocol.canonical_prompt('result', orchestration='problem_creation', excerpts=True,

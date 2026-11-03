@@ -75,8 +75,10 @@ class ProblemResultHistoryTests(ResultPartsCase):
                     def read_observation(records, artifacts, operation, payload, request_id):
                         return held[operation, payload['id']]
 
+                    # The frozen 0.69.18 request records common text version 2.
                     with patch.object(review_call_capture, 'capture_call', side_effect=keep_observation), \
-                            patch.object(review_call_capture, 'read_call_observation', side_effect=read_observation):
+                            patch.object(review_call_capture, 'read_call_observation', side_effect=read_observation), \
+                            patch.object(protocol, 'COMMON_VERSION', 2):
                         ResultPartsCase.setUp(builder)
                         install_codex_runtime(builder)
                         builder.record_series((2, 2, 2), 300000, note_size=12000, limit=500000, final_size=14000)

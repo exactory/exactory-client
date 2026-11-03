@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.71.7](docs/releases/0.71.7.md) gives newly rendered reviewer prompts common text version 3. It tells the reviewer to write each top-level field inside the one JSON object and to close that object once. Its aim is fewer reviewer calls lost to an answer that is not one object. Recorded prompts keep their text and their verification.
+
 Version [0.71.6](docs/releases/0.71.6.md) settles reviewer source requests with revalidated registry-absence or terminal-origin evidence, without granting reading credit or waiving critical source obligations.
 
 Version [0.71.5](docs/releases/0.71.5.md) makes the file guard's workspace, output-folder and controller discovery read the file status itself, so on Python 3.14, where pathlib's `exists()` and `is_file()` return False on every `OSError`, a check that fails still denies the call instead of allowing it.
