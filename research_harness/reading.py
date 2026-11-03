@@ -586,14 +586,18 @@ def registries_addressing(work):
 def _registry_capture_without_abstract(records, source, work):
     imported = source.get("provider") in ("web", "mcp") and source.get("imported") is True and source.get("id") in work["source_ids"]
     registry = (source.get("capture_method") == "http" and source.get("provider") in REGISTRY_PROVIDERS
-                and source.get("requested_identifier") in [work["id"], *work["aliases"]] and source.get("http_status") == 200)
+                and source.get("requested_identifier") in [work["id"], *work["aliases"]] and source.get("http_status") == 200
+                and source.get("observed_identifier") in [work["id"], *work["aliases"]]
+                and source.get("observed_identifier") in records.get("work", {}))
     return ((imported or registry) and source.get("status") == "captured" and source.get("response_complete") is True
             and source.get("response") is not None and not registry_abstract_present(records, source))
 
 
-def record_availability(store, payload, *, expected_revision, request_id):
-    def prepare(records, value):
+def qualify_availability(records, artifacts, value):
+    """Validate a policy against current source bindings and bytes without changing records."""
+    try:
         fields(value, ("id", "profile", "version_id", "depth", "source_ids", "reason", "policy"), code="invalid_availability")
+        text(value["id"], "Availability ID", code="invalid_availability")
         profile_name(value["profile"])
         work = exact_work(records, value["version_id"])
         text(value["reason"], "Unavailability reason", code="invalid_availability")
@@ -619,7 +623,19 @@ def record_availability(store, payload, *, expected_revision, request_id):
         else:
             raise ResearchError("invalid_availability", "The policy must require captured terminal origin failures, or registry abstract absence at abstract depth for a non-arXiv work")
         for source in sources:
-            store.build_artifact_store().read(source["response"])
+            artifacts.read(source["response"])
+    except ResearchError as error:
+        if error.code in ("artifact_missing", "artifact_corrupt"):
+            raise
+        details = {key: value[key] for key in ("id", "version_id", "depth", "source_ids")
+                   if isinstance(value, dict) and key in value}
+        details.update(error.details or {})
+        raise ResearchError("invalid_availability", error.message, details) from error
+
+
+def record_availability(store, payload, *, expected_revision, request_id):
+    def prepare(records, value):
+        qualify_availability(records, store.build_artifact_store(), value)
         return [immutable_record(records, "availability", value["id"], value)], dict(value, qualification="noncritical_only")
 
     return prepared_mutation(store, "literature.availability", payload, prepare,

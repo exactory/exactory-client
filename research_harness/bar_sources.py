@@ -371,6 +371,96 @@ def _declared_units(records, artifacts, work):
     return scopes, captures, pending
 
 
+def _fulltext_source(records, artifacts, work, capture):
+    """Validate the held exact source binding, original bytes and measured extraction."""
+    from .components import validate_binding
+    from .fulltext import extraction_measures
+    source = captured_source(records, artifacts, capture['source_id'])
+    if (capture.get('requested_version_id') != work['id'] or source.get('requested_identifier') != work['id']
+            or capture.get('original') != source['response']
+            or source.get('capture_method') not in ('http', 'http_range_v1')
+            or source.get('origin_verified') is not True or capture.get('extraction_status') != 'extracted'
+            or capture.get('text') is None):
+        raise ResearchError('review_source_binding_mismatch', 'Deliver the exact acquired version, original response and recorded extraction')
+    if source.get('observed_identifier') is not None and source['observed_identifier'] != work['id']:
+        raise ResearchError('review_source_binding_mismatch', 'The observed source version differs from the requested exact version')
+    original_size = (capture['original']['size'] if source.get('capture_method') == 'http_range_v1'
+                     else len(artifacts.read(capture['original'])))
+    extracted = artifacts.read(capture['text']).decode('utf-8')
+    if any(capture.get('extraction', {}).get(key) != value for key, value in extraction_measures(extracted, original_size).items()):
+        raise ResearchError('review_source_binding_mismatch', 'The extraction bytes no longer match their recorded native measurements')
+    validate_binding(records, artifacts, work['id'], capture)
+    return source
+
+
+def _qualified_unavailability(records, artifacts, work, request, result, captures):
+    """Settle retrieval with current evidence, without waiving reading or source obligations."""
+    from .identities import normalize_identifier
+    from .reading import qualify_availability, registries_addressing
+    if request['depth'] == 'fulltext' and any(c.get('availability') == 'available' for c in work.get('fulltexts', [])):
+        return result
+    for value in sorted(records.get('availability', {}).values(), key=lambda value: value['id']):
+        if normalize_identifier(value['version_id']) != request['version_id'] or value['depth'] != request['depth']:
+            continue
+        try:
+            qualify_availability(records, artifacts, value)
+        except ResearchError as error:
+            if error.code != 'invalid_availability':
+                raise
+            continue
+        registry_absence = value['policy']['allowed_statuses'] == [200]
+        if registry_absence and not registries_addressing(work):
+            continue
+        # Failed terminal responses are evidence of retrieval failure, not captured reading sources.
+        sources = [records['source'][source_id] for source_id in value['source_ids']]
+        result['evidence'] = []
+        provenance = []
+
+        def include(source, reference, kind, completeness):
+            artifacts.read(reference)
+            if reference not in result['evidence']:
+                result['evidence'].append(reference)
+            provenance.append({'kind': kind, 'source_id': source['id'],
+                **{key: source.get(key) for key in ('provider', 'requested_identifier', 'observed_identifier',
+                    'http_status', 'captured_at', 'capture_method', 'origin_verified', 'response_complete')},
+                'original_descriptor': descriptor(source['response']), 'delivered_sha256': [reference['sha256']],
+                'completeness': completeness, 'delivery_mode': 'exact-bytes'})
+
+        for capture in captures if request['depth'] == 'abstract' else []:
+            source = records['source'][capture['source_id']]
+            for reference in capture['artifacts']:
+                include(source, reference, 'abstract', capture['completeness'])
+        for source in sources:
+            include(source, source['response'], 'availability_evidence', 'complete')
+        result.update(status='unavailable_qualified', availability={
+            **{key: value[key] for key in ('id', 'profile', 'version_id', 'depth', 'policy', 'source_ids', 'reason')},
+            'qualification': 'noncritical_only'}, source_provenance=provenance)
+        if request['depth'] == 'abstract':
+            held = []
+            for capture in work.get('fulltexts', []):
+                if capture.get('availability') != 'available':
+                    continue
+                try:
+                    source = _fulltext_source(records, artifacts, work, capture)
+                except ResearchError:
+                    # An optional hint cannot block independently qualified retrieval evidence.
+                    continue
+                held.append(source['id'])
+            if held:
+                result['fulltext_alternative'] = {'version_id': request['version_id'], 'held': True,
+                    'source_ids': list(dict.fromkeys(held)), 'request_depth': 'fulltext'}
+        result['reason'] = (
+            'The complete captured records from every registry addressing this work contain no complete abstract. '
+            if registry_absence else
+            'The captured origin returned the terminal HTTP failure responses admitted by this retrieval policy. ')
+        result['reason'] += (
+            '`unavailable_qualified` settles this retrieval request with the attached unavailability evidence, '
+            'grants no reading or scientific-support credit, and permits you to request full text or return an '
+            'assessment that retains the limitation.')
+        return result
+    return result
+
+
 def _source(records, artifacts, request, original_rows):
     work = records.get('work', {}).get(request['version_id'])
     result = {'request': request, 'status': 'unavailable', 'evidence': [], 'source_provenance': [],
@@ -391,27 +481,11 @@ def _source(records, artifacts, request, original_rows):
                      'artifacts': [a for a in (c.get('original'), c.get('text')) if a is not None]}
                     for c in work.get('fulltexts', []) if c.get('availability') == 'available']
     if request['depth'] == 'fulltext':
-        from .components import validate_binding
         from .graph import main_captures
         result['source_alternatives'] = []
         for capture in work.get('fulltexts', []):
             if capture.get('availability') == 'available':
-                source = captured_source(records, artifacts, capture['source_id'])
-                if (capture.get('requested_version_id') != work['id'] or source.get('requested_identifier') != work['id']
-                        or capture.get('original') != source['response']
-                        or source.get('capture_method') not in ('http', 'http_range_v1')
-                        or source.get('origin_verified') is not True or capture.get('extraction_status') != 'extracted'
-                        or capture.get('text') is None):
-                    raise ResearchError('review_source_binding_mismatch', 'Deliver the exact acquired version, original response and recorded extraction')
-                if source.get('observed_identifier') is not None and source['observed_identifier'] != work['id']:
-                    raise ResearchError('review_source_binding_mismatch', 'The observed source version differs from the requested exact version')
-                original_size = (capture['original']['size'] if source.get('capture_method') == 'http_range_v1'
-                                 else len(artifacts.read(capture['original'])))
-                extracted = artifacts.read(capture['text']).decode('utf-8')
-                from .fulltext import extraction_measures
-                if any(capture.get('extraction', {}).get(key) != value for key, value in extraction_measures(extracted, original_size).items()):
-                    raise ResearchError('review_source_binding_mismatch', 'The extraction bytes no longer match their recorded native measurements')
-                validate_binding(records, artifacts, work['id'], capture)
+                source = _fulltext_source(records, artifacts, work, capture)
                 visual_captures, visual_pending = _html_assets(records, artifacts, work, capture)
                 captures.extend(visual_captures)
                 result['source_alternatives'].append({
@@ -468,6 +542,8 @@ def _source(records, artifacts, request, original_rows):
         result.update(status='partial', reason='The supplied captures are partial, of unknown completeness, or have pending required source units; the requested source depth remains pending.')
     else:
         result['reason'] = 'No complete captured source bytes at the requested depth are available in the current native records.'
+    if result['status'] != 'delivered':
+        return _qualified_unavailability(records, artifacts, work, request, result, captures)
     return result
 
 
@@ -526,7 +602,7 @@ def _answer_fulltext(records, artifacts, request, original_rows, delivered_bodie
     delivery = _source(records, artifacts, request, original_rows)
     capture = review_excerpts.find_fulltext_capture(records, request['version_id'])
     if capture is None or delivery['status'] not in ('delivered', 'partial'):
-        return [delivery], 0, delivery['status'] != 'delivered', False
+        return [delivery], 0, delivery['status'] not in ('delivered', 'unavailable_qualified'), False
     complete = delivery['status'] == 'delivered'
     content = artifacts.read(capture['text']).decode('utf-8')
     spans = review_excerpts.compute_part_spans(content)
@@ -566,7 +642,8 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
     consecutive parts, or it waits with status deferred_reading_budget. delivered_bodies maps the SHA-256 of each body
     that an earlier turn of this session delivered complete to that turn; a version whose whole text or every part is
     among them is answered as already delivered. A passage request is answered at once. A request stays pending until
-    its source or last part has arrived; already delivered and passage answers never stay pending."""
+    its source or last part has arrived, or qualified unavailability evidence settles it; already delivered and
+    passage answers never stay pending."""
     if 'staged_review' in previous_packet:
         epoch = records.get('review_epoch', {}).get(previous_packet['staged_review']['epoch_id'], {})
         raise ResearchError('review_task_pending', 'Plan staged retrievals as tasks with explicit rereading scope and empty history.',
@@ -604,7 +681,7 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
             delivery = {'request': request, 'status': 'delivered', 'page': _page(rows, inventory_value['digest'],
                 request['page'], request.get('query'), page_size=inventory_value['page_size']), 'reading_credit': False}
         deliveries.append(delivery)
-        if delivery['status'] != 'delivered':
+        if delivery['status'] not in ('delivered', 'unavailable_qualified'):
             outstanding.append(request)
     return {'source_inventory': inventory_value, 'prior_context': [], 'source_deliveries': deliveries,
             'pending_source_requests': outstanding, review_excerpts.KEY: session}

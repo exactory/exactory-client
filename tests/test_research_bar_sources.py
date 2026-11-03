@@ -10,6 +10,8 @@ from research_harness import research_decisions, review_protocol as protocol
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.reading import record_reading
+from research_harness.reading import record_availability
+from availability_fixtures import registry_absence, terminal_absence
 
 
 class BarSourceTests(StrategyCase):
@@ -52,6 +54,183 @@ class BarSourceTests(StrategyCase):
         response['source_requests'] = requests
         self.invoke(response, assignment)
         return response
+
+    def qualified_continuation(self, availability, depth='abstract'):
+        self.mutate(record_availability, availability)
+        self.assign()
+        request = {'id': 'qualified', 'kind': 'source', 'version_id': availability['version_id'], 'depth': depth}
+        self.request([request])
+        self.assign('qualified', prior_assignment_id='a')
+        packet = self.packet('qualified')
+        return request, packet, packet['source_deliveries'][0]
+
+    def test_registry_absence_delivers_qualified_evidence(self):
+        availability = registry_absence(self)
+        request, packet, delivery = self.qualified_continuation(availability)
+        self.assertEqual(delivery['status'], 'unavailable_qualified')
+        self.assertEqual(delivery['request'], request)
+        self.assertEqual(delivery['availability'], dict(availability, qualification='noncritical_only'))
+        self.assertNotIn('qualification', self.store.snapshot()['records']['availability'][availability['id']])
+        self.assertEqual(packet['pending_source_requests'], [])
+        self.assertFalse(delivery['reading_credit'])
+        self.assertFalse(delivery['scientific_truth_certified'])
+        records = self.store.snapshot()['records']
+        self.assertEqual(delivery['evidence'], [records['source'][s]['response'] for s in availability['source_ids']])
+        self.assertEqual({p['provider'] for p in delivery['source_provenance']}, {'openalex', 'crossref'})
+        for provenance, reference in zip(delivery['source_provenance'], delivery['evidence']):
+            source = records['source'][provenance['source_id']]
+            self.assertEqual(provenance['kind'], 'availability_evidence')
+            for key in ('provider', 'requested_identifier', 'observed_identifier', 'http_status',
+                        'captured_at', 'capture_method', 'origin_verified', 'response_complete'):
+                self.assertEqual(provenance[key], source.get(key))
+            self.assertEqual(provenance['original_descriptor']['sha256'], reference['sha256'])
+            self.assertEqual(provenance['delivered_sha256'], [reference['sha256']])
+            self.assertIn(self.artifacts.read(reference).decode(), [e['content'] for e in packet['evidence']])
+        self.assertTrue(delivery['reason'].endswith(
+            '`unavailable_qualified` settles this retrieval request with the attached unavailability evidence, '
+            'grants no reading or scientific-support credit, and permits you to request full text or return an '
+            'assessment that retains the limitation.'))
+
+    def test_qualified_answer_keeps_partial_abstract(self):
+        availability = registry_absence(self, partial=True)
+        _, packet, delivery = self.qualified_continuation(availability)
+        self.assertEqual(delivery['status'], 'unavailable_qualified')
+        abstract = self.store.snapshot()['records']['work'][availability['version_id']]['abstracts'][0]
+        self.assertIn(abstract['artifact'], delivery['evidence'])
+        provenance = next(p for p in delivery['source_provenance'] if p['kind'] == 'abstract')
+        self.assertEqual(provenance['completeness'], 'partial')
+        self.assertFalse(provenance['origin_verified'])
+        self.assertEqual(provenance['delivered_sha256'], [abstract['artifact']['sha256']])
+        self.assertIn('A partial publisher abstract snippet.', [e['content'] for e in packet['evidence']])
+        self.assertEqual(packet['pending_source_requests'], [])
+
+    def test_qualified_abstract_does_not_attach_fulltext(self):
+        from research_harness import review_excerpts
+        availability = registry_absence(self)
+        version = availability['version_id']
+        held = self.capture(version, abstract=False, body='The held exact full text. References: none.')
+        self.mutate(record_availability, availability)
+        self.assign()
+        self.request([{'id': 'abstract', 'kind': 'source', 'version_id': version, 'depth': 'abstract'},
+                      {'id': 'body', 'kind': 'source', 'version_id': version, 'depth': 'fulltext'}])
+        records = self.store.snapshot()['records']
+        from research_harness import bar_sources
+        abstract = bar_sources._source(records, self.artifacts,
+            {'id': 'abstract', 'kind': 'source', 'version_id': version, 'depth': 'abstract'}, {})
+        self.assertEqual(abstract['status'], 'unavailable_qualified')
+        self.assertEqual(abstract['fulltext_alternative'], {'version_id': version, 'held': True,
+            'source_ids': [held['source_id']], 'request_depth': 'fulltext'})
+        references = protocol.collect_references(abstract)
+        self.assertNotIn(held['text'], references)
+        self.assertNotIn(held['original'], references)
+        # A body fitting the exact whole-turn budget must still arrive whole after the abstract answer.
+        characters = bar_sources._count_text_characters(self.artifacts, [held['original'], held['text']])
+        with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', characters):
+            self.assign('qualified', prior_assignment_id='a')
+        packet = self.packet('qualified')
+        self.assertEqual([d['status'] for d in packet['source_deliveries']], ['unavailable_qualified', 'delivered'])
+        self.assertNotIn('The held exact full text.', json.dumps(abstract))
+
+    def test_qualified_abstract_only_advertises_verified_fulltext(self):
+        import copy
+        from research_harness import bar_sources
+        availability = registry_absence(self)
+        version = availability['version_id']
+        held = self.capture(version, abstract=False)
+        self.mutate(record_availability, availability)
+        records = self.store.snapshot()['records']
+        request = {'id': 'abstract', 'kind': 'source', 'version_id': version, 'depth': 'abstract'}
+        for kind in ('missing_original', 'missing_text', 'corrupt_original', 'corrupt_text', 'wrong_version'):
+            with self.subTest(kind=kind):
+                candidate = copy.deepcopy(records)
+                path = self.root / held['original' if kind.endswith('_original') else 'text']['path']
+                original = path.read_bytes()
+                if kind.startswith('missing'):
+                    path.unlink()
+                elif kind.startswith('corrupt'):
+                    path.chmod(0o600)
+                    path.write_bytes(b'Altered extraction')
+                else:
+                    candidate['source'][held['source_id']]['requested_identifier'] = 'openalex:W999'
+                try:
+                    delivery = bar_sources._source(candidate, self.artifacts, request, {})
+                    self.assertEqual(delivery['status'], 'unavailable_qualified')
+                    self.assertNotIn('fulltext_alternative', delivery)
+                    self.assertNotIn(held['text'], protocol.collect_references(delivery))
+                    self.assertNotIn(held['original'], protocol.collect_references(delivery))
+                finally:
+                    path.write_bytes(original)
+
+    def test_qualification_matches_accepted_identifier_spelling(self):
+        availability = dict(registry_absence(self), version_id='W123')
+        self.mutate(record_availability, availability)
+        self.assign()
+        request = {'id': 'abstract', 'kind': 'source', 'version_id': 'openalex:W123', 'depth': 'abstract'}
+        self.request([request])
+        self.assign('qualified', prior_assignment_id='a')
+        packet = self.packet('qualified')
+        self.assertEqual(packet['source_deliveries'][0]['status'], 'unavailable_qualified')
+        self.assertEqual(packet['source_deliveries'][0]['availability']['version_id'], 'W123')
+        self.assertEqual(packet['pending_source_requests'], [])
+
+    def test_complete_source_precedes_old_unavailability(self):
+        from research_harness.acquisition import acquire_work
+        from research_fixtures import client, json_response, openalex
+        availability = registry_absence(self)
+        self.mutate(record_availability, availability)
+        http, _, _ = client([json_response(openalex())])
+        acquire_work(self.store, 'W123', http=http, expected_revision=self.store.revision, request_id='complete-later')
+        self.assign()
+        self.request([{'id': 'abstract', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}])
+        self.assign('complete', prior_assignment_id='a')
+        delivery = self.packet('complete')['source_deliveries'][0]
+        self.assertEqual(delivery['status'], 'delivered')
+        self.assertNotIn('availability', delivery)
+        self.assertIn('An original abstract.', json.dumps(self.packet('complete')))
+
+    def test_terminal_fulltext_qualification_settles_request(self):
+        version = self.metadata()
+        availability = terminal_absence(self, version)
+        _, packet, delivery = self.qualified_continuation(availability, 'fulltext')
+        self.assertEqual(delivery['status'], 'unavailable_qualified')
+        self.assertEqual(packet['pending_source_requests'], [])
+        self.assertFalse(delivery['reading_credit'])
+        self.assertFalse(delivery['scientific_truth_certified'])
+        source = self.store.snapshot()['records']['source'][availability['source_ids'][0]]
+        self.assertEqual(delivery['evidence'], [source['response']])
+        self.assertEqual(delivery['source_provenance'][0]['http_status'], 404)
+        self.assertEqual(delivery['source_provenance'][0]['kind'], 'availability_evidence')
+        self.assertIn(self.artifacts.read(source['response']).decode(), [e['content'] for e in packet['evidence']])
+        self.assertNotIn('fulltext_alternative', delivery)
+        self.invoke(self.review_response('bar', status='unresolved'), 'qualified')
+        records = self.store.snapshot()['records']
+        self.assertEqual(protocol._find_session_bodies(records, self.artifacts,
+            records['review_assignment']['qualified']), {})
+
+    def test_terminal_failure_cannot_excuse_required_units(self):
+        from research_harness.literature import import_bundle
+        version = self.metadata()
+        availability = terminal_absence(self, version)
+        held = self.capture(version)
+        bundle = LiteratureCase.bundle(self, version, held)
+        bundle['units'].append({'id': 'figure', 'kind': 'figure', 'required': True, 'link': None,
+                                'url': 'https://example.org/required-figure.png',
+                                'reason': 'The required figure has not been captured.'})
+        self.mutate(import_bundle, bundle)
+        request, packet, delivery = self.qualified_continuation(availability, 'fulltext')
+        self.assertEqual(delivery['status'], 'partial')
+        self.assertEqual(packet['pending_source_requests'], [request])
+        self.assertTrue(delivery['source_scope_pending'])
+        self.assertNotIn('availability', delivery)
+
+    def test_unqualified_unavailable_stays_pending(self):
+        availability = registry_absence(self)
+        self.assign()
+        request = {'id': 'missing', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}
+        self.request([request])
+        self.assign('missing', prior_assignment_id='a')
+        self.assertEqual(self.packet('missing')['source_deliveries'][0]['status'], 'unavailable')
+        self.assertEqual(self.packet('missing')['pending_source_requests'], [request])
 
     def test_initial_packet_keeps_complete_inventory_access_without_unread_abstracts(self):
         self.cohort(range(1, 1004))

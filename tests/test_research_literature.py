@@ -8,9 +8,100 @@ from research_harness.evidence import digest
 from research_harness.graph import citation_graph
 from research_harness.literature import export_foundation, foundation_report, frontier, import_bundle, record_search
 from research_harness.reading import record_availability, record_reading, require_fulltext
+from availability_fixtures import registry_absence, terminal_absence
 
 
 class LiteratureTests(LiteratureCase):
+    def test_registry_absence_requires_parsed_matching_work(self):
+        from research_harness.acquisition import acquire_work
+        from research_fixtures import client, json_response, openalex
+        availability = registry_absence(self)
+        other = openalex()
+        other['id'], other['ids'] = 'https://openalex.org/W999', {'openalex': 'https://openalex.org/W999'}
+        del other['doi'], other['abstract_inverted_index']
+        http, _, _ = client([json_response(other), json_response({}), json_response(other)])
+        acquire_work(self.store, 'W999', http=http, expected_revision=self.store.revision, request_id='other-work')
+        for name in ('unparsed', 'mismatched'):
+            with self.subTest(name=name):
+                result = acquire_work(self.store, 'W123', http=http,
+                    expected_revision=self.store.revision, request_id=name)
+                bad = dict(availability, id=name, source_ids=result['source_ids'] + availability['source_ids'][1:])
+                self.assert_error('invalid_availability', lambda: self.mutate(record_availability, bad))
+
+    def test_review_qualification_revalidates_registry_coverage(self):
+        from research_harness import bar_sources
+        from research_harness.acquisition import acquire_work
+        from research_fixtures import client, json_response, openalex
+        availability = registry_absence(self, with_doi=False)
+        self.mutate(record_availability, availability)
+        request = {'id': 'abstract', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}
+        before = bar_sources._source(self.store.snapshot()['records'], self.artifacts, request, {})
+        self.assertEqual(before['status'], 'unavailable_qualified')
+        current = openalex()
+        del current['abstract_inverted_index']
+        http, _, _ = client([json_response(current)])
+        acquire_work(self.store, 'W123', http=http, expected_revision=self.store.revision, request_id='added-doi')
+        after = bar_sources._source(self.store.snapshot()['records'], self.artifacts, request, {})
+        self.assertEqual(after['status'], 'unavailable')
+        self.assertNotIn('availability', after)
+
+    def test_review_qualification_rejects_vacuous_registry_coverage(self):
+        from research_harness import bar_sources
+        raw = {'id': 'https://example.org/no-registry', 'title': 'A work without registry identifiers'}
+        result = import_response(self.store, 'web', json.dumps(raw).encode(),
+            source_url=raw['id'], captured_at='2026-09-07T12:00:00Z', media_type='application/json',
+            mappings=[{'id': '/id', 'title': '/title'}], expected_revision=self.store.revision, request_id='web-only')
+        availability = {'id': 'web-absence', 'profile': 'research', 'version_id': 'url:' + raw['id'],
+            'depth': 'abstract', 'source_ids': result['source_ids'], 'reason': 'The saved import carries no abstract.',
+            'policy': {'id': 'registry-absent', 'minimum_attempts': 1, 'allowed_statuses': [200],
+                       'rationale': 'Inspect the saved record.'}}
+        # Imported sources retain their record-time source_ids binding even without observed_identifier.
+        self.mutate(record_availability, availability)
+        source = self.store.snapshot()['records']['source'][result['source_ids'][0]]
+        self.assertIsNone(source.get('observed_identifier'))
+        delivery = bar_sources._source(self.store.snapshot()['records'], self.artifacts,
+            {'id': 'abstract', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}, {})
+        self.assertEqual(delivery['status'], 'unavailable')
+
+    def test_qualified_evidence_integrity_is_required(self):
+        from research_harness import bar_sources
+        from research_harness.errors import ResearchError
+        availability = registry_absence(self)
+        self.mutate(record_availability, availability)
+        records = self.store.snapshot()['records']
+        request = {'id': 'abstract', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}
+        reference = records['source'][availability['source_ids'][-1]]['response']
+        path = self.root / reference['path']
+        original = path.read_bytes()
+        for mode, code in (('missing', 'artifact_missing'), ('altered', 'artifact_corrupt')):
+            with self.subTest(mode=mode):
+                if mode == 'missing':
+                    path.unlink()
+                else:
+                    path.write_bytes(b'Altered registry evidence')
+                self.assert_error(code, lambda: bar_sources._source(records, self.artifacts, request, {}))
+                path.write_bytes(original)
+        # The same validator must reject corrupt evidence at record time too.
+        path.write_bytes(b'Altered registry evidence')
+        with self.assertRaises(ResearchError) as caught:
+            self.mutate(record_availability, dict(availability, id='corrupt-record'))
+        self.assertEqual(caught.exception.code, 'artifact_corrupt')
+
+    def test_qualification_preserves_critical_reading_obligations(self):
+        from research_harness import bar_sources
+        version = self.metadata()
+        self.scope([version])
+        availability = terminal_absence(self, version)
+        self.mutate(record_availability, availability)
+        self.mutate(require_fulltext, {'id': 'critical', 'profile': 'research', 'version_id': version,
+            'purpose': 'validity', 'reason': 'Validity depends on reading the unavailable proof.'})
+        delivery = bar_sources._source(self.store.snapshot()['records'], self.artifacts,
+            {'id': 'body', 'kind': 'source', 'version_id': version, 'depth': 'fulltext'}, {})
+        self.assertEqual(delivery['status'], 'unavailable_qualified')
+        self.assertFalse(delivery['reading_credit'])
+        self.assertIn('critical_source_unavailable', self.codes())
+        self.assertFalse(self.store.snapshot()['records'].get('reading'))
+
     def search(self, *args, **kwargs):
         return self.capture_search(*args, **kwargs)
 

@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.71.6](docs/releases/0.71.6.md) settles reviewer source requests with revalidated registry-absence or terminal-origin evidence, without granting reading credit or waiving critical source obligations.
+
 Version [0.71.5](docs/releases/0.71.5.md) makes the file guard's workspace, output-folder and controller discovery read the file status itself, so on Python 3.14, where pathlib's `exists()` and `is_file()` return False on every `OSError`, a check that fails still denies the call instead of allowing it.
 
 Version [0.71.4](docs/releases/0.71.4.md) lets the file guard skip a shell word or tool path only when its check raises `ENAMETOOLONG`, so an overlong heredoc word or file path no longer stops an unrelated tool call. Other unexpected check failures still deny the call.

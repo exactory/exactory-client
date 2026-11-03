@@ -16,6 +16,21 @@ from test_review_html_delivery import ROUTE
 
 
 class CompleteSourceTests(LiteratureCase):
+    def test_qualified_unavailability_is_not_complete_source_selection(self):
+        from availability_fixtures import terminal_absence
+        from research_harness.reading import record_availability
+        version = self.metadata(2)
+        self.mutate(record_availability, terminal_absence(self, version))
+        records = self.store.snapshot()['records']
+        delivery = bar_sources._source(records, self.artifacts,
+            {'id': 'missing', 'kind': 'source', 'version_id': version, 'depth': 'fulltext'}, {})
+        self.assertEqual(delivery['status'], 'unavailable_qualified')
+        selected = complete.selection(records, self.artifacts, [delivery])
+        self.assertEqual(selected['sources'], [])
+        self.assertEqual(selected['protected_sha256'], [])
+        self.assertFalse(delivery['reading_credit'])
+        self.assertFalse(delivery['scientific_truth_certified'])
+
     def setUp(self):
         super().setUp()
         self.version = self.metadata()
