@@ -27,7 +27,10 @@ produces an explicit denial.
 After the controller check, a word or path whose check raises `OSError` with
 `errno.ENAMETOOLONG` is too long to name an owned file or a generated output
 target; the shell-word and tool-target exception handlers re-raise every other
-`OSError` so the explicit check-failure denial still applies.
+`OSError` so the explicit check-failure denial still applies. The checks
+read the file status through `math_search.is_regular_file` and its siblings,
+because from Python 3.14 on pathlib's `is_file()` and `exists()` return
+False on every `OSError`, which would turn a failed check into an allow.
 
 After the controller check and before the check of the eight files, the hook
 denies a Write, an Edit or a NotebookEdit (its path is `notebook_path`) into
@@ -51,7 +54,7 @@ import re
 import shlex
 import sys
 from pathlib import Path
-from math_search import ControllerReadError, guard, normalize, workspace_for
+from math_search import ControllerReadError, guard, is_directory, is_regular_file, normalize, workspace_for
 
 # Each pair holds a compiled pattern of a path within the workspace and the
 # instruction that the denial of a write to that path gives: the harness
@@ -117,14 +120,14 @@ def _find_owner(path: Path) -> tuple[str, str] | None:
 def _has_output_views(root: Path) -> bool:
     """Whether the harness renders final/ and intermediate/ in `root`: its research store's marker, or a controller
     root in it that holds the controller's marker or the marker of a research store located there."""
-    if (root / _RESEARCH_MARKER_PATH).is_file():
+    if is_regular_file(root / _RESEARCH_MARKER_PATH):
         return True
     try:
-        children = [child for child in root.iterdir() if child.is_dir()]
+        children = [child for child in root.iterdir() if is_directory(child)]
     except OSError:
         return False
-    return any((child / _CONTROLLER_MARKER_PATH).is_file()
-               or ((child / ".search/tree.json").is_file() and (child / _RESEARCH_MARKER_PATH).is_file())
+    return any(is_regular_file(child / _CONTROLLER_MARKER_PATH)
+               or (is_regular_file(child / ".search/tree.json") and is_regular_file(child / _RESEARCH_MARKER_PATH))
                for child in children)
 
 
