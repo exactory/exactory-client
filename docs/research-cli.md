@@ -3220,6 +3220,16 @@ the same rule with its own units and protocol, described after the problem
 chain below. A native result review without an openness minimum keeps its
 single turn.
 
+New problem reading chains use `exactory-openness-reading-v5`. Every bound
+search keeps its original digest and minimum binding. The first assignment
+freezes `reading_record.search_delivery`, a manifest of the original searches,
+their residual descriptors and their shared field descriptors. The exact
+canonical values of `dispositions`, `queries`, `responses` and `scope` are
+shared when two or more distinct bound search records have the same value.
+Array order, Unicode, explicit nulls and absent fields remain distinct.
+Other fields, including each search's identity, purpose, question and impact,
+remain in its residual. An unaffected search retains its whole original body.
+
 A reading unit has a kind and an identity. A `fulltext` unit is the extracted
 full text of a read version, named by `version_id`. A `search_response` unit
 is the captured response of a search, named by `source_id`. A `record` unit is
@@ -3248,6 +3258,20 @@ at most 120,000 characters is delivered whole. A longer unit is cut into parts
 by the rule of the excerpt rules above, and each part is saved as its own text
 artifact; a part of a record or of a captured response is saved as plain text
 (`text/plain; charset=utf-8`), because a fragment of a JSON body is not JSON.
+
+For v5 the logical record catalog above remains the citation catalog. Physical
+search delivery follows the full texts: shared field bodies in first-use order
+in the minimum, then residual searches in minimum order, then the other records.
+A shared unit uses `record_kind: "search_shared_field"`, names its `field`,
+and lists all original owning searches and formulations in `owners`. A residual
+unit uses `record_kind: "search_residual"` and retains `record_id` and
+`search_digest`. Its JSON envelope has disjoint inline `fields` and
+`shared_fields`, a field-to-digest map. These bodies follow the same consecutive
+part rule and share the 120,000-character reading budget. The reviewer must
+assess every formulation separately even when its judgments share bytes.
+Excerpts and passage requests from either kind still cite an owning original
+`literature_search`, with its original `record_id`, digest and canonical JSON
+offsets. Physical component identities are not excerpt identities.
 
 A reading turn is a fresh input without the earlier turns. Its packet holds
 `reading_turn`: the subject digest, claim digest and reviewer of the native
@@ -3314,8 +3338,24 @@ allowance keeps its `characters`. The locator, descriptor and note that every
 entry repeated under 0.64.2 to 0.66.2 are gone. The entries keep their order
 and every text that the allowance rules retained.
 
+A v5 record also carries the frozen `search_delivery` manifest and derived
+`search_receipts`. A receipt identifies the original search digest and every
+component used to reconstruct it, with the delivering assignment, attempt and
+whole-body or part span and digest. A search receives credit only after
+authenticated, valid reading turns of this same chain deliver its residual
+and every part of every shared field it uses, and reconstruction reproduces
+the exact original canonical bytes and digest. A saved artifact, manifest,
+planned unit, reviewer assertion, excerpt or passage supplies no such credit.
+
 The final turn is the native packet, its evidence and the reading record, on
-its own prompt. The harness builds it with every body and every note and
+its own prompt. A v5 final omits factored search bodies, including when
+the route has room. Each keeps its original artifact descriptor, empty content
+and `delivery: "search-rebuilt-from-reading-turns"`; the manifest and verified
+receipts describe its complete original delivery. It never expands those
+searches again. Bytes with an independent protected role, including required
+proof, retain their existing final-input treatment even when their digest also
+names a factored search. All other bodies retain their existing final-input rules.
+The harness builds the final with every other body and every note and
 measures the exact request that the route sends. While that request exceeds
 the input limit, it withholds content in this order, one item at a time, and
 stops at the first request that fits:
@@ -3357,7 +3397,7 @@ input in the route's own request representation: the native context, which no
 turn changes, every evidence body that the final turn cannot withhold (the
 statement record, the bodies that the proof, source and screening contracts
 protect, and the required proof bytes), the excerpts and passages that the
-chain has accumulated so far, and the final prompt; a body that the final
+chain has accumulated so far, the v5 search manifest and the final prompt; a body that the final
 turn may withhold counts as empty. When that lower bound exceeds the route's
 input limit, `review-assignment` refuses with `review_input_too_large` and
 the details `phase: "final_preflight"`, `measurement_kind:
@@ -3406,7 +3446,7 @@ Run a reading chain turn by turn:
 4. The final turn returns the native result review, or a reading answer with at
    least one passage request while the passage allowance has characters left. A
    further final turn, assigned as in step 2, then delivers the passages. In a
-   chain under `exactory-openness-reading-v4` (every new turn since 0.71.0) at
+   chain under `exactory-openness-reading-v4` or `exactory-openness-reading-v5` at
    least one of those requests must deliver characters, that is, its anchor is
    found in a bound body and its characters fit the remaining passage
    allowance. `review-run` records a reading answer in which no request
@@ -3440,6 +3480,15 @@ finding becomes `problem_openness_stale` with the cause
 `review_context_unverified` or `openness_reading_incomplete`. A finding without
 reading turns behaves as before.
 
+For v5, verification also reconstructs every carried reading record from the
+authenticated outputs, checks the frozen manifest and final search omissions,
+and keeps the exact native packet, reviewer, author, route, ancestry, protocol
+and canonical prompts of the first assignment. `reading_turns` retains physical
+`delivered_units` and `delivered_parts` and adds `completed_searches` when a turn
+first completes an original search. `problem-openness` and later assessments
+derive this verified original-search coverage before auditing the unchanged
+minimum. Result review builders still receive the complete original search rows.
+
 A chain that 0.64.2 to 0.66.2 started (prompts `exactory-openness-reading-v1`
 or `exactory-openness-reading-v2`) keeps its recorded turns, which stay
 authenticated under their own protocol, and a finding recorded from it stays
@@ -3465,6 +3514,10 @@ that no reading turn delivered. A chain whose full texts were all read, or
 whose final turn returned passage requests, therefore reads its records next,
 and the final turn follows. A final turn that returned the native result still
 ends its chain.
+
+A stored v4 chain continues as v4. Its prompts, requests, packets, observations,
+source delivery rules and `reading_turns` remain unchanged. Only new problem
+chains select v5; historical chains are never relabeled or factored midway.
 
 A native result review of a math-solver objective reads its packet in the same
 chain when the packet binds `scientific_context.openness_minimum` outside

@@ -1,7 +1,7 @@
-"""The reading chain of release 0.65.2, so that a test builds a historical chain with the code of that release.
+"""Build historical reading chains with the exact code of their releases.
 
-The fixtures hold the exact bytes of openness_reading.py and review_excerpts.py at 448b6da, which 0.66.0 to 0.66.2 also
-kept, pinned by SHA-256. CI checks out a single commit, so the bytes are kept here and not read from the history.
+The fixtures pin openness_reading.py and review_excerpts.py at 448b6da (0.65.2, also kept by 0.66.0 to 0.66.2) and
+c408fea (0.71.8) by SHA-256. CI checks out a single commit, so the bytes are kept here rather than read from history.
 """
 
 import contextlib
@@ -51,4 +51,34 @@ def build_as_0_65_2():
     released = load_0_65_2_openness_reading()
     released.find_protocol = find_release_protocol
     with patch.object(protocol, 'openness_reading', released):
+        yield
+
+
+RELEASE_0_71_8_MODULES = (
+    ('review_excerpts', 'fixtures/review_excerpts_0_71_8.py.txt',
+     '2f294787a7349d035edcd476c8f49b16422ef4a36e410cd4e833cb354e605cc1'),
+    ('openness_reading', 'fixtures/openness_reading_0_71_8.py.txt',
+     '72e00ff9abf56ceabcc4ef3b8c5c9d394e3dd9d3ddafc56abd40a11f8a7ee723'))
+
+
+def load_0_71_8_openness_reading():
+    """Load the exact reading builders from c408fea (0.71.8), never a relabeled current chain."""
+    modules = {}
+    for name, path, sha256 in RELEASE_0_71_8_MODULES:
+        location = Path(__file__).resolve().parent / path
+        source = location.read_bytes()
+        if hashlib.sha256(source).hexdigest() != sha256:
+            raise AssertionError('The 0.71.8 source fixture changed: ' + path)
+        spec = importlib.util.spec_from_loader('research_harness.%s_0_71_8' % name, loader=None)
+        module = importlib.util.module_from_spec(spec)
+        exec(compile(source, str(location), 'exec'), module.__dict__)
+        modules[name] = module
+    modules['openness_reading'].review_excerpts = modules['review_excerpts']
+    return modules['openness_reading']
+
+
+@contextlib.contextmanager
+def build_as_0_71_8():
+    """Build and prompt v4 assignments using the release's unchanged bytes."""
+    with patch.object(protocol, 'openness_reading', load_0_71_8_openness_reading()):
         yield

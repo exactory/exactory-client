@@ -14,8 +14,11 @@ excerpts, which the harness checks against the bound bodies. The final turn is t
 packet with the reading record of the earlier turns. Only as far as the route's input limit needs, it withholds the
 bodies that reading turns delivered complete and then the notes of the earliest turns; it never withholds an excerpt or
 a passage. Every turn is a fresh input; the reading record carries the continuity. A chain that 0.64.2 to 0.66.2
-started keeps its recorded turns and continues under these rules. A math chain has its own protocol, under which the
-harness rebuilds every turn's record from the observed outputs when it verifies the chain.
+started keeps its recorded turns and continues under these rules. New problem chains use v5: repeated canonical
+search fields travel as shared bodies with per-search residuals, and authenticated complete delivery must rebuild
+each exact original search before it earns credit. Their final turns retain the manifest and receipts instead of
+expanding factored searches again; independently protected bytes retain their final-input treatment. A math chain
+has its own protocol. Both math and v5 problem chains rebuild each turn's record from authenticated observed outputs.
 """
 
 import copy
@@ -34,11 +37,12 @@ PROTOCOL_V2 = 'exactory-openness-reading-v2'
 # Keep the default reading prompt protocol at v3 for callers that omit reading_protocol.
 PROTOCOL = 'exactory-openness-reading-v3'
 PROTOCOL_V4 = 'exactory-openness-reading-v4'
+PROTOCOL_V5 = 'exactory-openness-reading-v5'
 # The protocol of a math-solver result review's chain: the units of v3 in the math order, no statement record, and a
 # final passage request that must deliver characters.
 MATH_PROTOCOL = 'exactory-openness-reading-math-v1'
 # The protocols whose units carry the identities of review_excerpts.IDENTITY_FIELDS.
-GENERIC_UNIT_PROTOCOLS = (PROTOCOL, PROTOCOL_V4, MATH_PROTOCOL)
+GENERIC_UNIT_PROTOCOLS = (PROTOCOL, PROTOCOL_V4, PROTOCOL_V5, MATH_PROTOCOL)
 TURN_KEY = 'reading_turn'
 RECORD_KEY = 'reading_record'
 STAGES = ('reading', 'final')
@@ -53,6 +57,9 @@ PART_MEDIA_TYPE = 'text/plain; charset=utf-8'
 BODY_WITHHELD_DELIVERY = 'body-delivered-in-reading-turns'
 BODY_WITHHELD_NOTE = 'Delivered complete in reading turns {}; body withheld to fit the route input limit.'
 NOTES_WITHHELD_NOTE = 'The notes of turn {} are withheld from this input so that it fits the route input limit.'
+SEARCH_DELIVERY = 'search-rebuilt-from-reading-turns'
+SEARCH_DELIVERY_NOTE = ('Exact original search rebuilt from authenticated reading turns; see '
+                        'reading_record.search_delivery and search_receipts.')
 # After the full texts that text_delivery_priority lists, the final turn withholds the complete bodies of these kinds
 # in this order: the other full texts, captured search responses, reading records and search records.
 WITHHOLDING_ORDER = ('fulltext', 'search_response', 'reading', 'literature_search')
@@ -320,10 +327,33 @@ FINAL_PROGRESS_RULE = (
     'characters fit the remaining passage allowance. The harness refuses a reading response in which no request '
     'delivers characters, because every request misses its anchor or exceeds the remaining allowance, and the chain '
     'does not continue from it. When no passage can help you judge, return the native result review instead.')
+SEARCH_READING_RULE = (
+    '\n\nSearch delivery in this v5 problem chain uses reading_record.search_delivery, a manifest frozen in the first '
+    'assignment. After full texts, shared canonical JSON field bodies arrive in first-use order, then residual '
+    'searches in minimum order, then the other records. A search_shared_field unit identifies its field and every '
+    'owning original search and formulation in owners. A search_residual unit contains the original record_id and '
+    'search_digest, its remaining fields, and shared_fields mapping field names to body digests. Each component '
+    'arrives whole or in consecutive parts under the same 120,000-character budget. A search completes only after '
+    'authenticated reading turns deliver its residual and every part of each field it references and the exact '
+    'original canonical bytes and digest rebuild. The manifest and saved artifacts supply no reading credit. '
+    'Assess every formulation separately: equal judgments do not imply equal relevance to different questions. '
+    'Quote shared or residual material using an owning original literature_search record_kind and record_id. '
+    'Excerpts and passage answers retain that original record digest and its original canonical JSON offsets; '
+    'component identities are delivery identities, not citation identities.')
+SEARCH_FINAL_RULE = (
+    '\n\nThis v5 final input keeps every original search binding, the frozen reading_record.search_delivery manifest '
+    'and authenticated search_receipts. Factored search bodies without an independent protected role are absent, '
+    'including when the route has room: '
+    'search-rebuilt-from-reading-turns denotes exact original searches reconstructed from fully delivered components. '
+    'Use their verified receipts, your notes, original-record excerpts and passages to judge every bound search '
+    'and formulation. Other final-input delivery requirements remain in force. A manifest, descriptor, excerpt or '
+    'passage alone never establishes complete search delivery.')
 PROMPTS = {PROTOCOL_V1: {'reading': READING_PROMPT_V1, 'final': FINAL_PROMPT_V1},
            PROTOCOL_V2: {'reading': READING_PROMPT_V2, 'final': FINAL_PROMPT_V2},
            PROTOCOL: {'reading': READING_PROMPT, 'final': FINAL_PROMPT},
            PROTOCOL_V4: {'reading': READING_PROMPT, 'final': FINAL_PROMPT + FINAL_PROGRESS_RULE},
+           PROTOCOL_V5: {'reading': READING_PROMPT + SEARCH_READING_RULE,
+                         'final': FINAL_PROMPT + FINAL_PROGRESS_RULE + SEARCH_FINAL_RULE},
            MATH_PROTOCOL: {'reading': MATH_READING_PROMPT, 'final': MATH_FINAL_PROMPT}}
 
 
@@ -340,9 +370,13 @@ def is_math_openness_packet(native):
             and native['contract'].get('orchestration') != 'problem_creation')
 
 
-def find_chain_protocol(native):
+def find_chain_protocol(native, prior_protocol=None):
     """The reading protocol of a new turn of a chain over a native packet."""
-    return MATH_PROTOCOL if is_math_openness_packet(native) else PROTOCOL_V4
+    if is_math_openness_packet(native):
+        return MATH_PROTOCOL
+    if prior_protocol is not None:
+        return PROTOCOL_V5 if prior_protocol == PROTOCOL_V5 else PROTOCOL_V4
+    return PROTOCOL_V5
 
 
 def find_stage(packet):
@@ -488,6 +522,28 @@ def list_reading_rows(records, artifacts, native):
     return list_reading_texts(records, native) + list_record_rows(artifacts, native)
 
 
+def _plan_search_delivery(artifacts, native):
+    """Plan only the exact search artifacts bound by this immutable native minimum, without writes."""
+    from .review_search_delivery import plan_search_delivery
+    carried = {entry['artifact']['sha256']: entry['artifact'] for entry in native['evidence']}
+    return plan_search_delivery([dict(binding, search=json.loads(artifacts.read(carried[binding['search_digest']])))
+                                 for binding in native['scientific_context']['openness_minimum']['searches']])
+
+
+def list_delivery_rows(rows, manifest):
+    """The physical v5 units: full texts, shared fields, residual searches, then other logical records."""
+    shared = [{'kind': 'record', 'record_kind': 'search_shared_field',
+               'record_id': entry['field'] + ':' + entry['artifact']['sha256'],
+               'field': entry['field'], 'owners': entry['owners'], 'artifact': entry['artifact']}
+              for entry in manifest['shared_fields']]
+    searches = [{'kind': 'record', 'record_kind': 'search_residual' if entry['residual'] else 'literature_search',
+                 'record_id': entry['record_id'], 'search_digest': entry['search_digest'],
+                 'artifact': entry['residual'] or entry['artifact']}
+                for entry in manifest['searches']]
+    return ([row for row in rows if row['kind'] == 'fulltext'] + shared + searches
+            + [row for row in rows if row['kind'] != 'fulltext' and row.get('record_kind') != 'literature_search'])
+
+
 def list_reading_units(artifacts, rows):
     """The reading units of whole rows, in order: each body whole when it fits one turn's reading budget, otherwise its
     consecutive parts, each saved as its own text artifact, a part of a record or a captured response as plain text.
@@ -500,7 +556,8 @@ def list_reading_units(artifacts, rows):
         media_type = None if row['kind'] == 'fulltext' else PART_MEDIA_TYPE
         for part, (start, end) in enumerate(spans, 1):
             reference = review_excerpts.save_part(artifacts, content, row['artifact'], start, end, media_type)
-            units.append(dict(_describe_identity(row), part=part, parts=len(spans), start=start, end=end,
+            units.append(dict({key: value for key, value in row.items() if key != 'artifact'},
+                              part=part, parts=len(spans), start=start, end=end,
                               characters=end - start, artifact_descriptor=descriptor(reference)))
     return units
 
@@ -683,11 +740,15 @@ def preflight_final_input(route, input_limit, packet, rows, record):
             and 'review_text_encoding' in packet['native']['scientific_context']):
         return dict(report, reason='No sound mandatory-input lower bound is established for this representation.')
     candidate = copy.deepcopy(packet)
+    if record['protocol'] == PROTOCOL_V5:
+        _project_search_delivery(candidate, record)
     optional = {row['artifact']['sha256'] for row in _list_withholding_candidates(packet, rows)}
     for entry in candidate['evidence']:
         if entry['artifact']['sha256'] in optional:
             entry['content'] = ''
     candidate[RECORD_KEY] = {key: copy.deepcopy(record[key]) for key in ('protocol', 'excerpts', 'passages')}
+    if record['protocol'] == PROTOCOL_V5:
+        candidate[RECORD_KEY]['search_delivery'] = copy.deepcopy(record['search_delivery'])
     prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
     request = _render(route, prompt, candidate)
     report.update(status='measured', input_characters=_measure(route, request))
@@ -746,9 +807,24 @@ def _build_final_turn(route, packet, record, rows, spans, observations):
     from .review_protocol import canonical_prompt
     value = {key: item for key, item in packet.items() if key != 'digest'}
     value[RECORD_KEY] = record
+    if record['protocol'] == PROTOCOL_V5:
+        value = copy.deepcopy(value)
+        _project_search_delivery(value, record)
     bodies = _list_withholdable_bodies(value, rows, spans, observations)
     prompt = canonical_prompt('native_math', reading_stage='final', reading_protocol=record['protocol'])['text']
     return _fit_turn(route, prompt, value, bodies)[0]
+
+
+def _project_search_delivery(packet, record):
+    """Omit factored search bodies, returning their digests, while preserving independently protected bytes."""
+    from .problem_openness_sources import protected_evidence, required_proof
+    protected = set(protected_evidence(packet)) | required_proof(packet['native'])
+    factored = {row['search_digest'] for row in record['search_delivery']['searches']
+                if row['residual'] is not None} - protected
+    for entry in packet['evidence']:
+        if entry['artifact']['sha256'] in factored:
+            entry.update(content='', delivery=SEARCH_DELIVERY, note=SEARCH_DELIVERY_NOTE)
+    return factored
 
 
 def _read_prior(records, artifacts, value, prior_id):
@@ -801,7 +877,7 @@ def _list_chain(records, assignment):
     return chain
 
 
-def _observe_turns(records, artifacts, assignments, rows, spans):
+def _observe_turns(records, artifacts, assignments, rows, spans, manifest=None):
     """For each turn, its authenticated observation: the units whose whole body and the parts whose exact slice its
     actual recorded request delivered complete, its observed output, and whether it is a reading turn. Every turn must
     be ready."""
@@ -817,13 +893,19 @@ def _observe_turns(records, artifacts, assignments, rows, spans):
         sent = review_excerpts.read_sent_packet(json.loads(artifacts.read(attempt['request']))) or {}
         complete = review_excerpts.find_complete_bodies(sent)
         packet = json.loads(artifacts.read(assignment['packet']))
+        reading = find_stage(packet) == 'reading'
+        planned = ({(review_excerpts.find_identity(row), row['part'])
+                    for row in sent.get(TURN_KEY, {}).get('reading_plan', {}).get('delivered_now', [])}
+                   if manifest is not None else set())
         whole, parts, delivered_parts = set(), set(), []
         for row in rows:
             key = review_excerpts.find_identity(row)
-            if row['artifact']['sha256'] in complete:
+            if (row['artifact']['sha256'] in complete
+                    and (manifest is None or not reading or (key, 1) in planned and len(spans[key]) == 1)):
                 whole.add(key)
             for part, (start, end, sha256) in enumerate(spans[key], 1):
-                if len(spans[key]) > 1 and sha256 in complete:
+                if (len(spans[key]) > 1 and sha256 in complete
+                        and (manifest is None or (key, part) in planned)):
                     parts.add((key, part))
                     delivered_parts.append(dict(_describe_identity(row), part=part, parts=len(spans[key]),
                                                 start=start, end=end, characters=end - start))
@@ -832,11 +914,56 @@ def _observe_turns(records, artifacts, assignments, rows, spans):
                                     if review_excerpts.find_identity(row) in whole]}
         if delivered_parts:
             turn['delivered_parts'] = delivered_parts
-        reading = find_stage(packet) == 'reading'
         observations.append({'assignment_id': assignment['id'], 'output': state['output'], 'reading': reading,
                              'delivered_now': packet[TURN_KEY]['reading_plan']['delivered_now'] if reading else [],
                              'whole': whole, 'parts': parts, 'turn': turn})
+        if manifest is not None:
+            observations[-1]['bodies'] = {entry['artifact']['sha256']: entry['content'].encode('utf-8')
+                                         for entry in sent.get('evidence', [])
+                                         if entry['artifact']['sha256'] in complete}
+    if manifest is not None:
+        completed = set()
+        for index, observation in enumerate(observations):
+            receipts = _verify_search_coverage(artifacts, manifest, rows, spans, observations[:index + 1])
+            newly = [receipt for receipt in receipts if receipt['search_digest'] not in completed]
+            completed.update(receipt['search_digest'] for receipt in newly)
+            if newly:
+                observation['turn']['completed_searches'] = newly
     return observations
+
+
+def _collect_delivered_bodies(rows, spans, observations):
+    """The exact whole bytes and contributing receipts of units completed in authenticated reading requests."""
+    delivered = {}
+    for row in rows:
+        key = review_excerpts.find_identity(row)
+        reference = row['artifact']
+        deliveries, pieces = [], {}
+        for observation in observations:
+            if not observation['reading']:
+                continue
+            body = observation['bodies'].get(reference['sha256'])
+            if key in observation['whole']:
+                pieces = {1: body}
+                deliveries = [dict({name: observation['turn'][name] for name in ('assignment_id', 'attempt_id')},
+                                   part=1, parts=1, start=0, end=spans[key][-1][1], sha256=reference['sha256'])]
+                break
+            for part, (start, end, sha256) in enumerate(spans[key], 1):
+                if (key, part) in observation['parts'] and part not in pieces:
+                    pieces[part] = observation['bodies'][sha256]
+                    deliveries.append(dict({name: observation['turn'][name] for name in ('assignment_id', 'attempt_id')},
+                                           part=part, parts=len(spans[key]), start=start, end=end, sha256=sha256))
+        if deliveries and (deliveries[0]['parts'] == 1 or len(pieces) == len(spans[key])):
+            delivered[reference['sha256']] = {'content': b''.join(pieces[part] for part in sorted(pieces)),
+                                             'deliveries': deliveries}
+    return delivered
+
+
+def _verify_search_coverage(artifacts, manifest, rows, spans, observations):
+    """Reconstruct search bytes only from whole components or all exact parts observed in reading requests."""
+    from .review_search_delivery import verify_search_deliveries
+    originals = {entry['search_digest']: artifacts.read(entry['artifact']) for entry in manifest['searches']}
+    return verify_search_deliveries(manifest, _collect_delivered_bodies(rows, spans, observations), originals)
 
 
 def _collect_coverage(observations):
@@ -930,15 +1057,22 @@ def _extend_record(records, artifacts, prior_packet, state, rows, observations, 
               'allowances': allowances}
     if 'excerpt_protocol' in earlier:
         record['excerpt_protocol'] = excerpt_protocol
+    if protocol == PROTOCOL_V5:
+        manifest = earlier['search_delivery']
+        delivery_rows = list_delivery_rows(rows, manifest)
+        record.update(search_delivery=copy.deepcopy(manifest), search_receipts=_verify_search_coverage(
+            artifacts, manifest, delivery_rows, _compute_spans(artifacts, delivery_rows), observations))
     return record
 
 
-def _create_record(protocol, *, excerpt_protocol=None):
+def _create_record(protocol, manifest=None, *, excerpt_protocol=None):
     """The reading record that a chain's first turn carries: no turns, sources, excerpts or passages yet."""
     record = {'protocol': protocol, 'turns': [], 'sources': [], 'excerpts': [], 'passages': [],
               'allowances': review_excerpts.create_allowances()}
     if excerpt_protocol is not None:
         record['excerpt_protocol'] = excerpt_protocol
+    if protocol == PROTOCOL_V5:
+        record.update(search_delivery=manifest, search_receipts=[])
     return record
 
 
@@ -960,24 +1094,37 @@ def prepare_packet(records, artifacts, value, route, packet):
         if (characters <= review_excerpts.TURN_FULLTEXT_CHARACTERS
                 and _fits(route, canonical_prompt('native_math')['text'], packet, [row['artifact'] for row in rows])):
             return packet, None
-        record = _create_record(find_chain_protocol(native), excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
+        protocol = find_chain_protocol(native)
+        plan = _plan_search_delivery(artifacts, native) if protocol == PROTOCOL_V5 else None
+        record = _create_record(protocol, plan['manifest'] if plan is not None else None,
+                                excerpt_protocol=review_excerpts.SESSION_PROTOCOL)
         chain = {'first_assignment_id': value['id'], 'turn': 1}
         preflight_final_input(route, transport.local_input_limit(route), packet, rows, record)
+        if plan is not None:
+            for content in plan['bodies'].values():
+                artifacts.put(content, 'application/json')
+            rows = list_delivery_rows(rows, plan['manifest'])
         return _build_reading_turn(artifacts, route, packet, record, [], list_reading_units(artifacts, rows), 1), chain
     prior, prior_packet, state = _read_prior(records, artifacts, value, prior_id)
     rows = list_reading_rows(records, artifacts, native)
-    spans = _compute_spans(artifacts, rows)
-    observations = _observe_turns(records, artifacts, _list_chain(records, prior), rows, spans)
-    record = _extend_record(records, artifacts, prior_packet, state, rows, observations, find_chain_protocol(native))
+    protocol = find_chain_protocol(native, find_protocol(prior_packet))
+    manifest = _find_record(prior_packet)['search_delivery'] if protocol == PROTOCOL_V5 else None
+    delivery_rows = list_delivery_rows(rows, manifest) if manifest is not None else rows
+    spans = _compute_spans(artifacts, delivery_rows)
+    prior_chain = _list_chain(records, prior)
+    observations = _observe_turns(records, artifacts, prior_chain, delivery_rows, spans, manifest)
+    if protocol == PROTOCOL_V5:
+        _require_problem_continuity(records, artifacts, native, prior_chain, rows, observations, manifest)
+    record = _extend_record(records, artifacts, prior_packet, state, rows, observations, protocol)
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
     preflight_final_input(route, transport.local_input_limit(route), packet, rows, record)
-    remaining = _list_remaining_units(artifacts, rows, spans, observations)
+    remaining = _list_remaining_units(artifacts, delivery_rows, spans, observations)
     if remaining:
         delivered = [dict({key: item for key, item in row.items() if key != 'artifact'},
                           artifact_descriptor=descriptor(row['artifact']))
                      for observation in observations for row in observation['delivered_now']]
         return _build_reading_turn(artifacts, route, packet, record, delivered, remaining, chain['turn']), chain
-    return _build_final_turn(route, packet, record, rows, spans, observations), chain
+    return _build_final_turn(route, packet, record, rows, _compute_spans(artifacts, rows), observations), chain
 
 
 def _require(condition, message, **details):
@@ -1041,10 +1188,10 @@ def validate_turn_output(packet, output):
 
 
 def has_deliverable_passage(records, artifacts, packet, output):
-    """Whether a valid turn output may continue its chain under the passage-progress rule of v4 and the math protocol: a
+    """Whether a valid turn output may continue under the passage-progress rule of v4, v5 and the math protocol: a
     reading response in a final turn must request at least one passage that the harness delivers from a bound body
     within the remaining passage allowance. Every other output, including those under v1, v2 and v3, may."""
-    if (find_stage(packet) != 'final' or packet[RECORD_KEY]['protocol'] not in (PROTOCOL_V4, MATH_PROTOCOL)
+    if (find_stage(packet) != 'final' or packet[RECORD_KEY]['protocol'] not in (PROTOCOL_V4, PROTOCOL_V5, MATH_PROTOCOL)
             or output.get('stage') != 'reading'):
         return True
     allowances = packet[RECORD_KEY]['allowances']
@@ -1222,6 +1369,137 @@ def _require_math_continuity(records, artifacts, native, chain, rows, spans, obs
                                     MATH_PROTOCOL)
 
 
+def _require_problem_plan(artifacts, packet, rows, spans, observations):
+    """A v5 reading plan describes exactly the remaining physical units and the preceding deliveries."""
+    from .artifacts import describe_artifact
+    whole, parts = _collect_coverage(observations)
+    expected = []
+    for row in rows:
+        key = review_excerpts.find_identity(row)
+        if _is_complete(key, spans[key], whole, parts):
+            continue
+        content = artifacts.read(row['artifact']).decode('utf-8')
+        for part, (start, end, _) in enumerate(spans[key], 1):
+            if (key, part) in parts:
+                continue
+            reference = (row['artifact'] if len(spans[key]) == 1 else
+                         describe_artifact(content[start:end].encode('utf-8'), PART_MEDIA_TYPE))
+            expected.append(dict({name: value for name, value in row.items() if name != 'artifact'},
+                                 part=part, parts=len(spans[key]), start=start, end=end, characters=end - start,
+                                 artifact_descriptor=descriptor(reference)))
+    plan = packet[TURN_KEY]['reading_plan']
+    now = [dict({key: value for key, value in row.items() if key != 'artifact'},
+                 artifact_descriptor=descriptor(row['artifact'])) for row in plan['delivered_now']]
+    before = [dict({key: value for key, value in row.items() if key != 'artifact'},
+                    artifact_descriptor=descriptor(row['artifact']))
+              for observation in observations for row in observation['delivered_now']]
+    if (not now or now + plan['remaining'] != expected or plan['delivered_before'] != before
+            or plan['turn'] != len(observations) + 1
+            or sum(row['characters'] for row in now) > review_excerpts.TURN_FULLTEXT_CHARACTERS):
+        raise ResearchError('openness_reading_incomplete', 'A v5 reading plan must name the exact remaining '
+                            'components and the preceding deliveries')
+
+
+def _require_problem_continuity(records, artifacts, native, chain, rows, observations, manifest, *, final=False):
+    """Rebuild every v5 carried record from authenticated outputs while keeping the first assignment's boundary."""
+    from .review_protocol import canonical_prompt, find_common_prompt_version
+    if manifest != _plan_search_delivery(artifacts, native)['manifest']:
+        raise ResearchError('openness_reading_incomplete', 'The frozen search manifest differs from the bound originals')
+    first = chain[0]
+    first_packet = json.loads(artifacts.read(first['packet']))
+    record = _create_record(PROTOCOL_V5, manifest,
+                            excerpt_protocol=_find_record(first_packet).get('excerpt_protocol'))
+    delivery_rows = list_delivery_rows(rows, manifest)
+    spans = _compute_spans(artifacts, rows)
+    delivery_spans = _compute_spans(artifacts, delivery_rows)
+    for index, (assignment, observation) in enumerate(zip(chain, observations)):
+        packet, output = json.loads(artifacts.read(assignment['packet'])), observation['output']
+        stage = find_stage(packet)
+        if stage == 'final':
+            bound = packet['native'] == native
+        else:
+            turn = packet[TURN_KEY]
+            minimum = native['scientific_context']['openness_minimum']
+            bound = (turn['statement'] == native['subject'] and all(
+                turn[key] == native[key] for key in ('subject_digest', 'claim_digest', 'reviewer'))
+                and turn['formulations'] == {'statement': minimum['statement'], 'neighbours': minimum['neighbours']})
+        if (not bound or find_protocol(packet) != PROTOCOL_V5 or assignment['role'] != 'native_math'
+                or assignment['context']['native_packet'] != first['context']['native_packet']
+                or assignment['route_id'] != first['route_id']
+                or normalized_text(assignment['reviewer_id']) != normalized_text(first['reviewer_id'])
+                or normalized_text(assignment['author_id']) != normalized_text(first['author_id'])
+                or assignment.get('reading_chain') != {'first_assignment_id': first['id'], 'turn': index + 1}
+                or assignment['prompt'] != canonical_prompt(
+                    'native_math', reading_stage=stage, reading_protocol=PROTOCOL_V5,
+                    common_version=find_common_prompt_version(assignment['prompt']))):
+            raise ResearchError('openness_reading_incomplete', 'Every turn of a v5 problem chain keeps the binding, '
+                                'protocol and prompt of its first turn', {'assignment_id': assignment['id']})
+        carried = _find_record(packet)
+        if _project_withheld_notes(record, carried) != carried:
+            raise ResearchError('openness_reading_incomplete', 'A v5 turn carries a record that the authenticated '
+                                'outputs and deliveries of earlier turns do not give', {'assignment_id': assignment['id']})
+        if stage == 'reading':
+            _require_problem_plan(artifacts, packet, delivery_rows, delivery_spans, observations[:index])
+        else:
+            expected = copy.deepcopy(packet)
+            omitted = _project_search_delivery(expected, record)
+            actual_entries = {entry['artifact']['sha256']: entry for entry in packet['evidence']}
+            expected_entries = {entry['artifact']['sha256']: entry for entry in expected['evidence']}
+            factored = {entry['search_digest'] for entry in manifest['searches'] if entry['residual'] is not None}
+            if (any(actual_entries.get(sha256) != expected_entries.get(sha256) for sha256 in factored)
+                    or {entry['artifact']['sha256'] for entry in packet['evidence']
+                        if entry.get('delivery') == SEARCH_DELIVERY} != omitted):
+                raise ResearchError('openness_reading_incomplete', 'The v5 final search omissions must match the '
+                                    'frozen manifest exactly')
+            _require_withheld_bodies(packet, rows, spans, observations[:index])
+        validate_turn_output(packet, output)
+        terminal = stage == 'final' and output.get('stage') != 'reading'
+        if terminal != (final and index + 1 == len(chain)):
+            raise ResearchError('openness_reading_incomplete', 'A v5 problem chain ends at its first native final result')
+        if not terminal:
+            _require(has_deliverable_passage(records, artifacts, packet, output), PASSAGE_PROGRESS_ERR_MSG,
+                     path='/passage_requests')
+            record = _extend_record(records, artifacts, packet, {'output': output}, rows, observations[:index + 1],
+                                    PROTOCOL_V5)
+
+
+def verify_problem_coverage(records, artifacts, assignment, *, final=False):
+    """Authenticate a v5 prefix and derive original-search and whole-unit credit without source validation.
+
+    This helper also serves final source validation without recursively calling validate_delivery. Search receipts use
+    only reading turns of this chain. Unit receipts likewise describe complete earlier reading delivery, with the
+    original artifact and exact contributing assignments, attempts and parts.
+    """
+    from .native_review import load_packet
+    native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+    rows = list_reading_rows(records, artifacts, native)
+    manifest = _plan_search_delivery(artifacts, native)['manifest']
+    delivery_rows = list_delivery_rows(rows, manifest)
+    spans = _compute_spans(artifacts, delivery_rows)
+    chain = _list_chain(records, assignment)
+    observations = _observe_turns(records, artifacts, chain, delivery_rows, spans, manifest)
+    _require_problem_continuity(records, artifacts, native, chain, rows, observations, manifest, final=final)
+    receipts = _verify_search_coverage(artifacts, manifest, delivery_rows, spans, observations)
+    searches = [receipt['search_digest'] for receipt in receipts]
+    whole, parts = _collect_coverage(observations)
+    delivered = _collect_delivered_bodies(delivery_rows, spans, observations)
+    units = [dict(_describe_identity(row), artifact=row['artifact'],
+                  deliveries=delivered[row['artifact']['sha256']]['deliveries'])
+             for row in rows if row.get('record_kind') != 'literature_search'
+             and _is_complete(review_excerpts.find_identity(row), spans[review_excerpts.find_identity(row)],
+                              whole, parts)]
+    if final:
+        whole.update(observations[-1]['whole'])
+        missing = [_describe_identity(row) for row in rows if (
+            row['artifact']['sha256'] not in searches if row.get('record_kind') == 'literature_search' else
+            not _is_complete(review_excerpts.find_identity(row), spans[review_excerpts.find_identity(row)], whole, parts))]
+        if missing:
+            raise ResearchError('openness_reading_incomplete', 'Every v5 unit and reconstructed original search '
+                                'must be delivered complete', {'units': missing})
+    return {'turns': [observation['turn'] for observation in observations], 'searches': searches,
+            'search_receipts': receipts, 'units': units}
+
+
 def verify_chain(records, artifacts, assignment):
     """The turns of a final turn's reading chain, each with the units whose whole body, and the parts whose exact
     slice, its actual recorded request delivered complete; the last entry is the final turn itself. Every turn must be
@@ -1231,6 +1509,8 @@ def verify_chain(records, artifacts, assignment):
     _require_math_continuity states. A final turn that 0.64.2 to 0.66.2 built is verified by the rules of those
     releases."""
     packet = json.loads(artifacts.read(assignment['packet']))
+    if packet[RECORD_KEY]['protocol'] == PROTOCOL_V5:
+        return verify_problem_coverage(records, artifacts, assignment, final=True)['turns']
     if packet[RECORD_KEY]['protocol'] not in GENERIC_UNIT_PROTOCOLS:
         return _verify_legacy_chain(records, artifacts, assignment)
     from .native_review import load_packet

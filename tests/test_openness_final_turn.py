@@ -583,7 +583,8 @@ class ReadingPromptTests(unittest.TestCase):
         self.assertEqual(openness_reading.PROTOCOL, 'exactory-openness-reading-v3')
         self.assertEqual(sorted(openness_reading.PROMPTS),
                          sorted([openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2, openness_reading.PROTOCOL,
-                                 openness_reading.PROTOCOL_V4, openness_reading.MATH_PROTOCOL]))
+                                 openness_reading.PROTOCOL_V4, openness_reading.PROTOCOL_V5,
+                                 openness_reading.MATH_PROTOCOL]))
         for stage in openness_reading.STAGES:
             prompt = protocol.canonical_prompt('native_math', reading_stage=stage)
             self.assertEqual(prompt['template_id'], openness_reading.PROTOCOL + '/' + stage)
