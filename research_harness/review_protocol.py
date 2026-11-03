@@ -2214,6 +2214,21 @@ def has_problem_result_rubric(assignment):
 
 def _matches_current_problem_adjudicator_prompt(prompt):
     """Whether a problem adjudicator prompt has the current body, under the common text that it records."""
+    parameters = prompt.get('parameters', {})
+    binding = parameters.get(review_parts.KEY)
+    if binding is not None:
+        if binding.get('adapter') != 'problem_adjudicator' or binding.get('kind') != 'final':
+            return False
+        descriptor = parameters.get('base_prompt', {})
+        base_parameters = descriptor.get('parameters')
+        if not isinstance(base_parameters, dict):
+            return False
+        base = canonical_prompt('adjudicator', **base_parameters)
+        if (descriptor.get('template_id') != base['template_id']
+                or descriptor.get('rendered_prompt_hash') != base['rendered_prompt_hash']
+                or prompt != canonical_prompt('adjudicator', **base_parameters, review_parts=binding)):
+            return False
+        prompt = base
     common_version = find_common_prompt_version(prompt)
     return common_version is not None and prompt == canonical_prompt('adjudicator', orchestration='problem_creation',
                                                                      common_version=common_version)
@@ -2372,10 +2387,17 @@ def has_ended_without_output(records, assignment_id):
 
 
 def find_replacement(records, assignment):
-    """The later continuation of the same parent that replaced a turn which ended without output, or None."""
+    """Find a later replacement of the same parent or focused initial slot."""
     parent = assignment.get('context', {}).get('prior_assignment_id')
     if parent is None:
-        return None
+        if assignment['role'] != 'adjudicator':
+            return None
+        slot_identifier = assignment.get('slot_id', assignment['id'])
+        return next((other for other in read_filtered_records(records, 'review_assignment',
+                     role='adjudicator', slot_id=slot_identifier).values()
+                     if other['role'] == 'adjudicator' and other.get('slot_id') == slot_identifier
+                     and other.get('context', {}).get('prior_assignment_id') is None
+                     and other['recorded_revision'] > assignment['recorded_revision']), None)
     return next((other for other in read_filtered_records(records, 'review_assignment',
                  role=assignment['role'], **{'context.prior_assignment_id': parent}).values()
                  if other['id'] != assignment['id'] and other['role'] == assignment['role']
@@ -2462,10 +2484,15 @@ def _find_problem_refresh_parent(records, artifacts, value):
 
 
 def _initial_size_failure(records, artifacts, prior, value):
-    """An initial problem result that its route cannot carry: its adapter rejected every recorded request before
+    """An unrun focused assignment or initial result that its route cannot carry: it was refused before
     starting its CLI, or it never ran and `review-run` refuses its exact frozen request before an invocation exists
     (0.71.0 records nothing for that refusal)."""
-    if (prior.get('context') or prior.get('staged_review') or prior['route_id'] != value['route_id']
+    focused = prior.get('role') == 'adjudicator'
+    if focused and (review_parts.KEY in prior or any(
+            prior.get('context', {}).get(key) != value.get('context', {}).get(key)
+            for key in ('review_ids', 'objection_id', 'correction'))):
+        return False
+    if ((prior.get('context') and not focused) or prior.get('staged_review') or prior['route_id'] != value['route_id']
             or any(normalized_text(prior[key]) != normalized_text(value[key]) for key in ('reviewer_id', 'author_id'))):
         return False
     attempts = list(read_filtered_records(records, 'review_attempt', assignment_id=prior['id']).values())
@@ -2480,6 +2507,8 @@ def _initial_size_failure(records, artifacts, prior, value):
                                            request, packet=_read_json(artifacts, prior['packet']), artifacts=artifacts)
         except ResearchError as error:
             return error.code == 'review_input_too_large'
+        return False
+    if focused:
         return False
     return has_ended_without_output(records, prior['id']) and all(
         attempt.get('origin') == 'instrumented' and attempt['status'] == 'failed'
@@ -2524,6 +2553,14 @@ def _initial_slot(records, artifacts, value):
     return value['id']
 
 
+def _require_focused_identity(previous, value):
+    if (previous['route_id'] != value['route_id']
+            or any(normalized_text(previous[key]) != normalized_text(value[key])
+                   for key in ('reviewer_id', 'author_id'))):
+        raise ResearchError('review_adjudicator_fixed',
+                            'A focused continuation retains its adjudicator, route and author')
+
+
 def record_assignment(store, payload, *, expected_revision, request_id):
     if isinstance(payload, dict) and 'controller_assignment_id' in payload:
         from .review_staged_protocol import plan_frontier
@@ -2566,6 +2603,12 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             value, upgrade_parent = prepare_upgrade(records, value, route, problem)
             controller_artifacts = ControllerArtifacts(artifacts)
             artifacts = Evaluation.of(records, controller_artifacts)
+        if problem and value['role'] == 'adjudicator' and value['context'].get('prior_assignment_id'):
+            prior = _get(records, 'review_assignment', value['context']['prior_assignment_id'])
+            if review_parts.KEY in prior:
+                inherited = {key: prior['context'][key] for key in ('review_ids', 'objection_id', 'correction')
+                             if key in prior['context']}
+                value = dict(value, context=dict(inherited, **value['context']))
         refresh_parent = _find_problem_refresh_parent(records, artifacts, value) if problem and upgrade is None else None
         if refresh_parent is not None:
             value = dict(value, context={'prior_assignment_id': refresh_parent})
@@ -2638,6 +2681,33 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 and (not problem or previous.get('subject') == value['subject'])]
             latest = max(previous_assignments, key=lambda previous: previous['recorded_revision'], default=None)
             for previous in previous_assignments:
+                if (problem and previous['id'] != latest['id'] and review_parts.KEY in latest
+                        and (value['context'].get('prior_assignment_id') == latest['id']
+                             or has_ended_without_output(records, latest['id']))):
+                    continue
+                if problem and previous['id'] == latest['id'] and review_parts.KEY in previous:
+                    previous_state = assignment_state(records, artifacts, previous['id'])
+                    ended = has_ended_without_output(records, previous['id'])
+                    is_pending = (previous[review_parts.KEY]['kind'] != 'final' or ended
+                                  or (previous_state.get('output') or {}).get('kind') == 'requests')
+                    if is_pending:
+                        _require_focused_identity(previous, value)
+                        prior_id = previous['context'].get('prior_assignment_id') if ended else previous['id']
+                        if (value['context'].get('prior_assignment_id') != prior_id
+                                or not ended and not previous_state['ready']):
+                            raise ResearchError('review_adjudicator_fixed',
+                                'Continue the selected focused parts turn with its observed output.')
+                        if any(previous['context'].get(key) != value['context'].get(key)
+                               for key in ('review_ids', 'objection_id', 'correction')):
+                            raise ResearchError('review_adjudicator_fixed',
+                                'Continue the exact focused review pair, objection and correction.')
+                        focused_parent = _get(records, 'review_assignment', prior_id) if prior_id else None
+                        slot_identifier = context_repair.slot_id(records, previous)
+                        continue
+                if (problem and previous['id'] == latest['id']
+                        and _initial_size_failure(records, artifacts, previous, value)):
+                    slot_identifier = context_repair.slot_id(records, previous)
+                    continue
                 correction = value['context'].get('correction')
                 old_correction = previous['context'].get('correction')
                 if correction and old_correction and (digest(correction) == digest(old_correction)
@@ -2649,6 +2719,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 if problem and not correction and previous_state['ready']:
                     from .research_decisions import find_undelivered_adjudication_keys
                     previous_packet = _read_json(artifacts, previous['packet'])
+                    if review_parts.find_kind(previous_packet) is not None:
+                        previous_packet = review_parts.read_logical_packet(artifacts, previous_packet[review_parts.KEY])
                     # A material objection's version changes with its finding even when the evidence digest does not.
                     previous_version = previous_packet['objection'].get('material_version')
                     version = packet['objection'].get('material_version')
@@ -2668,13 +2740,12 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                               'version_changed' if previous_version != version else
                               'evidence_changed' if previous_packet['problem_evidence_digest'] != packet['problem_evidence_digest'] else
                               'packet_incomplete' if undelivered else
+                              'current_sources_changed' if previous_packet.get('current_source_delivery')
+                              != packet.get('current_source_delivery') else
                               'protocol_changed' if not _matches_current_problem_adjudicator_prompt(previous['prompt'])
                               else None)
                     if reason is not None:
-                        if (normalized_text(previous['reviewer_id']) != normalized_text(value['reviewer_id'])
-                                or previous['route_id'] != value['route_id']
-                                or normalized_text(previous['author_id']) != normalized_text(value['author_id'])):
-                            raise ResearchError('review_adjudicator_fixed', 'A focused refresh continues the same adjudicator, route and author')
+                        _require_focused_identity(previous, value)
                         focused_parent = previous
                         packet.pop('evidence', None)
                         packet.pop('digest', None)
@@ -2694,6 +2765,14 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 contaminated = previous_state['context_status'] == 'contaminated'
                 if not failed and not contaminated and not (correction and correction['prior_adjudication_id']):
                     raise ResearchError('review_adjudicator_fixed', 'Retain the selected adjudicator; replacement needs a recorded error or failed invocation')
+        if focused_parent is not None:
+            slot_identifier = context_repair.slot_id(records, focused_parent)
+            focused_context = dict(value['context'])
+            if 'focused_refresh' in packet:
+                focused_context.pop('prior_assignment_id', None)
+            else:
+                focused_context['prior_assignment_id'] = focused_parent['id']
+            value = dict(value, context=focused_context)
         reassessment_required = 'context_repair' in packet
         base_prompt_parameters = dict(repair=reassessment_required,
             orchestration='problem_creation' if problem else None,
@@ -2728,6 +2807,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             packet = review_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history,
                 base_prompt_parameters=base_prompt_parameters, slot_id=slot_identifier)
         if review_parts.find_kind(packet) is not None:
+            if value['role'] == 'adjudicator' and slot_identifier is None:
+                slot_identifier = value['id']
             history = []
             prompt = review_parts.build_turn_prompt(value['role'], base_prompt_parameters, packet[review_parts.KEY])
         history = review_problem_history.bound_history(
@@ -3210,7 +3291,16 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
                 validate_task_output(assignment['staged_task'], output, manifest=epoch['manifest'])
             return
         _validate_staged_adjudication_scope(records, artifacts, assignment, packet)
-    packets = supplied_evidence.lineage_packets(records, artifacts, [assignment['id']])
+    parts_kind = review_parts.find_kind(packet)
+    if parts_kind is not None:
+        with contract_check('adjudication.shape'):
+            review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
+        if parts_kind != 'final' or output.get('kind') == 'requests':
+            return
+        from .research_decisions import read_review_citation_delivery
+        packets = read_review_citation_delivery(records, artifacts, assignment, attempt=attempt)['packets']
+    else:
+        packets = supplied_evidence.lineage_packets(records, artifacts, [assignment['id']])
     with contract_check('adjudication.shape'):
         fields(output, ('objection_id', 'disposition', 'reason', 'evidence', 'correction_admissible'), ('reassessment',))
         if packet['objection']['id'] != output['objection_id']:
@@ -3265,6 +3355,10 @@ def record_adjudication(store, payload, *, expected_revision, request_id):
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         packet = _read_json(artifacts, assignment['packet'])
         from .review_adjudicator_sources import validate_observed as validate_current_sources
+        if review_parts.KEY in assignment and (review_parts.find_kind(packet) != 'final'
+                or (output or {}).get('kind') == 'requests'):
+            raise ResearchError('review_parts_pending',
+                                'Complete the focused parts series before recording its disposition.')
         response = {k: v for k, v in value.items() if k not in ('id', 'assignment_id')}
         if response != output:
             raise ResearchError('review_output_mismatch', 'Record the exact observed adjudicator response')

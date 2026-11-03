@@ -1127,15 +1127,29 @@ def find_undelivered_adjudication_keys(records, artifacts, assignment_id, *, rub
     from .review_protocol import describe_calibration, resolve_original_calibrations
     assignment = records['review_assignment'][assignment_id]
     packet = read_assignment_packet(records, artifacts, assignment_id)
+    from . import review_parts
+    series = None
+    if review_parts.KEY in assignment:
+        series_header = packet[review_parts.KEY]
+        series = review_parts.verify_series(records, artifacts, assignment_id)
+        packet = review_parts.read_logical_packet(artifacts, series_header)
     expected = dict(version_evidence or {})
     entries = expected.pop('version_evidence', None)
     undelivered = [key for key, value in expected.items() if packet.get(key) != value]
+    if series is not None and not series['complete']:
+        undelivered.append('review_parts')
     # The standards compare as an adjudicator weighs them, so a packet that delivered them raw still covers them.
     if ([describe_calibration(bar) for bar in packet.get('bar_calibrations') or []]
             != resolve_original_calibrations(records, artifacts, assignment['context']['review_ids'])):
         undelivered.append('bar_calibrations')
     if entries is not None:
         delivered = packet.get('version_evidence') or []
+        if series is not None:
+            inventory = review_parts.read_inventory(artifacts, series_header['inventory'],
+                                                     series_header['inventory_digest'])
+            if not review_parts.covers_items(series['packets'], packet, 'version_evidence', inventory,
+                                             path=['version_evidence']):
+                delivered = []
         # An undelivered entry names its reference; a record entry its kind and id; an artifact its sha256.
         missing = ['version_evidence:' + (entry['identity'] if entry.get('kind') == 'undelivered' else
                                           entry['record_kind'] + ':' + entry['id'] if entry.get('kind') == 'record' else

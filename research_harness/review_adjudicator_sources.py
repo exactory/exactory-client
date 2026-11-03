@@ -146,7 +146,7 @@ def validate_staged(records, artifacts, assignment, frozen):
     validate(artifacts, frozen, has_delivery=received)
 
 
-def validate_request(artifacts, frozen, request):
+def validate_request(artifacts, frozen, request, *, has_delivery=None):
     """Check the frozen contract against exact model input, including actual inline file/image attachments."""
     if MARKER not in frozen:
         return
@@ -170,7 +170,18 @@ def validate_request(artifacts, frozen, request):
         if actual.get(MARKER) != frozen[MARKER]:
             _incomplete({'reason': 'The actual input does not retain its exact frozen current-source requirements.'})
         project_evidence(actual, attachments)
-        validate(artifacts, actual)
+        from . import review_parts as parts
+        if parts.find_kind(frozen) is not None:
+            if actual != frozen:
+                _incomplete({'reason': 'The actual parts input differs from its declared delivery.'})
+            inventory = parts.read_inventory(artifacts, actual[parts.KEY]['inventory'],
+                                             actual[parts.KEY]['inventory_digest'])
+            parts._validate_deliveries(actual, inventory)
+            if has_delivery is not None and parts.find_kind(actual) == 'final':
+                validate(artifacts, parts.read_logical_packet(artifacts, actual[parts.KEY]),
+                         has_delivery=has_delivery)
+        else:
+            validate(artifacts, actual, has_delivery=has_delivery)
     except (KeyError, IndexError, TypeError, ValueError) as error:
         _incomplete({'reason': 'The actual focused packet or its binary attachments are malformed.'})
 
@@ -180,6 +191,16 @@ def validate_observed(records, artifacts, assignment, attempt_id):
     import json
     frozen = json.loads(artifacts.read(assignment['packet']))
     if MARKER not in frozen:
+        return
+    from . import review_parts as parts
+    if parts.find_kind(frozen) is not None:
+        verified = parts.verify_series(records, artifacts, assignment['id'])
+        logical = parts.read_logical_packet(artifacts, frozen[parts.KEY])
+        validate(artifacts, logical, has_delivery=lambda reference:
+                 parts.has_series_attachment(artifacts, verified['packets'], reference))
+        if not verified['complete']:
+            raise ResearchError('review_parts_pending',
+                'Complete the focused parts series before its disposition can bind.', verified['issues'])
         return
     if assignment.get('staged_review') is not None:
         validate_staged(records, artifacts, assignment, frozen)
