@@ -216,6 +216,26 @@ def assess_source_requests(records, artifacts, *, outcomes=None):
                 calibration_profile_version=epoch.get("calibration_profile_version")))
             pending.extend(item for item in state.get("obligations", []) if item["code"] != "review_task_pending")
             continue
+        from . import review_parts
+        if review_parts.KEY in assignment:
+            verified = review_parts.verify_series(records, artifacts, identifier)
+            if not verified['complete']:
+                from .review_protocol import has_ended_without_output
+                scope = dict(role=assignment['role'], route_id=assignment['route_id'],
+                             reviewer_id=assignment['reviewer_id'], author_id=assignment['author_id'],
+                             dossier_id=assignment['dossier_id'])
+                if state['ready']:
+                    scope['prior_assignment_id'] = identifier
+                    next_step = dict(kind='review', workflow='review-assignment', scope=scope)
+                elif has_ended_without_output(records, identifier):
+                    prior = assignment.get('context', {}).get('prior_assignment_id')
+                    if prior is not None:
+                        scope['prior_assignment_id'] = prior
+                    next_step = dict(kind='review', workflow='review-assignment', scope=scope)
+                else:
+                    next_step = dict(kind='review', workflow='review-run', scope=dict(assignment_id=identifier))
+                pending.append(obligation('review_parts_pending', 'Complete the current parts review series.',
+                    assignment_id=identifier, **state.get(review_parts.KEY, {}), next=[next_step]))
         if state.get('output') is not None and state.get(review_problem_parts.KEY, {}).get('stage') == 'part':
             assignment = records['review_assignment'][identifier]
             packet = json.loads(artifacts.read(assignment['packet']))

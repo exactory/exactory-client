@@ -141,14 +141,15 @@ def find_fulltext(records, version_id):
     return None if capture is None else capture['text']
 
 
-def compute_part_spans(value):
+def compute_part_spans(value, segment_size=None):
     """The consecutive parts [start, end) in which a turn reads a text: the whole text when it fits one turn's budget;
     otherwise parts of at most the budget, each ending after the last blank line in the last quarter of its window,
     else after the last newline there, else exactly at the budget."""
+    segment_size = TURN_FULLTEXT_CHARACTERS if segment_size is None else segment_size
     spans, start = [], 0
-    while len(value) - start > TURN_FULLTEXT_CHARACTERS:
-        window_end = start + TURN_FULLTEXT_CHARACTERS
-        floor = window_end - TURN_FULLTEXT_CHARACTERS // 4
+    while len(value) - start > segment_size:
+        window_end = start + segment_size
+        floor = window_end - segment_size // 4
         blank_line = value.rfind('\n\n', floor, window_end)
         newline = value.rfind('\n', floor, window_end)
         end = blank_line + 2 if blank_line >= 0 else newline + 1 if newline >= 0 else window_end

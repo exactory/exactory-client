@@ -35,6 +35,13 @@ class ProblemResultHistoryTests(ResultPartsCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        from research_harness import review_parts
+        for target, name, replacement in (
+                (review_parts, 'prepare_packet', lambda records, artifacts, value, route, packet, prompt, history, **kwargs: packet),
+                (parts, 'prepare_packet', parts._prepare_legacy_packet)):
+            patcher = patch.object(target, name, replacement)
+            patcher.start()
+            cls.addClassCleanup(patcher.stop)
         directory = tempfile.TemporaryDirectory()
         cls.addClassCleanup(directory.cleanup)
         # Record every fixture once per class with the existing observed-route helpers; tests copy what they write.

@@ -3,6 +3,7 @@
 import copy
 import json
 import unittest
+from unittest.mock import patch
 
 from codex_route_fixtures import invoke_codex, limit_codex_input, record_codex_route
 from research_harness import research_decisions as decisions, review_protocol as protocol
@@ -27,6 +28,15 @@ def note_units(packet):
 
 class ResultPartsCase(unittest.TestCase):
     def setUp(self):
+        if not getattr(self, 'use_parts_v2', False):
+            from research_harness import review_parts, review_problem_parts
+            # These fixtures exercise the frozen 0.69.x entry implementation.
+            for target, name, replacement in (
+                (review_parts, 'prepare_packet', lambda records, artifacts, value, route, packet, prompt, history, **kwargs: packet),
+                (review_problem_parts, 'prepare_packet', review_problem_parts._prepare_legacy_packet)):
+                patcher = patch.object(target, name, replacement)
+                patcher.start()
+                self.addCleanup(patcher.stop)
         import test_research_problem_reviews as fixtures
         self.case = fixtures.ProblemReviewTests()
         self.addCleanup(self.case.doCleanups)

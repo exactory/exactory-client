@@ -54,7 +54,7 @@ class ReviewEntryPostGateTests(unittest.TestCase):
         epoch = case.read_records()['review_epoch'][successor['staged_review']['epoch_id']]
         self.assertEqual(epoch['predecessor']['assignment_id'], assignment['id'])
 
-    def test_scale_supported_oversized_results_complete_v1_and_make_post_ready(self):
+    def test_scale_supported_oversized_results_complete_v2_and_make_post_ready(self):
         from test_research_problem_delivery import ProblemDeliveryCase
         from test_research_problem_attempt import build_attempt
         from test_research_problem_assessment import build_assessment
@@ -110,29 +110,26 @@ class ReviewEntryPostGateTests(unittest.TestCase):
                     route_id='local-route', dossier_id=None, role='result', reviewer_id=reviewer,
                     author_id='problem-author', context={'prior_assignment_id': prior} if prior else {}))['result']
                 recorded = protocol._read_json(case.artifacts, assignment['packet'])
-                plan = recorded.get(KEY)
+                from research_harness import review_parts
+                from review_parts_fixtures import make_output
+                plan = recorded.get(review_parts.KEY)
                 protocols.append(plan['protocol'] if plan else recorded.get('staged_review', {}).get('protocol'))
-                self.assertFalse(assignment.get('staged_review'), 'Prospective result work must use v1 parts')
+                self.assertFalse(assignment.get('staged_review'), 'Prospective result work must use parts v2')
                 self.assertIsNotNone(plan, protocols)
-                if plan['stage'] == 'part':
-                    output = dict(stage='result', phase='evidence_part', part=plan['turn'], notes=[
-                        dict(unit=unit, note='The inspected evidence supports the bounded assessment.')
-                        for unit in note_units(recorded)])
-                else:
-                    output = scientific
+                output = scientific if plan['kind'] == 'final' else make_output(recorded)
                 invoke_codex(case, assignment['id'], output)
-                if plan['stage'] == 'final':
+                if plan['kind'] == 'final':
                     case.mutate(decisions.record_value_review, dict(output, id='review-result-' + reviewer,
                         dossier_id=None, assignment_id=assignment['id']))
                     break
                 prior = assignment['id']
             else:
-                self.fail('The finite v1 evidence queue did not finish')
+                self.fail('The finite parts v2 evidence queue did not finish')
         report = gate_state(case.store.snapshot()['records'], case.artifacts, 'post')
         self.assertEqual({row['code'] for row in report['obligations']}, {'problem_decision_missing'})
         case.record_post_decision()
         records = case.store.snapshot()['records']
-        self.assertEqual(set(protocols), {'exactory-problem-evidence-parts-v1'})
+        self.assertEqual(set(protocols), {'exactory-review-parts-v2'})
         for kind in ('review_epoch', 'review_task', 'review_slot_head'):
             self.assertFalse(records.get(kind), kind)
         report = gate_state(records, case.artifacts, 'post')
