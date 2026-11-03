@@ -401,4 +401,3 @@ class NativeOpennessRoutingTests(OpennessReadingCase):
         assignment = self.assign('turn-1', reference)
         self.assertIn('reading_chain', assignment)
         self.assertNotIn('review_parts', assignment)
-

@@ -120,4 +120,3 @@ class NativePartsAcceptanceTests(MathOpennessChainCase, unittest.TestCase):
             with self.subTest(field=field), patch.object(Store, 'snapshot', return_value=dict(records=records)):
                 with self.assertRaises(SearchError):
                     self.check_review()
-
