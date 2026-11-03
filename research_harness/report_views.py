@@ -32,7 +32,7 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "standards_missing", "rationale_missing", "innovation_missing",
             "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing",
             "review_worker_reconciliation_required", "review_observation_acceptance_pending", "review_capacity_wait",
-            "review_task_dependency_changed", "review_epoch_stale", "review_task_pending",
+            "review_task_dependency_changed", "review_epoch_stale", "review_task_pending", "review_parts_pending",
             "review_composition_conflict", "review_composition_pending", "review_assurance_dependency_pending",
             "assessment_incomplete", "problem_assurance_pending",
             "problem_rubric_below_threshold", "research_objection_unresolved",
@@ -50,6 +50,82 @@ _MAX_PAGE = 500
 # 16 KiB bound leaves; `status` reports the whole record.
 _SUMMARY_CRITERION_IDS = 6
 _SUMMARY_ID_LENGTH = 32
+
+
+def describe_parts_turn(assignment, state, series, *, ended_without_output=False):
+    """Describe one evaluated parts turn without copying its inventory or output."""
+    from . import review_parts
+
+    header = assignment[review_parts.KEY]
+    plan = assignment['review_parts_plan']
+    result = {key: header[key] for key in
+              ('protocol', 'adapter', 'series_assignment_id', 'kind', 'turn')}
+    result['recorded_revision'] = assignment['recorded_revision']
+    result.update({key: copy.deepcopy(plan[key]) for key in
+                   ('unit_allowance', 'card_allowance', 'remaining_turns')})
+    total = plan['units_carded'] + plan['units_remaining']
+    result.update(units_carded=0, units_remaining=total)
+    packets = series['packets']
+    inventory = (series.get('delivery') or {}).get('inventory')
+    if inventory is not None:
+        reads = [packet for packet in packets if review_parts.find_kind(packet) == 'read']
+        originals = [original for packet in reads
+                     for original in packet[review_parts.KEY]['originals']]
+        carded = 0
+        for row in inventory['units']:
+            item = dict(unit=row['handle'], item=True, start=0, end=row['item_characters'])
+            if (review_parts.covers_original(originals, item, inventory)
+                    and all(review_parts.has_series_attachment(None, reads, body['artifact'])
+                            for body in row['bodies'])):
+                carded += 1
+        result.update(units_carded=carded, units_remaining=total - carded)
+    result['complete'] = series['complete']
+    result['issues'] = copy.deepcopy(series['issues'])
+    result['next'] = []
+    observed = bool(packets and packets[-1][review_parts.KEY]['turn'] == header['turn'])
+    blocking_code = next((item['code'] for item in state.get('obligations', [])
+                          if item['code'] not in ('review_output_pending', 'review_output_refused')), None)
+    invalid_code = next((item['reason'] for item in series['issues']['examples']
+                         if item['code'] == 'series_invalid'), None)
+    if not series['complete']:
+        if invalid_code is not None:
+            result['blocked'] = invalid_code
+        elif not state['ready'] and len(state.get('refused_attempts', [])) >= 2:
+            result['blocked'] = 'review_slot_exhausted'
+        elif not state['ready'] and blocking_code is not None:
+            result['blocked'] = blocking_code
+        elif not state['ready'] and state.get('output') is not None:
+            result['blocked'] = next((item['code'] for item in state.get('obligations', [])),
+                                     'review_invocation_unverified')
+        elif (state['ready'] and observed) or ended_without_output:
+            scope = {key: assignment[key] for key in
+                     ('role', 'route_id', 'reviewer_id', 'author_id', 'dossier_id')}
+            prior = (assignment['id'] if state['ready'] and observed
+                     else assignment.get('context', {}).get('prior_assignment_id'))
+            if prior is not None:
+                scope['prior_assignment_id'] = prior
+            result['next'] = [dict(kind='review', workflow='review-assignment', scope=scope)]
+        else:
+            result['next'] = [dict(kind='review', workflow='review-run',
+                                   scope=dict(assignment_id=assignment['id']))]
+    return result
+
+
+def annotate_parts_obligations(report, review):
+    """Keep pending-series actions consistent with the evaluated progress view."""
+    assignments = review.get('assignments', {})
+    obligations = []
+    for item in report.get('obligations', []):
+        progress = assignments.get(item.get('assignment_id'), {}).get('review_parts')
+        if item.get('code') == 'review_parts_pending' and progress is not None:
+            details = {key: progress[key] for key in
+                       ('adapter', 'series_assignment_id', 'kind', 'turn',
+                        'units_carded', 'units_remaining', 'next')}
+            if 'blocked' in progress:
+                details['blocked'] = progress['blocked']
+            item = dict(item, **copy.deepcopy(details))
+        obligations.append(item)
+    return dict(report, obligations=obligations)
 
 
 def priority(item):
@@ -75,6 +151,11 @@ def _hint(value):
     result["truncated_fields"] = [key for key, limit in _HINT_LIMITS.items()
                                   if isinstance(value.get(key), str) and len(value[key]) > limit]
     result["details_required"] = True
+    if value.get('code') == 'review_parts_pending':
+        result['review_parts'] = {key: value.get(key) for key in
+                                  ('kind', 'turn', 'units_carded', 'units_remaining')}
+        result['review_parts'].update({key: _short(value.get(key), 64)
+                                       for key in ('adapter', 'series_assignment_id', 'blocked')})
     if "next" in value:
         actions = value["next"] or []
         # An executable payload is exact or absent. A clipped id could target
@@ -120,15 +201,15 @@ def next_summary(report, *, counters=False):
         hint["omitted_next_steps"] += 1
     if counters:
         result["evaluation"] = report.get("evaluation")
-        hint = result.get("next_hint")
-        while hint and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 4096:
-            fields = [key for key, value in hint.items() if isinstance(value, str) and value]
-            if not fields:
-                break
-            key = max(fields, key=lambda item: len(hint[item]))
-            hint[key] = hint[key][:-16]
-            if key not in hint["truncated_fields"]:
-                hint["truncated_fields"].append(key)
+    hint = result.get("next_hint")
+    while hint and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 4096:
+        fields = [key for key, value in hint.items() if isinstance(value, str) and value]
+        if not fields:
+            break
+        key = max(fields, key=lambda item: len(hint[item]))
+        hint[key] = hint[key][:-16]
+        if key not in hint["truncated_fields"]:
+            hint["truncated_fields"].append(key)
     return result
 
 
@@ -177,6 +258,27 @@ def status_summary(report):
     if slots:
         result["review_slots"] = dict(occupied=slots["occupied"],
             **{key: len(slots[key]) for key in ("complete", "incomplete", "pending")})
+    assignments = report.get('review', {}).get('assignments', {})
+    series = {}
+    for identifier, assignment in assignments.items():
+        progress = assignment.get('review_parts')
+        if progress is not None:
+            series_id = progress['series_assignment_id']
+            previous = series.get(series_id)
+            if previous is None or progress['recorded_revision'] > previous['recorded_revision']:
+                series[series_id] = dict(progress, assignment_id=identifier)
+    if series:
+        examples = []
+        for progress in list(series.values())[:20]:
+            example = {key: progress[key] for key in
+                       ('kind', 'turn', 'units_carded', 'units_remaining', 'complete')}
+            example.update({key: _short(progress[key], 64) for key in
+                            ('assignment_id', 'series_assignment_id', 'adapter')})
+            if 'blocked' in progress:
+                example['blocked'] = _short(progress['blocked'], 64)
+            examples.append(example)
+        result['review_parts'] = dict(count=len(series), examples=examples,
+                                      omitted=max(0, len(series) - len(examples)))
     result["source_deferrals"] = dict(Counter(item["status"] for item in report.get("source_deferrals", [])))
     result["deferred_obligations"] = _obligations(report.get("deferred_obligations", []))
     if "probes" in report:
@@ -207,6 +309,11 @@ def status_summary(report):
                 container[key] = container[key][:max(minimum, len(container[key]) - 16)]
                 if container is hint and key not in hint["truncated_fields"]:
                     hint["truncated_fields"].append(key)
+    progress = result.get('review_parts')
+    while (progress and progress['examples']
+           and len(json.dumps(result, ensure_ascii=False, indent=2).encode('utf-8')) > 16 * 1024):
+        progress['examples'].pop()
+        progress['omitted'] += 1
     return result
 
 

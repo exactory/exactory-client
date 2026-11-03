@@ -464,6 +464,8 @@ def _find_adoptions(records, inputs):
 
 def _find_series_root(records, assignment):
     """The series of an assignment: an adjudicator's session, else the origin of its lineage."""
+    if assignment.get('review_parts'):
+        return assignment['review_parts']['series_assignment_id']
     if assignment.get("staged_review", {}).get("kind") == "task":
         return _find_series_root(records, records["review_assignment"][assignment["staged_review"]["controller_assignment_id"]])
     if assignment["role"] == "adjudicator":
@@ -503,11 +505,12 @@ def _number_turns(records, members):
     for assignment in sorted(members, key=lambda item: item["recorded_revision"]):
         parent = _find_series_parent(assignment)
         position = numbers[parent] + 1 if parent in numbers else len(_lineage(records, assignment))
-        numbers[assignment["id"]] = (assignment.get("reading_chain") or {}).get("turn") or position
+        numbers[assignment["id"]] = ((assignment.get('review_parts') or {}).get('turn')
+                                     or (assignment.get("reading_chain") or {}).get("turn") or position)
     return numbers
 
 
-def _describe_run(artifacts, files, stem, run, attempt, invocation, refusal):
+def _describe_run(artifacts, files, stem, run, attempt, invocation, refusal, parts_header=None):
     """One run of a turn: its record fields and its output, copied to <stem>.<run>.json when small and readable."""
     record = attempt or invocation
     item = {"run_id": run, "status": attempt["status"] if attempt else "pending", "error": record.get("error"),
@@ -515,8 +518,14 @@ def _describe_run(artifacts, files, stem, run, attempt, invocation, refusal):
             "refusal": None if refusal is None else {key: refusal.get(key) for key in (
                 "code", "check", "details", "recorded_revision")},
             "correction": None, "selected": False}
-    item.update(_copy_output(artifacts, files, stem + "." + _format_file_name(run) + ".json", record.get("output"),
-                             _describe("review_attempt", run, record)))
+    path = stem + "." + _format_file_name(run) + ".json"
+    entry = _describe("review_attempt", run, record)
+    if parts_header is not None:
+        entry.update({key: parts_header[key] for key in ('series_assignment_id', 'turn', 'adapter')})
+        entry['review_parts_kind'] = parts_header['kind']
+    item.update(_copy_output(artifacts, files, path, record.get("output"), entry))
+    if parts_header is not None:
+        item['output_path'] = path if item['output_file'] is not None else None
     return item
 
 
@@ -540,7 +549,8 @@ def _copy_output(artifacts, files, path, reference, entry):
     return {"output": reference, "output_file": None if reason else path.rsplit("/", 1)[1], "output_listed": reason}
 
 
-def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, refusals, staged_state=None):
+def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, refusals, staged_state=None,
+                   parts_progress=None):
     """The runs of one turn in order, with the selected one marked: the first completed run without a refusal record
     whose context the transport observed, else the first completed run without a refusal record, else the run that an
     accepted correction corrected. This is the binding rule of review_protocol._selected_attempt over the recorded
@@ -549,7 +559,16 @@ def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, r
     invocations = {item["id"]: item for item in by_assignment["review_invocation"].get(assignment["id"], [])}
     ordered = sorted(set(attempts) | set(invocations),
                      key=lambda run: ((attempts.get(run) or invocations[run])["recorded_revision"], run))
-    runs = {run: _describe_run(artifacts, files, stem, run, attempts.get(run), invocations.get(run), refusals.get(run))
+    final_stem = stem
+    if parts_progress is not None and parts_progress['complete']:
+        final_stem = ('final/reviews/' + _format_file_name(assignment['role']) + '/'
+                      + _format_file_name(parts_progress['series_assignment_id']) + '/'
+                      + stem.rsplit('/', 1)[1])
+    runs = {run: _describe_run(artifacts, files,
+                              final_stem if (run == (staged_state or {}).get('attempt_id')
+                                             and not (staged_state or {}).get('output_correction_id')) else stem,
+                              run, attempts.get(run), invocations.get(run), refusals.get(run),
+                              assignment.get('review_parts'))
             for run in ordered}
     usable = [attempts[run] for run in ordered
               if run in attempts and attempts[run]["status"] == "completed" and run not in refusals]
@@ -564,21 +583,37 @@ def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, r
         for run in runs.values():
             run["raw_output"] = run["output"]
             run["selected"] = run["run_id"] == state.get("attempt_id")
+    if parts_progress is not None:
+        for run in runs.values():
+            run['selected'] = run['run_id'] == staged_state.get('attempt_id')
     for invocation in by_assignment["review_output_correction_invocation"].get(assignment["id"], []):
         result = records.get("review_output_correction", {}).get(invocation["id"]) or {}
         record = result or invocation
         entry = _describe("review_output_correction", invocation["id"], record)
+        if parts_progress is not None:
+            entry.update({key: assignment['review_parts'][key]
+                          for key in ('series_assignment_id', 'turn', 'adapter')})
+            entry['review_parts_kind'] = assignment['review_parts']['kind']
         correction = {"run_id": invocation["id"], "status": result.get("status", "pending"),
                       "correction_status": result.get("correction_status"),
                       "error": result.get("correction_error") or result.get("error"), "usage": result.get("usage"),
                       "recorded_revision": record["recorded_revision"], "selected": False}
-        correction.update(_copy_output(artifacts, files, stem + "." + _format_file_name(invocation["id"]) + ".json",
+        correction_path = stem + "." + _format_file_name(invocation['id']) + '.json'
+        correction.update(_copy_output(artifacts, files, correction_path,
                                        result.get("output"), entry))
-        corrected = _copy_output(artifacts, files, stem + "." + _format_file_name(invocation["id"]) + ".corrected.json",
+        selected = (parts_progress is not None
+                    and invocation['id'] == staged_state.get('output_correction_id'))
+        corrected_path = ((final_stem if selected else stem) + '.'
+                          + _format_file_name(invocation['id']) + '.corrected.json')
+        corrected = _copy_output(artifacts, files, corrected_path,
                                  result.get("corrected_output"), entry)
         correction.update({"corrected_" + key: value for key, value in corrected.items()})
+        if parts_progress is not None:
+            correction.update(selected=selected,
+                              output_path=correction_path if correction['output_file'] else None,
+                              corrected_output_path=corrected_path if corrected['output_file'] else None)
         corrected_run = invocation.get("diagnostic", {}).get("attempt_id")
-        if binding is None and result.get("correction_status") == "accepted":
+        if parts_progress is None and binding is None and result.get("correction_status") == "accepted":
             correction["selected"] = True
             if corrected_run in runs:
                 runs[corrected_run]["selected"] = True
@@ -608,6 +643,8 @@ def _build_series(records, artifacts, inputs):
         if binding.get('kind') == 'task':
             children.setdefault(binding['controller_assignment_id'], []).append(assignment)
     from .review_protocol import assignment_state
+    from . import review_parts
+    from .report_views import describe_parts_turn
     from .review_staged_protocol import collect_epoch_acceptances, collect_observations
     from .evaluation import Evaluation
     artifacts = Evaluation.of(records, artifacts)
@@ -642,6 +679,17 @@ def _build_series(records, artifacts, inputs):
                         and parent is not None and other["recorded_revision"] < assignment["recorded_revision"]]
             link = _name_link(records, assignment, siblings, adoptions)
             stem = folder + "%02d-%s" % (numbers[identifier], _format_file_name(identifier))
+            parts_progress = None
+            if review_parts.KEY in assignment:
+                try:
+                    state = assignment_state(records, artifacts, identifier)
+                except (ResearchError, json.JSONDecodeError):
+                    state = dict(ready=False)
+                staged_states[identifier] = state
+                verified = review_parts.verify_series(records, artifacts, identifier)
+                parts_progress = describe_parts_turn(
+                    assignment, state, verified,
+                    ended_without_output=has_ended_without_output(records, identifier))
             turns.append({
                 "turn": numbers[identifier], "assignment_id": identifier, "parent_assignment_id": parent, "link": link,
                 "sibling": None if not siblings else {"of": siblings[-1]["id"], "as": {
@@ -652,11 +700,13 @@ def _build_series(records, artifacts, inputs):
                 "recorded_revision": assignment["recorded_revision"], "reviewer_id": assignment["reviewer_id"],
                 "route_id": assignment["route_id"], "packet": assignment.get("packet"),
                 "runs": _describe_turn(records, artifacts, files, stem, assignment, by_assignment, refusals,
-                                       staged_states.get(identifier)),
+                                       staged_states.get(identifier), parts_progress),
                 "context_events": [{key: event.get(key) for key in ("id", "kind", "source", "reason",
                                                                      "recorded_revision")}
                                    for event in by_assignment["review_context_event"].get(identifier, [])],
                 "adopted_by": adoptions.get(identifier, [])})
+            if parts_progress is not None:
+                turns[-1]['review_parts'] = parts_progress
             if assignment.get("staged_review", {}).get("kind") == "task":
                 turns[-1]["task_id"] = assignment["staged_review"]["task_id"]
             if identifier in controllers:
