@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.72.0](docs/releases/0.72.0.md) delivers a review whose input does not fit one route input as a series of fresh-input turns (`exactory-review-parts-v2`): read, combine, check and final, with an append-only inventory, verified statements that keep their locations and a state budget that makes the final fit. The problem result, the focused adjudication, the context repairs, the study verification and readiness reviews and the native mathematics review use it. Six focused adjudications that 0.71.x refused with `review_input_too_large` plan as such series on record copies. The quality of a parts series against a single-input review is not yet measured. It also bounds the retained reviewer excerpt state (`exactory-review-excerpts-v3`).
+
 Version [0.71.8](docs/releases/0.71.8.md) makes the file guard's controller, workspace and output-folder discovery treat `ENAMETOOLONG` as absence, so an overlong parent component or whole path no longer stops an unrelated tool call. Ancestor and remaining-target checks continue, and other unexpected check failures still deny the call.
 
 Version [0.71.7](docs/releases/0.71.7.md) gives newly rendered reviewer prompts common text version 3. It tells the reviewer to write each top-level field inside the one JSON object and to close that object once. Its aim is fewer reviewer calls lost to an answer that is not one object. Recorded prompts keep their text and their verification.

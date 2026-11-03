@@ -243,6 +243,23 @@ positive control for the intended evidence. Create a `review-assignment` with
 identities, and `context: {"verification_task_id": "<bound task digest>"}`.
 Run it with `review-run`. The harness supplies the exact pinned paper, prepared
 comparison sources and current sampling context without earlier verdicts.
+When the packet does not fit one input of a text route with a local input limit,
+the harness delivers the review as a series of fresh-input turns
+(`exactory-review-parts-v2`): read turns that card the sources of the paper, a
+combine turn, check turns and a final turn, each a new assignment. The
+assignment result and `status` show the plan (`review_parts_plan`) before
+`review-run`. Run each turn with `review-run`, then record the next turn with
+`review-assignment` of the same role, route, reviewer, author and
+`verification_task_id` and `context: {prior_assignment_id}` naming the turn
+that just ran, until the final turn returns `{verdict, checks}`; `status` shows
+the progress of the series and the next command under
+`review.assignments.<id>.review_parts` while the series is open, and
+`bind-verdict` accepts only the final of a complete series
+(`review_parts_pending` otherwise). A refusal of
+`review-assignment` with `review_parts_frame_too_large`,
+`review_parts_inventory_too_large`, `review_parts_final_too_large` or
+`review_parts_no_progress` names the measured sizes, and nothing was written:
+report them to the user and wait for the decision.
 
 The observed response is exactly `{verdict, checks}`. `checks` contains one
 evidence-supported assessment each for `soundness`, `novelty` and `impact`.

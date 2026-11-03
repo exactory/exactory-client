@@ -1179,6 +1179,20 @@ Its `attestation_id` names the first turn, the assignment id chosen before the
 export. `accept` and `complete` follow the chain from that turn to its terminal
 turn and verify every turn.
 
+A packet without an openness minimum that does not fit one input of a text
+route with a local input limit is delivered as a series of fresh-input turns
+under `exactory-review-parts-v2`
+([CLI reference](../../docs/research-cli.md#reviews-in-fresh-parts)) instead
+of a reading chain: `review-assignment` records `review_parts` on the first
+turn, each later turn is a new assignment with `context.prior_assignment_id`,
+and the final turn returns the native output. Its `attestation_id` names the
+first turn as well. `accept` and `complete` find the final turn of the series,
+verify the whole series and store its receipts as `reading_turns` with empty
+unit lists; the supplied native packet must equal the series' logical packet
+(`review_packet_mismatch`), and an incomplete series is refused with
+`review_parts_incomplete`. A packet with an openness minimum keeps its reading
+chain.
+
 The packet retains the original objective and proof policy, exact subject,
 required scientific context, previous relevant strategy assessments and failures,
 and immutable evidence closure. Missing content references are explicit;

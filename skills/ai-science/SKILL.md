@@ -116,6 +116,17 @@ Inspect the observed output artifact from each `bar`, `slate` or `result`
 `review-run` for `source_requests` before recording a final `value-review` or
 support finding; the harness shows the output of each run in
 `intermediate/reviews/<role>/<root assignment id>/` beside its `series.json`.
+When a `result` review with the strategic dossier (the readiness review) does
+not fit one input of a text route with a local input limit, the harness
+delivers it as a series of fresh-input turns (`exactory-review-parts-v2`):
+record each next turn with `review-assignment` of the same role, route,
+reviewer and author and `context: {prior_assignment_id}` naming the turn that
+just ran, run it with `review-run`, and read `status` for the plan
+(`review_parts_plan`) and the next command, under
+`review.assignments.<id>.review_parts`; the readiness gate credits only the
+final of a complete series (`review_parts_pending` otherwise), and the final
+output of a complete series is shown in
+`final/reviews/<role>/<series assignment id>/`.
 Follow the [reviewer delivery contract](../../docs/research-decisions.md#reviewer-delivery-and-disagreement)
 for native continuations in the same reviewer slot. Acquire unavailable exact
 sources through the ordinary source pipeline; retain pending or unaffordable

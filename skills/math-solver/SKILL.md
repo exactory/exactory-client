@@ -221,6 +221,28 @@ route limits, and wait for the decision. A final turn
 that cannot judge yet requests passages that deliver characters. Reading in a
 chain changes no requirement of the finding: an unavailable decisive source
 stays a gap, and the finding stays unresolved.
+A `native_math` packet without an openness minimum (a proposal review, a result
+review without the minimum, a recovery review) that does not fit one input of
+such a route is delivered as a series of fresh-input turns instead
+(`exactory-review-parts-v2`): read turns that card the units of the packet (the
+entries of the dependency closure and of the list collections of the scientific
+context), a combine turn, check turns and a final turn, each a new assignment.
+The assignment result and `status` show the plan (`review_parts_plan`) before
+`review-run`. Run each turn with `review-run`, assign the next turn with the
+same reviewer, route, author and packet and with `context.prior_assignment_id`
+naming the turn that just ran, and submit the native output of the final turn
+unchanged to `search accept` or `search complete`: the attestation names the
+first turn, and the service verifies the whole series and stores its receipts
+as `reading_turns`. `status` shows the progress of the series and the next
+command under `review.assignments.<id>.review_parts` while the series is open.
+A turn whose attempts all ended without output is
+replaced by assigning the next turn again with the same `prior_assignment_id`.
+A refusal of `review-assignment` with `review_parts_frame_too_large`,
+`review_parts_inventory_too_large`, `review_parts_final_too_large` or
+`review_parts_no_progress` names the measured sizes: the series cannot run on
+that route with that material, and nothing was written; report the sizes to
+the user and wait for the decision. A packet that fits stays a single
+assignment, and a packet with an openness minimum keeps its reading chain.
 Keep earlier uncertain hits and their explicit later `resolved` judgments in the
 bound searches. An `out_of_scope` resolution removes the uncertain hit's reading
 obligation. A `duplicate` requires `minimum.duplicate_resolutions` with
