@@ -6,9 +6,12 @@ The engine supplies handles, sizes, deduplication and append-only inventories.
 """
 
 from . import (review_parts_adjudicator, review_parts_native, review_parts_problem_result,
-               review_parts_study)
+               review_parts_repair, review_parts_study)
 
-ADAPTERS = {'problem_result': review_parts_problem_result.ADAPTER,
+# find_adapter takes the first adapter that applies. The context repair adapter comes first, because it wraps
+# the role adapter of a repair packet.
+ADAPTERS = {'context_repair': review_parts_repair.ADAPTER,
+            'problem_result': review_parts_problem_result.ADAPTER,
             'problem_adjudicator': review_parts_adjudicator.ADAPTER,
             'native_math': review_parts_native.ADAPTER,
             'study_verification': review_parts_study.VERIFICATION_ADAPTER,
