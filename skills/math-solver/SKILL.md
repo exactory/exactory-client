@@ -226,23 +226,33 @@ review without the minimum, a recovery review) that does not fit one input of
 such a route is delivered as a series of fresh-input turns instead
 (`exactory-review-parts-v2`): read turns that card the units of the packet (the
 entries of the dependency closure and of the list collections of the scientific
-context), a combine turn, check turns and a final turn, each a new assignment.
-The assignment result and `status` show the plan (`review_parts_plan`) before
-`review-run`. Run each turn with `review-run`, assign the next turn with the
-same reviewer, route, author and packet and with `context.prior_assignment_id`
-naming the turn that just ran, and submit the native output of the final turn
-unchanged to `search accept` or `search complete`: the attestation names the
-first turn, and the service verifies the whole series and stores its receipts
-as `reading_turns`. `status` shows the progress of the series and the next
-command under `review.assignments.<id>.review_parts` while the series is open.
-A turn whose attempts all ended without output is
-replaced by assigning the next turn again with the same `prior_assignment_id`.
-A refusal of `review-assignment` with `review_parts_frame_too_large`,
+context), combine and check turns when needed, possibly more than one of each,
+followed by final turns, each a new assignment. Before `review-run`, read
+`review_parts_plan` in the assignment result; read the allowances, estimates,
+progress and next action in `status` under
+`review.assignments.<id>.review_parts`. Run each turn with `review-run`. Then
+read the next action's `workflow` and `scope` in `next` and build that
+command's complete payload: for `review-assignment`, a new id, the same role,
+`dossier_id: null`, route, reviewer and author, and
+`context: {native_packet, prior_assignment_id}` with the same packet and the
+turn that just ran, the current expected revision and a new request id. Submit
+the native output of the final turn unchanged to `search accept` or
+`search complete`: the attestation names the first turn, and the service
+verifies the whole series and stores its receipts as `reading_turns`. If every
+attempt of a turn ended without completed output and no invocation remains
+pending, replace the assignment with a new id: for a continuation, keep its
+original `prior_assignment_id`; for the first turn, first export a new packet
+whose attestation names the replacement assignment, then start the series
+again. If `review-assignment` refuses with `review_parts_frame_too_large`,
 `review_parts_inventory_too_large`, `review_parts_final_too_large` or
-`review_parts_no_progress` names the measured sizes: the series cannot run on
-that route with that material, and nothing was written; report the sizes to
-the user and wait for the decision. A packet that fits stays a single
-assignment, and a packet with an openness minimum keeps its reading chain.
+`review_parts_no_progress`, the proposed turn cannot be planned with the
+current route and material; no assignment or invocation is recorded, although
+the preparation can have stored artifacts. Report the refusal code and any
+supplied size details to the user and wait for the decision. A native
+assignment does not accept `context_repair`: report a retired route or a
+contaminated context instead of submitting a repair. A packet that fits stays
+a single assignment, and a packet with an openness minimum keeps its reading
+chain.
 Keep earlier uncertain hits and their explicit later `resolved` judgments in the
 bound searches. An `out_of_scope` resolution removes the uncertain hit's reading
 obligation. A `duplicate` requires `minimum.duplicate_resolutions` with

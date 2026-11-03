@@ -448,8 +448,9 @@ stored source text, and only checked excerpts reach later turns as source text.
 Since 0.72.0 a new session retains what it did not verify in a bounded form
 (`exactory-review-excerpts-v3`): the SHA-256, the length and the first 200
 characters of an unmatched excerpt or of an undelivered passage anchor, a
-purpose of at most 500 characters with the digest of the whole, and each entry
-once; a recorded session keeps its form.
+purpose longer than 500 characters cut to its first 500 with the digest and
+the length of the whole, and excerpts with the same source binding, text
+digest and status kept once; a recorded session keeps its form.
 The final assessment rests on the reviewer's notes and checked excerpts, and a
 bounded passage request reads a missing part again. The
 [CLI reference](research-cli.md#scientific-contribution-decisions) gives the
@@ -619,7 +620,7 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-lead` | Versioned discrepancy provenance and research disposition. |
 | `review-route` | Actual route and versioned configuration. |
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
-| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request or the series of a review in fresh parts. A packet that does not fit one input is delivered as a series of fresh-input turns when an adapter applies to its role (a problem result or adjudicator packet, a context repair, a verification or readiness packet, a native packet without an openness minimum; [Reviews in fresh parts](#reviews-in-fresh-parts)), a recorded 0.69.x result series continues in parts, and a staged review opens only through an explicit `staged_upgrade` of a recorded slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
+| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request or the series of a review in fresh parts. A packet that does not fit one input is delivered as a series of fresh-input turns when an adapter applies to its role (a problem result or adjudicator packet, a context repair, a verification or readiness packet, a native packet without an openness minimum; [Reviews in fresh parts](#reviews-in-fresh-parts)) and its route is `claude_cli_v1`, `codex_cli_v1` or `codex_cli_framed_v1` with a local input limit, a recorded 0.69.x result series continues in parts, and a staged review opens only through an explicit `staged_upgrade` of a recorded slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
 | `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a turn of a series in fresh parts: the turn's own call, checked under the contract of its kind. For a staged task: the owned worker's call, its committed capture and its acceptance. |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |
@@ -1105,25 +1106,30 @@ the quantum codes record carried 904,820 characters, of which
 cokernel record 773,411, of which `material_objections` 399,885. A focused
 adjudication was never delivered in parts, so six adjudications, four in the
 Sidorenko record and two in the quantum codes record, were refused with
-`review_input_too_large` and left their objections without a disposition. At
-high effort the output grows with the input: part turns of the unknotting
+`review_input_too_large` and left their objections without a disposition on
+the ordinary `review-run` path (an explicit `staged_upgrade` remained
+available). The measured high-effort turns approached or exceeded the output
+cap: part turns of the unknotting
 record returned 102,927 to 123,721 output tokens against a cap of 128,000, and
 the bar repairs of the KMP and unknotting records ended over the cap at
 187,401 to 217,901 tokens (`review_incomplete`). The replayed history and the objection evidence took
 most of a turn's input, not the problem evidence frame, and a turn has to be
 sized against the output cap as well as the input limit.
 
-Since 0.72.0 a review that does not fit one input is delivered under
-`exactory-review-parts-v2`, which the
-[CLI reference](research-cli.md#reviews-in-fresh-parts) states in full. Its
-decisions:
+Since 0.72.0 an oversized review enters `exactory-review-parts-v2` when its
+role and packet have an applicable adapter and its route is `claude_cli_v1`,
+`codex_cli_v1` or `codex_cli_framed_v1` with a local input limit. The
+[CLI reference](research-cli.md#reviews-in-fresh-parts) states the entry
+conditions and the exceptions. The decisions:
 
 - Every turn is a fresh input. Its request carries no replayed conversation.
   What a later turn needs from the earlier turns travels inside its packet as
   records that the harness builds from the authenticated outputs of those
   turns, never from a caller's payload.
 - The reviewer reads the originals in chunks and keeps the critical statements
-  verbatim. A read turn returns one card per unit; the harness verifies every
+  verbatim. A unit is one splittable packet entry with its attached artifact
+  contents, and a card is the structured record that the reviewer returns for
+  it. A read turn returns one card per unit; the harness verifies every
   statement of a card against the text that the turn delivered and carries
   only the verified ones, each with its location. The combine turn works over
   the cards and names the joint questions and the exact originals to read;
@@ -1132,10 +1138,11 @@ decisions:
   direction the owner approved on 2026-10-31.
 - Sizes come from the route and from the series' own observed outputs, never
   from a fixed claim count, card count or character-to-token ratio. The read
-  allowance follows the output tokens of the earlier read turns, and the state
-  that the final carries is budgeted against the measured final frame, so the
-  final fits by construction, or the series is refused before its first turn
-  with a typed code and the measured sizes.
+  allowance follows the output tokens of earlier read turns. The planner
+  budgets the carried state against the measured final frame and checks each
+  proposed turn before it records the assignment. A series can be refused at
+  entry or during continuation, with a typed code, when the remaining material
+  or state no longer fits.
 - One engine serves every role through adapters: the problem result review,
   the focused adjudication, the context repairs, the study verification and
   readiness reviews and the native mathematics review. Each adapter declares
@@ -1150,9 +1157,13 @@ decisions:
   on the same evidence is not measured: the tooling (synthetic records with
   planted defects, a runner that forces parts on fitting evidence, a scorer)
   is in the release record, its dry run of 36 paired cases planned 180 parts
-  turns without a model call, and the paid run of 276 calls waits for the
-  owner's budget. Until it runs, the equal quality of the two deliveries is an
-  expectation, and the paired regression count of that run is what tests it.
+  turns without a model call, and the paid run waits for the owner's budget
+  (276 calls under the assumption of five parts turns per case, one turn for
+  each ordinary review and repeat, and one route probe per case; the actual
+  count depends on continuations and failures). Equal review quality stays an
+  expectation. The paid run measures regressions on these synthetic fixtures;
+  its automatic scores need blinded human assessment of the reasoning and do
+  not establish general quality equivalence.
 
 Recorded 0.69.x series continue under their protocol until their final;
 frozen 0.70.0 staged epochs continue under their frozen contracts, and an
