@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.71.8](docs/releases/0.71.8.md) makes the file guard's controller, workspace and output-folder discovery treat `ENAMETOOLONG` as absence, so an overlong parent component or whole path no longer stops an unrelated tool call. Ancestor and remaining-target checks continue, and other unexpected check failures still deny the call.
+
 Version [0.71.7](docs/releases/0.71.7.md) gives newly rendered reviewer prompts common text version 3. It tells the reviewer to write each top-level field inside the one JSON object and to close that object once. Its aim is fewer reviewer calls lost to an answer that is not one object. Recorded prompts keep their text and their verification.
 
 Version [0.71.6](docs/releases/0.71.6.md) settles reviewer source requests with revalidated registry-absence or terminal-origin evidence, without granting reading credit or waiving critical source obligations.

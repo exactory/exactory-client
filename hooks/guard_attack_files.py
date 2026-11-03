@@ -24,10 +24,10 @@ redirection whose word does not begin with `>` (such as `2>`, `&>` or
 `x>file`), `>|file` without a space, and `dd of=`. A command that does not
 write is untouched. An allowed call is silent; an unexpected check failure
 produces an explicit denial.
-After the controller check, a word or path whose check raises `OSError` with
-`errno.ENAMETOOLONG` is too long to name an owned file or a generated output
-target; the shell-word and tool-target exception handlers re-raise every other
-`OSError` so the explicit check-failure denial still applies. The checks
+The discovery helpers in `math_search.py` treat an overlong path as absent:
+a path too long to stat names no existing file. The shell-word and tool-target
+`ENAMETOOLONG` catches remain as defensive boundaries around path resolution;
+they re-raise every other `OSError` so the explicit check-failure denial still applies. The checks
 read the file status through `math_search.is_regular_file` and its siblings,
 because from Python 3.14 on pathlib's `is_file()` and `exists()` return
 False on every `OSError`, which would turn a failed check into an allow.
