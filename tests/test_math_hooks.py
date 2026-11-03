@@ -180,6 +180,18 @@ class TestGuardAttackFiles(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertEqual(self._run_bash(command).stdout, "")
 
+    def test_allows_a_heredoc_with_an_overlong_quote_swallowed_word(self) -> None:
+        body = "Jordan's characterization: " + "x" * 320 + "/Jordan's result.\n"
+        completed = self._run_bash("cat > out.md <<'EOF'\n" + body + "EOF\n")
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, "")
+        self.assertEqual(completed.stderr, "")
+
+    def test_an_overlong_shell_word_does_not_hide_a_later_owned_file(self) -> None:
+        body = "Jordan's characterization: " + "x" * 320 + "/Jordan's result.\n"
+        command = "cat > out.md <<'EOF'\n" + body + "EOF\nprintf '{}' > attack/sample/journal.jsonl\n"
+        self.assertIn("journal add", _read_denial_reason(self, self._run_bash(command)))
+
     def test_other_tools_pass(self) -> None:
         completed = _run_hook(_GUARD_SCRIPT_PATH, {
             "tool_name": "Read",
