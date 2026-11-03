@@ -419,6 +419,11 @@ def _validate_scoped_review(context, value, candidate, contract, candidate_diges
         text(check["reason"], "Independent scientific reason", code=_CODE)
         seen.add(check["kind"])
         evidence.many(check["evidence"], "Scoped independent evidence")
+    from .review_parts_study import validate_series_evidence
+    for reference in validate_series_evidence(
+            context.records, context.artifacts, assignment_id, candidate['evidence'],
+            [item['reference'] for item in evidence.summary()]):
+        evidence.one(reference)
     if seen != expected or not {digest(e) for e in candidate["evidence"]} <= {digest(e["reference"]) for e in evidence.summary()}:
         raise ResearchError("review_evidence_incomplete", "Independently assess every scientific check and candidate evidence reference")
 
@@ -431,6 +436,8 @@ def prepare_combined_scoped_support(records, artifacts, payload, *, revision, re
     saved = {"id": payload["id"], "payload": payload, "artifact": artifact, "candidate": candidate,
              "scientific_target_digest": contract["scientific_target_digest"],
              "scientific_projection": contract["scientific_projection"], "reviewed_revision": revision}
+    if assignment_id is not None and 'review_parts' in records['review_assignment'][assignment_id]:
+        saved['assignment_id'] = assignment_id
     if payload["candidate_digest"] in context.candidate_inputs:
         saved["candidate_inputs"] = context.candidate_inputs[payload["candidate_digest"]]
     changes = [immutable_record(records, "scoped_readiness_review", payload["id"], saved),
@@ -491,7 +498,8 @@ def _assess_manuscript_readiness(records, artifacts, *, restore_inputs=None):
             review = records["scoped_readiness_review"][selection["id"]]
             if strict_json(artifacts.read(review["artifact"])) != review["payload"]:
                 raise ResearchError("scoped_review_corrupt", "The current independent review artifact differs from its immutable payload")
-            _validate_scoped_review(context, review["payload"], candidate, contract, exact)
+            _validate_scoped_review(context, review["payload"], candidate, contract, exact,
+                                    assignment_id=review.get('assignment_id'))
             if _is_adverse(review["payload"]):
                 obligations.append(obligation("scoped_review_pending", "Resolve the scientific finding through a substantively corrected target"))
     except ResearchError as error:

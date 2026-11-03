@@ -287,6 +287,8 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     from . import review_parts
     parts_packet = json.loads(artifacts.read(assignment['packet'])) if review_parts.KEY in assignment else {}
     parts_kind = review_parts.find_kind(parts_packet)
+    readiness_parts = (parts_kind is not None
+                       and parts_packet[review_parts.KEY]['adapter'] == 'study_readiness')
     if parts_kind is not None:
         with contract_check('review.shape'):
             review_parts.validate_turn_output(records, artifacts, assignment, parts_packet, output, attempt=attempt)
@@ -428,7 +430,7 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
     with contract_check("review.reassessment"), describe_error_at('/reassessment'):
         review_context_repair.validate_reassessment(records, artifacts, assignment, output, reading_checks=False, packet=repair_packet,
                                                     evidence_validator=contract_evidence)
-    if problem:
+    if problem or readiness_parts:
         from .review_delivered_evidence import project_delivery_view
         if staged_binding is not None:
             delivery = project_delivery_view(records, artifacts, packets)
@@ -452,6 +454,14 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
             raise ResearchError("invalid_value_review", "The bar and proposed slate cannot fabricate a completed result review")
         if not problem and stage == "result" and not isinstance(output["support"], dict):
             raise ResearchError("value_review_support_missing", "A result assessment contains the existing native support checks first")
+        if readiness_parts:
+            from .review_parts_study import validate_study_references
+            checks = strategy.items(output['support'].get('checks'), 'Readiness checks', nonempty=True)
+            for index, check in enumerate(checks):
+                path = '/support/checks/' + str(index)
+                fields(check, ('kind', 'status', 'reason', 'evidence'), code='invalid_value_review', path=path)
+                with describe_error_at(path + '/evidence'):
+                    validate_study_references(records, artifacts, check['evidence'], delivery)
 
 
 @record_refusal_on_error
@@ -1462,7 +1472,8 @@ def _support_obligations(records, artifacts, value, reviews):
             if not context.verify_candidate_digest(value["support_candidate_digest"], exact, scoped=True, record_id=value["id"]):
                 obligations.append(obligation("research_support_stale", "The exact supported manuscript scope changed after its combined assessment."))
             for review in reviews:
-                _validate_scoped_review(context, review["payload"]["support"], candidate, contract, exact)
+                _validate_scoped_review(context, review["payload"]["support"], candidate, contract, exact,
+                                        assignment_id=review['assignment_id'])
             if value["goal_status"] == "achieved" and not report["objective_complete"]:
                 obligations.append(obligation("research_goal_not_achieved", "A supported scoped delivery retains the incomplete full scientific objective."))
             return obligations
@@ -1474,7 +1485,8 @@ def _support_obligations(records, artifacts, value, reviews):
         if not context.verify_candidate_digest(value["support_candidate_digest"], candidate, record_id=value["id"]):
             obligations.append(obligation("research_support_stale", "The result changed after its combined independent support/value assessment."))
         for review in reviews:
-            report = _review(context, review["payload"]["support"], candidate)
+            report = _review(context, review["payload"]["support"], candidate,
+                             assignment_id=review['assignment_id'])
             obligations.extend(report["obligations"])
     except ResearchError as error:
         obligations.append(obligation(error.code, error.message, **(error.details or {})))

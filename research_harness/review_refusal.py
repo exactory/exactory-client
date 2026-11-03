@@ -230,6 +230,13 @@ def classify_observed_output(records, artifacts, attempt_id):
         elif assignment['role'] == 'adjudicator':
             packet = json.loads(artifacts.read(assignment['packet']))
             validate_adjudication_contract(records, artifacts, assignment, packet, output, attempt=attempt)
+        elif assignment['role'] == 'verification' and 'review_parts' in assignment:
+            from . import review_parts
+            from .review_parts_study import validate_verification_final
+            with contract_check('verification.parts'):
+                review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
+                if review_parts.find_kind(packet) == 'final' and output.get('kind') != 'requests':
+                    validate_verification_final(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'native_math':
             from .native_review import validate_output
             from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,

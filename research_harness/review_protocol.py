@@ -1723,6 +1723,17 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 packet['problem_refresh'] = {'assignment_id': prior['id'],
                     'previous_template_id': prior['prompt']['template_id'],
                     'template_id': canonical_prompt('bar', orchestration='problem_creation')['template_id']}
+            elif (role == 'result' and review_parts.find_kind(previous) is not None
+                  and previous[review_parts.KEY]['adapter'] == 'study_readiness'):
+                current = build_packet(records, artifacts, dossier_id, role, reviewer_id)
+                for key in ('source_inventory', 'source_deliveries', 'pending_source_requests',
+                            'prior_context', 'reviewer_excerpts', 'continuation'):
+                    if key in packet:
+                        current[key] = packet[key]
+                packet = current
+                packet.pop('digest', None)
+                if packet.get('prior_context') == []:
+                    packet.pop('prior_context')
             elif role in ('slate', 'result'):
                 add_direction_evidence(records, artifacts, packet, dossier_id)
             if problem and refreshed:
@@ -1773,7 +1784,13 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
         from .native_review import load_packet
         packet['native'] = load_packet(artifacts, context['native_packet'], reviewer_id)
     elif role == 'verification':
-        fields(context, ('verification_task_id',))
+        fields(context, ('verification_task_id',), ('prior_assignment_id',))
+        if 'prior_assignment_id' in context:
+            prior = _get(records, 'review_assignment', context['prior_assignment_id'])
+            previous = _read_json(artifacts, prior['packet'])
+            if (review_parts.find_kind(previous) is None
+                    or previous[review_parts.KEY]['adapter'] != 'study_verification'):
+                raise ResearchError('invalid_review_context', 'Only a verification parts turn has a continuation')
         from .verification import review_packet
         packet['paper'] = review_packet(records, artifacts, context['verification_task_id'])
     elif role in PAPER_ROLES:
@@ -2618,6 +2635,26 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                   value['role'] == 'adjudicator' and 'context_repair' in value['context'] else None)
         parent = None
         visual_transition = False
+        if value['role'] == 'verification' and 'prior_assignment_id' in value['context']:
+            parent = _get(records, 'review_assignment', value['context']['prior_assignment_id'])
+            previous = _read_json(artifacts, parent['packet'])
+            if (review_parts.find_kind(previous) is None
+                    or previous[review_parts.KEY]['adapter'] != 'study_verification'
+                    or any(parent.get(key) != value.get(key) for key in ('role', 'route_id', 'dossier_id'))
+                    or any(normalized_text(parent[key]) != normalized_text(value[key])
+                           for key in ('reviewer_id', 'author_id'))
+                    or parent['context']['verification_task_id'] != value['context'].get('verification_task_id')):
+                raise ResearchError('invalid_review_context', 'Continue the exact verification parts binding')
+            state = assignment_state(records, artifacts, parent['id'])
+            if not state['ready']:
+                raise ResearchError('review_context_unverified', 'Continue an observed uncontaminated verification turn')
+            if review_parts.find_kind(previous) == 'final' and state['output'].get('kind') != 'requests':
+                raise ResearchError('review_resampling_forbidden', 'A final verification cannot be continued')
+            if any(prior.get('context', {}).get('prior_assignment_id') == parent['id']
+                   and not has_ended_without_output(records, prior['id'])
+                   for prior in read_filtered_records(records, 'review_assignment',
+                       **{'context.prior_assignment_id': parent['id']}).values()):
+                raise ResearchError('review_source_continuation_fork', 'Continue the latest verification turn')
         if value['role'] in bar_sources.ROLES and 'prior_assignment_id' in value['context']:
             parent, _ = _source_parent(records, artifacts, value['context']['prior_assignment_id'], value['dossier_id'], value['reviewer_id'], value['role'])
             if parent['route_id'] != value['route_id']:

@@ -5,11 +5,14 @@ body entries, and optionally the digest of the item under whose card it belongs.
 The engine supplies handles, sizes, deduplication and append-only inventories.
 """
 
-from . import review_parts_adjudicator, review_parts_native, review_parts_problem_result
+from . import (review_parts_adjudicator, review_parts_native, review_parts_problem_result,
+               review_parts_study)
 
 ADAPTERS = {'problem_result': review_parts_problem_result.ADAPTER,
             'problem_adjudicator': review_parts_adjudicator.ADAPTER,
-            'native_math': review_parts_native.ADAPTER}
+            'native_math': review_parts_native.ADAPTER,
+            'study_verification': review_parts_study.VERIFICATION_ADAPTER,
+            'study_readiness': review_parts_study.READINESS_ADAPTER}
 
 
 def find_adapter(value, packet):

@@ -7,6 +7,7 @@ import hashlib
 from . import review_transport as transport
 from .errors import ResearchError
 from .fulltext import detect_media_type
+from .evidence import digest
 from .workspace import strict_json
 
 
@@ -66,6 +67,25 @@ def _require_review_packet(packet, assignments=None):
                  and isinstance(packet.get('dossier_id'), str) and bool(packet['dossier_id'].strip())
                  and 'subject' not in packet)
         valid = (problem or study) and role in ('bar', 'slate', 'result', 'adjudicator')
+        if role == 'verification':
+            from .review_parts import KINDS, PROTOCOL
+            header = packet.get('review_parts')
+            paper = packet.get('paper')
+            task = paper.get('task_digest') if isinstance(paper, dict) else None
+            valid = (protocol == 'exactory-independent-review-v1'
+                     and 'dossier_id' in packet and packet['dossier_id'] is None
+                     and 'subject' not in packet and isinstance(paper, dict)
+                     and paper.get('kind') == 'verification' and isinstance(task, str)
+                     and len(task) == 64 and all(character in '0123456789abcdef' for character in task)
+                     and isinstance(header, dict) and header.get('protocol') == PROTOCOL
+                     and header.get('adapter') == 'study_verification' and header.get('kind') in KINDS
+                     and type(header.get('turn')) is int and header['turn'] > 0
+                     and isinstance(header.get('series_assignment_id'), str)
+                     and bool(header['series_assignment_id'].strip())
+                     and isinstance(header.get('inventory_digest'), str)
+                     and len(header['inventory_digest']) == 64
+                     and all(character in '0123456789abcdef' for character in header['inventory_digest'])
+                     and digest({key: value for key, value in packet.items() if key != 'digest'}) == identifier)
         if role == 'adjudicator':
             assessments, objection = packet.get('assessments'), packet.get('objection')
             valid = (valid and protocol != 'exactory-independent-review-sources-v2'
@@ -122,12 +142,18 @@ def _require_review_packet(packet, assignments=None):
                      if packet['objection']['id'] == assignment.get('context', {}).get('objection_id')
                      and [row['id'] for row in packet['assessments'][:2]]
                      == assignment.get('context', {}).get('review_ids')]
-        if packet['role'] == 'native_math':
+        elif packet['role'] == 'native_math':
             bound = [assignment for assignment in bound
                      if isinstance(assignment.get('review_parts'), dict)
                      and all(packet['review_parts'].get(key) == assignment['review_parts'].get(key)
                              for key in ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn',
                                          'inventory_digest'))]
+        elif packet['role'] == 'verification':
+            keys = ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest')
+            bound = [assignment for assignment in bound
+                     if assignment.get('review_parts') == {key: packet['review_parts'][key] for key in keys}
+                     and assignment.get('context', {}).get('verification_task_id')
+                     == packet['paper']['task_digest']]
         valid = bool(bound)
     if not valid:
         raise ResearchError('review_input_unreadable', 'Use a native review packet with its exact bound identity')

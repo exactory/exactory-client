@@ -80,7 +80,10 @@ def record_task(store, payload, *, expected_revision, request_id):
 
 
 def _body(artifacts, reference):
-    body = strict_json(artifacts.read(reference))
+    return validate_verdict_body(strict_json(artifacts.read(reference)))
+
+
+def validate_verdict_body(body):
     fields(body, ("stance", "summary", "prediction"),
            ("rationaleSections", "wouldChange", "suggestions", "findings", "supersedesVerdictId"))
     text(body["stance"], "Verdict stance")
@@ -112,6 +115,7 @@ def review_packet(records, artifacts, task_digest):
 
 def require_verdict_assignment(records, artifacts, value, body):
     from .review_protocol import assignment_state
+    from .review_parts_study import require_complete_series
     from .operations import normalized_text
     assessment = value["assessment"]
     identifier = assessment.get("assignment_id")
@@ -121,7 +125,8 @@ def require_verdict_assignment(records, artifacts, value, body):
     if not state["ready"]:
         raise ResearchError("review_context_unverified", "The current verifier context does not establish independence", {"obligations": state["obligations"]})
     assignment = records["review_assignment"][identifier]
-    packet = strict_json(artifacts.read(assignment["packet"]))
+    series = require_complete_series(records, artifacts, identifier)
+    packet = series['packets'][-1] if series else strict_json(artifacts.read(assignment["packet"]))
     if (state["role"] != "verification" or packet.get("paper", {}).get("task_digest") != value["task_digest"]
             or normalized_text(state["reviewer_id"]) != normalized_text(assessment["assessor"])):
         raise ResearchError("verification_target_mismatch", "Use the observed verifier and exact task evidence")

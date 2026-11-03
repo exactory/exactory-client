@@ -1700,6 +1700,11 @@ def _review(context, value, candidate, *, assignment_id=None):
             obligations.append(obligation("independent_review_pending", "Resolve the independent evidence-linked review finding.", check=check["kind"], status=check["status"]))
     if seen != set(_REVIEW_CHECKS):
         raise ResearchError("invalid_development", "Independent review must address validity, scope, novelty, contribution, development and branches")
+    from .review_parts_study import validate_series_evidence
+    for reference in validate_series_evidence(
+            context.records, context.artifacts, assignment_id, candidate['evidence'],
+            [item['reference'] for item in evidence.summary()]):
+        evidence.one(reference)
     referenced = {digest(e["reference"]) for e in evidence.summary()}
     if not {digest(e) for e in candidate["evidence"]} <= referenced:
         raise ResearchError("review_evidence_incomplete", "Independently assess every exact evidence reference supplied by the candidate")
@@ -1727,6 +1732,8 @@ def prepare_combined_support(records, artifacts, payload, *, revision, request_i
                                         separators=(",", ":")).encode(), "application/json")
     record = {"id": payload["id"], "payload": payload, "candidate": candidate, "assessment": report,
               "artifact": artifact, "reviewed_revision": revision, "request_id": request_id}
+    if assignment_id is not None and 'review_parts' in records['review_assignment'][assignment_id]:
+        record['assignment_id'] = assignment_id
     if payload["candidate_digest"] in context.candidate_inputs:
         record["candidate_inputs"] = context.candidate_inputs[payload["candidate_digest"]]
     return [immutable_record(records, "readiness_review", payload["id"], record),
@@ -1772,7 +1779,7 @@ substitutes for these requirements.
             else:
                 saved = _get(records, "readiness_review", selection["review_id"], "unknown_review")
                 artifacts.read(saved["artifact"])
-                reviews = _review(context, saved["payload"], candidate)
+                reviews = _review(context, saved["payload"], candidate, assignment_id=saved.get('assignment_id'))
                 if not context.accept_dependencies(saved["assessment"]["digest"], reviews["digest"]):
                     obligations.append(obligation("readiness_review_stale", "Reassess changed independent source/result evidence."))
                 obligations.extend(reviews["obligations"])
