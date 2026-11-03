@@ -712,6 +712,11 @@ class TestGuardOutputFolders(unittest.TestCase):
         (self.workspace / ".exactory").mkdir(parents=True)
         (self.workspace / ".exactory" / "output-views.json").write_text("{}")
         (self.workspace / "work").mkdir()
+        self.restricted_directory = None
+
+    def tearDown(self) -> None:
+        if self.restricted_directory is not None:
+            self.restricted_directory.chmod(0o700)
 
     def _run_tool(self, tool_name: str, path, cwd: Path | None = None) -> subprocess.CompletedProcess:
         field = "notebook_path" if tool_name == "NotebookEdit" else "file_path"
@@ -721,12 +726,15 @@ class TestGuardOutputFolders(unittest.TestCase):
             "cwd": str(cwd or self.workspace),
         })
 
-    def _assert_denied(self, tool_name: str, path, cwd: Path | None = None) -> None:
+    def _assert_denied(self, tool_name: str, path, cwd: Path | None = None,
+                       reason_text: str = "work/") -> None:
         completed = self._run_tool(tool_name, path, cwd)
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
         self.assertNotEqual(completed.stdout, "", "the guard allowed " + str(path))
         decision = json.loads(completed.stdout)["hookSpecificOutput"]
         self.assertEqual(decision["permissionDecision"], "deny")
-        self.assertIn("work/", decision["permissionDecisionReason"])
+        self.assertIn(reason_text, decision["permissionDecisionReason"])
 
     def test_writes_into_the_generated_folders_are_denied(self) -> None:
         for tool_name, relative in (("Write", "final/reviews/bar/review-a.json"),
@@ -758,6 +766,60 @@ class TestGuardOutputFolders(unittest.TestCase):
         for relative in ("final/notes.md", "intermediate/notes.md"):
             with self.subTest(path=relative):
                 self.assertEqual(self._run_tool("Write", plain / relative, cwd=plain).stdout, "")
+
+    def test_allows_an_overlong_tool_path(self) -> None:
+        component = "x" * 300
+        for tool_name, relative in (("Write", component),
+                                    ("Edit", "work/" + component),
+                                    ("NotebookEdit", component + "/final/notes.md"),
+                                    ("NotebookEdit", component + "/intermediate/notes.md")):
+            with self.subTest(tool=tool_name, path=relative):
+                completed = self._run_tool(tool_name, self.workspace / relative)
+                self.assertEqual(completed.returncode, 0)
+                self.assertEqual(completed.stdout, "")
+                self.assertEqual(completed.stderr, "")
+
+    @unittest.skipIf(os.geteuid() == 0, "root ignores directory permission bits")
+    def test_permission_error_in_workspace_discovery_denies(self) -> None:
+        self.restricted_directory = self.workspace / "blocked"
+        self.restricted_directory.mkdir()
+        self.restricted_directory.chmod(0)
+        # The readable parent passes controller discovery; workspace_for then probes blocked/problem.json.
+        self._assert_denied("Write", self.restricted_directory,
+                            reason_text="could not check this tool call")
+
+    @unittest.skipIf(os.geteuid() == 0, "root ignores directory permission bits")
+    def test_permission_error_in_output_view_discovery_denies(self) -> None:
+        self.restricted_directory = self.workspace / ".exactory"
+        self.restricted_directory.chmod(0)
+        # NotebookEdit has no controller operand; the marker is first probed by _has_output_views.
+        self._assert_denied("NotebookEdit", self.workspace / "final/notes.ipynb", cwd=self.scratch,
+                            reason_text="could not check this tool call")
+
+    @unittest.skipIf(os.geteuid() == 0, "root ignores directory permission bits")
+    def test_permission_error_in_a_shell_word_denies(self) -> None:
+        self.restricted_directory = self.workspace / "blocked"
+        self.restricted_directory.mkdir()
+        self.restricted_directory.chmod(0)
+        command = "cat > out.md <<'EOF'\n" + str(self.restricted_directory / "notes.md") + "\nEOF\n"
+        completed = _run_hook(_FILE_GUARD_SCRIPT_PATH, {
+            "tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(self.workspace),
+        })
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stderr, "")
+        self.assertNotEqual(completed.stdout, "")
+        decision = json.loads(completed.stdout)["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")
+        self.assertIn("could not check this tool call", decision["permissionDecisionReason"])
+
+    @unittest.skipIf(os.geteuid() == 0, "root ignores directory permission bits")
+    def test_permission_error_in_controller_discovery_still_denies(self) -> None:
+        self.restricted_directory = self.workspace / "blocked"
+        self.restricted_directory.mkdir()
+        self.restricted_directory.chmod(0)
+        # A Write beneath blocked is rejected before the owned-file and output-folder checks.
+        self._assert_denied("Write", self.restricted_directory / "final/notes.md",
+                            reason_text="Recovery required before this managed operation")
 
     def test_a_controller_marker_or_a_store_at_the_controller_root_guards_the_parent(self) -> None:
         record = self.scratch / "record"

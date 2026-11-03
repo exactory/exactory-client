@@ -24,6 +24,10 @@ redirection whose word does not begin with `>` (such as `2>`, `&>` or
 `x>file`), `>|file` without a space, and `dd of=`. A command that does not
 write is untouched. An allowed call is silent; an unexpected check failure
 produces an explicit denial.
+After the controller check, a word or path whose check raises `OSError` with
+`errno.ENAMETOOLONG` is too long to name an owned file or a generated output
+target; the shell-word and tool-target exception handlers re-raise every other
+`OSError` so the explicit check-failure denial still applies.
 
 After the controller check and before the check of the eight files, the hook
 denies a Write, an Edit or a NotebookEdit (its path is `notebook_path`) into
@@ -41,6 +45,7 @@ is not. Shell commands that write into them are not inspected.
 
 from __future__ import annotations
 
+import errno
 import json
 import re
 import shlex
@@ -151,7 +156,12 @@ def _find_shell_write_target(command: str, cwd: Path) -> tuple[str, str] | None:
         candidate = token.lstrip(">")
         if not candidate or candidate in _WRITING_TOKENS or "/" not in candidate:
             continue
-        owner = _find_owner(_resolve(candidate, cwd))
+        try:
+            owner = _find_owner(_resolve(candidate, cwd))
+        except OSError as error:
+            if error.errno != errno.ENAMETOOLONG:
+                raise
+            continue
         if owner is not None:
             return owner
     return None
@@ -172,15 +182,25 @@ def main() -> None:
         tool_input = item.get("tool_input") or {}
         cwd = Path(item.get("cwd") or ".").resolve()
         if tool_name in _PATH_FIELD_BY_TOOL:
-            target = _resolve(tool_input.get(_PATH_FIELD_BY_TOOL[tool_name], ""), cwd)
-            folder = _find_output_folder(target)
+            try:
+                target = _resolve(tool_input.get(_PATH_FIELD_BY_TOOL[tool_name], ""), cwd)
+                folder = _find_output_folder(target)
+            except OSError as error:
+                if error.errno != errno.ENAMETOOLONG:
+                    raise
+                continue
             if folder is not None:
                 _deny(
                     f"[exactory] {target.relative_to(folder.parent).as_posix()} is in {folder.name}/, which the harness"
                     f" generates from its records. Write your own files to work/ instead."
                 )
         if tool_name in ("Write", "Edit"):
-            owner = _find_owner(target)
+            try:
+                owner = _find_owner(target)
+            except OSError as error:
+                if error.errno != errno.ENAMETOOLONG:
+                    raise
+                continue
         elif tool_name == "Bash":
             owner = _find_shell_write_target(tool_input.get("command", ""), cwd)
         else:
