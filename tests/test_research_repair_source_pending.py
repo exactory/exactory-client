@@ -7,6 +7,25 @@ from research_harness import research_decisions, review_protocol
 
 
 class RepairSourcePendingTests(StrategyCase):
+    def test_existing_final_requires_post_qualification_continuation(self):
+        from availability_fixtures import registry_absence
+        from research_harness.reading import record_availability
+        availability = registry_absence(self)
+        self.assign()
+        request = {'id': 'abstract', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}
+        self.request([request])
+        self.assign('pending', prior_assignment_id='a')
+        output = self.review_response('bar')
+        self.invoke(output, 'pending')
+        self.mutate(record_availability, availability)
+        self.error('review_sources_pending', lambda: self.record_final(output, 'pending'))
+        self.assign('qualified', prior_assignment_id='pending')
+        self.assertEqual(self.packet('qualified')['source_deliveries'][0]['status'], 'unavailable_qualified')
+        self.assertEqual(self.packet('qualified')['pending_source_requests'], [])
+        self.invoke(output, 'qualified')
+        self.record_final(output, 'qualified')
+        self.assertIn('final-repair', self.store.snapshot()['records']['value_review'])
+
     metadata = source_fixtures.BarSourceTests.metadata
     assign = source_fixtures.BarSourceTests.assign
     packet = source_fixtures.BarSourceTests.packet

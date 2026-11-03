@@ -27,6 +27,100 @@ class SourceReplyBatchTests(StrategyCase):
     invoke = sources.BarSourceTests.invoke
     request = sources.BarSourceTests.request
 
+    def test_qualified_reply_is_atomic_under_capacity(self):
+        from availability_fixtures import registry_absence
+        from research_harness.reading import record_availability
+        availability = registry_absence(self, padding=500)
+        other = self.metadata(1, abstract='A complete requested abstract. ' * 700)
+        self.mutate(record_availability, availability)
+        self.assign()
+        requests = [{'id': 'other', 'kind': 'source', 'version_id': other, 'depth': 'abstract'},
+                    {'id': 'absence', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}]
+        self.request(requests)
+        self.fit_locally(75000)
+        self.assign('batch', prior_assignment_id='a')
+        packet = self.packet('batch')
+        deferred = packet['source_deliveries'][1]
+        self.assertEqual(deferred['status'], 'deferred_capacity')
+        self.assertEqual(deferred['capacity_deferral']['available_status'], 'unavailable_qualified')
+        self.assertEqual(packet['pending_source_requests'], requests[1:])
+        self.assertNotIn('availability', deferred)
+        self.assertNotIn('evidence', deferred)
+        self.assertNotIn('source_provenance', deferred)
+        references = {self.store.snapshot()['records']['source'][s]['response']['sha256']
+                      for s in availability['source_ids']}
+        for entry in packet['evidence']:
+            if entry['artifact']['sha256'] in references:
+                self.assertEqual(entry['content'], '')
+        self.assertNotIn('Registry response evidence.', json.dumps(self.read_request('batch')))
+        self.invoke(self.review_response('bar', status='unresolved'), 'batch')
+        with patch.object(transport, 'local_input_limit', return_value=200000):
+            self.assign('next', prior_assignment_id='batch')
+        next_packet = self.packet('next')
+        self.assertEqual(next_packet['source_deliveries'][0]['status'], 'unavailable_qualified')
+        self.assertEqual(next_packet['pending_source_requests'], [])
+        self.assertEqual({e['sha256'] for e in next_packet['source_deliveries'][0]['evidence']}, references)
+        self.assertTrue(references <= {e['artifact']['sha256'] for e in next_packet['evidence'] if e['content']})
+
+    def test_qualification_is_progress_without_capture_delta(self):
+        from availability_fixtures import registry_absence
+        from research_harness.reading import record_availability
+        from research_harness.review_source_batches import MARKER, require_progress
+        availability = registry_absence(self)
+        self.assign()
+        request = {'id': 'absence', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}
+        self.request([request])
+        self.assign('unavailable', prior_assignment_id='a')
+        before = self.packet('unavailable')
+        self.request([], 'unavailable')
+        self.mutate(record_availability, availability)
+        self.assign('qualified', prior_assignment_id='unavailable')
+        after = self.packet('qualified')
+        delivery = after['source_deliveries'][0]
+        self.assertEqual(delivery['status'], 'unavailable_qualified')
+        self.assertEqual(before['source_deliveries'][0]['native_source_delta'], delivery['native_source_delta'])
+        self.assertNotEqual(before[MARKER]['source_states'], after[MARKER]['source_states'])
+        require_progress(before, after)
+        # Reissuing the same evidenced answer while the identical request is outstanding is not progress.
+        repeated = dict(after, pending_source_requests=[request])
+        with self.assertRaises(ResearchError) as caught:
+            require_progress(repeated, repeated)
+        self.assertEqual(caught.exception.code, 'review_source_no_progress')
+
+    def test_qualified_reply_requires_native_evidence_and_provenance(self):
+        from availability_fixtures import registry_absence
+        from research_harness.reading import record_availability
+        availability = registry_absence(self)
+        self.mutate(record_availability, availability)
+        self.assign()
+        request = {'id': 'absence', 'kind': 'source', 'version_id': availability['version_id'], 'depth': 'abstract'}
+        self.request([request])
+        original = transport.request_body
+
+        def omit(component):
+            def build(*args, **kwargs):
+                actual = original(*args, **kwargs)
+                content = actual['input'][-1]['content']
+                packet = json.loads(content[len(transport.PACKET_LABEL):])
+                if not any(row['status'] == 'unavailable_qualified' for row in packet.get('source_deliveries', [])):
+                    return actual
+                if component == 'provenance':
+                    packet['source_deliveries'][0].pop('source_provenance', None)
+                else:
+                    for entry in packet['evidence']:
+                        entry['content'] = ''
+                actual['input'][-1]['content'] = transport.PACKET_LABEL + json.dumps(packet, sort_keys=True)
+                return actual
+            return build
+
+        for component in ('evidence', 'provenance'):
+            with self.subTest(component=component):
+                with patch.object(transport, 'request_body', side_effect=omit(component)):
+                    with self.assertRaises(ResearchError) as caught:
+                        self.assign('missing-' + component, prior_assignment_id='a')
+                self.assertEqual(caught.exception.code, 'review_input_too_large')
+                self.assertEqual(caught.exception.details['source_request'], request)
+
     def setUp(self):
         super().setUp()
         self.sequence = 0
