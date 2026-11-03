@@ -77,7 +77,7 @@ def measure_request(route, request):
             'rendered_characters': len(rendered), 'prompt_characters': len(request.get('instructions', ''))}
 
 
-def project_replies(records, artifacts, packet, included, allowances):
+def project_replies(records, artifacts, packet, included, allowances, *, passage_requests=None):
     """Keep whole reply units, shared bodies and exact deferred identities."""
     from .review_protocol import collect_references
     from .review_source_capacity import BODY_DELIVERY
@@ -89,12 +89,24 @@ def project_replies(records, artifacts, packet, included, allowances):
     retained = {digest(reference) for reference in collect_references(outside)}
     withheld = set()
     pending = {row['id']: row for row in result.get('pending_source_requests', [])}
-    passage_requests = [row['request'] for index, row in enumerate(deliveries)
-                        if index in included and row['request']['kind'] == 'passage']
+    originals = {request['id']: request for request in passage_requests or []}
+    requests_to_answer, preserved = [], {}
+    for index, row in enumerate(deliveries):
+        request = row['request']
+        if index in included and request['kind'] == 'passage':
+            if request['id'] in originals:
+                requests_to_answer.append(originals[request['id']])
+            elif 'anchor_sha256' in request:
+                # A diagnostic head cannot be used as a fresh verbatim anchor.
+                preserved[request['id']] = row
+            else:
+                requests_to_answer.append(request)
     if allowances is not None and review_excerpts.KEY in result:
-        answers, after = review_excerpts.answer_passages(records, artifacts, passage_requests, allowances)
+        answers, after = review_excerpts.answer_passages(
+            records, artifacts, requests_to_answer, allowances,
+            protocol=result[review_excerpts.KEY].get('protocol', review_excerpts.PROTOCOL))
         result[review_excerpts.KEY]['allowances'] = after
-        answered = {row['request']['id']: row for row in answers}
+        answered = dict(preserved, **{row['request']['id']: row for row in answers})
     else:
         answered = {}
     for index, row in enumerate(deliveries):
@@ -105,6 +117,7 @@ def project_replies(records, artifacts, packet, included, allowances):
                 deliveries[index] = answered[request['id']]
             continue
         withheld.update(digest(reference) for reference in collect_references(row))
+        request = originals.get(request['id'], request)
         deliveries[index] = {'request': request, 'status': 'deferred_capacity', 'reading_credit': False,
                              'capacity_deferral': {'available_status': row['status'], 'reason': 'reviewer_input_limit'}}
         pending[request['id']] = request
@@ -174,7 +187,7 @@ def plan_packet(records, artifacts, route, packet, prompt, history):
     if ('staged_review' in packet or not (packet.get('continuation') or COMPLETE_MARKER in packet)
             or not packet.get('source_deliveries')):
         return packet
-    previous, allowances = {}, None
+    previous, allowances, passage_requests = {}, None, None
     if packet.get('continuation'):
         from .review_protocol import assignment_state, source_delivery_packet
         parent = records['review_assignment'][packet['continuation']['assignment_id']]
@@ -182,8 +195,12 @@ def plan_packet(records, artifacts, route, packet, prompt, history):
         previous = source_delivery_packet(records, artifacts, parent)
         if review_excerpts.KEY in packet:
             # The session allowances before this turn's passage replies; only included replies charge them.
+            from .review_parts import project_source_output
             output = assignment_state(records, artifacts, parent['id'])['output']
+            output = project_source_output(output, parent['role'])
             allowances = review_excerpts.carry_session(records, artifacts, previous, output)['allowances']
+            from .bar_sources import pending
+            passage_requests = [request for request in pending(previous, output) if request['kind'] == 'passage']
     limit = transport.local_input_limit(route)
     if route['adapter'] == 'codex_cli_visual_v1':
         from .review_codex_visual_transport import MAX_USER_TEXT
@@ -191,7 +208,7 @@ def plan_packet(records, artifacts, route, packet, prompt, history):
     count = len(packet['source_deliveries'])
 
     def build_candidate(included):
-        candidate = project_replies(records, artifacts, packet, included, allowances)
+        candidate = project_replies(records, artifacts, packet, included, allowances, passage_requests=passage_requests)
         rows = candidate['source_deliveries']
         candidate[MARKER] = {'protocol': PROTOCOL, 'route_digest': digest(route),
             'input_limit_characters': limit, 'input_limit_metric': 'rendered_characters',

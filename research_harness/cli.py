@@ -24,7 +24,8 @@ from .operations import fields, text
 from .output_views import (PROBLEM_EXPORTS_FOLDER, find_view_advisories, find_workspace_root, render_all,
                            render_views_after_command)
 from .provenance import runtime_provenance
-from .report_views import current_obligations, next_summary, obligations_page, order_obligations, status_summary
+from .report_views import (annotate_parts_obligations, current_obligations, next_summary, obligations_page,
+                           order_obligations, status_summary)
 from .storage import Store, check_command_bounds
 from .source_deferrals import defer_source, resume_source, assess_deferrals
 from .publication_scope import record_publication_scope, select_publication_scope, record_scoped_readiness_review
@@ -451,7 +452,8 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
 
 
 def _review_status(records, artifacts):
-    from . import review_refusal
+    from . import review_parts, review_refusal
+    from .report_views import describe_parts_turn
     from .problem_delivery import collect_review_outcomes, collect_staged_slots, describe_review_tasks
     completed = sorted((attempt for attempt in records.get("review_attempt", {}).values()
                         if attempt["status"] == "completed"), key=lambda attempt: attempt["recorded_revision"])
@@ -461,6 +463,23 @@ def _review_status(records, artifacts):
     result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
+    parts_assignments = sorted((assignment for assignment in records.get('review_assignment', {}).values()
+                                if review_parts.KEY in assignment),
+                               key=lambda row: row['recorded_revision'])
+    latest_turns = {assignment[review_parts.KEY]['series_assignment_id']: assignment
+                    for assignment in parts_assignments}
+    series_results = {identifier: review_parts.verify_series(records, artifacts, assignment['id'])
+                      for identifier, assignment in latest_turns.items()}
+    for assignment in parts_assignments:
+        identifier = assignment['id']
+        try:
+            state = review_protocol.assignment_state(records, artifacts, identifier)
+        except (ResearchError, json.JSONDecodeError):
+            state = dict(ready=False)
+        series = series_results[assignment[review_parts.KEY]['series_assignment_id']]
+        result['assignments'][identifier]['review_parts'] = describe_parts_turn(
+            assignment, state, series,
+            ended_without_output=review_protocol.has_ended_without_output(records, identifier))
     # Legacy status remains a cheap refusal listing. Staged science is selected
     # by assignment_state, never by treating a raw answer page as a final.
     if not records.get("review_epoch"):
@@ -492,7 +511,10 @@ def status_report(store, *, counters=False):
         advisories = find_view_advisories(store, snapshot["revision"])
         if "problem" in records.get("workspace", {}):
             report = gate_state(records, evaluation, "post")
-            if records.get("review_epoch"):
+            review = _review_status(records, evaluation)
+            report = annotate_parts_obligations(report, review)
+            if (records.get("review_epoch") or any('review_parts' in assignment
+                    for assignment in records.get('review_assignment', {}).values())):
                 report = dict(report, obligations=order_obligations(report["obligations"]))
             slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
             # A stale slate decides nothing; its stale obligation leads the report instead.
@@ -509,7 +531,7 @@ def status_report(store, *, counters=False):
                         # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
                         literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                         candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
-                        next=upcoming, review=_review_status(records, evaluation), advisories=advisories)
+                        next=upcoming, review=review, advisories=advisories)
         config = records.get("configuration", {}).get("research")
         profile = config["profile"] if config else "research"
         study = records.get("workspace", {}).get("study")
@@ -537,6 +559,8 @@ def status_report(store, *, counters=False):
             milestone = {"initiate": "direction", "cohort": "direction", "literature": "direction", "ideate": "execution"}.get((study or {}).get("stage"))
             if milestone is not None:
                 report = gate_state(records, evaluation, milestone, profile=profile)
+        review = _review_status(records, evaluation)
+        report = annotate_parts_obligations(report, review)
         draft_pending = find_draft_obligations(records, store.root)
         if draft_pending:
             obligations = report["obligations"] + draft_pending
@@ -582,7 +606,7 @@ def status_report(store, *, counters=False):
                     pending_executions=[key for key in records.get("execution_admission", {}) if key not in records.get("execution_outcome", {})],
                     remote_intents=list(records.get("remote_intent", {}).values()),
                     remote_observations=list(records.get("remote_observation", {}).values()),
-                    historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=_review_status(records, evaluation),
+                    historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=review,
                     advisories=advisories)
 
 

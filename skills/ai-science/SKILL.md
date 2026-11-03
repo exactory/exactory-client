@@ -116,6 +116,23 @@ Inspect the observed output artifact from each `bar`, `slate` or `result`
 `review-run` for `source_requests` before recording a final `value-review` or
 support finding; the harness shows the output of each run in
 `intermediate/reviews/<role>/<root assignment id>/` beside its `series.json`.
+When a `result` review with the strategic dossier (the readiness review) does
+not fit one input of a text route with a local input limit, the harness
+delivers it as a series of fresh-input turns (`exactory-review-parts-v2`).
+Before `review-run`, read `review_parts_plan` in the assignment result; read
+the allowances, estimates, progress and next action in `status` under
+`review.assignments.<id>.review_parts`. Run each turn with `review-run`. Then
+read the next action's `workflow` and `scope` in `next` and build that
+command's complete payload: for `review-assignment`, a new id, the same role,
+dossier, route, reviewer and author, `prior_assignment_id` inside `context`
+naming the turn that just ran, the current expected revision and a new
+request id. If every attempt of a turn ended without completed output and no
+invocation remains pending, replace the assignment with a new id: for a
+continuation, keep its original `prior_assignment_id`; for a first turn,
+repeat its original context without `prior_assignment_id`. The readiness gate
+credits only the final of a complete series (`review_parts_pending`
+otherwise), and the final output of a complete series is shown in
+`final/reviews/<role>/<series assignment id>/`.
 Follow the [reviewer delivery contract](../../docs/research-decisions.md#reviewer-delivery-and-disagreement)
 for native continuations in the same reviewer slot. Acquire unavailable exact
 sources through the ordinary source pipeline; retain pending or unaffordable

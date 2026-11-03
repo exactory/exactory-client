@@ -344,8 +344,9 @@ What a review may cite, and what counts toward its coverage, is the delivery
 of the exact authenticated attempt that produced it: the packets that its
 request carried, with their exact text bodies and native attachments, and the
 history that the recorded protocol permits, which is the earlier deliveries of
-a result slot delivered in parts under the 0.69.19 rule and the accepted task
-graph of a staged review. A saved packet of the lineage that the request did
+a result slot delivered in parts under the 0.69.19 rule, every turn of a
+series in fresh parts ([Reviews in fresh parts](#reviews-in-fresh-parts)) and
+the accepted task graph of a staged review. A saved packet of the lineage that the request did
 not carry, a descriptor, an omission marker, an earlier turn that the route
 reduced to its packet digest, and an artifact that is present in the store but
 absent from the request supply no body. On the visual route, a page image
@@ -444,6 +445,12 @@ not replace reading. The compressed form is verbatim excerpts with their
 locations, not summaries. A turn that delivers a full text tells the reviewer
 that the text will not come back. The harness checks every excerpt against the
 stored source text, and only checked excerpts reach later turns as source text.
+Since 0.72.0 a new session retains what it did not verify in a bounded form
+(`exactory-review-excerpts-v3`): the SHA-256, the length and the first 200
+characters of an unmatched excerpt or of an undelivered passage anchor, a
+purpose longer than 500 characters cut to its first 500 with the digest and
+the length of the whole, and excerpts with the same source binding, text
+digest and status kept once; a recorded session keeps its form.
 The final assessment rests on the reviewer's notes and checked excerpts, and a
 bounded passage request reads a missing part again. The
 [CLI reference](research-cli.md#scientific-contribution-decisions) gives the
@@ -613,8 +620,8 @@ a new mutation and the original payload, revision and identity for its replay.
 | `research-lead` | Versioned discrepancy provenance and research disposition. |
 | `review-route` | Actual route and versioned configuration. |
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
-| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request. A problem result packet that does not fit one input is delivered in parts, an adjudicator packet keeps its ordinary packet, and a staged review opens only through an explicit `staged_upgrade` of a recorded slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
-| `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a staged task: the owned worker's call, its committed capture and its acceptance. |
+| `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request or the series of a review in fresh parts. A packet that does not fit one input is delivered as a series of fresh-input turns when an adapter applies to its role (a problem result or adjudicator packet, a context repair, a verification or readiness packet, a native packet without an openness minimum; [Reviews in fresh parts](#reviews-in-fresh-parts)) and its route is `claude_cli_v1`, `codex_cli_v1` or `codex_cli_framed_v1` with a local input limit, a recorded 0.69.x result series continues in parts, and a staged review opens only through an explicit `staged_upgrade` of a recorded slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
+| `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a turn of a series in fresh parts: the turn's own call, checked under the contract of its kind. For a staged task: the owned worker's call, its committed capture and its acceptance. |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |
 | `review-adjudication` | Evidence-bound disposition of a specific objection or correction. |
@@ -1068,20 +1075,103 @@ is measured again, and the session stays in parts only when the complete
 request does not fit. A session that
 is not a series delivers the whole evidence in one request, as before.
 
-This delivery serves a first result request that does not fit one input, or
-whose fitted request would withhold an evidence body, and a session that is
-already a series. 0.70.0 staged such a request when it was assigned, and
-0.71.0 returned it to this delivery: a staged review has no passing quality
-measurement, so its result cannot post, while a series completes (owner
-decision 2, task D1-1, of
+This delivery served a first result request that did not fit one input, or
+whose fitted request would withhold an evidence body, and it still serves a
+session that is already a series. 0.70.0 staged such a request when it was
+assigned, and 0.71.0 returned it to this delivery: a staged review has no
+passing quality measurement, so its result cannot post, while a series
+completes (owner decision 2, task D1-1, of
 `misc/harness-improvement/20261101173008-release-0-71-0-remaining-records` in
-the exactory repository). A session that an explicit upgrade moves is a staged
-review, described in the next section, and a focused adjudication or a
-context repair that does not fit keeps its ordinary packet. A context repair of
-a part series keeps its part turns as intermediate outputs in the scientific
-history. Repeated records inside a series, for example the search records that
-both `openness_searches` and `assessment_evidence` carry, are still delivered
-under each index.
+the exactory repository). Since 0.72.0 a new oversized request of a result
+review, a focused adjudication or a context repair is delivered as a series
+of fresh-input turns under `exactory-review-parts-v2` (the next section), and
+only a recorded series continues under this protocol. A session that an
+explicit upgrade moves is a staged review, described after that. A context
+repair of a part series keeps its part turns as intermediate outputs in the
+scientific history. Repeated records inside a series, for example the search
+records that both `openness_searches` and `assessment_evidence` carry, are
+still delivered under each index.
+
+## Reviews in fresh parts
+
+The part delivery above kept the reviewer's session: every turn replayed the
+conversation of the earlier turns, and the final turn carried every
+objection's evidence at once. Measured on 2026-11-03 on copies of the record
+stores, on the code of 0.71.3: in series 4 of the random cokernel record the
+replayed history of turns 1 to 8 was 385,563 to 545,411 characters, and in
+series 4 of the quantum codes record 402,278 to 514,046; the current packet of
+such a turn was 700,000 to 1,070,000 characters; the final turn of slot A of
+the quantum codes record carried 904,820 characters, of which
+`material_objections` 502,196 in 14 objections, and that of the random
+cokernel record 773,411, of which `material_objections` 399,885. A focused
+adjudication was never delivered in parts, so six adjudications, four in the
+Sidorenko record and two in the quantum codes record, were refused with
+`review_input_too_large` and left their objections without a disposition on
+the ordinary `review-run` path (an explicit `staged_upgrade` remained
+available). The measured high-effort turns approached or exceeded the output
+cap: part turns of the unknotting
+record returned 102,927 to 123,721 output tokens against a cap of 128,000, and
+the bar repairs of the KMP and unknotting records ended over the cap at
+187,401 to 217,901 tokens (`review_incomplete`). The replayed history and the objection evidence took
+most of a turn's input, not the problem evidence frame, and a turn has to be
+sized against the output cap as well as the input limit.
+
+Since 0.72.0 an oversized review enters `exactory-review-parts-v2` when its
+role and packet have an applicable adapter and its route is `claude_cli_v1`,
+`codex_cli_v1` or `codex_cli_framed_v1` with a local input limit. The
+[CLI reference](research-cli.md#reviews-in-fresh-parts) states the entry
+conditions and the exceptions. The decisions:
+
+- Every turn is a fresh input. Its request carries no replayed conversation.
+  What a later turn needs from the earlier turns travels inside its packet as
+  records that the harness builds from the authenticated outputs of those
+  turns, never from a caller's payload.
+- The reviewer reads the originals in chunks and keeps the critical statements
+  verbatim. A unit is one splittable packet entry with its attached artifact
+  contents, and a card is the structured record that the reviewer returns for
+  it. A read turn returns one card per unit; the harness verifies every
+  statement of a card against the text that the turn delivered and carries
+  only the verified ones, each with its location. The combine turn works over
+  the cards and names the joint questions and the exact originals to read;
+  the check turn reads those originals; the final turn carries every card,
+  combination and finding and can request any original again. This is the
+  direction the owner approved on 2026-10-31.
+- Sizes come from the route and from the series' own observed outputs, never
+  from a fixed claim count, card count or character-to-token ratio. The read
+  allowance follows the output tokens of earlier read turns. The planner
+  budgets the carried state against the measured final frame and checks each
+  proposed turn before it records the assignment. A series can be refused at
+  entry or during continuation, with a typed code, when the remaining material
+  or state no longer fits.
+- One engine serves every role through adapters: the problem result review,
+  the focused adjudication, the context repairs, the study verification and
+  readiness reviews and the native mathematics review. Each adapter declares
+  its splittable collections, its targets, its series key and the citations
+  of a unit; the role's own validator judges the final.
+- The inventory is append-only, so an objection whose evidence the other
+  slot's final adds while a series runs becomes a late unit instead of a
+  restart; a changed or removed unit ends the series.
+- A slot reviewed in fresh parts can post. Posting through a 0.69.x series was
+  never gated by a quality measurement, and parts v2 adds checks to what that
+  series did. The quality of a parts v2 review against a single-input review
+  on the same evidence is not measured: the tooling (synthetic records with
+  planted defects, a runner that forces parts on fitting evidence, a scorer)
+  is in the release record, its dry run of 36 paired cases planned 180 parts
+  turns without a model call, and the paid run waits for the owner's budget
+  (276 calls under the assumption of five parts turns per case, one turn for
+  each ordinary review and repeat, and one route probe per case; the actual
+  count depends on continuations and failures). Equal review quality stays an
+  expectation. The paid run measures regressions on these synthetic fixtures;
+  its automatic scores need blinded human assessment of the reasoning and do
+  not establish general quality equivalence.
+
+Recorded 0.69.x series continue under their protocol until their final;
+frozen 0.70.0 staged epochs continue under their frozen contracts, and an
+explicit `staged_upgrade` still enters staged v2. The eleven modules that a
+route pins by their bytes are unchanged. The design, its independent review
+and the measurements are recorded in
+`misc/harness-improvement/20261103013817-release-0-72-0-oversized-reviews-in-fresh-parts`
+of the exactory repository.
 
 ## Staged problem reviews
 

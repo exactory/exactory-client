@@ -141,7 +141,8 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'review_input_too_large')
         self.assertNotIn('missing-body', case.read_records().get('review_invocation', {}))
 
-    def test_refused_adjudicator_anchor_can_be_explicitly_upgraded(self):
+    def test_pre_072_refused_adjudicator_anchor_can_be_explicitly_upgraded(self):
+        from research_harness import review_parts
         from test_research_problem_adjudication_contract import ProblemAdjudicationContractTests
         case = ProblemAdjudicationContractTests()
         case.setUp()
@@ -153,7 +154,11 @@ class DispatchTests(unittest.TestCase):
         payload = dict(id='anchor', role='adjudicator', reviewer_id='focused-third', author_id='problem-author',
             dossier_id=None, route_id='local-route', context=dict(review_ids=[
                 'review-result-first', 'review-result-second'], objection_id='unsupported-implication'))
-        anchor = case.mutate(protocol.record_assignment, payload)['result']
+        with patch.object(review_parts, 'prepare_packet', side_effect=lambda records, artifacts,
+                          value, route, packet, prompt, history, **kwargs: packet):
+            anchor = case.mutate(protocol.record_assignment, payload)['result']
+        self.assertNotIn('review_parts', anchor)
+        self.assertNotIn('staged_review', anchor)
         with patch.object(transport, 'send_request', return_value=case.build_provider_response({})):
             with self.assertRaises(ResearchError) as caught:
                 case.mutate(protocol.invoke_assignment, {'id': 'blocked', 'assignment_id': anchor['id']}, credential='test')

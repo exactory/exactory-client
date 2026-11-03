@@ -1,10 +1,11 @@
 """Derive separate delivery views from exact authenticated review invocations."""
 
 import copy
+import json
 
 from .errors import ResearchError
 from .evaluation import Evaluation
-from . import review_protocol as protocol, review_problem_parts as parts
+from . import review_protocol as protocol, review_problem_parts as parts, review_parts as fresh
 from .review_input_projection import packets_from_request, packets_from_visual_request
 
 
@@ -22,6 +23,16 @@ def project_delivery_view(records, artifacts, packets):
     evaluation = Evaluation.of(records, artifacts)
     packets = copy.deepcopy(packets)
     references, mappings = {}, []
+    # Reconstruct only fully covered exact originals from authenticated segment packets.
+    segments = {}
+    for packet in packets:
+        for entry in packet.get('evidence', []):
+            if 'segment' in entry and 'original_artifact' in entry:
+                original = entry['original_artifact']
+                segments.setdefault(original['sha256'], original)
+    for original in segments.values():
+        if fresh.has_series_attachment(evaluation, packets, original):
+            register_supplied_artifact(references, original)
     for packet in packets:
         for entry in packet.get('evidence', []):
             reference = entry['artifact']
@@ -41,22 +52,49 @@ def project_delivery_view(records, artifacts, packets):
     return dict(packets=packets, artifacts=references, source_mappings=mappings, carried_records=carried)
 
 
-def read_attempt_delivery(records, artifacts, assignment, attempt):
-    """Authenticate one named completed attempt without selecting its current state.
+def read_attempt_delivery(records, artifacts, assignment, attempt=None):
+    """Authenticate an explicit input; ordinary defaults retain the selected attempt.
 
-    Each view contains packets, artifacts, source_mappings and carried_records.
+    Recorded v1 series keep their first-authenticated-input contract. Citation
+    delivery does not require current scientific readiness. Each view contains
+    packets, artifacts, source_mappings and carried_records.
     current_input is exactly the named request. citation_history additionally
     admits only the legacy part contract's historical deliveries. Coverage uses
     the current part series alone. Authentication or decoding failure raises an
     existing review error and supplies no saved-packet fallback.
     """
     evaluation = Evaluation.of(records, artifacts)
+    if attempt is None:
+        if records.get('review_assignment', {}).get(assignment.get('id')) != assignment:
+            raise ResearchError('review_invocation_unverified', 'Select the exact recorded assignment')
+        evidence_parts = assignment.get('prompt', {}).get('parameters', {}).get('evidence_parts')
+        if isinstance(evidence_parts, str) and evidence_parts.startswith(parts.PROTOCOL + '/'):
+            # The recorded v1 contract reads its first authenticated input even
+            # when its output is refused or its current lineage is contaminated.
+            candidates = sorted((row for row in records.get('review_attempt', {}).values()
+                                 if row['assignment_id'] == assignment['id'] and row.get('status') == 'completed'),
+                                key=lambda row: row['recorded_revision'])
+            for candidate in candidates:
+                if protocol.authenticate_attempt(records, evaluation, assignment, candidate):
+                    return _read_authenticated_delivery(records, evaluation, assignment, candidate)
+            raise ResearchError('review_invocation_unverified', 'Read the authenticated historical series input')
+        state = protocol.assignment_state(records, evaluation, assignment['id'])
+        attempt = records.get('review_attempt', {}).get(state.get('attempt_id'))
+        if attempt is None:
+            raise ResearchError('review_invocation_unverified', 'Citation history requires its selected attempt')
     if (records.get('review_assignment', {}).get(assignment.get('id')) != assignment
             or records.get('review_attempt', {}).get(attempt.get('id')) != attempt
             or attempt.get('assignment_id') != assignment.get('id')
             or attempt.get('status') != 'completed'
             or not protocol.authenticate_attempt(records, evaluation, assignment, attempt)):
         raise ResearchError('review_invocation_unverified', 'Delivery requires the exact authenticated completed attempt')
+    return _read_authenticated_delivery(records, evaluation, assignment, attempt)
+
+
+def _read_authenticated_delivery(records, evaluation, assignment, attempt):
+    """Project a delivery after explicit authentication or ready-state selection."""
+    evidence_parts = assignment.get('prompt', {}).get('parameters', {}).get('evidence_parts')
+    legacy_series = isinstance(evidence_parts, str) and evidence_parts.startswith(parts.PROTOCOL + '/')
     try:
         raw = protocol.read_raw_observation(records, evaluation, attempt['id'])
         if raw['request_digest'] != attempt.get('request_digest'):
@@ -71,6 +109,8 @@ def read_attempt_delivery(records, artifacts, assignment, attempt):
             seen.add(identifier)
             ancestor = records.get('review_assignment', {}).get(identifier)
             if ancestor is None:
+                if legacy_series:
+                    continue
                 raise ResearchError('review_input_unreadable', 'The exact bound input ancestry is missing')
             ancestors.append(ancestor)
             from .review_supplied_evidence import find_scientific_predecessor
@@ -97,7 +137,7 @@ def read_attempt_delivery(records, artifacts, assignment, attempt):
             packets = (packets_from_visual_request(request, assignments=ancestors)
                        if route['adapter'] == 'codex_cli_visual_v1' else
                        packets_from_request(request, native_attachments=route['adapter'] == 'openai_responses_v1',
-                                            assignments=ancestors))
+                                            assignments=None if legacy_series else ancestors))
             if not packets or packets[-1]['digest'] != assignment['packet_digest']:
                 raise ResearchError('review_input_unreadable', 'The deciding request must carry its exact current packet')
         current = project_delivery_view(records, evaluation, packets)
@@ -108,23 +148,33 @@ def read_attempt_delivery(records, artifacts, assignment, attempt):
             earlier = parts.collect_series_packets(records, evaluation, prior) if prior else []
             coverage = parts.verified_coverage_packets(records, evaluation, assignment['id'], packets + earlier)
             citation += earlier + parts.collect_earlier_series_packets(records, evaluation, assignment)
+        if fresh.find_kind(packets[-1]) is not None:
+            prior = assignment.get('context', {}).get('prior_assignment_id')
+            earlier = fresh.collect_series_packets(records, evaluation, prior) if prior else []
+            series_id = packets[-1][fresh.KEY]['series_assignment_id']
+            earlier = [packet for packet in earlier if packet[fresh.KEY]['series_assignment_id'] == series_id]
+            coverage = earlier + packets
+            citation = earlier + packets
         identities = []
         for packet in packets:
-            owner = next(owner for owner in ancestors if owner['packet_digest'] == packet['digest'])
-            identities.append(dict(assignment_id=owner['id'],
+            owner = next((owner for owner in ancestors if owner['packet_digest'] == packet['digest']), None)
+            if owner is None and not legacy_series:
+                raise ResearchError('review_input_unreadable', 'Bind each actual packet to its input ancestry')
+            owner = owner or {}
+            identities.append(dict(assignment_id=owner.get('id'),
                 **{key: copy.deepcopy(packet.get(key, owner.get(key))) for key in
                    ('digest', 'protocol', 'role', 'reviewer_id', 'dossier_id', 'subject')}))
         return dict(assignment_id=assignment['id'], attempt_id=attempt['id'], request_digest=raw['request_digest'],
                     packet_identities=identities, current_input=current,
-                    citation_history=project_delivery_view(records, evaluation, citation),
-                    coverage_witnesses=project_delivery_view(records, evaluation, coverage))
+                    citation_history=fresh.read_series_delivery(records, evaluation, packets=citation),
+                    coverage_witnesses=fresh.read_series_delivery(records, evaluation, packets=coverage))
     except ResearchError:
         raise
-    except (ValueError, TypeError, KeyError, UnicodeError, OSError) as error:
+    except json.JSONDecodeError as error:
         raise ResearchError('review_input_unreadable', 'The exact authenticated input cannot be decoded') from error
 
 
-def read_selected_delivery(records, artifacts, assignment_id):
+def read_selected_delivery(records, artifacts, assignment_id, *, require_ready=True):
     """Select at a gate boundary, retaining a metadata correction's original attempt.
 
     A staged controller has no scientific invocation of its own. Its accepted
@@ -133,8 +183,10 @@ def read_selected_delivery(records, artifacts, assignment_id):
     """
     evaluation = Evaluation.of(records, artifacts)
     assignment = records.get('review_assignment', {}).get(assignment_id)
-    state = protocol.assignment_state(records, evaluation, assignment_id)
-    if assignment is None or not state['ready']:
+    controller = (assignment or {}).get('staged_review', {}).get('kind') == 'controller'
+    state = (protocol.assignment_state(records, evaluation, assignment_id)
+             if require_ready or not controller else {})
+    if assignment is None or require_ready and not state['ready']:
         raise ResearchError('review_invocation_unverified', 'Select a ready authenticated scientific delivery')
     if assignment.get('staged_review', {}).get('kind') == 'controller':
         from .direction_reviews import collect_selected_task_graph
@@ -155,4 +207,4 @@ def read_selected_delivery(records, artifacts, assignment_id):
     attempt = records.get('review_attempt', {}).get(state.get('attempt_id'))
     if attempt is None:
         raise ResearchError('review_invocation_unverified', 'The selected result must bind its scientific attempt')
-    return read_attempt_delivery(records, evaluation, assignment, attempt)
+    return _read_authenticated_delivery(records, evaluation, assignment, attempt)

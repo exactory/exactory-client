@@ -25,6 +25,7 @@ from research_harness.evidence import digest
 from research_harness.principles import initialize_research
 from research_harness.problem_claims import compute_statement_digest, initialize_problem
 from research_harness.storage import Store
+from test_review_parts_views import PartsViewCase
 
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
@@ -350,6 +351,96 @@ class StagedOutputViewTests(ViewCase):
         self.assertFalse((self.root / output_views.DIRTY_PATH).exists())
 
 
+class PartsOutputViewTests(PartsViewCase):
+    def test_outputs_place_intermediate_turns_and_requests_apart_from_the_final(self):
+        from review_parts_fixtures import make_output
+        self.prepare_parts()
+        assignment = self.assign()
+        turns = []
+        while self.packet(assignment)['review_parts']['kind'] == 'read':
+            turns.append(assignment)
+            self.invoke(assignment)
+            assignment = self.assign('read-' + str(len(turns) + 1), assignment['id'])
+        self.assertEqual(self.packet(assignment)['review_parts']['kind'], 'combine')
+        turns.append(assignment)
+        combination = dict(units=['u1'], question='Does the original support the card?',
+                           view='Read its opening.',
+                           read=[dict(unit='u1', item=True, start=0, end=100)])
+        self.invoke(assignment, make_output(self.packet(assignment), [combination]))
+        check = self.assign('check', assignment['id'])
+        turns.append(check)
+        self.assertEqual(self.packet(check)['review_parts']['kind'], 'check')
+        self.invoke(check)
+        request = self.assign('request', check['id'])
+        turns.append(request)
+        self.invoke(request, self.request_original(request))
+        final = self.assign('final', request['id'])
+        self.record_final(final)
+        result = cli.run(cli.build_parser().parse_args([
+            'export', '--kind', 'outputs', '--workspace', str(self.case.root)]))
+        self.assertEqual(result['errors'], 0)
+        paths = read_tree(self.case.root)
+        series_id = assignment['review_parts']['series_assignment_id']
+        documents = [json.loads(data) for path, data in paths.items()
+                     if path.endswith('/series.json')]
+        series = next(document for document in documents
+                      if any(turn['assignment_id'] == final['id'] for turn in document['turns']))
+        for member in turns + [final]:
+            with self.subTest(assignment=member['id']):
+                turn = next(row for row in series['turns'] if row['assignment_id'] == member['id'])
+                self.assertIn('review_parts', turn)
+                self.assertEqual(turn['review_parts']['series_assignment_id'], series_id)
+                self.assertEqual(turn['turn'], member['review_parts']['turn'])
+                run = next(row for row in turn['runs'] if row['selected'])
+                self.assertIn('output_path', run)
+                path = run['output_path']
+                self.assertTrue(path.startswith('final/' if member is final else 'intermediate/'))
+                self.assertEqual(json.loads(paths[path]),
+                                 json.loads(self.case.artifacts.read(run['output'])))
+                index = json.loads(paths[path.split('/')[0] + '/index.json'])
+                entry = next(row for row in index['files']
+                             if row['path'] == path.split('/', 1)[1])
+                self.assertEqual(entry['kind'], 'review_attempt')
+                self.assertEqual(entry['review_parts_kind'], member['review_parts']['kind'])
+                self.assertEqual((entry['series_assignment_id'], entry['turn']),
+                                 (series_id, member['review_parts']['turn']))
+        self.assertFalse(any(path.startswith('intermediate/') and
+                             path.endswith('.attempt-final.json') for path in paths))
+        before = paths
+        output_views.render_all(self.case.store)
+        self.assertEqual(read_tree(self.case.root), before)
+
+    def test_series_progress_does_not_embed_a_large_inventory(self):
+        self.prepare_parts(count=45)
+        assignment = self.assign()
+        output_views.render_all(self.case.store)
+        paths = read_tree(self.case.root)
+        series = next(json.loads(data) for path, data in paths.items()
+                      if path.endswith('/series.json') and
+                      any(row['assignment_id'] == assignment['id']
+                          for row in json.loads(data)['turns']))
+        turn = next(row for row in series['turns'] if row['assignment_id'] == assignment['id'])
+        self.assertIn('review_parts', turn)
+        self.assertEqual(turn['review_parts']['units_remaining'], 45)
+        self.assertNotIn('search-44', json.dumps(series))
+        self.assertLess(len(json.dumps(turn)), 10000)
+
+    def test_missing_parts_packet_does_not_hide_other_output_views(self):
+        self.prepare_parts()
+        assignment = self.assign()
+        (self.case.root / assignment['packet']['path']).unlink()
+        result = output_views.render_all(self.case.store)
+        self.assertEqual(result['errors'], 0)
+        paths = read_tree(self.case.root)
+        series = next(json.loads(data) for path, data in paths.items()
+                      if path.endswith('/series.json') and
+                      any(row['assignment_id'] == assignment['id']
+                          for row in json.loads(data)['turns']))
+        turn = next(row for row in series['turns'] if row['assignment_id'] == assignment['id'])
+        self.assertFalse(turn['review_parts']['complete'])
+        self.assertGreater(turn['review_parts']['issues']['count'], 0)
+
+
 class RegistryTests(unittest.TestCase):
     def test_every_written_kind_has_a_placement(self):
         kinds, forwarding = scan_written_kinds()
@@ -634,6 +725,39 @@ class IntermediateRecordTests(ViewCase):
 class SeriesTests(ViewCase):
     def read_series(self, role, root):
         return self.read_json("intermediate/reviews/" + role + "/" + root + "/series.json")
+
+    def test_parts_final_places_the_selected_correction_apart_from_its_refused_raw_output(self):
+        self.assign('parts-final', role='result')
+        raw = dict(reassessment=dict(findings=[dict(disposition='confirmed')]))
+        corrected = dict(reassessment=dict(findings=[dict(disposition='revised')]))
+        self.refuse(self.run_turn('parts-final', 'raw', raw))
+        invocation = dict(id='fix', assignment_id='parts-final', diagnostic=dict(attempt_id='raw'),
+                          recorded_revision=self.store.revision + 1)
+        result = dict(invocation, status='completed', correction_status='accepted',
+                      output=self.put_json(dict(findings=[dict(disposition='revised')])),
+                      corrected_output=self.put_json(corrected))
+        self.put(('review_output_correction_invocation', 'fix', invocation),
+                 ('review_output_correction', 'fix', result))
+        records = self.store.snapshot()['records']
+        assignment = dict(records['review_assignment']['parts-final'], review_parts=dict(
+            protocol='exactory-review-parts-v2', adapter='problem_result',
+            series_assignment_id='parts-first', kind='final', turn=5))
+        grouped = {kind: {'parts-final': list(records.get(kind, {}).values())}
+                   for kind in output_views._SERIES_KINDS[1:]}
+        files = {}
+        runs = output_views._describe_turn(
+            records, self.artifacts, files, 'intermediate/reviews/result/parts-first/05-parts-final',
+            assignment, grouped, {'raw': records['review_output_refusal']['raw']},
+            staged_state=dict(attempt_id='raw', output_correction_id='fix'),
+            parts_progress=dict(complete=True, series_assignment_id='parts-first'))
+        finals = {path: json.loads(view.content) for path, view in files.items()
+                  if path.startswith('final/')}
+        self.assertEqual(list(finals.values()), [corrected])
+        self.assertTrue(runs[0]['output_path'].startswith('intermediate/'))
+        correction = runs[0]['correction']
+        self.assertTrue(correction['selected'])
+        self.assertTrue(correction['output_path'].startswith('intermediate/'))
+        self.assertIn(correction['corrected_output_path'], finals)
 
     def test_turns_are_numbered_linked_and_named_by_run(self):
         self.assign("bar-a")

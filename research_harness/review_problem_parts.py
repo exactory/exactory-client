@@ -514,7 +514,7 @@ def preserves_ordinary_packet(artifacts, packet, request):
                if entry.get('encoding') in ('utf-8', 'base64'))
 
 
-def prepare_packet(records, artifacts, value, route, packet, prompt, history, *, staged_entry=None):
+def _prepare_legacy_packet(records, artifacts, value, route, packet, prompt, history):
     """Keep complete ordinary requests or deliver eligible result evidence through v1 parts."""
     from .review_protocol import canonical_prompt
     prior_id = value['context'].get('prior_assignment_id')
@@ -658,3 +658,18 @@ def covers_items(packets, expected, key):
                 delivered.setdefault(unit['index'], []).append(unit['item'])
     return all(any(item == candidate for candidate in delivered.get(index, []))
                for index, item in enumerate(expected[key]))
+
+
+def is_continuing_series(records, previous, packet, prior_id):
+    refreshed = any(row['assignment_id'] == prior_id for row in records.get('value_review', {}).values())
+    return (find_stage(previous) is not None and not refreshed
+            and previous.get('problem_evidence_digest') == packet.get('problem_evidence_digest'))
+
+
+def prepare_packet(records, artifacts, value, route, packet, prompt, history):
+    """Continue recorded v1 series only; prospective entry belongs to parts v2."""
+    prior_id = value.get('context', {}).get('prior_assignment_id')
+    previous = _read_packet(artifacts, records['review_assignment'][prior_id]) if prior_id else {}
+    if not is_continuing_series(records, previous, packet, prior_id):
+        return packet
+    return _prepare_legacy_packet(records, artifacts, value, route, packet, prompt, history)

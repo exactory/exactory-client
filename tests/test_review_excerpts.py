@@ -65,6 +65,16 @@ class ReviewExcerptTests(LiteratureCase):
         self.assertLess(start, SOURCE.rindex(REPEATED))
         self.assert_span(entry, start, start + len(REPEATED))
 
+    def test_a_new_session_bounds_purpose_without_changing_a_verified_span(self):
+        session = review_excerpts.carry_session(self.store.snapshot()['records'], self.artifacts, {}, {})
+        value = dict(self.excerpt(THEOREM), purpose='p' * 501)
+        session = review_excerpts.carry_session(self.store.snapshot()['records'], self.artifacts,
+                                                 {review_excerpts.KEY: session}, {'excerpts': [value]})
+        [entry] = session['excerpts']
+        self.assertEqual(len(entry['purpose']), 500)
+        self.assertEqual(entry['purpose_characters'], 501)
+        self.assert_span(entry, SOURCE.index(THEOREM), SOURCE.index(THEOREM) + len(THEOREM))
+
     def test_an_unmatched_excerpt_keeps_the_reviewers_text_with_its_reason(self):
         cases = ((self.excerpt('A complete sentence copied from elsewhere.', 'arxiv:2601.00999v1'), 'no_stored_text'),
                  (self.excerpt('Theorem 2.'), 'too_short'),

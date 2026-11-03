@@ -194,7 +194,7 @@ def _validate_staged_pages(records, assignment, epoch, task, output):
 
 def classify_observed_output(records, artifacts, attempt_id):
     """Return the first pure failure of an authenticated attempt's own saved output."""
-    from . import review_protocol as protocol
+    from . import review_parts, review_protocol as protocol
     from .review_protocol import authenticate_attempt, validate_adjudication_contract
     from .research_decisions import validate_review_contract
     attempt = records.get('review_attempt', {}).get(attempt_id)
@@ -220,11 +220,20 @@ def classify_observed_output(records, artifacts, attempt_id):
                 scientific = _project_staged_final(assignment['role'], output)
                 if scientific is not None:
                     _validate_staged_final(records, artifacts, assignment, packet, epoch, scientific)
+        elif (review_parts.find_kind(packet) is not None
+              and (review_parts.find_kind(packet) != 'final'
+                   or isinstance(output, dict) and output.get('kind') == 'requests')):
+            with contract_check('review.shape'):
+                review_parts.validate_turn_output(records, artifacts, assignment, packet, output, attempt=attempt)
         elif assignment['role'] in ('bar', 'slate', 'result'):
             validate_review_contract(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'adjudicator':
             packet = json.loads(artifacts.read(assignment['packet']))
             validate_adjudication_contract(records, artifacts, assignment, packet, output, attempt=attempt)
+        elif assignment['role'] == 'verification' and 'review_parts' in assignment:
+            from .review_parts_study import validate_verification_final
+            with contract_check('verification.parts'):
+                validate_verification_final(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'native_math':
             from .native_review import validate_output
             from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,

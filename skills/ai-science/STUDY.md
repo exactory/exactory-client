@@ -59,7 +59,9 @@ turn in `intermediate/reviews/<role>/<root assignment id>/`, where `series.json`
 lists every turn and every run with its status, error, usage, refusal,
 correction, the selected run and the record that adopted the turn, and
 `<NN>-<assignment id>.<run id>.json` holds the output of one completed run of
-turn NN; the route probes in `intermediate/reviews/routes/`; the exported review
+turn NN (the final output of a complete series in fresh parts is in
+`final/reviews/<role>/<series assignment id>/` instead); the route probes in
+`intermediate/reviews/routes/`; the exported review
 packets in `intermediate/reviews/packets/`; the probes of the lab in
 `intermediate/lab/probes/<probe id>/probe.json` and the admitted runs in
 `intermediate/lab/runs/<admission id>/` (`run.json`, `result.json`, `log.txt`);

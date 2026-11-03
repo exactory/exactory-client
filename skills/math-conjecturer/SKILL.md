@@ -87,7 +87,9 @@ item: each reviewer turn in `intermediate/reviews/<role>/<root assignment id>/`,
 where `series.json` lists every turn and every run with its status, error,
 usage, refusal, correction, the selected run and the record that adopted the
 turn, and `<NN>-<assignment id>.<run id>.json` holds the output of one completed
-run of turn NN (an openness chain is a `native_math` series); the route probes in
+run of turn NN (an openness chain is a `native_math` series; the final output of
+a complete series in fresh parts is in `final/reviews/<role>/<series assignment
+id>/` instead); the route probes in
 `intermediate/reviews/routes/`; the exported packets in
 `intermediate/reviews/packets/`; the candidates in
 `intermediate/problem/candidates/`; the probes and runs of the lab in
@@ -614,8 +616,9 @@ evidence, the computations and the formal checks; a saved packet that the reques
 carry credits nothing, and the same request bounds what the review may cite
 (`review_evidence_undelivered`). The search records in that evidence satisfy
 the check for the bound searches, so a text route may withhold the bodies of their captured
-responses at its input limit. For a review performed in stages (step 3), the check reads the
-accepted tasks of the epoch instead of one request. The
+responses at its input limit. For a review delivered in fresh parts (step 3), the check reads the read
+turns of the series, and for a review performed in stages the accepted tasks of the epoch,
+instead of one request. The
 [CLI reference](../../docs/research-cli.md#problem-creation) states the exact rule.
 
 1. Keep the two bars of the slate for the result reviews and the decision.
@@ -628,7 +631,10 @@ accepted tasks of the epoch instead of one request. The
    closes, a model is withdrawn, or the user forbids it), record `review-context` with kind
    `route_retired` on the slot's last observed assignment and the user's instruction as evidence,
    probe another route, and continue the slot with a `context_repair` assignment that names the
-   retirement; the replacement reviewer gives the final reassessment in the preserved slot.
+   retirement; the replacement reviewer gives the final reassessment in the preserved slot. When
+   the repair's request does not fit one input, or an earlier attempt with the same role,
+   dossier, slot and repair predecessor ended over the output cap, the repair runs as a series of
+   fresh-input turns. Follow `next` as in step 3.
 3. Assign each result review with `review-assignment`, role `result` and `dossier_id: null`;
    the harness uses the template `exactory-problem-review-v5/result`, delivers the current bars,
    the statement, the openness finding with its bound search records, the value evidence, the
@@ -636,12 +642,34 @@ accepted tasks of the epoch instead of one request. The
    the readings with their inline passages, the computations, the formal checks, and every
    applicable objection. Run the assignment with `review-run` and record the observed review
    with `value-review`. When the result packet does not fit one input of the route, or its fitted
-   request would withhold an evidence body, the harness delivers the evidence in parts
-   (`exactory-problem-evidence-parts-v1`): continue each part turn with a new assignment of the
-   same role, route and reviewer and `context: {prior_assignment_id}`, as in step 4, until a turn
-   returns the review; `next` lists `problem_evidence_part_pending` while a part turn waits, and
-   `value-review` records only the turn that returned the review. A session that was already a
-   series continues the same way, and a completed series can make the gate ready. A staged
+   request would withhold an evidence body, the harness delivers the review as a series of
+   fresh-input turns (`exactory-review-parts-v2`): read turns that card the evidence, combine and
+   check turns when needed, possibly more than one of each, followed by final turns, each a new
+   assignment. Before `review-run`, read `review_parts_plan` in the assignment result (the kind,
+   the turn, the units carded and remaining, and the estimated remaining turns); read the
+   allowances, estimates, progress and next action in `status` under
+   `review.assignments.<id>.review_parts`. Run each turn with `review-run`. Then read the next
+   action's `workflow` and `scope` in `next` and build that command's complete payload: for
+   `review-assignment`, a new id, the same role, `dossier_id: null`, route, reviewer and author,
+   `prior_assignment_id` inside `context` naming the turn that just ran, the current expected
+   revision and a new request id. Continue until a final turn returns the review; `next` lists
+   `review_parts_pending` while the series is open, and `value-review` records only the turn
+   that returned the review. A final turn can request originals or sources instead of returning
+   the review: assign and run further final turns while requests remain. If `review-assignment`
+   refuses with `review_parts_request_no_progress`, stop repeating that continuation and report
+   the unresolved request, the refusal code and the supplied details; an output refusal with
+   that code follows the ordinary output-retry rule. If every attempt of a turn ended without
+   completed output and no invocation remains pending, replace the assignment with a new id: for
+   a continuation, keep its original `prior_assignment_id`; for a first turn, repeat its original
+   context without adding `prior_assignment_id`. If `review-assignment` refuses with
+   `review_parts_frame_too_large`, `review_parts_inventory_too_large`,
+   `review_parts_final_too_large` or `review_parts_no_progress`, the proposed turn cannot be
+   planned with the current route and material; no assignment or invocation is recorded, although
+   the preparation can have stored artifacts. Report the refusal code and any supplied size
+   details to the user and wait for the decision. A series that 0.69.x started
+   (`exactory-problem-evidence-parts-v1`, `problem_evidence_part_pending` in `next`) continues
+   under its own rules in the same way, and a completed series of either kind can make the gate
+   ready. A staged
    review, in which the harness freezes an epoch (the evidence, the claims and the budgets),
    plans every task itself and performs the review in tasks, each a fresh call, starts only when
    `review-assignment` is given `context: {staged_upgrade: {assignment_id}}` for a recorded slot;
@@ -706,13 +734,21 @@ accepted tasks of the epoch instead of one request. The
    `attempt` or `calibration`, and name both original result review ids in
    `context.review_ids`. An adjudication of A7 decides only whether the question is of the
    excluded kind. Run the assignment with `review-run` and record the observed finding with
-   `review-adjudication`. An adjudication whose packet does not fit one input stays an ordinary
-   assignment, and `review-run` refuses its run before an invocation exists, with
-   `review_input_too_large` and `phase: "dispatch_preflight"`, recording nothing; an explicit `staged_upgrade`
-   that names that assignment, as in step 3, opens a staged review with the objection's claim,
-   reason, resolution condition and correction request as its claims; the disposition is the
-   terminal choice of its final task, and `review-adjudication` records the controller's
-   effective result. An incomplete adjudication
+   `review-adjudication`. An adjudication whose packet does not fit one input runs as a series of
+   fresh-input turns, as in step 3: build each next turn's `review-assignment` payload from
+   `next` (a new id, the same adjudicator, route and author, `dossier_id: null`, and
+   `prior_assignment_id` inside `context` naming the turn that just ran; the harness carries
+   `review_ids`, `objection_id` and `correction` over from that turn), run it with `review-run`,
+   and read `status` for the progress and the next action; a failed turn is replaced as in step 3;
+   `review-adjudication` records only the final turn of a complete series and refuses every other
+   turn with `review_parts_pending`. A focused assignment recorded before 0.72.0 that never ran
+   because its request did not fit can be replaced by a new assignment with the same adjudicator,
+   route, author, `review_ids`, objection and correction; that assignment starts the series. An
+   explicit `staged_upgrade`
+   that names a recorded adjudicator assignment, as in step 3, still opens a staged review with
+   the objection's claim, reason, resolution condition and correction request as its claims; the
+   disposition is then the terminal choice of its final task, and `review-adjudication` records
+   the controller's effective result. An incomplete adjudication
    leaves the objection open (`assessment_incomplete`); do the recovery work that `next` names.
 7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
    as a resolution of that one item.

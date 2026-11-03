@@ -27,6 +27,7 @@ from test_research_problem_assessment import build_assessment
 from test_research_problem_attempt import build_attempt
 from test_research_problem_candidates import build_candidate
 from test_research_problem_claims import ProblemCase
+from test_review_parts_views import PartsViewCase
 
 
 PLUGIN = Path(__file__).resolve().parents[1]
@@ -96,6 +97,44 @@ def build_required_arguments(parser, payload_path):
             arguments.append(action.option_strings[0])
         arguments.append(value)
     return arguments
+
+
+class PartsPlanCheckTests(CheckCommandMixin, PartsViewCase):
+    def test_recorded_parts_assignment_and_status_show_the_marked_plan_before_run(self):
+        self.prepare_parts()
+        self.root, self.store = self.case.root, self.case.store
+        payload = dict(id='recorded-read', route_id='route', dossier_id=None,
+                       role='result', reviewer_id='first', author_id='author', context={})
+        written = self.invoke_command('review-assignment', payload, check=False)
+        self.assertEqual(written[0], 0, written[2])
+        assignment = json.loads(written[1])['result']
+        self.assertIn('review_parts_plan', assignment)
+        plan = assignment['review_parts_plan']
+        self.assertEqual((plan['kind'], plan['turn'], plan['units_carded'], plan['units_remaining']),
+                         ('read', 1, 0, 6))
+        self.assertGreater(plan['unit_allowance'], 0)
+        self.assertGreater(plan['card_allowance'], 0)
+        self.assertEqual(set(plan['remaining_turns']), {'read', 'combine', 'check', 'final'})
+        for estimate in plan['remaining_turns'].values():
+            self.assertEqual(set(estimate), {'estimate'})
+            self.assertIs(type(estimate['estimate']), int)
+            self.assertGreaterEqual(estimate['estimate'], 0)
+        progress = cli.status_report(self.store)['review']['assignments'][assignment['id']]['review_parts']
+        for key, value in plan.items():
+            self.assertEqual(progress[key], value)
+        self.assertFalse(any(row['assignment_id'] == assignment['id']
+                             for row in self.store.snapshot()['records'].get('review_invocation', {}).values()))
+
+    def test_local_parts_assignment_check_is_refused_without_workspace_changes(self):
+        self.prepare_parts()
+        self.root, self.store = self.case.root, self.case.store
+        payload = dict(id='checked-read', route_id='route', dossier_id=None,
+                       role='result', reviewer_id='first', author_id='author', context={})
+        before = self.read_workspace()
+        checked = self.invoke_command('review-assignment', payload)
+        self.assertEqual(checked[0], 1, checked[2])
+        self.assertEqual(json.loads(checked[2])['error']['code'], 'check_unsupported')
+        self.assertEqual(self.read_workspace(), before)
 
 
 class ParserCheckTests(CheckCommandMixin, unittest.TestCase):

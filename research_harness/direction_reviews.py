@@ -246,8 +246,18 @@ def assess_direction_reviews(records, artifacts, dossier, reviews, direction):
     for review in reviews:
         covered = set()
         try:
-            delivery = read_selected_delivery(records, evaluation, review["assignment_id"])
-            packets = delivery['coverage_witnesses']['packets']
+            from .review_parts_study import require_complete_series
+            series = require_complete_series(records, evaluation, review['assignment_id'])
+            if series is not None:
+                from .review_parts import has_series_attachment
+                from .review_protocol import _evidence
+                packets = series['delivery']['packets']
+                reconstructed = [entry for entry in _evidence(evaluation, expected, records=records)
+                                 if has_series_attachment(evaluation, packets, entry['artifact'])]
+                packets = packets + [dict(evidence=reconstructed)]
+            else:
+                delivery = read_selected_delivery(records, evaluation, review["assignment_id"])
+                packets = delivery['coverage_witnesses']['packets']
         except ResearchError:
             # No saved-packet fallback: the obligation below reports what no authenticated delivery carries.
             packets = []

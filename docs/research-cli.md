@@ -73,14 +73,14 @@ All new mutations use the normal `--file`, `--expected-revision` and
 | `research-lead` | Preserve an earlier discrepancy and its original provenance, verification status and next check. |
 | `review-route` | Register the explicit instrumented provider, model and resource configuration: `claude_cli_v1` at `claude://local` (the reviewer of a Claude Code session, run as an isolated `claude -p` process on the owner's subscription), `codex_cli_v1` at `codex://local` (the reviewer of a Codex session), `codex_cli_framed_v1` at `codex://local` (an isolated versioned route for lossless openness evidence framing), `codex_cli_visual_v1` at `codex://local` (a Codex route that also receives the rendered pages of a required PDF inspection as images), or `openai_responses_v1` at an HTTPS endpoint with an API credential. The record pins the runtime of the installed adapter. Probes and attempts verify against that pin, so a review bound earlier stays verifiable after the adapter changes. A run or a probe on a route whose pin differs from the installed adapter is refused with `review_route_runtime_stale` before any call. Record and probe a new route then. A `status` read or a review preparation observes the installed runtime of the adapters in use at its start and at its end; when it changed in between, the command refuses with `review_runtime_changed` and writes nothing, and the same command run again reads the current runtime. |
 | `review-probe` | Execute and retain the input-boundary positive-control test. A failed test establishes no independence. The probe binds to the route's pinned runtime; after an adapter change, probe a new route instead of the old one. A probe interrupted after the reviewer answered is finished or reconciled as an interrupted `review-run` is. |
-| `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. A problem `result` packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, is delivered in parts ([Problem evidence in parts](#problem-evidence-in-parts)), and an `adjudicator` packet stays an ordinary assignment, also when its request does not fit. A staged review starts only through `context: {staged_upgrade: {assignment_id}}`, which opens one in a recorded slot; `{controller_assignment_id}` alone then plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A problem `result` assignment that the part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series ([Problem evidence in parts](#problem-evidence-in-parts)). Since 0.71.0 an ordinary assignment, one that is neither on a `codex_cli_visual_v1` route nor the controller or a task of a staged review, stores its replayed history as `history_ref` instead of `history`: a version 1 root with `version`, `message_count`, `history_digest` and the ordered `pages`, each page an immutable artifact with `version`, `start` and at most 32 `messages`, and each message with `body` (an artifact that holds the exact content, UTF-8 text or JSON for a native content array), `metadata` (the other fields of the message), `source` (`assignment_id`, `message_index`) and `occurrence` (`session_id`, `index`); the pages and bodies of an unchanged prefix are shared between the turns of a session. Every command reads either form, and the reviewer receives the identical history. A record that carries both fields is refused with `review_history_ambiguous`, and a page or body that does not match its root with `review_history_invalid`, or with `artifact_missing` or `artifact_corrupt` when its artifact is gone or altered; either code means that the artifacts of the store are damaged or a record was edited, so stop and report it. |
-| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. When the reviewer answers, the run commits the answer as one immutable record, `review_call_observation`, before the write that records the run: this capture binds the operation and the invocation, the original request ID and the digest of the payload, the route and the request, the reservation and the calling process, and holds the exact observation with its artifacts. The write that records the run reads the capture and is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last of those refusals, and the capture stays. A run whose process ended after the capture committed, or whose write is still refused after that wait, is finished by repeating `review-run` with the same payload and the original request ID: that returns the recorded receipt when one exists and otherwise records the run from the capture, without calling the reviewer again. Until then the invocation is pending: a `review-run` of the assignment under another `id` refuses with `review_invocation_pending` and names that step, and `review-attempt` refuses an import under the run's `id`. A run whose process ended before the capture committed leaves an unknown outcome and the invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`, and the refusals say to reconcile it. `review-run` with `{"action": "reconcile", "operation": OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a run, `review.route_probe` for a probe or `review.output_correction` for a correction and the id is the `id` of the original payload, releases the capacity of the call once its process and its transport processes have ended; for a call without a capture it also records the unknown outcome as a `failed` attempt, probe or correction with the error `review_invocation_interrupted`, which ends the pending state. For a run that 0.69.x started, which has no reservation, the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload), and the refusal carries that payload under `next`. After either step, a `review-run` of the assignment under a new `id` and request ID is permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
+| `review-assignment` | Freeze the canonical role, exact allowed packet, reviewer identity and current verified route. A packet whose request does not fit one input of a local text route, or whose fitted request withholds an evidence body, is delivered as a series of fresh-input turns when an adapter applies to its role (a problem `result` or `adjudicator` packet, a context repair, a `verification` or readiness `result` packet, a `native_math` packet without an openness minimum; [Reviews in fresh parts](#reviews-in-fresh-parts)) on a `claude_cli_v1`, `codex_cli_v1` or `codex_cli_framed_v1` route with a local input limit; an admitted adjudicator repair on such a route enters parts whatever its size. The next turn is assigned with a new id, the same role, dossier, route, reviewer and author, and the last turn as `context: {prior_assignment_id}`, and the assignment result carries `review_parts_plan`. A recorded 0.69.x result series continues in parts under its own protocol ([Problem evidence in parts](#problem-evidence-in-parts)). A staged review starts only through `context: {staged_upgrade: {assignment_id}}`, which opens one in a recorded slot; `{controller_assignment_id}` alone then plans and assigns its next task and returns the next command, `context: {controller_assignment_id, task_id}` records the child that runs one of its tasks, and `scheduler: {store_limit, route_limits}` records the reviewer capacity ([Staged problem reviews](#staged-problem-reviews)). A turn of a recorded 0.69.x series that the v1 part planner refuses with `review_input_too_large` can instead freeze a reduced replay history of completed earlier series ([Problem evidence in parts](#problem-evidence-in-parts)). Since 0.71.0 an ordinary assignment, one that is neither on a `codex_cli_visual_v1` route nor the controller or a task of a staged review nor a turn of a parts v2 series (whose `history` is `[]`), stores its replayed history as `history_ref` instead of `history`: a version 1 root with `version`, `message_count`, `history_digest` and the ordered `pages`, each page an immutable artifact with `version`, `start` and at most 32 `messages`, and each message with `body` (an artifact that holds the exact content, UTF-8 text or JSON for a native content array), `metadata` (the other fields of the message), `source` (`assignment_id`, `message_index`) and `occurrence` (`session_id`, `index`); the pages and bodies of an unchanged prefix are shared between the turns of a session. Every command reads either form, and the reviewer receives the identical history. A record that carries both fields is refused with `review_history_ambiguous`, and a page or body that does not match its root with `review_history_invalid`, or with `artifact_missing` or `artifact_corrupt` when its artifact is gone or altered; either code means that the artifacts of the store are damaged or a record was edited, so stop and report it. |
+| `review-run` | Execute that assignment once, retaining the output, the usage and the failed or interrupted attempts. When the reviewer answers, the run commits the answer as one immutable record, `review_call_observation`, before the write that records the run: this capture binds the operation and the invocation, the original request ID and the digest of the payload, the route and the request, the reservation and the calling process, and holds the exact observation with its artifacts. The write that records the run reads the capture and is tried again after `store_busy`, `stale_revision` or `review_task_dependency_changed`, at most 600 times within 600 seconds, without a second call. The run that waited exits with the last of those refusals, and the capture stays. A run whose process ended after the capture committed, or whose write is still refused after that wait, is finished by repeating `review-run` with the same payload and the original request ID: that returns the recorded receipt when one exists and otherwise records the run from the capture, without calling the reviewer again. Until then the invocation is pending: a `review-run` of the assignment under another `id` refuses with `review_invocation_pending` and names that step, and `review-attempt` refuses an import under the run's `id`. A run whose process ended before the capture committed leaves an unknown outcome and the invocation pending: a replay with the original request ID and every later `review-run` of the assignment refuse with `review_invocation_pending`, and the refusals say to reconcile it. `review-run` with `{"action": "reconcile", "operation": OPERATION, "invocation_id": ID}`, where the operation is `review.invoke` for a run, `review.route_probe` for a probe or `review.output_correction` for a correction and the id is the `id` of the original payload, releases the capacity of the call once its process and its transport processes have ended; for a call without a capture it also records the unknown outcome as a `failed` attempt, probe or correction with the error `review_invocation_interrupted`, which ends the pending state. For a run that 0.69.x started, which has no reservation, the step is `review-attempt` under the run's `id`: a `failed` attempt with `output: null`, a reason and a `usage` object with null counters (the [route instructions](research-decisions.md#commands-and-shared-state) give the payload), and the refusal carries that payload under `next`. After either step, a `review-run` of the assignment under a new `id` and request ID is permitted. After a refused output, one retry with the same request is permitted. On the Claude route, an answer that withdraws earlier objects, each followed by a line that is exactly `RETRACTED`, is read to its last object. The whole text stays in the response as evidence. Prose or any other content outside the blocks refuses that reading, and the other routes refuse an answer with more than one object. The Claude route also retains every system event of the stream, up to 4,096 events and 4 MiB. A refused context can then be classified again offline with `inspect_retained_system_events` of `research_harness.review_claude_transport`; there is no command for it, and it changes no recorded result. For a part turn of a problem result series ([Problem evidence in parts](#problem-evidence-in-parts)), `review-run` checks the part response when an authenticated run completes and writes the output refusal `invalid_value_review` under `review.shape` when it fails. For a turn of a parts v2 series ([Reviews in fresh parts](#reviews-in-fresh-parts)) it checks a read, combine or check output and the request form of a final the same way, under `review.shape` whatever the role, with `invalid_value_review` for a contract failure and `review_parts_request_no_progress` for a request that makes no progress. For a task of a staged review, `review-run {assignment_id, epoch_id, task_id}` reserves the task, runs it through an owned worker, accepts its committed capture and reconciles the worker; `action: "accept"` resumes an acceptance and `action: "reconcile"` a reconciliation, neither with a reviewer call; a refused capture permits one retry with the same request, and the result names `review-assignment {controller_assignment_id}` as the next step ([Staged problem reviews](#staged-problem-reviews)). See the [reviewer delivery contract](research-decisions.md#reviewer-delivery-and-disagreement) and the [route instructions](research-decisions.md#commands-and-shared-state). |
 | `review-attempt` | Preserve imported output or failure history; imported assertions never establish verified independence. |
 | `review-context` | Record evidence of later contamination or other context observations, or retire a route: `kind: "route_retired"` on an assignment of that route, with the owner's instruction as evidence. A retired route accepts no new assignment or run, an assignment on it without an observed output is dead, and a preserved slot continues through a context repair that names the retirement as its cause. |
-| `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. The finding's citations are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). |
+| `review-adjudication` | Record the exact observed focused finding. An output that fails its output contract leaves a refusal record. The finding's citations are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). A turn of a parts v2 series that is not the final of a complete series, or a final that returned a request, is refused with `review_parts_pending` ([Reviews in fresh parts](#reviews-in-fresh-parts)). |
 | `review-output-correction` | `{id, assignment_id, route_id}`. For a problem result reassessment whose two completed, authenticated outputs both have recorded refusals, the latest for `review_reassessment_mismatch`: when relabeling the latest output's `confirmed` findings whose content changed as `revised` would satisfy its output contract, ask the same reviewer once for that relabeling. Use a verified route with the original endpoint, model and adapter; a `codex_cli_visual_v1` assignment can use `codex_cli_v1` instead. The reviewer returns only those dispositions and reasons, or declines; every other value of the output is kept, and `value-review` then records the composed output with its `output_correction_id`. It is not a new review and grants no further sample. On a `codex_cli_v1` route the native rollout of the correction turn is read once, when the answer is captured, and retained in the capture, so a correction finished after an interruption authenticates against the retained rollout. An interrupted correction is finished or reconciled as an interrupted `review-run` is. |
 | `review-budget` | `{max_calls, reason}`. Record the optional store-wide allowance of reviewer calls as `review_budget/store`: `max_calls` is a nonnegative integer, or null for no limit, and `reason` is nonempty text. A store without the record behaves as before. With it, the start of every ordinary `review-run`, `review-probe` and `review-output-correction`, and every reservation of a staged task, is refused with `review_budget_exhausted` when no call remains; the check runs in the transaction that records the start, together with the capacity admission ([Staged problem reviews](#staged-problem-reviews)), so two processes cannot both take the last call. Each admission counts once: a staged reservation and its accepted attempt count once, a replay, a capture, an acceptance and a reconciliation add nothing, and a failed or unknown outcome stays counted. An allowance below the calls already admitted is refused with `review_budget_below_charged`, whose details name the smallest allowance permitted as `minimum_max_calls` and a `review-budget` command under `recovery`; raising the allowance keeps the expenditure. With an allowance set, the ID of an imported call cannot admit a new call (`record_conflict`). `intermediate/reviews/usage.json` shows the allowance, the charged calls and the remaining calls under `review_budget`. The allowance counts calls, not money, and review usage stays outside the preparation budgets of `budget`. `--check` accepts or refuses without writing. |
-| `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. The output's citations and bars are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). A part turn of a problem result series is refused with `problem_evidence_part_pending` and leaves no refusal record. A staged review is recorded from its controller's effective result; an incomplete assessment is refused with `assessment_incomplete`. |
+| `value-review` | Record the exact observed bar, slate or combined support/value result. An output that fails its output contract leaves a refusal record. The output's citations and bars are checked against the delivery of the exact authenticated attempt that produced it, the packets that its request carried, and not against the saved packets of its lineage ([Problem creation](#problem-creation)). A part turn of a problem result series is refused with `problem_evidence_part_pending` and leaves no refusal record. Of a parts v2 series, record only the final turn that returned the review; a read, combine or check turn and a final that returned a request carry no review ([Reviews in fresh parts](#reviews-in-fresh-parts)). A staged review is recorded from its controller's effective result; an incomplete assessment is refused with `assessment_incomplete`. |
 | `research-decision` | Select the canonical scientific action, artifact disposition and full-goal status. |
 | `source-impact` | Bind an explicit impact classification for the complete source delta since the selected decision. |
 
@@ -148,8 +148,14 @@ for a recorded bar, slate or result review. Under the excerpt rules:
   descriptor of the stored text. Verified excerpts have a total of 200,000
   characters in a session, counted in output order; an excerpt beyond it is
   `over_allowance`. Any other excerpt is `unmatched` with the reason
-  `no_stored_text`, `too_short`, `too_long` or `not_found`, and keeps the
-  reviewer's text, marked as not checked. `reviewer_excerpts` lists the checked
+  `no_stored_text`, `too_short`, `too_long` or `not_found`, marked as not
+  checked: in a session under `exactory-review-excerpts-v3` (every session
+  started since 0.72.0) it keeps the SHA-256, the length and the first 200
+  characters of the reviewer's text, and in an earlier session the whole text.
+  Under v3 a `purpose` longer than 500 characters keeps its first 500
+  characters with the SHA-256 and the length of the whole, excerpts with the
+  same source binding, text digest and status are kept once, and a verified
+  duplicate does not charge the allowance. `reviewer_excerpts` lists the checked
   excerpts of all earlier turns in order, with the allowances used.
 - One turn delivers at most 120,000 characters of new full text. Full-text
   requests are answered in request order. A source whose text bodies fit what
@@ -181,7 +187,12 @@ for a recorded bar, slate or result review. Under the excerpt rules:
   that starts at the first occurrence of the anchor and has at most that many
   characters (`delivered`), with `not_found`, or with `over_allowance` beyond
   100,000 delivered passage characters in the session. A passage request is
-  valid only in a turn under the excerpt rules.
+  valid only in a turn under the excerpt rules. Under
+  `exactory-review-excerpts-v3` an answer that was not delivered keeps the
+  first 200 characters of its anchor with the SHA-256 and the length of the
+  whole; `not_found` and `over_allowance` settle the request, and when
+  capacity defers the reply, the pending request keeps the complete anchor
+  and a later continuation answers that original request.
 
 A final phase assessment still needs every pending request settled.
 `already_delivered` answers and the passage answers `delivered`, `not_found`
@@ -251,7 +262,13 @@ Assign a new initial `result` assignment of the same reviewer, on the same
 route and with the same author, with `dossier_id: null` and an empty context:
 it takes the slot of that reviewer's bar, and the earlier assignment stays in
 the record and can no longer be run or continued
-(`review_assignment_superseded`). A replacement on another route or with
+(`review_assignment_superseded`). Since 0.72.0 the same applies to a focused
+`adjudicator` assignment recorded before 0.72.0 that never ran and whose
+frozen request fails the size preflight: a new assignment with the same
+adjudicator, route, author, `review_ids`, objection and correction takes its
+slot and enters a parts v2 series
+([Reviews in fresh parts](#reviews-in-fresh-parts)),
+and the old record stays. A replacement on another route or with
 another author, a replacement of an initial assignment that never ran and
 fits, and a replacement of one that has a completed output, a pending
 invocation or an attempt that failed with another code, are refused with
@@ -259,8 +276,13 @@ invocation or an attempt that failed with another code, are refused with
 
 The excerpt rules of 0.64.2 to 0.65.1 (`exactory-review-excerpts-v1`) had no
 reading budget. Assignments recorded under them keep their prompt and stay
-authenticated, and their sessions continue under the current rules
-(`exactory-review-excerpts-v2`) from the next continuation.
+authenticated, and their sessions continue under the rules of
+`exactory-review-excerpts-v2` from the next continuation. A session started
+since 0.72.0 records `exactory-review-excerpts-v3`: the same rules and
+allowances, with the bounded retention above. A parts v2 series of a bar,
+slate or result review creates a v3 session only when its packet has no
+excerpt session; otherwise it keeps the inherited session protocol. A
+recorded v2 session stays v2.
 
 A text route fits an oversized request, other than a `complete-visible-v1`
 continuation, by applying these reductions in order, one at a time, until the
@@ -300,11 +322,12 @@ limit is 1,300,000 characters on `claude_cli_v1` and 1,048,576 on
 `codex_cli_v1` and `codex_cli_framed_v1` (the
 [route instructions](research-decisions.md#commands-and-shared-state)). The CLI
 receives nothing.
-A problem `result` request on these routes that does not fit, or whose fitted
-request withholds an evidence body, is delivered in parts
-([Problem evidence in parts](#problem-evidence-in-parts)); an `adjudicator`
-request that does not fit is recorded as an ordinary assignment, whose run is
-refused as above. A staged review
+A new problem `result` or `adjudicator` request on these text routes enters
+parts v2 when it does not fit or its fitted request withholds an evidence
+body, subject to the entry exceptions in
+[Reviews in fresh parts](#reviews-in-fresh-parts). A recorded v1 result
+series continues under its own protocol
+([Problem evidence in parts](#problem-evidence-in-parts)). A staged review
 ([Staged problem reviews](#staged-problem-reviews)) starts only through an
 explicit `staged_upgrade` of a recorded slot.
 The harness also keeps the earlier
@@ -335,6 +358,304 @@ records, and `review-run` returns it under `preflight`. A recorded request is
 never checked again: the reconstruction and authentication of recorded
 attempts do not run the preflight.
 
+### Reviews in fresh parts
+
+A review whose request does not fit one input of a text route with a local
+input limit (`claude_cli_v1`, `codex_cli_v1` and `codex_cli_framed_v1`), or
+whose fitted request withholds an evidence body, is delivered as a series of
+fresh-input turns under the protocol `exactory-review-parts-v2` ("parts v2")
+when an adapter applies to its role and packet. The adapters: `problem_result`
+(a `result` review of a problem record without a `complete-visible-v1`
+delivery), `problem_adjudicator` (a focused adjudication of a problem record),
+`context_repair` (a repair of a bar, slate or result slot, or of an admitted
+adjudicator slot), `study_verification` (a `verification` review),
+`study_readiness` (a `result` review with a strategic dossier) and
+`native_math` (a `native_math` review without an openness minimum).
+For new work outside an existing series, `review-assignment` builds the
+ordinary request first. A fitting request that carries every body stays
+ordinary and is recorded as before, byte for byte, unless a repair rule
+requires parts: an admitted adjudicator repair on such a route uses parts
+whatever its size, and an earlier overflow of the same repair binding (the
+same role, dossier, slot and repair predecessor) also requires parts. A
+request that does not fit, or whose fitted request withholds a body, starts a
+series. A recorded 0.69.x
+series continues under [Problem evidence in parts](#problem-evidence-in-parts)
+while its previous turn is a v1 turn with the same evidence digest and no
+recorded final; a refresh after its recorded final, or a changed evidence
+digest, enters this section. A staged review starts only through an explicit
+`staged_upgrade` ([Staged problem reviews](#staged-problem-reviews)). On a
+route without a local input limit, and on the visual route, nothing changes.
+
+Terms. A series is the chain of assignments that delivers one review, named
+by its first assignment (`series_assignment_id`); a turn is one assignment of
+it. A unit is one entry of a collection that the adapter declares splittable,
+with the artifact bodies that the existing evidence attachment owns for it; it
+has a handle (`u1`, `u2`, ...). A card is the structured reviewer record
+returned for a unit; passage units share their reading's card. A target is a
+check, rubric item, objection or other question that the final review must
+decide. Equal items at several places are one unit
+with several occurrences, and every occurrence of the frozen packet stays an
+obligation. The frame is the packet with every unit removed; every turn
+carries it whole. The inventory is the list of the series' units, stored by
+the first turn as a canonical JSON artifact and bound by its digest in every
+turn: for each unit the handle, the item digest, the item characters, the
+occurrences (collection path and key or index), the owned bodies (SHA-256,
+kind, characters) and `citations`, the exact references by which the role's
+validator accepts a citation of the unit's content, so that a final turn cites
+a unit that it saw only as a card by copying them. The first turn also stores
+the logical packet, the complete packet before projection, and binds its
+digest. The inventory is append-only: a turn's inventory holds every row of
+the previous one unchanged plus the units that appeared since, in packet
+order; a unit that disappears from the current packet ends the series.
+
+Turns. Every turn's packet holds the frame, the header `review_parts`
+(`protocol`, `adapter`, `series_assignment_id`, `series_key`, `kind`, `turn`,
+`inventory` with `inventory_digest`, `logical_packet` with
+`logical_packet_digest`, the `receipts` of the earlier turns, the `targets`
+with their labels, the allowances, the `plan` and a fixed `note`) and the
+carried state `review_parts_state` (`cards`, `combinations`, `findings`),
+which the harness builds only from the selected authenticated attempts of the
+earlier turns. The kinds:
+
+- `read`: the units of this turn, each at its first occurrence in its
+  collection, with their bodies or body segments. The reviewer returns
+  `{"kind": "read", "turn": N, "cards": [...], "unborne": [{"target",
+  "reason"}]}`: exactly one card per delivered unit (a passage is carded under
+  its reading), each `{"unit", "summary", "bearing": [{"target", "relation",
+  "reason"}], "statements": [{"text", "why"}], "depends_on", "questions"}`
+  with `relation` one of `supports`, `qualifies`, `contradicts`, `context`,
+  and `unborne` naming exactly the targets that no card of the turn bears on.
+  A card with a `supports`, `qualifies` or `contradicts` bearing has at least
+  one statement.
+- `combine`: the cards of the series, or two blocks of them when they do not
+  fit one input (each pair of blocks meets once). The reviewer returns
+  `{"kind": "combine", "turn": N, "combinations": [{"units", "question",
+  "view", "read": [...]}], "rest"}`, where each `read` entry is a whole unit
+  `{"unit"}`, a body span `{"unit", "body", "start", "end"}` or an item span
+  `{"unit", "item": true, "start", "end"}`, and the originals of one
+  combination fit one check turn. The harness assigns the combination ids
+  (`c<turn>-<n>`).
+- `check`: the combinations of this turn with the cards of their units and
+  the originals they named. The reviewer returns `{"kind": "check", "turn":
+  N, "findings": [{"combination", "finding", "effect", "statements":
+  [{"unit", "text", "why"}]}]}` with exactly one finding per combination and
+  `effect` one of `supports`, `qualifies`, `contradicts`, `unresolved`.
+- `final`: the frame, every card, combination and finding, and the fill, the
+  originals that fit the spare room (first the units with a `contradicts` or
+  `qualifies` bearing or finding, then the originals that combinations named,
+  then the other units). The reviewer returns the role's ordinary output under
+  the role's validator, or `{"kind": "requests", "unit_requests": [...],
+  "source_requests": [...]}` with at least one nonempty list; a unit request
+  has the shape of a combination's `read` entry plus `why`, and the source
+  requests follow the existing source-request rules (empty for an
+  adjudication, a verification and a native review). A request is answered by
+  a further final turn, assigned the same way, which carries the requested
+  originals first and then the fill.
+
+The planner chooses a read turn while any unit lacks complete item or body
+delivery. It chooses combine turns until the required card and block pairs
+have been read together. It then chooses check turns while combinations lack
+findings, and a final turn otherwise. A series with at most one card needs no
+combine turn, and a series without combinations needs no check turn. Units
+that appear after the first turn get read turns even after combine or check
+turns ran, and the combine turn that follows reads every new card against
+every card of the series.
+
+Statements. Every statement of a card or a finding is checked against the
+text that the turn delivered for its unit, under the normalization of the
+excerpt rules (Unicode compatibility normalization, NFKC, applied to each
+character, and white space collapsed). Only verified statements are carried.
+Each keeps `at`: the unit, the body's SHA-256 or `item: true`, and the Unicode
+code point offsets `[start, end)` in the whole text; they locate the first
+matching occurrence in the delivered text (for a segment, the offsets count
+from the start of the whole body). The
+carried card records how many statements were not verified; an unverified
+statement does not refuse the output. The statements of a turn count against
+40,000 characters per turn and 6,000 per statement, and the allowances do not
+accumulate over the series.
+
+Segments. A text body that does not fit the room of one read turn is delivered
+in exact segments. A segment ends at a paragraph or line boundary in the last
+quarter of its allowed span when one is available, and at the size limit
+otherwise. Each segment names its body, its offsets and the body's total
+length, and the body counts as delivered when the segments of the series
+cover `[0, length)`. An item whose
+canonical JSON does not fit is delivered the same way, as segments of its
+canonical JSON text bound by the item digest. A body whose encoding is not
+UTF-8 is delivered whole in one read turn and never segmented. A binary body
+follows the existing route rules.
+
+Sizes. Every planned packet is measured as its exact rendered request, so no
+margin guesses the prompt size. The read allowance, the unit characters of
+one read turn, starts at 600,000 and follows the series' own recorded
+attempts: after a read turn whose output tokens reached 75 percent of the
+route's `max_output_tokens` the next allowance is half the turn's unit
+characters, after a turn at 35 percent or less one and a half times,
+otherwise the same; when a failed read turn qualifies for replacement after an
+output-cap failure or `review_incomplete`, the replacement starts with half
+the failed turn's measured `unit_characters`. Units enter a turn in inventory
+order; a unit enters whole when its
+item and pending bodies fit, and the first unit that does not fit whole is
+delivered with as many segments as fit and continues in the next turns. The
+state budget: everything the final carries besides its frame fits the room
+that the measured final frame leaves under the route limit, with cards at
+most half of that room, combinations a tenth, findings a fifth and the rest
+the fill. The cards of a read turn get at most 80,000 characters and at least
+4,000, in proportion to the turn's share of the uncarded unit characters; a
+combine output, a check output and the request form of a final get at most
+60,000 characters; the role's ordinary output in a final is bounded by the
+role's validator and the route's output cap, as it is today. The packet
+states each allowance under `review_parts.output_allowance`.
+
+Progress. Every read turn delivers at least one item, body segment or item
+segment that no earlier turn delivered. A final request must name at least
+one original or source that the final it answers did not carry (it can ask
+again for an original that an earlier final carried), and the final turns of
+a series carry at most twice the inventory's characters of originals in
+total. The refusals of `review-assignment`, at entry or during continuation,
+each before an assignment or invocation is recorded (the preparation can
+already have stored the inventory and logical packet artifacts), some without
+size details: `review_parts_frame_too_large` with `frame_characters`,
+`input_limit_characters` and `largest_fields` when the frame leaves no room;
+`review_parts_final_too_large` when the final frame cannot hold the minimum
+cards, when two card blocks or the combination blocks do not fit, or when the
+final frame and its state do not fit; `review_parts_inventory_too_large` when
+the floors of the planned read turns exceed the card budget, when a non-text
+body cannot fit one read turn whole (`unit`, `body`, `body_characters`), when
+the remaining card budget is below 4,000 characters while units remain, when
+the findings budget is below 2,000 characters per pending combination, or when
+a combination cannot fit its promised check room; `review_parts_no_progress`
+when the next read turn can add nothing; and
+`review_parts_request_no_progress` when no requested original fits the next
+final. A final request output is refused with
+`review_parts_request_no_progress`, under `review.shape` and the retry rule
+below, when it requests nothing absent from the answered final, or includes
+unit requests after the final-original budget is exhausted; a request larger
+than the remaining room is answered in segments over successive final turns.
+
+Series identity, replacement and change. A series is valid when its turns
+share role, route, slot, session, reviewer, author, subject and the adapter's
+series key, each turn's `prior_assignment_id` names the turn before it, and
+each turn's header holds the receipts of exactly the observed earlier turns.
+The series keys: `problem_result`, the problem evidence digest and the digest
+of the bars; `problem_adjudicator`, the problem evidence digest, the
+objection's material version and the digest of the current-source
+requirements; `context_repair`, the role's key and the repair binding;
+`study_verification` and `native_math`, the digest of the frame;
+`study_readiness`, the digest of the frame without its transport envelope
+(`continuation`, `source_deliveries`, `pending_source_requests`,
+`prior_context`, `reviewer_excerpts`, `evidence`), so that the series' own
+source replies do not restart it. A changed series key or a removed inventory
+unit ends the series. The next request is measured again and starts another
+parts series only when parts are still required. The cards of the ended
+series are not carried. If every attempt of a turn ended without completed
+output and no invocation remains pending, replace the assignment with a new
+id, and the replacement is planned again: for a continuation, keep its
+original `prior_assignment_id` (`review_assignment_replaced` for the failed
+one); for a first turn, repeat its original context without adding
+`prior_assignment_id`; for a native first turn, first export a new packet
+whose attestation names the replacement assignment. No turn of a series runs
+concurrently with another turn of the same series. For a bar, slate or result
+series, or an admitted adjudicator predecessor, repair a retired route or a
+contaminated context through `context_repair`. Native and verification
+assignments do not accept that context; report their blocked binding instead
+of submitting a context-repair assignment.
+
+Prompts. The prompt of a turn is the role's base prompt, as `canonical_prompt`
+builds it for that role and situation, followed by the parts v2 common text
+and the text of the turn's kind, and in a final turn the text of the adapter
+(after the request-answer text when the final answers a request). Its
+template id is `exactory-review-parts-v2/<adapter>/<kind>` (`final-answer`
+for a final that answers a request); `parameters.base_prompt` records the base
+prompt's parameters, template id and hash, and `parameters.review_parts` the
+binding (`adapter`, `kind`, `protocol`, `answer`). Every existing template id,
+prompt text and hash stays as it is, and a parts prompt recorded under one
+common text version keeps authenticating after the common version changes.
+
+Running a series. Assign the first turn as the ordinary assignment of the
+role; the assignment result holds `review_parts` and `review_parts_plan`
+(`kind`, `turn`, `units_carded`, `units_remaining`, `unit_allowance`,
+`card_allowance`, and `remaining_turns` per kind, each `{estimate}` computed
+from the series' own turns only). Before `review-run`, the first step that
+calls a model, read `review_parts_plan` in the assignment result, and the
+allowances, estimates, progress and next action in `status` under
+`review.assignments.<id>.review_parts`; `review-assignment --check` refuses a
+parts preparation with `check_unsupported`, because it needs the reviewer
+CLI, and writes nothing. Run the turn with `review-run`. Then read the next
+action's `workflow` and `scope` in `next` and build that command's complete
+payload: for `review-assignment`, a new id, the same role, dossier, route,
+reviewer and author, and `prior_assignment_id` inside `context` naming the
+turn that just ran, with `native_packet` (the same packet) or
+`verification_task_id` (the same task) there when the role needs it; supply
+the current expected revision and a new request id. A focused continuation
+inherits `review_ids`, `objection_id` and `correction` from the turn. Run
+the turn, and continue until a final turn returns the role's ordinary
+output. `status` and `next` name each step:
+`review.assignments.<id>.review_parts` carries the adapter, the series id, the
+kind and the turn, the units carded and remaining, the allowances and
+estimates, `complete`, the bounded `issues`, `blocked` with a code when the
+turn cannot continue, and `next`, a list of actions `{kind, workflow, scope}`
+(`review-assignment` with the last turn as `prior_assignment_id`, or
+`review-run` of the recorded turn); in a problem record the obligation
+`review_parts_pending` carries the same fields; `status --summary` adds
+`review_parts: {count, examples, omitted}`. When an authenticated run
+completes, `review-run` checks a read, combine or check output and the
+request form of a final under `review.shape`, whatever the role, and writes
+the output refusal when it fails: `invalid_value_review` for an output over
+its allowance, a missing or extra card or finding, an unknown handle, a wrong
+kind or turn, or a span outside its text, and
+`review_parts_request_no_progress` for a request that makes no progress. The
+ordinary final output is validated by the role's validator
+(`adjudication.shape` for an adjudicator, `verification.parts` for a
+verification). The retry after a refused output and `review_slot_exhausted`
+after two refused outputs apply as for any output. Record the final that
+returned the review with `value-review`, `review-adjudication`,
+`bind-verdict` or the math-solver command of the role; `review-adjudication`
+refuses every other turn with `review_parts_pending`.
+
+What a series delivers. `research_harness.review_parts.verify_series`
+authenticates every turn (its selected attempt is instrumented, completed and
+ready, its actual request carries the frozen packet, and its output passes the
+contract of its kind) and reports whether the series is complete: every
+occurrence of every unit of the final inventory was credited by a read turn
+(the item whole or by item segments, and every owned body complete in one turn
+or covered by segments); every read turn has one card per delivered unit and
+every target borne or `unborne`; every card was read by a combine turn, unless
+the series has at most one card, and every pair of blocks met once; every
+combination has a finding; and the final
+turn is observed with the role's ordinary output. `read_series_delivery`
+builds what the series delivered from its actual packets: complete
+attachments, segments with their exact offsets, and the bodies whose segments
+cover them. A final cites what any turn of its series delivered; the result
+coverage check, the citation check and the adjudicator source checks read
+that delivery, so a body delivered in three segments is citable and counts
+for coverage ([Problem creation](#problem-creation)). For a focused
+adjudication the completed series is checked against the stored logical
+packet, so the manifest, projection, inspected-unit, version and descriptor
+comparisons stay exact and only byte availability comes from the series. For
+a readiness review a candidate evidence reference is covered when the final's
+support evidence cites it, or when the complete series carries an
+authenticated card of a unit whose inventory `citations` include that exact
+reference and whose bearing names one of the six readiness targets.
+`require_verdict_assignment` accepts only the final of a complete
+verification series; the math-solver harness accepts the final of a complete
+native series as it accepts a reading chain's final, with the series receipts
+as `reading_turns`.
+
+Views. `export --kind outputs` places the outputs of read, combine and check
+turns, and the request form of a final, under
+`intermediate/reviews/<role>/<series assignment id>/<NN>-<assignment id>.<run
+id>.json`, and the selected final output of a complete series under
+`final/reviews/<role>/<series assignment id>/`: an ordinary final as
+`<NN>-<assignment id>.<run id>.json`, a corrected final as
+`<NN>-<assignment id>.<correction id>.corrected.json`. Read the run's
+`output_path` or the correction's `corrected_output_path` for the exact
+location. `series.json` lists the turns in series order; each turn has a
+`review_parts` progress object (`protocol`, `adapter`, `series_assignment_id`,
+`kind`, `turn`, the allowances, the estimates, the evaluated progress and the
+next actions), and the output index entries carry `series_assignment_id`,
+`turn`, `adapter` and `review_parts_kind`.
+
 ### Staged problem reviews
 
 A staged review performs one review as tasks of a frozen epoch, each task a
@@ -342,22 +663,26 @@ fresh call with an empty history, instead of one call or a series of part
 turns. Its protocol is `exactory-review-staged-v2`. It starts in two ways:
 `review-assignment` with `context: {staged_upgrade: {assignment_id}}` opens
 one in a recorded slot (Upgrading a recorded session, below), and a context
-repair of a slot whose predecessor is a controller is itself a controller
+repair of a `result` slot whose predecessor is a controller is itself a
+controller when its ordinary repair request fits one input
 (Context repair of a staged slot, below). Every other `result` or
 `adjudicator` assignment, except a child assignment that runs a task of a
-staged review, is an ordinary assignment or a part turn. A problem `result` or
-`adjudicator` assignment on a local route (`claude_cli_v1`, `codex_cli_v1`,
-`codex_cli_framed_v1` and `codex_cli_visual_v1`) is an ordinary review when
-the request that the transport builds fits the route's input limit and
-delivers every item of the packet and every artifact body of its `evidence`
-list; the harness records the packet, the prompt and the request byte for
-byte, as before. A `result` request on a route with a local input limit that
-does not fit, or whose fitted request withholds one of those bodies, is
-delivered in parts ([Problem evidence in parts](#problem-evidence-in-parts)):
-a series continued with the same evidence digest goes on, and a refreshed
-session, a continuation whose evidence digest changed and a session that
-never was a series start a series at part turn 1. An `adjudicator` request, a
-context repair of an ordinary slot, a continuation with
+staged review, is an ordinary assignment or a turn of a series. A problem
+`result` or `adjudicator` assignment on a local route (`claude_cli_v1`,
+`codex_cli_v1`, `codex_cli_framed_v1` and `codex_cli_visual_v1`) is an
+ordinary review when the request that the transport builds fits the route's
+input limit and delivers every item of the packet and every artifact body of
+its `evidence` list; the harness records the packet, the prompt and the
+request byte for byte, as before. A `result` or `adjudicator` request on a
+route with a local input limit that does not fit, or whose fitted request
+withholds one of those bodies, is delivered as a parts v2 series
+([Reviews in fresh parts](#reviews-in-fresh-parts)); a recorded 0.69.x
+series continued with the same evidence digest goes on under its own protocol
+([Problem evidence in parts](#problem-evidence-in-parts)). A context repair
+of an ordinary slot whose request does not fit, or whose earlier attempt with
+the same role, dossier, slot and repair predecessor ended over the output
+cap, is a parts v2 series too, and so is every admitted adjudicator repair on
+such a route. A continuation with
 `context.source_delivery` and an assignment on the visual route keep their
 ordinary packet, whatever its size; when the request does not fit,
 `review-run` refuses it before an invocation exists with
@@ -842,8 +1167,13 @@ The scientific predecessor of an assignment is read from
 `context.staged_upgrade.assignment_id`, in that order, by every consumer.
 
 Context repair of a staged slot. A `context_repair` assignment of a `result`
-or an `adjudicator` slot whose predecessor is a controller is itself a
-controller. It waits for pending workers and invocations
+slot whose predecessor is a controller is itself a controller when its
+ordinary repair request fits one input; a repair whose request does not fit,
+or whose earlier attempt with the same role, dossier, slot and repair
+predecessor ended over the output cap, and every repair of an `adjudicator`
+slot on a route with a local input limit, run as a parts v2 series
+([Reviews in fresh parts](#reviews-in-fresh-parts)). A controller repair
+waits for pending workers and invocations
 (`review_context_repair_pending`), authenticates each staged task of the
 predecessor's history against its frozen request and committed capture,
 carries the predecessor's raw observations, intermediate findings and
@@ -857,9 +1187,9 @@ recorded. A turn that continues such a series with the same evidence digest,
 before the result review of its final turn is recorded, continues it under
 the rules of the next section. A continuation whose evidence digest changed
 and a refresh of the series start new work under the entry rule above
-(ordinary when the complete request fits, otherwise in parts), and an explicit
-`staged_upgrade` moves the recorded slot to a staged review at once, under the
-scale preflight. No module that a route pins by its bytes
+(ordinary when the complete request fits, otherwise a parts v2 series), and an
+explicit `staged_upgrade` moves the recorded slot to a staged review at once,
+under the scale preflight. No module that a route pins by its bytes
 changed, and the reduction orders do not change.
 
 Views. `intermediate/reviews/staged/<kind>/<id>.json` holds the epochs, the
@@ -878,23 +1208,23 @@ adjudication whose slot has a staged successor is `historical`.
 
 ### Problem evidence in parts
 
-This delivery serves a `result` session whose request does not fit one input
-of the route, or whose fitted request withholds an evidence body, and a
-session that is already a series. A turn that continues a recorded series
-with the same evidence digest, before the result review of its final turn is
-recorded, continues under these rules; this includes a series started under
-0.69.0 to 0.69.4. A continuation of a series whose evidence digest changed, a
-refresh of a series and a first turn of a session that never was a series are
-measured against the route limit: a request that fits and delivers every body
-is built as before, byte for byte, with the same packet and prompt; one that
-does not starts a series under these rules at part turn 1. A `staged_upgrade`
+This delivery, `exactory-problem-evidence-parts-v1`, serves a `result`
+session that is already a series. Since 0.72.0 no new series starts under it.
+A turn that continues a recorded series with the same evidence digest, before
+the result review of its final turn is recorded, continues under these rules;
+this includes a series started under 0.69.0 to 0.69.4. A continuation of a
+series whose evidence digest changed, a refresh of a series and a first turn
+of a session that never was a series are measured against the route limit: a
+request that fits and delivers every body is built as before, byte for byte,
+with the same packet and prompt; one that does not starts a parts v2 series
+([Reviews in fresh parts](#reviews-in-fresh-parts)). A `staged_upgrade`
 assignment moves a recorded slot to a staged review at once
 ([Staged problem reviews](#staged-problem-reviews)).
 The rules below describe the series that continue. They apply
 to a `result` session on a route with a local input limit (`claude_cli_v1`,
 `codex_cli_v1` and `codex_cli_framed_v1`); a `complete-visible-v1`
 continuation and a bar or slate packet, which carries no problem evidence, are
-never a series.
+never a v1 series.
 
 A series is the turns of one result session that deliver one problem evidence
 digest in parts; it is named by the id of its first assignment
@@ -1081,12 +1411,14 @@ unchanged digest receives the full current problem evidence and never the
 `delivered-in-an-earlier-turn` marker, because the replayed history of a
 series does not carry the evidence whole.
 
-The problem adjudicator and a context repair are not delivered in parts. An
-adjudicator request or a repair request that does not fit one input is
-recorded with its ordinary packet, and `review-run` refuses its run before an
-invocation exists with `review_input_too_large` and `phase:
-"dispatch_preflight"`, recording nothing; an explicit `staged_upgrade` that
-names the recorded adjudicator assignment opens a staged review in its slot
+The problem adjudicator and a context repair are not delivered under this
+protocol. Since 0.72.0 an adjudicator request that does not fit one input,
+and a repair request that does not fit, or whose earlier attempt with the
+same role, dossier, slot and repair predecessor ended over the output cap, are
+delivered as parts v2 series
+([Reviews in fresh parts](#reviews-in-fresh-parts)); an explicit
+`staged_upgrade` that names a recorded adjudicator assignment still opens a
+staged review in its slot
 ([Staged problem reviews](#staged-problem-reviews)). A context repair of
 a slot whose session holds a part turn keeps each part turn in its scientific
 history as `intermediate_output` and needs no recorded final for it; a final
@@ -3527,14 +3859,32 @@ earlier final response of a completed earlier series can be a placeholder of
 the reduced history ([Problem evidence in parts](#problem-evidence-in-parts)).
 Coverage still comes from the authenticated actual turns of the series, not
 from the replayed history.
-This applies only to a session that is a series: a session becomes a series
-when a first packet does not fit one input, and it stays in parts after a
-changed evidence digest or a refresh. A session that is not a series delivers
-the whole evidence in one request as before. `value-review` and the
+This applies only to a session that is a v1 series: a session became a v1
+series when a first packet did not fit one input before 0.72.0, and after a
+changed evidence digest or a refresh the request is measured again under the
+current entry rules ([Reviews in fresh parts](#reviews-in-fresh-parts)). A
+session that is not a series delivers the whole evidence in one request as
+before. `value-review` and the
 `review_evidence_undelivered` audit read the authenticated actual packets of
 the series for a review of a series, so the review can cite a record or a
 passage that a counted turn delivered; a span inside an inline passage of a
 part turn is a delivered bounded span and gives no whole-artifact credit.
+
+For a result review delivered as a parts v2 series
+([Reviews in fresh parts](#reviews-in-fresh-parts)), the check reads the
+authenticated read turns of the series. The review is credited only when
+`verify_series` reports the series complete and the actual packets of its
+read turns, under the current evidence digest, carry every item of the six
+split keys (`openness_searches`, `assessment_evidence`, `readings`,
+`passages`, `computations`, `formal_checks`), whole or as item segments that
+cover it; equal the expected value of every frame key (`claim`, `openness`,
+`value`, `assessment`, `attempt`, `results`, `citations`, and `delivery` when
+the evidence has it); and attach every artifact body of the assessment
+evidence, the computations and the formal checks, complete or in segments
+that cover it. A shortfall returns `problem_evidence_unassessed` with
+`missing`, `artifact_digests` and the series' `issues`. The review cites what
+any turn of its series delivered, and a body delivered in segments is citable
+through them.
 
 For a staged review ([Staged problem reviews](#staged-problem-reviews)), the
 check reads the accepted task graph of the epoch instead of one request: the
@@ -3908,6 +4258,7 @@ example the population of the cohort tool. The post decision is
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
 | `review_sources_pending` | Resolve the reviewers' pending source requests. |
 | `problem_evidence_part_pending` | Continue the named part turn (`assignment_id`, `turn`, `remaining`) with a new assignment of the same reviewer, route and author and `context: {prior_assignment_id}`; the turn after the last part is the final turn, which returns the review. |
+| `review_parts_pending` | A series of fresh-input turns ([Reviews in fresh parts](#reviews-in-fresh-parts)) is not complete. Read each action's `workflow` and `scope` in `next`, then build that command's complete payload: for `review-assignment`, a new id, the same role, dossier, route, reviewer and author, and `prior_assignment_id` inside `context`, with `native_packet` or `verification_task_id` there when the role needs it, the current expected revision and a new request id; for `review-run`, the recorded turn. `adapter`, `series_assignment_id`, `kind`, `turn`, `units_carded` and `units_remaining` show the progress, and `blocked` names the code when the turn cannot continue. |
 | `review_task_pending` | A task of a staged review is ready, blocked or not yet planned: run the `review-assignment` or `review-run` payload in `next`; `review-assignment {controller_assignment_id}` plans and assigns the next task ([Staged problem reviews](#staged-problem-reviews)). |
 | `review_capacity_wait` | The reviewer capacity is occupied: reconcile the named reservations with `review-run ... action: "reconcile"` and start no other call. |
 | `review_worker_reconciliation_required`, `review_observation_acceptance_pending` | Reconcile the task's worker, or resume the acceptance of its committed capture, with the `review-run` payload in `next`; neither makes a reviewer call. |
@@ -4219,7 +4570,7 @@ stores retain preparation ordering and the next unread cohort abstract. At the `
 
 At stage `write`, `status` and `next` also carry one `draft_marker_missing` obligation while no draft record exists, or while `.exactory/draft.json` (the marker) is not a regular file that holds the JSON of the draft record. The comparison is of parsed JSON, not of bytes, and it applies no default: a record that holds `version` differs from a file without it. The full list appends the obligation after the other obligations, and both commands select it as `next`, so `status --summary` and `next --summary` carry it as `next_hint`. `by_code` of the summaries orders codes by count and then by name, not by `next`. The obligation carries `stage` (`write`), `path` (`.exactory/draft.json`) and `missing_fields`: the objective fields among `title` and `category` that are absent while neither record nor entry exists, and an empty list otherwise. The hint carries the fixed hint keys `code`, `version_id`, `work_id`, `collection_id`, `unit_id` and `explanation`, with the four identifiers null for this obligation and the explanation cut at 120 characters, and `truncated_fields` and `details_required: true`. It carries no `path`, `stage` or `missing_fields`. A summary that exceeds its size bound can cut the explanation shorter and then lists it in `next_hint.truncated_fields`. Every explanation names the step of its state within 120 characters. The states and their steps: (1) A draft record exists, and the marker is missing, holds other or invalid JSON, or is a symbolic link: `export` (its default `--kind workspace`) writes the marker from the record again. It replaces a link and leaves the link's target alone. (2) A draft record exists, and the entry is a directory or another type: move the entry to an unused name in `.exactory/`, then `export`. (3) No draft record exists, and the marker is a regular file that holds a JSON object whose `version` is absent, 1 or 2: `adopt` records that object as the draft, as it is and without adding `version`. Its payload, sent with the usual `--expected-revision` and `--request-id`, names `.exactory/draft.json` in `files` and gives an `id`, a `reason` and the current `profile` and `target` exactly (`configuration_conflict` otherwise). `exactory-draft init` refuses the directory while the file exists. (4) No draft record exists, and the entry is a symbolic link (dangling included), a directory, or a regular file that is not such an object (`adopt` answers `invalid_json` or `migration_required`): move the entry to an unused name in `.exactory/`, for example `mv -n .exactory/draft.json .exactory/draft.json.saved`, with no trailing slash on either path and a name that no entry holds yet (`-n` does not overwrite an existing file of that name, and the entry then stays in place), then run `status` again and take the step of the state it reports. The saved entry is not an input of `adopt`. (5) Neither record nor entry exists, and `missing_fields` is not empty: `exactory-draft init --title TITLE --category CATEGORY` in the workspace root records the draft from its own values and writes the marker. The objective does not change. (6) Neither exists, `missing_fields` is empty, and the study status is not `done`: `exactory-lab state set --stage write` records the draft from the objective. (7) Neither exists, `missing_fields` is empty, and the status is `done`: `exactory-draft init` with the objective's `title` and `category`. The status stays `done`, whereas a same-stage update whose status stays `done` checks the `manuscript` gate and the `readiness` gate (or the selected `manuscript-readiness` gate) first. Reading `status` writes nothing and never reads the target of a link.
 
-The optional `--summary` flag on `status` and `next` returns a bounded advisory view. It runs the same current-state evaluation as the default command. It does not change research obligations, authorize a transition, or reduce required reading. `status --summary` is limited to 16 KiB and `next --summary` to 4 KiB of UTF-8 JSON. Counts distinguish displayed and omitted obligations. Hints can omit or truncate details and must not be used directly as mutation payloads. One exception is `next_step` of `next_hint`, the first action of the selected obligation of a staged review, which is copied exactly when it fits in 1,024 bytes and is otherwise null, with `omitted_next_steps` counting the actions not shown; `status --summary` adds `review_slots: {occupied, complete, incomplete, pending}` when the record holds a staged review. `status --summary` also reports `evaluation` counters (objects verified, readings assessed, graph builds, elapsed seconds); they describe this invocation and are never stored. Full reports retain the exact current data; summaries remain advisory views.
+The optional `--summary` flag on `status` and `next` returns a bounded advisory view. It runs the same current-state evaluation as the default command. It does not change research obligations, authorize a transition, or reduce required reading. `status --summary` is limited to 16 KiB and `next --summary` to 4 KiB of UTF-8 JSON. Counts distinguish displayed and omitted obligations. Hints can omit or truncate details and must not be used directly as mutation payloads. One exception is `next_step` of `next_hint`, the first action of the selected obligation of a staged review, which is copied exactly when it fits in 1,024 bytes and is otherwise null, with `omitted_next_steps` counting the actions not shown; `status --summary` adds `review_slots: {occupied, complete, incomplete, pending}` when the record holds a staged review, and `review_parts: {count, examples, omitted}` when it holds a parts v2 series ([Reviews in fresh parts](#reviews-in-fresh-parts)): one example per series, its latest turn with `kind`, `turn`, `units_carded`, `units_remaining`, `complete`, the ids cut at 64 characters and `blocked` when set, at most 20 examples and fewer when the summary exceeds its bound. The full `status` carries the progress of every parts turn under `review.assignments.<id>.review_parts`, and the `next_hint` of a `review_parts_pending` obligation adds `review_parts` with the kind, the turn, the units carded and remaining, the adapter, the series id and `blocked`. `status --summary` also reports `evaluation` counters (objects verified, readings assessed, graph builds, elapsed seconds); they describe this invocation and are never stored. Full reports retain the exact current data; summaries remain advisory views.
 
 `batches --depth abstract --size N --destination DIR [--profile PROFILE] [--screen] [--max-input-bytes BYTES] [--max-output-tokens TOKENS --estimated-output-tokens-per-item TOKENS]` writes the current unread abstracts (cohort members first, then Tier 3 references) as `batch-NNN.json` files with each version's selected complete abstract text, the exact link, and a `README.json` naming the notes shape that `read-batch` accepts. `--profile` defaults to the configured profile. It reads the store and writes only under the new destination directory (`review_destination_exists` when it exists; `migration_required` without a configuration); a reader agent works from one file and returns one notes file, and a single coordinator submits it with `read-batch`. With `--screen` it writes `screen-NNN.json` files of the unscreened members for `screen-batch`, under `screened-v1` only (`policy_inapplicable` otherwise). The `README.json` names the shape of the export's own mode: the screening shape with `--screen`, the loop shape with `--loop`, the placement shape under `sampled-v1`, and the plain notes shape otherwise.
 
@@ -4245,9 +4596,9 @@ SQLite is authoritative. Workspace JSON, decision logs, and the output views in 
 
 ### Final and intermediate outputs
 
-`final/` and `intermediate/` are generated views of the records, in the workspace root: the directory of the store, or, for a store at a math-solver controller root, that root's parent. `final/` holds the current step results and `final/history/` the superseded and historical ones, in the same layout: `reviews/incomplete/<id>.json` for an incomplete assessment of a staged review (current while its epoch is the slot head); `reviews/<role>/<record id>.json` for the recorded reviews and adjudications (a `value_review` under the role of its assignment, `review_adjudication` under `adjudicator`, `manuscript_review` under `manuscript`, `manuscript_prediction` under `prediction`, `readiness_review` under `readiness`, `scoped_readiness_review` under `scoped-readiness`, `round_review` under `round`); `problem/<kind>/<record id>.json` for the current statement and the latest slate, attempt, openness finding, value, assessment, decision, formal checks and post (`statements/`, `slates/`, `attempts/`, `openness/`, `values/`, `assessments/`, `decisions/`, `formal-checks/`, `posts/`); `study/<kind>/<record id>.json` for the current round admissions, round decisions, round assessments, round factual assessments, research decisions, cycle assessments, contribution analyses, checkpoints and receipts (`round-admissions/`, `round-decisions/`, `round-assessments/`, `round-factual-assessments/`, `decisions/`, `cycle-assessments/`, `contribution-analyses/`, `checkpoints/`, `receipts/`); `study/manuscripts/<bundle id>/bundle.json` with the pinned files under `files/`, for the selected bundle and the bundle of the latest deposit receipt; `study/deposits/<intent id>/receipt.json`, `read-back.json` and the uploaded files under `files/`; `verification/verdicts/` and `verification/tasks/`; `math/deliveries/attempts/` and `math/deliveries/closures/`; and `math/<rel>/`, which the math-solver controller renders (its `SEARCH.md`, "Locked command construction and recoverable projections"). A record whose canonical JSON exceeds 1 MiB is shown as a summary, `{summary: true, kind, id, recorded_revision, status, bytes, sha256, fields}`, in which a field over 64 KiB is `{omitted: true, bytes, sha256}`.
+`final/` and `intermediate/` are generated views of the records, in the workspace root: the directory of the store, or, for a store at a math-solver controller root, that root's parent. `final/` holds the current step results and `final/history/` the superseded and historical ones, in the same layout: `reviews/incomplete/<id>.json` for an incomplete assessment of a staged review (current while its epoch is the slot head); `reviews/<role>/<record id>.json` for the recorded reviews and adjudications (a `value_review` under the role of its assignment, `review_adjudication` under `adjudicator`, `manuscript_review` under `manuscript`, `manuscript_prediction` under `prediction`, `readiness_review` under `readiness`, `scoped_readiness_review` under `scoped-readiness`, `round_review` under `round`); `reviews/<role>/<series assignment id>/<NN>-<assignment id>.<run id>.json` for the selected final output of a complete parts v2 series, or `<NN>-<assignment id>.<correction id>.corrected.json` for a corrected final ([Reviews in fresh parts](#reviews-in-fresh-parts)); `problem/<kind>/<record id>.json` for the current statement and the latest slate, attempt, openness finding, value, assessment, decision, formal checks and post (`statements/`, `slates/`, `attempts/`, `openness/`, `values/`, `assessments/`, `decisions/`, `formal-checks/`, `posts/`); `study/<kind>/<record id>.json` for the current round admissions, round decisions, round assessments, round factual assessments, research decisions, cycle assessments, contribution analyses, checkpoints and receipts (`round-admissions/`, `round-decisions/`, `round-assessments/`, `round-factual-assessments/`, `decisions/`, `cycle-assessments/`, `contribution-analyses/`, `checkpoints/`, `receipts/`); `study/manuscripts/<bundle id>/bundle.json` with the pinned files under `files/`, for the selected bundle and the bundle of the latest deposit receipt; `study/deposits/<intent id>/receipt.json`, `read-back.json` and the uploaded files under `files/`; `verification/verdicts/` and `verification/tasks/`; `math/deliveries/attempts/` and `math/deliveries/closures/`; and `math/<rel>/`, which the math-solver controller renders (its `SEARCH.md`, "Locked command construction and recoverable projections"). A record whose canonical JSON exceeds 1 MiB is shown as a summary, `{summary: true, kind, id, recorded_revision, status, bytes, sha256, fields}`, in which a field over 64 KiB is `{omitted: true, bytes, sha256}`.
 
-`intermediate/` holds every other output. `reviews/<role>/<root assignment id>/series.json` and `<NN>-<assignment id>.<run id>.json` show each reviewer series, the turns of one lineage (an adjudicator's turns are grouped by session): `series.json` lists each turn with its link, slot, packet reference, runs, their status, error, usage, refusal and correction, the selected run and the record that adopted the turn, and the file of a run holds its output; a correction's output is `<NN>-<assignment id>.<correction id>.json`. A controller's turn of a staged review adds `raw_output_digest` and `effective`, with its effective output in `<NN>-<assignment id>.effective.json`, and a child's turn names its `task_id`; `reviews/staged/<kind>/<id>.json` holds the records of the staged reviews (epochs, tasks, execution plans, task executions, reservations, observations, acceptance receipts, pool memberships, the capacity policy, slot heads, dispatch records and composition plans) and, under `review_call_observation`, the captured answers of the ordinary reviewer calls. The other entries are `reviews/routes/<route id>/route.json` and `probes/<probe id>.json`; `reviews/usage.json`, the review call usage with the allowance, the charged calls and the remaining calls under `review_budget`; `reviews/packets/<assignment id>/` and `reviews/packets/<kind>-r<revision>/`, the default destinations of the packet exports, with a numeric suffix when the directory exists; `problem/candidates/<record id>.json`; `lab/probes/<probe id>/probe.json`, `lab/artifacts/<id>.json` for a local artifact that no pin ties to a probe, `lab/runs/<admission id>/run.json`, `result.json` and `log.txt`, and `lab/executions/<id>.json` for an execution that no outcome names; `study/bundles/<bundle id>.json` for the bundles that were neither selected nor deposited, `study/score-history.json` (every recorded manuscript review in recorded order), `study/remote-intents/` and `study/remote-observations/`; `checks/citation-check.json` and `checks/derivation-check.json`, copies of the reports in `.exactory/`; `literature/exports/`, the destination of `export --kind foundation`; `legacy/<original path>/`, the copies that a session moved there once; and `math/<rel>/`, rendered by the controller. A run output of at most 1 MiB is copied; a larger, sealed, missing or corrupt one is listed in `series.json` with `output_listed` set to `over_1_mib`, `sealed`, `artifact_missing` or `artifact_corrupt`.
+`intermediate/` holds every other output. `reviews/<role>/<root assignment id>/series.json` and `<NN>-<assignment id>.<run id>.json` show each reviewer series, the turns of one lineage (an adjudicator's turns are grouped by session): `series.json` lists each turn with its link, slot, packet reference, runs, their status, error, usage, refusal and correction, the selected run and the record that adopted the turn, and the file of a run holds its output; a correction's output is `<NN>-<assignment id>.<correction id>.json`. The turns of a parts v2 series are grouped under the series id, each with a `review_parts` progress object (`protocol`, `adapter`, `series_assignment_id`, `kind`, `turn`, the allowances, the estimates, the evaluated progress and the next actions) and each run with `output_path`: the outputs of read, combine and check turns and the request form of a final stay here, and the selected final output of a complete series is written under `final/reviews/<role>/<series assignment id>/`, an ordinary final as `<NN>-<assignment id>.<run id>.json` and a corrected final as `<NN>-<assignment id>.<correction id>.corrected.json` (`corrected_output_path`); the index entries of both carry `series_assignment_id`, `turn`, `adapter` and `review_parts_kind`. A controller's turn of a staged review adds `raw_output_digest` and `effective`, with its effective output in `<NN>-<assignment id>.effective.json`, and a child's turn names its `task_id`; `reviews/staged/<kind>/<id>.json` holds the records of the staged reviews (epochs, tasks, execution plans, task executions, reservations, observations, acceptance receipts, pool memberships, the capacity policy, slot heads, dispatch records and composition plans) and, under `review_call_observation`, the captured answers of the ordinary reviewer calls. The other entries are `reviews/routes/<route id>/route.json` and `probes/<probe id>.json`; `reviews/usage.json`, the review call usage with the allowance, the charged calls and the remaining calls under `review_budget`; `reviews/packets/<assignment id>/` and `reviews/packets/<kind>-r<revision>/`, the default destinations of the packet exports, with a numeric suffix when the directory exists; `problem/candidates/<record id>.json`; `lab/probes/<probe id>/probe.json`, `lab/artifacts/<id>.json` for a local artifact that no pin ties to a probe, `lab/runs/<admission id>/run.json`, `result.json` and `log.txt`, and `lab/executions/<id>.json` for an execution that no outcome names; `study/bundles/<bundle id>.json` for the bundles that were neither selected nor deposited, `study/score-history.json` (every recorded manuscript review in recorded order), `study/remote-intents/` and `study/remote-observations/`; `checks/citation-check.json` and `checks/derivation-check.json`, copies of the reports in `.exactory/`; `literature/exports/`, the destination of `export --kind foundation`; `legacy/<original path>/`, the copies that a session moved there once; and `math/<rel>/`, rendered by the controller. A run output of at most 1 MiB is copied; a larger, sealed, missing or corrupt one is listed in `series.json` with `output_listed` set to `over_1_mib`, `sealed`, `artifact_missing` or `artifact_corrupt`.
 
 Each folder has `README.md` and `index.json`. The index lists every file with its `type` (`view`, `controller`, `export`, `legacy`), the `kind`, `id`, `recorded_revision` and `status` of its record (`current`, `superseded`, `historical`, `not_selected`), an `error` when the file could not be written, and every other file under `unowned`. The marker `.exactory/output-views.json` records the rendered revision, the digest of the event at that revision, the plugin version and the size, modification time and digest of every owned file. Each recording command of `exactory-research`, `exactory-lab`, `exactory-draft`, `exactory-cohort` and `exactory` (`submit`, `verify`, `reconcile`) renders once after its last commit, outside every store lock, under `.exactory/output-views.lock`; read commands and `--check` render nothing. A render writes only the files whose bytes differ and removes the owned files that the model no longer produces; it never overwrites a file that it does not own (`output_view_conflict` on the entry). A failed render prints one warning line on stderr and leaves the command's result and exit status unchanged. `export --kind outputs` renders every view again and returns `{revision, files: {final, intermediate}, errors}`. `status` and `next` carry `advisories` with one `output_views_stale` entry while the views may not show the current records; its `reason` is `shared_workspace_root` (a store at a controller root whose parent also holds a store renders nothing), `marker_unreadable`, `render_failed` (with `path` and `error`), `file_errors` (the first path with an error), `not_rendered`, `plugin_changed`, `history_changed`, `behind` or `render_deferred` (a render waited more than one second for the renderer lock, so it left the dirty marker `.exactory/output-views-dirty.json`, named in `path`; the next recording command or `export --kind outputs` renders every view again); a field that does not apply to the reason is null. `status --summary` and `next --summary` add `advisories: [{code, reason}]` only when the list is not empty. The advisory never changes `ready`, `obligations`, `counts` or `next`, and no gate reads it. The guard hook refuses `Write`, `Edit` and `NotebookEdit` into `<workspace root>/final/` and `<workspace root>/intermediate/` (only these two direct children, so `draft/final/` is not guarded), except `intermediate/legacy/`, when the workspace root holds `.exactory/output-views.json`, or a folder in it holds `.search/output-views.json` (a controller root), or a controller root in it (`.search/tree.json`) holds `.exactory/output-views.json` (a research store located at the controller root); shell commands are not inspected, and each render checks the files it owns.
 

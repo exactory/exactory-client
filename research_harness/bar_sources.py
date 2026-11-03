@@ -656,7 +656,8 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
     requested = pending(previous_packet, output)
     session = review_excerpts.carry_session(records, artifacts, previous_packet, output)
     answers, session['allowances'] = review_excerpts.answer_passages(
-        records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'])
+        records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'],
+        protocol=session['protocol'])
     answered = {answer['request']['id']: answer for answer in answers}
     characters_left, fulltexts = review_excerpts.TURN_FULLTEXT_CHARACTERS, {}
     for request in requested:

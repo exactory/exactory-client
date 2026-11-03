@@ -242,6 +242,9 @@ def _compact_history(records, artifacts, value, packet, history, mapped):
 
 def bound_history(records, artifacts, value, route, packet, prompt, history, history_assignment_id):
     """Return unchanged history, or a smaller replay after legacy planning refuses."""
+    from .review_parts import find_kind
+    if find_kind(packet) is not None:
+        return history
     if (value['role'] != 'result' or packet.get('subject', {}).get('kind') != 'problem'
             or route['adapter'] not in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1')
             or history_assignment_id is None or 'context_repair' in packet or 'complete_source_delivery' in packet
