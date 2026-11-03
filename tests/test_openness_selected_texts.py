@@ -159,6 +159,110 @@ class SelectedSourceTests(unittest.TestCase):
     def test_multipart_selected_text_survives_projection_and_is_verified_again(self):
         self.finish(700)
 
+    def test_indirect_declared_assets_keep_their_roles_in_text_only_delivery(self):
+        from research_harness import bar_sources
+        native = self.fixture.standalone_packet('asset-roles')
+        records = self.case.store.snapshot()['records']
+        rows = reading.list_reading_rows(records, self.case.artifacts, native)
+        sha256 = self.fixture.pdf['text']['sha256']
+        asset = dict(self.fixture.pdf['text'], media_type='image/png')
+        scopes, unit_captures, pending = bar_sources._declared_units(
+            records, self.case.artifacts, records['work'][self.fixture.work])
+        for role in ('figure', 'table', 'equation', 'supplement'):
+            with self.subTest(role=role):
+                link = {'version_id': self.fixture.work, 'source_id': self.fixture.html['source_id'],
+                    'artifact_descriptor': bar_sources.descriptor(self.fixture.html['text']),
+                    'locator': {'kind': 'html', 'anchor': self.case.span(self.fixture.html['text'], kind='span'),
+                        'assets': [{'url': 'https://example.org/figure.png', 'source_id': self.fixture.pdf['source_id'],
+                                    'artifact_descriptor': bar_sources.descriptor(asset)}]}}
+                bundles = copy.deepcopy(scopes)
+                bundles[0]['units'].append({'id': 'visual', 'kind': role, 'required': True, 'link': link, 'url': None})
+                captures = copy.deepcopy(unit_captures) + [{'source_id': self.fixture.pdf['source_id'],
+                    'kind': 'visual_asset', 'url': 'https://example.org/figure.png', 'bundle_id': bundles[0]['id'],
+                    'unit_id': 'visual', 'completeness': 'complete', 'artifacts': [asset]}]
+                results = []
+                # Use the real source projection with unfiltered declared-unit metadata at its boundary.
+                with patch.object(bar_sources, '_declared_units', side_effect=lambda *args: (
+                        copy.deepcopy(bundles), copy.deepcopy(captures), copy.deepcopy(pending))):
+                    for text_only in (False, True):
+                        with transport.text_only_delivery(text_only):
+                            projected = bar_sources._source(records, self.case.artifacts, {'id': 'asset-probe',
+                                'kind': 'source', 'version_id': self.fixture.work, 'depth': 'fulltext'}, {})
+                            provenance = [row for row in projected['source_provenance']
+                                          if row.get('unit_id') == 'visual']
+                            self.assertEqual(any(sha256 in row['delivered_sha256'] for row in provenance),
+                                             not text_only)
+                            results.append(sources.classify_selected_texts(
+                                records, self.case.artifacts, native, rows)[sha256])
+                            self.assertNotIn(sha256, reading._classify_final_texts(
+                                records, self.case.artifacts, native, rows, reading.PROTOCOL_V5))
+                self.assertEqual(results, [{'selected_text', role}, {'selected_text', role}])
+
+
+class DuplicateSelectedSourceTests(OpennessReadingCase):
+    reading_protocol = None
+    text_sizes = (3000, 3000)
+
+    def build_text(self, number):
+        return 'Identical extracted source text. ' * 90 + 'References: none.'
+
+    def test_identical_selected_texts_in_different_turns_share_one_final_receipt(self):
+        native = json.loads(self.artifacts.read(self.export(priority=self.versions)))
+        proof = self.artifacts.put(b'Independent required proof.', 'text/plain')
+        native['evidence'].append({'digest': proof['sha256'], 'kind': 'artifact', 'artifact': proof})
+        native['scientific_context']['native_reviews'] = [{'required_evidence_digests': [proof['sha256']]}]
+        native['scientific_context']['openness_delivery'] = sources.build_delivery(
+            self.store.snapshot()['records'], self.artifacts, native)
+        self.assertEqual(len(native['scientific_context']['openness_delivery']['sources']), 2)
+        reference = self.artifacts.put(json.dumps(native).encode('utf-8'), 'application/json')
+        prior, delivered = None, {}
+        with patch.object(review_excerpts, 'TURN_FULLTEXT_CHARACTERS', 3000):
+            for number in range(1, 20):
+                identifier = 'turn-%d' % number
+                records = self.store.snapshot()['records']
+                value = {'id': identifier, 'role': 'native_math', 'route_id': 'route',
+                         'reviewer_id': 'openness-reviewer', 'author_id': 'problem-author',
+                         'context': {'native_packet': reference, 'prior_assignment_id': prior}}
+                outer = protocol.build_packet(records, self.artifacts, None, 'native_math',
+                                              'openness-reviewer', native_packet=reference)
+                route = records['review_route']['route']
+                trial, _ = reading.prepare_packet(records, self.artifacts, value, route, outer)
+                if reading.find_stage(trial) == 'final':
+                    prompt = protocol.canonical_prompt('native_math', reading_stage='final',
+                                                       reading_protocol=reading.PROTOCOL_V5)['text']
+                    size = reading._measure(route, transport.request_body(route, prompt, trial, order=()))
+                    with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', size - 1):
+                        self.assign(identifier, reference, prior)
+                    packet = self.read_packet(identifier)
+                    self.invoke(identifier, self.build_native_result(packet))
+                    break
+                self.assign(identifier, reference, prior)
+                packet = self.read_packet(identifier)
+                for unit in packet['reading_turn']['reading_plan']['delivered_now']:
+                    if unit['kind'] == 'fulltext':
+                        delivered[unit['version_id']] = identifier
+                self.invoke(identifier, self.build_reading_response(packet, excerpts=[]))
+                prior = identifier
+            else:
+                self.fail('The duplicate-source chain must finish')
+            self.assertEqual(delivered, dict(zip(self.versions, ['turn-1', 'turn-2'])))
+            sha256 = self.texts[self.versions[0]]['sha256']
+            self.assertEqual(sha256, self.texts[self.versions[1]]['sha256'])
+            entry = next(row for row in packet['evidence'] if row['artifact']['sha256'] == sha256)
+            self.assertEqual(entry['delivery'], reading.BODY_WITHHELD_DELIVERY)
+            self.assertEqual(entry['note'], reading.BODY_WITHHELD_NOTE.format('turn-1'))
+            records = self.store.snapshot()['records']
+            assignment = records['review_assignment'][identifier]
+            reading.verify_chain(records, self.artifacts, assignment)
+            coverage = reading.verify_problem_coverage(records, self.artifacts, assignment, final=True)
+            units = [row for row in coverage['units'] if row['kind'] == 'fulltext']
+            self.assertEqual({row['version_id']: [receipt['assignment_id'] for receipt in row['deliveries']]
+                              for row in units}, {self.versions[0]: ['turn-1'], self.versions[1]: ['turn-2']})
+            state = protocol.assignment_state(records, self.artifacts, identifier)
+            self.assertTrue(state['ready'], state['obligations'])
+            self.assertEqual(sources.validate_delivery(records, self.artifacts, native, state),
+                             native['scientific_context']['openness_delivery'])
+
 
 class HeadroomTests(OpennessReadingCase):
     reading_protocol = None
@@ -246,7 +350,7 @@ class IncidentFinalTests(OpennessReadingCase):
                     version = texts[0]['version_id']
                     content = self.artifacts.read(self.texts[version]).decode()
                     count = min(19, 224 - retained)
-                    excerpts = [{'version_id': version, 'text': content[1000:1650],
+                    excerpts = [{'version_id': version, 'text': content[1000 + index:1650 + index],
                                  'purpose': 'Retained scientific passage %d.' % (retained + index)}
                                 for index in range(count)]
                     retained += count

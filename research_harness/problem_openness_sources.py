@@ -143,9 +143,8 @@ def classify_selected_texts(records, artifacts, packet, rows):
     This classification grants no delivery credit and does not change the schema-1 contract or generic fitting.
     Binary originals and source-unit assets must be considered even on a text-only reviewer route.
     """
-    from .bar_sources import _source
+    from .bar_sources import _declared_units
     from .problem_openness_screening import required_evidence
-    from .review_transport import text_only_delivery
     context = packet['scientific_context']
     delivery = context.get('openness_delivery')
     if delivery is None:
@@ -162,16 +161,15 @@ def classify_selected_texts(records, artifacts, packet, rows):
     protect(required_evidence(context), 'screening')
     for source in delivery['sources']:
         protect((row['original_descriptor']['sha256'] for row in source['representations']), 'original')
-        with text_only_delivery(False):
-            complete = _source(records, artifacts, {'id': 'openness-source', 'kind': 'source',
-                'version_id': source['version_id'], 'depth': 'fulltext'}, {})
-        for bundle in complete['declared_bundles']:
+        bundles, captures, _ = _declared_units(records, artifacts, records['work'][source['version_id']])
+        for bundle in bundles:
             for unit in bundle['units']:
                 if unit['link'] is not None and unit['kind'] in {'figure', 'table', 'equation', 'supplement'}:
-                    protect([unit['link']['artifact_descriptor']['sha256']] + [identity
-                        for row in complete['source_provenance']
-                        if row.get('bundle_id') == bundle['id'] and row.get('unit_id') == unit['id']
-                        for identity in row['delivered_sha256']], unit['kind'])
+                    protect([unit['link']['artifact_descriptor']['sha256']] + [
+                        asset['artifact_descriptor']['sha256'] for asset in unit['link']['locator'].get('assets', [])
+                    ] + [reference['sha256'] for capture in captures
+                         if capture.get('bundle_id') == bundle['id'] and capture.get('unit_id') == unit['id']
+                         for reference in capture['artifacts']], unit['kind'])
     minimum = context['openness_minimum']
     for row in records.get('reading', {}).values():
         if digest(row) in minimum['reading_digests']:
@@ -302,14 +300,14 @@ def validate_delivery(records, artifacts, packet, state):
     require(delivery == build_delivery(records, artifacts, packet), "Reassess changed source captures, readings or containment")
     from .problem_openness_reviews import actual_delivery
     supplied = actual_delivery(records, artifacts, state, packet, required_proof(packet))
-    from .openness_reading import PROTOCOL_V5, list_reading_rows, verify_problem_coverage
+    from .openness_reading import PROTOCOL_V5, list_reading_rows, select_delivered_bodies, verify_problem_coverage
     withheld = {}
     if supplied.get('reading_record', {}).get('protocol') == PROTOCOL_V5:
         attempt = records['review_attempt'][state['attempt_id']]
         assignment = records['review_assignment'][attempt['assignment_id']]
         coverage = verify_problem_coverage(records, artifacts, assignment, final=True)
         reasons = classify_selected_texts(records, artifacts, packet, list_reading_rows(records, artifacts, packet))
-        withheld = {row['artifact']['sha256']: row['deliveries'] for row in coverage['units']
-                    if reasons.get(row['artifact']['sha256']) == {'selected_text'}}
+        withheld = {sha256: row['deliveries'] for sha256, row in select_delivered_bodies(coverage['units']).items()
+                    if reasons.get(sha256) == {'selected_text'}}
     _projection(supplied, projected=True, withheld_texts=withheld)
     return delivery

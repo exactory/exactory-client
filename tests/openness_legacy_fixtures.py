@@ -2,6 +2,7 @@
 
 The fixtures pin openness_reading.py and review_excerpts.py at 448b6da (0.65.2, also kept by 0.66.0 to 0.66.2) and
 c408fea (0.71.8) by SHA-256. CI checks out a single commit, so the bytes are kept here rather than read from history.
+The 0.72.0 builder at 6f2121a also pins v4 chains with excerpt-v3 retention.
 """
 
 import contextlib
@@ -82,3 +83,15 @@ def build_as_0_71_8():
     """Build and prompt v4 assignments using the release's unchanged bytes."""
     with patch.object(protocol, 'openness_reading', load_0_71_8_openness_reading()):
         yield
+
+
+def load_0_72_0_openness_reading():
+    """Load the exact v4 reading builder from 6f2121a, with its unchanged excerpt-v3 module."""
+    location = Path(__file__).resolve().parent / 'fixtures/openness_reading_0_72_0.py.txt'
+    source = location.read_bytes()
+    if hashlib.sha256(source).hexdigest() != 'abe357a573cfc30c15ae001e70debcbac4e3eb9fb20f8f33762d3801e3b317ea':
+        raise AssertionError('The 0.72.0 source fixture changed: ' + str(location))
+    spec = importlib.util.spec_from_loader('research_harness.openness_reading_0_72_0', loader=None)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(source, str(location), 'exec'), module.__dict__)
+    return module

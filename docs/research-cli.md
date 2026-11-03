@@ -284,6 +284,11 @@ slate or result review creates a v3 session only when its packet has no
 excerpt session; otherwise it keeps the inherited session protocol. A
 recorded v2 session stays v2.
 
+New v5 problem openness chains carry `excerpt_protocol` set to
+`exactory-review-excerpts-v3`. A continuing v4 chain keeps its recorded excerpt
+protocol: 0.72.0 chains retain v3, and older chains with no `excerpt_protocol`
+field keep the field absent and their earlier retention rules.
+
 A text route fits an oversized request, other than a `complete-visible-v1`
 continuation, by applying these reductions in order, one at a time, until the
 input fits:
@@ -3379,8 +3384,12 @@ whole or in every part, and the chain retains its native packet, reviewer,
 author and route. Its digest must have no other protected role: required proof,
 screening evidence, an original, a figure, table, equation, supplement or
 inspection asset. Eligibility uses complete metadata on both text-only and
-other routes. Source validation derives coverage again from authenticated
-requests; saved receipts alone give no credit. Existing proof-container
+other routes, including declared units' original and asset descriptors before
+transport projection. When several full-text units have the same digest,
+coverage keeps each unit's delivering turns. Final withholding and source
+validation both select the first complete unit by identity for that digest.
+Source validation derives coverage again from authenticated requests; saved
+receipts alone give no credit. Existing proof-container
 containment still applies. Generic route fitting continues to protect selected
 texts, and v4 and math chains retain their existing rules. A withheld body keeps
 its artifact reference and encoding, with `content: ""`,

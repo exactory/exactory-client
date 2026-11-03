@@ -809,6 +809,8 @@ def _list_withholdable_bodies(packet, rows, spans, observations, eligible_texts=
     native = packet['native']
     priority = native['scientific_context'].get('text_delivery_priority', [])
     whole, parts = _collect_coverage(observations)
+    receipts = (select_delivered_bodies(_collect_delivered_bodies(rows, spans, observations).values())
+                if packet.get(RECORD_KEY, {}).get('protocol') == PROTOCOL_V5 else None)
     ranked = []
     for row in _list_withholding_candidates(packet, rows, eligible_texts):
         key, sha256 = review_excerpts.find_identity(row), row['artifact']['sha256']
@@ -820,6 +822,8 @@ def _list_withholdable_bodies(packet, rows, spans, observations, eligible_texts=
             rank = (1 + WITHHOLDING_ORDER.index(row.get('record_kind', row['kind'])), -spans[key][-1][1])
         delivering = [observation['assignment_id'] for observation in observations if observation['reading']
                       and (key in observation['whole'] or any(item[0] == key for item in observation['parts']))]
+        if receipts is not None:
+            delivering = list(dict.fromkeys(receipt['assignment_id'] for receipt in receipts[sha256]['deliveries']))
         ranked.append((rank, key, sha256, delivering))
     bodies, seen = [], set()
     for _, _, sha256, delivering in sorted(ranked):
@@ -960,7 +964,7 @@ def _observe_turns(records, artifacts, assignments, rows, spans, manifest=None):
 
 
 def _collect_delivered_bodies(rows, spans, observations):
-    """The exact whole bytes and contributing receipts of units completed in authenticated reading requests."""
+    """Keep exact whole bytes and contributing receipts by unit identity, including units with equal digests."""
     delivered = {}
     for row in rows:
         key = review_excerpts.find_identity(row)
@@ -981,16 +985,25 @@ def _collect_delivered_bodies(rows, spans, observations):
                     deliveries.append(dict({name: observation['turn'][name] for name in ('assignment_id', 'attempt_id')},
                                            part=part, parts=len(spans[key]), start=start, end=end, sha256=sha256))
         if deliveries and (deliveries[0]['parts'] == 1 or len(pieces) == len(spans[key])):
-            delivered[reference['sha256']] = {'content': b''.join(pieces[part] for part in sorted(pieces)),
-                                             'deliveries': deliveries}
+            delivered[key] = dict(_describe_identity(row), artifact=reference,
+                                  content=b''.join(pieces[part] for part in sorted(pieces)), deliveries=deliveries)
     return delivered
+
+
+def select_delivered_bodies(units):
+    """Choose the first complete unit by identity for each digest, consistently across fitting and validation."""
+    selected = {}
+    for unit in sorted(units, key=review_excerpts.find_identity):
+        selected.setdefault(unit['artifact']['sha256'], unit)
+    return selected
 
 
 def _verify_search_coverage(artifacts, manifest, rows, spans, observations):
     """Reconstruct search bytes only from whole components or all exact parts observed in reading requests."""
     from .review_search_delivery import verify_search_deliveries
     originals = {entry['search_digest']: artifacts.read(entry['artifact']) for entry in manifest['searches']}
-    return verify_search_deliveries(manifest, _collect_delivered_bodies(rows, spans, observations), originals)
+    return verify_search_deliveries(manifest, select_delivered_bodies(
+        _collect_delivered_bodies(rows, spans, observations).values()), originals)
 
 
 def _collect_coverage(observations):
@@ -1150,7 +1163,7 @@ def prepare_packet(records, artifacts, value, route, packet):
     record = _extend_record(records, artifacts, prior_packet, state, rows, observations, protocol)
     chain = dict(prior['reading_chain'], turn=prior['reading_chain']['turn'] + 1)
     selected = _classify_final_texts(records, artifacts, native, rows, protocol)
-    delivered_bodies = (_collect_delivered_bodies(delivery_rows, spans, observations)
+    delivered_bodies = (select_delivered_bodies(_collect_delivered_bodies(delivery_rows, spans, observations).values())
                         if protocol == PROTOCOL_V5 else None)
     report = preflight_final_input(route, transport.local_input_limit(route), packet, rows, record,
                                    eligible_texts=selected, delivered=delivered_bodies)
@@ -1534,7 +1547,7 @@ def verify_problem_coverage(records, artifacts, assignment, *, final=False):
     whole, parts = _collect_coverage(observations)
     delivered = _collect_delivered_bodies(delivery_rows, spans, observations)
     units = [dict(_describe_identity(row), artifact=row['artifact'],
-                  deliveries=delivered[row['artifact']['sha256']]['deliveries'])
+                  deliveries=delivered[review_excerpts.find_identity(row)]['deliveries'])
              for row in rows if row.get('record_kind') != 'literature_search'
              and _is_complete(review_excerpts.find_identity(row), spans[review_excerpts.find_identity(row)],
                               whole, parts)]

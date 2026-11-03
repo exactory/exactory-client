@@ -103,7 +103,7 @@ def build_before_preflight(*args):
     return namespace['prepare_packet'](*args)
 
 
-def create_legacy_record(protocol, **options):
+def create_legacy_record(protocol, manifest=None, **options):
     """Pin the pre-0.72 retention shape while comparing historical preflight builders."""
     return {'protocol': protocol, 'turns': [], 'sources': [], 'excerpts': [], 'passages': [],
             'allowances': reading.review_excerpts.create_allowances()}
