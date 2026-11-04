@@ -16,6 +16,7 @@ from . import review_protocol as protocol
 # Outcome names, terminal codes and allowances have one policy home.
 OUTCOME_CODES = {
     'runtime_unavailable': 'review_runtime_missing',
+    'runtime_stale': 'review_route_runtime_stale',
     'format_unsupported': 'review_format_unsupported',
     'input_over_limit': 'review_input_too_large',
     'usage_limit': 'review_provider_unavailable',
@@ -157,7 +158,7 @@ def classify_attempt(records, artifacts, attempt):
     usage_line = re.match(r"^You['’]ve (?:hit|reached) your\b[^\n]*\blimit\b", answer.strip())
     outcome, signal, reset_at = 'unknown', dict(source='retained_evidence', value='undecided'), None
     dispatch = {'review_runtime_missing': 'runtime_unavailable',
-                'review_route_runtime_stale': 'runtime_unavailable',
+                'review_route_runtime_stale': 'runtime_stale',
                 'review_format_unsupported': 'format_unsupported', 'review_input_too_large': 'input_over_limit'}
     if error_code in dispatch:
         outcome, signal = dispatch[error_code], dict(source='attempt.error.code', value=error_code)
