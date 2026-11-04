@@ -196,6 +196,31 @@ class AssignmentRequestOnceTests(ResultPartsCase):
                 self.assertEqual(failure.exception.args, ('assignment_id',))
 
 
+class StagedAssignmentRequestTests(ResultPartsCase):
+    staged_entry = True
+
+    def test_staged_request_rebuilds_and_checks_its_frozen_digest_on_warm_evaluation(self):
+        self.oversized()
+        controller = self.assign_staged('frozen-controller')
+        child = self.case.assign('result', 'first', identifier='frozen-child',
+            controller_assignment_id=controller['id'], task_id=controller['staged_review']['task_ids'][0])
+        records = self.case.read_records()
+        evaluation = Evaluation(records, self.case.artifacts)
+        frozen = json.loads(self.case.artifacts.read(child['request']))
+        with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
+            first = protocol.build_assignment_request(records, evaluation, child)
+            second = protocol.build_assignment_request(records, evaluation, child)
+            self.assertEqual(build.call_count, 2)
+            self.assertEqual(first, frozen)
+            self.assertEqual(second, frozen)
+            self.assertIsNot(first, second)
+            changed = dict(child, planned_request_digest='0' * 64)
+            with self.assertRaises(ResearchError) as failure:
+                protocol.build_assignment_request(records, evaluation, changed)
+            self.assertEqual(failure.exception.code, 'review_task_dependency_changed')
+            self.assertEqual(build.call_count, 3)
+
+
 class VisualAssignmentRequestTests(unittest.TestCase):
     def setUp(self):
         from test_visual_context_repair import VisualContextRepairTests

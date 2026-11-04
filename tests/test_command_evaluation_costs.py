@@ -105,10 +105,22 @@ class CommandEvaluationTests(LiteratureCase):
                     for evaluation in (root, child):
                         evaluation.request_once(('warm',), lambda: b'compressed request')
                         evaluation.once('ordinary', lambda: 'warm state')
+                        self.assertGreater(evaluation.retention_report()['request_bytes'], 0)
             self.assertEqual(error.exception.code, 'review_runtime_changed')
         for evaluation in (root, child):
             self.assertEqual(evaluation.retention_report()['optional_bytes'], 0)
             self.assertEqual(evaluation.retention_report()['request_entries'], 0)
+            self.assertEqual(evaluation.retention_report()['request_bytes'], 0)
+            for insert in (False, True):
+                if insert:
+                    evaluation.once('ordinary', lambda: 'fresh state')
+                    evaluation.request_once(('warm',), lambda: b'fresh compressed request')
+                    self.assertEqual(evaluation.request_once(('warm',), None), b'fresh compressed request')
+                    self.assertEqual(evaluation.retention_report()['request_entries'], 1)
+                request_weight = sum(weight for _, weight in evaluation._requests.values())
+                optional_weight = sum(weight for _, weight in evaluation._optional.values())
+                self.assertEqual(evaluation._request_bytes[0], request_weight)
+                self.assertEqual(evaluation._retained_bytes[0], request_weight + optional_weight)
 
     def test_runtime_scope_does_not_retain_inactive_evaluation_views(self):
         records = {'review_route': {'route': {'id': 'route', 'adapter': transport.ADAPTER}}}

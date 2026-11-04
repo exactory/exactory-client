@@ -37,6 +37,14 @@ class RequestReuseTests(ResultPartsCase):
             self.exercise(evaluation)
         self.assertEqual(derive.call_count, 1)
 
+    def test_independent_evaluations_derive_identical_inputs_twice(self):
+        with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+            first = self.exercise(Evaluation(self.records, self.case.artifacts))
+            self.assertEqual(derive.call_count, 1)
+            second = self.exercise(Evaluation(self.records, self.case.artifacts))
+        self.assertEqual(second, first)
+        self.assertEqual(derive.call_count, 2)
+
     def test_request_survives_streaming_more_than_the_total_budget(self):
         evaluation = Evaluation(self.records, self.case.artifacts, retention_budget_bytes=64000)
         with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
@@ -219,6 +227,64 @@ class RequestIteratorTests(LiteratureCase):
             for packet in ({'a': 1, 'b': 2}, {'b': 2, 'a': 1}, {'a': 1.0, 'b': 2}, {'a': True, 'b': 2}):
                 self.derive(packet=packet)
         self.assertEqual(derive.call_count, 4)
+
+    def test_iterator_history_matches_pinned_requests_without_polluting_list_history(self):
+        from research_harness.review_request_evaluation import iter_built_requests
+        history = [{'role': 'user', 'content': 'Earlier question'}]
+        expected = list(transport.list_built_requests(self.route, 'Read this packet', self.packet, iter(history)))
+        self.assertEqual(expected[0]['input'][:-1], history)
+        with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+            for _ in range(2):
+                original = iter(history)
+                actual = list(iter_built_requests(self.evaluation, self.route, 'Read this packet', self.packet, original))
+                self.assertEqual(actual, expected)
+                self.assertIs(derive.call_args.args[3], original)
+                self.assertEqual(list(original), [])
+            self.assertEqual(derive.call_count, 2)
+            self.assertEqual(self.evaluation.retention_report()['request_entries'], 0)
+            self.assertEqual(self.derive(history=history), expected[0])
+            self.assertEqual(self.derive(history=history), expected[0])
+            self.assertEqual(self.derive(history=tuple(history)), expected[0])
+        self.assertEqual(derive.call_count, 3)
+
+    def test_list_order_preserves_native_fit_after_warming_tuple_order(self):
+        from test_review_html_delivery import ROUTE, entry
+        body = entry('x' * (transport.CODEX_INPUT_LIMIT_CHARS + 1), 'text/plain')
+        packet = {'problem_evidence': {}, 'evidence': [body],
+                  'source_deliveries': [{'status': 'delivered', 'evidence': [body['artifact']]}]}
+        order = list(transport.FIT_ORDER)
+        expected_tuple = transport.request_body(ROUTE, 'Read this packet', packet, [], order=transport.FIT_ORDER)
+        expected_list = transport.request_body(ROUTE, 'Read this packet', packet, [], order=order)
+        supplied_tuple = json.loads(expected_tuple['input'][-1]['content'][len(transport.PACKET_LABEL):])
+        supplied_list = json.loads(expected_list['input'][-1]['content'][len(transport.PACKET_LABEL):])
+        self.assertEqual(supplied_tuple['evidence'][0]['content'], body['content'])
+        self.assertEqual(supplied_list['evidence'][0]['content'], '')
+        with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+            self.assertEqual(self.derive(route=ROUTE, packet=packet), expected_tuple)
+            for _ in range(2):
+                self.assertEqual(self.derive(route=ROUTE, packet=packet, order=order), expected_list)
+                self.assertIs(derive.call_args.kwargs['order'], order)
+            self.assertEqual(self.derive(route=ROUTE, packet=packet), expected_tuple)
+        self.assertEqual(derive.call_count, 3)
+        self.assertEqual(self.evaluation.retention_report()['request_entries'], 1)
+
+    def test_history_and_order_subclasses_bypass_retention(self):
+        class HistoryList(list):
+            pass
+        class Sequence(tuple):
+            pass
+        class Step(str):
+            pass
+        for changes in (dict(history=HistoryList()), dict(history=Sequence()),
+                        dict(order=Sequence(transport.FIT_ORDER)),
+                        dict(order=tuple(Step(step) for step in transport.FIT_ORDER))):
+            with self.subTest(changes=changes):
+                self.evaluation = Evaluation({}, self.artifacts)
+                with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+                    first = self.derive(**changes)
+                    self.assertEqual(self.derive(**changes), first)
+                self.assertEqual(derive.call_count, 2)
+                self.assertEqual(self.evaluation.retention_report()['request_entries'], 0)
 
     def test_lazy_iterator_matches_pinned_order_duplicates_and_exceptions(self):
         from research_harness.review_request_evaluation import iter_built_requests
