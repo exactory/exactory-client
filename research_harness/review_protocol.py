@@ -2937,7 +2937,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if review_parts.find_kind(packet) is not None:
             record[review_parts.KEY] = {key: packet[review_parts.KEY][key] for key in
                 ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest')}
-            record['review_parts_plan'] = packet[review_parts.KEY]['plan']
+            record['review_parts_plan'] = review_parts.describe_plan(packet)
         if not controller and review_parts.find_kind(packet) is None and route['adapter'] != 'codex_cli_visual_v1':
             previous = records.get('review_assignment', {}).get(history_assignment_id)
             record['history_ref'] = write_history(artifacts, record, history, previous=previous)
