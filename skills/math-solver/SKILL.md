@@ -212,27 +212,37 @@ replacement of a turn after the first is the next turn assigned again with the
 same `prior_assignment_id`). Do not write your own driver, turn limit or retry
 loop around reviewer calls. The command prints one JSON object per line for
 each step and ends in one of four ways. Exit status 3 with the handoff
-`native_review_acceptance_required` (command `search accept`): the final turn
-has its output; submit that native output unchanged to `search accept` or
-`search complete`. The service verifies the whole chain and stores its
-`reading_turns` on the acceptance or closure. Exit status 3 with the handoff
+`native_review_acceptance_required` (command `search accept`; the plan names
+only this command): the final turn has its output; submit that native output
+unchanged to `search accept`, or to `search complete` for the closure review.
+The service verifies the whole chain and stores its `reading_turns` on the
+acceptance or closure. Exit status 3 with the handoff
 `native_review_attestation_required` (command `search review-packet`): the
 first turn needs a replacement, which needs a new attestation; export a new
 packet under a new assignment id and start a new chain. Exit status 3 with the
 handoff `review_route_runtime_stale` (command `review-route`): the head's route
 pins another reviewer runtime; record and probe a new route, and the
 replacement turn then runs on it. Exit status 3 with a `stop`: a typed limit or
-refusal with its `code` and `details`; report both to the user and wait for the
-decision. Exit status 4 with `not_before` on the last line: a wait of more than
-30 minutes; run `review-series` again at `not_before`. Exit status 0: the plan
-is `done`, and the chain's final is recorded. A refusal of
+refusal with its `code` and `details`; the harness cannot continue the chain.
+A refused action of the chain ends the command this way with the refusal's
+code (for example `review_input_too_large` or a `review_parts_*` code); when
+the refusal recorded an output refusal, or its code is
+`review_invocation_pending`, the command plans again instead. Read `code`
+and `details`. When the CLI reference names a step for that code, take it.
+Otherwise report the stop with its code and details in your summary and
+continue the work that does not depend on this chain. Exit status 4 with the
+plan and its `not_before` on the last line: a wait of more than 30 minutes; run
+`review-series` again at `not_before`. Exit status 0: the plan is `done`, and
+the chain's final is recorded. A refusal of
 `review-assignment` with `review_input_too_large` and `phase:
 "final_preflight"`, before a turn is planned, says that the mandatory final
 input (the required proof bytes and the protected bodies, the excerpts and
 passages so far and the final prompt) exceeds the route's limit: the chain
 cannot finish on that route with that material, nothing was written, and
-`mandatory_components` names each body; report them to the user, with the
-route limits, and wait for the decision. A final turn
+`mandatory_components` names each body; when `review-series` assigned the
+turn, it ends with a `stop` of that code. Report them in your summary, with
+the route limits, and continue the work that does not depend on this chain. A
+final turn
 that cannot judge yet requests passages that deliver characters. Reading in a
 chain changes no requirement of the finding: an unavailable decisive source
 stays a gap, and the finding stays unresolved.
@@ -252,17 +262,19 @@ the same packet and the turn that just ran), runs it, and replaces a turn whose
 attempts all ended without completed output (for a continuation, with its
 original `prior_assignment_id`). At the handoff
 `native_review_acceptance_required`, submit the native output of the final turn
-unchanged to `search accept` or `search complete`: the attestation names the
-first turn, and the service verifies the whole series and stores its receipts
-as `reading_turns`. At the handoff `native_review_attestation_required` (a
+unchanged to `search accept`, or to `search complete` for the closure review:
+the attestation names the first turn, and the service verifies the whole series
+and stores its receipts as `reading_turns`. At the handoff `native_review_attestation_required` (a
 failed first turn), first export a new packet whose attestation names the
 replacement assignment (`search review-packet`), then start the series again.
 If `review-assignment` refuses with `review_parts_frame_too_large`,
 `review_parts_inventory_too_large`, `review_parts_final_too_large` or
-`review_parts_no_progress`, the proposed turn cannot be planned with the
+`review_parts_no_progress` (a `stop` of `review-series` with that code when the
+command assigned the turn), the proposed turn cannot be planned with the
 current route and material; no assignment or invocation is recorded, although
 the preparation can have stored artifacts. Report the refusal code and any
-supplied size details to the user and wait for the decision. A native
+supplied size details in your summary and continue the work that does not
+depend on this chain. A native
 assignment does not accept `context_repair`: report a retired route or a
 contaminated context instead of submitting a repair. A packet that fits stays
 a single assignment, and a packet with an openness minimum keeps its reading

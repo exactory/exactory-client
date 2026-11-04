@@ -1126,66 +1126,81 @@ save that exact input `ResultReview` as `verification-review.json`. The shared
 runner retains rejected result/recovery responses, but they cannot be converted
 into approve-only native records.
 
-In a reading chain, run reading turn 1 with `review-run`. Then assign the next
-turn with the same reviewer, route, author and packet and with `context:
-{native_packet, prior_assignment_id}` that names the previous turn, and run it.
-The previous turn must be ready and its answer a valid reading answer. The
-harness checks the excerpts of that answer, answers its passage requests, and
-builds the next reading turn while units remain. After the last reading turn the
-next assignment is the final turn: the native packet with the reading record of
-the earlier turns, on the prompt of the final turn. Only as far as its request
-needs to fit the route limit, the final turn withholds bodies that reading turns
-delivered complete (full texts largest first, then captured responses, reading
-records and search records), then the notes of the earliest turns, and never an
-excerpt or a passage. The final turn returns the `ResultReview`, or a reading
-answer with at least one passage request while the passage allowance has
-characters left. A further final turn, assigned in the same way, then delivers
-those passages. At least one request of such an answer must deliver characters.
-An answer whose requests all have an absent anchor, name no single stored body,
-or exceed the remaining allowance is refused with `invalid_reading_response`.
-Run the same assignment again with `review-run` under a new invocation id. When
-every attempt of a turn ended without a completed output, for example at the
-route timeout, the same assignment can also run again under a new invocation
-id: attempts without a completed output do not block a run while the route is
-not retired, not changed and its pinned runtime equals the installed adapter.
-A turn after the first can instead be replaced: assign the next turn again with
-the same `prior_assignment_id`. The new assignment replaces the failed turn,
-which can no longer run or be continued (`review_assignment_replaced`). The
-first turn has no `prior_assignment_id`. When it cannot run again, export a new
-packet under a new assignment id and start a new chain, and the final output's
-`attestation_id` then names the new first turn. A turn whose invocation is
-pending can be neither run nor replaced. When the process stopped after the
-capture of the reviewer's answer committed, or the finishing write stayed
-refused, run that `review-run` again with the same payload and request id: it
-records the captured answer without a second call. When the process stopped
-before the capture committed, even after the reviewer answered, reconcile the
-call, or for a call of 0.69.x import a `failed` attempt with
-`output: null` under the `id` of that `review-run` with `review-attempt`
+In a reading chain, run reading turn 1 with `review-run`, then run the chain
+to its end with `exactory-research review-series --workspace WORKSPACE
+--assignment ASSIGNMENT_ID`, where the assignment is any turn of the chain
+([CLI reference](../../docs/research-cli.md#review-chains-and-review-series));
+the math-solver skill, stage 3, states its exits. It assigns the next turn with
+the same reviewer, route, author and packet and with `context: {native_packet,
+prior_assignment_id}` that names the previous turn, and runs it. The previous
+turn must be ready and its answer a valid reading answer. The harness checks
+the excerpts of that answer, answers its passage requests, and builds the next
+reading turn while units remain. After the last reading turn the next
+assignment is the final turn: the native packet with the reading record of the
+earlier turns, on the prompt of the final turn. Only as far as its request
+needs to fit the route limit, the final turn withholds bodies that reading
+turns delivered complete (full texts largest first, then captured responses,
+reading records and search records), then the notes of the earliest turns, and
+never an excerpt or a passage. The final turn returns the `ResultReview`, or a
+reading answer with at least one passage request while the passage allowance
+has characters left. A further final turn, assigned in the same way, then
+delivers those passages. At least one request of such an answer must deliver
+characters. An answer whose requests all have an absent anchor, name no single
+stored body, or exceed the remaining allowance is refused with
+`invalid_reading_response`; `review-series` runs the same turn once more, and
+after a second refusal it ends with the handoff `review_slot_exhausted`: the
+chain cannot continue from a refused turn, so export a new packet under a new
+assignment id and start a new chain. When every attempt of a turn ended
+without a completed output, `review-series` plans the next action under the
+outcomes of a failed reviewer call: a run of the same assignment under a new
+invocation id (attempts without a completed output do not block a run while
+the route is not retired, not changed and its pinned runtime equals the
+installed adapter), a replacement of a turn after the first (state `replace`:
+the next turn assigned again with the same `prior_assignment_id`, which
+replaces the failed turn; the failed turn can no longer run or be continued,
+`review_assignment_replaced`), or a `stop` with the outcome's code. The first
+turn has no `prior_assignment_id`. When it cannot run again, the command ends
+with the handoff `native_review_attestation_required` (command
+`search review-packet`): export a new packet under a new assignment id and
+start a new chain, and the final output's `attestation_id` then names the new
+first turn. A turn whose invocation is pending can be neither run nor
+replaced: `review-series` finishes a call whose process stopped after the
+capture of the reviewer's answer committed, or whose finishing write stayed
+refused, with its original request id (state `resume`), and records the
+captured answer without a second call; when the process stopped before the
+capture committed, even after the reviewer answered, it reconciles the call
+in the same state, and for a call of 0.69.x, which has no pool membership, it
+ends with the handoff `review_worker_reconciliation_required` (command
+`review-attempt`): import a `failed` attempt with `output: null` under the
+`id` of that `review-run`
 ([the shared route instructions](../../docs/research-decisions.md#commands-and-shared-state)).
-A second live continuation of one turn
-is refused with `review_source_continuation_fork`. When the first unit of a
-reading turn does not fit the route alone, or the final turn does not fit after
-every withholding, `review-assignment` refuses with `review_input_too_large`.
-For the final turn the details give the sizes of the base packet, the notes, the
-excerpts and the passages. Before each turn is planned, the harness also
-measures a lower bound of the mandatory final input (the required proof bytes
-and the protected bodies, the excerpts and passages so far and the final
-prompt) and refuses with the same code and `phase: "final_preflight"` when it
-exceeds the route limit; nothing is written, `mandatory_components` names each
-body, and the chain cannot finish on that route with that material
-([CLI reference](../../docs/research-cli.md#problem-creation)). Submit the
-native output of the final turn unchanged.
-Its `attestation_id` names the first turn, the assignment id chosen before the
-export. `accept` and `complete` follow the chain from that turn to its terminal
-turn and verify every turn.
+A second live continuation of one turn is refused with
+`review_source_continuation_fork`. When the first unit of a reading turn does
+not fit the route alone, or the final turn does not fit after every
+withholding, `review-assignment` refuses with `review_input_too_large`, and
+`review-series` ends with a `stop` of that code. For the final turn the
+details give the sizes of the base packet, the notes, the excerpts and the
+passages. Before each turn is planned, the harness also measures a lower bound
+of the mandatory final input (the required proof bytes and the protected
+bodies, the excerpts and passages so far and the final prompt) and refuses
+with the same code and `phase: "final_preflight"` when it exceeds the route
+limit; nothing is written, `mandatory_components` names each body, and the
+chain cannot finish on that route with that material
+([CLI reference](../../docs/research-cli.md#problem-creation)). At the handoff
+`native_review_acceptance_required` (command `search accept`), submit the
+native output of the final turn unchanged. Its `attestation_id` names the
+first turn, the assignment id chosen before the export. `accept` and
+`complete` follow the chain from that turn to its terminal turn and verify
+every turn.
 
 A packet without an openness minimum that does not fit one input of a text
 route with a local input limit is delivered as a series of fresh-input turns
 under `exactory-review-parts-v2`
 ([CLI reference](../../docs/research-cli.md#reviews-in-fresh-parts)) instead
 of a reading chain: `review-assignment` records `review_parts` on the first
-turn, each later turn is a new assignment with `context.prior_assignment_id`,
-and the final turn returns the native output. Its `attestation_id` names the
+turn, `review-series` assigns each later turn as a new assignment with
+`context.prior_assignment_id` and runs it, and the final turn returns the
+native output. Its `attestation_id` names the
 first turn as well. `accept` and `complete` find the final turn of the series,
 verify the whole series and store its receipts as `reading_turns` with empty
 unit lists; the supplied native packet must equal the series' logical packet
@@ -1728,9 +1743,11 @@ scientific evidence without making current common preparation a currency gate.
 Recorded version 1 closures replay unchanged.
 
 The closure review is its own observed review. Export the closure subject as a
-`result` packet with the complete current `OpennessMinimum`, run it, as a
-reading chain when the packet exceeds a single turn, and submit the output of
-its final turn with `search complete`. A checkpoint review cannot stand in for
+`result` packet with the complete current `OpennessMinimum`, run it (with
+`review-series` as a reading chain when the packet exceeds a single turn; its
+handoff `native_review_acceptance_required` names `search accept` only), and
+submit the output of its final turn with `search complete`. A checkpoint review
+cannot stand in for
 it: the closure binds the exact subject digest of the closure subject. A closure
 whose review came from a chain also stores `reading_turns`. `complete` derives
 them from the verified chain, and every audit of the closure compares them as

@@ -454,8 +454,8 @@ result and its source; start no solver work to reproduce an established result.
      `status` is `"unknown"` and the floor, the headroom and the warning are null. Keep the
      floor, the headroom and the warning of every turn in your report. A floor above the limit
      is still refused with `review_input_too_large` and `phase: "final_preflight"` (below).
-   - When a turn's run ends without output, for example at the route timeout, `review-series`
-     retries or replaces it under the outcomes of a failed reviewer call in the
+   - When a turn's run ends without output, `review-series` retries, replaces or stops the turn
+     under the outcomes of a failed reviewer call in the
      [CLI reference](../../docs/research-cli.md#review-chains-and-review-series). A replacement
      is the next turn assigned again with the same `prior_assignment_id`; it replaces the failed
      turn, which can no longer be run or continued (`review_assignment_replaced`). When the first
@@ -470,11 +470,12 @@ result and its source; start no solver work to reproduce an established result.
      and a measurement stands against its limit, such as `normalized_characters: 18` against
      `minimum_characters: 20`. `review-series` runs the same turn once more: it sends the exact
      same request, and the reviewer learns nothing about the refusal. A second refusal exhausts
-     the turn, and the command ends with the handoff `review_slot_exhausted` (exit status 3).
-     The chain cannot continue from a refused turn
-     (`review_source_continuation_unverified`), and a turn with a refused output is not replaced
-     by a sibling turn (`review_source_continuation_fork`): export the packet again under a new
-     assignment id and start a new chain, and keep both diagnostics in your report.
+     the turn, and the command ends with the handoff `review_slot_exhausted` (exit status 3),
+     whose command for an openness chain is `export`, kind `problem-openness`. The chain cannot
+     continue from a refused turn (`review_source_continuation_unverified`), and a turn with a
+     refused output is not replaced by a sibling turn (`review_source_continuation_fork`):
+     export the packet again under a new assignment id and start a new chain, and keep both
+     diagnostics in your report.
    - The assignment after the last reading turn is the final turn (prompt template
      `exactory-openness-reading-v5/final`, or `exactory-openness-reading-v4/final` in a v4
      chain): the native packet with the reading record of the earlier turns. A v5 final turn
@@ -503,13 +504,13 @@ result and its source; start no solver work to reproduce an established result.
      handled as above: the command runs the same turn once more, and the chain does not continue
      from the refused answer.
    - When `review-assignment` refuses the final turn with `review_input_too_large`,
-     `review-series` prints the refusal with its `error`, and the refusal
-     names the size of each part: the base packet, the notes, the excerpts and the passages. What
-     remains after every withholding is the protected evidence, the statement, and the excerpts
-     and passages that the allowances let the chain keep. Re-exporting the same records preserves
-     their mandatory evidence. A new chain starts with empty excerpt, passage and note lists, so
-     its final turn carries only what its own turns gather. Report the four sizes to the owner
-     and wait for the owner's decision.
+     `review-series` ends with a `stop` of that code (exit status 3), and the refusal's
+     `details` name the size of each part: the base packet, the notes, the excerpts and the
+     passages. What remains after every withholding is the protected evidence, the statement, and
+     the excerpts and passages that the allowances let the chain keep. Re-exporting the same
+     records preserves their mandatory evidence. A new chain starts with empty excerpt, passage
+     and note lists, so its final turn carries only what its own turns gather. Report the four
+     sizes in your summary and continue the work that does not depend on this chain.
    - When `review-assignment` refuses a turn with `review_input_too_large` and `phase:
      "final_preflight"`, before that turn is planned, the mandatory final input already exceeds
      the route's limit: the statement record, the protected source and screening bodies, the
@@ -520,11 +521,15 @@ result and its source; start no solver work to reproduce an established result.
      with its kind, SHA-256 and size. Re-exporting the same records preserves their mandatory
      evidence. A new chain starts with empty excerpt and passage lists, so its initial measured
      lower bound can be smaller. A registered route with a larger input limit can hold a new
-     chain. Report the components to the owner and wait for the owner's decision.
+     chain. When `review-series` assigned the turn, it ends with a `stop` of that code (exit
+     status 3). Report the components in your summary, with the route limit, and continue the
+     work that does not depend on this chain.
 7. Record the observed finding with `exactory-research problem-openness` and
    `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
-   native result. `review-series` records it itself when the recording needs no judgment (state
-   `record`, exit status 0), so the record then exists before you run this command. For a chain, the record adds `reading_turns`, and every unit of the packet, full
+   native result. For a chain that `review-series` ran, the command records the finding itself
+   with `problem-openness` and the head's `assignment_id` (state `record`, exit status 0),
+   whatever the openness outcome, and this step is then done; run the command yourself for a
+   single assignment that you ran with `review-run`. For a chain, the record adds `reading_turns`, and every unit of the packet, full
    texts and records, must have reached a reading turn complete or arrived complete in the final
    turn's request (`openness_reading_incomplete` names the missing ones by kind and identity). In
    a v5 chain, the entry of the first reading turn that completes an original search under the
@@ -730,7 +735,11 @@ instead of one request. The
    - Exit status 0: the plan is `done`, and the final of the chain is recorded.
    - Exit status 3 with a `handoff` on the last line: the next step needs you. Run the `command`
      that the plan names, then run `review-series` again. `review_slot_exhausted` (two outputs
-     of the head were refused) names `review-output-correction`. `review_resampling_forbidden`
+     of the head were refused; the assignment is exhausted) names `review-output-correction`
+     when that operation accepts the head (a problem result reassessment whose latest failure is
+     `review_reassessment_mismatch`), and otherwise `review-assignment` for a new eligible
+     reviewer of the slot; for an openness chain it names `export`, kind `problem-openness`
+     (Openness, step 6). `review_resampling_forbidden`
      (an initial bar, slate or result review ended without an output, and the same reviewer
      identity is not sampled again) names `review-assignment` for a new eligible reviewer.
      `review_context_*` and `review_route_retired` name `review-assignment` for the context
@@ -739,23 +748,30 @@ instead of one request. The
      runs on it. `assessment_incomplete` and `review_worker_reconciliation_required` are the
      handoffs of a staged review, below.
    - Exit status 3 with a `stop` on the last line: a typed limit or refusal, with its `code` and
-     `details`. Report both to the user and wait for the decision; the
-     [CLI reference](../../docs/research-cli.md#review-chains-and-review-series) lists the codes.
-   - Exit status 4 with `not_before` on the last line: a wait of more than 30 minutes, for a
-     provider reset or another condition. Run `review-series` again at `not_before`. A shorter
-     wait the command sleeps through itself.
+     `details`; the harness cannot continue the chain. A refused action of the chain ends the
+     command this way with the refusal's code (for example `review_input_too_large` or a
+     `review_parts_*` code); when the refusal recorded an output refusal, or its code is
+     `review_invocation_pending`, the command plans again instead. Read `code` and
+     `details`. When the
+     [CLI reference](../../docs/research-cli.md#review-chains-and-review-series) names a step
+     for that code, take it. Otherwise report the stop with its code and details in your summary
+     and continue the work that does not depend on this chain.
+   - Exit status 4 with the plan and its `not_before` on the last line: a wait of more than 30
+     minutes, for a provider reset or another condition. Run `review-series` again at
+     `not_before`. A shorter wait the command sleeps through itself.
    `next` lists `review_parts_pending` while the series is open, with the plan of the chain in
    its entry (`state`, `command`, `payload`). A final turn can request originals or sources
    instead of returning the review: the command assigns and runs further final turns while
    requests remain. If `review-assignment` refuses with `review_parts_request_no_progress`, the
-   command prints the refusal with its `error`; report the unresolved request, the refusal code
-   and the supplied details; an output refusal with that code follows the ordinary output-retry
-   rule. If `review-assignment` refuses with
+   command ends with a `stop` of that code; report the unresolved request, the refusal code and
+   the supplied details in your summary; an output refusal with that code follows the ordinary
+   output-retry rule. If `review-assignment` refuses with
    `review_parts_frame_too_large`, `review_parts_inventory_too_large`,
    `review_parts_final_too_large` or `review_parts_no_progress`, the proposed turn cannot be
    planned with the current route and material; no assignment or invocation is recorded, although
-   the preparation can have stored artifacts. Report the refusal code and any supplied size
-   details to the user and wait for the decision. A series that 0.69.x started
+   the preparation can have stored artifacts, and the command ends with a `stop` of that code.
+   Report the refusal code and any supplied size details in your summary and continue the work
+   that does not depend on this chain. A series that 0.69.x started
    (`exactory-problem-evidence-parts-v1`, `problem_evidence_part_pending` in `next`) continues
    under its own rules through the same command. When its planner refuses a turn with
    `review_input_too_large` after the replay reduction, `review-assignment` starts one parts v2
@@ -775,14 +791,14 @@ instead of one request. The
    around it, since in this release only an ordinary review or a series reaches the post. In a
    staged review, `review-series` plans and assigns each next task
    (`review-assignment {controller_assignment_id}`, state `plan`), runs it
-   (`review-run {assignment_id, epoch_id, task_id}`), and resumes an interrupted acceptance
+   (`review-run {assignment_id, epoch_id, task_id}`), resumes an interrupted acceptance
    (`action: "accept"`) or reconciles a worker (`action: "reconcile"`), neither with a reviewer
-   call, until `next` is the `value-review` payload. A refused output gets one retry with the
+   call, and records the final, the controller's effective result, with `value-review` naming
+   the controller's assignment id (state `record`). A refused output gets one retry with the
    same request and then a smaller task; build no task envelope by hand. Two handoffs end the
    command with exit status 3: `review_worker_reconciliation_required` (a pending invocation of
    an earlier version has no pool membership) names `review-attempt`, and `assessment_incomplete`
-   names `review-assignment`. The review is the controller's effective result, and `value-review` records it naming
-   the controller's assignment id. An assessment that the reviewer cannot complete, or that the
+   names `review-assignment`. An assessment that the reviewer cannot complete, or that the
    bounded execution cannot finish, is recorded as `assessment_incomplete`: the slot stays
    occupied, `next` names the research or recovery work, and no second reviewer replaces it. The
    [CLI reference](../../docs/research-cli.md#staged-problem-reviews) states the records, the
@@ -813,11 +829,12 @@ instead of one request. The
    wait (`deferred_reading_budget`); a reply that the route's input cannot hold beside the
    others waits too (`deferred_capacity`), chosen when `review-assignment` records the turn, and
    stays in `pending_source_requests`. The command keeps assigning continuations while requests
-   stay pending. When a continuation's run ends without output, for example at the route
-   timeout, it assigns a new continuation of the same parent (state `replace`): the new one
-   replaces the failed one. When `review-assignment` refuses a continuation with
-   `review_source_no_progress`, the reviewer repeated requests that the harness already answered
-   with nothing new; do not continue the session with the same requests. `review-run` already
+   stay pending. When a continuation's run ends without output, it retries, replaces or stops
+   the continuation under the outcomes of a failed reviewer call; a replacement is a new
+   continuation of the same parent (state `replace`), which replaces the failed one. When
+   `review-assignment` refuses a continuation with `review_source_no_progress`, `review-series`
+   ends with a `stop` of that code: the reviewer repeated requests that the harness already
+   answered with nothing new; do not continue the session with the same requests. `review-run` already
    keeps the observed output, and `value-review` refuses a final assessment while the inherited
    requests stay pending (`review_sources_pending`). Change the source state first, for example
    by acquiring the missing source, and then continue the session, or report the unresolved

@@ -268,18 +268,27 @@ ways. Exit status 3 with the handoff `verification_verdict_body_required`
 needs the verdict body; continue with the next paragraph. Exit status 3 with
 the handoff `review_route_runtime_stale` (command `review-route`): record and
 probe a new route, and the replacement turn then runs on it. Exit status 3
-with a `stop`: a typed limit or refusal with its `code` and `details`; report
-both to the user and wait for the decision. Exit status 4 with `not_before` on
-the last line: a wait of more than 30 minutes; run `review-series` again at
-`not_before`. Exit status 0: the plan is `done`, and the verdict is recorded.
+with a `stop`: a typed limit or refusal with its `code` and `details`; the
+harness cannot continue the chain. A refused action of the chain ends the
+command this way with the refusal's code (for example a `review_parts_*`
+code); when the refusal recorded an output refusal, or its code is
+`review_invocation_pending`, the command plans again instead. Read `code`
+and `details`. When the CLI reference names a step for that code, take it.
+Otherwise report the stop with its code and details in your summary and
+continue the work that does not depend on this chain. Exit status 4 with the
+plan and its `not_before` on the last line: a wait of more than 30 minutes;
+run `review-series` again at `not_before`. Exit status 0: the plan is `done`,
+and the verdict is recorded.
 `bind-verdict` accepts only the final of a complete series
 (`review_parts_pending` otherwise). If `review-assignment` refuses
 with `review_parts_frame_too_large`, `review_parts_inventory_too_large`,
-`review_parts_final_too_large` or `review_parts_no_progress`, the proposed
-turn cannot be planned with the current route and material; no assignment or
-invocation is recorded, although the preparation can have stored artifacts.
-Report the refusal code and any supplied size details to the user and wait for
-the decision. A verification assignment does not accept `context_repair`:
+`review_parts_final_too_large` or `review_parts_no_progress` (a `stop` of
+`review-series` with that code when the command assigned the turn), the
+proposed turn cannot be planned with the current route and material; no
+assignment or invocation is recorded, although the preparation can have stored
+artifacts. Report the refusal code and any supplied size details in your
+summary and continue the work that does not depend on this chain. A
+verification assignment does not accept `context_repair`:
 report a retired route or a contaminated context instead of submitting a
 repair.
 

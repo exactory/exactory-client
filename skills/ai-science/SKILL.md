@@ -139,7 +139,9 @@ It prints one JSON object per line for each step and ends in one of four
 ways. Exit status 0: the plan is `done`, and the final is recorded. Exit
 status 3 with a `handoff` on the last line: run the `command` that the plan
 names, then run `review-series` again. `review_slot_exhausted` (two outputs
-of the head were refused) names `review-output-correction`.
+of the head were refused; the assignment is exhausted) names
+`review-assignment` for a new eligible reviewer of the slot; the CLI reference
+states when it names `review-output-correction` or `export` instead.
 `review_resampling_forbidden` (an initial bar, slate or result review ended
 without an output, and the same reviewer identity is not sampled again) names
 `review-assignment` for a new eligible reviewer. `review_context_*` and
@@ -149,9 +151,15 @@ without an output, and the same reviewer identity is not sampled again) names
 `review`. `review_route_runtime_stale` names `review-route`: record and probe
 a new route, and the replacement turn then runs on it. Exit status 3 with a
 `stop` on the last line: a typed limit or refusal with its `code` and
-`details`; report both to the user and wait for the decision. Exit status 4
-with `not_before` on the last line: a wait of more than 30 minutes; run
-`review-series` again at `not_before`. The readiness gate
+`details`; the harness cannot continue the chain. A refused action of the
+chain ends the command this way with the refusal's code (for example a
+`review_parts_*` code); when the refusal recorded an output refusal, or its
+code is `review_invocation_pending`, the command plans again instead.
+Read `code` and `details`. When the CLI reference names a step for that code,
+take it. Otherwise report the stop with its code and details in your summary
+and continue the work that does not depend on this chain. Exit status 4 with
+the plan and its `not_before` on the last line: a wait of more than 30
+minutes; run `review-series` again at `not_before`. The readiness gate
 credits only the final of a complete series (`review_parts_pending`
 otherwise), and the final output of a complete series is shown in
 `final/reviews/<role>/<series assignment id>/`.

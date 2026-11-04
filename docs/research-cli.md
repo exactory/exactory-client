@@ -248,7 +248,9 @@ source rather than by request id, is refused with
 `review_source_no_progress` before any reviewer call, and its pending
 requests stay as they were: the reviewer repeated requests that the harness
 already answered with nothing new, so do not continue the session with the
-same requests. The observed output of the earlier turn is already kept by
+same requests; `review-series` ends with a `stop` of that code
+([Review chains and `review-series`](#review-chains-and-review-series)). The
+observed output of the earlier turn is already kept by
 `review-run`, and while its inherited requests stay pending `value-review`
 refuses to record a final assessment (`review_sources_pending`). Change the
 source state first, for example by acquiring the missing source or recording a
@@ -256,13 +258,13 @@ qualifying availability policy, and then
 continue the session, or report the unresolved source gap to the user. A
 packet recorded before 0.71.0 rebuilds unchanged and gains no batch.
 
-A continuation whose recorded attempts all ended without a completed output,
-for example because the run was stopped at the route timeout, does not hold the
-session. Assign a new continuation of the same parent, with the same reviewer,
-route and author: it replaces the failed one, which stays in the record and can
-no longer be run or continued (`review_assignment_replaced`). Since 0.73.0
-`plan_next` plans that replacement (state `replace`) and `review-series`
-executes it; a replacement that the rules below refuse with
+A continuation whose recorded attempts all ended without a completed output
+does not hold the session. A new continuation of the same parent, with the
+same reviewer, route and author, replaces the failed one, which stays in the
+record and can no longer be run or continued (`review_assignment_replaced`).
+Since 0.73.0 `plan_next` plans that replacement (state `replace`) when the
+outcome of the failed call names one, and `review-series` executes it; a
+replacement that the rules below refuse with
 `review_resampling_forbidden` is a `handoff` whose command is
 `review-assignment` for a new eligible reviewer
 ([Review chains and `review-series`](#review-chains-and-review-series)). A continuation
@@ -390,9 +392,11 @@ function, `plan_next`, plans the next action of a chain from its head, and
 assignment, after every report digest is computed, as the fields `state`,
 `command`, `payload`, `request_id`, `not_before`, `code` and `details` of its
 `next` entries. `status` also lists a chain head that ended without an
-output. It adds no obligation for a failed `native_math` head unless the head
-is an openness chain: the math-solver controller names the native reviews it
-still needs (`exactory-math search next`).
+output, with the obligations of its own state (for example
+`review_output_pending`), each with its planned action. It adds no obligation
+for a failed `native_math` head unless the head is an openness chain: the
+math-solver controller names the native reviews it still needs
+(`exactory-math search next`).
 
 The plan. `plan_next` returns `state`, `chain` (the chain kind), `head_id`,
 `progress` and, per state, `command`, `payload`, `request_id` (`resume`),
@@ -413,6 +417,10 @@ turn and `<assignment id>-run-<k>` for a run.
 | `done` | The chain's final is recorded, or the problem is posted. |
 | `stop` | A typed limit or refusal; `code`, `details`. |
 
+The `record` action of an openness chain is `problem-openness` with the
+head's `assignment_id`, whatever the openness outcome. The final of a staged
+bar, slate or result review is a `record` action (`value-review`).
+
 The driver. `review-series --assignment HEAD` (`--workspace` defaults to `.`,
 and any assignment of the chain resolves to the chain's current head) executes
 the planned actions of one review chain in process, through the same
@@ -421,9 +429,9 @@ turn limit. It prints one JSON object per line for each step: the plan, then
 the executed action with its `request_id` and the store `revision`, or the
 refusal with its `error`. The exit status is `0` when the plan is `done`; `3`
 at a `handoff` or a `stop`, with the plan on the last line; and `4` when a
-`wait` ends more than 30 minutes ahead, with `not_before` on the last line. A
-`wait` of at most 30 minutes: it sleeps until `not_before` and plans again. A
-refusal with `store_busy`, `stale_revision` or
+`wait` ends more than 30 minutes ahead, with the plan, with its `not_before`,
+on the last line. A `wait` of at most 30 minutes: it sleeps until `not_before`
+and plans again. A refusal with `store_busy`, `stale_revision` or
 `review_task_dependency_changed` is planned again from a fresh read, at most
 8 times in a row; the 8th ends in a `stop` with that code. A captured call is
 resumed with its original request id (state `resume`, field `request_id`). It
@@ -434,13 +442,22 @@ turns, the request digests of completed attempts, the accepted staged tasks,
 the attempts of the head's turn position, the staged task attempts, and the
 recorded finals. When an executed action is refused with
 `review_route_runtime_stale`, the command ends with exit status 3 and the
-handoff of that code. Output views are rendered once when it ends. `--check`
-is refused with `check_unsupported` before any workspace or model effect. At
-a `handoff`, the agent runs the command that the plan names and then
-`review-series` again. At a `stop`, the agent reports the `code` and the
-`details`. After exit status 4, the agent runs `review-series` again at
-`not_before`. The agent writes no driver, turn limit or retry loop of its own
-around reviewer calls.
+handoff of that code. When an executed action is refused with any other code,
+the command plans again if the refusal recorded a new output refusal (a
+recording command that refuses an output records it before it raises) or the
+code is `review_invocation_pending`; otherwise it ends with exit status 3 and
+a `stop` whose `code` and `details` are those of the refusal (for example
+`review_input_too_large` or a `review_parts_*` code). Output views are
+rendered once when it ends. `--check` is refused with `check_unsupported`
+before any workspace or model effect. At a `handoff`, the agent runs the
+command that the plan names and then `review-series` again. At a `stop` the
+harness cannot continue the chain. The exactory skills run to the end without
+stopping for questions: the agent reads `code` and `details`; when this
+reference names a step for that code, the agent takes it; otherwise the agent
+reports the stop with its code and details in its summary and continues the
+work that does not depend on this chain. After exit status 4, the agent runs
+`review-series` again at `not_before`. The agent writes no driver, turn limit
+or retry loop of its own around reviewer calls.
 
 The handoffs:
 
@@ -450,7 +467,7 @@ The handoffs:
 | `native_review_attestation_required` | `search review-packet` (openness chains: `export`, kind `problem-openness`) | A native first turn needs a replacement, which needs a new attestation. |
 | `verification_verdict_body_required` | `bind-verdict` | A verification review has its output; recording needs the verdict body. |
 | `review_recording_required` | `manuscript-review`, `export` (standalone, kind `outputs`) or `review` | Another role's output needs its recording step. |
-| `review_slot_exhausted` | `review-output-correction` | Two outputs of the head were refused. |
+| `review_slot_exhausted` | `review-output-correction` when that operation accepts the head (a problem result reassessment whose latest failure is `review_reassessment_mismatch`); `export`, kind `problem-openness`, for an openness chain (a new chain); otherwise `review-assignment` (a new eligible reviewer for the slot) | Two outputs of the head were refused; the assignment is exhausted. |
 | `review_resampling_forbidden` | `review-assignment` | An initial bar, slate or result review ended without an output; the same reviewer identity is not sampled again, so a new eligible reviewer is needed. |
 | `review_worker_reconciliation_required` | `review-attempt` | A pending invocation has no pool membership (a call of an earlier version). |
 | `assessment_incomplete` | `review-assignment` | A staged assessment is incomplete. |
@@ -689,8 +706,10 @@ again for an original that an earlier final carried), and the final turns of
 a series carry at most twice the inventory's characters of originals in
 total. The refusals of `review-assignment`, at entry or during continuation,
 each before an assignment or invocation is recorded (the preparation can
-already have stored the inventory and logical packet artifacts), some without
-size details: `review_parts_frame_too_large` with `frame_characters`,
+already have stored the inventory and logical packet artifacts), each a
+`stop` of `review-series` with its code when the command assigned the turn
+([Review chains and `review-series`](#review-chains-and-review-series)), some
+without size details: `review_parts_frame_too_large` with `frame_characters`,
 `input_limit_characters` and `largest_fields` when the frame leaves no room;
 `review_parts_final_too_large` when the final frame cannot hold the minimum
 cards, when two card blocks or the combination blocks do not fit, or when the
@@ -1723,7 +1742,9 @@ assignment is refused, and each refused output still fails its check,
 and request, and the reviewer receives nothing about the refusal. A refused
 output that has become recordable binds again, and `review-run` refuses the
 retry with `review_resampling_forbidden`. After two refused outputs,
-`review-run` refuses the next invocation with `review_slot_exhausted`. A new
+`review-run` refuses the next invocation with `review_slot_exhausted`, and
+`plan_next` gives the handoff of that code with its command
+([Review chains and `review-series`](#review-chains-and-review-series)). A new
 reviewer can take an exhausted initial bar slot; the same reviewer is refused.
 A slate or result slot keeps its bar continuity, and the adjudicator stays
 fixed, so those roles recover through the retry only. `status` lists the
@@ -3706,8 +3727,8 @@ Run a reading chain turn by turn:
    previous turn must be ready and its answer a valid reading answer. The harness
    checks its excerpts, answers its passages and builds the next reading turn
    while units remain. The command runs each turn. When a turn's attempts
-   all ended without a completed output, for example at the route timeout, it
-   retries or replaces the turn under the outcomes of a failed reviewer call; a
+   all ended without a completed output, it retries, replaces or stops the
+   turn under the outcomes of a failed reviewer call; a
    replacement is the next turn assigned again with the same
    `prior_assignment_id`, and it replaces the failed turn, which can no longer be
    run or continued (`review_assignment_replaced`). A failed first turn has no
@@ -3717,10 +3738,12 @@ Run a reading chain turn by turn:
 3. After the last reading turn the next assignment is the final turn, built and
    fitted as described above. When its request does not fit after every
    withholding, `review-assignment` refuses with `review_input_too_large` and
-   the four part sizes. A new export does not change them; report the sizes to
-   the owner. A refusal at step 1 or step 2 with `phase: "final_preflight"`
-   says the same of the mandatory material alone, before that turn is planned;
-   report its `mandatory_components` to the owner.
+   the four part sizes, and `review-series` ends with a `stop` of that code
+   (exit status 3). A new export does not change them; report the sizes in
+   the summary and continue the work that does not depend on this chain. A
+   refusal at step 1 or step 2 with `phase: "final_preflight"` says the same
+   of the mandatory material alone, before that turn is planned; report its
+   `mandatory_components` in the same way.
 4. The final turn returns the native result review, or a reading answer with at
    least one passage request while the passage allowance has characters left. A
    further final turn, assigned as in step 2, then delivers the passages. In a
@@ -3730,10 +3753,13 @@ Run a reading chain turn by turn:
    allowance. `review-run` records a reading answer in which no request
    delivers characters as the output refusal `invalid_reading_response`
    (`details.path` `/passage_requests`), the turn is not ready, and
-   `review-assignment` does not continue from it; run `review-run` on the same
-   turn again under the ordinary retry rules.
-5. Record the final turn that returned the native result with
-   `problem-openness` and its `assignment_id`.
+   `review-assignment` does not continue from it; `review-series` runs the
+   same turn once more (the `scientific_refused` outcome), and after a second
+   refusal it ends with the handoff `review_slot_exhausted`, whose command for
+   an openness chain is `export`, kind `problem-openness`: a new chain.
+5. `review-series` records the final turn that returned the native result
+   with `problem-openness` and its `assignment_id` (state `record`), whatever
+   the openness outcome.
 
 `problem-openness` on a final turn keeps every check and also checks the chain:
 each turn is ready, the reading record names the observed attempts of the
@@ -4589,7 +4615,7 @@ example the population of the cohort tool. The post decision is
 | `review_evidence_undelivered` | The named recorded review cites content that the request of its authenticated attempt did not deliver (`review_id`, `undelivered_references`); since 0.71.0 the audit reads that request, so an older review can carry this obligation for content that only a saved packet of its lineage held. Assign the same reviewer and role again with an empty context to refresh it. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
 | `review_sources_pending` | Resolve the reviewers' pending source requests. |
-| `problem_evidence_part_pending` | Continue the named part turn (`assignment_id`, `turn`, `remaining`) with a new assignment of the same reviewer, route and author and `context: {prior_assignment_id}`; the turn after the last part is the final turn, which returns the review. |
+| `problem_evidence_part_pending` | A series that 0.69.x started is not complete: run `review-series --assignment ID` ([Review chains and `review-series`](#review-chains-and-review-series)), which continues the named part turn (`assignment_id`, `turn`, `remaining`) with a new assignment of the same reviewer, route and author and `context: {prior_assignment_id}`; the turn after the last part is the final turn, which returns the review. |
 | `review_parts_pending` | A series of fresh-input turns ([Reviews in fresh parts](#reviews-in-fresh-parts)) is not complete; a recording that names a series whose current v2 successor has no authenticated complete final is refused with the same code. The obligation carries the plan of the chain (`state`, `command`, `payload`, `request_id`, `not_before`, `code`, `details`); run `review-series --assignment ID`, which executes it ([Review chains and `review-series`](#review-chains-and-review-series)). `adapter`, `series_assignment_id`, `kind`, `turn`, `units_carded` and `units_remaining` show the progress, and `blocked` names the code when the turn cannot continue. |
 | `review_series_superseded` | A saved selection or a result names a final of a superseded series. Select only the recorded finals of the current result slots; older finals stay as history ([Problem evidence in parts](#problem-evidence-in-parts)). |
 | `review_result_pending` | The current series of a slot has an observed complete final that is not recorded. Record it with `value-review` from its exact output; no further reviewer call is needed. |
@@ -4918,7 +4944,7 @@ At stage `write`, `status` and `next` also carry one `draft_marker_missing` obli
 
 The optional `--summary` flag on `status` and `next` returns a bounded advisory view. It runs the same current-state evaluation as the default command. It does not change research obligations, authorize a transition, or reduce required reading. `status --summary` is limited to 16 KiB and `next --summary` to 4 KiB of UTF-8 JSON. Counts distinguish displayed and omitted obligations. Hints can omit or truncate details and must not be used directly as mutation payloads. One exception is `next_step` of `next_hint`, the first action of the selected obligation of a staged review, which is copied exactly when it fits in 1,024 bytes and is otherwise null, with `omitted_next_steps` counting the actions not shown; `status --summary` adds `review_slots: {occupied, complete, incomplete, pending}` when the record holds a staged review, and `review_parts: {count, examples, omitted}` when it holds a parts v2 series ([Reviews in fresh parts](#reviews-in-fresh-parts)): one example per series, its latest turn with `kind`, `turn`, `units_carded`, `units_remaining`, `complete`, the ids cut at 64 characters and `blocked` when set, at most 20 examples and fewer when the summary exceeds its bound. The full `status` carries the progress of every parts turn under `review.assignments.<id>.review_parts`, and the `next_hint` of a `review_parts_pending` obligation adds `review_parts` with the kind, the turn, the units carded and remaining, the adapter, the series id and `blocked`. `status --summary` also reports `evaluation` counters (objects verified, readings assessed, graph builds, elapsed seconds); they describe this invocation and are never stored. Full reports retain the exact current data; summaries remain advisory views.
 
-Since 0.73.0 `status` and the `gate` command attach the plan of the review chain to every obligation that names a review assignment, after every report digest is computed: the fields `state`, `command`, `payload`, `request_id`, `not_before`, `code` and `details` of its `next` entries, which `review-series` executes ([Review chains and `review-series`](#review-chains-and-review-series)). `status` also lists a chain head that ended without an output, and it adds no obligation for a failed `native_math` head unless the head is an openness chain. It shows `answer_recoveries` per assignment, `answer_recovery` for a staged task, and `unit_allowance_floor` for a parts v2 turn ([Reviews in fresh parts](#reviews-in-fresh-parts)). In a problem workspace with a recorded post, `status` lists the problem's other findings under `after_post`, and `next --summary` reports `after_post` as a count ([Problem creation](#problem-creation)).
+Since 0.73.0 `status` and the `gate` command attach the plan of the review chain to every obligation that names a review assignment, after every report digest is computed: the fields `state`, `command`, `payload`, `request_id`, `not_before`, `code` and `details` of its `next` entries, which `review-series` executes ([Review chains and `review-series`](#review-chains-and-review-series)). `status` also lists a chain head that ended without an output, with the obligations of its own state (for example `review_output_pending`), each with its planned action, and it adds no obligation for a failed `native_math` head unless the head is an openness chain. It shows `answer_recoveries` per assignment, `answer_recovery` for a staged task, and `unit_allowance_floor` for a parts v2 turn ([Reviews in fresh parts](#reviews-in-fresh-parts)). In a problem workspace with a recorded post, `status` lists the problem's other findings under `after_post`, and `next --summary` reports `after_post` as a count ([Problem creation](#problem-creation)).
 
 `batches --depth abstract --size N --destination DIR [--profile PROFILE] [--screen] [--max-input-bytes BYTES] [--max-output-tokens TOKENS --estimated-output-tokens-per-item TOKENS]` writes the current unread abstracts (cohort members first, then Tier 3 references) as `batch-NNN.json` files with each version's selected complete abstract text, the exact link, and a `README.json` naming the notes shape that `read-batch` accepts. `--profile` defaults to the configured profile. It reads the store and writes only under the new destination directory (`review_destination_exists` when it exists; `migration_required` without a configuration); a reader agent works from one file and returns one notes file, and a single coordinator submits it with `read-batch`. With `--screen` it writes `screen-NNN.json` files of the unscreened members for `screen-batch`, under `screened-v1` only (`policy_inapplicable` otherwise). The `README.json` names the shape of the export's own mode: the screening shape with `--screen`, the loop shape with `--loop`, the placement shape under `sampled-v1`, and the plain notes shape otherwise.
 
