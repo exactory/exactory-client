@@ -342,8 +342,21 @@ def _plan_head(records, artifacts, assignment):
         usable = state.get('output') is not None and observed
         refused = state.get('refused_attempts', [])
         if not usable and len(refused) >= 2:
-            return dict(state='handoff', command='review-output-correction', code='review_slot_exhausted',
-                        details=dict(assignment_id=assignment['id'], refused_attempts=refused))
+            from . import review_output_correction
+            command = 'review-output-correction'
+            details = dict(assignment_id=assignment['id'], refused_attempts=refused)
+            try:
+                review_output_correction.prepare_packet(records, artifacts, assignment['id'])
+            except ResearchError:
+                command = 'review-assignment'
+                if assignment['role'] == 'native_math':
+                    from .native_review import load_packet
+                    native = load_packet(artifacts, assignment['context']['native_packet'],
+                                         assignment['reviewer_id'])
+                    if openness_reading.is_openness_packet(native):
+                        command = 'export'
+                        details['kind'] = 'problem-openness'
+            return dict(state='handoff', command=command, code='review_slot_exhausted', details=details)
         if attempts and not usable:
             latest = max(attempts, key=lambda row: row.get('recorded_revision', 0))
             failed = latest['status'] != 'completed' or not protocol._context_observed(artifacts, latest)
