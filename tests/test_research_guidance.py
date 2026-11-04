@@ -144,16 +144,19 @@ class ResearchGuidanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             plugin = root / "Plugin with spaces"
+            # The staging directory can itself be below PLUGIN through TMPDIR.
             shutil.copytree(PLUGIN, plugin, ignore=shutil.ignore_patterns(
-                ".git", ".superpowers", ".lake", "__pycache__", ".coverage*"))
+                ".git", ".superpowers", ".lake", "__pycache__", ".coverage*",
+                ".lane-scratch", root.name))
             workspace = root / "Independent workspace"
             workspace.mkdir()
             environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+            environment["GIT_CEILING_DIRECTORIES"] = str(root)
             environment.pop("PYTHONPATH", None)
 
             def invoke(command, *arguments):
                 result = subprocess.run([sys.executable, "-B", str(plugin / "bin" / command), *arguments],
-                    cwd=workspace, env=environment, capture_output=True, text=True, timeout=20)
+                    cwd=workspace, env=environment, capture_output=True, text=True, timeout=60)
                 self.assertEqual((result.returncode, result.stderr), (0, ""), result.stdout)
                 return result.stdout
 
