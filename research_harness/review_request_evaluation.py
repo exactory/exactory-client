@@ -28,20 +28,28 @@ def _encode_exact(value):
         return None
 
 
+def _build_request(route, prompt, packet, history, order):
+    """Call the pinned builder with the arguments that list_built_requests passes: no order for the current fit
+    order, and the order as the fifth positional argument for an earlier one."""
+    if order is transport.FIT_ORDER:
+        return transport.request_body(route, prompt, packet, history)
+    return transport.request_body(route, prompt, packet, history, order)
+
+
 def request_for_order(evaluation, route, prompt, packet, history, order):
     """Derive once for the complete actual inputs; return an independent value."""
     if (type(history) not in (list, tuple) or type(order) is not tuple
             or any(type(step) is not str for step in order)):
-        return transport.request_body(route, prompt, packet, history, order=order)
+        return _build_request(route, prompt, packet, history, order)
     encoded_inputs = [_encode_exact(value) for value in (route, prompt, packet, list(history))]
     if any(value is None for value in encoded_inputs):
-        return transport.request_body(route, prompt, packet, history, order=order)
+        return _build_request(route, prompt, packet, history, order)
     key = (tuple(hashlib.sha256(value).digest() for value in encoded_inputs),
            tuple(order), transport.local_input_limit(route))
     uncached = []
 
     def derive():
-        request = transport.request_body(route, prompt, packet, history, order=order)
+        request = _build_request(route, prompt, packet, history, order)
         encoded = _encode_exact(request)
         if encoded is None:
             uncached.append(request)
