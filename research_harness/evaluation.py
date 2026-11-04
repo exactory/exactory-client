@@ -1,7 +1,7 @@
 """Snapshot-local verified access with bounded optional Python-value retention.
 
-The root owns a shared optional budget (64 MiB by default). Compressed derived
-requests have a protected weighted LRU capped at half the budget. Ordinary
+The root owns a shared optional budget (64 MiB by default). Compressed requests
+and review states have a protected weighted LRU capped at half the budget. Ordinary
 entries borrow unused space but never evict requests. We charge recursive shallow
 Python sizes, including containers, keys and entry overhead, without deduplicating
 between entries. Oversized values are returned uncached. Authenticated snapshots,
@@ -12,8 +12,11 @@ or the temporary memory needed to build one request or parse one JSON value.
 """
 
 from collections import OrderedDict
+import json
+import marshal
 import sys
 import weakref
+import zlib
 
 from .artifacts import ArtifactStore, validate_reference
 from .errors import ResearchError
@@ -156,8 +159,13 @@ class Evaluation:
                     if child.records is records:
                         return child
         if retention_budget_bytes is None:
-            return cls(records, artifacts)
-        return cls(records, artifacts, retention_budget_bytes=retention_budget_bytes)
+            evaluation = cls(records, artifacts)
+        else:
+            evaluation = cls(records, artifacts, retention_budget_bytes=retention_budget_bytes)
+        if (isinstance(artifacts, cls) and artifacts._runtime_scope[0] is not None
+                and evaluation._optional is artifacts._optional):
+            evaluation._byte_namespace = artifacts._byte_namespace
+        return evaluation
 
     of = reuse_evaluation
 
@@ -228,6 +236,11 @@ class Evaluation:
         self.counters['reads'] += 1
         validate_reference(reference)
         key = tuple(reference[name] for name in ('sha256', 'size', 'path', 'media_type'))
+        for decoder in ('json', 'strict_json'):
+            parsed = self.reuse_value((decoder, self._byte_namespace, key),
+                                      namespace=self._byte_namespace)
+            if parsed is not None:
+                return parsed[0]
         def verify():
             data = self.store.read(reference)
             self.counters['artifacts_verified'] += 1
@@ -239,6 +252,27 @@ class Evaluation:
         data = self.read(reference)
         return self._retain_once(('text', self._byte_namespace, reference['sha256']), lambda: data.decode('utf-8'))
 
+    def read_json(self, reference, *, strict=False):
+        """Reuse a verified parse, retaining descriptor checks and caller isolation."""
+        validate_reference(reference)
+        identity = tuple(reference[name] for name in ('sha256', 'size', 'path', 'media_type'))
+        key = ('strict_json' if strict else 'json', self._byte_namespace, identity)
+
+        def parse():
+            data = self.read(reference)
+            if strict:
+                from .workspace import strict_json
+                return data, strict_json(data)
+            return data, json.loads(data)
+
+        _, value = self.reuse_value(key, parse, namespace=self._byte_namespace)
+        retained_key = ('memo', self._byte_namespace, ('encoded_value', key))
+        if retained_key in self._optional:
+            removed = self._optional.pop(('bytes', self._byte_namespace, identity), None)
+            if removed is not None:
+                self._retained_bytes[0] -= removed[1]
+        return value
+
     def put(self, data, media_type):
         return self.store.put(data, media_type)
 
@@ -249,7 +283,29 @@ class Evaluation:
         def calculate():
             self.counters['computed'] += 1
             return compute()
-        return self._retain_once(('memo', self._namespace, key), calculate)
+        return self._retain_once(('memo', self._namespace, key), None if compute is None else calculate)
+
+    def reuse_value(self, key, compute=None, *, protected=False, namespace=None):
+        """Retain compact native values in this arena and return an isolated value.
+
+        The binary representation is produced here, never read from artifacts or
+        persisted. Encoding avoids retaining copies of large overlapping packets;
+        decoding avoids repeating JSON parsing and Python-level deep copies.
+        """
+        if namespace is None:
+            namespace = self._namespace
+
+        def encode():
+            self.counters['computed'] += 1
+            return zlib.compress(marshal.dumps(compute(), 4), 1)
+
+        if protected:
+            key = ('encoded_value', namespace, key)
+            encoded = self.request_once(key, None if compute is None else encode)
+        else:
+            encoded = self._retain_once(('memo', namespace, ('encoded_value', key)),
+                                        None if compute is None else encode)
+        return None if encoded is None else marshal.loads(zlib.decompress(encoded))
 
     def index_records(self, kind, field, *, order=None):
         """Index immutable rows once, preserving insertion order for equal sort keys."""
