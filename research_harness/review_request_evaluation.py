@@ -30,6 +30,9 @@ def _encode_exact(value):
 
 def request_for_order(evaluation, route, prompt, packet, history, order):
     """Derive once for the complete actual inputs; return an independent value."""
+    if (type(history) not in (list, tuple) or type(order) is not tuple
+            or any(type(step) is not str for step in order)):
+        return transport.request_body(route, prompt, packet, history, order=order)
     encoded_inputs = [_encode_exact(value) for value in (route, prompt, packet, list(history))]
     if any(value is None for value in encoded_inputs):
         return transport.request_body(route, prompt, packet, history, order=order)

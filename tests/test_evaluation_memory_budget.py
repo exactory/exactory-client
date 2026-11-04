@@ -9,6 +9,26 @@ from research_harness.source_links import read_locator
 
 
 class EvaluationMemoryBudgetTests(LiteratureCase):
+    def test_refresh_with_requests_keeps_entry_weights_and_allows_another_request(self):
+        for request in (False, True):
+            with self.subTest(request=request):
+                evaluation = Evaluation({}, self.artifacts, retention_budget_bytes=24000)
+                evaluation.once('ordinary', lambda: b'ordinary state')
+                evaluation.request_once(('request',), lambda: b'compressed request')
+                key = ('request',) if request else ('memo', evaluation._namespace, 'ordinary')
+                refreshed = evaluation._retain_once(key, lambda: b'refreshed' * 300, refresh=True, request=request)
+                self.assertEqual(refreshed, b'refreshed' * 300)
+                for insert in (False, True):
+                    if insert:
+                        evaluation.request_once(('another',), lambda: b'another compressed request')
+                        self.assertEqual(evaluation.request_once(('another',), None), b'another compressed request')
+                    request_weight = sum(weight for _, weight in evaluation._requests.values())
+                    optional_weight = sum(weight for _, weight in evaluation._optional.values())
+                    self.assertGreater(request_weight, 0)
+                    self.assertGreater(optional_weight, 0)
+                    self.assertEqual(evaluation._request_bytes[0], request_weight)
+                    self.assertEqual(evaluation._retained_bytes[0], request_weight + optional_weight)
+
     def test_requests_have_a_protected_half_budget_and_ordinary_entries_borrow_the_rest(self):
         evaluation = Evaluation({}, self.artifacts, retention_budget_bytes=24000)
         first = evaluation.once('ordinary', lambda: b'x' * 17000)
