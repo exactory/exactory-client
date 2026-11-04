@@ -2,6 +2,7 @@
 
 import copy
 import importlib
+import importlib.util
 import json
 import tempfile
 import unittest
@@ -173,8 +174,7 @@ class ImportTests(unittest.TestCase):
         from research_harness.storage import Store
         from research_harness.acquisition import collect_cohort
         from research_fixtures import client
-        # Keep disposable Stores inside the checkout without private SDD state.
-        self.directory = tempfile.TemporaryDirectory(prefix="oai-cohort-test-", dir=Path(__file__).resolve().parents[1])
+        self.directory = tempfile.TemporaryDirectory(prefix="oai-cohort-test-")
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
         self.store = Store(self.root, create=True)
@@ -226,7 +226,7 @@ class ImportTests(unittest.TestCase):
         import subprocess
         import sys
         binary = Path(__file__).resolve().parents[1] / "bin" / "exactory-research"
-        with tempfile.TemporaryDirectory(dir=self.root.parent) as directory:
+        with tempfile.TemporaryDirectory() as directory:
             fresh = Path(directory)
             payload = fresh / "payload.json"
             payload.write_text(json.dumps({"collection_id": "missing", "pages": []}))

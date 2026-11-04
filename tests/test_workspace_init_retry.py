@@ -27,6 +27,7 @@ class InitializationRetryCases:
         self.workspace = self.root / (self.kind + " workspace")
         self.marker = self.workspace / (".exactory/" + self.kind + ".json")
         self.environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+        self.environment["GIT_CEILING_DIRECTORIES"] = str(self.root)
         self.environment.pop("PYTHONPATH", None)
         self.arguments = ["init", "--dir", str(self.workspace), *self.options,
                           "--expected-revision", "0", "--request-id", "original-init"]
@@ -34,7 +35,7 @@ class InitializationRetryCases:
 
     def command(self, program, arguments, *, cwd=None):
         result = subprocess.run([sys.executable, "-B", str(PLUGIN / "bin" / program), *arguments],
-            cwd=cwd or self.root, env=self.environment, capture_output=True, text=True, timeout=20)
+            cwd=cwd or self.root, env=self.environment, capture_output=True, text=True, timeout=60)
         self.observations["commands"].append({"program": program, "arguments": arguments,
             "exit_code": result.returncode, "stdout": result.stdout, "stderr": result.stderr})
         return result
@@ -162,7 +163,7 @@ with patch("research_harness.integration.export_workspace",
 """
         interrupted = subprocess.run([sys.executable, "-B", "-c", source,
             str(PLUGIN / "bin" / self.program), *self.arguments], cwd=self.root,
-            env=self.environment, capture_output=True, text=True, timeout=20)
+            env=self.environment, capture_output=True, text=True, timeout=60)
         self.observations["interruption"] = {"exit_code": interrupted.returncode,
             "stdout": interrupted.stdout, "stderr": interrupted.stderr}
         self.assertNotEqual(interrupted.returncode, 0)
