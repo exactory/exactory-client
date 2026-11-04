@@ -309,6 +309,11 @@ def build_parser():
     job_status.add_argument("--job-id", required=True)
     job_status.add_argument("--cursor", type=int, default=0)
     job_status.add_argument("--limit", type=int, default=30)
+    series = commands.add_parser("review-series", allow_abbrev=False,
+                                 help="PLACEHOLDER: execute one recorded review chain.")
+    series.add_argument("--workspace", default=".")
+    series.add_argument("--assignment", required=True)
+    series.add_argument("--check", action="store_true", help="PLACEHOLDER: series check is unsupported.")
     for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
                     "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
@@ -455,6 +460,7 @@ def _review_status(records, artifacts):
     from . import review_parts, review_refusal
     from .report_views import describe_parts_turn
     from .problem_delivery import collect_review_outcomes, collect_staged_slots, describe_review_tasks
+    from .review_continuation import describe_next_actions
     completed = sorted((attempt for attempt in records.get("review_attempt", {}).values()
                         if attempt["status"] == "completed"), key=lambda attempt: attempt["recorded_revision"])
     by_assignment = {}
@@ -480,6 +486,9 @@ def _review_status(records, artifacts):
         result['assignments'][identifier]['review_parts'] = describe_parts_turn(
             assignment, state, series,
             ended_without_output=review_protocol.has_ended_without_output(records, identifier))
+        progress = result['assignments'][identifier]['review_parts']
+        if progress['next']:
+            progress['next'] = describe_next_actions(records, artifacts, identifier, progress['next'])
     # Legacy status remains a cheap refusal listing. Staged science is selected
     # by assignment_state, never by treating a raw answer page as a final.
     if not records.get("review_epoch"):
@@ -502,6 +511,7 @@ def _review_status(records, artifacts):
 
 def status_report(store, *, counters=False):
     from .review_state_evaluation import runtime_scope
+    from .review_continuation import annotate_review_obligations
     started = time.monotonic()
     snapshot = store.snapshot()
     evaluation = Evaluation(snapshot['records'], ArtifactStore(store.root))
@@ -535,7 +545,7 @@ def status_report(store, *, counters=False):
             if counters:
                 result['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
                                             retention=evaluation.retention_report())
-            return result
+            return annotate_review_obligations(records, evaluation, result)
         config = records.get("configuration", {}).get("research")
         profile = config["profile"] if config else "research"
         study = records.get("workspace", {}).get("study")
@@ -598,7 +608,7 @@ def status_report(store, *, counters=False):
                          "--scope-target-digest", scoped_report["scientific_target_digest"]]
                 scope_status["publication_commands"] = {"deposit": ["exactory-draft", "deposit"] + flags,
                                                         "submit": ["exactory", "submit"] + flags}
-        return dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
+        result = dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
                     source_deferrals=assess_deferrals(records, evaluation, profile),
                     deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
                     study=study, preparation=preparation, resources=resources.account_report(records, profile),
@@ -612,6 +622,7 @@ def status_report(store, *, counters=False):
                     remote_observations=list(records.get("remote_observation", {}).values()),
                     historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=review,
                     advisories=advisories)
+        return annotate_review_obligations(records, evaluation, result)
 
 
 def load_candidates(path, *, include_coverage=False):
@@ -650,7 +661,8 @@ def run(args):
     if args.command == "example":
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
-    if getattr(args, "check", False) and args.command in ("batches", "export", "recover", "restore", "strategy-packet"):
+    if getattr(args, "check", False) and args.command in (
+            "batches", "export", "recover", "restore", "strategy-packet", "review-series"):
         raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
                             {"command": args.command})
     preview = args.command == "import-response" and args.preview
@@ -742,6 +754,9 @@ def run(args):
         return acquisition_command(store, args.command, payload, identity, preview=preview, response_bytes=response_bytes)
     if args.command == "fulltext-status":
         return fulltext_jobs.read_job_status(store, args.job_id, cursor=args.cursor, limit=args.limit)
+    if args.command == "review-series":
+        from .review_series import run_series
+        return run_series(store, args.assignment)
     if args.command in ("research-decision-assess", "strategy-packet", "review-route-assess"):
         snapshot = store.snapshot()
         artifacts = Evaluation(snapshot["records"], ArtifactStore(root))
@@ -854,7 +869,8 @@ def run(args):
 
 def _is_recording_command(args):
     """Whether the command can commit a record: a mutation or an acquisition that is not a check or a preview."""
-    return ((args.command in OPERATIONS or args.command in ACQUISITION) and not getattr(args, "check", False)
+    return ((args.command in OPERATIONS or args.command in ACQUISITION or args.command == "review-series")
+            and not getattr(args, "check", False)
             and not getattr(args, "preview", False))
 
 
@@ -864,6 +880,8 @@ def main(argv=None, render_views=render_views_after_command):
     args = build_parser().parse_args(argv)
     try:
         result = run(args)
+        if args.command == "review-series":
+            raise SystemExit(result)
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
     except ResearchError as error:
         print(json.dumps({"error": error.as_dict()}, ensure_ascii=False), file=sys.stderr)

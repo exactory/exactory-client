@@ -123,6 +123,8 @@ def annotate_parts_obligations(report, review):
                         'units_carded', 'units_remaining', 'next')}
             if 'blocked' in progress:
                 details['blocked'] = progress['blocked']
+            if any(action.get('command') for action in item.get('next', [])):
+                details['next'] = item['next']
             item = dict(item, **copy.deepcopy(details))
         obligations.append(item)
     return dict(report, obligations=obligations)

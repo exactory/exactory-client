@@ -145,9 +145,11 @@ def require_complete_series(records, artifacts, assignment_id):
         return None
     result = parts.verify_series(records, artifacts, assignment_id)
     if not result['complete']:
+        from .review_continuation import describe_next_actions
         raise ResearchError(
             'review_parts_pending', 'Complete the review series before crediting its final',
-            dict(assignment_id=assignment_id, issues=result['issues']))
+            dict(assignment_id=assignment_id, issues=result['issues'],
+                 next=describe_next_actions(records, artifacts, assignment_id)))
     return result
 
 

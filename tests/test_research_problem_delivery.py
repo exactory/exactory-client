@@ -45,6 +45,15 @@ def build_staged_delivery(origin="execution", role="result", recovery=None):
 
 
 class StagedDeliveryTests(unittest.TestCase):
+    def setUp(self):
+        # These projection fixtures deliberately have no artifact store or
+        # executable controller. Real staged continuation contracts live in
+        # test_review_continuation_staged.
+        patcher = mock.patch('research_harness.review_continuation.describe_next_actions',
+            side_effect=lambda records, artifacts, assignment_id, actions=(): actions)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_incomplete_advice_cannot_repeat_exhausted_work_through_a_workflow_alias(self):
         from research_harness.problem_delivery import assess_source_requests
         frozen, assignment, state, outcome = build_staged_delivery(recovery={"workflow": "review-run",
