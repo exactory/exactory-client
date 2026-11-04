@@ -1,5 +1,6 @@
 """Runtime probes retry only pre-generation missing-runtime failures."""
 
+from datetime import datetime, timedelta
 import time
 from unittest.mock import call, patch
 
@@ -99,9 +100,13 @@ class RuntimeRetryTests(LiteratureCase):
         self.assertTrue(records['review_pool_membership'][identify_call('review.invoke', 'attempt')]['released'])
         self.assertEqual(self.sleeper.call_args_list, [call(n) for n in (1, 2, 4, 8, 16)])
         classification = failures.classify_attempt(records, self.artifacts, attempt)
-        plan = failures.plan_after_failure(records, self.artifacts, 'assignment')
+        observed_at = datetime.fromisoformat(attempt['observed_at'])
+        with patch.object(failures, 'datetime', wraps=datetime) as clock:
+            clock.now.return_value = observed_at
+            plan = failures.plan_after_failure(records, self.artifacts, 'assignment')
+        deadline = (observed_at + timedelta(seconds=60)).isoformat(timespec='seconds')
         self.assertEqual((classification['outcome'], plan['state'], plan['code'], plan['not_before']),
-                         ('runtime_unavailable', 'stop', 'review_runtime_missing', None))
+                         ('runtime_unavailable', 'wait', 'review_runtime_missing', deadline))
 
     def test_observed_stale_runtime_stops_with_stale_code(self):
         self.run_probe()
