@@ -28,6 +28,9 @@ STOP_CHECKS = ("stop", "demand")
 ALL_CHECKS = CONTINUE_CHECKS + ("stop",)
 BOUNDARIES = ("target", "cycle", "write", "publication", "round")
 ARTIFACT_DISPOSITIONS = ("none", "result_report", "prepare_manuscript", "deliver_under_instruction")
+_SUPERSEDED_RESULT_NOTE = 'PLACEHOLDER: Record the final of the current result series.'
+_PARTS_RESULT_PENDING_NOTE = 'PLACEHOLDER: Complete the authenticated parts final before recording a result.'
+_CURRENT_RESULTS_NOTE = 'PLACEHOLDER: Select finals of the current result slots.'
 _LIMITS = ("These are mechanical evidence, attribution and transition checks. Scientific truth, importance, "
            "semantic materiality and the meaning of a user instruction require substantive review. "
            "No ordinal score establishes sufficient contribution or native mathematical proof acceptance.")
@@ -500,6 +503,19 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         if effective_output != _response(value):
             raise ResearchError("value_review_output_mismatch", "Record the exact observed independent output without author substitutions")
         saved_assignment = records["review_assignment"][value["assignment_id"]]
+        if problem is not None and value['stage'] == 'result':
+            from .review_context_repair import slot_id
+            current = select_problem_slot_assignments(records, 'result', saved_assignment.get('subject'))
+            head = current.get(slot_id(records, saved_assignment))
+            if head is not None and head['id'] != saved_assignment['id']:
+                raise ResearchError('review_series_superseded', _SUPERSEDED_RESULT_NOTE,
+                                    dict(assignment_id=saved_assignment['id'], current_assignment_id=head['id']))
+            from . import review_parts
+            if review_parts.KEY in saved_assignment:
+                verified = review_parts.verify_series(records, artifacts, saved_assignment['id'])
+                if not assignment['ready'] or not verified['complete']:
+                    raise ResearchError('review_parts_pending', _PARTS_RESULT_PENDING_NOTE,
+                                        dict(assignment_id=saved_assignment['id'], issues=verified['issues']))
         validate_review_contract(records, artifacts, saved_assignment, effective_output)
         if value["stage"] in ("bar", "slate", "result"):
             if assignment.get("pending_source_requests"):
@@ -798,9 +814,29 @@ def _independence(records, artifacts, reviews):
     return obligations
 
 
+def select_problem_slot_assignments(records, stage, subject):
+    """Select each current problem slot, including a successor without a result."""
+    from .review_context_repair import slot_id
+    heads = {}
+    for assignment in sorted(records.get('review_assignment', {}).values(),
+                             key=lambda row: (row.get('recorded_revision', 0), row['id'])):
+        if (assignment['role'] != stage or assignment.get('subject', {}).get('kind') != 'problem'
+                or (stage != 'bar' and assignment.get('subject') != subject)
+                or assignment.get('staged_review', {}).get('kind') == 'task'):
+            continue
+        heads[slot_id(records, assignment)] = assignment
+    return heads
+
+
 def _collect_problem_reviews(records, stage, subject):
     from .review_context_repair import historical_reviews, slot_id
     historical = {review['id'] for review in historical_reviews(records, None, stage)}
+    if stage == 'result':
+        current = {assignment['id'] for assignment in select_problem_slot_assignments(records, stage, subject).values()}
+        return [review['id'] for review in sorted(records.get('value_review', {}).values(),
+                key=lambda row: (row.get('recorded_revision', 0), row['id']))
+                if review['id'] not in historical and review['assignment_id'] in current
+                and review['payload']['stage'] == stage]
     slots = {}
     for review in sorted(records.get('value_review', {}).values(),
                          key=lambda saved: (saved.get('recorded_revision', 0), saved['id'])):
@@ -833,15 +869,17 @@ def collect_problem_slot_outcomes(records, artifacts, subject, *, stage='result'
     heads = {}
     kind = 'review_adjudication' if stage == 'adjudicator' else 'value_review'
     reviews = {row['assignment_id']: row for row in records.get(kind, {}).values()}
-    for assignment in sorted(records.get('review_assignment', {}).values(),
-                             key=lambda row: (row.get('recorded_revision', 0), row['id'])):
+    assignments = (select_problem_slot_assignments(records, stage, subject).values() if stage == 'result'
+                   else sorted(records.get('review_assignment', {}).values(),
+                               key=lambda row: (row.get('recorded_revision', 0), row['id'])))
+    for assignment in assignments:
         if (assignment['role'] != stage or assignment.get('subject', {}).get('kind') != 'problem'
                 or (stage != 'bar' and assignment.get('subject') != subject)
                 or assignment.get('staged_review', {}).get('kind') == 'task'):
             continue
         key = slot_id(records, assignment)
         staged = assignment.get('staged_review')
-        if staged is None and assignment['id'] not in reviews and key not in heads:
+        if stage != 'result' and staged is None and assignment['id'] not in reviews and key not in heads:
             continue
         outcome = reviews.get(assignment['id'])
         kind = 'complete' if outcome is not None else 'pending'
@@ -1224,8 +1262,8 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
     from .problem_claims import describe_problem_evidence, compute_problem_evidence_digest
     from .review_protocol import build_problem_subject, is_version_2_problem_result, validate_problem_bars
     subject = build_problem_subject(records)
-    staged_results = any(assignment.get('staged_review')
-                         and assignment['staged_review'].get('kind') != 'task'
+    staged_results = any((assignment.get('staged_review') or assignment.get('review_parts'))
+                         and assignment.get('staged_review', {}).get('kind') != 'task'
                          and assignment['role'] == 'result' and assignment.get('subject') == subject
                          for assignment in records.get('review_assignment', {}).values())
     slot_outcomes = collect_problem_slot_outcomes(records, artifacts, subject) if staged_results else None
@@ -1234,6 +1272,14 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
     obligations, pairs = [], {}
     for stage, identifiers, code in (('bar', bar_review_ids, 'problem_bar_pending'),
                                       ('result', review_ids, 'problem_review_pair_required')):
+        if stage == 'result':
+            current_ids = set(_collect_problem_reviews(records, stage, subject))
+            superseded = [identifier for identifier in identifiers
+                          if identifier in records.get('value_review', {}) and identifier not in current_ids]
+            if superseded:
+                obligations.append(obligation('review_series_superseded', _CURRENT_RESULTS_NOTE,
+                                              review_ids=superseded))
+                identifiers = [identifier for identifier in identifiers if identifier not in superseded]
         if stage == 'result' and slot_outcomes is not None and (slot_outcomes['incomplete'] or slot_outcomes['pending']):
             # A required assessment is occupied, so it is not a request for an
             # unrelated second reviewer. Its scientific work must be completed.

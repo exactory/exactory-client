@@ -539,9 +539,11 @@ class ProblemReviewTests(LiteratureCase):
         self.assertEqual(packet['bar_calibrations'], [self.deliver_calibration(records, identifier)
                                                      for identifier in ('review-bar-first', 'review-bar-second')])
         self.assertEqual(packet['current_bar_calibrations'], [self.deliver_calibration(records, 'review-bar-replaced')])
-        # The replaced bar retires the original pair from the current gate, so assess that pair by name.
-        state = decisions.assess_problem_reviews(records, self.artifacts, review_ids=['review-result-first', 'review-result-second'])
-        self.assertNotIn('problem_rubric_below_threshold', {row['code'] for row in state['obligations']})
+        # Assess the historical pair's rubric without crediting it to the current gate.
+        reviews = [records['value_review'][identifier]
+                   for identifier in ('review-result-first', 'review-result-second')]
+        pending = decisions.assess_rubric_reviews(records, self.artifacts, reviews, digest(self.expected))
+        self.assertNotIn('problem_rubric_below_threshold', {row['code'] for row in pending})
 
     def test_rubric_adjudication_against_a_replaced_bar_does_not_clear_the_shortfall(self):
         self.prepare_below_threshold_reviews()
@@ -556,9 +558,15 @@ class ProblemReviewTests(LiteratureCase):
         with patch.object(protocol, 'add_focused_adjudication', side_effect=build_with_the_current_bars):
             _, packet = self.observe_rubric_adjudication()
         self.assertEqual([bar['id'] for bar in packet['bar_calibrations']], ['review-bar-replaced', 'review-bar-second'])
-        state = decisions.assess_problem_reviews(self.read_records(), self.artifacts,
+        records = self.read_records()
+        state = decisions.assess_problem_reviews(records, self.artifacts,
                                                  review_ids=['review-result-first', 'review-result-second'])
-        below = [row for row in state['obligations'] if row['code'] == 'problem_rubric_below_threshold']
+        self.assertEqual([row['review_ids'] for row in state['obligations']
+                          if row['code'] == 'review_series_superseded'], [['review-result-first']])
+        reviews = [records['value_review'][identifier]
+                   for identifier in ('review-result-first', 'review-result-second')]
+        pending = decisions.assess_rubric_reviews(records, self.artifacts, reviews, digest(self.expected))
+        below = [row for row in pending if row['code'] == 'problem_rubric_below_threshold']
         self.assertEqual([row['shortfalls'] for row in below], [[{'item': 'priority', 'required': '>= 2', 'graded': 1}]])
 
     def test_rubric_adjudication_cannot_waive_an_assurance_or_another_item(self):

@@ -33,6 +33,7 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing",
             "review_worker_reconciliation_required", "review_observation_acceptance_pending", "review_capacity_wait",
             "review_task_dependency_changed", "review_epoch_stale", "review_task_pending", "review_parts_pending",
+            "problem_evidence_part_pending", "review_result_pending",
             "review_composition_conflict", "review_composition_pending", "review_assurance_dependency_pending",
             "assessment_incomplete", "problem_assurance_pending",
             "problem_rubric_below_threshold", "research_objection_unresolved",
