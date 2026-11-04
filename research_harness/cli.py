@@ -50,6 +50,7 @@ OPERATIONS = {
     "problem-formal-check": problem_claims.record_formal_check,
     "problem-decision": problem_claims.record_decision,
     "problem-posted": problem_claims.record_posted,
+    "problem-post-external": problem_claims.record_post_external,
     "init": principles.initialize_research,
     "adopt": adopt_workspace,
     "artifact": pin_artifact,
@@ -518,7 +519,9 @@ def status_report(store, *, counters=False):
                 report = dict(report, obligations=order_obligations(report["obligations"]))
             slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
             # A stale slate decides nothing; its stale obligation leads the report instead.
-            if current_slate is not None and not current_slate["selected"]:
+            if report.get("post") is not None:
+                upcoming = report["obligations"][0]
+            elif current_slate is not None and not current_slate["selected"]:
                 upcoming = {"code": "problem_no_post", "reason": current_slate["reason"],
                             "explanation": "The latest slate selects no candidate; a new slate that selects one reopens the post path."}
             elif report["obligations"]:

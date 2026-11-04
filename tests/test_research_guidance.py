@@ -145,7 +145,7 @@ class ResearchGuidanceTests(unittest.TestCase):
             root = Path(temporary).resolve()
             plugin = root / "Plugin with spaces"
             shutil.copytree(PLUGIN, plugin, ignore=shutil.ignore_patterns(
-                ".git", ".superpowers", ".lake", "__pycache__", ".coverage*"))
+                ".git", ".superpowers", ".lane-scratch", ".lake", "__pycache__", ".coverage*"))
             workspace = root / "Independent workspace"
             workspace.mkdir()
             environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")

@@ -6,9 +6,10 @@ proof. Requested formal support is bound to a delivered native completion.
 
 from datetime import datetime, timezone
 
-from .artifacts import ArtifactStore
+from .artifacts import ArtifactStore, validate_reference
 from .errors import ResearchError
 from .evidence import digest
+from .exactory_api import UUID_RE
 from .graph import obligation
 from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .principles import prepare_initialization
@@ -237,3 +238,42 @@ def record_posted(store, payload, *, expected_revision, request_id):
     return prepared_mutation(store, "problem.posted", payload,
         lambda records, value: prepare_posted(records, artifacts, value),
         expected_revision=expected_revision, request_id=request_id)
+
+
+def record_post_external(store, payload, *, expected_revision, request_id):
+    artifacts = store.build_artifact_store()
+
+    def prepare(records, value):
+        from .problem_delivery import find_post
+        require_problem(records)
+        fields(value, ("id", "problem_id", "statement_digest", "reason", "evidence"))
+        for key in ("id", "problem_id", "statement_digest", "reason"):
+            text(value[key], "External post " + key)
+        if not UUID_RE.fullmatch(value["problem_id"]):
+            raise ResearchError("invalid_input", "Posted problem ID must be a UUID")
+        if isinstance(value["evidence"], dict):
+            validate_reference(value["evidence"])
+            artifacts.verify(value["evidence"])
+        else:
+            text(value["evidence"], "External post evidence")
+        statement = find_current_statement(records)
+        if statement is None:
+            raise ResearchError("problem_statement_missing",
+                                "Select the exact current problem statement")
+        statement_digest = compute_statement_digest(statement)
+        if value["statement_digest"] != statement_digest:
+            raise ResearchError("problem_statement_mismatch",
+                                "The posted statement digest must match the current statement",
+                                {"statement_digest": statement_digest})
+        earlier = find_post(records, statement)
+        if earlier is not None:
+            raise ResearchError("problem_already_posted",
+                                "This exact statement already has a recorded post",
+                                {"post_id": earlier["id"]})
+        record = dict(value, statement_id=statement["id"], gate="bypassed",
+                      posted_at=datetime.now(timezone.utc).isoformat(),
+                      recorded_revision=expected_revision + 1)
+        return [immutable_record(records, "problem_post", value["id"], record)], record
+
+    return prepared_mutation(store, "problem.post_external", payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id)
