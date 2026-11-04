@@ -297,10 +297,12 @@ def record_native_refusal(store, assignment_id, *, request_id):
 
 
 def _record_refusal(store, payload, *, expected_revision, request_id):
+    from .evaluation import Evaluation
     from .review_protocol import assignment_state
     artifacts = store.build_artifact_store()
     snapshot = store.snapshot()
     records = snapshot['records']
+    artifacts = Evaluation.of(records, artifacts)
     assignment_id = payload.get('assignment_id') if isinstance(payload, dict) else None
     if not isinstance(assignment_id, str) or assignment_id not in records.get('review_assignment', {}):
         return

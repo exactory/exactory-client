@@ -54,6 +54,16 @@ the undelivered readings in `reading_ids`. The decision stores
 `direction_evidence_unassessed` and requires a new decision with reviews that
 saw it. Target commitment applies that same minimum and review-coverage rule.
 
+Within one command, request selection and authentication reuse derived text
+requests only when the complete route, prompt, packet, ordered history, fit order
+and local input limit match. Inputs are read and verified before reuse, and each
+recorded request still receives the full authentication checks. Exact compressed
+requests use a protected LRU capped at half the evaluation's existing 64 MiB
+optional retention budget; other entries borrow unused space and cannot evict
+requests. Oversized or unencodable requests are computed without retention, and
+no retained state survives the command. Visual requests still check current
+emitter bytes on every build, and staged reviews keep their existing path.
+
 For version-2 `investigate`, `pivot` and `develop_manuscript`, both reviews
 pass `q1_venue`. Missing findings report `q1_venue_missing`; a failed or
 unresolved finding reports `research_assurance_pending`. The bar defines

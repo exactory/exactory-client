@@ -466,9 +466,11 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
 
 @record_refusal_on_error
 def record_value_review(store, payload, *, expected_revision, request_id):
-    artifacts = store.build_artifact_store()
+    artifact_store = store.build_artifact_store()
 
     def prepare(records, value):
+        from .evaluation import Evaluation
+        artifacts = Evaluation.of(records, artifact_store)
         from . import review_problem_parts
         saved = records.get('review_assignment', {}).get(value.get('assignment_id')) if isinstance(value, dict) else None
         if saved is not None and 'evidence_parts' in saved['prompt'].get('parameters', {}):

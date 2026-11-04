@@ -1,6 +1,8 @@
 """Snapshot-local verified access with bounded optional Python-value retention.
 
-The root owns a weighted LRU (64 MiB by default). We charge recursive shallow
+The root owns a shared optional budget (64 MiB by default). Compressed derived
+requests have a protected weighted LRU capped at half the budget. Ordinary
+entries borrow unused space but never evict requests. We charge recursive shallow
 Python sizes, including containers, keys and entry overhead, without deduplicating
 between entries. Oversized values are returned uncached. Authenticated snapshots,
 history indexes, standalone structural indexes and active guards are not
@@ -110,7 +112,9 @@ class Evaluation:
         self._revisions = weakref.WeakValueDictionary()
         arena = inherited if inherited is not None and inherited.retention_budget_bytes == retention_budget_bytes else None
         self._optional = OrderedDict() if arena is None else arena._optional
+        self._requests = OrderedDict() if arena is None else arena._requests
         self._retained_bytes = [0] if arena is None else arena._retained_bytes
+        self._request_bytes = [0] if arena is None else arena._request_bytes
         self._views = weakref.WeakSet() if arena is None else arena._views
         self._views.add(self)
         self._byte_namespace = object() if _owner is None else _owner._byte_namespace
@@ -164,16 +168,20 @@ class Evaluation:
     def compute_once_in_root(self, key, compute):
         return self.find_root().once(('revision', self._namespace, key), compute)
 
-    def _retain_once(self, key, compute, *, refresh=False):
+    def _retain_once(self, key, compute, *, refresh=False, request=False):
         scope = self._runtime_scope[0]
         if scope is not None and self.retention_budget_bytes:
             scope['arenas'][id(self._optional)] = (self._optional, self._retained_bytes)
-        if key in self._optional:
-            value, weight = self._optional.pop(key)
+            scope['arenas'][id(self._requests)] = (self._requests, self._request_bytes)
+        entries = self._requests if request else self._optional
+        if key in entries:
+            value, weight = entries.pop(key)
             if not refresh:
-                self._optional[key] = value, weight
+                entries[key] = value, weight
                 return value
             self._retained_bytes[0] -= weight
+            if request:
+                self._request_bytes[0] -= weight
         if compute is None:
             return None
         value = compute()
@@ -182,21 +190,35 @@ class Evaluation:
             return value
         # OrderedDict linkage and the stored (value, weight) pair are charged
         # in addition to recursively sized keys and values.
-        weight = _weigh_value((key, value)) + sys.getsizeof((None, 0)) + 256
-        if weight <= budget:
+        weight = _weigh_value((key, value)) + sys.getsizeof((None, 0)) + (512 if request else 256)
+        capacity = budget // 2 if request else budget - self._request_bytes[0]
+        if weight <= capacity and not (request and value is None):
+            if request:
+                while self._requests and self._request_bytes[0] + weight > capacity:
+                    _, (_, removed) = self._requests.popitem(last=False)
+                    self._request_bytes[0] -= removed
+                    self._retained_bytes[0] -= removed
             while self._optional and self._retained_bytes[0] + weight > budget:
                 _, (_, removed) = self._optional.popitem(last=False)
                 self._retained_bytes[0] -= removed
-            self._optional[key] = value, weight
+            entries[key] = value, weight
             self._retained_bytes[0] += weight
+            if request:
+                self._request_bytes[0] += weight
         return value
+
+    def request_once(self, key, compute):
+        """Share compressed pure derivations across views of this command's arena."""
+        return self._retain_once(key, compute, request=True)
 
     def retention_report(self):
         root = self.find_root()
         views = list(self._views)
         return {'budget_bytes': self.retention_budget_bytes,
                 'optional_bytes': self._retained_bytes[0],
-                'optional_entries': len(self._optional),
+                'optional_entries': len(self._optional) + len(self._requests),
+                'request_bytes': self._request_bytes[0],
+                'request_entries': len(self._requests),
                 'structural_bytes': _weigh_value([(view._structural, view._active_states) for view in views] +
                     [root._historical_cache._verified_current if root._historical_cache is not None else {}]),
                 'snapshot_bytes': _weigh_value([view.records for view in views]),

@@ -1,4 +1,4 @@
-"""Text requests are memoized per records view; visual requests observe the current emitter."""
+"""Text derivations share complete inputs; selection remains local to each view."""
 
 import copy
 import json
@@ -80,7 +80,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
         self.evaluation = Evaluation(self.records, self.case.artifacts)
 
     def test_repeated_request_is_built_once_and_returns_independent_copies(self):
-        with patch.object(transport, 'list_built_requests', wraps=transport.list_built_requests) as build:
+        with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
             first = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
             second = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
             self.assertEqual(build.call_count, 1)
@@ -92,13 +92,13 @@ class AssignmentRequestOnceTests(ResultPartsCase):
             self.assertEqual(protocol.build_assignment_request(self.records, self.evaluation, self.assignment), expected)
             self.assertEqual(build.call_count, 1)
 
-    def test_another_records_view_builds_again(self):
+    def test_another_records_view_reuses_identical_derivation_inputs(self):
         other_records = copy.deepcopy(self.records)
-        with patch.object(transport, 'list_built_requests', wraps=transport.list_built_requests) as build:
+        with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
             first = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
             second = protocol.build_assignment_request(other_records, self.evaluation,
                                                        other_records['review_assignment'][self.assignment['id']])
-        self.assertEqual(build.call_count, 2)
+        self.assertEqual(build.call_count, 1)
         self.assertEqual(first, second)
         self.assertIsNot(first, second)
 
@@ -111,26 +111,29 @@ class AssignmentRequestOnceTests(ResultPartsCase):
         earlier_records['review_attempt'] = {}
         earlier_evaluation = Evaluation(earlier_records, self.evaluation)
         views = ((earlier_records, earlier_evaluation, current), (self.records, self.evaluation, recorded))
-        with patch.object(transport, 'list_built_requests',
-                          side_effect=lambda *args: iter(copy.deepcopy((current, recorded)))) as build:
+        def derive(route, prompt, packet, history=(), order=transport.FIT_ORDER):
+            return copy.deepcopy(current if order == transport.FIT_ORDER else recorded)
+        with patch.object(transport, 'request_body', side_effect=derive) as build:
             for records, evaluation, expected in views + views[::-1]:
                 assignment = records['review_assignment'][self.assignment['id']]
                 self.assertEqual(protocol.build_assignment_request(records, evaluation, assignment), expected)
             self.assertEqual(build.call_count, 2)
 
-    def test_changing_input_history_does_not_change_the_memoized_request(self):
+    def test_changing_input_history_derives_a_new_request(self):
         self.records['review_attempt'] = {}
         self.assignment.pop('history_ref', None)
         self.assignment['history'] = [
             {'role': 'user', 'content': 'An earlier supplied question.'},
             {'role': 'assistant', 'content': 'An earlier canonical assessment.'}]
         first = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
-        expected = copy.deepcopy(first)
         self.assertEqual(first['input'][:2], self.assignment['history'])
         self.assignment['history'][0]['content'] = 'Changed by the input owner.'
         self.assignment['history'][1]['content'] = 'A substituted assessment.'
         first['input'][0]['content'] = 'Changed by the caller.'
-        self.assertEqual(protocol.build_assignment_request(self.records, self.evaluation, self.assignment), expected)
+        with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
+            changed = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
+        self.assertEqual(build.call_count, 1)
+        self.assertEqual(changed['input'][:2], self.assignment['history'])
 
     def test_request_matches_the_recorded_request_and_direct_rebuild(self):
         attempt = self.records['review_attempt']['attempt-' + self.assignment['id']]
@@ -158,7 +161,9 @@ class AssignmentRequestOnceTests(ResultPartsCase):
         recorded = json.loads(self.case.artifacts.read(attempt['request']))
         current = copy.deepcopy(recorded)
         current['input'][-1]['content'] = 'The current fit differs from the recorded fit.'
-        with patch.object(transport, 'list_built_requests', return_value=iter((current, recorded))):
+        def derive(route, prompt, packet, history=(), order=transport.FIT_ORDER):
+            return current if order == transport.FIT_ORDER else recorded
+        with patch.object(transport, 'request_body', side_effect=derive):
             self.assertEqual(protocol.build_assignment_request(self.records, self.evaluation, self.assignment), recorded)
 
     def test_only_completed_attempts_with_a_request_select_an_earlier_fit(self):
@@ -172,7 +177,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
                 records = copy.deepcopy(self.records)
                 records['review_attempt'] = {attempt['id']: dict(attempt, status=status, request=request),
                                              other_attempt['id']: dict(other_attempt, request=attempt['request'])}
-                with patch.object(transport, 'list_built_requests', return_value=iter((current, recorded))):
+                with patch.object(transport, 'request_body', return_value=current):
                     self.assertEqual(protocol.build_assignment_request(records, self.evaluation, self.assignment), current)
 
     def test_another_assignments_attempt_without_status_is_ignored(self):
@@ -202,11 +207,28 @@ class VisualAssignmentRequestTests(unittest.TestCase):
         self.evaluation = Evaluation(self.records, self.fixture.artifacts)
 
     def test_visual_request_is_built_on_every_call(self):
-        with patch.object(transport, 'list_built_requests', wraps=transport.list_built_requests) as build:
+        with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
             first = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
             second = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
         self.assertEqual(first, second)
         self.assertEqual(build.call_count, 2)
+
+    def test_emitter_drift_inside_scope_clears_both_retention_categories(self):
+        from research_harness import review_exact_text_cost_v1 as emitter
+        from research_harness.review_state_evaluation import runtime_scope
+        original = Path(emitter.__file__).read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'review_exact_text_cost_v1.py'
+            source.write_bytes(original)
+            with patch.object(emitter, '__file__', str(source)):
+                with self.assertRaises(ResearchError) as failure:
+                    with runtime_scope(self.records, self.evaluation):
+                        self.evaluation.request_once(('warm-text-request',), lambda: b'compressed request')
+                        protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
+                        source.write_bytes(original + b'\n# Changed emitter bytes during one command.\n')
+                self.assertEqual(failure.exception.code, 'review_runtime_changed')
+                self.assertEqual(self.evaluation.retention_report()['optional_bytes'], 0)
+                self.assertEqual(self.evaluation.retention_report()['request_entries'], 0)
 
     def test_changed_emitter_rejects_a_warm_visual_request_and_restoring_it_recovers(self):
         from research_harness import review_exact_text_cost_v1 as emitter

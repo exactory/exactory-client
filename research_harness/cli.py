@@ -525,13 +525,17 @@ def status_report(store, *, counters=False):
                 upcoming = report["obligations"][0]
             else:
                 upcoming = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
-            return dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
+            result = dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
                         problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
                         limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
                         # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
                         literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                         candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
                         next=upcoming, review=review, advisories=advisories)
+            if counters:
+                result['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
+                                            retention=evaluation.retention_report())
+            return result
         config = records.get("configuration", {}).get("research")
         profile = config["profile"] if config else "research"
         study = records.get("workspace", {}).get("study")

@@ -1554,8 +1554,8 @@ def deliver_historical_review(records, artifacts, review):
 def build_assignment_request(records, artifacts, assignment):
     """The request that the harness builds for an assignment. Where a completed attempt recorded a request that an
     earlier fit order of the transport built, that request: a retry repeats it and the state of the assignment is
-    derived from it. Otherwise the request of the current fit order. A text route's request is built once per
-    evaluation of a records view and every caller receives its own copy; a visual route's request is built on every
+    derived from it. Otherwise the request of the current fit order. Text derivations share complete actual inputs
+    within the evaluation budget and every caller receives its own copy; a visual route's request is built on every
     call, because building it checks the current emitter bytes."""
     from .evaluation import Evaluation
     evaluation = Evaluation.of(records, artifacts)
@@ -1563,25 +1563,20 @@ def build_assignment_request(records, artifacts, assignment):
     route = records['review_route'][assignment['route_id']]
     attempts = _read_review_group(records, evaluation, 'review_attempt', 'assignment_id', assignment['id'])
 
-    def build_request():
-        packet = _read_json(evaluation, assignment['packet'])
-        if assignment.get('staged_review'):
-            from .review_staged_protocol import build_assigned_request
-            return build_assigned_request(evaluation, route, assignment, packet)
-        recorded = [_read_json(evaluation, attempt['request'])
-                    for attempt in attempts
-                    if attempt['status'] == 'completed' and attempt.get('request')]
-        built = transport.list_built_requests(route, assignment['prompt']['text'], packet,
-                                              read_history(evaluation, assignment))
-        current = next(built)
-        if not recorded or current in recorded:
-            return current
-        return next((request for request in built if request in recorded), current)
-
-    if route['adapter'] == 'codex_cli_visual_v1':
-        return build_request()
-    return copy.deepcopy(evaluation.once(('assignment_request', assignment['id']),
-                                         lambda: copy.deepcopy(build_request())))
+    packet = _read_json(evaluation, assignment['packet'])
+    if assignment.get('staged_review'):
+        from .review_staged_protocol import build_assigned_request
+        return build_assigned_request(evaluation, route, assignment, packet)
+    recorded = [_read_json(evaluation, attempt['request'])
+                for attempt in attempts
+                if attempt['status'] == 'completed' and attempt.get('request')]
+    from .review_request_evaluation import iter_built_requests
+    built = iter_built_requests(evaluation, route, assignment['prompt']['text'], packet,
+                                read_history(evaluation, assignment))
+    current = next(built)
+    if not recorded or current in recorded:
+        return copy.deepcopy(current)
+    return copy.deepcopy(next((request for request in built if request in recorded), current))
 
 
 def source_delivery_packet(records, artifacts, assignment):
@@ -3112,6 +3107,9 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
 
 def authenticate_provenance(records, artifacts, assignment, attempt):
     """Authenticate the provenance of one exact observation: its runtime, route, request, packet, prompt and output."""
+    from .evaluation import Evaluation
+    from .review_request_evaluation import iter_built_requests
+    artifacts = Evaluation.of(records, artifacts)
     try:
         route = records['review_route'][assignment['route_id']]
         request = _read_json(artifacts, attempt['request']) if attempt.get('request') else None
@@ -3128,8 +3126,8 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
         return (attempt.get('origin') == 'instrumented' and request is not None
                 and attempt.get('runtime') == route['runtime']
                 and attempt.get('route_digest') == digest(route)
-                and any(request == built for built in transport.list_built_requests(
-                    route, assignment['prompt']['text'], packet, read_history(artifacts, assignment)))
+                and any(request == built for built in iter_built_requests(
+                    artifacts, route, assignment['prompt']['text'], packet, read_history(artifacts, assignment)))
                 and attempt.get('packet_digest') == assignment['packet_digest']
                 and attempt.get('prompt_hash') == assignment['prompt_hash']
                 and transport.response_output(response) == output)

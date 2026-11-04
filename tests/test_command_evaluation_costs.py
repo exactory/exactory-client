@@ -3,6 +3,7 @@
 import copy
 import json
 import unittest
+import weakref
 from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
@@ -93,6 +94,32 @@ class CommandEvaluationTests(LiteratureCase):
             with states.runtime_scope(records, root):
                 self.assertFalse(states.evaluate_state(child.records, child, 'assignment', 'one',
                                                        lambda *args: {'ready': False})['ready'])
+
+    def test_runtime_drift_clears_requests_in_every_participating_arena(self):
+        records = {'review_route': {'route': {'id': 'route', 'adapter': transport.ADAPTER}}}
+        root = Evaluation(records, self.artifacts, retention_budget_bytes=20000)
+        child = Evaluation.of(dict(records), root, retention_budget_bytes=10000)
+        with patch.object(transport, 'runtime', side_effect=[{'version': 1}, {'version': 2}]):
+            with self.assertRaises(ResearchError) as error:
+                with states.runtime_scope(records, root):
+                    for evaluation in (root, child):
+                        evaluation.request_once(('warm',), lambda: b'compressed request')
+                        evaluation.once('ordinary', lambda: 'warm state')
+            self.assertEqual(error.exception.code, 'review_runtime_changed')
+        for evaluation in (root, child):
+            self.assertEqual(evaluation.retention_report()['optional_bytes'], 0)
+            self.assertEqual(evaluation.retention_report()['request_entries'], 0)
+
+    def test_runtime_scope_does_not_retain_inactive_evaluation_views(self):
+        records = {'review_route': {'route': {'id': 'route', 'adapter': transport.ADAPTER}}}
+        root = Evaluation(records, self.artifacts, retention_budget_bytes=1000)
+        with states.runtime_scope(records, root):
+            child = Evaluation.of(dict(records, payload='large input' * 1000000), root)
+            retained = weakref.ref(child)
+            child.request_once(('oversized',), lambda: b'compressed request' * 100)
+            del child
+            self.assertIsNone(retained())
+            self.assertEqual(root.retention_report()['optional_bytes'], 0)
 
     def test_unavailable_scope_fingerprint_keeps_native_uncached_checks(self):
         records = {'review_route': {'route': {'id': 'route', 'adapter': transport.ADAPTER}}}
