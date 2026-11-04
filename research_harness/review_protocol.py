@@ -26,6 +26,7 @@ from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, prepared_task_mutation, text
 from .finishing import retry_store_write
 from . import review_transport as transport
+from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
 from . import openness_reading
 from . import review_excerpts
@@ -2067,6 +2068,15 @@ def _observed(artifacts, route, request, credential):
                         response=None, output=None, status='failed',
                         error=dict(kind='ResearchError', code=error.code),
                         usage=dict(input_tokens=None, output_tokens=None, cost_usd=None, wall_seconds=None))
+    if (observed['status'] == 'failed'
+            and (observed.get('error') or {}).get('kind') == 'JSONDecodeError'):
+        recovered = recover_answer(observed['response'])
+        if recovered is not None:
+            recovered_response = observed['response']
+            observed.update(status='completed', output=recovered['output'], error=None,
+                            provider_response_id=recovered_response['id'],
+                            observed_model=recovered_response.get('model'),
+                            answer_recovery=recovered['certificate'])
     observed['observed_at'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
     response = observed['response']
     if (observed['status'] != 'completed' and response is not None
@@ -2236,7 +2246,7 @@ def _route_state(records, artifacts, route_id):
                 bounded = request.get('tools') == [] and request.get('store') is False and 'previous_response_id' not in request
                 if (saved['status'] == 'completed' and saved['request_digest'] == digest(request) and no_excluded
                         and complete_sources and positives and bounded and output.get('excluded_controls') == []
-                        and transport.response_output(_read_json(artifacts, saved['response'])) == output
+                        and derive_output(dict(saved, output=output), _read_json(artifacts, saved['response'])) == output
                         and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']))):
                     status, proof = 'verified_for_route', saved['id']
             except (ResearchError, ValueError, TypeError, KeyError):
@@ -3249,7 +3259,7 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
                     artifacts, route, assignment['prompt']['text'], packet, read_history(artifacts, assignment)))
                 and attempt.get('packet_digest') == assignment['packet_digest']
                 and attempt.get('prompt_hash') == assignment['prompt_hash']
-                and transport.response_output(response) == output)
+                and derive_output(dict(attempt, output=output), response) == output)
     except (ResearchError, ValueError, TypeError, KeyError):
         return False
 
@@ -3289,11 +3299,15 @@ def _read_raw_observation(artifacts, attempt_id, attempt, captured=None):
                   instrumented=attempt.get('origin') == 'instrumented',
                   provenance={key: copy.deepcopy(attempt.get(key)) for key in
                               ('origin', 'runtime', 'route_digest', 'invocation_id', 'recorded_revision')})
+    if 'answer_recovery' in observation:
+        result['answer_recovery'] = copy.deepcopy(observation['answer_recovery'])
     for name in ('request', 'response', 'output'):
         reference = observation.get(name)
         result[name] = copy.deepcopy(reference)
         value = _read_json(artifacts, reference) if reference is not None else None
         result[name + '_digest'] = digest(value) if reference is not None else None
+        if name == 'response':
+            result['answer_text'] = extract_answer_text(value) if value is not None else None
         if name == 'output':
             result['raw_output'] = value
             result['raw_output_digest'] = result['output_digest']
@@ -3382,6 +3396,8 @@ def _assignment_state(records, artifacts, assignment_id):
     if binding is not None:
         attempt = binding
         state['attempt_id'] = attempt['id']
+        if 'answer_recovery' in attempt:
+            state['answer_recovery'] = copy.deepcopy(attempt['answer_recovery'])
         try:
             state['output'] = _read_json(artifacts, attempt['output'])
             state['output_digest'] = digest(state['output'])
@@ -3410,6 +3426,9 @@ def _assignment_state(records, artifacts, assignment_id):
         else:
             state.update(output=correction['output'], output_digest=digest(correction['output']),
                          attempt_id=correction['attempt_id'], output_correction_id=correction['id'])
+            original = records['review_attempt'][correction['attempt_id']]
+            if 'answer_recovery' in original:
+                state['answer_recovery'] = copy.deepcopy(original['answer_recovery'])
     else:
         state['obligations'].append(obligation('review_output_pending', 'A complete observed reviewer response is required.'))
     if binding is None and assignment['route_id'] in retired_routes(records):
@@ -3692,5 +3711,8 @@ def usage_report(records, dossier_id=None):
                 unknown[metric] += 1
     return {'review_budget': read_budget_usage(records),
             'calls': len(calls), 'pending_calls': pending, 'failed_calls': failed,
+            'recovered_calls': sum('answer_recovery' in (result or {}) for _, result in calls),
+            'answer_recoveries': {identifier: result['answer_recovery'] for identifier, result in calls
+                                  if result is not None and 'answer_recovery' in result},
             'observed': observed, 'unknown': unknown, 'call_ids': [identifier for identifier, _ in calls],
             'scope': 'all review calls including shared route probes' if dossier_id is None else 'dossier calls excluding shared route probes'}

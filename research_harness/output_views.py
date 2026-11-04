@@ -518,6 +518,8 @@ def _describe_run(artifacts, files, stem, run, attempt, invocation, refusal, par
             "refusal": None if refusal is None else {key: refusal.get(key) for key in (
                 "code", "check", "details", "recorded_revision")},
             "correction": None, "selected": False}
+    if 'answer_recovery' in record:
+        item['answer_recovery'] = record['answer_recovery']
     path = stem + "." + _format_file_name(run) + ".json"
     entry = _describe("review_attempt", run, record)
     if parts_header is not None:
@@ -598,6 +600,8 @@ def _describe_turn(records, artifacts, files, stem, assignment, by_assignment, r
                       "correction_status": result.get("correction_status"),
                       "error": result.get("correction_error") or result.get("error"), "usage": result.get("usage"),
                       "recorded_revision": record["recorded_revision"], "selected": False}
+        if 'answer_recovery' in result:
+            correction['answer_recovery'] = result['answer_recovery']
         correction_path = stem + "." + _format_file_name(invocation['id']) + '.json'
         correction.update(_copy_output(artifacts, files, correction_path,
                                        result.get("output"), entry))

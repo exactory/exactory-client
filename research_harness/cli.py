@@ -469,6 +469,10 @@ def _review_status(records, artifacts):
     result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
+    for attempt in completed:
+        if 'answer_recovery' in attempt:
+            result['assignments'][attempt['assignment_id']].setdefault('answer_recoveries', {})[
+                attempt['id']] = attempt['answer_recovery']
     parts_assignments = sorted((assignment for assignment in records.get('review_assignment', {}).values()
                                 if review_parts.KEY in assignment),
                                key=lambda row: row['recorded_revision'])
@@ -506,6 +510,20 @@ def _review_status(records, artifacts):
             composition_root=effective.get("composition_root"),
             incomplete_outcome=effective.get("incomplete_outcome"),
             tasks=describe_review_tasks(records, row["epoch"], state))
+        if 'answer_recovery' in state:
+            result['assignments'][assignment['id']]['answer_recovery'] = state['answer_recovery']
+    for identifier, assignment in records.get('review_assignment', {}).items():
+        binding = assignment.get('staged_review', {})
+        if binding.get('kind') != 'task':
+            continue
+        execution = records.get('review_task_execution', {}).get(binding.get('task_id'), {})
+        capture = records.get('review_observation', {}).get(execution.get('reservation_id'), {})
+        if (not result['assignments'][identifier].get('answer_recoveries')
+                and 'answer_recovery' not in capture.get('observation', {})):
+            continue
+        state = review_protocol.assignment_state(records, artifacts, identifier)
+        if 'answer_recovery' in state:
+            result['assignments'][identifier]['answer_recovery'] = state['answer_recovery']
     return result
 
 

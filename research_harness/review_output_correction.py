@@ -9,6 +9,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .operations import fields, immutable_record, text
 from . import review_context_repair as repair, review_transport as transport
+from .review_answer_recovery import derive_output
 
 PROTOCOL = 'exactory-reassessment-disposition-correction-v1'
 PROMPT = (
@@ -181,7 +182,7 @@ def _authenticate_observation(records, artifacts, invocation, observation):
             or observation.get('observed_model') != route['model']
             or response.get('model') != route['model']
             or protocol._read_json(artifacts, observation['request']) != request
-            or transport.response_output(response) != output
+            or derive_output(dict(observation, output=output), response) != output
             or not protocol.verify_route_context(artifacts, route, request, response)):
         raise ResearchError('review_correction_unverified', 'The exact same-reviewer correction invocation must authenticate.')
     if route['adapter'] == 'codex_cli_v1':
