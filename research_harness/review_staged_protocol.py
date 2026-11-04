@@ -10,6 +10,7 @@ import copy
 from .artifacts import _StagedArtifacts
 from . import review_protocol as protocol
 from . import review_transport as transport
+from .review_answer_recovery import derive_output
 from . import review_excerpts, review_problem_parts
 from .errors import ResearchError
 from .evidence import digest
@@ -1527,12 +1528,15 @@ def authenticate_observation(records, artifacts, assignment, attempt, *, require
         return (captured['origin'] == 'instrumented' and attempt['origin'] == 'instrumented'
                 and captured['task_id'] == assignment['staged_review']['task_id']
                 and all(attempt.get(name) == observation.get(name) for name in ('status', 'request', 'response', 'output'))
+                and ('answer_recovery' in attempt) == ('answer_recovery' in observation)
+                and _canonical(attempt.get('answer_recovery')) == _canonical(observation.get('answer_recovery'))
                 and digest(route) == assignment['route_digest'] == observation['route_digest']
                 and observation['runtime'] == route['runtime']
                 and protocol._read_json(artifacts, observation['request']) == request
                 and request.get('history') == [] and len(transport.logical_messages(request)) == 1
                 and digest(request) == assignment['planned_request_digest']
-                and transport.response_output(response) == protocol._read_json(artifacts, observation['output'])
+                and derive_output(dict(observation, output=protocol._read_json(artifacts, observation['output'])),
+                                  response) == protocol._read_json(artifacts, observation['output'])
                 and (not require_verified_context or observation['status'] == 'completed'
                      and protocol.verify_route_context(artifacts, route, request, response)))
     except (ResearchError, KeyError, TypeError, ValueError):
@@ -1649,6 +1653,8 @@ def build_selection(records, artifacts, epoch, controller_id, binding, observati
         raw = read_raw_observation(records, artifacts, attempt['id'])
         if binding['kind'] == 'controller':
             state.update(raw_output=raw['raw_output'], raw_output_digest=raw['raw_output_digest'], attempt_id=attempt['id'])
+            if 'answer_recovery' in raw:
+                state['answer_recovery'] = raw['answer_recovery']
         selection.update(terminal_attempt_id=attempt['id'], terminal_raw_output_digest=raw['raw_output_digest'])
         if completion['complete'] and 'assessment_incomplete' not in observed['output']:
             if paged is not None:
@@ -1695,11 +1701,15 @@ def build_state(records, artifacts, assignment, *, include_contaminated=False):
         if capture is not None:
             raw = read_raw_observation(records, artifacts, capture['id'])
             state.update(raw_output=raw['raw_output'], raw_output_digest=raw['raw_output_digest'])
+            if 'answer_recovery' in raw:
+                state['answer_recovery'] = raw['answer_recovery']
         selected = next((row for row in observations if row['task_id'] == binding['task_id']), None)
         if selected is not None:
             raw = read_raw_observation(records, artifacts, selected['id'])
             state.update(raw_output=raw['raw_output'], raw_output_digest=raw['raw_output_digest'],
                          attempt_id=selected['id'])
+            if 'answer_recovery' in raw:
+                state['answer_recovery'] = raw['answer_recovery']
     selection, completion, paged = build_selection(records, artifacts, epoch, controller_id,
                                                    binding, observations, terminal, state)
     if repair_obligations:
