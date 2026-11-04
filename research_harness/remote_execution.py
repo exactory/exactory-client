@@ -27,6 +27,7 @@ from .workspace import checked_parent, json_projection, read_file, strict_json, 
 
 
 _RUNNER_CLAIMS = {}
+_POLLING_READ_BUSY = object()
 
 
 def transport_root():
@@ -90,9 +91,13 @@ def _publish_job(store, claim):
     return root, job
 
 
-def _release(store, claim, root, job):
+def _release(store, claim, root, job, *, read_store=None):
     from .artifacts import ArtifactStore
     from .execution import _binding, _files
+
+    if read_store is None:
+        def read_store(read):
+            return read()
 
     def authorize(current):
         admission = validate_admitted_execution(current, ArtifactStore(store.root), claim["admission_id"])
@@ -101,7 +106,10 @@ def _release(store, claim, root, job):
             raise ResearchError("execution_identity_mismatch", "The remote release differs from its durable binding")
         _files(store, admission, binding)
 
-    records = store.snapshot()["records"]
+    snapshot = read_store(store.snapshot)
+    if snapshot is None:
+        return _POLLING_READ_BUSY
+    records = snapshot["records"]
     released = records.get("execution_remote_release", {}).get(claim["admission_id"])
     if released is None:
         claims_dir = root / "jobs" / job["job_id"] / "claims"
@@ -119,8 +127,14 @@ def _release(store, claim, root, job):
         def prepare(current, payload):
             authorize(current)
             return [immutable_record(current, "execution_remote_release", claim["admission_id"], value)], value
+        revision = read_store(lambda: store.revision)
+        if revision is None:
+            return _POLLING_READ_BUSY
+        preparation = read_store(store._read_preparation)
+        if preparation is None:
+            return _POLLING_READ_BUSY
         released = prepared_mutation(store, "execution.remote-release", value, prepare,
-            expected_revision=store.revision, request_id="remote-release-" + digest(claim))["result"]
+            expected_revision=revision, request_id="remote-release-" + digest(claim), _snapshot=preparation)["result"]
     nonce = released["worker"]["worker_nonce"]
     prefix = "jobs/" + job["job_id"]
     go = prefix + "/GO-" + nonce
@@ -136,9 +150,13 @@ def _release(store, claim, root, job):
             return released
         # A retained release is an immutable identity, not current permission
         # to emit a signal that may never have reached the original runner.
-        current = store.snapshot()
+        current = read_store(store.snapshot)
+        if current is None:
+            return _POLLING_READ_BUSY
         authorize(current["records"])
-        revision = store.revision
+        revision = read_store(lambda: store.revision)
+        if revision is None:
+            return _POLLING_READ_BUSY
         if revision != current["revision"]:
             raise ResearchError("stale_revision", "Research changed while checking a missing remote execution signal; retain the release and recheck before dispatch", {"expected_revision": current["revision"], "revision": revision})
     _immutable(root, go, _canonical(released).encode())
@@ -147,11 +165,12 @@ def _release(store, claim, root, job):
 
 def launch_colab(store, claim):
     from .execution import reconcile_execution
+    from .review_worker import read_polling_store
     root, job = _publish_job(store, claim)
     deadline = time.monotonic() + claim["config"]["timeout_seconds"] + _interval("EXACTORY_LAB_COLAB_WAIT", 1800)
     while True:
-        _release(store, claim, root, job)
-        if (root / "results" / job["job_id"] / "DONE").exists():
+        released = _release(store, claim, root, job, read_store=read_polling_store)
+        if released is not _POLLING_READ_BUSY and (root / "results" / job["job_id"] / "DONE").exists():
             return reconcile_execution(store, {"admission_id": claim["admission_id"]}, expected_revision=store.revision,
                 request_id="remote-observe-" + digest(claim), owned=True)
         if time.monotonic() >= deadline:
