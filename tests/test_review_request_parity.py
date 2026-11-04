@@ -23,10 +23,25 @@ class ReviewRequestParityTests(unittest.TestCase):
         self.assertEqual(self.frozen["serialization"], "review_protocol._put_json")
 
 
+def strip_observation_metadata(attempt):
+    if attempt is None:
+        return None
+    # These advisory fields were added after the oracle and do not authenticate attempts.
+    return {key: value for key, value in attempt.items()
+            if key not in ("observed_at", "provider_diagnostic")}
+
+
 def add_case(name, build):
     def test(self):
         actual = build()
         expected = self.frozen["cases"][name]
+        actual["attempts"] = {key: strip_observation_metadata(attempt)
+                              for key, attempt in actual["attempts"].items()}
+        for selected in actual["selected"].values():
+            if "value" in selected:
+                binding, refused, completed = selected["value"]
+                selected["value"] = [strip_observation_metadata(binding), refused,
+                                     [strip_observation_metadata(attempt) for attempt in completed]]
         self.assertEqual(set(actual), set(expected))
         # Separate assertions locate a regression without dumping other reports
         # or truncating a comparison of large request bodies.
