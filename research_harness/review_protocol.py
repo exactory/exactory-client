@@ -634,6 +634,9 @@ def _read_context_records(records, assignment):
 
 
 def _read_json(artifacts, reference):
+    from .evaluation import Evaluation
+    if isinstance(artifacts, Evaluation):
+        return artifacts.read_json(reference)
     return json.loads(artifacts.read(reference))
 
 
@@ -1593,19 +1596,35 @@ def source_delivery_packet(records, artifacts, assignment):
     to equal this same reconstruction. Caller-authored delivery flags are not
     accepted as a substitute for computing the actual transport request.
     """
-    packet = _read_json(artifacts, assignment['packet'])
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    packet = _read_json(evaluation, assignment['packet'])
     from .review_source_capacity import MARKER, PROTOCOL
     from .review_source_complete import MARKER as COMPLETE_MARKER, PROTOCOL as COMPLETE_PROTOCOL
     if assignment['role'] not in bar_sources.ROLES or not (packet.get('continuation') or MARKER in packet or COMPLETE_MARKER in packet):
         return packet
-    request = build_assignment_request(records, artifacts, assignment)
-    content = transport.logical_messages(request)[-1].get('content')
-    if isinstance(content, str) and content.startswith(transport.PACKET_LABEL):
-        actual = json.loads(content[len(transport.PACKET_LABEL):])
-        if (actual.get(MARKER, {}).get('protocol') == PROTOCOL
-                or actual.get(COMPLETE_MARKER, {}).get('protocol') == COMPLETE_PROTOCOL):
-            return actual
-    return packet
+    def project():
+        request = build_assignment_request(records, evaluation, assignment)
+        content = transport.logical_messages(request)[-1].get('content')
+        if isinstance(content, str) and content.startswith(transport.PACKET_LABEL):
+            actual = json.loads(content[len(transport.PACKET_LABEL):])
+            if (actual.get(MARKER, {}).get('protocol') == PROTOCOL
+                    or actual.get(COMPLETE_MARKER, {}).get('protocol') == COMPLETE_PROTOCOL):
+                return actual
+        return packet
+
+    route = records['review_route'][assignment['route_id']]
+    if route['adapter'] == 'codex_cli_visual_v1' or assignment.get('staged_review'):
+        return project()
+    read_history(evaluation, assignment)
+    attempts = _read_review_group(records, evaluation, 'review_attempt', 'assignment_id', assignment['id'])
+    references = [attempt['request'] for attempt in attempts
+                  if attempt['status'] == 'completed' and attempt.get('request')]
+    for reference in references:
+        evaluation.read(reference)
+    key = ('source_delivery_packet', digest(assignment), digest(route), digest(references),
+           transport.local_input_limit(route))
+    return evaluation.reuse_value(key, project, namespace=evaluation._byte_namespace)
 
 
 def _find_session_bodies(records, artifacts, prior):
@@ -3027,27 +3046,43 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 slot_identifier = value['id']
             history = []
             prompt = review_parts.build_turn_prompt(value['role'], base_prompt_parameters, packet[review_parts.KEY])
-        history = review_problem_history.bound_history(
-            records, artifacts, value, route, packet, prompt, history, history_assignment_id)
-        if route['adapter'] == 'codex_cli_visual_v1':
-            from . import review_visual_sources, review_visual_route
-            review_visual_sources.prepare_packet(records, artifacts, packet, history=history)
-            if visual_transition:
-                packet[review_visual_route.MARKER] = review_visual_route.validate_transition(
-                    records, artifacts, parent, route,
-                    {'packet': packet, 'history': history, 'reviewer_id': value['reviewer_id'],
-                     'author_id': value['author_id'], 'slot_id': slot_identifier, 'subject': value['subject'], 'role': value['role']})
-            packet.pop('digest', None)
-            packet['digest'] = digest(packet)
-        if upgrade is not None or staged_repair:
-            from .review_staged import PROTOCOL as STAGED_PROTOCOL
-            packet.pop('digest', None)
-            packet['staged_review'] = dict(protocol=STAGED_PROTOCOL, kind='controller')
-            packet['digest'] = digest(packet)
-            if upgrade is not None:
-                value = dict(value, context=dict(value['context'], staged_upgrade=upgrade))
-        else:
-            packet = review_problem_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history)
+        restart = None
+        try:
+            history = review_problem_history.bound_history(
+                records, artifacts, value, route, packet, prompt, history, history_assignment_id)
+            if route['adapter'] == 'codex_cli_visual_v1':
+                from . import review_visual_sources, review_visual_route
+                review_visual_sources.prepare_packet(records, artifacts, packet, history=history)
+                if visual_transition:
+                    packet[review_visual_route.MARKER] = review_visual_route.validate_transition(
+                        records, artifacts, parent, route,
+                        {'packet': packet, 'history': history, 'reviewer_id': value['reviewer_id'],
+                         'author_id': value['author_id'], 'slot_id': slot_identifier, 'subject': value['subject'], 'role': value['role']})
+                packet.pop('digest', None)
+                packet['digest'] = digest(packet)
+            if upgrade is not None or staged_repair:
+                from .review_staged import PROTOCOL as STAGED_PROTOCOL
+                packet.pop('digest', None)
+                packet['staged_review'] = dict(protocol=STAGED_PROTOCOL, kind='controller')
+                packet['digest'] = digest(packet)
+                if upgrade is not None:
+                    value = dict(value, context=dict(value['context'], staged_upgrade=upgrade))
+            else:
+                packet = review_problem_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history)
+        except ResearchError as error:
+            if error.code != 'review_input_too_large' or upgrade is not None or staged_repair:
+                raise
+            successor = review_parts.prepare_packet(
+                records, artifacts, value, route, packet, prompt, history,
+                base_prompt_parameters=base_prompt_parameters, slot_id=slot_identifier,
+                legacy_refusal=error)
+            if review_parts.find_kind(successor) is None:
+                raise
+            previous = _read_json(artifacts, history_parent['packet'])
+            restart = dict(series_assignment_id=previous[review_problem_parts.KEY]['series_assignment_id'],
+                           reason=error.code, details=error.details)
+            packet, history = successor, []
+            prompt = review_parts.build_turn_prompt(value['role'], base_prompt_parameters, packet[review_parts.KEY])
         if review_problem_parts.find_stage(packet) is not None:
             prompt = canonical_prompt(value['role'], orchestration='problem_creation', excerpts=True,
                                       evidence_parts=review_problem_parts.find_stage(packet))
@@ -3072,6 +3107,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             previous = records.get('review_assignment', {}).get(history_assignment_id)
             record['history_ref'] = write_history(artifacts, record, history, previous=previous)
             record.pop('history')
+        if restart is not None:
+            record['review_parts_restart'] = restart
         if slot_identifier is not None:
             record['slot_id'] = slot_identifier
         changes = []

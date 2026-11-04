@@ -16,6 +16,7 @@ def _require(condition, message):
 
 
 def _read_pages(artifacts, assignment):
+    from .evaluation import Evaluation
     if 'history' in assignment and 'history_ref' in assignment:
         raise ResearchError('review_history_ambiguous', 'An assignment cannot carry both history and history_ref')
     root = assignment['history_ref']
@@ -31,7 +32,8 @@ def _read_pages(artifacts, assignment):
     for reference in root['pages']:
         data = artifacts.read(reference)
         try:
-            page = strict_json(data)
+            page = (artifacts.read_json(reference, strict=True) if isinstance(artifacts, Evaluation)
+                    else strict_json(data))
         except ResearchError as error:
             raise ResearchError('review_history_invalid', 'History page must contain valid JSON') from error
         _require(isinstance(page, dict) and set(page) == {'version', 'start', 'messages'},
@@ -64,7 +66,8 @@ def _read_pages(artifacts, assignment):
                 raise ResearchError('review_history_invalid', 'History body must contain exact UTF-8 text') from error
             if media_type == 'application/json':
                 try:
-                    content = strict_json(content)
+                    content = (artifacts.read_json(entry['body'], strict=True) if isinstance(artifacts, Evaluation)
+                               else strict_json(content))
                 except ResearchError as error:
                     raise ResearchError('review_history_invalid', 'History attachment content must contain valid JSON') from error
                 _require(isinstance(content, list), 'History attachment content must preserve its native content array')
@@ -80,6 +83,16 @@ def read_history(artifacts, assignment):
     if 'history' in assignment and 'history_ref' in assignment:
         raise ResearchError('review_history_ambiguous', 'An assignment cannot carry both history and history_ref')
     if 'history_ref' in assignment:
+        from .evaluation import Evaluation
+        if isinstance(artifacts, Evaluation):
+            key = ('review_history', assignment.get('session_id'), digest(assignment['history_ref']))
+            history, entries = artifacts.reuse_value(key, lambda: _read_pages(artifacts, assignment),
+                                                    namespace=artifacts._byte_namespace)
+            for reference in assignment['history_ref']['pages']:
+                artifacts.read(reference)
+            for entry in entries:
+                artifacts.read(entry['body'])
+            return history
         return _read_pages(artifacts, assignment)[0]
     return copy.deepcopy(assignment.get('history', []))
 

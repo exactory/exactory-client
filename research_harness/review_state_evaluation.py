@@ -125,15 +125,17 @@ def evaluate_state(records, artifacts, kind, identifier, compute):
                 # Unscoped calls retain their historical behavior: return the
                 # native result without retaining it after observed drift.
                 changed.append(True)
-            return copy.deepcopy(result)
+            return result
         changed = []
         if before is None:
             return copy.deepcopy(calculate())
-        result = evaluation.once(('review_state', key), calculate)
+        result = evaluation.reuse_value(('review_state', key), calculate, protected=True)
         if changed:
-            removed = evaluation._optional.pop(('memo', evaluation._namespace, ('review_state', key)), None)
+            cache_key = ('encoded_value', evaluation._namespace, ('review_state', key))
+            removed = evaluation._requests.pop(cache_key, None)
             if removed is not None:
                 evaluation._retained_bytes[0] -= removed[1]
-        return copy.deepcopy(result)
+                evaluation._request_bytes[0] -= removed[1]
+        return result
     finally:
         active.remove(identity)

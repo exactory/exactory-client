@@ -3,6 +3,7 @@
 import copy
 import argparse
 from contextlib import contextmanager
+from functools import partial
 import importlib.machinery
 import importlib.util
 import hashlib
@@ -18,7 +19,7 @@ import unittest
 from unittest import mock
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import observed_candidate, prepare_manuscript
+from integration_fixtures import admit_lab, observed_candidate, prepare_manuscript
 from research_harness import cli
 from research_harness.artifacts import ArtifactStore
 from research_harness.storage import Store
@@ -391,6 +392,7 @@ REFUSED_OUTCOMES = {
     "problem-formal-check": "problem_formal_check_unbound",
     "problem-openness": "review_context_unverified",
     "problem-posted": "readiness_required",
+    "problem-post-external": "problem_statement_mismatch",
     "problem-slate": "problem_slate_incomplete",
     "publication-scope": "publication_scope_stale",
     "read-batch": "invalid_batch",
@@ -504,7 +506,10 @@ class CommandTableCheckTests(CheckCommandMixin, DevelopmentCase, ProblemCase):
                 self.assert_command_preserves_workspace(command, arguments=arguments)
 
         self.audit_stage = "candidate"
-        execution = observed_candidate(self)
+        # This audit checks workspace preservation, not the fixture's runtime.
+        # Keep a real launch while allowing slow worker startup on a busy host.
+        with mock.patch("integration_fixtures.admit_lab", partial(admit_lab, timeout=120)):
+            execution = observed_candidate(self)
         imported_execution = copy.deepcopy(execution)
         imported_execution["id"] = "audit-imported-result"
         imported_execution["origin"] = dict(examples["result"]["origin"], original={

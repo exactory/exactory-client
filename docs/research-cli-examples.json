@@ -166,6 +166,13 @@
     "problem_id": "returned-problem-id",
     "export_directory": "problem-export"
   },
+  "problem-post-external": {
+    "id": "external-post-1",
+    "problem_id": "656c336e-e892-4c47-80d2-a71d022f4116",
+    "statement_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "PLACEHOLDER: external post reason",
+    "evidence": "PLACEHOLDER: owner instruction evidence"
+  },
   "publication-scope": {
     "id": "supported-manuscript-1",
     "policy": "source-limited-v1",

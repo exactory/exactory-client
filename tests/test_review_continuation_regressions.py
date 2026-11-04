@@ -21,6 +21,48 @@ class ContinuationRegressionTests(unittest.TestCase):
         self.addCleanup(case.doCleanups)
         return case
 
+    def test_two_reassessment_mismatches_hand_off_eligible_correction(self):
+        from research_harness import review_output_correction
+        from test_review_output_correction import CorrectionTests
+
+        case = self.fixture(CorrectionTests)
+        case.prepare_refused()
+        before = case.fixture.store.snapshot()
+        identifier = case.case.assignment['id']
+        packet = review_output_correction.prepare_packet(
+            before['records'], case.fixture.artifacts, identifier)
+        self.assertEqual(packet['diagnostic']['code'], 'review_reassessment_mismatch')
+        plan = plan_next(before['records'], case.fixture.artifacts, identifier)
+        self.assertEqual((plan['state'], plan['code'], plan['command']),
+                         ('handoff', 'review_slot_exhausted', 'review-output-correction'))
+        self.assertEqual(plan['details'], dict(assignment_id='repair-result', refused_attempts=[
+            dict(attempt_id='refused-one', code='review_reassessment_mismatch'),
+            dict(attempt_id='refused-two', code='review_reassessment_mismatch')]))
+        self.assertNotIn('payload', plan)
+        self.assertEqual(case.fixture.store.snapshot(), before)
+
+    def test_two_openness_refusals_hand_off_a_new_export(self):
+        from openness_reading_fixtures import OpennessReadingCase
+
+        case = self.fixture(OpennessReadingCase)
+        case.limit_input()
+        reference = case.export(assignment_id='openness-first')
+        case.assign('openness-first', reference)
+        packet = case.read_packet('openness-first')
+        output = dict(case.build_reading_response(packet), notes='')
+        for attempt in ('refused-one', 'refused-two'):
+            result = case.invoke('openness-first', output, attempt=attempt)
+            self.assertEqual(result['output_refusal']['code'], 'invalid_reading_response')
+        before = case.store.snapshot()
+        plan = plan_next(before['records'], case.artifacts, 'openness-first')
+        self.assertEqual((plan['state'], plan['code'], plan['command']),
+                         ('handoff', 'review_slot_exhausted', 'export'))
+        self.assertEqual(plan['details'], dict(assignment_id='openness-first', kind='problem-openness',
+            refused_attempts=[dict(attempt_id='refused-one', code='invalid_reading_response'),
+                              dict(attempt_id='refused-two', code='invalid_reading_response')]))
+        self.assertNotIn('payload', plan)
+        self.assertEqual(case.store.snapshot(), before)
+
     def test_live_inline_owner_is_waited_for_without_another_call(self):
         fixture = self.fixture()
         entered, release = threading.Event(), threading.Event()

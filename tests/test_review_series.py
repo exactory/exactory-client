@@ -165,6 +165,7 @@ class SeriesTests(unittest.TestCase):
             code, steps = self.drive()
         self.assertEqual(code, 3)
         self.assertEqual(steps[-1]['code'], 'review_slot_exhausted')
+        self.assertEqual(steps[-1]['command'], 'review-assignment')
         self.assertEqual(send.call_count, 2)
         self.assertEqual(len(self.case.read_records()['review_output_refusal']), 2)
 

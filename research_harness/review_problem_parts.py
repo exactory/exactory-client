@@ -227,7 +227,8 @@ def validate_part_output(packet, output):
 
 
 def _read_packet(artifacts, assignment):
-    return json.loads(artifacts.read(assignment['packet']))
+    from .review_protocol import _read_json
+    return _read_json(artifacts, assignment['packet'])
 
 
 def _list_series(records, artifacts, assignment_id):
@@ -258,7 +259,8 @@ def _list_series(records, artifacts, assignment_id):
 
 def _sent_packet(records, artifacts, assignment, attempt):
     from .review_input_projection import packets_from_request
-    request = json.loads(artifacts.read(attempt['request']))
+    from .review_protocol import _read_json
+    request = _read_json(artifacts, attempt['request'])
     route = records['review_route'][assignment['route_id']]
     packets = packets_from_request(request, native_attachments=route['adapter'] == 'openai_responses_v1')
     packet = packets[-1] if packets else {}
@@ -353,33 +355,49 @@ def observe_series(records, artifacts, assignment_id):
     from .review_protocol import assignment_state
     observations = []
     evaluation = Evaluation.of(records, artifacts)
+    scope = evaluation.find_root()._runtime_scope[0]
     for assignment, frozen in _list_series(records, evaluation, assignment_id):
         state = assignment_state(records, evaluation, assignment['id'])
         attempt = records.get('review_attempt', {}).get(state.get('attempt_id'))
         if not state['ready'] or attempt is None or attempt.get('origin') != 'instrumented':
             continue
         try:
-            packet = _sent_packet(records, evaluation, assignment, attempt)
-            if packet is None or packet.get(KEY) != frozen[KEY]:
-                continue
-            plan = packet[KEY]
-            if (plan['turn'] != len(observations) + 1
-                    or plan['delivered_before'] != [row['receipt'] for row in observations]):
-                continue
-            if find_stage(packet) == 'part':
-                validate_part_output(packet, state['output'])
-            units = _delivered_units(packet)
-            attached = {digest(entry['artifact']): entry['artifact'] for entry in packet.get('evidence', [])
-                        if has_attachment(evaluation, packet, entry['artifact'])}
-            attached = [attached[key] for key in sorted(attached)]
-            if (find_stage(packet) == 'part' and not _makes_progress(units, attached, observations)
-                    and not has_new_objection_body(packet, attached, observations)):
-                continue
-            receipt = {'turn': plan['turn'], 'assignment_id': assignment['id'], 'attempt_id': attempt['id'],
-                       'units': _ranges(units)}
-            observations.append({'packet': packet, 'receipt': receipt, 'units': units, 'artifacts': attached})
-        except (ResearchError, ValueError, TypeError, KeyError, UnicodeError):
+            for name in ('request', 'response', 'output'):
+                reference = attempt.get(name)
+                if reference is not None:
+                    evaluation.read(reference)
+        except ResearchError:
             continue
+
+        def observe():
+            try:
+                packet = _sent_packet(records, evaluation, assignment, attempt)
+                if packet is None or packet.get(KEY) != frozen[KEY]:
+                    return observations
+                plan = packet[KEY]
+                if (plan['turn'] != len(observations) + 1
+                        or plan['delivered_before'] != [row['receipt'] for row in observations]):
+                    return observations
+                if find_stage(packet) == 'part':
+                    validate_part_output(packet, state['output'])
+                units = _delivered_units(packet)
+                attached = {digest(entry['artifact']): entry['artifact'] for entry in packet.get('evidence', [])
+                            if has_attachment(evaluation, packet, entry['artifact'])}
+                attached = [attached[key] for key in sorted(attached)]
+                if (find_stage(packet) == 'part' and not _makes_progress(units, attached, observations)
+                        and not has_new_objection_body(packet, attached, observations)):
+                    return observations
+                receipt = {'turn': plan['turn'], 'assignment_id': assignment['id'], 'attempt_id': attempt['id'],
+                           'units': _ranges(units)}
+                return observations + [{'packet': packet, 'receipt': receipt, 'units': units, 'artifacts': attached}]
+            except (ResearchError, ValueError, TypeError, KeyError, UnicodeError):
+                return observations
+        if scope is None or scope['fingerprint'] is None:
+            observations = observe()
+        else:
+            key = ('problem_parts_observations', assignment['id'], scope['fingerprint'],
+                   state['ready'], state.get('attempt_id'), state.get('output_digest'))
+            observations = evaluation.reuse_value(key, observe)
     return observations
 
 
@@ -420,14 +438,14 @@ def collect_earlier_series_packets(records, artifacts, assignment):
 def collect_contract_packets(records, artifacts, assignment):
     """Actual inputs for a series output check, without selecting the current attempt recursively during refusal."""
     from .review_input_projection import packets_from_request
-    from .review_protocol import authenticate_attempt
+    from .review_protocol import _read_json, authenticate_attempt
     prior_id = assignment.get('history_assignment_id')
     earlier = collect_series_packets(records, artifacts, prior_id) if prior_id else []
     for attempt in sorted(records.get('review_attempt', {}).values(), key=lambda row: row['recorded_revision']):
         if (attempt['assignment_id'] != assignment['id'] or attempt.get('status') != 'completed'
                 or not authenticate_attempt(records, artifacts, assignment, attempt)):
             continue
-        request = json.loads(artifacts.read(attempt['request']))
+        request = _read_json(artifacts, attempt['request'])
         packets = packets_from_request(request)
         return list(reversed(packets)) + list(reversed(earlier))
     return []
