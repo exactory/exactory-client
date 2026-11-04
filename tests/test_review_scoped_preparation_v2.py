@@ -357,7 +357,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
     def test_new_preparation_does_not_reuse_previous_request_evaluation(self):
         self.assign()
         builds = []
-        build = protocol.transport.list_built_requests
+        build = protocol.transport.request_body
 
         def count(*args, **kwargs):
             builds.append(True)
@@ -368,7 +368,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
             protocol.build_assignment_request(records, self.artifacts, assignment)
             protocol.build_assignment_request(records, self.artifacts, assignment)
             return [], {}
-        with patch.object(protocol.transport, 'list_built_requests', side_effect=count):
+        with patch.object(protocol.transport, 'request_body', side_effect=count):
             for index in range(2):
                 protocol._prepare_review_mutation(self.store, 'prepare', {}, prepare,
                     expected_revision=self.store.revision, request_id='fresh-' + str(index))

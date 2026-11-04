@@ -37,6 +37,27 @@ class RequestReuseTests(ResultPartsCase):
             self.exercise(evaluation)
         self.assertEqual(derive.call_count, 1)
 
+    def test_four_parameter_request_body_supports_build_and_authentication(self):
+        original = transport.request_body
+
+        def request_body(route, prompt, packet, history=()):
+            return original(route, prompt, packet, history)
+
+        route = self.records['review_route'][self.assignment['route_id']]
+        packet = protocol._read_json(self.case.artifacts, self.assignment['packet'])
+        history = protocol.read_history(self.case.artifacts, self.assignment)
+        expected = protocol._read_json(self.case.artifacts, self.attempt['request'])
+        with patch.object(transport, 'request_body', side_effect=request_body):
+            self.assertEqual(next(transport.list_built_requests(
+                route, self.assignment['prompt']['text'], packet, history)), expected)
+            for authenticate_first in (False, True):
+                with self.subTest(authenticate_first=authenticate_first):
+                    evaluation = Evaluation(self.records, self.case.artifacts)
+                    if authenticate_first:
+                        self.assertTrue(protocol.authenticate_provenance(
+                            self.records, evaluation, self.assignment, self.attempt))
+                    self.assertEqual(self.exercise(evaluation), expected)
+
     def test_independent_evaluations_derive_identical_inputs_twice(self):
         with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
             first = self.exercise(Evaluation(self.records, self.case.artifacts))
@@ -222,6 +243,22 @@ class RequestIteratorTests(LiteratureCase):
                 self.derive()
             self.assertEqual(derive.call_count, 7)
 
+    def test_request_body_uses_pinned_arguments_on_every_derivation_path(self):
+        orders = (transport.FIT_ORDER, transport.EARLIER_FIT_ORDERS[0], tuple(list(transport.FIT_ORDER)))
+        for path in ('cached', 'iterator-history', 'non-native-packet'):
+            for order in orders:
+                with self.subTest(path=path, order=order):
+                    self.evaluation = Evaluation({}, self.artifacts)
+                    history = iter(()) if path == 'iterator-history' else []
+                    packet = {'value': (1, 2)} if path == 'non-native-packet' else self.packet
+                    with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+                        self.derive(packet=packet, history=history, order=order)
+                    args = (self.route, 'Read this packet', packet, history)
+                    if order is not transport.FIT_ORDER:
+                        args += (order,)
+                    derive.assert_called_once_with(*args)
+                    self.assertIs(derive.call_args.args[-1], args[-1])
+
     def test_key_preserves_types_and_object_order(self):
         with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
             for packet in ({'a': 1, 'b': 2}, {'b': 2, 'a': 1}, {'a': 1.0, 'b': 2}, {'a': True, 'b': 2}):
@@ -263,7 +300,7 @@ class RequestIteratorTests(LiteratureCase):
             self.assertEqual(self.derive(route=ROUTE, packet=packet), expected_tuple)
             for _ in range(2):
                 self.assertEqual(self.derive(route=ROUTE, packet=packet, order=order), expected_list)
-                self.assertIs(derive.call_args.kwargs['order'], order)
+                self.assertIs(derive.call_args.args[4], order)
             self.assertEqual(self.derive(route=ROUTE, packet=packet), expected_tuple)
         self.assertEqual(derive.call_count, 3)
         self.assertEqual(self.evaluation.retention_report()['request_entries'], 1)

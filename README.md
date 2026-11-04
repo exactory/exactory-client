@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.72.4](docs/releases/0.72.4.md) makes the request memo of 0.72.2 call the pinned request builder with the arguments of the pinned iterator, so test replacements without an `order` parameter work again. Requests, reports and refusals do not change.
+
 Version [0.72.3](docs/releases/0.72.3.md) keeps the request memo of 0.72.2 to plain list histories and tuple fit orders; other argument types take the uncached path. The harness's own requests, reports and refusals do not change.
 
 Version [0.72.2](docs/releases/0.72.2.md) makes a command derive each review request of an assignment once and share it between request selection and attempt authentication. On a problem record with 141 review assignments, one `status` called the request builder 1,214 times on 102 distinct inputs. The requests, packets, reports and refusals do not change, and no route-pinned module changed.
