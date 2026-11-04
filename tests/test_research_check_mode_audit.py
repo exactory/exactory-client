@@ -44,7 +44,7 @@ OTHER_ARGUMENTS = {
 
 READ_ONLY_COMMANDS = {
     "exactory-research": frozenset((name,) for name in (
-        "status", "next", "fulltext-status", "obligations", "population-query", "policy-report", "gate", "check-claims", "example",
+        "status", "next", "record-check", "fulltext-status", "obligations", "population-query", "policy-report", "gate", "check-claims", "example",
         "research-decision-assess", "review-route-assess")),
     "exactory-lab": frozenset({("keys",), ("state", "show"), ("colab-status",)}),
     "exactory-draft": frozenset(),
@@ -126,15 +126,16 @@ class PartsPlanCheckTests(CheckCommandMixin, PartsViewCase):
         self.assertFalse(any(row['assignment_id'] == assignment['id']
                              for row in self.store.snapshot()['records'].get('review_invocation', {}).values()))
 
-    def test_local_parts_assignment_check_is_refused_without_workspace_changes(self):
+    def test_local_parts_assignment_check_plans_turn_without_workspace_changes(self):
         self.prepare_parts()
         self.root, self.store = self.case.root, self.case.store
         payload = dict(id='checked-read', route_id='route', dossier_id=None,
                        role='result', reviewer_id='first', author_id='author', context={})
         before = self.read_workspace()
         checked = self.invoke_command('review-assignment', payload)
-        self.assertEqual(checked[0], 1, checked[2])
-        self.assertEqual(json.loads(checked[2])['error']['code'], 'check_unsupported')
+        self.assertEqual(checked[0], 0, checked[2])
+        self.assertEqual(json.loads(checked[1])['check'], 'accepted')
+        self.assertFalse(json.loads(checked[1])['recorded'])
         self.assertEqual(self.read_workspace(), before)
 
 

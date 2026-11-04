@@ -209,6 +209,7 @@ OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": recor
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
+RECORD_CHECK_HELP_MSG = "PLACEHOLDER: qualify a cloned research record offline."
 
 
 def add_identity(parser, *, required=True):
@@ -314,6 +315,10 @@ def build_parser():
     series.add_argument("--workspace", default=".")
     series.add_argument("--assignment", required=True)
     series.add_argument("--check", action="store_true", help="PLACEHOLDER: series check is unsupported.")
+    record_check = commands.add_parser("record-check", allow_abbrev=False,
+                                      help=RECORD_CHECK_HELP_MSG)
+    record_check.add_argument("--workspace", required=True)
+    record_check.add_argument("--keep-clone", type=Path)
     for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
                     "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
@@ -532,7 +537,8 @@ def status_report(store, *, counters=False):
     from .review_continuation import annotate_review_obligations
     started = time.monotonic()
     snapshot = store.snapshot()
-    evaluation = Evaluation(snapshot['records'], ArtifactStore(store.root))
+    evaluation = Evaluation(snapshot['records'], store.build_artifact_store())
+    runtime = store.describe_runtime() if hasattr(store, 'describe_runtime') else runtime_provenance()
     with runtime_scope(snapshot['records'], evaluation):
         records = snapshot["records"]
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
@@ -553,7 +559,7 @@ def status_report(store, *, counters=False):
                 upcoming = report["obligations"][0]
             else:
                 upcoming = {"code": "problem_export_required", "explanation": "Export the reviewed parts with exactory-research export --kind problem, then post and record the delivery."}
-            result = dict(report, revision=snapshot["revision"], profile="research", runtime=runtime_provenance(),
+            result = dict(report, revision=snapshot["revision"], profile="research", runtime=runtime,
                         problem=records["workspace"]["problem"], resources=resources.account_report(records, "research"),
                         limits={"depth": describe_depth(records)}, source_deferrals=assess_deferrals(records, evaluation, "research"),
                         # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
@@ -626,7 +632,7 @@ def status_report(store, *, counters=False):
                          "--scope-target-digest", scoped_report["scientific_target_digest"]]
                 scope_status["publication_commands"] = {"deposit": ["exactory-draft", "deposit"] + flags,
                                                         "submit": ["exactory", "submit"] + flags}
-        result = dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime_provenance(),
+        result = dict(report, revision=snapshot["revision"], profile=profile, runtime=runtime,
                     source_deferrals=assess_deferrals(records, evaluation, profile),
                     deferred_obligations=literature.foundation_state(records, evaluation, profile).get("deferred_obligations", []),
                     study=study, preparation=preparation, resources=resources.account_report(records, profile),
@@ -676,6 +682,9 @@ def describe_review_budget_refusal(error):
 
 
 def run(args):
+    if args.command == "record-check":
+        from .record_check import check_record
+        return check_record(Path(args.workspace), keep_clone=args.keep_clone)
     if args.command == "example":
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
@@ -906,6 +915,8 @@ def main(argv=None, render_views=render_views_after_command):
         if args.command == "review-series":
             raise SystemExit(result)
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))
+        if args.command == "record-check" and not result['ready']:
+            raise SystemExit(1)
     except ResearchError as error:
         print(json.dumps({"error": error.as_dict()}, ensure_ascii=False), file=sys.stderr)
         raise SystemExit(1)
@@ -915,3 +926,7 @@ def main(argv=None, render_views=render_views_after_command):
     finally:
         if _is_recording_command(args):
             render_views(args.workspace)
+
+
+if __name__ == '__main__':
+    main()
