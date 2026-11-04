@@ -9,10 +9,12 @@ import time
 import unittest
 from unittest.mock import patch
 
+from problem_parts_fixtures import ResultPartsCase
 from review_parts_fixtures import PartsResultCase
 from codex_route_fixtures import build_codex_response
 from research_harness import review_parts as parts
 from research_harness.artifacts import ArtifactStore
+from research_harness.errors import ResearchError
 from research_harness import review_failure_class as failures
 from research_harness import review_protocol as protocol
 
@@ -164,6 +166,86 @@ class FailureClassTests(unittest.TestCase):
             self.attempt(answer, **changes)
             self.assertEqual(self.plan()['state'], 'stop')
             self.assertEqual(self.plan()['code'], 'review_provider_unavailable')
+
+    def test_runtime_schedule_every_wait_and_stop_with_and_without_observation_time(self):
+        for observed_at in ('2026-11-04T08:00:00+00:00', None):
+            self.records['review_attempt'].clear()
+            for index, minute in enumerate((1, 2, 4, 8, 16, 30, None), 1):
+                with self.subTest(observed_at=observed_at, count=index):
+                    attempt = self.attempt(code='review_runtime_missing', observed_at=observed_at,
+                                           status='failed', wall=None)
+                    attempt['response'] = None
+                    plan = self.plan()
+                    state = 'stop' if minute is None else 'run' if observed_at is None else 'wait'
+                    deadline = ('2026-11-04T08:%02d:00+00:00' % minute
+                                if observed_at is not None and minute is not None else None)
+                    self.assertEqual((plan['state'], plan['code'], plan['not_before']),
+                                     (state, 'review_runtime_missing', deadline))
+            self.attempt(code='review_runtime_missing', observed_at=observed_at, status='failed')
+            self.assertEqual((self.plan()['state'], self.plan()['code']),
+                             ('stop', 'review_turn_failures_exhausted'))
+
+    def test_runtime_and_provider_schedules_count_separately_across_replacements(self):
+        self.records['review_assignment']['old'] = dict(self.assignment, id='old', recorded_revision=0)
+        self.attempt(diagnostic='server_overloaded')
+        self.attempt(code='review_runtime_missing', assignment='old')
+        self.assertEqual(self.plan()['not_before'], '2026-11-04T08:01:00+00:00')
+        self.attempt(code='review_runtime_missing')
+        self.assertEqual(self.plan()['not_before'], '2026-11-04T08:02:00+00:00')
+        self.attempt(diagnostic='server_overloaded')
+        self.assertEqual(self.plan()['not_before'], '2026-11-04T08:02:00+00:00')
+        self.attempt(code='review_runtime_missing', assignment='old')
+        self.assertEqual(self.plan()['not_before'], '2026-11-04T08:04:00+00:00')
+
+    def test_usable_output_restarts_runtime_schedule(self):
+        self.attempt(code='review_runtime_missing')
+        self.attempt(code='review_runtime_missing')
+        complete = self.attempt('{}', status='completed', provider_status='completed', code=None)
+        complete['output'] = self.put({})
+        self.attempt(code='review_runtime_missing')
+        self.assertEqual(self.plan()['not_before'], '2026-11-04T08:01:00+00:00')
+
+    def test_completed_claude_output_token_maximum_error_stops_without_retry(self):
+        answer = ("API Error: Claude's response exceeded the 20000 output token maximum. "
+                  'To configure this behavior, set the CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable.')
+        self.records['review_route']['route']['adapter'] = 'claude_cli_v1'
+        attempt = self.attempt(answer, status='failed', provider_status='completed', tokens=0)
+        classification = self.classify(attempt)
+        self.assertEqual(classification, dict(outcome='output_over_cap', reset_at=None,
+            signal=dict(source='response.answer', value=answer, max_output_tokens=20000)))
+        plan = self.plan()
+        self.assertEqual((plan['state'], plan['code'], plan['not_before']),
+                         ('stop', 'review_output_over_cap', None))
+        self.assertEqual(plan['details']['signal']['max_output_tokens'], 20000)
+
+    def test_output_token_maximum_message_precedes_provider_but_not_dispatch(self):
+        for maximum in (1000, 32000):
+            with self.subTest(maximum=maximum):
+                self.records['review_attempt'].clear()
+                attempt = self.attempt(
+                    'API Error: The response exceeded the %d output token maximum.' % maximum,
+                    diagnostic='usage_limit_exceeded')
+                self.assertEqual(self.classify(attempt)['outcome'], 'output_over_cap')
+                self.assertEqual(self.classify(attempt)['signal']['max_output_tokens'], maximum)
+                self.assertEqual(self.plan()['state'], 'stop')
+                attempt['error']['code'] = 'review_input_too_large'
+                self.assertEqual(self.classify(attempt)['outcome'], 'input_over_limit')
+
+    def test_other_api_errors_keep_provider_classification_and_plan(self):
+        for answer, outcome, state, code in [
+            ("API Error: Can't reach the API server (ENOTFOUND)", 'provider_unavailable',
+             'wait', 'review_provider_unavailable'),
+            ("API Error: The model's safeguards flagged this message", 'provider_refused',
+             'run', 'review_provider_refused'),
+            ("API Error: Claude's request exceeded the 20000 input token maximum.",
+             'provider_unavailable', 'wait', 'review_provider_unavailable'),
+        ]:
+            with self.subTest(answer=answer):
+                self.records['review_attempt'].clear()
+                attempt = self.attempt(answer, provider_status='completed')
+                self.assertEqual(self.classify(attempt)['outcome'], outcome)
+                plan = self.plan()
+                self.assertEqual((plan['state'], plan['code']), (state, code))
 
     def test_usable_completed_output_is_not_a_failure(self):
         self.attempt(diagnostic='server_overloaded')
@@ -360,7 +442,7 @@ class FailureClassTests(unittest.TestCase):
         self.assertEqual(self.plan()['state'], 'stop')
 
     def test_dispatch_and_unhandled_output_caps_stop_with_measurement(self):
-        for code in ('review_runtime_missing', 'review_format_unsupported'):
+        for code in ('review_route_runtime_stale', 'review_format_unsupported'):
             self.records['review_attempt'].clear()
             self.attempt(code=code)
             self.assertEqual(self.plan()['state'], 'stop')
@@ -416,6 +498,31 @@ class FailureClassTests(unittest.TestCase):
         for index in range(8):
             self.attempt("You've hit your limit · resets Nov 6 at 9am (America/Phoenix)")
         self.assertEqual(self.plan()['code'], 'review_turn_failures_exhausted')
+
+
+class LegacyRuntimeFailureTests(ResultPartsCase):
+    def test_parts_v1_result_turn_seven_without_observed_at_runs(self):
+        self.oversized(count=12, characters=24000)
+        with patch.object(protocol.review_problem_parts, 'PART_UNIT_CHARACTERS', 30000):
+            assignment = self.assign('turn-1')
+            for turn in range(1, 7):
+                self.assertEqual(self.packet(assignment)['problem_evidence_parts']['turn'], turn)
+                self.invoke(assignment)
+                assignment = self.assign('turn-' + str(turn + 1), prior=assignment['id'])
+        header = self.packet(assignment)['problem_evidence_parts']
+        self.assertEqual((header['stage'], header['turn']), ('part', 7))
+        missing = ResearchError('review_runtime_missing', 'Synthetic pre-generation runtime failure')
+        with patch.object(protocol.transport, 'send_request', side_effect=missing), patch.object(time, 'sleep'):
+            attempt = self.case.mutate(protocol.invoke_assignment,
+                dict(id='runtime-failure', assignment_id=assignment['id']), credential='fixture')['result']
+        self.assertEqual(attempt['error']['code'], 'review_runtime_missing')
+        records = self.case.read_records()
+        # Earlier records retain the same failure shape without the advisory timestamp.
+        del records['review_attempt'][attempt['id']]['observed_at']
+        plan = failures.plan_after_failure(records, self.case.artifacts, assignment['id'])
+        self.assertEqual((plan['state'], plan['code'], plan['not_before']),
+                         ('run', 'review_runtime_missing', None))
+        self.assertEqual(plan['details']['failed_attempts'], 1)
 
 
 class OutputReplacementTests(PartsResultCase):

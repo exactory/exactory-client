@@ -44,6 +44,8 @@ _CLAUDE_RESET = re.compile(
 _CODEX_RESET = re.compile(
     r'try again at ([A-Z][a-z]{2}) (\d{1,2})(?:st|nd|rd|th), (\d{4}) (\d{1,2}):(\d{2}) (AM|PM)\.',
     re.IGNORECASE)
+_OUTPUT_TOKEN_MAXIMUM_ERROR = re.compile(
+    r'^API Error:.*?\bresponse exceeded (?:the )?([0-9]+) output token maximum\b', re.IGNORECASE)
 
 
 def read_attempt_evidence(artifacts, attempt):
@@ -156,12 +158,17 @@ def classify_attempt(records, artifacts, attempt):
     error_code = (attempt.get('error') or {}).get('code')
     diagnostic = attempt.get('provider_diagnostic') or {}
     usage_line = re.match(r"^You['’]ve (?:hit|reached) your\b[^\n]*\blimit\b", answer.strip())
+    output_maximum = _OUTPUT_TOKEN_MAXIMUM_ERROR.match(answer.lstrip())
     outcome, signal, reset_at = 'unknown', dict(source='retained_evidence', value='undecided'), None
     dispatch = {'review_runtime_missing': 'runtime_unavailable',
                 'review_route_runtime_stale': 'runtime_stale',
                 'review_format_unsupported': 'format_unsupported', 'review_input_too_large': 'input_over_limit'}
     if error_code in dispatch:
         outcome, signal = dispatch[error_code], dict(source='attempt.error.code', value=error_code)
+    elif output_maximum is not None:
+        outcome = 'output_over_cap'
+        signal = dict(source='response.answer', value=answer,
+                      max_output_tokens=int(output_maximum.group(1)))
     elif usage_line or diagnostic.get('codex_error_info') == 'usage_limit_exceeded':
         outcome = 'usage_limit'
         signal = dict(source='response.answer' if usage_line else 'provider_diagnostic.codex_error_info',
@@ -297,6 +304,19 @@ def plan_output_replacement(records, artifacts, assignment):
                 context=copy.deepcopy(value['context']), preflight=preflight)
 
 
+def plan_scheduled_retry(attempt, failure_count, reset_at=None):
+    """Apply the shared delays to one allowance's own count and observation time."""
+    if failure_count > len(PROVIDER_WAIT_SECONDS):
+        return 'stop', None
+    if reset_at is not None:
+        return 'wait', reset_at
+    observed_at = parse_observation_time(attempt)
+    if observed_at is None:
+        return 'run', None
+    deadline = observed_at + timedelta(seconds=PROVIDER_WAIT_SECONDS[failure_count - 1])
+    return 'wait', deadline.isoformat(timespec='seconds')
+
+
 def plan_after_failure(records, artifacts, assignment_id):
     """Derive all counts and deadlines from the whole retained failure sequence."""
     assignment = records['review_assignment'][assignment_id]
@@ -334,6 +354,9 @@ def plan_after_failure(records, artifacts, assignment_id):
         if protocol._initial_size_failure(records, artifacts, assignment, assignment):
             state = 'replace'
             details['context'] = copy.deepcopy(assignment['context'])
+    elif outcome == 'runtime_unavailable':
+        runtime_count = sum(item['outcome'] == outcome for _, item in failures)
+        state, not_before = plan_scheduled_retry(last, runtime_count)
     elif outcome in ('scientific_refused', 'provider_refused', 'execution_incomplete',
                      'answer_malformed', 'context_unverified'):
         outcome_count = sum(item['outcome'] == outcome for _, item in failures)
@@ -353,16 +376,9 @@ def plan_after_failure(records, artifacts, assignment_id):
                             and failures_were_cheap_and_empty))
             provider_count += eligible
         if eligible:
-            if provider_count > len(PROVIDER_WAIT_SECONDS):
+            state, not_before = plan_scheduled_retry(last, provider_count, classification['reset_at'])
+            if state == 'stop':
                 code = 'review_provider_unavailable'
-            elif classification['reset_at'] is not None:
-                state, not_before = 'wait', classification['reset_at']
-            else:
-                observed_at = parse_observation_time(last)
-                state = 'run' if observed_at is None else 'wait'
-                if observed_at is not None:
-                    deadline = observed_at + timedelta(seconds=PROVIDER_WAIT_SECONDS[provider_count - 1])
-                    not_before = deadline.isoformat(timespec='seconds')
     if state == 'wait' and datetime.now(timezone.utc) >= datetime.fromisoformat(not_before):
         state = 'run'
     return dict(state=state, not_before=not_before, code=code, details=details)
