@@ -8,8 +8,10 @@ selected attempts, refusal details and fingerprints of exact serialized bytes.
 import gzip
 import json
 import unittest
+from unittest import mock
 
 import review_request_parity_fixtures as fixtures
+from research_harness import review_continuation
 
 
 class ReviewRequestParityTests(unittest.TestCase):
@@ -41,9 +43,25 @@ def strip_status_floor(value):
     return value
 
 
+def keep_report(records, artifacts, report):
+    return report
+
+
+def keep_actions(records, artifacts, assignment_id, actions=()):
+    return [dict(action) for action in actions]
+
+
+def build_without_actions(build):
+    # The executable actions that 0.73.0 attaches to obligations are checked by the
+    # continuation tests; without them every report must equal the oracle exactly.
+    with mock.patch.object(review_continuation, "annotate_review_obligations", keep_report), \
+            mock.patch.object(review_continuation, "describe_next_actions", keep_actions):
+        return build()
+
+
 def add_case(name, build):
     def test(self):
-        actual = build()
+        actual = build_without_actions(build)
         expected = self.frozen["cases"][name]
         actual["attempts"] = {key: strip_observation_metadata(attempt)
                               for key, attempt in actual["attempts"].items()}
