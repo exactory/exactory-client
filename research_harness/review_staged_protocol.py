@@ -13,6 +13,7 @@ from . import review_transport as transport
 from . import review_excerpts, review_problem_parts
 from .errors import ResearchError
 from .evidence import digest
+from .finishing import retry_store_write
 from .graph import obligation
 from .operations import _read_preparation, fields, immutable_record, prepared_mutation, text
 from .storage import _canonical, read_epoch_tasks
@@ -1426,21 +1427,26 @@ def wait_for_capture(store, route, reservation, request_id):
     """Launch once or reconcile the owned worker, then await its durable capture."""
     import time
     from . import review_task_execution as execution, review_worker
+    snapshot = retry_store_write(store.snapshot, codes=('store_busy',))
+    reservation = protocol._get(snapshot['records'], 'review_reservation', reservation['id'])
     process = None
     if reservation['launch'] is not None and reservation['observation_id'] is None:
         execution.reconcile_worker(store, {'reservation_id': reservation['id']},
-                                   request_id=request_id + ':resume:' + str(reservation['generation']))
+                                   request_id=request_id + ':resume:' + str(reservation['generation'])
+                                   + ':' + str(snapshot['revision']))
     if reservation['launch'] is None and reservation['state'] == 'reserved' and not reservation['released']:
         process = review_worker.launch_worker(store, reservation['id'])
     deadline = time.monotonic() + route['configuration']['timeout_seconds'] + 15
     while True:
-        records = store.snapshot()['records']
-        current = records['review_reservation'][reservation['id']]
-        if current['observation_id'] is not None:
-            break
-        if current['released'] or process is not None and process.poll() is not None:
-            execution.reconcile_worker(store, {'reservation_id': current['id']}, request_id=request_id + ':reconcile')
-            raise ResearchError('review_worker_reconciliation_required', 'The worker ended without a committed observation')
+        snapshot = review_worker.read_polling_store(store.snapshot)
+        if snapshot is not None:
+            records = snapshot['records']
+            current = records['review_reservation'][reservation['id']]
+            if current['observation_id'] is not None:
+                break
+            if current['released'] or process is not None and process.poll() is not None:
+                execution.reconcile_worker(store, {'reservation_id': current['id']}, request_id=request_id + ':reconcile')
+                raise ResearchError('review_worker_reconciliation_required', 'The worker ended without a committed observation')
         if time.monotonic() >= deadline:
             raise ResearchError('review_worker_reconciliation_required', 'Resume the owned reservation; its outcome is still pending')
         time.sleep(.05)
