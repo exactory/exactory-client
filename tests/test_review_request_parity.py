@@ -31,12 +31,24 @@ def strip_observation_metadata(attempt):
             if key not in ("observed_at", "provider_diagnostic")}
 
 
+def strip_status_floor(value):
+    # status reports the parts allowance floor from 0.73.0 on; requests and packets never carry it.
+    if isinstance(value, dict):
+        return {key: strip_status_floor(item) for key, item in value.items()
+                if key != "unit_allowance_floor"}
+    if isinstance(value, list):
+        return [strip_status_floor(item) for item in value]
+    return value
+
+
 def add_case(name, build):
     def test(self):
         actual = build()
         expected = self.frozen["cases"][name]
         actual["attempts"] = {key: strip_observation_metadata(attempt)
                               for key, attempt in actual["attempts"].items()}
+        if "status" in actual:
+            actual["status"] = strip_status_floor(actual["status"])
         for selected in actual["selected"].values():
             if "value" in selected:
                 binding, refused, completed = selected["value"]
