@@ -287,7 +287,7 @@ class ContinuationTests(unittest.TestCase):
                 self.assertEqual((plan['state'], plan['command']), ('handoff', command))
                 self.assertNotIn('payload', plan)
 
-    def test_two_refusals_hand_off_correction(self):
+    def test_two_initial_bar_refusals_hand_off_a_new_reviewer(self):
         for number in range(2):
             output = self.case.build_review_output('bar')
             output['value']['status'] = 'invented'
@@ -301,7 +301,15 @@ class ContinuationTests(unittest.TestCase):
         plan = self.plan()
         self.assertEqual(plan['state'], 'handoff')
         self.assertEqual(plan['code'], 'review_slot_exhausted')
-        self.assertEqual(plan['command'], 'review-output-correction')
+        self.assertEqual(plan['command'], 'review-assignment')
+        self.assertEqual(plan['details']['assignment_id'], 'bar-first')
+        self.assertEqual([row['attempt_id'] for row in plan['details']['refused_attempts']],
+                         ['bar-first-run-1', 'bar-first-run-2'])
+        self.assertNotIn('payload', plan)
+        with patch('research_harness.review_output_correction.prepare_packet',
+                   side_effect=RuntimeError('eligibility defect')):
+            with self.assertRaises(RuntimeError):
+                self.plan()
 
 if __name__ == '__main__':
     unittest.main()
