@@ -7,6 +7,7 @@ from problem_parts_fixtures import ResultPartsCase
 import test_review_staged_frontier as frontier
 from research_harness import review_task_execution as execution
 from literature_fixtures import LiteratureCase
+from research_harness import review_failure_class as failures
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness.errors import ResearchError
 from research_harness.review_task_execution import identify_call
@@ -97,6 +98,30 @@ class RuntimeRetryTests(LiteratureCase):
         self.assertIn(identify_call('review.invoke', 'attempt'), records['review_call_observation'])
         self.assertTrue(records['review_pool_membership'][identify_call('review.invoke', 'attempt')]['released'])
         self.assertEqual(self.sleeper.call_args_list, [call(n) for n in (1, 2, 4, 8, 16)])
+        classification = failures.classify_attempt(records, self.artifacts, attempt)
+        plan = failures.plan_after_failure(records, self.artifacts, 'assignment')
+        self.assertEqual((classification['outcome'], plan['state'], plan['code'], plan['not_before']),
+                         ('runtime_unavailable', 'stop', 'review_runtime_missing', None))
+
+    def test_observed_stale_runtime_stops_with_stale_code(self):
+        self.run_probe()
+        self.assign()
+        runtime = self.records()['review_route']['route']['runtime']
+        changed_runtime = dict(runtime, implementation_sha256='0' * 64)
+        with patch.object(transport, 'runtime', side_effect=[runtime, changed_runtime]), \
+                patch.object(transport, 'send_request', side_effect=AssertionError('No model call')):
+            attempt = self.invoke()['result']
+        self.assertEqual(attempt['status'], 'failed')
+        self.assertEqual(attempt['error'], dict(kind='ResearchError', code='review_route_runtime_stale'))
+        records = self.records()
+        self.assertIn('attempt', records['review_attempt'])
+        self.assertIn(identify_call('review.invoke', 'attempt'), records['review_call_observation'])
+        self.assertTrue(records['review_pool_membership'][identify_call('review.invoke', 'attempt')]['released'])
+        self.sleeper.assert_not_called()
+        classification = failures.classify_attempt(records, self.artifacts, attempt)
+        plan = failures.plan_after_failure(records, self.artifacts, 'assignment')
+        self.assertEqual((classification['outcome'], plan['state'], plan['code'], plan['not_before']),
+                         ('runtime_stale', 'stop', 'review_route_runtime_stale', None))
 
     def test_observed_transient_runtime_check_then_success(self):
         route = self.records()['review_route']['route']
