@@ -1,5 +1,6 @@
 """Staged obligations retain the existing controller, execution and capture actions."""
 
+import copy
 import json
 import sys
 import unittest
@@ -9,7 +10,8 @@ import test_review_staged_frontier as fixtures
 from research_harness import cli, review_protocol as protocol, review_worker
 from research_harness import review_task_execution as execution
 from research_harness.problem_delivery import assess_source_requests
-from research_harness.review_continuation import describe_next_actions, list_chain_heads, plan_next
+from research_harness.review_continuation import (
+    annotate_review_obligations, describe_next_actions, list_chain_heads, plan_next)
 from research_harness.review_series import run_series
 
 
@@ -44,9 +46,39 @@ class StagedContinuationTests(unittest.TestCase):
             task_id=child['staged_review']['task_id'], id=child['id'] + '-run-1'))
         self.assertNotIn(child['id'], list_chain_heads(records, self.case.artifacts))
         obligations = assess_source_requests(records, self.case.artifacts)
+        obligations = annotate_review_obligations(
+            records, self.case.artifacts, dict(obligations=obligations))['obligations']
         item = next(row for row in obligations if row.get('task_id') == plan['payload']['task_id'])
         self.assertEqual(item['next'][0]['command'], plan['command'])
         self.assertEqual(item['next'][0]['payload'], plan['payload'])
+
+    def test_staged_diagnostic_identity_is_attached_after_gate_digest(self):
+        from research_harness.evidence import digest
+        from research_harness.gates import gate_state
+
+        records = self.case.read_records()
+        with patch('research_harness.review_staged_protocol.matches_currency', return_value=False):
+            original = gate_state(records, self.case.artifacts, 'post')
+            upcoming = next(row for row in original['obligations']
+                            if row['code'] == 'review_epoch_stale' and 'task_id' not in row)
+            original = dict(original, next=upcoming)
+            before = copy.deepcopy(original)
+            enriched = annotate_review_obligations(records, self.case.artifacts, original)
+        row = next(row for row in original['obligations']
+                   if row['code'] == 'review_epoch_stale' and 'task_id' not in row)
+        self.assertNotIn('assignment_id', row)
+        self.assertNotIn('next', row)
+        self.assertEqual(original['digest'], digest(dict(
+            problem_evidence_digest=original['problem_evidence_digest'], decision=None,
+            obligations=original['obligations'])))
+        self.assertEqual(enriched['digest'], original['digest'])
+        row = next(row for row in enriched['obligations']
+                   if row['code'] == 'review_epoch_stale' and 'task_id' not in row)
+        self.assertTrue(row['next'])
+        self.assertEqual(row['next'][0]['command'], 'review-assignment')
+        self.assertEqual(row['next'][0]['state'], 'handoff')
+        self.assertEqual(enriched['next'], row)
+        self.assertEqual(original, before)
 
     def test_killed_task_acceptance_reconciles_then_resumes_original_request(self):
         self.execute(self.plan())

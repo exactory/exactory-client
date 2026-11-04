@@ -9,7 +9,7 @@ import uuid
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import digest
-from .review_continuation import plan_next
+from .review_continuation import plan_next, plan_route_handoff
 
 
 MAX_WAIT_SECONDS = 30 * 60
@@ -112,6 +112,11 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             OPERATIONS[plan['command']](store, plan['payload'],
                 expected_revision=snapshot['revision'], request_id=request_id)
         except ResearchError as error:
+            if error.code == 'review_route_runtime_stale':
+                assignment = snapshot['records']['review_assignment'][plan['head_id']]
+                handoff = {key: plan[key] for key in ('chain', 'head_id', 'progress')}
+                emit(dict(handoff, **plan_route_handoff(assignment)))
+                return 3
             row = dict(plan, request_id=request_id, error=error.as_dict())
             if ((waiting or plan['state'] == 'resume') and error.code in (
                     'review_worker_reconciliation_required', 'review_invocation_pending')):
