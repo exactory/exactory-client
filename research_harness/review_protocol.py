@@ -634,6 +634,9 @@ def _read_context_records(records, assignment):
 
 
 def _read_json(artifacts, reference):
+    from .evaluation import Evaluation
+    if isinstance(artifacts, Evaluation):
+        return artifacts.read_json(reference)
     return json.loads(artifacts.read(reference))
 
 
@@ -1593,19 +1596,35 @@ def source_delivery_packet(records, artifacts, assignment):
     to equal this same reconstruction. Caller-authored delivery flags are not
     accepted as a substitute for computing the actual transport request.
     """
-    packet = _read_json(artifacts, assignment['packet'])
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    packet = _read_json(evaluation, assignment['packet'])
     from .review_source_capacity import MARKER, PROTOCOL
     from .review_source_complete import MARKER as COMPLETE_MARKER, PROTOCOL as COMPLETE_PROTOCOL
     if assignment['role'] not in bar_sources.ROLES or not (packet.get('continuation') or MARKER in packet or COMPLETE_MARKER in packet):
         return packet
-    request = build_assignment_request(records, artifacts, assignment)
-    content = transport.logical_messages(request)[-1].get('content')
-    if isinstance(content, str) and content.startswith(transport.PACKET_LABEL):
-        actual = json.loads(content[len(transport.PACKET_LABEL):])
-        if (actual.get(MARKER, {}).get('protocol') == PROTOCOL
-                or actual.get(COMPLETE_MARKER, {}).get('protocol') == COMPLETE_PROTOCOL):
-            return actual
-    return packet
+    def project():
+        request = build_assignment_request(records, evaluation, assignment)
+        content = transport.logical_messages(request)[-1].get('content')
+        if isinstance(content, str) and content.startswith(transport.PACKET_LABEL):
+            actual = json.loads(content[len(transport.PACKET_LABEL):])
+            if (actual.get(MARKER, {}).get('protocol') == PROTOCOL
+                    or actual.get(COMPLETE_MARKER, {}).get('protocol') == COMPLETE_PROTOCOL):
+                return actual
+        return packet
+
+    route = records['review_route'][assignment['route_id']]
+    if route['adapter'] == 'codex_cli_visual_v1' or assignment.get('staged_review'):
+        return project()
+    read_history(evaluation, assignment)
+    attempts = _read_review_group(records, evaluation, 'review_attempt', 'assignment_id', assignment['id'])
+    references = [attempt['request'] for attempt in attempts
+                  if attempt['status'] == 'completed' and attempt.get('request')]
+    for reference in references:
+        evaluation.read(reference)
+    key = ('source_delivery_packet', digest(assignment), digest(route), digest(references),
+           transport.local_input_limit(route))
+    return evaluation.reuse_value(key, project, namespace=evaluation._byte_namespace)
 
 
 def _find_session_bodies(records, artifacts, prior):
