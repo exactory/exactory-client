@@ -17,7 +17,8 @@ from .problem_claims import find_current_statement, find_latest, find_value, com
 from .problem_evidence import assess_formal_checks, project_citations, validate_value
 from .problem_openness import assess_openness
 
-_RECORD_RESULT_NOTE = 'PLACEHOLDER: Record the completed current result final.'
+_RECORD_RESULT_NOTE = ('Record the observed complete final of the current series with value-review from its '
+                       'exact output. No further reviewer call is needed.')
 
 
 def assess_minimum(records, artifacts):

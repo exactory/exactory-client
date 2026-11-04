@@ -119,17 +119,39 @@ support finding; the harness shows the output of each run in
 When a `result` review with the strategic dossier (the readiness review) does
 not fit one input of a text route with a local input limit, the harness
 delivers it as a series of fresh-input turns (`exactory-review-parts-v2`).
-Before `review-run`, read `review_parts_plan` in the assignment result; read
-the allowances, estimates, progress and next action in `status` under
-`review.assignments.<id>.review_parts`. Run each turn with `review-run`. Then
-read the next action's `workflow` and `scope` in `next` and build that
-command's complete payload: for `review-assignment`, a new id, the same role,
-dossier, route, reviewer and author, `prior_assignment_id` inside `context`
-naming the turn that just ran, the current expected revision and a new
-request id. If every attempt of a turn ended without completed output and no
-invocation remains pending, replace the assignment with a new id: for a
-continuation, keep its original `prior_assignment_id`; for a first turn,
-repeat its original context without `prior_assignment_id`. The readiness gate
+Read `review_parts_plan` in the assignment result, and the allowances,
+estimates, progress and next action in `status` under
+`review.assignments.<id>.review_parts`. Then run
+`exactory-research review-series --assignment ID`, where ID is any assignment
+of the chain. It executes the planned actions of the chain in process, through
+the same operations as the CLI, until the chain is done or needs you: it runs
+each turn, assigns each next turn with the complete payload (a new id, the
+same role, dossier, route, reviewer and author, and `prior_assignment_id`
+inside `context` naming the turn that just ran), resumes a captured call with
+its original request id, replaces a turn whose attempts all ended without a
+completed output (for a continuation, with its original `prior_assignment_id`;
+for a first turn, with its original context), retries a failed call under the
+outcomes of the
+[CLI reference](../../docs/research-cli.md#review-chains-and-review-series),
+and records the final when the recording needs no judgment (state `record`).
+Do not write your own driver, turn limit or retry loop around reviewer calls.
+It prints one JSON object per line for each step and ends in one of four
+ways. Exit status 0: the plan is `done`, and the final is recorded. Exit
+status 3 with a `handoff` on the last line: run the `command` that the plan
+names, then run `review-series` again. `review_slot_exhausted` (two outputs
+of the head were refused) names `review-output-correction`.
+`review_resampling_forbidden` (an initial bar, slate or result review ended
+without an output, and the same reviewer identity is not sampled again) names
+`review-assignment` for a new eligible reviewer. `review_context_*` and
+`review_route_retired` name `review-assignment` for a context repair.
+`review_recording_required` names the recording step of another role:
+`manuscript-review`, `export` with kind `outputs` for a standalone review, or
+`review`. `review_route_runtime_stale` names `review-route`: record and probe
+a new route, and the replacement turn then runs on it. Exit status 3 with a
+`stop` on the last line: a typed limit or refusal with its `code` and
+`details`; report both to the user and wait for the decision. Exit status 4
+with `not_before` on the last line: a wait of more than 30 minutes; run
+`review-series` again at `not_before`. The readiness gate
 credits only the final of a complete series (`review_parts_pending`
 otherwise), and the final output of a complete series is shown in
 `final/reviews/<role>/<series assignment id>/`.
@@ -225,6 +247,9 @@ assignment with `review_invocation_pending` until then. A process that stopped b
 committed, even after the reviewer answered, leaves the invocation pending without a capture;
 reconcile it as the `review-run` row of the
 [CLI reference](../../docs/research-cli.md#scientific-contribution-decisions) describes.
+For a review assignment, `exactory-research review-series --assignment ID` finishes or
+reconciles such a call itself, with its original request id (state `resume`); run it instead
+of repeating `review-run` by hand (see "Initiate").
 Use the current gate for the next action. Preserve original objective, budgets, managed history, and uncommitted
 user work. Research continues from the recorded state rather than restarting.
 

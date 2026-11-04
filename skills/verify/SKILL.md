@@ -247,21 +247,33 @@ When the packet does not fit one input of a text route with a local input limit,
 the harness delivers the review as a series of fresh-input turns
 (`exactory-review-parts-v2`): read turns that card the sources of the paper,
 combine and check turns when needed, possibly more than one of each, followed
-by final turns, each a new assignment. Before `review-run`, read
-`review_parts_plan` in the assignment result; read the allowances, estimates,
-progress and next action in `status` under
-`review.assignments.<id>.review_parts`. Run each turn with `review-run`. Then
-read the next action's `workflow` and `scope` in `next` and build that
-command's complete payload: for `review-assignment`, a new id, the same role,
-`dossier_id: null`, route, reviewer and author, and
+by final turns, each a new assignment. Read `review_parts_plan` in the
+assignment result, and the allowances, estimates, progress and next action in
+`status` under `review.assignments.<id>.review_parts`. Then run
+`exactory-research review-series --assignment ID`, where ID is any assignment
+of the chain. It executes the planned actions of the chain in process, through
+the same operations as the CLI, until the chain is done or needs you: it runs
+each turn, assigns each next turn with the complete payload (a new id, the
+same role, `dossier_id: null`, route, reviewer and author, and
 `context: {verification_task_id, prior_assignment_id}` with the same task id
-and the turn that just ran, the current expected revision and a new request
-id. Continue until a final returns `{verdict, checks}`; `bind-verdict` accepts
-only the final of a complete series (`review_parts_pending` otherwise). If
-every attempt of a turn ended without completed output and no invocation
-remains pending, replace the assignment with a new id: for a continuation,
-keep its original `prior_assignment_id`; for the first turn, repeat its
-original context without `prior_assignment_id`. If `review-assignment` refuses
+and the turn that just ran), resumes a captured call with its original request
+id, replaces a turn whose attempts all ended without completed output (for a
+continuation, with its original `prior_assignment_id`; for the first turn,
+with its original context), and retries a failed call under the outcomes of
+the [CLI reference](../../docs/research-cli.md#review-chains-and-review-series).
+Do not write your own driver, turn limit or retry loop around reviewer calls.
+It prints one JSON object per line for each step and ends in one of four
+ways. Exit status 3 with the handoff `verification_verdict_body_required`
+(command `bind-verdict`): a final returned `{verdict, checks}`, and recording
+needs the verdict body; continue with the next paragraph. Exit status 3 with
+the handoff `review_route_runtime_stale` (command `review-route`): record and
+probe a new route, and the replacement turn then runs on it. Exit status 3
+with a `stop`: a typed limit or refusal with its `code` and `details`; report
+both to the user and wait for the decision. Exit status 4 with `not_before` on
+the last line: a wait of more than 30 minutes; run `review-series` again at
+`not_before`. Exit status 0: the plan is `done`, and the verdict is recorded.
+`bind-verdict` accepts only the final of a complete series
+(`review_parts_pending` otherwise). If `review-assignment` refuses
 with `review_parts_frame_too_large`, `review_parts_inventory_too_large`,
 `review_parts_final_too_large` or `review_parts_no_progress`, the proposed
 turn cannot be planned with the current route and material; no assignment or

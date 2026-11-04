@@ -311,10 +311,12 @@ def build_parser():
     job_status.add_argument("--cursor", type=int, default=0)
     job_status.add_argument("--limit", type=int, default=30)
     series = commands.add_parser("review-series", allow_abbrev=False,
-                                 help="PLACEHOLDER: execute one recorded review chain.")
+                                 help="Execute the planned actions of one review chain, in process, until the chain "
+                                      "is done or needs the agent.")
     series.add_argument("--workspace", default=".")
     series.add_argument("--assignment", required=True)
-    series.add_argument("--check", action="store_true", help="PLACEHOLDER: series check is unsupported.")
+    series.add_argument("--check", action="store_true",
+                        help="Refused with check_unsupported: review-series has no check mode.")
     for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
                     "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,

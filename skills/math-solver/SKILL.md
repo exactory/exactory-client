@@ -200,17 +200,32 @@ On a text route with a local input limit (`claude_cli_v1`, `codex_cli_v1` or
 `codex_cli_framed_v1`), a packet whose captured responses, full texts and
 records do not fit one input complete, or together exceed 120,000 characters, is
 read as a reading chain (`SEARCH.md#observed-native-review-delivery`):
-`review-assignment` records `reading_chain` on the first assignment. Run each
-turn with `review-run`, assign the next turn with the same reviewer, route,
-author and packet and with `context.prior_assignment_id`, and submit the native
-output of the final turn unchanged to `search accept` or `search complete`. The
-service verifies the whole chain and stores its `reading_turns` on the
-acceptance or closure. A turn whose attempts all ended without output can run
-again under a new invocation id while its route is not retired, not changed and
-its pinned runtime equals the installed adapter. A turn after the first can
-instead be replaced by assigning the next turn again with the same
-`prior_assignment_id`. When the first turn cannot run again, export a new packet
-under a new assignment id and start a new chain. A refusal of
+`review-assignment` records `reading_chain` on the first assignment. Run the
+chain with `exactory-research review-series --assignment ID`, where ID is any
+assignment of the chain: it runs each turn, assigns the next turn with the same
+reviewer, route, author and packet and with `context.prior_assignment_id`,
+resumes a captured call with its original request id, and retries or replaces a
+turn whose attempts all ended without output under the outcomes of a failed
+reviewer call in the
+[CLI reference](../../docs/research-cli.md#review-chains-and-review-series) (a
+replacement of a turn after the first is the next turn assigned again with the
+same `prior_assignment_id`). Do not write your own driver, turn limit or retry
+loop around reviewer calls. The command prints one JSON object per line for
+each step and ends in one of four ways. Exit status 3 with the handoff
+`native_review_acceptance_required` (command `search accept`): the final turn
+has its output; submit that native output unchanged to `search accept` or
+`search complete`. The service verifies the whole chain and stores its
+`reading_turns` on the acceptance or closure. Exit status 3 with the handoff
+`native_review_attestation_required` (command `search review-packet`): the
+first turn needs a replacement, which needs a new attestation; export a new
+packet under a new assignment id and start a new chain. Exit status 3 with the
+handoff `review_route_runtime_stale` (command `review-route`): the head's route
+pins another reviewer runtime; record and probe a new route, and the
+replacement turn then runs on it. Exit status 3 with a `stop`: a typed limit or
+refusal with its `code` and `details`; report both to the user and wait for the
+decision. Exit status 4 with `not_before` on the last line: a wait of more than
+30 minutes; run `review-series` again at `not_before`. Exit status 0: the plan
+is `done`, and the chain's final is recorded. A refusal of
 `review-assignment` with `review_input_too_large` and `phase:
 "final_preflight"`, before a turn is planned, says that the mandatory final
 input (the required proof bytes and the protected bodies, the excerpts and
@@ -227,23 +242,22 @@ such a route is delivered as a series of fresh-input turns instead
 (`exactory-review-parts-v2`): read turns that card the units of the packet (the
 entries of the dependency closure and of the list collections of the scientific
 context), combine and check turns when needed, possibly more than one of each,
-followed by final turns, each a new assignment. Before `review-run`, read
-`review_parts_plan` in the assignment result; read the allowances, estimates,
-progress and next action in `status` under
-`review.assignments.<id>.review_parts`. Run each turn with `review-run`. Then
-read the next action's `workflow` and `scope` in `next` and build that
-command's complete payload: for `review-assignment`, a new id, the same role,
-`dossier_id: null`, route, reviewer and author, and
-`context: {native_packet, prior_assignment_id}` with the same packet and the
-turn that just ran, the current expected revision and a new request id. Submit
-the native output of the final turn unchanged to `search accept` or
-`search complete`: the attestation names the first turn, and the service
-verifies the whole series and stores its receipts as `reading_turns`. If every
-attempt of a turn ended without completed output and no invocation remains
-pending, replace the assignment with a new id: for a continuation, keep its
-original `prior_assignment_id`; for the first turn, first export a new packet
-whose attestation names the replacement assignment, then start the series
-again. If `review-assignment` refuses with `review_parts_frame_too_large`,
+followed by final turns, each a new assignment. Read `review_parts_plan` in the
+assignment result, and the allowances, estimates, progress and next action in
+`status` under `review.assignments.<id>.review_parts`. Then run
+`review-series` as for a reading chain above: it assigns each next turn with
+the complete payload (a new id, the same role, `dossier_id: null`, route,
+reviewer and author, and `context: {native_packet, prior_assignment_id}` with
+the same packet and the turn that just ran), runs it, and replaces a turn whose
+attempts all ended without completed output (for a continuation, with its
+original `prior_assignment_id`). At the handoff
+`native_review_acceptance_required`, submit the native output of the final turn
+unchanged to `search accept` or `search complete`: the attestation names the
+first turn, and the service verifies the whole series and stores its receipts
+as `reading_turns`. At the handoff `native_review_attestation_required` (a
+failed first turn), first export a new packet whose attestation names the
+replacement assignment (`search review-packet`), then start the series again.
+If `review-assignment` refuses with `review_parts_frame_too_large`,
 `review_parts_inventory_too_large`, `review_parts_final_too_large` or
 `review_parts_no_progress`, the proposed turn cannot be planned with the
 current route and material; no assignment or invocation is recorded, although
