@@ -8,8 +8,14 @@ independence without rewriting the original assessment.
 
 import base64
 import copy
+from datetime import datetime, timezone
+import glob
+import hashlib
 import json
 import os
+from pathlib import Path
+import stat
+import time
 import uuid
 from collections import ChainMap
 
@@ -1950,20 +1956,131 @@ def verify_route_context(artifacts, route, request, response):
     return transport.context_verified(route, request, response)
 
 
+_RUNTIME_RETRY_SECONDS = (1, 2, 4, 8, 16)
+_CODEX_ROLLOUT_LIMIT_BYTES = 64 * 1024 * 1024
+
+
+def retry_runtime_check(check, *args):
+    """Retry only a missing CLI runtime, before any model process can start."""
+    for index in range(len(_RUNTIME_RETRY_SECONDS) + 1):
+        try:
+            result = check(*args)
+        except ResearchError as error:
+            if error.code != 'review_runtime_missing' or index == len(_RUNTIME_RETRY_SECONDS):
+                raise
+        else:
+            if (not isinstance(result, dict)
+                    or (result.get('error') or {}).get('code') != 'review_runtime_missing'
+                    or index == len(_RUNTIME_RETRY_SECONDS)):
+                return result
+        time.sleep(_RUNTIME_RETRY_SECONDS[index])
+
+
 def _require_route_runtime(route):
-    if transport.runtime(route) != route['runtime']:
+    if retry_runtime_check(transport.runtime, route) != route['runtime']:
         raise ResearchError('review_route_runtime_stale',
                             'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
 
 
+def validate_observation_fields(observation):
+    """Validate optional scheduling metadata without adding an authentication dependency."""
+    code = 'invalid_review_attempt'
+    if 'observed_at' in observation:
+        value = text(observation['observed_at'], 'Observation time', code=code)
+        try:
+            observed_at = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError as error:
+            raise ResearchError(code, 'Observation time must be an ISO 8601 UTC timestamp') from error
+        if observed_at.tzinfo is None or observed_at.utcoffset() != timezone.utc.utcoffset(observed_at):
+            raise ResearchError(code, 'Observation time must be an ISO 8601 UTC timestamp')
+    if 'provider_diagnostic' not in observation:
+        return
+    diagnostic = observation['provider_diagnostic']
+    fields(diagnostic, ('source', 'thread_id', 'codex_error_info', 'message', 'rollout_sha256'), code=code)
+    text(diagnostic['thread_id'], 'Diagnostic thread ID', code=code)
+    checksum = diagnostic['rollout_sha256']
+    if (diagnostic['source'] != 'codex_rollout'
+            or diagnostic['message'] is not None and not isinstance(diagnostic['message'], str)
+            or diagnostic['codex_error_info'] is not None and not isinstance(diagnostic['codex_error_info'], (str, dict))
+            or not isinstance(checksum, str) or len(checksum) != 64
+            or any(character not in '0123456789abcdef' for character in checksum)):
+        raise ResearchError(code, 'A provider diagnostic must retain the Codex error and rollout digest')
+
+
+def read_codex_diagnostic(response):
+    """Read advisory failure evidence from the same sessions location as the transport."""
+    from .review_codex_transport import clean_environment
+    thread_id = (response.get('context_evidence') or {}).get('thread_id')
+    if not isinstance(thread_id, str) or not thread_id or '/' in thread_id:
+        return None
+    environment = clean_environment(os.environ)
+    home = Path(environment.get('CODEX_HOME', str(Path.home() / '.codex')))
+    try:
+        matches = list((home / 'sessions').rglob('*' + glob.escape(thread_id) + '*.jsonl'))
+        if len(matches) != 1:
+            return None
+        descriptor = os.open(matches[0], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, 'rb') as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size > _CODEX_ROLLOUT_LIMIT_BYTES:
+                return None
+            data = stream.read(_CODEX_ROLLOUT_LIMIT_BYTES)
+            after = os.fstat(stream.fileno())
+            if len(data) != after.st_size or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                return None
+    except OSError:
+        return None
+    last_error = None
+    try:
+        for line in data.splitlines():
+            if not line.strip():
+                continue
+            event = json.loads(line)
+            if not isinstance(event, dict):
+                continue
+            payload = event.get('payload')
+            if isinstance(payload, dict) and payload.get('type') == 'task_complete':
+                last_error = payload.get('error')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(last_error, dict):
+        return None
+    diagnostic = dict(source='codex_rollout', thread_id=thread_id,
+                      codex_error_info=last_error.get('codex_error_info'), message=last_error.get('message'),
+                      rollout_sha256=hashlib.sha256(data).hexdigest())
+    try:
+        validate_observation_fields(dict(provider_diagnostic=diagnostic))
+    except ResearchError:
+        return None
+    return diagnostic
+
+
 def _observed(artifacts, route, request, credential):
     from .review_codex_notices import record_disabled_exec_notices
-    _require_route_runtime(route)
-    observed = transport.observe(route, request, credential)
-    record_disabled_exec_notices(route, observed['response'])
+    try:
+        _require_route_runtime(route)
+        observed = retry_runtime_check(transport.observe, route, request, credential)
+    except ResearchError as error:
+        if error.code not in ('review_runtime_missing', 'review_route_runtime_stale'):
+            raise
+        observed = dict(request_digest=digest(request), route_digest=digest(route), runtime=route['runtime'],
+                        response=None, output=None, status='failed',
+                        error=dict(kind='ResearchError', code=error.code),
+                        usage=dict(input_tokens=None, output_tokens=None, cost_usd=None, wall_seconds=None))
+    observed['observed_at'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
+    response = observed['response']
+    if (observed['status'] != 'completed' and response is not None
+            and route['adapter'] in ('codex_cli_v1', 'codex_cli_framed_v1', 'codex_cli_visual_v1')):
+        answer = ''.join(part['text'] for item in response.get('output', []) if item.get('type') == 'message'
+                         for part in item.get('content', []) if part.get('type') == 'output_text')
+        if not answer.strip():
+            diagnostic = read_codex_diagnostic(response)
+            if diagnostic is not None:
+                observed['provider_diagnostic'] = diagnostic
+    record_disabled_exec_notices(route, response)
     record = {key: value for key, value in observed.items() if key not in ('request', 'response', 'output')}
     record['request'] = _put_json(artifacts, request)
-    record['response'] = None if observed['response'] is None else _put_json(artifacts, observed['response'])
+    record['response'] = None if response is None else _put_json(artifacts, response)
     record['output'] = None if observed['output'] is None else _put_json(artifacts, observed['output'])
     return record
 
@@ -2966,7 +3083,9 @@ def record_attempt(store, payload, *, expected_revision, request_id):
     """Imported attempts retain provenance but cannot masquerade as observed transport."""
     artifacts = store.build_artifact_store()
     def prepare(records, value):
-        fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'))
+        fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'),
+               ('observed_at', 'provider_diagnostic'))
+        validate_observation_fields(value)
         _get(records, 'review_assignment', value['assignment_id'])
         from .review_task_execution import has_call_terminated, identify_call
         if value['id'] in records.get('review_invocation', {}):

@@ -35,7 +35,10 @@ def _check_bindings(records, artifacts, captured, operation, payload, request_id
             or membership['id'] != identifier or membership['route_id'] != invocation['route_id']
             or membership['operation'] != operation or membership['invocation_id'] != payload['id']):
         raise ResearchError('review_invocation_unverified', 'The committed call observation must bind its original invocation')
-    for reference in collect_references([captured['observation'], captured['retained_evidence']]):
+    # Scheduling metadata cannot introduce artifact dependencies into authentication.
+    observation_evidence = {key: value for key, value in captured['observation'].items()
+                            if key not in ('observed_at', 'provider_diagnostic')}
+    for reference in collect_references([observation_evidence, captured['retained_evidence']]):
         artifacts.read(reference)
     return invocation
 
