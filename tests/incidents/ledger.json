@@ -649,10 +649,12 @@
       "record": "v13",
       "class": "upgrade (installed copy replaced)",
       "summary": "Updating the plugin removed hook files still referenced by running Codex sessions.",
-      "fixed_in": "0.73.0",
-      "expected": "Activation identifies the record wrapper and loaded plugin version, qualifies the candidate, and requires session restart or deferred update; the terminal classification is handoff until activation finishes.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.62.0",
+      "expected": "Each generated hook command finds its entrypoint missing: a blocking hook refuses with the update message, a non-blocking hook reports it, and the Stop hook lets the session stop; the session restarts to load the new version (owner decision of 0.62.0).",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_hook_startup.TestHookStartup.test_missing_version_reports_update_for_every_entrypoint"
+      ]
     },
     {
       "id": "v13-format-only-svg-rerun",
@@ -1663,10 +1665,12 @@
       "record": "20261021235924",
       "class": "paths-hooks (installed copy replaced)",
       "summary": "A plugin update deleted files still used by a running review session's hooks.",
-      "fixed_in": "0.73.0",
-      "expected": "Activation records wrapper and executable versions and waits for or restarts sessions that loaded old hooks; the required external session action is a handoff.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.62.0",
+      "expected": "Each generated hook command finds its entrypoint missing: a blocking hook refuses with the update message, a non-blocking hook reports it, and the Stop hook lets the session stop; the session restarts to load the new version (owner decision of 0.62.0).",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_hook_startup.TestHookStartup.test_missing_version_reports_update_for_every_entrypoint"
+      ]
     },
     {
       "id": "20261022002458-release-0-58-0-of-local-repairs-ci-missing-poppler",
@@ -2455,10 +2459,12 @@
       "record": "20261029205602",
       "class": "paths-hooks (installed copies)",
       "summary": "An unidentified process replaced the plugin cache and configuration while running Codex sessions still needed the older hooks.",
-      "fixed_in": "0.73.0",
-      "expected": "Activation identifies the loaded version and requires restart before using the qualified runtime; session rebinding is an explicit handoff rather than an automatic hook rewrite.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.62.0",
+      "expected": "Each generated hook command finds its entrypoint missing: a blocking hook refuses with the update message, a non-blocking hook reports it, and the Stop hook lets the session stop; the session restarts to load the new version (owner decision of 0.62.0).",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_hook_startup.TestHookStartup.test_missing_version_reports_update_for_every_entrypoint"
+      ]
     },
     {
       "id": "20261030154844-resolve-open-items-after-0-67-0-unreviewed-release-texts",
@@ -2576,8 +2582,8 @@
       "record": "20261030154844",
       "class": "upgrade (version binding)",
       "summary": "Running app servers kept the installed plugin cache behind the released version.",
-      "fixed_in": "0.73.0",
-      "expected": "Activation qualifies the candidate and identifies each wrapper and executable; sessions holding old hooks must finish or restart before the updated cache is used.",
+      "fixed_in": "open",
+      "expected": "Kept by decision: a running session keeps the plugin version it loaded; the cache is updated when no session that loaded it runs, and a session restarts to load a new version (activation procedure of 0.73.0).",
       "test_kind": "none",
       "tests": []
     },
@@ -2821,8 +2827,8 @@
       "record": "20261101173008",
       "class": "upgrade (version binding)",
       "summary": "The plugin cache remained old while long-running Codex sessions held its hooks.",
-      "fixed_in": "0.73.0",
-      "expected": "Activation reports the actual wrapper, executable and loaded version and requires session turnover before cache replacement; unfinished activation is a handoff.",
+      "fixed_in": "open",
+      "expected": "Kept by decision: a running session keeps the plugin version it loaded; the cache is updated when no session that loaded it runs, and a session restarts to load a new version (activation procedure of 0.73.0).",
       "test_kind": "none",
       "tests": []
     },
@@ -2886,8 +2892,8 @@
       "record": "20261103124500-file-guard-enametoolong-heredoc-record-root-probe",
       "class": "upgrade (version binding)",
       "summary": "A running Claude session kept using old hooks after the plugin cache was updated.",
-      "fixed_in": "0.73.0",
-      "expected": "Activation identifies the session-loaded plugin version separately from the cache and qualifies the chosen executable; restarting or rebinding the session remains an explicit handoff.",
+      "fixed_in": "open",
+      "expected": "Kept by decision: a running session keeps the plugin version it loaded; the cache is updated when no session that loaded it runs, and a session restarts to load a new version (activation procedure of 0.73.0).",
       "test_kind": "none",
       "tests": []
     },
