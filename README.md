@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.72.3](docs/releases/0.72.3.md) keeps the request memo of 0.72.2 to plain list histories and tuple fit orders; other argument types take the uncached path. The harness's own requests, reports and refusals do not change.
+
 Version [0.72.2](docs/releases/0.72.2.md) makes a command derive each review request of an assignment once and share it between request selection and attempt authentication. On a problem record with 141 review assignments, one `status` called the request builder 1,214 times on 102 distinct inputs. The requests, packets, reports and refusals do not change, and no route-pinned module changed.
 
 Version [0.72.1](docs/releases/0.72.1.md) adds the protocol `exactory-openness-reading-v5` for new problem openness reading chains. Search fields that several bound searches share arrive once, and the harness rebuilds every original search from the delivered parts before it gives credit. A v5 final turn can withhold a selected source text that earlier turns delivered completely, and each `review-assignment` reports the final-input headroom. Chains that earlier releases started continue under their own protocol.
