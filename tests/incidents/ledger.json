@@ -1029,8 +1029,12 @@
       "summary": "A completed reviewer answer with one surplus brace was discarded.",
       "fixed_in": "0.73.0",
       "expected": "A new completed response with only surplus closing braces is recovered with a reproducible certificate and preserved answer text; the observation completes without another model call and old failed attempts stay failed.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_answer_recovery.RecoveryGrammarTests.test_the_23_published_structural_shapes",
+        "test_review_answer_recovery.RecoveryObservationTests.test_recovered_capture_authenticates_exposes_text_and_charges_once",
+        "test_review_answer_recovery.RecoveryGrammarTests.test_derive_output_rejects_every_certificate_tampering"
+      ]
     },
     {
       "id": "20261021113539-pdf-charset-citation-check",
@@ -1657,8 +1661,10 @@
       "summary": "A release note claimed that every inline formula stayed on one line.",
       "fixed_in": "0.73.0",
       "expected": "A dated release-note correction states the actual inline-formula limitation; documentation is corrected without changing already published records.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_release_records.RepositoryReleaseRecordsTests.test_0570_note_ends_with_supervisor_correction"
+      ]
     },
     {
       "id": "20261021235924-update-removes-running-hooks",
@@ -1719,8 +1725,12 @@
       "summary": "Code merged before release steps finished and the release lacked its published record.",
       "fixed_in": "0.73.0",
       "expected": "The release procedure checks tags, GitHub release records and branch activation at release time; missing release records are completed before acceptance.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_release_records.ReleaseRecordsTests.test_0580_tag_without_github_release",
+        "test_release_records.ReleaseRecordsTests.test_0662_note_without_tag",
+        "test_release_records.ReleaseRecordsTests.test_current_missing_releases_have_the_reported_real_shape"
+      ]
     },
     {
       "id": "20261022002458-historical-cli-runtime",
@@ -2265,8 +2275,11 @@
       "summary": "A Codex capacity error was recorded as an undifferentiated JSON decoding failure.",
       "fixed_in": "0.73.0",
       "expected": "Retained provider diagnostics distinguish server overload from malformed output; capacity failures wait with durable bounded backoff and eventually stop as review_provider_unavailable without restarting the allowance.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_observation_fields.ObservationFieldsTests.test_new_observation_clock_and_last_rollout_error_on_all_codex_routes"
+      ]
     },
     {
       "id": "20261027085554-reading-turn-text-budget",
@@ -2360,8 +2373,12 @@
       "summary": "A route pinned to an older runtime could not dispatch under the installed adapter.",
       "fixed_in": "0.73.0",
       "expected": "Activation reports the wrapper, executable and route mismatch before dispatch; recording and probing a compatible route is an explicit handoff and old attempts continue authenticating under their pins.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_runtime_retry.RuntimeRetryTests.test_observed_stale_runtime_stops_with_stale_code",
+        "test_review_continuation.ContinuationTests.test_stale_runtime_failure_hands_off_recording_a_new_route",
+        "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
+      ]
     },
     {
       "id": "20261029205602-release-0-67-0-every-open-record-release-tag-procedure",
@@ -2503,8 +2520,12 @@
       "summary": "Large reviewer turns overflowed the output cap and were repeatedly eligible to run again.",
       "fixed_in": "0.73.0",
       "expected": "The failure planner adapts only when a smaller admissible request is demonstrated; otherwise it stops as review_output_over_cap, or review_parts_budget_exhausted at the card-floor allowance, before another call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_over_cap_failure_at_the_floor_stops_before_recording_a_replacement",
+        "test_review_failure_class.OutputReplacementTests.test_real_read_handler_halves_units_and_does_not_write",
+        "test_review_failure_class.FailureClassTests.test_dispatch_and_unhandled_output_caps_stop_with_measurement"
+      ]
     },
     {
       "id": "20261031101231-problem-result-packet-exceeds-route-limit-result-evidence-packet-size",
@@ -2640,8 +2661,12 @@
       "summary": "A reviewer closed its JSON object early and continued writing top-level fields.",
       "fixed_in": "0.73.0",
       "expected": "For a new completed answer with one lossless reading, certified premature-root-close recovery preserves every member and value and completes without another call; ambiguous duplicate-key shapes remain refused.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_answer_recovery.RecoveryGrammarTests.test_the_23_published_structural_shapes",
+        "test_review_answer_recovery.RecoveryObservationTests.test_recovered_capture_authenticates_exposes_text_and_charges_once",
+        "test_review_answer_recovery.RecoveryGrammarTests.test_derive_output_rejects_every_certificate_tampering"
+      ]
     },
     {
       "id": "20261101093143-url-work-citations-lack-title-and-authors-url-citation-metadata",
@@ -2884,8 +2909,12 @@
       "summary": "Early closure or surplus braces made complete reviewer answers fail JSON decoding.",
       "fixed_in": "0.73.0",
       "expected": "New completed responses with a single permitted reading recover with an authenticated certificate, preserved raw text and no extra call; duplicate keys or competing answers remain malformed and old failed observations are unchanged.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_answer_recovery.RecoveryGrammarTests.test_the_23_published_structural_shapes",
+        "test_review_answer_recovery.RecoveryObservationTests.test_recovered_capture_authenticates_exposes_text_and_charges_once",
+        "test_review_answer_recovery.RecoveryGrammarTests.test_derive_output_rejects_every_certificate_tampering"
+      ]
     },
     {
       "id": "20261103124500-file-guard-enametoolong-heredoc-record-root-probe-claude-session-old-hooks",
@@ -3025,8 +3054,11 @@
       "summary": "A staged worker launch made a paged direction-review test fail once with store_busy.",
       "fixed_in": "0.73.0",
       "expected": "Polling treats store_busy as not-yet until its original deadline and retains the admitted reservation; resumption uses the same request and never launches a second worker.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_store_polling_busy.WorkerPollingTests.test_handshake_retries_busy_reads_and_authorizes_the_original_worker",
+        "test_store_polling_busy_resume.ReviewRunResumptionTests.test_busy_handshake_deadline_and_repeated_review_run_keep_one_reservation"
+      ]
     },
     {
       "id": "20261104073509-stuck-v1-result-series-has-no-path-to-parts-v2-stuck-v1-series",
@@ -3035,8 +3067,12 @@
       "summary": "A parts-v1 series without a final exhausted replay capacity and had no path to parts v2.",
       "fixed_in": "0.73.0",
       "expected": "After either v1 planner refusal and its existing reduction, one atomic prospective v2 successor starts with empty delivery credit and bounded search bodies; historical v1 evidence stays unchanged and the active chain can finish or return a typed stop.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_result_parts_restart.ProblemResultRestartTests.test_measured_21_turn_history_restarts_and_finishes_with_search_bodies_withheld",
+        "test_problem_result_parts_restart.ProblemResultRestartTests.test_later_planner_refusal_starts_v2",
+        "test_problem_result_parts_restart.ProblemResultRestartTests.test_fitting_legacy_continuation_has_identical_packet_prompt_history_and_request"
+      ]
     },
     {
       "id": "failed-attempts-codex-turn-failed-no-answer",
@@ -3045,8 +3081,12 @@
       "summary": "Codex calls failed without retaining an answer or an actionable provider reason.",
       "fixed_in": "0.73.0",
       "expected": "For new calls, retained rollout diagnostics identify usage or capacity conditions; an unknown no-answer failure waits only when cheap, with durable backoff and a seven-provider-failure or eight-total-failure stop across restarts and replacements.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_failure_class.FailureClassTests.test_provider_schedule_every_wait_and_stop",
+        "test_review_observation_fields.ObservationFieldsTests.test_new_observation_clock_and_last_rollout_error_on_all_codex_routes"
+      ]
     },
     {
       "id": "failed-attempts-early-close-answer-object",
@@ -3055,8 +3095,12 @@
       "summary": "An answer closed its root object before appending more top-level fields.",
       "fixed_in": "0.73.0",
       "expected": "A new completed response with a nonempty id and exactly one lossless reading is certified as premature_root_close; the original response is retained, observation completes without another model call, and historical failures remain unchanged.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_answer_recovery.RecoveryGrammarTests.test_the_23_published_structural_shapes",
+        "test_review_answer_recovery.RecoveryObservationTests.test_recovered_capture_authenticates_exposes_text_and_charges_once",
+        "test_review_answer_recovery.RecoveryGrammarTests.test_derive_output_rejects_every_certificate_tampering"
+      ]
     },
     {
       "id": "failed-attempts-early-close-duplicate-key",
@@ -3065,8 +3109,12 @@
       "summary": "Joining an early-closed answer would produce duplicate decoded member names.",
       "fixed_in": "0.73.0",
       "expected": "Recovery refuses duplicate member names at every depth; the answer remains answer_malformed, receives at most one further call at the turn position, then stops without discarding the original response.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_answer_recovery.RecoveryGrammarTests.test_refuses_ambiguous_incomplete_and_non_json_answers",
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_failure_class.FailureClassTests.test_single_retry_outcomes_and_scientific_refusal"
+      ]
     },
     {
       "id": "failed-attempts-surplus-closing-braces",
@@ -3075,8 +3123,12 @@
       "summary": "One complete answer object was followed only by extra closing braces and whitespace.",
       "fixed_in": "0.73.0",
       "expected": "A new completed response recovers as surplus_closing_braces with removed offsets and canonical digests; authentication replays the certificate, the original answer stays retained and no extra model call is made.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_answer_recovery.RecoveryGrammarTests.test_the_23_published_structural_shapes",
+        "test_review_answer_recovery.RecoveryObservationTests.test_recovered_capture_authenticates_exposes_text_and_charges_once",
+        "test_review_answer_recovery.RecoveryGrammarTests.test_derive_output_rejects_every_certificate_tampering"
+      ]
     },
     {
       "id": "failed-attempts-raw-control-character",
@@ -3085,8 +3137,12 @@
       "summary": "An otherwise valid answer object contained a literal control character inside a JSON string.",
       "fixed_in": "0.73.0",
       "expected": "The certified recovery grammar preserves literal control characters and every decoded value, alone or with a permitted brace rule; the observation completes without another call and historical failed observations remain failed.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_answer_recovery.RecoveryGrammarTests.test_two_measured_raw_line_feed_shapes_and_combined_rules",
+        "test_review_answer_recovery.RecoveryGrammarTests.test_every_literal_control_character_and_json_whitespace",
+        "test_review_answer_recovery.RecoveryObservationTests.test_recovered_capture_authenticates_exposes_text_and_charges_once"
+      ]
     },
     {
       "id": "failed-attempts-other-malformed-text",
@@ -3095,8 +3151,12 @@
       "summary": "An answer had a missing comma or additional fence and prose with no permitted recovery.",
       "fixed_in": "0.73.0",
       "expected": "The full-input recovery refuses competing or unsupported readings as answer_malformed; one retry is allowed across the whole turn position and the second failure stops with its evidence retained.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_answer_recovery.RecoveryGrammarTests.test_refuses_ambiguous_incomplete_and_non_json_answers",
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_failure_class.FailureClassTests.test_single_retry_outcomes_and_scientific_refusal"
+      ]
     },
     {
       "id": "failed-attempts-provider-usage-limit",
@@ -3105,8 +3165,11 @@
       "summary": "A provider returned a usage-limit message instead of review output.",
       "fixed_in": "0.73.0",
       "expected": "The planner waits until the stated reset with its timezone, or uses durable one-to-thirty-minute backoff when absent; it makes no call during the wait and eventually stops as review_provider_unavailable under the stored allowance.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_failure_class.FailureClassTests.test_reset_times_zones_local_codex_and_year_boundary"
+      ]
     },
     {
       "id": "failed-attempts-provider-api-error",
@@ -3115,8 +3178,11 @@
       "summary": "Provider API errors included both unreachable-server messages and a safeguards refusal.",
       "fixed_in": "0.73.0",
       "expected": "Unreachable API errors wait with durable bounded provider backoff; safeguards refusal gets one additional call and then review_provider_refused, with the total eight-failure allowance and original observations preserved.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_failure_class.FailureClassTests.test_single_retry_outcomes_and_scientific_refusal"
+      ]
     },
     {
       "id": "failed-attempts-answer-over-output-cap",
@@ -3125,8 +3191,13 @@
       "summary": "Large answers exceeded their output allowance and could not be used.",
       "fixed_in": "0.73.0",
       "expected": "Only an existing handler proving a smaller admissible request may adapt; reading and native overflows otherwise stop as review_output_over_cap, and a parts read at its minimum card-floor allowance stops as review_parts_budget_exhausted before another call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_failure_class.FailureClassTests.test_dispatch_and_unhandled_output_caps_stop_with_measurement",
+        "test_review_failure_class.OutputReplacementTests.test_real_read_handler_halves_units_and_does_not_write",
+        "test_review_failure_class.FailureClassTests.test_completed_claude_output_token_maximum_error_stops_without_retry"
+      ]
     },
     {
       "id": "failed-attempts-input-over-route-limit",
@@ -3135,8 +3206,11 @@
       "summary": "The transport refused oversized input before making a reviewer call.",
       "fixed_in": "0.73.0",
       "expected": "Preflight makes no model call; an eligible initial-size replacement is planned from the original parent, otherwise the chain stops with input_over_limit and its measured refusal.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_failure_class.FailureClassTests.test_initial_input_size_replacement_uses_existing_rule"
+      ]
     },
     {
       "id": "failed-attempts-cli-runtime-check-failed",
@@ -3145,8 +3219,15 @@
       "summary": "A transient CLI version-check failure prevented a review call from starting.",
       "fixed_in": "0.73.0",
       "expected": "Every pre-dispatch runtime check retries after one, two, four, eight and sixteen seconds; an exhausted post-admission failure is captured and finished as runtime_unavailable, then stops without duplicate generation or a stranded pending call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_runtime_retry.RuntimeRetryTests.test_invocation_start_retries_then_calls_once",
+        "test_review_runtime_retry.RuntimeRetryTests.test_observed_runtime_failure_finishes_admitted_invocation",
+        "test_review_runtime_retry.StagedRuntimeRetryTests.test_staged_start_transient_runtime_then_dispatch",
+        "test_review_failure_class.FailureClassTests.test_runtime_schedule_every_wait_and_stop_with_and_without_observation_time",
+        "test_review_failure_class.LegacyRuntimeFailureTests.test_parts_v1_result_turn_seven_without_observed_at_runs"
+      ]
     },
     {
       "id": "failed-attempts-other",
@@ -3155,8 +3236,11 @@
       "summary": "Other failed attempts included an unsupported format and an attempt with no recorded error.",
       "fixed_in": "0.73.0",
       "expected": "Unsupported dispatch format stops without a model call; an unclassifiable attempt stays unknown, and only a cheap Codex failure without an answer can enter the bounded provider wait schedule.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
+        "test_review_failure_class.FailureClassTests.test_missing_timestamps_and_expensive_unknown_stop"
+      ]
     },
     {
       "id": "failed-attempts-refusal-invalid-reading-response",
@@ -3165,8 +3249,10 @@
       "summary": "Reading-chain answers violated the reading-response contract.",
       "fixed_in": "0.73.0",
       "expected": "The completed answer retains an output refusal with code invalid_reading_response; one further scientific call is allowed, and after two refusals the chain hands off for an authorized output correction or explicit repair, preserving both attempts and refusing an unbounded third call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_output_refusals_retry_once_without_calling_provider"
+      ]
     },
     {
       "id": "failed-attempts-refusal-invalid-value-review",
@@ -3175,8 +3261,10 @@
       "summary": "Completed answers violated the value-review contract.",
       "fixed_in": "0.73.0",
       "expected": "The completed answer retains an output refusal with code invalid_value_review; one further scientific call is allowed, and after two refusals the chain hands off for an authorized output correction or explicit repair, preserving both attempts and refusing an unbounded third call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_output_refusals_retry_once_without_calling_provider"
+      ]
     },
     {
       "id": "failed-attempts-refusal-review-reassessment-mismatch",
@@ -3185,8 +3273,10 @@
       "summary": "A reassessment labelled changed inherited content as an exact confirmation.",
       "fixed_in": "0.73.0",
       "expected": "The completed answer retains an output refusal with code review_reassessment_mismatch; one further scientific call is allowed, and after two refusals the chain hands off for an authorized output correction or explicit repair, preserving both attempts and refusing an unbounded third call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_output_refusals_retry_once_without_calling_provider"
+      ]
     },
     {
       "id": "failed-attempts-refusal-research-objection-identity-conflict",
@@ -3195,8 +3285,10 @@
       "summary": "An answer reused an objection identity for another contested claim.",
       "fixed_in": "0.73.0",
       "expected": "The completed answer retains an output refusal with code research_objection_identity_conflict; one further scientific call is allowed, and after two refusals the chain hands off for an authorized output correction or explicit repair, preserving both attempts and refusing an unbounded third call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_output_refusals_retry_once_without_calling_provider"
+      ]
     },
     {
       "id": "failed-attempts-refusal-invalid-native-review",
@@ -3205,8 +3297,10 @@
       "summary": "Completed native answers violated the native-review contract.",
       "fixed_in": "0.73.0",
       "expected": "The completed answer retains an output refusal with code invalid_native_review; one further scientific call is allowed, and after two refusals the chain hands off for an authorized output correction or explicit repair, preserving both attempts and refusing an unbounded third call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_output_refusals_retry_once_without_calling_provider"
+      ]
     },
     {
       "id": "failed-attempts-refusal-review-evidence-undelivered",
@@ -3215,8 +3309,10 @@
       "summary": "Completed answers cited evidence absent from authenticated actual delivery.",
       "fixed_in": "0.73.0",
       "expected": "The completed answer retains an output refusal with code review_evidence_undelivered; one further scientific call is allowed, and after two refusals the chain hands off for an authorized output correction or explicit repair, preserving both attempts and refusing an unbounded third call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_output_refusals_retry_once_without_calling_provider"
+      ]
     },
     {
       "id": "failed-attempts-refusal-invalid-strategy",
@@ -3225,8 +3321,87 @@
       "summary": "Completed answers contained strategy evidence outside the accepted contract.",
       "fixed_in": "0.73.0",
       "expected": "The completed answer retains an output refusal with code invalid_strategy; one further scientific call is allowed, and after two refusals the chain hands off for an authorized output correction or explicit repair, preserving both attempts and refusing an unbounded third call.",
-      "test_kind": "none",
-      "tests": []
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_measured_output_refusals_retry_once_without_calling_provider"
+      ]
+    },
+    {
+      "id": "record-states-posted-record-loses-terminal-state",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "dead-end (posted record)",
+      "summary": "Posted problems read new review or adjudication obligations under later releases, so next named work on a post that cannot be edited.",
+      "fixed_in": "0.73.0",
+      "expected": "A recorded post of the current statement keeps problem_already_posted as the only obligation; every other finding is listed under after_post with its code and reason.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_terminal.PostedProblemTests.test_changed_evidence_digest_after_post_is_advisory",
+        "test_problem_post_terminal.PostedProblemTests.test_legacy_adjudication_missing_later_version_evidence_is_advisory",
+        "test_problem_post_terminal.PostedProblemTests.test_new_unrelated_post_finding_is_advisory"
+      ]
+    },
+    {
+      "id": "record-states-external-post-unrecordable",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "dead-end (post outside the harness)",
+      "summary": "A problem posted on exactory.ai without gate post could not be recorded, so the store never became terminal.",
+      "fixed_in": "0.73.0",
+      "expected": "problem-post-external records the post with gate bypassed, the reason and the evidence; the store becomes terminal; a second post of the statement is refused.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_external.ExternalPostTests.test_records_a_terminal_bypassed_post_without_an_export",
+        "test_problem_post_external.ExternalPostTests.test_a_second_post_of_the_statement_is_refused"
+      ]
+    },
+    {
+      "id": "record-states-failed-head-has-no-pointer",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "dead-end (failed chain head)",
+      "summary": "A result turn that failed with review_runtime_missing had no obligation in status and nothing in next (graph rigidity slot A turn 7).",
+      "fixed_in": "0.73.0",
+      "expected": "Every chain head without a usable output is listed with its planned action; a runtime failure, never charged, is retried on the provider schedule and an attempt recorded before 0.73.0 runs at once.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_continuation_regressions.ContinuationRegressionTests.test_failed_source_head_has_an_executable_status_obligation",
+        "test_review_failure_class.LegacyRuntimeFailureTests.test_parts_v1_result_turn_seven_without_observed_at_runs"
+      ]
+    },
+    {
+      "id": "integration-cli-output-token-maximum-as-provider-error",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "external-output (misclassified failure)",
+      "summary": "A completed Claude answer stating that the response exceeded the 20000 output token maximum read as a provider condition, so the schedule would repeat the same over-cap request.",
+      "fixed_in": "0.73.0",
+      "expected": "The answer classifies as output_over_cap with the stated maximum and stops unless a handler proves a smaller admissible request.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.FailureClassTests.test_completed_claude_output_token_maximum_error_stops_without_retry"
+      ]
+    },
+    {
+      "id": "integration-superseded-native-heads-in-status",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "agent-text (stale obligations)",
+      "summary": "Failed native reviews that later reviews superseded would have been listed in status as calls to run.",
+      "fixed_in": "0.73.0",
+      "expected": "status adds no obligation for a failed native mathematical head unless it is an openness chain; plan_next and review-series still plan every head.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_continuation_regressions.ContinuationRegressionTests.test_status_lists_failed_openness_but_not_controller_native_heads"
+      ]
+    },
+    {
+      "id": "integration-time-dependent-gate-digest",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "determinism (report digest)",
+      "summary": "Executable actions attached before the gate digest made the digest change between two reads of an unchanged store.",
+      "fixed_in": "0.73.0",
+      "expected": "Actions are attached after every report digest; two reads of an unchanged store give the same digest, equal to the digest without actions.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_continuation_regressions.ContinuationRegressionTests.test_wait_actions_do_not_change_gate_or_status_digests",
+        "test_review_continuation_staged.StagedContinuationTests.test_staged_diagnostic_identity_is_attached_after_gate_digest"
+      ]
     }
   ]
 }
