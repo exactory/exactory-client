@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from research_harness import cli
 from research_harness.errors import ResearchError
@@ -88,6 +88,18 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertEqual(steps[-1]['code'], 'stale_revision')
         self.assertEqual(len([row for row in steps if row.get('error')]), 8)
+
+    def test_stale_runtime_refusal_hands_off_recording_a_new_route(self):
+        initial = self.fixture.plan()
+        operation = Mock(side_effect=ResearchError('review_route_runtime_stale', 'fixture stale runtime'))
+        with patch.dict(cli.OPERATIONS, {'review-run': operation}):
+            code, steps = self.drive()
+        self.assertEqual(code, 3)
+        operation.assert_called_once()
+        self.assertEqual(steps, [dict(state='handoff', chain=initial['chain'],
+            head_id='bar-first', progress=initial['progress'], command='review-route',
+            code='review_route_runtime_stale',
+            details=dict(assignment_id='bar-first', route_id='route'))])
 
     def test_planner_refusal_is_replanned_from_fresh_snapshot(self):
         from research_harness.review_continuation import plan_next

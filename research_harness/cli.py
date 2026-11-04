@@ -17,7 +17,7 @@ from .drafting import find_draft_obligations
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
-from .gates import gate_report, gate_state, require_ready
+from .gates import gate_state, require_ready
 from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
 from .limits import describe_depth, limits_report
 from .operations import fields, text
@@ -832,7 +832,12 @@ def run(args):
         reference = strict_json(Path(args.reference).read_bytes()) if args.reference else None
         return screening.policy_report(store, policy=args.policy, reference=reference)
     if args.command == "gate":
-        report = gate_report(store, args.action)
+        from .review_continuation import annotate_review_obligations
+        snapshot = store.snapshot()
+        evaluation = Evaluation(snapshot['records'], ArtifactStore(store.root))
+        report = gate_state(snapshot['records'], evaluation, args.action)
+        report = annotate_review_obligations(snapshot['records'], evaluation,
+                                            dict(report, revision=snapshot['revision']))
         require_ready(report, args.action)
         return report
     if args.kind == "problem":

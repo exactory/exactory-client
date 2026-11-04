@@ -214,8 +214,7 @@ def assess_source_requests(records, artifacts, *, outcomes=None):
             pending.append(obligation("review_quality_measurement_pending", "Qualify this staged protocol and reviewer configuration with the approved passing C study.",
                 **identity, route_id=assignment["route_id"], protocol=epoch.get("protocol"),
                 calibration_profile_version=epoch.get("calibration_profile_version")))
-            pending.extend(dict(item, assignment_id=identifier) for item in state.get("obligations", [])
-                           if item["code"] != "review_task_pending")
+            pending.extend(item for item in state.get("obligations", []) if item["code"] != "review_task_pending")
             continue
         from . import review_parts
         if review_parts.KEY in assignment:
@@ -246,11 +245,6 @@ def assess_source_requests(records, artifacts, *, outcomes=None):
         if state.get("pending_source_requests"):
             pending.append(obligation("review_sources_pending", "Deliver the sources requested by the observed reviewer.",
                                       assignment_id=identifier, requests=state["pending_source_requests"]))
-    from .review_continuation import describe_next_actions
-    for item in pending:
-        identifier = item.get('assignment_id')
-        if identifier in records.get('review_assignment', {}):
-            item['next'] = describe_next_actions(records, artifacts, identifier, item.get('next', []))
     return pending
 
 

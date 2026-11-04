@@ -138,6 +138,18 @@ class ContinuationTests(unittest.TestCase):
                    return_value=self.case.build_provider_response(self.case.build_review_output('bar'))):
             self.execute(plan, request='retry-unverified')
 
+    def test_stale_runtime_failure_hands_off_recording_a_new_route(self):
+        with patch('research_harness.review_transport.send_request', side_effect=OSError('failure')):
+            self.execute(self.plan(), request='failed-call')
+        with patch('research_harness.review_failure_class.plan_after_failure',
+                   return_value=dict(state='stop', code='review_route_runtime_stale', details={})):
+            plan = self.plan()
+        self.assertEqual(plan['state'], 'handoff')
+        self.assertEqual(plan['code'], 'review_route_runtime_stale')
+        self.assertEqual(plan['command'], 'review-route')
+        self.assertEqual(plan['details'], dict(assignment_id='bar-first', route_id='route'))
+        self.assertNotIn('payload', plan)
+
     def test_all_registered_roles_and_parts_adapters_keep_their_context(self):
         from research_harness.review_parts_roles import ADAPTERS
         records = self.case.read_records()
@@ -183,11 +195,16 @@ class ContinuationTests(unittest.TestCase):
 
     def test_source_obligation_exposes_complete_action(self):
         from research_harness.problem_delivery import assess_source_requests
+        from research_harness.review_continuation import annotate_review_obligations
         output = self.case.build_review_output('bar')
         output.update(source_requests=[dict(id='page', kind='inventory_page', page=0)])
         output['value']['status'] = 'unresolved'
         self.invoke(output)
-        rows = assess_source_requests(self.case.read_records(), self.case.artifacts)
+        records = self.case.read_records()
+        rows = assess_source_requests(records, self.case.artifacts)
+        self.assertNotIn('next', next(row for row in rows if row['code'] == 'review_sources_pending'))
+        rows = annotate_review_obligations(records, self.case.artifacts,
+                                          dict(obligations=rows))['obligations']
         row = next(row for row in rows if row['code'] == 'review_sources_pending')
         self.assertEqual(row['next'][0]['command'], self.plan()['command'])
         self.assertEqual(row['next'][0]['payload'], self.plan()['payload'])

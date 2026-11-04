@@ -1,6 +1,8 @@
 """Lifecycle regressions found by the independent continuation review."""
 
+import json
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 import unittest
 from unittest.mock import patch
@@ -63,6 +65,69 @@ class ContinuationRegressionTests(unittest.TestCase):
         self.assertEqual(code, 0, steps)
         self.assertGreaterEqual(len(sleeps), 3)
         self.assertEqual(send.call_count, 1)
+
+    def test_wait_actions_do_not_change_gate_or_status_digests(self):
+        from research_harness.gates import gate_report
+        from review_parts_fixtures import PartsResultCase
+
+        fixture = self.fixture(PartsResultCase)
+        fixture.oversized()
+        for row in fixture.case.expected['openness_searches']:
+            row['search'].update(profile='research', purpose='openness',
+                                 found_work_ids=[], cited_work_ids=[], responses=[])
+            fixture.case.put('literature_search', row['search']['id'], row['search'])
+        assignment = fixture.assign()
+        with patch('research_harness.review_protocol._observed', side_effect=RuntimeError('killed')):
+            with self.assertRaises(RuntimeError):
+                fixture.invoke(assignment)
+        before = fixture.case.store.snapshot()
+        args = cli.build_parser().parse_args([
+            'gate', 'post', '--workspace', str(fixture.case.root)])
+        with patch('research_harness.cli.require_ready', side_effect=lambda report, action: report):
+            first = cli.run(args)
+            first_status = cli.status_report(fixture.case.store)
+            time.sleep(1.05)
+            second = cli.run(args)
+            second_status = cli.status_report(fixture.case.store)
+            with patch('research_harness.review_continuation.annotate_review_obligations',
+                       side_effect=lambda records, artifacts, report: report):
+                baseline = cli.run(args)
+                baseline_status = cli.status_report(fixture.case.store)
+        self.assertEqual(first['digest'], second['digest'])
+        self.assertEqual(first_status['digest'], second_status['digest'])
+        self.assertEqual(first['digest'], baseline['digest'])
+        self.assertEqual(first_status['digest'], baseline_status['digest'])
+        self.assertEqual(first['digest'], gate_report(fixture.case.store, 'post')['digest'])
+        for report in (first, second, first_status, second_status):
+            row = next(row for row in report['obligations']
+                       if row['code'] == 'review_parts_pending')
+            action = row['next'][0]
+            self.assertEqual(action['state'], 'wait')
+            self.assertEqual(action['command'], 'review-run')
+            self.assertEqual(action['payload'], dict(action='reconcile', operation='review.invoke',
+                invocation_id='attempt-' + assignment['id']))
+        first_wait = next(row for row in first['obligations'] if row['code'] == 'review_parts_pending')
+        second_wait = next(row for row in second['obligations'] if row['code'] == 'review_parts_pending')
+        self.assertNotEqual(first_wait['next'][0]['not_before'], second_wait['next'][0]['not_before'])
+        self.assertEqual(fixture.case.store.snapshot(), before)
+
+    def test_blocked_gate_exposes_the_executable_source_action(self):
+        fixture = self.fixture()
+        output = fixture.case.build_review_output('bar')
+        output['value']['status'] = 'unresolved'
+        output['source_requests'] = [dict(id='page', kind='inventory_page', page=0)]
+        fixture.invoke(output)
+        args = cli.build_parser().parse_args([
+            'gate', 'post', '--workspace', str(fixture.case.root)])
+        with self.assertRaises(ResearchError) as raised:
+            cli.run(args)
+        self.assertEqual(raised.exception.code, 'readiness_required')
+        row = next(row for row in raised.exception.details['obligations']
+                   if row['code'] == 'review_sources_pending')
+        self.assertEqual(row['next'][0]['command'], 'review-assignment')
+        self.assertEqual(row['next'][0]['payload'], dict(id='bar-first-t2', route_id='route',
+            dossier_id=None, role='bar', reviewer_id='first', author_id='author',
+            context=dict(prior_assignment_id='bar-first')))
 
     def test_failed_source_head_has_an_executable_status_obligation(self):
         fixture = self.fixture()
@@ -162,6 +227,58 @@ class ContinuationRegressionTests(unittest.TestCase):
             report = cli.status_report(case.store)
         row = next(row for row in report['obligations'] if row.get('assignment_id') == 'failed-a')
         self.assertEqual(row['next'][0]['payload'], dict(id='failed-a-run-2', assignment_id='failed-a'))
+
+    def test_status_lists_failed_openness_but_not_controller_native_heads(self):
+        from openness_reading_fixtures import OpennessReadingCase
+        case = self.fixture(OpennessReadingCase)
+        reference = case.export(assignment_id='openness-failed')
+        case.assign('openness-failed', reference)
+        native = json.loads(case.artifacts.read(reference))
+        native['contract'].pop('orchestration')
+        native['scientific_context'].pop('openness_minimum')
+        native['reviewer'] = dict(source='host', actor_id='math-reviewer',
+                                 attestation_id='review-assignment:math-failed')
+        reference = case.artifacts.put(json.dumps(native).encode(), 'application/json')
+        case.mutate(protocol.record_assignment, dict(id='math-failed', route_id='route',
+            dossier_id=None, role='native_math', reviewer_id='math-reviewer', author_id='problem-author',
+            context=dict(native_packet=reference)))
+        for identifier in ('math-failed', 'openness-failed'):
+            with patch('research_harness.review_transport.send_request', side_effect=OSError('failure')):
+                protocol.invoke_assignment(case.store,
+                    dict(id=identifier + '-run-1', assignment_id=identifier),
+                    expected_revision=case.store.revision, request_id=identifier + '-call',
+                    credential='fixture')
+        with patch('research_harness.review_failure_class.plan_after_failure',
+                   return_value=dict(state='run', code='fixture_failure', details={})):
+            report = cli.status_report(case.store)
+            records = case.store.snapshot()['records']
+            self.assertEqual(list_chain_heads(records, case.artifacts),
+                             ['math-failed', 'openness-failed'])
+            for identifier in ('math-failed', 'openness-failed'):
+                plan = plan_next(records, case.artifacts, identifier)
+                self.assertEqual(plan['state'], 'run')
+                self.assertEqual(plan['payload'], dict(id=identifier + '-run-2',
+                                                      assignment_id=identifier))
+        identifiers = {row.get('assignment_id') for row in report['obligations']}
+        self.assertIn('openness-failed', identifiers)
+        self.assertNotIn('math-failed', identifiers)
+        packet_path = case.root / records['review_assignment']['math-failed']['packet']['path']
+        original = packet_path.read_bytes()
+        for corruption in ('missing', 'corrupt'):
+            with self.subTest(packet=corruption):
+                try:
+                    if corruption == 'missing':
+                        packet_path.unlink()
+                    else:
+                        packet_path.write_bytes(b'corrupt packet')
+                    with patch('research_harness.review_failure_class.plan_after_failure',
+                               return_value=dict(state='run', code='fixture_failure', details={})):
+                        report = cli.status_report(case.store)
+                    identifiers = {row.get('assignment_id') for row in report['obligations']}
+                    self.assertIn('openness-failed', identifiers)
+                    self.assertNotIn('math-failed', identifiers)
+                finally:
+                    packet_path.write_bytes(original)
 
     def test_a_recorded_problem_post_finishes_every_chain(self):
         fixture = self.fixture()

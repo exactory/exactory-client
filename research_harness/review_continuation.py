@@ -176,6 +176,12 @@ def _describe_wait():
     return (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
 
 
+def plan_route_handoff(assignment):
+    """Name the agent action required to record a current runtime route."""
+    return dict(state='handoff', command='review-route', code='review_route_runtime_stale',
+                details=dict(assignment_id=assignment['id'], route_id=assignment['route_id']))
+
+
 def _plan_pending_call(records, assignment):
     for invocation in records.get('review_invocation', {}).values():
         if invocation['assignment_id'] != assignment['id']:
@@ -349,6 +355,8 @@ def _plan_head(records, artifacts, assignment):
     if failed or unverified:
         from .review_failure_class import plan_after_failure
         result = copy.deepcopy(plan_after_failure(records, artifacts, assignment['id']))
+        if result['state'] == 'stop' and result.get('code') == 'review_route_runtime_stale':
+            return plan_route_handoff(assignment)
         if result['state'] == 'replace':
             if assignment['role'] == 'native_math' and not assignment.get('context', {}).get('prior_assignment_id'):
                 packet = protocol._read_json(artifacts, assignment['packet'])
@@ -458,6 +466,14 @@ def annotate_review_obligations(records, artifacts, report):
         for identifier in list_chain_heads(records, artifacts):
             if identifier in represented:
                 continue
+            assignment = records['review_assignment'][identifier]
+            if assignment['role'] == 'native_math':
+                try:
+                    packet = protocol._read_json(artifacts, assignment['packet'])
+                except (ResearchError, json.JSONDecodeError):
+                    continue
+                if not openness_reading.is_openness_packet(packet['native']):
+                    continue
             state = protocol.assignment_state(records, artifacts, identifier)
             rows.extend(dict(item, assignment_id=identifier) for item in state.get('obligations', []))
             binding = records.get('review_attempt', {}).get(state.get('attempt_id'))
@@ -480,6 +496,7 @@ def annotate_review_obligations(records, artifacts, report):
             if report.get('next') is None:
                 report['next'] = report['obligations'][0]
     result = dict(report)
+    staged_outcomes = None
     for key in ('obligations', 'manuscript_obligations', 'objective_obligations'):
         if key not in report:
             continue
@@ -489,6 +506,18 @@ def annotate_review_obligations(records, artifacts, report):
             identifier = item.get('assignment_id') or item.get('controller_assignment_id')
             if identifier in records.get('review_assignment', {}):
                 item['next'] = describe_next_actions(records, artifacts, identifier, item.get('next', []))
+            elif records.get('review_epoch'):
+                # Legacy staged diagnostics have no assignment identity in the
+                # gate digest. Resolve their controllers only in the reader.
+                if staged_outcomes is None:
+                    from .problem_delivery import collect_review_outcomes
+                    staged_outcomes = [row for row in collect_review_outcomes(records, artifacts)
+                                       if row['epoch'] is not None]
+                identifiers = [row['assignment']['id'] for row in staged_outcomes
+                               if original in row['state'].get('obligations', [])]
+                if identifiers:
+                    item['next'] = [action for identifier in identifiers for action in
+                        describe_next_actions(records, artifacts, identifier, item.get('next', []))]
             rows.append(item)
         result[key] = rows
     if report.get('preparation'):
@@ -496,8 +525,14 @@ def annotate_review_obligations(records, artifacts, report):
     if report.get('next') is not None:
         upcoming = report['next']
         if 'code' in upcoming:
-            identifier = upcoming.get('assignment_id') or upcoming.get('controller_assignment_id')
-            if identifier in records.get('review_assignment', {}):
-                result['next'] = dict(upcoming, next=describe_next_actions(
-                    records, artifacts, identifier, upcoming.get('next', [])))
+            annotated = next((item for original, item in zip(
+                report.get('obligations', []), result.get('obligations', []))
+                if original == upcoming), None)
+            if annotated is not None:
+                result['next'] = dict(annotated)
+            else:
+                identifier = upcoming.get('assignment_id') or upcoming.get('controller_assignment_id')
+                if identifier in records.get('review_assignment', {}):
+                    result['next'] = dict(upcoming, next=describe_next_actions(
+                        records, artifacts, identifier, upcoming.get('next', [])))
     return result
