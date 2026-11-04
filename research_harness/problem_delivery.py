@@ -337,12 +337,19 @@ def assess_post(records, artifacts):
         milestone = "value"
     if posted is not None:
         milestone = "post"
+    posted_state = {}
+    if posted is not None:
+        after_post = [dict(row, reason=row.get("reason", row["explanation"])) for row in unique
+                      if row["code"] != "problem_already_posted"]
+        unique = [row for row in unique if row["code"] == "problem_already_posted"]
+        posted_state = dict(after_post=after_post,
+                            post=dict(posted, gate=posted.get("gate", "passed")))
     slots = {"slot_outcomes": collect_staged_slots(outcomes)} if records.get("review_epoch") else {}
     return dict({"ready": not unique, "obligations": unique, "counts": {"obligations": len(unique)},
             "digest": digest({"problem_evidence_digest": evidence_digest, "decision": decision, "obligations": unique}),
             "orchestration": "problem_creation", "milestone": milestone,
             "problem_evidence_digest": evidence_digest, "statement_id": None if statement is None else statement["id"],
-            "decision_id": None if decision is None else decision["id"]}, **slots)
+            "decision_id": None if decision is None else decision["id"]}, **slots, **posted_state)
 
 
 def prepare_decision(records, artifacts, value, revision):
