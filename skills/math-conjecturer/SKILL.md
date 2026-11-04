@@ -400,22 +400,54 @@ result and its source; start no solver work to reproduce an established result.
    the record. Run it with `review-run`.
 6. When the receipt of that assignment shows `reading_chain`, one input of the route cannot hold
    every unit of the packet complete, or the units together exceed the 120,000 characters of one
-   turn, and the reviewer reads them in a chain of turns. The units are the full texts of the
-   readings and the packet's own records (the bound search records, the reading records and the
-   statement record). Each turn is a fresh input with at most 120,000 characters of new units:
-   whole full texts or consecutive parts of a longer text, and after the full texts the records
-   as exact JSON text. The reviewer keeps notes and verbatim excerpts, and the harness checks
-   every excerpt against the exact bytes of its unit. Run the chain to its end:
+   turn, and the reviewer reads them in a chain of turns. A new chain records the protocol
+   `exactory-openness-reading-v5` (prompt templates `exactory-openness-reading-v5/reading` and
+   `exactory-openness-reading-v5/final`). A chain that an earlier release started under
+   `exactory-openness-reading-v4` continues as v4, with the v4 templates. The units are the full
+   texts of the readings and the packet's own records (the bound search records, the reading
+   records and the statement record). Under v5 the bound search records travel in two kinds of
+   unit: each exact canonical value of `dispositions`, `queries`, `responses` or `scope` that two
+   or more bound searches share travels once as a shared body (`record_kind:
+   "search_shared_field"`), and each search that uses shared fields travels as a residual
+   (`record_kind: "search_residual"`) that holds its other fields and the digests of the shared
+   bodies it uses. A search that shares no value travels as its original body. A bound search
+   receives delivery credit after authenticated, valid reading turns of the same chain deliver
+   every required body, whole or in every part. These bodies are its residual and shared field
+   bodies when it uses shared fields, or its original body otherwise. The harness verifies the
+   exact original canonical bytes and digest. Every bound search keeps its own digest, and the
+   reviewer judges each formulation's search on its own. An excerpt or a passage request about
+   a shared body or a residual names the owning original search with `record_kind:
+   "literature_search"` and its `record_id`. Each turn is a
+   fresh input with at most 120,000 characters of new units: whole full texts or consecutive
+   parts of a longer text, and after the full texts the records as exact JSON text. The reviewer
+   keeps notes and verbatim excerpts, and the harness checks every excerpt against the exact
+   bytes of its unit. Run the chain to its end:
    - Assign the next turn with the same reviewer, route, author and packet and
      `context: {native_packet, prior_assignment_id}`, where `prior_assignment_id` names the turn
      that just ran. Run it with `review-run`. Repeat while the new assignment is a reading turn
-     (prompt template `exactory-openness-reading-v4/reading`). A text of 300,000 characters takes
+     (prompt template `exactory-openness-reading-v5/reading`, or
+     `exactory-openness-reading-v4/reading` in a v4 chain). A text of 300,000 characters takes
      three reading turns, so a chain over several long texts and their records has many turns. A
      chain that an earlier release started, under `exactory-openness-reading-v3` or before,
-     continues in the same way: its next turn records `exactory-openness-reading-v4`, and its next
-     turns read the units that no reading turn delivered, full texts first and then the records.
-     Each turn's answer is checked under the protocol of its own packet, so a turn built under v3
-     keeps v3's rules.
+     continues in the same way: its next turn records `exactory-openness-reading-v4`, not v5, and
+     its next turns read the units that no reading turn delivered, full texts first and then the
+     records. Each turn's answer is checked under the protocol of its own packet, so a turn built
+     under v3 keeps v3's rules.
+   - In a v5 chain the result of every `review-assignment` that succeeds, from the first turn to
+     the final turn, carries `diagnostics.final_input`. The harness measures it before the
+     reviewer runs. The report is part of the command receipt and remains separate from the
+     saved assignment and scientific packet. It gives the route limit (`input_limit_characters`),
+     the mandatory final-input floor (`input_characters`), `headroom_upper_bound_characters` (the
+     limit minus the floor), `mandatory_components`, `planned_removable_texts` (each selected
+     text that the final turn may withhold, with `deliveries`, the verified turns that delivered
+     it, empty until its delivery is complete), `remaining_allowances` (the remaining excerpt and
+     passage characters) and `capacity_warning`. `capacity_warning: true` means that the headroom
+     cannot hold both remaining allowances: the final input may stop fitting as the chain's
+     excerpts and passages grow. The warning reports a capacity risk. The assignment remains
+     valid and the chain continues. On a route whose representation gives no sound measurement,
+     `status` is `"unknown"` and the floor, the headroom and the warning are null. Keep the
+     floor, the headroom and the warning of every turn in your report. A floor above the limit
+     is still refused with `review_input_too_large` and `phase: "final_preflight"` (below).
    - When a turn's run ends without output, for example at the route timeout, assign the next
      turn again with the same `prior_assignment_id`. The new assignment replaces the failed turn,
      which can no longer be run or continued (`review_assignment_replaced`). When the first turn
@@ -433,38 +465,56 @@ result and its source; start no solver work to reproduce an established result.
      by a sibling turn (`review_source_continuation_fork`): export the packet again under a new
      assignment id and start a new chain, and keep both diagnostics in your report.
    - The assignment after the last reading turn is the final turn (prompt template
-     `exactory-openness-reading-v4/final`): the native packet with the reading record of the
-     earlier turns. To fit the route's input limit it withholds, only as far as needed, the bodies
-     that reading turns delivered complete (full texts from the end of `text_priority`, then the
-     other full texts, the reading records and the search records, largest first within each
-     kind), each replaced by a note naming the turns that delivered it, and then the notes of the
-     earliest turns, oldest first. It never withholds an excerpt, a passage, the statement or the
-     formulations. When it returns a reading answer with passage requests, assign one more final
-     turn in the same way. Under `exactory-openness-reading-v4` at least one of those requests
-     must deliver characters: its anchor is found in a bound body, and its characters fit the
-     remaining passage allowance. A reading answer in which no request delivers characters is an
-     output refusal (`invalid_reading_response`, `path` `/passage_requests`), handled as above:
-     run `review-run` on the same turn again, and the chain does not continue from the refused
-     answer.
+     `exactory-openness-reading-v5/final`, or `exactory-openness-reading-v4/final` in a v4
+     chain): the native packet with the reading record of the earlier turns. A v5 final turn
+     omits the original body of each search that uses shared fields and has no independent
+     protected role, even when the route has room. Each omitted search keeps its original
+     artifact descriptor with `content: ""` and `delivery: "search-rebuilt-from-reading-turns"`.
+     The manifest and the verified receipts of the reading record describe its complete
+     delivery. A search that shares no fields follows the ordinary final-turn withholding rules
+     that follow. To fit the route's input limit it withholds, only as far as needed, the bodies
+     that reading turns delivered complete (full texts from the end of
+     `text_priority`, then the other full texts, the reading records and the search records,
+     largest first within each kind), each replaced by a note naming the turns that delivered it,
+     and then the notes of the earliest turns, oldest first. In a v5 chain a selected source text
+     of an `openness_delivery` record (step 10) is one of the full texts it may withhold when
+     reading turns of the same chain delivered that text complete and its digest has no other
+     protected role; a withheld selected text keeps its artifact descriptor with `content: ""`
+     and `delivery: "body-delivered-in-reading-turns"`, and required proof bytes and screening
+     evidence stay delivered. It never withholds an excerpt, a passage, the statement or the
+     formulations. When it returns a
+     reading answer with passage requests, assign one more final turn in the same way. Under
+     `exactory-openness-reading-v4` and `exactory-openness-reading-v5` at least one of those
+     requests must deliver characters: its anchor is found in a bound body, and its characters
+     fit the remaining passage allowance. A reading answer in which no request delivers
+     characters is an output refusal (`invalid_reading_response`, `path` `/passage_requests`),
+     handled as above: run `review-run` on the same turn again, and the chain does not continue
+     from the refused answer.
    - When `review-assignment` refuses the final turn with `review_input_too_large`, the refusal
      names the size of each part: the base packet, the notes, the excerpts and the passages. What
-     remains is protected evidence, the statement, and the excerpts and passages that the
-     allowances let the chain keep; a new export does not reduce it. Report the four sizes to the
-     owner and wait for the owner's decision.
+     remains after every withholding is the protected evidence, the statement, and the excerpts
+     and passages that the allowances let the chain keep. Re-exporting the same records preserves
+     their mandatory evidence. A new chain starts with empty excerpt, passage and note lists, so
+     its final turn carries only what its own turns gather. Report the four sizes to the owner
+     and wait for the owner's decision.
    - When `review-assignment` refuses a turn with `review_input_too_large` and `phase:
      "final_preflight"`, before that turn is planned, the mandatory final input already exceeds
      the route's limit: the statement record, the protected source and screening bodies, the
-     required proof bytes, the excerpts and passages gathered so far and the final prompt. The
-     chain cannot finish on that route with that material, whichever turns it reads, and nothing
-     was written. `mandatory_components` names each body with its kind, SHA-256 and size, and a
-     new export of the same record measures the same; a registered route with a larger input
-     limit can hold a new chain. Report the components to the owner and wait for the owner's
-     decision.
+     required proof bytes, the excerpts and passages gathered so far, the final prompt and, in a
+     v5 chain, the search manifest. In a v5 chain the floor counts a selected text that the final
+     turn may withhold as empty. The chain cannot finish on that route with that material,
+     whichever turns it reads, and nothing was written. `mandatory_components` names each body
+     with its kind, SHA-256 and size. Re-exporting the same records preserves their mandatory
+     evidence. A new chain starts with empty excerpt and passage lists, so its initial measured
+     lower bound can be smaller. A registered route with a larger input limit can hold a new
+     chain. Report the components to the owner and wait for the owner's decision.
 7. Record the observed finding with `exactory-research problem-openness` and
    `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
    native result. For a chain, the record adds `reading_turns`, and every unit of the packet, full
    texts and records, must have reached a reading turn complete or arrived complete in the final
-   turn's request (`openness_reading_incomplete` names the missing ones by kind and identity).
+   turn's request (`openness_reading_incomplete` names the missing ones by kind and identity). In
+   a v5 chain, the entry of the first reading turn that completes an original search under the
+   delivery rule of step 6 lists that search under `completed_searches`.
 8. On `unresolved`, fill the recorded gap and obtain a new finding.
 9. On `already_solved`, redirect to the settling result, or record a new statement.
 10. When a neighbour is added, a new material search is not bound, a bound search or reading
@@ -486,7 +536,10 @@ result and its source; start no solver work to reproduce an established result.
    artifact only when its size and SHA-256 match. This never substitutes a partial excerpt,
    normalized text or an omitted container, and it makes no claim that omitted original layout
    was delivered. Recording and later assessment check the actual request and current source
-   bindings. Historical packets without this delivery record retain their original behavior.
+   bindings. In a v5 reading chain the final turn may withhold a selected text that reading turns
+   of the same chain delivered complete (step 6), and the recording derives that delivery from
+   the authenticated requests again. Historical packets without this delivery record retain
+   their original behavior.
 
 ## Value and the rubric
 

@@ -3266,17 +3266,21 @@ artifact; a part of a record or of a captured response is saved as plain text
 
 For v5 the logical record catalog above remains the citation catalog. Physical
 search delivery follows the full texts: shared field bodies in first-use order
-in the minimum, then residual searches in minimum order, then the other records.
+in the minimum, then each search's residual or unchanged original body in
+minimum order, then the other records.
 A shared unit uses `record_kind: "search_shared_field"`, names its `field`,
 and lists all original owning searches and formulations in `owners`. A residual
 unit uses `record_kind: "search_residual"` and retains `record_id` and
 `search_digest`. Its JSON envelope has disjoint inline `fields` and
 `shared_fields`, a field-to-digest map. These bodies follow the same consecutive
 part rule and share the 120,000-character reading budget. The reviewer must
-assess every formulation separately even when its judgments share bytes.
-Excerpts and passage requests from either kind still cite an owning original
-`literature_search`, with its original `record_id`, digest and canonical JSON
-offsets. Physical component identities are not excerpt identities.
+assess every formulation separately, including formulations whose searches
+contain identical field values. For excerpts and passage requests about shared
+fields or residuals, use `record_kind: "literature_search"` and the owning
+original search's `record_id`. The harness checks the text against the
+canonical JSON of that original record and keeps the span's offsets and SHA-256
+in the reading record. An identity of kind `search_shared_field` or
+`search_residual` is refused with `invalid_reading_response`.
 
 A reading turn is a fresh input without the earlier turns. Its packet holds
 `reading_turn`: the subject digest, claim digest and reviewer of the native
@@ -3346,10 +3350,12 @@ and every text that the allowance rules retained.
 A v5 record also carries the frozen `search_delivery` manifest and derived
 `search_receipts`. A receipt identifies the original search digest and every
 component used to reconstruct it, with the delivering assignment, attempt and
-whole-body or part span and digest. A search receives credit only after
-authenticated, valid reading turns of this same chain deliver its residual
-and every part of every shared field it uses, and reconstruction reproduces
-the exact original canonical bytes and digest. A saved artifact, manifest,
+whole-body or part span and digest. A bound search receives delivery credit
+after authenticated, valid reading turns of the same chain deliver every
+required body, whole or in every part. These bodies are its residual and
+shared field bodies when it uses shared fields, or its original body
+otherwise. The harness verifies the exact original canonical bytes and digest.
+A saved artifact, manifest,
 planned unit, reviewer assertion, excerpt or passage supplies no such credit.
 
 The final turn is the native packet, its evidence and the reading record, on
@@ -3388,6 +3394,9 @@ other routes, including declared units' original and asset descriptors before
 transport projection. When several full-text units have the same digest,
 coverage keeps each unit's delivering turns. Final withholding and source
 validation both select the first complete unit by identity for that digest.
+A withheld selected text keeps its artifact descriptor with `content: ""` and
+`delivery: "body-delivered-in-reading-turns"`, the label of every withheld body
+below, and a note that names the turns that delivered it.
 Source validation derives coverage again from authenticated requests; saved
 receipts alone give no credit. Existing proof-container
 containment still applies. Generic route fitting continues to protect selected
@@ -3405,8 +3414,10 @@ records the assignment. The details give `input_characters`,
 passages}`, the characters that the reduced request spends on each part; the
 four parts add up to the input characters, and the message names all four.
 What remains at that point is protected evidence, the statement, and the
-excerpts and passages that the allowances let the chain keep. A new export of
-the same record does not reduce them.
+excerpts and passages that the allowances let the chain keep. Re-exporting the
+same records preserves their mandatory evidence. A new chain starts with empty
+excerpt, passage and note lists, so its final turn carries only what its own
+turns gather.
 
 The mandatory final input is measured before the chain reads. Before the
 first reading turn of a new chain writes its part artifacts, and before each
@@ -3421,13 +3432,16 @@ input limit, `review-assignment` refuses with `review_input_too_large` and
 the details `phase: "final_preflight"`, `measurement_kind:
 "mandatory_input_lower_bound"`, `input_characters`, `input_limit_characters`
 and `mandatory_components`, one entry per component with its `kind`
-(`evidence`, `final_prompt`, `native_context`, `excerpt` or `passage`), its
-`sha256`, its `size_bytes` and its `characters`; an `evidence` entry also
-carries its `encoding` and `delivery`. Nothing is written: no assignment, no
+(`evidence`, `final_prompt`, `native_context`, `excerpt`, `passage` or, in a
+v5 chain, `search_manifest`), its `sha256`, its `size_bytes` and its
+`characters`; an `evidence` entry also carries its `encoding` and `delivery`.
+Nothing is written: no assignment, no
 part artifact and no observation. The refusal means that the chain cannot
 finish on that route with that mandatory material, whichever turns it reads,
-and the components show which bodies to examine; a new export that binds the
-same records measures the same. The measurement is made where the
+and the components show which bodies to examine. Re-exporting the same records
+preserves their mandatory evidence. A new chain starts with empty excerpt and
+passage lists, so its initial measured lower bound can be smaller. The
+measurement is made where the
 representation gives a sound lower bound: `claude_cli_v1`, `codex_cli_v1`
 and `codex_cli_framed_v1` without a text encoding. On the visual route, on
 `codex_cli_framed_v1` with `scientific_context.review_text_encoding`, for a
@@ -3583,7 +3597,8 @@ The final turn withholds the full texts largest first, then the captured
 responses, the reading records and the search records, each kind largest first,
 and then the earliest notes. Two rules are added. The first is the passage rule
 of a final turn, which a problem chain under `exactory-openness-reading-v4`
-shares since 0.71.0. A reading answer in a final turn must request at least one
+shares since 0.71.0 and a problem chain under `exactory-openness-reading-v5`
+shares as well. A reading answer in a final turn must request at least one
 passage that the harness delivers from a bound body within the remaining
 allowance. An answer whose requests are all not found, name no single stored
 body or exceed the allowance is refused with `invalid_reading_response`
@@ -3620,10 +3635,10 @@ Refusal codes of a reading chain:
 - `invalid_reading_response`: a malformed reading answer, an excerpt or passage
   request with mixed identity fields, a reading answer in a final turn without
   a passage request, one after the passage allowance is used up, or, in a math
-  chain or a problem chain under `exactory-openness-reading-v4`, a reading
-  answer in a final turn whose passage requests all deliver no characters.
-  `review-run` records it as an output refusal, and `review-assignment`
-  refuses to continue from it.
+  chain or a problem chain under `exactory-openness-reading-v4` or
+  `exactory-openness-reading-v5`, a reading answer in a final turn whose
+  passage requests all deliver no characters. `review-run` records it as an
+  output refusal, and `review-assignment` refuses to continue from it.
 - `review_source_continuation_mismatch`: the next turn names another packet,
   reviewer, route or author, or a turn that is not part of a reading chain.
 - `review_source_continuation_fork`: another turn already continues the named
