@@ -199,8 +199,11 @@ def validate_observed(records, artifacts, assignment, attempt_id):
         validate(artifacts, logical, has_delivery=lambda reference:
                  parts.has_series_attachment(artifacts, verified['packets'], reference))
         if not verified['complete']:
+            from .review_continuation import describe_next_actions
             raise ResearchError('review_parts_pending',
-                'Complete the focused parts series before its disposition can bind.', verified['issues'])
+                'Complete the focused parts series before its disposition can bind.',
+                dict(verified['issues'], assignment_id=assignment['id'],
+                     next=describe_next_actions(records, artifacts, assignment['id'])))
         return
     if assignment.get('staged_review') is not None:
         validate_staged(records, artifacts, assignment, frozen)
