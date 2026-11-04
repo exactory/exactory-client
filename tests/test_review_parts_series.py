@@ -20,6 +20,47 @@ class SeriesTests(PartsResultCase):
         self.assertGreater(result['issues']['count'],0)
         self.assertLessEqual(len(result['issues']['examples']),20)
 
+    def test_warm_derivations_keep_each_turns_actual_recorded_request(self):
+        import json
+        from unittest.mock import patch
+        from research_harness import review_protocol as protocol, review_transport as transport
+        from research_harness import review_input_projection as projection
+        from research_harness.evaluation import Evaluation
+        from research_harness.evidence import digest
+        self.oversized()
+        turns, final = self.finish_series()
+        self.record_final(final)
+        records = self.case.read_records()
+        evaluation = Evaluation(records, self.case.artifacts)
+        assignments = turns + [final]
+        for assignment in records['review_assignment'].values():
+            protocol.build_assignment_request(records, evaluation, assignment)
+        expected = []
+        for assignment in assignments:
+            attempt = records['review_attempt']['attempt-' + assignment['id']]
+            request = json.loads(self.case.artifacts.read(attempt['request']))
+            self.assertEqual(digest(request), attempt['request_digest'])
+            self.assertTrue(protocol.authenticate_attempt(records, evaluation, assignment, attempt))
+            self.assertEqual(protocol.build_assignment_request(records, evaluation, assignment), request)
+            expected.append(request)
+        with patch.object(projection, 'packets_from_request', wraps=projection.packets_from_request) as project, \
+                patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+            report = parts.verify_series(records, evaluation, final['id'])
+            delivery = parts.read_series_delivery(records, evaluation, final['id'])
+        self.assertTrue(report['complete'], report)
+        actual = [call.args[0] for call in project.call_args_list]
+        for request in expected:
+            self.assertIn(request, actual)
+        self.assertEqual(derive.call_count, 0)
+        self.assertEqual(delivery['actual_packets'], report['packets'])
+        forged = copy.deepcopy(records)
+        attempt = forged['review_attempt']['attempt-' + turns[0]['id']]
+        request = copy.deepcopy(expected[0])
+        request['instructions'] += ' Forged instructions'
+        attempt['request'] = protocol._put_json(self.case.artifacts, request)
+        attempt['request_digest'] = digest(request)
+        self.assertFalse(parts.verify_series(forged, Evaluation(forged, evaluation), final['id'])['complete'])
+
     def test_skipped_unit_missing_card_and_pair_are_incomplete(self):
         self.oversized(); turns,final=self.finish_series(); self.record_final(final)
         for kind in ('read','combine'):

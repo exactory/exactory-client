@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.72.2](docs/releases/0.72.2.md) makes a command derive each review request of an assignment once and share it between request selection and attempt authentication. On a problem record with 141 review assignments, one `status` called the request builder 1,214 times on 102 distinct inputs. The requests, packets, reports and refusals do not change, and no route-pinned module changed.
+
 Version [0.72.1](docs/releases/0.72.1.md) adds the protocol `exactory-openness-reading-v5` for new problem openness reading chains. Search fields that several bound searches share arrive once, and the harness rebuilds every original search from the delivered parts before it gives credit. A v5 final turn can withhold a selected source text that earlier turns delivered completely, and each `review-assignment` reports the final-input headroom. Chains that earlier releases started continue under their own protocol.
 
 Version [0.72.0](docs/releases/0.72.0.md) delivers a review whose input does not fit one route input as a series of fresh-input turns (`exactory-review-parts-v2`): read, combine, check and final, with an append-only inventory, verified statements that keep their locations and a state budget that makes the final fit. The problem result, the focused adjudication, the context repairs, the study verification and readiness reviews and the native mathematics review use it. Six focused adjudications that 0.71.x refused with `review_input_too_large` plan as such series on record copies. The quality of a parts series against a single-input review is not yet measured. It also bounds the retained reviewer excerpt state (`exactory-review-excerpts-v3`).

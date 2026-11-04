@@ -36,7 +36,9 @@ def runtime_scope(records, artifacts):
         yield evaluation
         return
     before = _runtime_fingerprint(evaluation.records, evaluation)
-    scope = {'fingerprint': before, 'arenas': {id(root._optional): (root._optional, root._retained_bytes)}}
+    scope = {'fingerprint': before, 'arenas': {
+        id(root._optional): (root._optional, root._retained_bytes),
+        id(root._requests): (root._requests, root._request_bytes)}}
     root._runtime_scope[0] = scope
     previous = getattr(records, '_review_evaluation', None)
     # Preparation mappings carry ownership to callbacks that still accept the
@@ -50,8 +52,8 @@ def runtime_scope(records, artifacts):
         if before is not None and _runtime_fingerprint(evaluation.records, evaluation) != before:
             raise ResearchError('review_runtime_changed', 'The reviewer runtime changed during this operation; retry against the current runtime.')
     except BaseException:
-        for optional, retained_bytes in scope['arenas'].values():
-            optional.clear()
+        for entries, retained_bytes in scope['arenas'].values():
+            entries.clear()
             retained_bytes[0] = 0
         raise
     finally:

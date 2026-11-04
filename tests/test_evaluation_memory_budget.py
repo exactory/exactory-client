@@ -9,6 +9,36 @@ from research_harness.source_links import read_locator
 
 
 class EvaluationMemoryBudgetTests(LiteratureCase):
+    def test_requests_have_a_protected_half_budget_and_ordinary_entries_borrow_the_rest(self):
+        evaluation = Evaluation({}, self.artifacts, retention_budget_bytes=24000)
+        first = evaluation.once('ordinary', lambda: b'x' * 17000)
+        self.assertGreater(evaluation.retention_report()['optional_bytes'], 12000)
+        evaluation.request_once(('first',), lambda: b'a' * 7000)
+        report = evaluation.retention_report()
+        self.assertEqual(report['request_entries'], 1)
+        self.assertLessEqual(report['request_bytes'], 12000)
+        self.assertLessEqual(report['optional_bytes'], 24000)
+        self.assertIsNone(evaluation._retain_once(('memo', evaluation._namespace, 'ordinary'), None))
+        evaluation.once('another', lambda: b'y' * 17000)
+        self.assertEqual(evaluation.request_once(('first',), lambda: self.fail('Ordinary insertion evicted a request')), b'a' * 7000)
+        evaluation.request_once(('second',), lambda: b'b' * 7000)
+        self.assertIsNone(evaluation.request_once(('first',), None))
+        self.assertEqual(evaluation.retention_report()['request_entries'], 1)
+        self.assertEqual(first, b'x' * 17000)
+
+    def test_request_lru_is_shared_across_views_and_overrides_isolate_budgets(self):
+        root = Evaluation({}, self.artifacts, retention_budget_bytes=30000)
+        child = Evaluation({}, root)
+        small = Evaluation({}, root, retention_budget_bytes=1)
+        root.request_once(('one',), lambda: b'a' * 5000)
+        child.request_once(('two',), lambda: b'b' * 5000)
+        root.request_once(('one',), None)
+        child.request_once(('three',), lambda: b'c' * 5000)
+        self.assertIsNone(root.request_once(('two',), None))
+        self.assertEqual(child.request_once(('one',), None), b'a' * 5000)
+        self.assertIsNone(small.request_once(('one',), None))
+        self.assertEqual(root.retention_report(), child.retention_report())
+
     def test_payload_eviction_reverifies_and_catches_tampering(self):
         evaluation = Evaluation({}, self.artifacts, retention_budget_bytes=12000)
         references = [self.artifacts.put(bytes([n]) * 8000, 'application/octet-stream') for n in range(5)]
