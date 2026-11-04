@@ -1700,7 +1700,7 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
 
 
 def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
-                   base_prompt_parameters=None, slot_id=None):
+                   base_prompt_parameters=None, slot_id=None, legacy_refusal=None):
     """Enter or continue parts with the same base prompt and adapter-owned series key."""
     from . import review_problem_parts as legacy, review_transport as transport
     from .review_parts_roles import find_adapter, get_adapter
@@ -1718,7 +1718,13 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     old_header = previous.get(KEY, {})
     continuing = (find_kind(previous) is not None and not refreshed
                   and old_header.get('adapter') == adapter and old_header.get('series_key') == series_key)
-    if legacy.is_continuing_series(records, previous, packet, prior_id):
+    continuing_legacy = legacy.is_continuing_series(records, previous, packet, prior_id)
+    if legacy_refusal is not None:
+        if (legacy_refusal.code != 'review_input_too_large' or adapter != 'problem_result'
+                or not continuing_legacy):
+            raise legacy_refusal
+        continuing = False
+    elif continuing_legacy:
         return packet
     previous_inventory = None
     if continuing:
@@ -1730,10 +1736,11 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                 raise
             continuing = False
     if not continuing:
-        ordinary = transport.request_body(route, prompt['text'], packet, history)
-        if (legacy._measure(route, ordinary) <= transport.local_input_limit(route)
-                and legacy.preserves_ordinary_packet(artifacts, packet, ordinary)):
-            return packet
+        if legacy_refusal is None:
+            ordinary = transport.request_body(route, prompt['text'], packet, history)
+            if (legacy._measure(route, ordinary) <= transport.local_input_limit(route)
+                    and legacy.preserves_ordinary_packet(artifacts, packet, ordinary)):
+                return packet
         inventory = build_inventory(packet, adapter)
     observations = observe_series(records, artifacts, prior_id) if continuing else []
     series_id = old_header['series_assignment_id'] if continuing else value['id']
@@ -1750,6 +1757,9 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                                     review_excerpts.carry_session(records, artifacts, {}, {})})
         base_prompt_parameters['excerpts'] = True
     packet = dict(packet)
+    if adapter == 'problem_result' and not continuing and 'continuation' in packet:
+        packet['continuation'] = dict(packet['continuation'])
+        packet['continuation'].pop('scientific_context', None)
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
     logical_reference = artifacts.put(render_json(packet).encode('utf-8'), 'application/json')
@@ -1770,10 +1780,33 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
                 raise
         return legacy._measure(route, transport.request_body(route, turn_prompt['text'], candidate, [], order=()))
 
-    planned = plan_turn(packet, inventory, observations, series_id=series_id,
-        input_limit=transport.local_input_limit(route), measure=measure,
-        output_tokens=route['configuration']['max_output_tokens'], replacement=replacement,
-        inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key)
+    # Search captures are provenance, unless a unit or a source delivery owns
+    # their bodies. Reduce only prospective packets; frozen inventories and
+    # request reconstruction retain the exact preparation recorded before.
+    reductions = iter(())
+    if adapter == 'problem_result':
+        fit = transport._Fit(copy.deepcopy(packet), [], transport.FIT_ORDER)
+        fit.protected.update(body['artifact']['sha256'] for unit in inventory['units'] for body in unit['bodies'])
+        from .review_protocol import collect_references
+        fit.protected.update(reference['sha256'] for reference in collect_references(packet.get('source_deliveries', [])))
+        reductions = transport._reduce_search_responses(fit)
+    while True:
+        try:
+            planned = plan_turn(packet, inventory, observations, series_id=series_id,
+                input_limit=transport.local_input_limit(route), measure=measure,
+                output_tokens=route['configuration']['max_output_tokens'], replacement=replacement,
+                inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key)
+            break
+        except ResearchError as error:
+            if error.code not in ('review_parts_frame_too_large', 'review_parts_final_too_large',
+                                   'review_parts_inventory_too_large', 'review_parts_no_progress'):
+                raise
+            if next(reductions, False) is False:
+                raise
+            packet = copy.deepcopy(fit.supplied)
+            packet.pop('digest', None)
+            packet['digest'] = digest(packet)
+            logical_reference = artifacts.put(render_json(packet).encode('utf-8'), 'application/json')
     for entry in planned.get('evidence', []):
         if entry.get('segment'):
             reference = artifacts.put(entry['content'].encode('utf-8'), entry['artifact']['media_type'])

@@ -267,6 +267,16 @@ def _find_current_value_reviews(records):
         slot_id(records, records["review_assignment"][review["assignment_id"]])))
     superseded = {identifier for identifier in current if _has_staged_successor(
         records, records["review_assignment"][reviews[identifier]["assignment_id"]])}
+    from .research_decisions import select_problem_slot_assignments
+    for identifier in current:
+        review = reviews[identifier]
+        if review['payload']['stage'] != 'result' or review.get('subject', {}).get('kind') != 'problem':
+            continue
+        assignment = records['review_assignment'][review['assignment_id']]
+        heads = select_problem_slot_assignments(records, 'result', review['subject'])
+        head = heads.get(slot_id(records, assignment))
+        if head is not None and head['id'] != assignment['id']:
+            superseded.add(identifier)
     current.difference_update(superseded)
     historical.update(superseded)
     return current, historical
@@ -707,6 +717,8 @@ def _build_series(records, artifacts, inputs):
                 "adopted_by": adoptions.get(identifier, [])})
             if parts_progress is not None:
                 turns[-1]['review_parts'] = parts_progress
+            if assignment.get('review_parts_restart'):
+                turns[-1]['review_parts_restart'] = assignment['review_parts_restart']
             if assignment.get("staged_review", {}).get("kind") == "task":
                 turns[-1]["task_id"] = assignment["staged_review"]["task_id"]
             if identifier in controllers:
@@ -728,6 +740,11 @@ def _build_series(records, artifacts, inputs):
         document = {"schema": _SERIES_SCHEMA_NAME, "role": root["role"], "root_assignment_id": root_id,
                     "slot_id": slot, "replaced_by_series": replacements[0]["id"] if replacements else None,
                     "turns": turns}
+        restarts = [dict(other['review_parts_restart'], successor_assignment_id=other['id'])
+                    for other in assignments.values() if other.get('review_parts_restart')
+                    and other.get('history_assignment_id') in {member['id'] for member in members}]
+        if restarts:
+            document['review_parts_restarts'] = restarts
         files[folder + "series.json"] = ViewFile(_encode(document), _describe("review_assignment", root_id, root))
     return files
 
