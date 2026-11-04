@@ -20,6 +20,8 @@ KINDS = ('read', 'combine', 'check', 'final')
 STATE_KEY = 'review_parts_state'
 READ_CHARACTERS = 600000
 CARD_CHARACTERS = 80000
+CARD_FLOOR_CHARACTERS = 4000
+FINDING_FLOOR_CHARACTERS = 2000
 OUTPUT_CHARACTERS = 60000
 STATEMENT_CHARACTERS = 6000
 STATEMENTS_CHARACTERS = 40000
@@ -522,6 +524,39 @@ class PlanningContext:
                               self.state if state is None else state, parent_characters=parent_characters)
 
 
+def compute_read_budget(unit_characters_remaining, card_budget_remaining):
+    """Keep enough card floors for the undelivered item and body characters.
+
+    Read turns add cards. Combination room and the findings floor per pending
+    combination remain governed by their own planners.
+    """
+    if (type(unit_characters_remaining) is not int
+            or type(card_budget_remaining) is not int):
+        return None
+    remaining = max(0, unit_characters_remaining)
+    available = card_budget_remaining
+    maximum_reads = max(0, available // CARD_FLOOR_CHARACTERS)
+    floor = ((remaining + maximum_reads - 1) // maximum_reads
+             if maximum_reads else remaining)
+    return dict(unit_characters_remaining=remaining, card_budget_remaining=available,
+                maximum_read_turns=maximum_reads, unit_allowance_floor=floor)
+
+
+def describe_plan(value):
+    """Add advisory state room to a record without changing its wire packet."""
+    if 'review_parts_plan' in value:
+        return copy.deepcopy(value['review_parts_plan'])
+    header = value[KEY]
+    plan = copy.deepcopy(header['plan'])
+    floor = 0
+    if header['kind'] == 'read':
+        budget = compute_read_budget(header.get('unit_characters_remaining'),
+                                     header.get('card_budget_remaining'))
+        floor = budget['unit_allowance_floor'] if budget is not None else None
+    plan['unit_allowance_floor'] = floor
+    return plan
+
+
 def prepare_plan(packet, inventory, observations, *, series_id, input_limit, measure,
                  output_tokens, replacement=None, inventory_reference=None,
                  logical_reference=None, series_key=None):
@@ -576,16 +611,31 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
     header['state_budget'] = budgets
     header['card_budget'] = budgets['cards']
     header['plan']['unit_allowance'] = min(allowance, room)
-    if not observations and remaining:
-        _require(budgets['cards'] >= 4000, 'The final cannot hold the minimum cards',
-                 'review_parts_final_too_large', final_frame_characters=final_frame,
-                 input_limit_characters=input_limit)
-        minimum_reads = math.ceil(inventory['characters'] / max(1, min(allowance, room)))
-        _require(minimum_reads * 4000 <= budgets['cards'],
-                 'The read floors exceed the final state budget', 'review_parts_inventory_too_large',
-                 minimum_read_turns=minimum_reads, card_budget=budgets['cards'])
     context = PlanningContext(packet, inventory, list(observations), units, frame, state, header,
                               input_limit, measure, output_tokens, reads, remaining, budgets)
+    read_budget = compute_read_budget(
+        inventory['characters'] - _count_content(units, reads),
+        budgets['cards'] - len(render_json(state['cards'])))
+    if observations or replacement:
+        header['plan']['unit_allowance'] = max(
+            header['plan']['unit_allowance'], read_budget['unit_allowance_floor'])
+    if replacement and 'unit_allowance_floor' in replacement:
+        details = dict(read_budget, units_remaining=len(remaining),
+                       state_budget=budgets, input_limit_characters=input_limit)
+        details.update({key: replacement[key] for key in
+                        ('failed_assignment_id', 'unit_allowance_floor', 'state_budget',
+                         'units_remaining', 'unit_characters_remaining', 'maximum_read_turns',
+                         'card_budget_remaining', 'output_tokens', 'max_output_tokens')})
+        raise ResearchError('review_parts_budget_exhausted',
+                            'A read at the state budget floor exceeded the output cap', details)
+    if not observations and remaining:
+        _require(budgets['cards'] >= CARD_FLOOR_CHARACTERS, 'The final cannot hold the minimum cards',
+                 'review_parts_final_too_large', final_frame_characters=final_frame,
+                 input_limit_characters=input_limit)
+        minimum_reads = math.ceil(inventory['characters'] / max(1, header['plan']['unit_allowance']))
+        _require(minimum_reads * CARD_FLOOR_CHARACTERS <= budgets['cards'],
+                 'The read floors exceed the final state budget', 'review_parts_inventory_too_large',
+                 minimum_read_turns=minimum_reads, card_budget=budgets['cards'])
     if not observations:
         for unit in units:
             for body in unit['bodies']:
@@ -594,7 +644,7 @@ def prepare_plan(packet, inventory, observations, *, series_id, input_limit, mea
                 candidate = context.render('read', [dict(unit=unit['handle'], body=body['artifact']['sha256'])],
                                            state=empty)
                 _require(_read_entry_bytes(body) is not None
-                         and len(render_json(body['content'])) <= min(allowance, room)
+                         and len(render_json(body['content'])) <= header['plan']['unit_allowance']
                          and measure(candidate) <= input_limit,
                          'A non-text body cannot fit whole', 'review_parts_inventory_too_large',
                          unit=unit['handle'], body=body['artifact']['sha256'],
@@ -633,7 +683,8 @@ def plan_read(context):
     before = _count_content(context.units, context.read_packets)
     remaining_characters = max(1, context.inventory['characters'] - before)
     available = context.budgets['cards'] - len(render_json(context.state['cards']))
-    _require(available >= 4000, 'The remaining card budget is below its floor',
+    read_budget = compute_read_budget(remaining_characters, available)
+    _require(available >= CARD_FLOOR_CHARACTERS, 'The remaining card budget is below its floor',
              'review_parts_inventory_too_large', card_budget_remaining=available)
     allowance = context.header['plan']['unit_allowance']
     budget = allowance
@@ -646,7 +697,7 @@ def plan_read(context):
         provisional = context.render('read', selected, state=carried)
         characters = _count_content(context.units, context.read_packets + [provisional]) - before
         card_allowance = min(CARD_CHARACTERS, available,
-                             max(4000, available * characters // remaining_characters))
+                             max(CARD_FLOOR_CHARACTERS, available * characters // remaining_characters))
         context.header['plan'].update(card_allowance=card_allowance,
                                       unit_allowance=allowance)
         context.header['plan']['remaining_turns']['read']['estimate'] = math.ceil(
@@ -664,6 +715,14 @@ def plan_read(context):
                                     unit_characters_remaining=remaining_characters)
             measured = context.measure(result)
         if selected and characters > 0 and measured <= context.input_limit:
+            _require(not context.observations or read_budget['maximum_read_turns'] != 1
+                     or characters == remaining_characters,
+                     'The last card floor cannot deliver the remaining originals on this route',
+                     'review_parts_budget_exhausted',
+                     **dict(read_budget, units_remaining=len(context.remaining),
+                            unit_characters=characters, state_budget=context.budgets,
+                            input_limit_characters=context.input_limit,
+                            max_output_tokens=context.output_tokens))
             return result
         if not selected:
             break
@@ -795,14 +854,15 @@ def _select_combination_state(context, combinations):
 def plan_check(context):
     pending = [entry for entry in context.state['combinations'] if not entry['checked']]
     available = context.budgets['findings'] - len(render_json(context.state['findings']))
-    _require(2000 * len(pending) <= available,
+    _require(FINDING_FLOOR_CHARACTERS * len(pending) <= available,
              'The findings floors exceed the remaining budget', 'review_parts_inventory_too_large',
              combinations_remaining=len(pending), findings_budget_remaining=available)
     best = None
     for count in range(1, len(pending) + 1):
         selected = pending[:count]
         requests = [original for combination in selected for original in combination['read']]
-        allowance = min(OUTPUT_CHARACTERS, max(2000 * count, available * count // len(pending)))
+        allowance = min(OUTPUT_CHARACTERS,
+                        max(FINDING_FLOOR_CHARACTERS * count, available * count // len(pending)))
         candidate = context.render('check', requests, state=_select_combination_state(context, selected),
                                    check_combinations=[entry['id'] for entry in selected],
                                    output_allowance=allowance, findings_budget_remaining=available)
@@ -1661,6 +1721,18 @@ def find_failed_replacement(records, artifacts, value, adapter, series_key, slot
                         or replacement_key(read_logical_packet(artifacts, header)) != replacement_key(logical_packet)):
                     continue
             replacement = dict(unit_characters=header['unit_characters'], over_cap=True)
+            plan = header.get('plan') or {}
+            budget = compute_read_budget(header.get('unit_characters_remaining'),
+                                         header.get('card_budget_remaining'))
+            if (budget is not None and type(plan.get('unit_allowance')) is int
+                    and plan['unit_allowance'] <= budget['unit_allowance_floor']):
+                tokens = [(attempt.get('usage') or {}).get('output_tokens') for attempt in attempts]
+                measured_tokens = [value for value in tokens if type(value) is int]
+                replacement.update(
+                    budget, failed_assignment_id=failed['id'],
+                    state_budget=header.get('state_budget'), units_remaining=plan.get('units_remaining'),
+                    output_tokens=max(measured_tokens) if measured_tokens else None,
+                    max_output_tokens=output_tokens)
     return replacement
 
 

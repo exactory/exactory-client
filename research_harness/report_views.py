@@ -57,12 +57,13 @@ def describe_parts_turn(assignment, state, series, *, ended_without_output=False
     from . import review_parts
 
     header = assignment[review_parts.KEY]
-    plan = assignment['review_parts_plan']
+    plan = review_parts.describe_plan(assignment)
     result = {key: header[key] for key in
               ('protocol', 'adapter', 'series_assignment_id', 'kind', 'turn')}
     result['recorded_revision'] = assignment['recorded_revision']
     result.update({key: copy.deepcopy(plan[key]) for key in
                    ('unit_allowance', 'card_allowance', 'remaining_turns')})
+    result['unit_allowance_floor'] = plan.get('unit_allowance_floor')
     total = plan['units_carded'] + plan['units_remaining']
     result.update(units_carded=0, units_remaining=total)
     packets = series['packets']
