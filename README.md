@@ -226,6 +226,11 @@ review binding to objections and reassessment findings, and lets the Claude
 Code route verify a fenced JSON answer and the thinking-token accounting event
 of effort `max`.
 
+Version [0.56.0](docs/releases/0.56.0.md) gives a Claude Code session its own
+reviewer route, so that the independent reviews of a record run inside the
+session that opened it. It also repairs the defects that the first problem
+record met on 2026-10-20 and 2026-10-21.
+
 Version [0.55.1](docs/releases/0.55.1.md) corrects the delivery boundary of
 the problem reviews: a delivered passage carries a citation only when the
 receiving role can record it, the adjudicator's output is checked against the
@@ -363,8 +368,9 @@ draft workspace, from its root. A ready study records its receipt. A workspace
 that refuses the receipt gets one stderr line. A refused receipt stops no request.
 
 Version [0.40.0](docs/releases/0.40.0.md) runs `exactory submit`, `exactory
-verify`, and `exactory-draft deposit` on the user's instruction. Version 0.39.2
-enforces the final round decision at deposit, separates internal claim history
+verify`, and `exactory-draft deposit` on the user's instruction. Version
+[0.39.2](docs/releases/0.39.2.md) enforces the final round decision at deposit,
+separates internal claim history
 from blind review, and measures the three paired reviewers. Version
 [0.39.0](docs/releases/0.39.0.md) develops a paper across research rounds. At the
 end of a round, the study decides on the exact manuscript bundle to continue with
@@ -374,11 +380,16 @@ runs four searches on the consequences of the paper. It also reads in full one
 paper that developed a comparable first result further. The manuscript keeps each
 earlier claim, or marks the claim as revised or superseded. Each blind measurement
 review also predicts the cohort percentile of the paper. An optional `development`
-budget limits the number of rounds. These versions retain the proportionate
+budget limits the number of rounds. Version [0.39.1](docs/releases/0.39.1.md)
+corrects the documentation of these rounds and adds tests. These versions retain the proportionate
 literature preparation of [0.38.0](docs/releases/0.38.0.md), the shared research
 foundation of [0.36.0](docs/releases/0.36.0.md) and
 [0.37.0](docs/releases/0.37.0.md) and the mathematical strategy reassessment of
-[0.35.0](docs/releases/0.35.0.md). Read the
+[0.35.0](docs/releases/0.35.0.md). Version [0.34.0](docs/releases/0.34.0.md)
+adds the math search controller that Claude Code and Codex share. Versions
+[0.34.1](docs/releases/0.34.1.md) and [0.34.2](docs/releases/0.34.2.md) repair its
+ranking, task recovery and journal. Version [0.33.1](docs/releases/0.33.1.md) holds
+the Claude Code and Codex entrypoints, the 14 shared skills and their hooks. Read the
 [release notes](docs/releases/0.42.1.md) and the
 [upgrade notes of 0.39.0](docs/releases/0.39.0.md) before updating a waiting agent
 or adopting an existing attack. An update does not resume paused research or reset
