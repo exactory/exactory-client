@@ -35,6 +35,8 @@ def build_sized_body(number, characters):
 
 class OpennessReadingCase(ProblemCase):
     text_sizes = None
+    # Historical unit, withholding and prompt expectations stay explicit under v4. V5 cases set this to None.
+    reading_protocol = 'exactory-openness-reading-v4'
 
     def build_text(self, number):
         """The full text of work `number`: the short default body, or a body of the case's own size."""
@@ -44,6 +46,10 @@ class OpennessReadingCase(ProblemCase):
 
     def setUp(self):
         super().setUp()
+        if self.reading_protocol is not None:
+            patcher = patch('research_harness.openness_reading.find_chain_protocol', return_value=self.reading_protocol)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.initialize_problem()
         self.put_selecting_slate()
         self.selected = self.select_statement(candidate_id='candidate-1')

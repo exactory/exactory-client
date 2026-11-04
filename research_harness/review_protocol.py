@@ -2714,6 +2714,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         elif value['role'] in bar_sources.ROLES or repair is not None or repair_adjudicator:
             slot_identifier = (context_repair.slot_id(records, parent) if parent is not None else
                                repair['slot_id'] if repair is not None else _initial_slot(records, artifacts, value))
+        diagnostics = {}
         # Derived PNG pages do not deliver original PDFs. Add their explicit native
         # image bindings after constructing the same truthful source text packet.
         with transport.text_only_delivery(route['adapter'] in transport.TEXT_ONLY_ADAPTERS
@@ -2737,6 +2738,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 else:
                     packet, reading_chain = openness_reading.prepare_packet(records, artifacts, value, route, packet)
                     if reading_chain is not None:
+                        diagnostics = reading_chain.pop('diagnostics', {})
                         value = dict(value, reading_chain=reading_chain)
         if staged_repair:
             from . import review_parts_repair
@@ -2955,7 +2957,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 controller_artifacts.publish()
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
-        return changes + [immutable_record(records, 'review_assignment', value['id'], record)], record
+        return changes + [immutable_record(records, 'review_assignment', value['id'], record)], (
+            dict(record, diagnostics=diagnostics) if diagnostics else record)
     result = _prepare_review_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id, scoped=True)
     if 'scheduler' in payload:
         from .review_task_execution import record_capacity

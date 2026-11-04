@@ -1375,3 +1375,46 @@ mode decides no posting (`review_quality_measurement_pending`). The
 full-history validation of the store on every authoritative read is unchanged,
 measured at 2.041 seconds for the unknotting copy and 1.707 for the KMP copy,
 so no history-independent command latency is claimed.
+
+## Openness reading chains v5
+
+A problem binds one search per formulation, and every material search stays
+bound, so a record that records its searches again adds a full copy of each.
+Measured on 2026-11-03 on the bunkbed record (plugin 0.71.7): the openness
+minimum bound 15 search records, three generations for each of five
+formulations, with 4,301,964 characters of canonical JSON but only two
+distinct `dispositions` lists (ten records shared one list of 339 judgments,
+five shared one list of 271). The reading chain delivered each record whole,
+so about 36 of its about 45 turns read repeated text. In another chain of the
+same record the export bound `native_reviews`; the selected representations of
+all twelve source versions were then protected in the final turn, and turn 19
+was refused with `review_input_too_large` at a mandatory floor of 1,303,063
+characters against a limit of 1,300,000. The protected floor was already
+about 1.08 million characters at turn 1.
+
+Since 0.72.1 new problem chains use `exactory-openness-reading-v5`. The
+decisions:
+
+- Repeated search fields travel once. The exact canonical values of
+  `dispositions`, `queries`, `responses` and `scope` that two or more bound
+  records share travel as shared bodies, and each record travels as a residual
+  that names them. The harness gives a search credit only when the
+  authenticated turns of the chain delivered its residual and every part of
+  every shared body it uses, and the exact original bytes and digest rebuild.
+  Every bound search keeps its digest in the minimum and the finding, and the
+  openness audit still visits each of them.
+- Supersession of older searches was rejected: it changes which evidence is
+  material, and it leaves one copy per formulation. A shared screening record
+  was rejected because it changes stored records. Deduplication of parts by
+  hash was rejected because a differing field shifts the later part
+  boundaries.
+- A selected source text that earlier turns of the same chain delivered
+  completely counts as delivered for the final turn, because those turns are
+  requests of the same review. Required proof bytes, screening evidence and
+  every other protected role keep their final-input rule, and validation
+  derives the coverage again from the actual requests.
+- Each assignment reports the final-input headroom before the call, so a
+  chain that will not fit is visible at its start. Only a sound floor above
+  the limit is refused.
+- A chain that an earlier release started continues under its own protocol,
+  and result reviews receive the complete original search rows as before.

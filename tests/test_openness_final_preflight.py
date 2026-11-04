@@ -103,7 +103,7 @@ def build_before_preflight(*args):
     return namespace['prepare_packet'](*args)
 
 
-def create_legacy_record(protocol, **options):
+def create_legacy_record(protocol, manifest=None, **options):
     """Pin the pre-0.72 retention shape while comparing historical preflight builders."""
     return {'protocol': protocol, 'turns': [], 'sources': [], 'excerpts': [], 'passages': [],
             'allowances': reading.review_excerpts.create_allowances()}
@@ -347,6 +347,9 @@ class RepresentationCompatibilityTests(unittest.TestCase):
         self.fixture.setUp()
         self.case = self.fixture.case
         record_codex_route(self.case, 'codex-route')
+        patcher = patch.object(reading, 'find_chain_protocol', return_value=reading.PROTOCOL_V4)
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def check_chain(self, native):
         from codex_route_fixtures import invoke_codex

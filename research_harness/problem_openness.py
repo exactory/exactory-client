@@ -38,8 +38,9 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("review_context_unverified", "Obtain the observed native_math openness result", {"obligations": state["obligations"]})
     packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
     output = state["output"]
-    from .openness_reading import find_stage, verify_chain
-    stage = find_stage(json.loads(artifacts.read(assignment["packet"])))
+    from .openness_reading import PROTOCOL_V5, find_protocol, find_stage, verify_chain, verify_problem_coverage
+    supplied = json.loads(artifacts.read(assignment["packet"]))
+    stage = find_stage(supplied)
     if stage == "reading" or (stage == "final" and output.get("stage") == "reading"):
         raise ResearchError("openness_reading_incomplete", "This turn of the reading chain returned no native result; "
                             "continue the chain to a final turn that returns it", {"assignment_id": assignment["id"]})
@@ -74,6 +75,12 @@ def prepare_openness(records, artifacts, value, revision):
             or packet["subject"] != statement or packet["subject_digest"] != digest(statement)):
         raise ResearchError("openness_statement_mismatch", "The finding must name the exact current problem claim")
     delivered = {entry["digest"] for entry in packet["evidence"]}
+    verified = None
+    if stage == "final" and find_protocol(supplied) == PROTOCOL_V5:
+        verified = verify_problem_coverage(records, artifacts, assignment, final=True)
+        delivered.difference_update(row["search_digest"] for row in
+                                    packet["scientific_context"]["openness_minimum"]["searches"])
+        delivered.update(verified["searches"])
     if not isinstance(finding["evidence"], list) or not set(finding["evidence"]) <= delivered:
         raise ResearchError("openness_evidence_mismatch", "Use evidence delivered to the observed reviewer")
     if finding["outcome"] != "unresolved":
@@ -95,7 +102,7 @@ def prepare_openness(records, artifacts, value, revision):
     record = dict(finding, id=value["assignment_id"], assignment_id=value["assignment_id"],
                   statement_id=statement["id"], review=output, recorded_revision=revision)
     if stage == "final":
-        record["reading_turns"] = verify_chain(records, artifacts, assignment)
+        record["reading_turns"] = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
     from .problem_openness_reviews import validate_native_reviews
     native_reviews = validate_native_reviews(records, artifacts, packet, state)
     if native_reviews is not None:
@@ -118,10 +125,18 @@ def assess_openness(records, artifacts):
     affected = {"openness_id": finding["id"], "statement_id": None if statement is None else statement["id"]}
     if statement is None or finding["statement_digest"] != compute_statement_digest(statement):
         return [obligation("problem_openness_stale", "Reassess openness of the current exact claim.", **affected)]
+    verified = None
     if "native_reviews" in finding or "source_evidence" in finding or "reading_turns" in finding:
         from .problem_openness_reviews import observed_review, validate_native_reviews
         try:
             assignment, state, packet = observed_review(records, artifacts, finding["assignment_id"])
+            if "reading_turns" in finding:
+                from .openness_reading import PROTOCOL_V5, find_protocol, verify_chain, verify_problem_coverage
+                if find_protocol(json.loads(artifacts.read(assignment["packet"]))) == PROTOCOL_V5:
+                    verified = verify_problem_coverage(records, artifacts, assignment, final=True)
+                turns = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
+                if turns != finding["reading_turns"]:
+                    raise ResearchError("openness_reading_incomplete", "The recorded reading turns changed")
             current = validate_native_reviews(records, artifacts, packet, state)
             if current != finding.get("native_reviews") or state["output"] != finding["review"]:
                 raise ResearchError("openness_native_review_mismatch", "The recorded native review binding changed")
@@ -131,10 +146,6 @@ def assess_openness(records, artifacts):
             from .problem_openness_screening import validate_source_evidence
             if validate_source_evidence(records, artifacts, packet, state) != finding.get("source_evidence"):
                 raise ResearchError("openness_screening_evidence_mismatch", "The recorded screening source evidence changed")
-            if "reading_turns" in finding:
-                from .openness_reading import verify_chain
-                if verify_chain(records, artifacts, assignment) != finding["reading_turns"]:
-                    raise ResearchError("openness_reading_incomplete", "The recorded reading turns changed")
         except ResearchError as error:
             return [obligation("problem_openness_stale", "Reassess changed or unavailable observed openness evidence.",
                                cause=error.code, **affected)]
@@ -163,7 +174,11 @@ def assess_openness(records, artifacts):
         return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", **affected)]
     from .openness_minimum import audit_minimum
     try:
-        audit_minimum(finding, statement["statement"], records, artifacts, set(finding["evidence"]))
+        delivered = set(finding["evidence"])
+        if verified is not None:
+            delivered.difference_update(row["search_digest"] for row in minimum["searches"])
+            delivered.update(verified["searches"])
+        audit_minimum(finding, statement["statement"], records, artifacts, delivered)
     except ResearchError as error:
         return [obligation("problem_openness_stale", "Reassess changed or newly material search and reading evidence.",
                            cause=error.code, **affected)]
