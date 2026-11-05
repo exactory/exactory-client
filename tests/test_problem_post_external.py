@@ -134,4 +134,3 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         payload = cli.run(cli.build_parser().parse_args(["example", "problem-post-external"]))
         self.assertEqual(set(payload), set(self.payload))
         self.assertEqual(len(payload["statement_digest"]), 64)
-

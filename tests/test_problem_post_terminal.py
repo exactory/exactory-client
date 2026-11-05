@@ -126,4 +126,3 @@ class PostedProblemTests(delivery.ProblemDeliveryCase):
         self.assertNotEqual(report["next"]["code"], "problem_already_posted")
         self.assertEqual(report.get("after_post", []), [])
         self.assertIsNone(report.get("post"))
-
