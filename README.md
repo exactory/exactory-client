@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.73.6](docs/releases/0.73.6.md) makes a recorded post terminal for review work on the posted statement. New bar, result and adjudicator reviews, reviewer calls, staged planning and output corrections of that statement are refused with `problem_already_posted`, and the views show no further review action. Replays, captured outputs, reconciliation and the readers of stored records are unchanged.
+
 Version [0.73.5](docs/releases/0.73.5.md) stops failed Lean downloads from failing CI. Only the jobs that run Lean install it, from the GitHub Actions cache or in up to four timed attempts, and a skipped harness test now fails CI. The harness code does not change.
 
 Version [0.73.4](docs/releases/0.73.4.md) makes CI of 0.73.3 pass. A replay test of a 0.69.18 review history now expects the pending occupancy that 0.73.3 reports. The harness code does not change.

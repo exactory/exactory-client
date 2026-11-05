@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 from research_harness.artifacts import ArtifactStore
 from research_harness import review_protocol as protocol
-from research_harness import operations
 from research_harness import review_staged as staged
 from research_harness import review_staged_protocol as producer
 from research_harness.evidence import digest
@@ -188,7 +187,7 @@ class IntegrationPartitionTests(unittest.TestCase):
             return dict(result=result, changes=changes)
 
         store = type('PartitionStore', (), dict(revision=1, build_artifact_store=lambda _:self.artifacts))()
-        with patch.object(operations, 'prepared_task_mutation', side_effect=prepare_mutation), \
+        with patch.object(protocol, '_prepare_review_mutation', side_effect=prepare_mutation), \
                 patch.object(producer, 'matches_currency', return_value=True), \
                 patch.object(producer, 'plan_remaining_tasks', return_value=dict(tasks=[])), \
                 patch.object(producer, 'prepare_partitions', side_effect=prepare_partitions), \

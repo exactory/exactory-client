@@ -2759,6 +2759,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 raise ResearchError('problem_author_unknown', 'The assignment author must be one of the immutable problem authors')
             if value['role'] in bar_sources.ROLES + ('adjudicator',):
                 value = dict(value, subject=build_problem_subject(records, value['role']))
+            if 'controller_assignment_id' not in value['context']:
+                from .problem_delivery import require_unposted_review
+                require_unposted_review(records, value)
         if normalized_text(value['reviewer_id']) == normalized_text(value['author_id']):
             raise ResearchError('review_not_independent', 'The author cannot provide an independent assessment')
         route = _get(records, 'review_route', value['route_id'])
@@ -3185,6 +3188,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         artifacts = Evaluation.of(records, store_artifacts)
         fields(value, ('id', 'assignment_id'))
         assignment = _get(records, 'review_assignment', value['assignment_id'])
+        from .problem_delivery import require_unposted_review
+        require_unposted_review(records, assignment)
         if assignment['route_id'] in retired_routes(records):
             raise ResearchError('review_route_retired', 'The route of this assignment was retired; continue its slot through a context repair on another route')
         if find_replacement(records, assignment) is not None:

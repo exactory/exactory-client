@@ -53,7 +53,7 @@ _SUMMARY_CRITERION_IDS = 6
 _SUMMARY_ID_LENGTH = 32
 
 
-def describe_parts_turn(assignment, state, series, *, ended_without_output=False):
+def describe_parts_turn(assignment, state, series, *, ended_without_output=False, is_posted=False):
     """Describe one evaluated parts turn without copying its inventory or output."""
     from . import review_parts
 
@@ -110,6 +110,8 @@ def describe_parts_turn(assignment, state, series, *, ended_without_output=False
         else:
             result['next'] = [dict(kind='review', workflow='review-run',
                                    scope=dict(assignment_id=assignment['id']))]
+    if is_posted:
+        result['next'] = []
     return result
 
 

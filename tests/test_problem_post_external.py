@@ -60,6 +60,7 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         self.assertEqual(report["post"], post)
         self.assertEqual({row["code"] for row in report["after_post"]},
                          {row["code"] for row in before["obligations"]})
+        self.assertTrue(all("next" not in row for row in report["after_post"]))
         self.assertEqual(next_summary(report)["after_post"], len(report["after_post"]))
 
     def test_wrong_statement_digest_is_refused_without_writing(self):

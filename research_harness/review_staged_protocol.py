@@ -20,6 +20,27 @@ from .operations import _read_preparation, fields, immutable_record, prepared_mu
 from .storage import _canonical, read_epoch_tasks
 
 
+class _GuardReviewStarts:
+    """Check prospective staged admissions inside their serialized writes."""
+
+    def __init__(self, store, assignment_id):
+        self._store = store
+        self._assignment_id = assignment_id
+
+    def __getattr__(self, name):
+        return getattr(self._store, name)
+
+    def mutate_scoped(self, operation, payload, apply, **identity):
+        def commit(transaction, revision):
+            from .problem_delivery import require_unposted_review
+            from .review_task_execution import _TransactionRecords
+            records = _TransactionRecords(transaction)
+            assignment = protocol._get(records, 'review_assignment', self._assignment_id)
+            require_unposted_review(records, assignment)
+            return apply(transaction, revision)
+        return self._store.mutate_scoped(operation, payload, commit, **identity)
+
+
 def collect_output_records(observations, names):
     """Keep one exact record per identity across the accepted dependency closure."""
     records = {}
@@ -1098,6 +1119,8 @@ def prepare_child(records, artifacts, value, revision):
     for key in ('role', 'reviewer_id', 'author_id', 'route_id', 'dossier_id'):
         if value[key] != controller[key]:
             raise ResearchError('review_task_dependency_changed', 'A child retains the frozen controller identities')
+    from .problem_delivery import require_unposted_review
+    require_unposted_review(records, controller)
     epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
     planned = records.get('review_task', {}).get(value['context']['task_id'])
     changes = []
@@ -1260,8 +1283,21 @@ def invoke_task(store, payload, *, expected_revision, request_id):
     records = snapshot.records
     assignment = protocol._get(records, 'review_assignment', payload['assignment_id'])
     binding = assignment['staged_review']
+    from .problem_delivery import require_unposted_review
     if binding['kind'] != 'task':
+        require_unposted_review(records, assignment)
         raise ResearchError('review_task_pending', 'Assign and run a child of this staged controller')
+    state = records.get('review_task_execution', {}).get(binding['task_id'])
+    reservation = records.get('review_reservation', {}).get(state['reservation_id']) if state else None
+    previous_capture = records.get('review_observation', {}).get(reservation['observation_id']) if reservation else None
+    retained = records.get('review_capture_attempt', {}).get(reservation['id'], {}) if reservation else {}
+    retryable = (reservation is not None and reservation['released'] and retained.get('attempt_id') != payload['id']
+                 and (reservation['state'] == 'refused' or previous_capture is None or previous_capture['observation']['status'] != 'completed'))
+    requires_unposted = (reservation is None or retryable
+                         or reservation['launch'] is None and previous_capture is None
+                         or retained and retained.get('attempt_id') != payload['id'])
+    if requires_unposted:
+        require_unposted_review(records, assignment)
     route = protocol._get(records, 'review_route', assignment['route_id'])
     controller_id = binding['controller_assignment_id']
     from .review_context_repair import validate_repair_binding
@@ -1295,6 +1331,8 @@ def invoke_task(store, payload, *, expected_revision, request_id):
                 selectors=[dict(kind='review_slot_head', key=epoch['slot_id'], digest=digest(head))])
     def prepare_dispatch(current_records, value):
         current = protocol._get(current_records, 'review_assignment', value['assignment_id'])
+        if requires_unposted:
+            require_unposted_review(current_records, current)
         if digest(current) != digest(assignment):
             raise ResearchError('review_task_dependency_changed', 'The task assignment changed before dispatch')
         validate_repair_binding(current_records, store.build_artifact_store(),
@@ -1303,15 +1341,10 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         return [immutable_record(current_records, 'review_task_dispatch', request_id, dispatch)], dispatch
     prepared_task_mutation(store, 'review.task_dispatch', payload, prepare_dispatch,
                            request_id=request_id + ':dispatch', expected_revision=expected_revision)
-    state = records.get('review_task_execution', {}).get(binding['task_id'])
-    reservation = records.get('review_reservation', {}).get(state['reservation_id']) if state else None
-    previous_capture = records.get('review_observation', {}).get(reservation['observation_id']) if reservation else None
-    retained = records.get('review_capture_attempt', {}).get(reservation['id'], {}) if reservation else {}
-    retryable = (reservation is not None and reservation['released'] and retained.get('attempt_id') != payload['id']
-                 and (reservation['state'] == 'refused' or previous_capture is None or previous_capture['observation']['status'] != 'completed'))
     if reservation is None or retryable:
         try:
-            reserved = execution.reserve_task(store, plan, request_id=request_id + ':reserve')
+            reserved = execution.reserve_task(_GuardReviewStarts(store, assignment['id']), plan,
+                                              request_id=request_id + ':reserve')
         except ResearchError as error:
             if error.code not in ('assessment_incomplete', 'review_task_exhausted'):
                 raise
@@ -1436,7 +1469,11 @@ def wait_for_capture(store, route, reservation, request_id):
                                    request_id=request_id + ':resume:' + str(reservation['generation'])
                                    + ':' + str(snapshot['revision']))
     if reservation['launch'] is None and reservation['state'] == 'reserved' and not reservation['released']:
-        process = review_worker.launch_worker(store, reservation['id'])
+        from .problem_delivery import require_unposted_review
+        epoch = protocol._get(snapshot['records'], 'review_epoch', reservation['epoch_id'])
+        controller = protocol._get(snapshot['records'], 'review_assignment', epoch['controller_assignment_id'])
+        require_unposted_review(snapshot['records'], controller)
+        process = review_worker.launch_worker(_GuardReviewStarts(store, controller['id']), reservation['id'])
     deadline = time.monotonic() + route['configuration']['timeout_seconds'] + 15
     while True:
         snapshot = review_worker.read_polling_store(store.snapshot)
@@ -1991,7 +2028,6 @@ def prepare_execution_incomplete(records, artifacts, epoch, task, reason, receip
 
 def plan_frontier(store, payload, *, expected_revision, request_id):
     """Plan and assign the next ready frontier through the operator's controller handle."""
-    from .operations import prepared_task_mutation
     from .evaluation import Evaluation
     from . import review_staged as staged
     fields(payload, ('controller_assignment_id',))
@@ -2001,6 +2037,8 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
         binding = controller.get('staged_review', {})
         if binding.get('kind') != 'controller':
             raise ResearchError('invalid_review_context', 'Plan through the frozen staged controller')
+        from .problem_delivery import require_unposted_review
+        require_unposted_review(records, controller)
         epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
         head = protocol._get(records, 'review_slot_head', epoch['slot_id'])
         if head['epoch_id'] != epoch['id'] or not matches_currency(records, artifacts, epoch):
@@ -2170,8 +2208,8 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
             changes.extend(child_changes)
         return changes, dict(controller_assignment_id=controller['id'], task_ids=[task['id']], next=[dict(kind='command',
             command='review-run', payload=dict(assignment_id=controller['id'], epoch_id=epoch['id'], task_id=task['id']))])
-    return prepared_task_mutation(store, 'review.frontier', payload, prepare,
-                                  expected_revision=expected_revision, request_id=request_id)
+    return protocol._prepare_review_mutation(store, 'review.frontier', payload, prepare, scoped=True,
+                                             expected_revision=expected_revision, request_id=request_id)
 
 
 

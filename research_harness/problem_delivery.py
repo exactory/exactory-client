@@ -279,6 +279,26 @@ def find_post(records, statement):
                  if row["statement_digest"] == compute_statement_digest(statement)), None)
 
 
+def find_review_post(records, assignment):
+    """Match a review's bound claim, including aliases of a posted statement."""
+    from .strategy import find_orchestration
+    subject = assignment.get("subject") or {}
+    if (assignment.get("role") not in ("bar", "result", "adjudicator")
+            or subject.get("kind") != "problem" or subject.get("statement_id") is None
+            or find_orchestration(records) != "problem_creation"):
+        return None
+    statement = records.get("problem_statement", {}).get(subject["statement_id"])
+    return find_post(records, statement)
+
+
+def require_unposted_review(records, assignment):
+    """Refuse prospective review work while leaving historical readers usable."""
+    post = find_review_post(records, assignment)
+    if post is not None:
+        raise ResearchError("problem_already_posted", "This exact statement already has a recorded post.",
+                            {"post_id": post["id"], "statement_id": assignment["subject"]["statement_id"]})
+
+
 def describe_problem_work(records, pending):
     """Attach research steps to completed scientific defects without resampling the review."""
     from .research_decisions import list_stated_objections
@@ -365,7 +385,8 @@ def assess_post(records, artifacts):
         milestone = "post"
     posted_state = {}
     if posted is not None:
-        after_post = [dict(row, reason=row.get("reason", row["explanation"])) for row in unique
+        after_post = [dict({key: value for key, value in row.items() if key != "next"},
+                           reason=row.get("reason", row["explanation"])) for row in unique
                       if row["code"] != "problem_already_posted"]
         unique = [row for row in unique if row["code"] == "problem_already_posted"]
         shown_post = dict(posted, gate=posted.get("gate", "passed"))
