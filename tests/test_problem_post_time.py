@@ -104,6 +104,16 @@ class PostTimeTests(CheckCommandMixin, fixtures.ProblemDeliveryCase):
         self.select_statement(identifier='new-statement', statement='A different synthetic bound.')
         self.assertEqual(self.record_time()['result']['post_id'], self.post_payload['id'])
 
+    def test_a_workspace_without_a_problem_record_is_refused_without_writes(self):
+        self.assertIn('problem-post-time', cli.OPERATIONS)
+        self.put('workspace', 'study', {'stage': 'initiate'})
+        payload = dict(post_id='external-post-1', posted_at='2026-11-04T14:49:22.236Z',
+                       evidence='The saved server response states this creation time.')
+        render_all(self.store)
+        before = self.read_workspace()
+        self.assert_refusal_parity('problem-post-time', payload, 'orchestration_conflict')
+        self.assertEqual(self.read_workspace(), before)
+
     def test_missing_post_and_second_statement_are_refused_without_writes(self):
         self.prepare_post()
         self.assertIn('problem-post-time', cli.OPERATIONS)

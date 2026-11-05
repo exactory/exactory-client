@@ -155,7 +155,6 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         self.assertEqual(payload["posted_at"], "2026-11-04T14:49:22.236Z")
         self.assertEqual(len(payload["statement_digest"]), 64)
 
-
     def test_server_time_is_verbatim_and_recording_clock_is_separate(self):
         now = datetime(2026, 11, 5, 8, 31, 11, 654321, tzinfo=timezone.utc)
         times = ('2026-11-04T14:49:22.236Z', '2026-11-04T14:49:22Z',

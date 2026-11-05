@@ -56,8 +56,10 @@ class EmptyPairAdjudicationTests(RefreshCase):
         post = problem_delivery.assess_post(records, self.artifacts)
         self.assertFalse(post['ready'])
         self.assertNotIn('unsupported-implication', self.unresolved_ids(post))
-        self.assertTrue({'problem_review_pair_required', 'review_task_pending'} &
-                        {row['code'] for row in post['obligations']})
+        codes = {row['code'] for row in post['obligations']}
+        # Both slots are occupied by pending successors, so the gate reports pending work, not a missing pair.
+        self.assertIn('review_task_pending', codes)
+        self.assertNotIn('problem_review_pair_required', codes)
 
     def test_not_binding_adjudication_keeps_its_effect_with_an_empty_pair(self):
         self.prepare_reviews(bar_reviewer='first')

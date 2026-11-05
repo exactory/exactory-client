@@ -287,6 +287,7 @@ def record_post_time(store, payload, *, expected_revision, request_id):
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
+        require_problem(records)
         fields(value, ("post_id", "posted_at", "evidence"))
         text(value["post_id"], "External post ID")
         timestamp(value["posted_at"])
