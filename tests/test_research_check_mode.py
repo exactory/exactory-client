@@ -231,16 +231,18 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
             self.assertEqual(json.loads(response[2])["error"]["code"], "check_unsupported")
             self.assertEqual(self.read_workspace(), before)
 
-    def test_check_refuses_local_runtime_inspection_without_starting_a_process(self):
+    def test_check_reads_local_runtime_version_without_workspace_changes(self):
         payload = {"id": "local-route", "adapter": "codex_cli_v1", "model": "fixture-model",
                    "endpoint": "codex://local", "configuration": {"max_output_tokens": 100, "timeout_seconds": 5}}
         before = self.read_workspace()
         with mock.patch("research_harness.review_codex_transport.shutil.which", return_value=sys.executable), \
                 mock.patch("research_harness.review_codex_transport._run_owned",
-                           side_effect=AssertionError("Check started a local runtime process")):
+                           return_value=subprocess.CompletedProcess(
+                               [sys.executable, "--version"], 0, "codex-cli 0.0.123", "")) as version:
             response = self.invoke_command("review-route", payload)
-        self.assertEqual(response[0], 1, response[2])
-        self.assertEqual(json.loads(response[2])["error"]["code"], "check_unsupported")
+        self.assert_accepted_check(response, 0)
+        self.assertTrue(version.call_args_list)
+        self.assertTrue(all(call.args == ([sys.executable, "--version"],) for call in version.call_args_list))
         self.assertEqual(self.read_workspace(), before)
 
     def test_check_refuses_a_probe_pin_without_reserving_the_origin_request(self):
@@ -306,7 +308,7 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
         self.assertEqual(diagnostic["artifact_digests"],
                          ["ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"])
 
-    def test_check_refuses_runtime_fingerprinting_before_review_state_validation(self):
+    def test_check_reads_runtime_fingerprint_before_review_state_validation(self):
         from research_harness import review_protocol
         route = {"id": "local-route", "adapter": "codex_cli_v1", "runtime": {}}
         self.store.mutate("fixture.route", {}, lambda tx: tx.put("review_route", "local-route", route),
@@ -324,10 +326,12 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
         with mock.patch.dict(cli.OPERATIONS, {"artifact": record_fixture}), \
                 mock.patch("research_harness.review_codex_transport.shutil.which", return_value=sys.executable), \
                 mock.patch("research_harness.review_codex_transport._run_owned",
-                           side_effect=AssertionError("Check started a local runtime process")):
+                           return_value=subprocess.CompletedProcess(
+                               [sys.executable, "--version"], 0, "codex-cli 0.0.123", "")) as version:
             response = self.invoke_command("artifact", {})
-        self.assertEqual(response[0], 1, response[2])
-        self.assertEqual(json.loads(response[2])["error"]["code"], "check_unsupported")
+        self.assert_accepted_check(response, 1)
+        self.assertTrue(version.call_args_list)
+        self.assertTrue(all(call.args == ([sys.executable, "--version"],) for call in version.call_args_list))
         self.assertEqual(self.read_workspace(), before)
 
     def test_check_refuses_pdf_inspection_before_creating_temporary_files(self):
@@ -354,7 +358,7 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
         self.assertEqual(json.loads(response[2])["error"]["code"], "check_unsupported")
         self.assertEqual(self.read_workspace(), before)
 
-    def test_check_refuses_visual_delivery_before_inspecting_the_renderer(self):
+    def test_check_allows_local_visual_delivery_reads_without_workspace_changes(self):
         from research_harness.review_visual_sources import prepare_packet
 
         def record_fixture(store, payload, **identity):
@@ -366,10 +370,10 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
         before = self.read_workspace()
         with mock.patch.dict(cli.OPERATIONS, {"artifact": record_fixture}), \
                 mock.patch("research_harness.review_pdf_pages.profile",
-                           side_effect=AssertionError("Check inspected PDF renderer")):
+                           return_value={}) as profile:
             response = self.invoke_command("artifact", {})
-        self.assertEqual(response[0], 1, response[2])
-        self.assertEqual(json.loads(response[2])["error"]["code"], "check_unsupported")
+        self.assert_accepted_check(response, 0)
+        self.assertTrue(profile.call_args_list)
         self.assertEqual(self.read_workspace(), before)
 
     def test_check_replays_a_recorded_acquisition_before_refusing_external_effects(self):

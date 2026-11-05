@@ -1965,14 +1965,17 @@ def record_route(store, payload, *, expected_revision, request_id):
 
 
 def read_route_runtime(artifacts, route):
-    if route['adapter'] in transport.LOCAL_ADAPTERS:
-        artifacts.require_external_effect()
+    from .evaluation import Evaluation
+    store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
+    store.require_local_read('route_runtime:' + route['adapter'])
     return transport.runtime(route)
 
 
 def verify_route_context(artifacts, route, request, response):
     if route['adapter'] in transport.LOCAL_ADAPTERS:
-        artifacts.require_external_effect()
+        from .evaluation import Evaluation
+        store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
+        store.require_local_read('route_context:' + route['adapter'])
     return transport.context_verified(route, request, response)
 
 
