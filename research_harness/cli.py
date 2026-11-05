@@ -51,6 +51,7 @@ OPERATIONS = {
     "problem-decision": problem_claims.record_decision,
     "problem-posted": problem_claims.record_posted,
     "problem-post-external": problem_claims.record_post_external,
+    "problem-post-time": problem_claims.record_post_time,
     "init": principles.initialize_research,
     "adopt": adopt_workspace,
     "artifact": pin_artifact,
@@ -536,7 +537,7 @@ def _review_status(records, artifacts):
 
 def status_report(store, *, counters=False):
     from .review_state_evaluation import runtime_scope
-    from .review_continuation import annotate_review_obligations
+    from .review_continuation import annotate_review_obligations, describe_next_actions
     started = time.monotonic()
     snapshot = store.snapshot()
     evaluation = Evaluation(snapshot['records'], store.build_artifact_store())
@@ -549,8 +550,10 @@ def status_report(store, *, counters=False):
             report = gate_state(records, evaluation, "post")
             review = _review_status(records, evaluation)
             report = annotate_parts_obligations(report, review)
-            if (records.get("review_epoch") or any('review_parts' in assignment
-                    for assignment in records.get('review_assignment', {}).values())):
+            slots = report.get('slot_outcomes', {})
+            if (records.get("review_epoch") or slots.get('pending') or slots.get('incomplete')
+                    or any('review_parts' in assignment
+                           for assignment in records.get('review_assignment', {}).values())):
                 report = dict(report, obligations=order_obligations(report["obligations"]))
             slate, current_slate = problem_candidates.find_slate(records), problem_candidates.find_current_slate(records)
             # A stale slate decides nothing; its stale obligation leads the report instead.
@@ -573,7 +576,18 @@ def status_report(store, *, counters=False):
             if counters:
                 result['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
                                             retention=evaluation.retention_report())
-            return annotate_review_obligations(records, evaluation, result)
+            result = annotate_review_obligations(records, evaluation, result)
+            upcoming = result['next']
+            if upcoming.get('code') == 'review_task_pending' and not upcoming.get('next'):
+                pending_slots = {head['slot_id'] for head in slots.get('pending', [])}
+                heads = research_decisions.select_problem_slot_assignments(
+                    records, 'result', review_protocol.build_problem_subject(records))
+                actions = [action for slot, assignment in heads.items()
+                           if slot in pending_slots and not assignment.get('staged_review')
+                           for action in describe_next_actions(records, evaluation, assignment['id'])]
+                if actions:
+                    result['next'] = dict(upcoming, next=actions)
+            return result
         config = records.get("configuration", {}).get("research")
         profile = config["profile"] if config else "research"
         study = records.get("workspace", {}).get("study")

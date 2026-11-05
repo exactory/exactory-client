@@ -866,7 +866,11 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         # result cannot fill the pair; its material objection still blocks.
         reviews = decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
         self.assertEqual(reviews["review_ids"], ["review-result-second"])
-        self.assert_blocked_delivery("problem_review_pair_required")
+        codes = {row["code"] for row in reviews["obligations"]}
+        self.assertIn("review_task_pending", codes)
+        self.assertIn("problem_evidence_unassessed", codes)
+        self.assertNotIn("problem_review_pair_required", codes)
+        self.assert_blocked_delivery("problem_evidence_unassessed")
 
     def test_a_recorded_resolution_requires_its_evidence_to_remain_available(self):
         self.prepare_reviews(result_reviewer="first")

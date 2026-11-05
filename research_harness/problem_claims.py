@@ -11,7 +11,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .exactory_api import UUID_RE
 from .graph import obligation
-from .operations import fields, immutable_record, prepared_mutation, strings, text
+from .operations import fields, immutable_record, prepared_mutation, strings, text, timestamp
 from .principles import prepare_initialization
 from .strategy import find_orchestration
 from . import problem_rubric, strategy
@@ -246,7 +246,10 @@ def record_post_external(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         from .problem_delivery import find_post
         require_problem(records)
-        fields(value, ("id", "problem_id", "statement_digest", "reason", "evidence"))
+        fields(value, ("id", "problem_id", "statement_digest", "reason", "evidence"),
+               optional=("posted_at",))
+        if "posted_at" in value:
+            timestamp(value["posted_at"])
         for key in ("id", "problem_id", "statement_digest", "reason"):
             text(value[key], "External post " + key)
         if not UUID_RE.fullmatch(value["problem_id"]):
@@ -271,9 +274,43 @@ def record_post_external(store, payload, *, expected_revision, request_id):
                                 "This exact statement already has a recorded post",
                                 {"post_id": earlier["id"]})
         record = dict(value, statement_id=statement["id"], gate="bypassed",
-                      posted_at=datetime.now(timezone.utc).isoformat(),
+                      posted_at=value.get("posted_at"),
+                      recorded_at=datetime.now(timezone.utc).isoformat(),
                       recorded_revision=expected_revision + 1)
         return [immutable_record(records, "problem_post", value["id"], record)], record
 
     return prepared_mutation(store, "problem.post_external", payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id)
+
+
+def record_post_time(store, payload, *, expected_revision, request_id):
+    artifacts = store.build_artifact_store()
+
+    def prepare(records, value):
+        require_problem(records)
+        fields(value, ("post_id", "posted_at", "evidence"))
+        text(value["post_id"], "Time statement post ID")
+        timestamp(value["posted_at"])
+        if isinstance(value["evidence"], dict):
+            validate_reference(value["evidence"])
+            artifacts.verify(value["evidence"])
+        else:
+            text(value["evidence"], "Time statement evidence")
+        post = records.get("problem_post", {}).get(value["post_id"])
+        if post is None:
+            raise ResearchError("problem_post_missing", "No recorded problem post has this post ID",
+                                {"post_id": value["post_id"]})
+        if post.get("gate") != "bypassed" or "recorded_at" in post:
+            raise ResearchError("problem_post_time_inapplicable",
+                                "Only posts with gate bypassed and no recorded_at accept a time statement",
+                                {"post_id": value["post_id"], "gate": post.get("gate")})
+        if value["post_id"] in records.get("problem_post_time", {}):
+            raise ResearchError("problem_post_time_already_recorded",
+                                "This post already has a time statement",
+                                {"post_id": value["post_id"]})
+        record = dict(value, recorded_at=datetime.now(timezone.utc).isoformat(),
+                      recorded_revision=expected_revision + 1)
+        return [immutable_record(records, "problem_post_time", value["post_id"], record)], record
+
+    return prepared_mutation(store, "problem.post_time", payload, prepare,
                              expected_revision=expected_revision, request_id=request_id)

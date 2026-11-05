@@ -315,6 +315,8 @@ _RECORD_TREES = {
         records, "problem_formal_check", find_formal_checks(records))),
     "problem_post": ("problem/posts", lambda records: _find_keys_of(
         records, "problem_post", [find_post(records, find_current_statement(records))])),
+    "problem_post_time": ("problem/post-times", lambda records: _find_keys_of(
+        records, "problem_post", [find_post(records, find_current_statement(records))])),
     "round_admission": ("study/round-admissions", lambda records: _find_latest_keys(
         records, "round_admission", lambda record: record["number"])),
     "round_decision": ("study/round-decisions", lambda records: _find_latest_keys(

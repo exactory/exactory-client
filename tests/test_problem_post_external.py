@@ -2,12 +2,27 @@
 
 import copy
 import json
+from datetime import datetime, timezone
+from unittest.mock import patch
 
 import test_research_check_mode as checks
 import test_research_problem_claims as fixtures
-from research_harness import cli, problem_claims
+from research_harness import cli, operations, problem_claims
 from research_harness.output_views import render_all
 from research_harness.report_views import next_summary
+
+
+def record_legacy_post(case, payload):
+    """Write the record and receipt with the 0.73.2 operation and payload."""
+    revision = case.store.revision
+    post = dict(payload, statement_id=case.statement['id'], gate='bypassed',
+                posted_at='2026-11-05T08:31:11.654321+00:00',
+                recorded_revision=revision + 1)
+    receipt = operations.prepared_mutation(
+        case.store, 'problem.post_external', payload,
+        lambda records, value: ([('problem_post', post['id'], post)], post),
+        expected_revision=revision, request_id='legacy-post-request')
+    return revision, receipt
 
 
 class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
@@ -34,7 +49,8 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
             self.assertEqual(post[key], value)
         self.assertEqual(post["gate"], "bypassed")
         self.assertEqual(post["statement_id"], self.statement["id"])
-        self.assertIn("posted_at", post)
+        self.assertIsNone(post["posted_at"])
+        self.assertIn("recorded_at", post)
         self.assertNotIn("export_digest", post)
         self.assertNotIn("export_directory", post)
         self.assertFalse((self.root / "final/problem/exports").exists())
@@ -53,10 +69,12 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
 
     def test_boundary_refuses_malformed_ids_empty_text_and_invalid_evidence(self):
         self.assertIn("problem-post-external", cli.OPERATIONS)
+        before = self.store.snapshot()
         invalid_values = {
             "id": ("", " \n", None),
             "problem_id": ("not-a-uuid", "656c336ee8924c4780d2a71d022f4116", None, 7),
             "reason": ("", " \n", None, []),
+            "posted_at": ("2026-11-04T14:49:22", "2026-11-04", 7, None, "bad time"),
             "evidence": ("", " \n", None, [], {}, {"kind": "record", "id": "instruction"}),
         }
         for field, values in invalid_values.items():
@@ -71,6 +89,7 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
                 self.assert_refusal_parity("problem-post-external", payload, "invalid_input")
         self.assert_refusal_parity("problem-post-external", dict(self.payload, export_directory="unused"),
                                   "invalid_input")
+        self.assertEqual(self.store.snapshot(), before)
 
     def test_evidence_can_be_a_verified_artifact_reference(self):
         evidence = self.artifacts.put(b"An authored instruction to post the exact statement.", "text/plain")
@@ -132,5 +151,69 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
     def test_the_cli_example_has_all_external_post_fields(self):
         self.assertIn("problem-post-external", cli.OPERATIONS)
         payload = cli.run(cli.build_parser().parse_args(["example", "problem-post-external"]))
-        self.assertEqual(set(payload), set(self.payload))
+        self.assertEqual(set(payload), set(self.payload) | {"posted_at"})
+        self.assertEqual(payload["posted_at"], "2026-11-04T14:49:22.236Z")
         self.assertEqual(len(payload["statement_digest"]), 64)
+
+    def test_server_time_is_verbatim_and_recording_clock_is_separate(self):
+        now = datetime(2026, 11, 5, 8, 31, 11, 654321, tzinfo=timezone.utc)
+        times = ('2026-11-04T14:49:22.236Z', '2026-11-04T14:49:22Z',
+                 '2026-11-04T10:49:22.123456-04:00', '2099-01-01T00:00:00+09:00')
+        for index, posted_at in enumerate(times):
+            with self.subTest(posted_at=posted_at), patch.object(problem_claims, 'datetime') as clock:
+                clock.now.return_value = now
+                self.select_statement(identifier='timed-' + str(index), statement='Synthetic bound ' + str(index))
+                statement = self.store.snapshot()['records']['problem_statement']['timed-' + str(index)]
+                payload = dict(self.payload, id='post-' + str(index), posted_at=posted_at,
+                               statement_digest=problem_claims.compute_statement_digest(statement))
+                before = self.read_workspace()
+                self.assert_accepted_check(self.invoke_command('problem-post-external', payload), self.store.revision)
+                self.assertEqual(self.read_workspace(), before)
+                post = self.record_external(payload)['result']
+                self.assertEqual(post['posted_at'], posted_at)
+                self.assertEqual(post['recorded_at'], now.isoformat())
+                clock.now.assert_called_with(timezone.utc)
+
+    def test_omitted_time_records_null_with_the_frozen_recording_clock(self):
+        now = datetime(2026, 11, 5, 8, 31, 11, tzinfo=timezone.utc)
+        with patch.object(problem_claims, 'datetime') as clock:
+            clock.now.return_value = now
+            post = self.record_external()['result']
+        self.assertIsNone(post['posted_at'])
+        self.assertEqual(post['recorded_at'], now.isoformat())
+
+    def test_legacy_projection_preserves_snapshot_receipt_fingerprint_and_raw_output(self):
+        revision, receipt = record_legacy_post(self, self.payload)
+        render_all(self.store)
+        raw = {str(path): path.read_bytes() for path in (self.root / 'final/problem/posts').rglob('*.json')}
+        self.assertTrue(raw)
+        before = self.read_workspace()
+        snapshot = self.store.snapshot()
+        fingerprint = self.store._read_preparation()._fingerprint
+        original = self.store.committed_request('legacy-post-request')
+        report = cli.status_report(self.store)
+        self.assertEqual(report['post'], dict(receipt['result'], posted_at=None,
+                                             recorded_at=receipt['result']['posted_at']))
+        self.assertEqual(self.store.snapshot(), snapshot)
+        self.assertEqual(self.store.committed_request('legacy-post-request'), original)
+        self.assertEqual(self.store._read_preparation()._fingerprint, fingerprint)
+        self.assertEqual(self.read_workspace(), before)
+        render_all(self.store)
+        self.assertEqual({str(path): path.read_bytes() for path in (self.root / 'final/problem/posts').rglob('*.json')}, raw)
+        replay = cli.OPERATIONS['problem-post-external'](
+            self.store, self.payload, expected_revision=revision, request_id='legacy-post-request')
+        self.assertEqual(replay, receipt)
+        checked = self.invoke_command('problem-post-external', self.payload, revision=revision,
+                                      request='legacy-post-request')
+        self.assertEqual(json.loads(checked[1]), receipt)
+        self.assert_refusal_parity('problem-post-external', dict(self.payload, posted_at='2026-11-04T14:49:22.236Z'),
+                                  'request_id_conflict', revision=revision, request='legacy-post-request')
+
+    def test_internal_posts_with_or_without_gate_are_never_converted(self):
+        for gate in (None, 'passed'):
+            with self.subTest(gate=gate):
+                post = dict(self.payload, statement_id=self.statement['id'], posted_at='2026-11-04T14:49:22Z')
+                if gate is not None:
+                    post['gate'] = gate
+                self.put('problem_post', post['id'], post)
+                self.assertEqual(cli.status_report(self.store)['post'], dict(post, gate='passed'))
