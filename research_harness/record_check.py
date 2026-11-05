@@ -24,7 +24,10 @@ import tempfile
 import time
 import uuid
 
-from .artifacts import ArtifactStore, _CheckEffectRequired, is_sealed_artifact
+from .artifacts import (
+    ArtifactStore, _CheckEffectRequired, _OBJECT_DIRECTORY, _SEALED_DIRECTORY,
+    is_sealed_artifact,
+)
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
@@ -164,12 +167,18 @@ def check_integrity(store):
     """Verify artifacts of every historical event, including superseded records."""
     store.snapshot()
     artifacts = store.build_artifact_store()
+    artifact_prefixes = (_OBJECT_DIRECTORY + '/', _SEALED_DIRECTORY + '/')
     verified = set()
+    workspace_descriptors = set()
     with store._connection() as connection:
         for event in connection.execute('SELECT payload, changes, result FROM events ORDER BY revision'):
             for encoded in event:
                 for reference in protocol.collect_references(json.loads(encoded)):
                     identity = digest(reference)
+                    path = reference['path']
+                    if not isinstance(path, str) or not path.startswith(artifact_prefixes):
+                        workspace_descriptors.add(identity)
+                        continue
                     if identity in verified:
                         continue
                     if is_sealed_artifact(reference):
@@ -177,7 +186,7 @@ def check_integrity(store):
                     else:
                         artifacts.read(reference)
                     verified.add(identity)
-    return {'artifacts': len(verified)}
+    return {'artifacts': len(verified), 'workspace_descriptors': len(workspace_descriptors)}
 
 
 @contextmanager
