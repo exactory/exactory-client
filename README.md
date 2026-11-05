@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.73.0](docs/releases/0.73.0.md) adds `review-series`, which runs a review chain to its end, and `record-check`, which checks a copy of a record offline before the record moves to a new version. A failed reviewer call now has an outcome that decides the next step. An answer with exactly one reading is kept, a stuck parts v1 series continues in parts v2, and a posted problem stays posted. Every recorded incident is in a regression ledger with its test.
+
 Version [0.72.4](docs/releases/0.72.4.md) makes the request memo of 0.72.2 call the pinned request builder with the arguments of the pinned iterator, so test replacements without an `order` parameter work again. Requests, reports and refusals do not change.
 
 Version [0.72.3](docs/releases/0.72.3.md) keeps the request memo of 0.72.2 to plain list histories and tuple fit orders; other argument types take the uncached path. The harness's own requests, reports and refusals do not change.
