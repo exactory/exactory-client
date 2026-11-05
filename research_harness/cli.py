@@ -175,6 +175,8 @@ def _review_run(store, payload, **identity):
                         owner = candidate
                         break
             if owner and payload.get("id", owner["id"]) != owner["id"]:
+                from .problem_delivery import require_unposted_review
+                require_unposted_review(records, child)
                 raise ResearchError("review_resampling_forbidden", "Resume the attempt that owns this captured reservation.")
             # Replaying acceptance retains its original attempt identity. Before
             # acceptance, a deterministic identity also survives CLI interruption.
@@ -467,7 +469,7 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
 def _review_status(records, artifacts):
     from . import review_parts, review_refusal
     from .report_views import describe_parts_turn
-    from .problem_delivery import collect_review_outcomes, collect_staged_slots, describe_review_tasks
+    from .problem_delivery import collect_review_outcomes, collect_staged_slots, describe_review_tasks, find_review_post
     from .review_continuation import describe_next_actions
     completed = sorted((attempt for attempt in records.get("review_attempt", {}).values()
                         if attempt["status"] == "completed"), key=lambda attempt: attempt["recorded_revision"])
@@ -497,6 +499,7 @@ def _review_status(records, artifacts):
         series = series_results[assignment[review_parts.KEY]['series_assignment_id']]
         result['assignments'][identifier]['review_parts'] = describe_parts_turn(
             assignment, state, series,
+            is_posted=find_review_post(records, assignment) is not None,
             ended_without_output=review_protocol.has_ended_without_output(records, identifier))
         progress = result['assignments'][identifier]['review_parts']
         if progress['next']:
@@ -511,13 +514,16 @@ def _review_status(records, artifacts):
         if row["epoch"] is None:
             continue
         assignment, state, effective = row["assignment"], row["state"], row["effective"] or {}
+        tasks = describe_review_tasks(records, row["epoch"], state)
+        if find_review_post(records, assignment) is not None:
+            tasks = [dict(task, next=[]) for task in tasks]
         result["assignments"][assignment["id"]].update(
             epoch_id=row["epoch"]["id"], kind=effective.get("kind", "pending"),
             raw_output_digest=None if state.get("raw_output") is None else digest(state["raw_output"]),
             effective_output_digest=effective.get("effective_output_digest"),
             composition_root=effective.get("composition_root"),
             incomplete_outcome=effective.get("incomplete_outcome"),
-            tasks=describe_review_tasks(records, row["epoch"], state))
+            tasks=tasks)
         if 'answer_recovery' in state:
             result['assignments'][assignment['id']]['answer_recovery'] = state['answer_recovery']
     for identifier, assignment in records.get('review_assignment', {}).items():

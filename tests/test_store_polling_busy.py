@@ -126,6 +126,10 @@ class CapturePollingTests(WorkerPollingFixture):
     def test_persistent_busy_capture_keeps_its_pending_outcome_deadline(self):
         reservation = self.reserve()['result']
         initial = self.store.snapshot()
+        # Give this generic execution fixture an unposted controller binding.
+        initial['records']['review_epoch'][reservation['epoch_id']]['controller_assignment_id'] = 'controller'
+        initial['records']['review_assignment'] = {
+            'controller': dict(id='controller', role='result', subject=None)}
         clock = PollClock()
         with patch.object(review_worker, 'launch_worker', return_value=None), \
                 patch.object(self.store, 'snapshot', side_effect=chain(

@@ -661,6 +661,7 @@ def _build_series(records, artifacts, inputs):
     from .review_protocol import assignment_state
     from . import review_parts
     from .report_views import describe_parts_turn
+    from .problem_delivery import find_review_post
     from .review_staged_protocol import collect_epoch_acceptances, collect_observations
     from .evaluation import Evaluation
     artifacts = Evaluation.of(records, artifacts)
@@ -705,6 +706,7 @@ def _build_series(records, artifacts, inputs):
                 verified = review_parts.verify_series(records, artifacts, identifier)
                 parts_progress = describe_parts_turn(
                     assignment, state, verified,
+                    is_posted=find_review_post(records, assignment) is not None,
                     ended_without_output=has_ended_without_output(records, identifier))
             turns.append({
                 "turn": numbers[identifier], "assignment_id": identifier, "parent_assignment_id": parent, "link": link,

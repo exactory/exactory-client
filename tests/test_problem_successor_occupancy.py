@@ -230,8 +230,9 @@ class PartsOccupancyMixin:
             reason='The owner authorized publication.', evidence='The publication instruction.'))
         posted = cli.status_report(self.case.store)
         self.assertEqual(posted['next']['code'], 'problem_already_posted')
-        self.assertEqual(posted['after_post'], [dict(row, reason=row.get('reason', row['explanation']))
-                                              for row in findings])
+        self.assertEqual(posted['after_post'], [dict(
+            {key: value for key, value in row.items() if key != 'next'},
+            reason=row.get('reason', row['explanation'])) for row in findings])
 
 
 class LegacyPartsOccupancyTests(PartsOccupancyMixin, ResultPartsCase):

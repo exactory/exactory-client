@@ -3655,6 +3655,103 @@
         "test_problem_successor_occupancy.LegacyPartsOccupancyTests.test_resolved_pair_reopens_objections_for_one_then_two_successors_and_after_post",
         "test_problem_successor_occupancy.FreshPartsOccupancyTests.test_resolved_pair_reopens_objections_for_one_then_two_successors_and_after_post"
       ]
+    },
+    {
+      "id": "posted-advisories-retain-review-actions",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "reporting",
+      "summary": "Posted two-slot parts findings retain continuation hints.",
+      "fixed_in": "0.73.6",
+      "expected": "Advisory projection removes only next; findings, counts and terminal behavior remain intact.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_review_terminal.PostedReviewTests.test_two_posted_part_slots_have_advisory_findings_only",
+        "test_problem_post_review_terminal.AdvisoryProjectionTests.test_projection_preserves_all_other_fields_order_count_and_source",
+        "test_problem_post_review_terminal.PostedReviewTests.test_completed_unrecorded_final_is_advisory_but_can_still_be_recorded",
+        "test_problem_post_terminal.PostedProblemTests.test_new_unrelated_post_finding_is_advisory",
+        "test_problem_post_external.ExternalPostTests.test_records_a_terminal_bypassed_post_without_an_export"
+      ]
+    },
+    {
+      "id": "posted-statement-accepts-review-assignment",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "admission",
+      "summary": "A posted statement accepts fresh review, repair or adjudication assignments.",
+      "fixed_in": "0.73.6",
+      "expected": "Matching subjects receive problem_already_posted; replay, exclusions and second-post assignments remain valid.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_subject_assignment_matrix",
+        "test_problem_post_review_terminal.PostedReviewTests.test_alias_is_posted_but_changed_statement_or_criteria_can_be_assigned",
+        "test_problem_post_review_terminal.PostedReviewTests.test_committed_assignment_replays_and_changed_payload_conflicts",
+        "test_problem_post_review_terminal.PostedReviewTests.test_post_between_preparation_and_assignment_admission_invalidates_tracked_read",
+        "test_problem_post_review_terminal.PostedReviewTests.test_0733_assignment_committed_after_post_still_replays_and_authenticates",
+        "test_problem_post_review_terminal.PostedReviewTests.test_excluded_roles_and_null_subjects_do_not_inherit_current_statement",
+        "test_problem_post_review_terminal.AdvisoryProjectionTests.test_passed_post_refuses_assignments_in_both_modes_without_workspace_writes",
+        "test_problem_post_review_terminal.AdvisoryProjectionTests.test_context_events_remain_recordable_but_repair_cannot_reopen_post",
+        "test_problem_post_review_terminal.AdvisoryProjectionTests.test_focused_adjudication_cannot_reopen_posted_results"
+      ]
+    },
+    {
+      "id": "posted-statement-accepts-review-call",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "execution",
+      "summary": "Existing assignments and reservations can start further calls after posting.",
+      "fixed_in": "0.73.6",
+      "expected": "New ordinary and staged calls stop; capture acceptance and reconciliation remain available.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_calls_stop_without_blocking_capture_recovery",
+        "test_problem_post_review_terminal.PostedReviewTests.test_fresh_staged_run_refuses_before_dispatch_reservation_or_launch",
+        "test_problem_post_review_terminal.PostedReviewTests.test_unlaunched_reservation_cannot_launch_but_can_release_capacity",
+        "test_problem_post_review_terminal.PostedReviewTests.test_staged_capture_acceptance_after_post_needs_no_transport",
+        "test_problem_post_review_terminal.PostedReviewTests.test_post_between_preparation_and_call_admission_prevents_capacity_and_transport",
+        "test_problem_post_review_terminal.PostedReviewTests.test_post_between_reservation_preparation_and_admission_prevents_charge",
+        "test_problem_post_review_terminal.PostedReviewTests.test_post_between_launch_read_and_claim_prevents_worker_launch",
+        "test_problem_post_review_terminal.PostedReviewTests.test_post_before_launch_authorization_stops_provider_and_allows_reconciliation",
+        "test_problem_post_review_terminal.PostedReviewTests.test_new_retry_after_post_is_refused_and_committed_failed_run_replays"
+      ]
+    },
+    {
+      "id": "posted-controller-plans-new-frontier",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "planning",
+      "summary": "A posted controller can plan and assign another task.",
+      "fixed_in": "0.73.6",
+      "expected": "Frontier and direct-child creation refuse using the controller subject, including diagnostic preparation.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_controller_frontier_and_child_refusal",
+        "test_problem_post_review_terminal.PostedReviewTests.test_child_of_unposted_controller_uses_frozen_subject_despite_posted_selection",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_frontier_check_changes_no_workspace_bytes"
+      ]
+    },
+    {
+      "id": "posted-statement-accepts-output-correction",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "execution",
+      "summary": "A posted result can spend another correction call.",
+      "fixed_in": "0.73.6",
+      "expected": "Fresh correction refuses; historical correction authentication, replay and fingerprints remain unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_correction_refusal_preserves_history",
+        "test_problem_post_review_terminal.PostedReviewTests.test_historical_correction_replay_and_fingerprints_survive_post"
+      ]
+    },
+    {
+      "id": "posted-review-views-invite-continuation",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "reporting",
+      "summary": "Status task progress and generated series files expose independent review instructions.",
+      "fixed_in": "0.73.6",
+      "expected": "Derived views retain evidence and progress without prospective review hints for posted subjects.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_status_and_series_views_have_no_review_actions",
+        "test_problem_post_review_terminal.PostedReviewTests.test_staged_status_preserves_tasks_and_incomplete_recovery_evidence",
+        "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags"
+      ]
     }
   ]
 }

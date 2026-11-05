@@ -462,12 +462,14 @@ def plan_next(records, artifacts, head_id):
 def describe_next_actions(records, artifacts, assignment_id, actions=()):
     """Add executable actions while preserving existing navigation fields."""
     plan = plan_next(records, artifacts, assignment_id)
+    from .problem_delivery import find_review_post
+    assignment = records.get('review_assignment', {}).get(assignment_id, {})
+    is_posted = find_review_post(records, assignment) is not None
     result = []
     for original in actions or [dict(kind='review', workflow=plan.get('command'),
                                      scope=dict(assignment_id=assignment_id))]:
         action = copy.deepcopy(original)
         selected = plan
-        assignment = records.get('review_assignment', {}).get(assignment_id, {})
         task_id = original.get('payload', {}).get('task_id') or original.get('scope', {}).get('task_id')
         if (assignment.get('staged_review') and task_id is not None
                 and plan['state'] not in ('done', 'stop', 'handoff')):
@@ -483,6 +485,9 @@ def describe_next_actions(records, artifacts, assignment_id, actions=()):
             if key in selected:
                 action[key] = copy.deepcopy(selected[key])
         action['state'] = selected['state']
+        if is_posted:
+            action.pop('workflow', None)
+            action.pop('scope', None)
         result.append(action)
     return result
 

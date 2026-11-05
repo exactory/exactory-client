@@ -47,6 +47,7 @@ class PostedProblemTests(delivery.ProblemDeliveryCase):
         self.assertEqual(report["counts"]["obligations"], 1)
         self.assertLessEqual(expected_codes, {row["code"] for row in report["after_post"]})
         for row in report["after_post"]:
+            self.assertNotIn("next", row)
             self.assertTrue(row["reason"])
             self.assertTrue(row["explanation"])
         summary = next_summary(report)
