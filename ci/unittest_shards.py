@@ -136,6 +136,7 @@ def main():
     commands = parser.add_subparsers(dest="command", required=True)
     run = commands.add_parser("run")
     run.add_argument("--start-directory", type=Path, default=Path("tests"))
+    run.add_argument("--top-level-directory", type=Path)
     run.add_argument("--shard-index", type=int, required=True)
     run.add_argument("--shard-count", type=int, required=True)
     run.add_argument("--marketplace", type=Path, required=True)
@@ -159,7 +160,10 @@ def main():
             "marketplace_commit": git_value(args.marketplace, "HEAD"),
             "python_version": platform.python_version(),
         }
-        suite = unittest.TestLoader().discover(str(args.start_directory.resolve()))
+        top_level = str(args.top_level_directory.resolve()) if args.top_level_directory else None
+        suite = unittest.TestLoader().discover(
+            str(args.start_directory.resolve()), top_level_dir=top_level,
+        )
         report = run_shard(suite, args.shard_index, args.shard_count, provenance, record_path=args.result)
     else:
         paths = sorted(args.receipts.rglob("shard-result.json"))

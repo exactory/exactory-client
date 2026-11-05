@@ -35,6 +35,10 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.73.5](docs/releases/0.73.5.md) stops failed Lean downloads from failing CI. Only the jobs that run Lean install it, from the GitHub Actions cache or in up to four timed attempts, and a skipped harness test now fails CI. The harness code does not change.
+
+Version [0.73.4](docs/releases/0.73.4.md) makes CI of 0.73.3 pass. A replay test of a 0.69.18 review history now expects the pending occupancy that 0.73.3 reports. The harness code does not change.
+
 Version [0.73.3](docs/releases/0.73.3.md) records the time of a problem post that was made outside the harness, and adds `problem-post-time` for such a post that an earlier version recorded. The post gate keeps a valid adjudication while the result reviews are refreshed, and it reports a refreshed result slot as pending work.
 
 Version [0.73.2](docs/releases/0.73.2.md) raises the default time budget of `record-check` from 900 to 3600 seconds, so that a record whose readers work but take longer than 15 minutes passes the report step.

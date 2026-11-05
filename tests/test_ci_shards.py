@@ -131,6 +131,69 @@ class CIShardTests(unittest.TestCase):
         subprocess.run(["git", "-C", str(path), "update-ref", "HEAD", commit], check=True)
         return commit, tree
 
+    def run_package_fixture(self, outcome, with_top_level=True):
+        scratch = tempfile.TemporaryDirectory(prefix="ci package ")
+        self.addCleanup(scratch.cleanup)
+        base = Path(scratch.name)
+        client = base / "client"
+        (client / "ci").mkdir(parents=True)
+        shutil.copyfile(ROOT / "ci/unittest_shards.py", client / "ci/unittest_shards.py")
+        tests = client / "harness" / "tests"
+        tests.mkdir(parents=True)
+        (tests / "__init__.py").write_text("")
+        (tests / "support.py").write_text("VALUE = 'harness sibling support'\n")
+        (tests / "test_sample.py").write_text(
+            ("from tests.support import VALUE\n" if with_top_level else
+             "from support import VALUE\n") +
+            "import unittest\n"
+            "class Sample(unittest.TestCase):\n"
+            "    def test_sibling(self):\n"
+            "        self.assertEqual(VALUE, 'harness sibling support')\n" +
+            ("        self.skipTest('observed harness skip')\n" if outcome == "skip" else "")
+        )
+        # The plugin's non-package tests directory must not shadow the harness.
+        (client / "tests").mkdir()
+        (client / "tests" / "support.py").write_text("raise RuntimeError('wrong tests directory')\n")
+        self.git_fixture(client)
+        self.git_fixture(base / "marketplace")
+        result = base / "result.json"
+        command = [sys.executable, str(client / "ci/unittest_shards.py"), "run",
+                   "--start-directory", "harness/tests", "--shard-index", "0",
+                   "--shard-count", "1", "--marketplace", str(base / "marketplace"),
+                   "--result", str(result)]
+        if with_top_level:
+            command.extend(["--top-level-directory", "harness"])
+        process = subprocess.run(command, cwd=client, capture_output=True, text=True, timeout=30)
+        return process, json.loads(result.read_text()) if result.is_file() else None
+
+    def test_cli_top_level_package_imports_its_sibling_support(self):
+        process, report = self.run_package_fixture("pass")
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertTrue(report["success"])
+        self.assertEqual(report["tests_run"], 1)
+        self.assertEqual(report["all_test_ids"], ["tests.test_sample.Sample.test_sibling"])
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(report["skipped"], [])
+
+    def test_cli_top_level_package_skip_fails_the_shard(self):
+        process, report = self.run_package_fixture("skip")
+        self.assertIsNotNone(report, process.stderr)
+        self.assertEqual(process.returncode, 1, process.stderr)
+        self.assertFalse(report["success"])
+        self.assertEqual(report["tests_run"], 1)
+        self.assertEqual(report["skipped"], [
+            ["tests.test_sample.Sample.test_sibling", "observed harness skip"]])
+        self.assertEqual(report["errors"], [])
+
+    def test_cli_default_discovery_keeps_top_level_module_names(self):
+        process, report = self.run_package_fixture("pass", with_top_level=False)
+        self.assertIsNotNone(report, process.stderr)
+        self.assertEqual(process.returncode, 0, process.stderr)
+        self.assertEqual(report["all_test_ids"], ["test_sample.Sample.test_sibling"])
+        self.assertEqual(report["tests_run"], 1)
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(report["skipped"], [])
+
     def test_cli_receipts_reject_an_actual_failure_and_a_missing_shard(self):
         self.api()
         with tempfile.TemporaryDirectory() as directory:
