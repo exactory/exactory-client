@@ -171,7 +171,13 @@
     "problem_id": "656c336e-e892-4c47-80d2-a71d022f4116",
     "statement_digest": "0000000000000000000000000000000000000000000000000000000000000000",
     "reason": "The problem was posted on exactory.ai without gate post, on the owner's instruction.",
-    "evidence": "Owner instruction of 2026-11-04: \"Post this problem on exactory.ai now, without gate post.\""
+    "evidence": "Owner instruction of 2026-11-04: \"Post this problem on exactory.ai now, without gate post.\"",
+    "posted_at": "2026-11-04T14:49:22.236Z"
+  },
+  "problem-post-time": {
+    "post_id": "external-post-1",
+    "posted_at": "2026-11-04T14:49:22.236Z",
+    "evidence": "The saved server response states this creation time."
   },
   "publication-scope": {
     "id": "supported-manuscript-1",

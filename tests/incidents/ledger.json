@@ -3583,6 +3583,78 @@
         "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_default_uses_record_check_constant",
         "test_research_record_check.RecordCheckFollowupTests.test_default_budget_allows_measured_report_reader_times"
       ]
+    },
+    {
+      "id": "integration-problem-post-external-time",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "provenance (post time)",
+      "summary": "An external post recorded many hours after publication reported its recording time as the post time.",
+      "fixed_in": "0.73.3",
+      "expected": "A supplied server timestamp stays verbatim beside a separate UTC recording time; omission is null, legacy status normalizes a copy, and old records, receipts, fingerprints and raw exports stay unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_external.ExternalPostTests.test_server_time_is_verbatim_and_recording_clock_is_separate",
+        "test_problem_post_external.ExternalPostTests.test_legacy_projection_preserves_snapshot_receipt_fingerprint_and_raw_output"
+      ]
+    },
+    {
+      "id": "integration-problem-post-time-statement",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "provenance (post time)",
+      "summary": "An older external post had no structured way to retain its known server creation time after correcting the interpretation of its stored timestamp.",
+      "fixed_in": "0.73.3",
+      "expected": "One immutable time statement for an eligible older external post supplies the status time with verified evidence and a separate export; exact requests replay before eligibility, with no change to scientific evidence, gates or request reconstruction.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_time.PostTimeTests.test_server_response_time_statement_projects_old_post_and_exports_separately",
+        "test_problem_post_time.PostTimeTests.test_replay_precedes_eligibility_after_current_statement_changes",
+        "test_problem_post_time.PostTimeTests.test_statement_changes_neither_scientific_digest_gate_nor_rebuilt_requests"
+      ]
+    },
+    {
+      "id": "integration-adjudication-with-empty-pair",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "gate (objection adjudication)",
+      "summary": "A valid focused adjudication stopped resolving its objection while both current result successors were pending because the assessment omitted the evidence digest.",
+      "fixed_in": "0.73.3",
+      "expected": "The current digest is computed even with an empty pair; adjudications bound to that digest and material version retain effect, stale bindings remain unresolved, and the missing or pending pair still blocks posting.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_review_refresh.EmptyPairAdjudicationTests.test_focused_adjudication_keeps_its_effect_while_both_successors_are_pending",
+        "test_problem_review_refresh.EmptyPairAdjudicationTests.test_changed_evidence_digest_leaves_the_objection_unresolved",
+        "test_problem_review_refresh.EmptyPairAdjudicationTests.test_changed_material_version_leaves_the_objection_unresolved",
+        "test_problem_review_refresh.EmptyPairAdjudicationTests.test_digest_failure_with_empty_pair_is_reported_by_post"
+      ]
+    },
+    {
+      "id": "integration-pending-successor-occupancy",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "reporting (review occupancy)",
+      "summary": "Ordinary and parts v1 successors occupied result slots but the report described an absent pair; newer parts omitted the missing independent slot beside a pending head.",
+      "fixed_in": "0.73.3",
+      "expected": "Every current result head contributes occupancy; pending work stays in its series, a genuinely absent independent slot retains the pair finding, completed peers are checked, complete report shapes are preserved, and next continues the pending series.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_successor_occupancy.LegacyPartsOccupancyTests.test_two_refreshed_legacy_slots_remain_pending_at_part_turn_21",
+        "test_problem_successor_occupancy.OrdinaryOccupancyTests.test_no_head_one_pending_two_pending_and_complete_keep_report_shapes",
+        "test_problem_successor_occupancy.FreshPartsOccupancyTests.test_no_head_one_pending_two_pending_and_complete_peer",
+        "test_problem_successor_occupancy.OrdinaryOccupancyTests.test_ordinary_pending_next_names_a_current_assignment"
+      ]
+    },
+    {
+      "id": "integration-objections-after-refresh",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "gate (current review series)",
+      "summary": "Refreshing one or both result slots retired the finals that had resolved historical objections, leaving those objections open while successor work continued.",
+      "fixed_in": "0.73.3",
+      "expected": "Superseded finals retain their historical evidence but do not supply current resolutions; current finals or a valid focused adjudication resolve retained objections, explicit and saved old pairs remain refused, and external posting preserves the findings in after_post.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_successor_occupancy.OrdinaryOccupancyTests.test_current_finals_resolve_until_one_or_both_slots_refresh",
+        "test_problem_successor_occupancy.OrdinaryOccupancyTests.test_saved_and_explicit_superseded_pairs_stay_refused_after_refresh",
+        "test_problem_successor_occupancy.LegacyPartsOccupancyTests.test_resolved_pair_reopens_objections_for_one_then_two_successors_and_after_post",
+        "test_problem_successor_occupancy.FreshPartsOccupancyTests.test_resolved_pair_reopens_objections_for_one_then_two_successors_and_after_post"
+      ]
     }
   ]
 }

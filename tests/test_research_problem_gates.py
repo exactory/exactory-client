@@ -125,10 +125,13 @@ class ProblemGateTests(ProblemDeliveryCase):
         self.assertEqual(self.collect_gate_codes(records), {"problem_value_computation_missing"})
 
     def test_missing_bar_pair_and_result_pair_are_independent_gate_conditions(self):
-        for identifier, code in (("review-bar-second", "problem_bar_pending"), ("review-result-second", "problem_review_pair_required")):
+        for identifier, code in (("review-bar-second", "problem_bar_pending"), ("review-result-second", "review_task_pending")):
             records = self.store.snapshot()["records"]
             records["value_review"].pop(identifier)
-            self.assertIn(code, self.collect_gate_codes(records))
+            codes = self.collect_gate_codes(records)
+            self.assertIn(code, codes)
+            if identifier == "review-result-second":
+                self.assertNotIn("problem_review_pair_required", codes)
 
     def test_bar_mismatch_is_reported_by_the_post_gate(self):
         records = self.store.snapshot()["records"]

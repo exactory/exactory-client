@@ -368,8 +368,13 @@ def assess_post(records, artifacts):
         after_post = [dict(row, reason=row.get("reason", row["explanation"])) for row in unique
                       if row["code"] != "problem_already_posted"]
         unique = [row for row in unique if row["code"] == "problem_already_posted"]
-        posted_state = dict(after_post=after_post,
-                            post=dict(posted, gate=posted.get("gate", "passed")))
+        shown_post = dict(posted, gate=posted.get("gate", "passed"))
+        if posted.get("gate") == "bypassed" and "recorded_at" not in posted:
+            shown_post.update(recorded_at=posted["posted_at"], posted_at=None)
+            time_statement = records.get("problem_post_time", {}).get(posted["id"])
+            if time_statement is not None:
+                shown_post.update(posted_at=time_statement["posted_at"], time_statement=time_statement)
+        posted_state = dict(after_post=after_post, post=shown_post)
     slots = ({"slot_outcomes": reviews['slot_outcomes']} if 'slot_outcomes' in reviews else
              {"slot_outcomes": collect_staged_slots(outcomes)} if records.get('review_epoch') else {})
     return dict({"ready": not unique, "obligations": unique, "counts": {"obligations": len(unique)},

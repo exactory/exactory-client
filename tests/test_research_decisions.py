@@ -9,8 +9,8 @@ from strategy_fixtures import StrategyCase
 
 
 class OrdinaryProblemReviewTests(unittest.TestCase):
-    def test_ordinary_problem_review_pair_does_not_enter_staged_slot_collection(self):
-        from research_harness import research_decisions as decisions
+    def test_ordinary_heads_collect_occupancy_without_staged_authentication(self):
+        from research_harness import research_decisions as decisions, review_staged
         ordinary = dict(id='ordinary', dossier_id=None, role='result', context={},
                         subject={'kind': 'problem', 'statement_id': None})
         unrelated = dict(ordinary, id='unrelated', subject={'kind': 'problem', 'statement_id': 'other'},
@@ -18,13 +18,21 @@ class OrdinaryProblemReviewTests(unittest.TestCase):
         for assignments in ({}, {ordinary['id']: ordinary}, {unrelated['id']: unrelated}):
             with self.subTest(assignments=list(assignments)):
                 records = {'workspace': {'problem': {'authors': ['author']}}, 'review_assignment': assignments}
-                with patch('research_harness.review_staged.collect_slot_outcomes',
-                           side_effect=AssertionError('Ordinary reviews must not evaluate staged slots.')):
-                    result = decisions.assess_problem_reviews(records, object())
+                with patch.object(review_staged, 'collect_slot_outcomes',
+                                  wraps=review_staged.collect_slot_outcomes) as collect, \
+                        patch('research_harness.review_protocol.assignment_state',
+                              side_effect=AssertionError('Ordinary heads need no staged authentication.')):
+                    result = decisions.assess_problem_reviews(records, object(), check_evidence=False)
+                collect.assert_called_once()
                 self.assertFalse(result['ready'])
-                self.assertNotIn('slot_outcomes', result)
-                self.assertEqual({row['code'] for row in result['obligations']},
-                                 {'problem_bar_pending', 'problem_review_pair_required'})
+                expected = {'problem_bar_pending', 'problem_review_pair_required'}
+                if ordinary['id'] in assignments:
+                    expected.add('review_task_pending')
+                    self.assertEqual(result['slot_outcomes']['occupied'], 1)
+                    self.assertEqual(len(result['slot_outcomes']['pending']), 1)
+                else:
+                    self.assertNotIn('slot_outcomes', result)
+                self.assertEqual({row['code'] for row in result['obligations']}, expected)
 
 
 class DecisionContractTests(StrategyCase):

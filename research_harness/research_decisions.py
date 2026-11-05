@@ -1288,7 +1288,8 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
                          and assignment.get('staged_review', {}).get('kind') != 'task'
                          and assignment['role'] == 'result' and assignment.get('subject') == subject
                          for assignment in records.get('review_assignment', {}).values())
-    slot_outcomes = collect_problem_slot_outcomes(records, artifacts, subject) if staged_results else None
+    slot_outcomes = collect_problem_slot_outcomes(records, artifacts, subject)
+    has_unfinished_results = bool(slot_outcomes['incomplete'] or slot_outcomes['pending'])
     review_ids = _collect_problem_reviews(records, 'result', subject) if review_ids is None else review_ids
     bar_review_ids = _collect_problem_reviews(records, 'bar', subject) if bar_review_ids is None else bar_review_ids
     obligations, pairs = [], {}
@@ -1302,7 +1303,7 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
                 obligations.append(obligation('review_series_superseded', _CURRENT_RESULTS_NOTE,
                                               review_ids=superseded))
                 identifiers = [identifier for identifier in identifiers if identifier not in superseded]
-        if stage == 'result' and slot_outcomes is not None and (slot_outcomes['incomplete'] or slot_outcomes['pending']):
+        if stage == 'result' and has_unfinished_results:
             # A required assessment is occupied, so it is not a request for an
             # unrelated second reviewer. Its scientific work must be completed.
             obligations.append(obligation('assessment_incomplete' if slot_outcomes['incomplete'] else 'review_task_pending',
@@ -1311,6 +1312,11 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
             pairs[stage] = [records['value_review'][identifier] for identifier in identifiers
                             if identifier in records.get('value_review', {})
                             and any(row['id'] == identifier for row in slot_outcomes['complete'])]
+            if slot_outcomes['occupied'] < 2:
+                try:
+                    _pair(records, identifiers, subject, stage)
+                except ResearchError as error:
+                    obligations.append(obligation(code, str(error), review_ids=identifiers))
             obligations.extend(_independence(records, artifacts, pairs[stage]))
             continue
         try:
@@ -1371,15 +1377,21 @@ def assess_problem_reviews(records, artifacts, review_ids=None, bar_review_ids=N
             obligations.append(obligation('review_bar_mismatch', 'Each problem result must receive the bars it assesses.',
                                           review_id=review['id'], bar_ids=undelivered))
     expected, evidence_digest = None, None
-    if reviews and check_evidence:
-        expected = describe_problem_evidence(records, artifacts)
-        evidence_digest = compute_problem_evidence_digest(records, artifacts)
-        obligations.extend(_assess_problem_coverage(records, artifacts, reviews, expected, evidence_digest))
+    if check_evidence:
+        if reviews:
+            expected = describe_problem_evidence(records, artifacts)
+        try:
+            evidence_digest = compute_problem_evidence_digest(records, artifacts)
+        except ResearchError:
+            if reviews:
+                raise
+        if reviews:
+            obligations.extend(_assess_problem_coverage(records, artifacts, reviews, expected, evidence_digest))
     obligations.extend(assess_rubric_reviews(records, artifacts, reviews, evidence_digest))
     obligations.extend(assess_problem_objections(records, artifacts, subject, bars, reviews, evidence_digest))
     return {'ready': not obligations, 'obligations': _obligations(obligations),
             'review_ids': review_ids, 'bar_review_ids': bar_review_ids, 'problem_evidence_digest': evidence_digest,
-            **({'slot_outcomes': slot_outcomes} if slot_outcomes is not None else {})}
+            **({'slot_outcomes': slot_outcomes} if staged_results or has_unfinished_results else {})}
 
 
 def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
