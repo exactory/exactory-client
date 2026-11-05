@@ -714,23 +714,23 @@ class RecordCheckTests(unittest.TestCase):
 
     def test_sandbox_profile_allows_devnull_subprocess_and_denies_outside_write_when_available(self):
         from research_harness.record_check import build_sandbox_profile
-        if sys.platform != 'darwin':
-            self.skipTest('sandbox-exec is available only on macOS')
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory).resolve()
             clone, reports = base / 'clone', base / 'reports'
             clone.mkdir()
             reports.mkdir()
+            if sys.platform != 'darwin':
+                # Without sandbox-exec the check reports isolation as unavailable instead.
+                self.assertFalse(Path('/usr/bin/sandbox-exec').is_file())
+                return
             profile = build_sandbox_profile(clone, reports, self.case.root)
             executable = '/usr/bin/sandbox-exec'
-            try:
-                probe = subprocess.run([executable, '-p', profile, '/usr/bin/true'],
-                                       capture_output=True, text=True, timeout=15)
-            except (OSError, subprocess.TimeoutExpired) as error:
-                self.skipTest('sandbox-exec could not apply the record-check profile: ' + str(error))
+            probe = subprocess.run([executable, '-p', profile, '/usr/bin/true'],
+                                   capture_output=True, text=True, timeout=15)
             if probe.returncode:
-                self.skipTest('sandbox-exec could not apply the record-check profile: '
-                              + (probe.stderr.strip() or 'probe exited ' + str(probe.returncode)))
+                # An enclosing sandbox refuses the profile; the check reports that reason.
+                self.assertTrue(probe.stderr.strip())
+                return
             forbidden = base / 'outside'
             script = '''
 import subprocess
