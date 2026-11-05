@@ -38,8 +38,10 @@ of that assignment with `review_invocation_pending`. A process that stopped befo
 committed, even after the reviewer answered, leaves the invocation pending without a capture;
 reconcile it as the `review-run` row of the
 [CLI reference](../../docs/research-cli.md#scientific-contribution-decisions) describes.
-For a review assignment, `exactory-research review-series --assignment ID` finishes or
-reconciles such a call itself, with its original request id (state `resume`); run it instead of
+For a review assignment, `exactory-research review-series --assignment ID` finishes a captured
+call itself with its original request id (state `resume`) and reconciles an uncaptured current
+call through a `wait` with a new request id; a call of 0.69.x, which has no pool membership, is
+the handoff `review_worker_reconciliation_required` (command `review-attempt`). Run it instead of
 repeating `review-run` by hand ("Reviews and the decision", step 3).
 `exactory-research example OPERATION` prints a complete example payload. `exactory-research next`
 names the first missing condition with the action that clears it. Add `--check` to validate a payload without writing: the harness reports the first refusal
@@ -50,16 +52,17 @@ command whose validation evaluates a route or an assignment state while the reco
 Claude or Codex route is checked, since 0.73.0 a check reads the reviewer CLI version; see
 [Inputs and receipts](../../docs/research-cli.md#inputs-and-receipts).
 
-Before the first command on an existing problem record whose own wrapper pins a harness version
-other than the one you run, activate the new version. Run `exactory-research record-check
---workspace W` with the new version, where `W` is the record's workspace; the command checks a
-copy of the record and opens no SQLite connection on the record itself. Continue on the new version only when the
-report says `ready` true (exit status 0); otherwise keep the record on its pinned version and
-report the failed step and its `error` in your summary (a failure that the previous release
-shares is decided by the release procedure). Then update the version that the wrapper pins,
-verify the executable path and the version that the wrapper runs (the report's `runtime`), and
-start a new session so that the new hooks load. A running session keeps the version it loaded;
-update the plugin cache only when no session that loaded it runs. The
+Before you use a new harness version on an existing problem record, run `exactory-research
+record-check --workspace W` with that version, where `W` is the record's workspace. This holds
+for every existing record: one whose wrapper pins a version, and one that runs the harness from
+PATH. The command checks a copy of the record and opens no SQLite connection on the record
+itself. When the report says `ready` true (exit status 0), update the version that the record's
+wrapper pins, or the command resolution that the record uses. Verify the executable path and the
+version that the record's command actually runs (the report's `runtime`, when the check ran
+through that command). Start a new session so that the new hooks load. When `ready` is false
+(exit status 1), keep the record on the version it runs. Report the failed step and its `error`
+in your summary. Continue the work on that version. A running session keeps the version it
+loaded; update the plugin cache only when no session that loaded it runs. The
 [CLI reference](../../docs/research-cli.md#record-check) states the check and the activation.
 
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on success.
@@ -437,9 +440,8 @@ result and its source; start no solver work to reproduce an established result.
    parts of a longer text, and after the full texts the records as exact JSON text. The reviewer
    keeps notes and verbatim excerpts, and the harness checks every excerpt against the exact
    bytes of its unit. Run the chain to its end with `exactory-research review-series
-   --assignment ID`, where ID is any assignment of the chain; its exits are stated in "Reviews
-   and the decision", step 3. Do not write your own driver, turn limit or retry loop around
-   reviewer calls.
+   --assignment ID`, where ID is any assignment of the chain; its exits and the driver rule are
+   stated in "Reviews and the decision", step 3.
    - `review-series` assigns the next turn with the same reviewer, route, author and packet and
      `context: {native_packet, prior_assignment_id}`, where `prior_assignment_id` names the turn
      that just ran, and runs it. It repeats this while the new assignment is a reading turn
@@ -466,14 +468,15 @@ result and its source; start no solver work to reproduce an established result.
      `status` is `"unknown"` and the floor, the headroom and the warning are null. Keep the
      floor, the headroom and the warning of every turn in your report. A floor above the limit
      is still refused with `review_input_too_large` and `phase: "final_preflight"` (below).
-   - When a turn's run ends without output, `review-series` retries, replaces or stops the turn
-     under the outcomes of a failed reviewer call in the
-     [CLI reference](../../docs/research-cli.md#review-chains-and-review-series). A replacement
+   - When a turn's run ends without output, `review-series` runs the turn again, waits, stops
+     or replaces the turn under the outcomes of a failed reviewer call in the
+     [CLI reference](../../docs/research-cli.md#review-chains-and-review-series): a replacement
+     only in the cases that name one, and a timeout stops with `review_timeout`. A replacement
      is the next turn assigned again with the same `prior_assignment_id`; it replaces the failed
      turn, which can no longer be run or continued (`review_assignment_replaced`). When the first
-     turn fails, the command ends with the handoff `native_review_attestation_required` (exit
-     status 3): export the packet again under a new assignment id (`export`, kind
-     `problem-openness`) and start a new chain.
+     turn needs a replacement, the command ends with the handoff
+     `native_review_attestation_required` (exit status 3): export the packet again under a new
+     assignment id (`export`, kind `problem-openness`) and start a new chain.
    - When the receipt of a `review-run` step carries `output_refusal`, the answer was refused as
      a whole: none of its notes, excerpts or passage requests is in the chain, and the saved
      output is an attempt artifact, not chain evidence. Read `output_refusal.details`: `message`
@@ -748,30 +751,42 @@ instead of one request. The
    CLI, until the chain is done or needs you: it runs each turn, assigns each next turn with the
    complete payload (a new id, the same role, `dossier_id: null`, route, reviewer and author,
    and `prior_assignment_id` inside `context` naming the turn that just ran), resumes a captured
-   call with its original request id, replaces a turn whose attempts all ended without a
-   completed output (for a continuation, with its original `prior_assignment_id`; for a first
-   turn, with its original context), retries a failed call under the outcomes of the
-   [CLI reference](../../docs/research-cli.md#review-chains-and-review-series), and records the
+   call with its original request id, runs again, waits, replaces or stops a turn whose attempts
+   all ended without a completed output under the outcomes of the
+   [CLI reference](../../docs/research-cli.md#review-chains-and-review-series) (a replacement
+   keeps, for a continuation, its original `prior_assignment_id`, and for a first turn, its
+   original context), and records the
    final that returned the review with `value-review` (state `record`). Do not write your own
    driver, turn limit or retry loop around reviewer calls. It prints one JSON object per line
    for each step and ends in one of four ways:
    - Exit status 0: the plan is `done`, and the final of the chain is recorded.
-   - Exit status 3 with a `handoff` on the last line: the next step needs you. Run the `command`
-     that the plan names, then run `review-series` again. `review_slot_exhausted` (two outputs
-     of the head were refused; the assignment is exhausted) names `review-output-correction`
-     when that operation accepts the head (a problem result reassessment whose latest failure is
-     `review_reassessment_mismatch`), and otherwise `review-assignment` for a new eligible
-     reviewer of the slot; for an openness chain it names `export`, kind `problem-openness`
-     (Openness, step 6). `openness_review_not_approved` (the final turn of an openness chain
+   - Exit status 3 with a `handoff` on the last line: the next step needs you. Perform the step
+     that the handoff names. Run `review-series` again only when the step leaves more work in
+     the chain, and with the new assignment id when the step starts a new chain.
+     `review_slot_exhausted` (two outputs of the head were refused; the assignment is exhausted)
+     names `review-output-correction` when that operation accepts the head (a problem result
+     reassessment whose latest failure is `review_reassessment_mismatch`), `export`, kind
+     `problem-openness`, for an openness chain (Openness, step 6), and `review-assignment` for
+     an initial bar (role `bar` without `prior_assignment_id`: a new eligible reviewer replaces
+     the slot). For a bar continuation, a slate, a result or an adjudicator the plan is a `stop`
+     with this code and no command: the slot keeps its continuity or its fixed adjudicator, and
+     `review-assignment` of a new reviewer is refused (`review_slots_fixed`,
+     `review_resampling_forbidden` or `review_adjudicator_fixed`); report the stop as below.
+     `openness_review_not_approved` (the final turn of an openness chain
      returned a result that `problem-openness` does not accept) names `export`, kind
      `problem-openness` (Openness, step 7). `review_resampling_forbidden`
      (an initial bar, slate or result review ended without an output, and the same reviewer
      identity is not sampled again) names `review-assignment` for a new eligible reviewer.
      `review_context_*` and `review_route_retired` name `review-assignment` for the context
      repair of step 2. `review_route_runtime_stale` (the head's route pins another reviewer
-     runtime) names `review-route`: record and probe a new route, and the replacement turn then
-     runs on it. `assessment_incomplete` and `review_worker_reconciliation_required` are the
-     handoffs of a staged review, below.
+     runtime) names `review-route`. The planner keeps the route of the chain, so `review-series`
+     on the same head gives this handoff again. Record a new route with a new id and the same
+     adapter, model, endpoint and configuration. Probe it. Then follow the stale-route procedure
+     of the [route instructions](../../docs/research-decisions.md#commands-and-shared-state):
+     assign the role again on the new route, or, for a slot with history, retire the stale route
+     and continue the slot through the context repair of step 2. Then run `review-series` with
+     the new assignment. `assessment_incomplete` and `review_worker_reconciliation_required` are
+     the handoffs of a staged review, below.
    - Exit status 3 with a `stop` on the last line: a typed limit or refusal, with its `code` and
      `details`; the harness cannot continue the chain. A refused action of the chain ends the
      command this way with the refusal's code (for example `review_input_too_large` or a
@@ -854,9 +869,10 @@ instead of one request. The
    wait (`deferred_reading_budget`); a reply that the route's input cannot hold beside the
    others waits too (`deferred_capacity`), chosen when `review-assignment` records the turn, and
    stays in `pending_source_requests`. The command keeps assigning continuations while requests
-   stay pending. When a continuation's run ends without output, it retries, replaces or stops
-   the continuation under the outcomes of a failed reviewer call; a replacement is a new
-   continuation of the same parent (state `replace`), which replaces the failed one. When
+   stay pending. When a continuation's run ends without output, it runs the continuation again,
+   waits, stops or replaces it under the outcomes of a failed reviewer call (a replacement only
+   in the cases that name one); a replacement is a new continuation of the same parent (state
+   `replace`), which replaces the failed one. When
    `review-assignment` refuses a continuation with `review_source_no_progress`, `review-series`
    ends with a `stop` of that code: the reviewer repeated requests that the harness already
    answered with nothing new; do not continue the session with the same requests. `review-run` already

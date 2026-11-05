@@ -128,7 +128,7 @@ A session can end before the objective does. The controller event record is the 
 
 Resume, instead of starting at stage 1, when the input asks to resume, restart, or continue, or when the session-start hook reports a managed objective. Run `search status --json`, then `search next --json`, and perform exactly the returned controller action. This includes an open objective whose native attacks all have `units/FINISHED.json`: local completion can leave another obligation, result review, root audit, or required deliverable pending. When a command fails with `recovery_required` and `node_ids`, run `search refresh --spec FILE` with exactly `{"node_ids": [...]}` of those IDs. A Stop that returned them with `has_more: true` recorded nothing and goes on after the refresh. A native or journal command that returned them has already recorded its work; do not repeat it (`SEARCH.md#filesystem-service-and-cli`). For the selected node, also run `status <slug>` and read `tasks.json`; these give local stage detail but do not override `search next`. `status <slug>` is also a harness command. After a harness command on the attack in this session, the activity hook also records this session's ordinary shell calls on the attack. A session without one records only its writes and edits there. Activity is advisory: it never changes controller work, proof credit or the stage. A recorded pause survives status checks and session resume. Only an explicit authorized `search resume` clears it. Existing unmanaged work requires explicit reviewed adoption; never migrate or resume it automatically.
 
-Before the first command on a resumed objective whose record's own wrapper pins a harness version other than the one you run, activate the new version. Run `exactory-research record-check --workspace W` with the new version, where `W` is the research workspace of the objective (the command reads the controllers inside its copy with `search status` and `search next`); the command checks a copy of the record and opens no SQLite connection on the record itself. Continue on the new version only when the report says `ready` true (exit status 0); otherwise keep the record on its pinned version and report the failed step and its `error` in your summary (a failure that the previous release shares is decided by the release procedure). Then update the version that the wrapper pins, verify the executable path and the version that the wrapper runs (the report's `runtime`), and start a new session so that the new hooks load. A running session keeps the version it loaded; update the plugin cache only when no session that loaded it runs. The [CLI reference](../../docs/research-cli.md#record-check) states the check and the activation.
+Before you use a new harness version on a resumed objective, run `exactory-research record-check --workspace W` with that version, where `W` is the research workspace of the objective; the command reads the controllers inside its copy with `search status` and `search next`. This holds for every existing record: one whose wrapper pins a version, and one that runs the harness from PATH. The command checks a copy of the record and opens no SQLite connection on the record itself. When the report says `ready` true (exit status 0), update the version that the record's wrapper pins, or the command resolution that the record uses. Verify the executable path and the version that the record's command actually runs (the report's `runtime`, when the check ran through that command). Start a new session so that the new hooks load. When `ready` is false (exit status 1), keep the record on the version it runs. Report the failed step and its `error` in your summary. Continue the work on that version. A running session keeps the version it loaded; update the plugin cache only when no session that loaded it runs. The [CLI reference](../../docs/research-cli.md#record-check) states the check and the activation.
 
 Keep the action list current from the first move: when a strategy is entered, add one task per plan step it will dispatch; mark each done after the move that ran it; add a task for every deterministic run before writing its code. A task named nowhere in the record is the one thing a resumed session cannot recover.
 
@@ -206,11 +206,12 @@ read as a reading chain (`SEARCH.md#observed-native-review-delivery`):
 chain with `exactory-research review-series --assignment ID`, where ID is any
 assignment of the chain: it runs each turn, assigns the next turn with the same
 reviewer, route, author and packet and with `context.prior_assignment_id`,
-resumes a captured call with its original request id, and retries or replaces a
-turn whose attempts all ended without output under the outcomes of a failed
-reviewer call in the
+resumes a captured call with its original request id, and runs again, waits,
+replaces or stops a turn whose attempts all ended without output under the
+outcomes of a failed reviewer call in the
 [CLI reference](../../docs/research-cli.md#review-chains-and-review-series) (a
-replacement of a turn after the first is the next turn assigned again with the
+replacement only in the cases that name one; a replacement of a turn after the
+first is the next turn assigned again with the
 same `prior_assignment_id`). Do not write your own driver, turn limit or retry
 loop around reviewer calls. The command prints one JSON object per line for
 each step and ends in one of four ways. Exit status 3 with the handoff
@@ -218,13 +219,24 @@ each step and ends in one of four ways. Exit status 3 with the handoff
 only this command): the final turn has its output; submit that native output
 unchanged to `search accept`, or to `search complete` for the closure review.
 The service verifies the whole chain and stores its `reading_turns` on the
-acceptance or closure. Exit status 3 with the handoff
+acceptance or closure. The controller records the acceptance, and
+`review-series` does not see the chain as done through it: continue with
+`search next` and do not run `review-series` on that head again. Exit status 3
+with the handoff
 `native_review_attestation_required` (command `search review-packet`): the
 first turn needs a replacement, which needs a new attestation; export a new
-packet under a new assignment id and start a new chain. Exit status 3 with the
+packet under a new assignment id, start a new chain and run `review-series`
+with the new assignment id. Exit status 3 with the
 handoff `review_route_runtime_stale` (command `review-route`): the head's route
-pins another reviewer runtime; record and probe a new route, and the
-replacement turn then runs on it. Exit status 3 with a `stop`: a typed limit or
+pins another reviewer runtime. The planner keeps the route of the chain, so
+`review-series` on the same head gives this handoff again. Record a new route
+with a new id and the same adapter, model, endpoint and configuration. Probe
+it. Then assign the review again on the new route (the stale-route procedure
+of the [route instructions](../../docs/research-decisions.md#commands-and-shared-state)):
+a native first turn needs a new attestation, so export a new packet under a
+new assignment id with `search review-packet`, as for
+`native_review_attestation_required`, and assign it on the new route. Then
+run `review-series` with the new assignment. Exit status 3 with a `stop`: a typed limit or
 refusal with its `code` and `details`; the harness cannot continue the chain.
 A refused action of the chain ends the command this way with the refusal's
 code (for example `review_input_too_large` or a `review_parts_*` code); when
@@ -260,9 +272,10 @@ assignment result, and the allowances, estimates, progress and next action in
 `review-series` as for a reading chain above: it assigns each next turn with
 the complete payload (a new id, the same role, `dossier_id: null`, route,
 reviewer and author, and `context: {native_packet, prior_assignment_id}` with
-the same packet and the turn that just ran), runs it, and replaces a turn whose
-attempts all ended without completed output (for a continuation, with its
-original `prior_assignment_id`). At the handoff
+the same packet and the turn that just ran), runs it, and runs again, waits,
+replaces or stops a turn whose attempts all ended without completed output
+under the same outcomes (a replacement of a continuation keeps its original
+`prior_assignment_id`). At the handoff
 `native_review_acceptance_required`, submit the native output of the final turn
 unchanged to `search accept`, or to `search complete` for the closure review:
 the attestation names the first turn, and the service verifies the whole series

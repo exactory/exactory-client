@@ -26,15 +26,16 @@ receipt. In any other directory the CLI sends the verdict directly; a workspace 
 store refuses the receipt first prints one line, `Managed record skipped (<code>): <message>`.
 Neither case stops the send.
 
-Before the first command on an existing managed verification workspace whose record's own
-wrapper pins a harness version other than the one you run, activate the new version. Run
-`exactory-research record-check --workspace W` with the new version, where `W` is the
-verification workspace; the command checks a copy of the record and opens no SQLite connection
-on the record itself. Continue on the new version only when the report says `ready` true (exit status 0);
-otherwise keep the record on its pinned version and report the failed step and its `error` in
-your summary (a failure that the previous release shares is decided by the release procedure).
-Then update the version that the wrapper pins, verify the executable path and the version that
-the wrapper runs (the report's `runtime`), and start a new session so that the new hooks load.
+Before you use a new harness version on an existing managed verification workspace, run
+`exactory-research record-check --workspace W` with that version, where `W` is the
+verification workspace. This holds for every existing workspace: one whose wrapper pins a
+version, and one that runs the harness from PATH. The command checks a copy of the record and
+opens no SQLite connection on the record itself. When the report says `ready` true (exit status
+0), update the version that the record's wrapper pins, or the command resolution that the
+record uses. Verify the executable path and the version that the record's command actually runs
+(the report's `runtime`, when the check ran through that command). Start a new session so that
+the new hooks load. When `ready` is false (exit status 1), keep the record on the version it
+runs. Report the failed step and its `error` in your summary. Continue the work on that version.
 A running session keeps the version it loaded; update the plugin cache only when no session
 that loaded it runs. The [CLI reference](../../docs/research-cli.md#record-check) states the
 check and the activation.
@@ -270,17 +271,27 @@ each turn, assigns each next turn with the complete payload (a new id, the
 same role, `dossier_id: null`, route, reviewer and author, and
 `context: {verification_task_id, prior_assignment_id}` with the same task id
 and the turn that just ran), resumes a captured call with its original request
-id, replaces a turn whose attempts all ended without completed output (for a
-continuation, with its original `prior_assignment_id`; for the first turn,
-with its original context), and retries a failed call under the outcomes of
-the [CLI reference](../../docs/research-cli.md#review-chains-and-review-series).
+id, and runs again, waits, replaces or stops a turn whose attempts all ended
+without completed output under the outcomes of
+the [CLI reference](../../docs/research-cli.md#review-chains-and-review-series)
+(a replacement keeps, for a continuation, its original `prior_assignment_id`,
+and for the first turn, its original context).
 Do not write your own driver, turn limit or retry loop around reviewer calls.
 It prints one JSON object per line for each step and ends in one of four
 ways. Exit status 3 with the handoff `verification_verdict_body_required`
 (command `bind-verdict`): a final returned `{verdict, checks}`, and recording
-needs the verdict body; continue with the next paragraph. Exit status 3 with
-the handoff `review_route_runtime_stale` (command `review-route`): record and
-probe a new route, and the replacement turn then runs on it. Exit status 3
+needs the verdict body; continue with the next paragraph, and after
+`bind-verdict` run `review-series` again, which ends with `done` once the
+verdict assessment is recorded. Exit status 3 with
+the handoff `review_route_runtime_stale` (command `review-route`): the head's
+route pins another reviewer runtime. The planner keeps the route of the chain,
+so `review-series` on the same head gives this handoff again. Record a new
+route with a new id and the same adapter, model, endpoint and configuration.
+Probe it. Then assign the verification review again on the new route, as a
+new first assignment with `context: {verification_task_id}` (the stale-route
+procedure of the
+[route instructions](../../docs/research-decisions.md#commands-and-shared-state)).
+Then run `review-series` with the new assignment. Exit status 3
 with a `stop`: a typed limit or refusal with its `code` and `details`; the
 harness cannot continue the chain. A refused action of the chain ends the
 command this way with the refusal's code (for example a `review_parts_*`

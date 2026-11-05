@@ -209,9 +209,7 @@ OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": recor
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
-RECORD_CHECK_HELP_MSG = ("Qualify a copy of a research record offline in six steps and print a JSON report; ready decides the "
-                         "exit status (0 when true, 1 otherwise). --workspace W names the record, --keep-clone DIR keeps "
-                         "the clone, --time-budget SECONDS (default 900) bounds each reader of the report step.")
+RECORD_CHECK_HELP_MSG = "Qualify a copy of a research record offline; print a JSON report and exit 0 when ready is true, 1 otherwise."
 
 
 def add_identity(parser, *, required=True):
@@ -298,12 +296,9 @@ def build_parser():
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
         item.add_argument("--check", action="store_true",
-                          help="Validate the payload against one snapshot of the existing store, print the first "
-                               "refusal or {check: accepted, revision, recorded: false, ...}, and write nothing: an "
-                               "accepted check is no record. A request ID already committed returns its original "
-                               "receipt. Acquisitions, reviewer calls, reconciliations and a preparation that needs "
-                               "a second commit refuse with check_unsupported; a check reads the reviewer CLI version "
-                               "and renders PDF pages when a preparation needs them.")
+                          help="Validate against one snapshot, write nothing; acquisitions, reviewer calls, "
+                               "reconciliations, a result PDF page count (pdfinfo) and a second commit refuse with "
+                               "check_unsupported.")
         add_identity(item, required=command != "import-response")
         if command == "import-response":
             item.add_argument("--preview", action="store_true",

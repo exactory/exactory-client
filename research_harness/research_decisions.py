@@ -31,7 +31,7 @@ ARTIFACT_DISPOSITIONS = ("none", "result_report", "prepare_manuscript", "deliver
 _SUPERSEDED_RESULT_NOTE = ('The result names a superseded series. A new result must belong to the current '
                            'assignment of its slot. The details name the superseded assignment and the '
                            'current assignment.')
-_PARTS_RESULT_PENDING_NOTE = ('A result needs the authenticated complete final of the current parts v2 series. '
+_PARTS_RESULT_PENDING_NOTE = ('A result must bind the authenticated complete final of the current parts v2 series. '
                               'Intermediate or incomplete work records no result.')
 _CURRENT_RESULTS_NOTE = 'Select only the recorded finals of the current result slots. Older finals stay as history.'
 _LIMITS = ("These are mechanical evidence, attribution and transition checks. Scientific truth, importance, "

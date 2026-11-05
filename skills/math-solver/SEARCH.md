@@ -1156,11 +1156,13 @@ without a completed output, `review-series` plans the next action under the
 outcomes of a failed reviewer call: a run of the same assignment under a new
 invocation id (attempts without a completed output do not block a run while
 the route is not retired, not changed and its pinned runtime equals the
-installed adapter), a replacement of a turn after the first (state `replace`:
-the next turn assigned again with the same `prior_assignment_id`, which
-replaces the failed turn; the failed turn can no longer run or be continued,
-`review_assignment_replaced`), or a `stop` with the outcome's code. The first
-turn has no `prior_assignment_id`. When it cannot run again, the command ends
+installed adapter), a wait, a `stop` with the outcome's code (a timeout stops
+with `review_timeout`), or, only in the cases of those outcomes that name
+one, a replacement of a turn after the first (state `replace`: the next turn
+assigned again with the same `prior_assignment_id`, which replaces the failed
+turn; the failed turn can no longer run or be continued,
+`review_assignment_replaced`). The first
+turn has no `prior_assignment_id`. When it needs a replacement, the command ends
 with the handoff `native_review_attestation_required` (command
 `search review-packet`): export a new packet under a new assignment id and
 start a new chain, and the final output's `attestation_id` then names the new
@@ -1170,11 +1172,15 @@ capture of the reviewer's answer committed, or whose finishing write stayed
 refused, with its original request id (state `resume`), and records the
 captured answer without a second call; when the process stopped before the
 capture committed, even after the reviewer answered, it reconciles the call
-in the same state, and for a call of 0.69.x, which has no pool membership, it
-ends with the handoff `review_worker_reconciliation_required` (command
-`review-attempt`): import a `failed` attempt with `output: null` under the
-`id` of that `review-run`
-([the shared route instructions](../../docs/research-decisions.md#commands-and-shared-state)).
+through a `wait` with `payload.action` `reconcile` and a new request id (the
+code `review_invocation_pending`), and for a call of 0.69.x, which has no
+pool membership, it ends with the handoff
+`review_worker_reconciliation_required` (command `review-attempt`): import a
+`failed` attempt with `output: null` under the `id` of that `review-run`
+([the shared route instructions](../../docs/research-decisions.md#commands-and-shared-state));
+the imported attempt has no measured wall time, so `review-series` on that
+head then stops with `review_failure_unknown`, and `search next` names the
+native review that the controller still needs.
 A second live continuation of one turn is refused with
 `review_source_continuation_fork`. When the first unit of a reading turn does
 not fit the route alone, or the final turn does not fit after every
