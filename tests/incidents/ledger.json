@@ -3526,6 +3526,19 @@
       ]
     },
     {
+      "id": "integration-record-check-sandbox-devnull",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "isolation (sandbox profile)",
+      "summary": "The sandbox denied writes to /dev/null, breaking Codex runtime reads and disabling optional state-memo reuse. On a mixed Claude/Codex record copy, status took 45.3 seconds with 127 route context verifications outside isolation, versus 370.6 seconds with 6,961 inside it; continuation runtime reads could also raise PermissionError.",
+      "fixed_in": "0.73.0",
+      "expected": "A literal /dev/null exemption lets isolated subprocesses use DEVNULL, so Codex runtime reads can compute the state-memo identity and qualification can continue. Every other write outside the clone and report directory, every source-workspace read, and outbound network remain denied.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.RecordCheckTests.test_sandbox_profile_allows_devnull_subprocess_and_denies_outside_write_when_available",
+        "test_research_record_check.RecordCheckTests.test_sandbox_profile_denies_source_reads_network_and_outside_writes"
+      ]
+    },
+    {
       "id": "integration-route-capacity-decision-stop",
       "record": "20261104074403-harness-problems-closed-for-good",
       "class": "classification (route capacity)",
