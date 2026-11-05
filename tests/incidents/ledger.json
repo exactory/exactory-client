@@ -2523,6 +2523,9 @@
       "test_kind": "real_shape",
       "tests": [
         "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_over_cap_failure_at_the_floor_stops_before_recording_a_replacement",
+        "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_floor_failure_plan_preserves_budget_measurements_and_classification",
+        "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_series_ends_with_the_floor_budget_stop_without_another_call",
+        "test_review_failure_class.OutputReplacementTests.test_other_read_handler_refusal_keeps_the_output_cap_stop",
         "test_review_failure_class.OutputReplacementTests.test_real_read_handler_halves_units_and_does_not_write",
         "test_review_failure_class.FailureClassTests.test_dispatch_and_unhandled_output_caps_stop_with_measurement"
       ]
@@ -3193,6 +3196,9 @@
       "expected": "Only an existing handler proving a smaller admissible request may adapt; reading and native overflows otherwise stop as review_output_over_cap, and a parts read at its minimum card-floor allowance stops as review_parts_budget_exhausted before another call.",
       "test_kind": "real_shape",
       "tests": [
+        "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_floor_failure_plan_preserves_budget_measurements_and_classification",
+        "test_review_parts_budget_floor.BudgetFloorReplacementTests.test_series_ends_with_the_floor_budget_stop_without_another_call",
+        "test_review_failure_class.OutputReplacementTests.test_other_read_handler_refusal_keeps_the_output_cap_stop",
         "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
         "test_review_failure_class.FailureClassTests.test_dispatch_and_unhandled_output_caps_stop_with_measurement",
         "test_review_failure_class.OutputReplacementTests.test_real_read_handler_halves_units_and_does_not_write",

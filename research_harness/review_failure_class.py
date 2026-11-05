@@ -295,6 +295,8 @@ def plan_output_replacement(records, artifacts, assignment):
         if _measure(route, request) >= _measure(route, old_request):
             return None
     except (ResearchError, json.JSONDecodeError) as error:
+        if isinstance(error, ResearchError) and error.code == 'review_parts_budget_exhausted':
+            return dict(error.details or {}, state='stop', code=error.code)
         return dict(state='stop', code=OUTCOME_CODES['output_over_cap'],
                     reason='replacement_inadmissible',
                     handler_error=getattr(error, 'code', 'invalid_json'))

@@ -207,9 +207,9 @@ class PartsStatusTests(PartsViewCase):
         self.assertEqual(progress['next'], [])
         self.assertEqual(report['next']['code'], 'review_parts_pending')
         action = report['next']['next'][0]
-        self.assertEqual(action['state'], 'handoff')
-        # A parts series is not a reassessment disposition, so its exhausted slot takes a new reviewer.
-        self.assertEqual(action['command'], 'review-assignment')
+        self.assertEqual(action['state'], 'stop')
+        self.assertEqual(action['code'], 'review_slot_exhausted')
+        self.assertNotIn('command', action)
         self.assertNotIn('payload', action)
         self.assertEqual(report_views.next_summary(report)['next_hint']['review_parts']['blocked'],
                          'review_slot_exhausted')

@@ -526,6 +526,30 @@ class LegacyRuntimeFailureTests(ResultPartsCase):
 
 
 class OutputReplacementTests(PartsResultCase):
+    def test_other_read_handler_refusal_keeps_the_output_cap_stop(self):
+        self.oversized(count=12, characters=10000, room=80000)
+        assignment = self.assign()
+
+        def overflow(route, request, credential):
+            response = build_codex_response(route, request, {})
+            response['output'][0]['content'][0]['text'] = '{'
+            response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
+            return response
+
+        with patch.object(protocol.transport, 'send_request', side_effect=overflow):
+            protocol.invoke_assignment(self.case.store, dict(id='overflow', assignment_id=assignment['id']),
+                credential='fixture', expected_revision=self.case.store.revision, request_id='overflow')
+        records = self.case.read_records()
+        with patch.object(parts, 'prepare_packet', side_effect=ResearchError(
+                'review_parts_frame_too_large', 'Synthetic frame refusal', dict(frame_characters=999999))):
+            plan = failures.plan_after_failure(records, self.case.artifacts, assignment['id'])
+        self.assertEqual((plan['state'], plan['code']), ('stop', 'review_output_over_cap'))
+        self.assertEqual(plan['details']['handler_error'], 'review_parts_frame_too_large')
+        self.assertEqual(plan['details']['reason'], 'replacement_inadmissible')
+        self.assertEqual(plan['details']['outcome'], 'output_over_cap')
+        self.assertEqual(plan['details']['output_tokens'], 1000)
+        self.assertEqual(plan['details']['max_output_tokens'], 1000)
+
     def test_real_read_handler_halves_units_and_does_not_write(self):
         self.oversized(count=12, characters=10000, room=80000)
         assignment = self.assign()

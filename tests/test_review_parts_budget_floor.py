@@ -2,6 +2,9 @@
 
 import base64
 import copy
+import io
+import json
+from contextlib import redirect_stdout
 import unittest
 from unittest.mock import patch
 
@@ -11,6 +14,7 @@ from research_harness import review_protocol as protocol
 from research_harness.artifacts import describe_artifact
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
+from research_harness.review_continuation import plan_next
 from review_parts_fixtures import (
     PartsResultCase, make_output, make_packet, measure_input_limit,
     measure_packet, observe, plan,
@@ -247,6 +251,42 @@ class BudgetFloorPlanningTests(unittest.TestCase):
 
 
 class BudgetFloorReplacementTests(PartsResultCase):
+    def test_floor_failure_plan_preserves_budget_measurements_and_classification(self):
+        assignment, details = self.assert_floor_failure_stops()
+        before = self.case.store.snapshot()
+        plan = plan_next(before['records'], self.case.artifacts, assignment['id'])
+        self.assertEqual((plan['state'], plan['code']), ('stop', 'review_parts_budget_exhausted'))
+        self.assertNotIn('command', plan)
+        self.assertNotIn('payload', plan)
+        actual = dict(plan['details'])
+        self.assertEqual(actual.pop('outcome'), 'output_over_cap')
+        self.assertEqual(actual.pop('reset_at'), None)
+        attempt_id = actual.pop('attempt_id')
+        self.assertEqual(attempt_id, 'overflow-2')
+        self.assertEqual(actual.pop('failed_attempts'), 3)
+        signal = actual.pop('signal')
+        self.assertEqual(signal['source'], 'review_parts.find_failed_replacement')
+        self.assertEqual(signal['value']['failed_assignment_id'], assignment['id'])
+        self.assertEqual(actual, details)
+        self.assertEqual(self.case.store.snapshot(), before)
+
+    def test_series_ends_with_the_floor_budget_stop_without_another_call(self):
+        assignment, details = self.assert_floor_failure_stops()
+        before = self.case.store.snapshot()
+        output = io.StringIO()
+        with patch.object(protocol.transport, 'send_request',
+                          side_effect=AssertionError('A floor failure must not call a reviewer')), \
+                redirect_stdout(output), self.assertRaises(SystemExit) as exited:
+            cli.main(['review-series', '--workspace', str(self.case.root),
+                      '--assignment', assignment['id']], render_views=lambda workspace: None)
+        self.assertEqual(exited.exception.code, 3)
+        stop = json.loads(output.getvalue().splitlines()[-1])
+        self.assertEqual((stop['state'], stop['code']), ('stop', 'review_parts_budget_exhausted'))
+        self.assertNotIn('command', stop)
+        for key, value in details.items():
+            self.assertEqual(stop['details'][key], value, key)
+        self.assertEqual(self.case.store.snapshot(), before)
+
     def test_over_cap_failure_at_the_floor_stops_before_recording_a_replacement(self):
         self.assert_floor_failure_stops()
 
@@ -303,13 +343,16 @@ class BudgetFloorReplacementTests(PartsResultCase):
                 self.assertEqual(details['unit_characters_remaining'],
                                  header['unit_characters_remaining'])
                 self.assertEqual(details['unit_allowance_floor'], floor)
+                self.assertEqual(details['maximum_read_turns'],
+                                 header['card_budget_remaining'] // 4000)
+                self.assertEqual(details['card_budget_remaining'], header['card_budget_remaining'])
                 self.assertEqual(details['state_budget'], header['state_budget'])
                 self.assertEqual(details['output_tokens'], failed_tokens)
                 self.assertEqual(details['max_output_tokens'], self.output_tokens)
                 self.assertEqual(details['failed_assignment_id'], assignment['id'])
                 self.assertEqual(self.case.store.snapshot(), before)
                 self.assertEqual(len(calls), index + 1)
-                break
+                return assignment, details
             following = self.assign('replacement-' + str(index), prior)
             expected = max(following['review_parts_plan']['unit_allowance_floor'],
                            header['unit_characters'] // 2)

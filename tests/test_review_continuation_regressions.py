@@ -1,6 +1,8 @@
 """Lifecycle regressions found by the independent continuation review."""
 
+import io
 import json
+from contextlib import redirect_stdout
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -20,6 +22,125 @@ class ContinuationRegressionTests(unittest.TestCase):
         case.setUp()
         self.addCleanup(case.doCleanups)
         return case
+
+    def assert_exhausted_slot_stops(self, case, identifier):
+        before = case.store.snapshot()
+        plan = plan_next(before['records'], case.artifacts, identifier)
+        self.assertEqual((plan['state'], plan['code']), ('stop', 'review_slot_exhausted'))
+        self.assertEqual(plan['details'], dict(assignment_id=identifier, refused_attempts=[
+            dict(attempt_id='refused-1', code='review_evidence_undelivered'),
+            dict(attempt_id='refused-2', code='review_evidence_undelivered')]))
+        self.assertNotIn('command', plan)
+        self.assertNotIn('payload', plan)
+        self.assertEqual(case.store.snapshot(), before)
+        return plan
+
+    def test_two_bar_continuation_refusals_stop_the_fixed_slot(self):
+        fixture = self.fixture()
+        case = fixture.case
+        case.assign('bar', 'second')
+        output = case.build_review_output('bar')
+        output['source_requests'] = [dict(id='page', kind='inventory_page', page=0)]
+        output['value']['status'] = 'unresolved'
+        fixture.invoke(output)
+        fixture.execute(fixture.plan(), request='continue-bar')
+        identifier = 'bar-first-t2'
+        output = case.build_review_output('bar')
+        output['value']['evidence'] = [case.artifacts.put(b'Undelivered evidence.', 'text/plain')]
+        for attempt in ('refused-1', 'refused-2'):
+            with patch('research_harness.review_transport.send_request',
+                       return_value=case.build_provider_response(output)):
+                case.mutate(protocol.invoke_assignment, dict(id=attempt, assignment_id=identifier),
+                            credential='fixture')
+            with self.assertRaises(ResearchError) as caught:
+                case.mutate(cli.OPERATIONS['value-review'], dict(
+                    output, id='finding', dossier_id=None, assignment_id=identifier))
+            self.assertEqual(caught.exception.code, 'review_evidence_undelivered')
+        before = case.store.snapshot()
+        with self.assertRaises(ResearchError) as caught:
+            case.assign('bar', 'third', identifier='replacement')
+        self.assertEqual(caught.exception.code, 'review_slots_fixed')
+        with self.assertRaises(ResearchError) as caught:
+            case.assign('bar', 'third', identifier='replacement', prior_assignment_id='bar-first')
+        self.assertEqual(caught.exception.code, 'review_source_continuation_mismatch')
+        self.assertEqual(case.store.snapshot(), before)
+        self.assert_exhausted_slot_stops(case, identifier)
+
+    def test_two_slate_refusals_stop_the_fixed_slot(self):
+        from test_research_problem_adjudication_resolution import ReviewOutputRefusalTests
+
+        case = self.fixture(ReviewOutputRefusalTests)
+        # This fixture also proves that a fresh reviewer is refused with review_bar_continuity.
+        case.exhaust_later_role('slate')
+        self.assert_exhausted_slot_stops(case, 'slate-first')
+
+    def test_two_problem_result_refusals_stop_the_fixed_slot(self):
+        from test_research_problem_adjudication_resolution import ReviewOutputRefusalTests
+
+        case = self.fixture(ReviewOutputRefusalTests)
+        case.exhaust_later_role('result')
+        self.assert_exhausted_slot_stops(case, 'result-first')
+
+    def test_two_adjudicator_refusals_stop_the_fixed_slot(self):
+        from test_research_problem_adjudication_resolution import ReviewOutputRefusalTests
+
+        case = self.fixture(ReviewOutputRefusalTests)
+        case.prepare_reviews(result_reviewer='first')
+        context = dict(review_ids=['review-result-first', 'review-result-second'],
+                       objection_id='unsupported-implication')
+        case.assign('adjudicator', 'third', identifier='focused', **context)
+        output = dict(objection_id=context['objection_id'], disposition='not_upheld',
+            reason='Exact evidence resolves it.', correction_admissible=None,
+            evidence=[case.artifacts.put(b'Undelivered evidence.', 'text/plain')])
+        for attempt in ('refused-1', 'refused-2'):
+            error = case.refuse(output, 'focused', attempt, command='review-adjudication')
+            self.assertEqual(error.code, 'review_evidence_undelivered')
+        before = case.store.snapshot()
+        with self.assertRaises(ResearchError) as caught:
+            case.assign('adjudicator', 'fourth', identifier='replacement', **context)
+        self.assertEqual(caught.exception.code, 'review_adjudicator_fixed')
+        self.assertEqual(case.store.snapshot(), before)
+        self.assert_exhausted_slot_stops(case, 'focused')
+
+    def test_two_verification_refusals_keep_the_assignment_handoff(self):
+        from test_review_parts_study import VerificationPartsTests
+        from review_parts_fixtures import make_output
+
+        case = self.fixture(VerificationPartsTests)
+        case.enlarge_verification()
+        case.install_packet()
+        assignment = case.assign()
+        output = make_output(case.packet(assignment))
+        output['cards'] = []
+        for attempt in ('refused-1', 'refused-2'):
+            result = case.invoke(assignment, output, attempt)
+            self.assertEqual(result['output_refusal']['code'], 'invalid_value_review')
+        before = case.case.store.snapshot()
+        plan = plan_next(before['records'], case.case.artifacts, assignment['id'])
+        self.assertEqual((plan['state'], plan['code'], plan['command']),
+                         ('handoff', 'review_slot_exhausted', 'review-assignment'))
+        self.assertEqual(plan['details'], dict(assignment_id=assignment['id'], refused_attempts=[
+            dict(attempt_id='refused-1', code='invalid_value_review'),
+            dict(attempt_id='refused-2', code='invalid_value_review')]))
+        self.assertNotIn('payload', plan)
+        self.assertEqual(case.case.store.snapshot(), before)
+
+    def test_series_ends_with_the_exhausted_fixed_slot_stop(self):
+        from test_research_problem_adjudication_resolution import ReviewOutputRefusalTests
+
+        case = self.fixture(ReviewOutputRefusalTests)
+        case.exhaust_later_role('result')
+        output = io.StringIO()
+        before = case.store.snapshot()
+        with patch('research_harness.review_transport.send_request',
+                   side_effect=AssertionError('An exhausted slot must not call a reviewer')), \
+                redirect_stdout(output), self.assertRaises(SystemExit) as exited:
+            cli.main(['review-series', '--workspace', str(case.root), '--assignment', 'result-first'],
+                     render_views=lambda workspace: None)
+        self.assertEqual(exited.exception.code, 3)
+        self.assertEqual(json.loads(output.getvalue().splitlines()[-1]),
+                         self.assert_exhausted_slot_stops(case, 'result-first'))
+        self.assertEqual(case.store.snapshot(), before)
 
     def test_two_reassessment_mismatches_hand_off_eligible_correction(self):
         from research_harness import review_output_correction
