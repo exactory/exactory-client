@@ -49,7 +49,7 @@ class ProvenanceTests(unittest.TestCase):
 
 class ProvenanceReceiptTests(LiteratureCase):
     def test_receipts_record_runtime_and_replay_ignores_runtime_differences(self):
-        from research_harness import operations
+        from research_harness import provenance
         from research_harness.reading import record_reading
         a = self.metadata()
         payload = self.abstract_note(a)
@@ -57,7 +57,7 @@ class ProvenanceReceiptTests(LiteratureCase):
         receipt = self.store.snapshot()["records"]["literature_operation"]["same-request"]
         self.assertEqual(receipt["operation"], "literature.reading")
         self.assertEqual(len(receipt["runtime"]["package_digest"]), 64)
-        with mock.patch.object(operations, "runtime_provenance", return_value={"plugin_version": "0.0.0-other"}):
+        with mock.patch.object(provenance, "runtime_provenance", return_value={"plugin_version": "0.0.0-other"}):
             again = record_reading(self.store, payload, expected_revision=self.store.revision, request_id="same-request")
         self.assertEqual(first, again)
 

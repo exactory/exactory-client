@@ -17,8 +17,7 @@ def _runtime_fingerprint(records, artifacts):
         representatives = {}
         for route in records.get('review_route', {}).values():
             representatives.setdefault(route['adapter'], route)
-        from .review_protocol import read_route_runtime
-        return digest({'adapters': {adapter: read_route_runtime(artifacts, representatives[adapter])
+        return digest({'adapters': {adapter: artifacts.store.read_runtime_fingerprint(representatives[adapter])
                                    for adapter in sorted(representatives)},
                        'exact_text_cost': profile()})
     except Exception:
@@ -125,15 +124,17 @@ def evaluate_state(records, artifacts, kind, identifier, compute):
                 # Unscoped calls retain their historical behavior: return the
                 # native result without retaining it after observed drift.
                 changed.append(True)
-            return copy.deepcopy(result)
+            return result
         changed = []
         if before is None:
             return copy.deepcopy(calculate())
-        result = evaluation.once(('review_state', key), calculate)
+        result = evaluation.reuse_value(('review_state', key), calculate, protected=True)
         if changed:
-            removed = evaluation._optional.pop(('memo', evaluation._namespace, ('review_state', key)), None)
+            cache_key = ('encoded_value', evaluation._namespace, ('review_state', key))
+            removed = evaluation._requests.pop(cache_key, None)
             if removed is not None:
                 evaluation._retained_bytes[0] -= removed[1]
-        return copy.deepcopy(result)
+                evaluation._request_bytes[0] -= removed[1]
+        return result
     finally:
         active.remove(identity)

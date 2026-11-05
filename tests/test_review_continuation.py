@@ -249,11 +249,32 @@ class ContinuationTests(unittest.TestCase):
             context=dict(native_packet={'fixture': 'native'}))
         records['review_attempt'] = dict(failed=dict(id='failed', assignment_id='bar-first',
             status='failed', recorded_revision=200))
-        with patch('research_harness.review_failure_class.plan_after_failure',
+        with patch('research_harness.native_review.load_packet',
+                   return_value=dict(contract={}, scientific_context={})), \
+                patch('research_harness.review_failure_class.plan_after_failure',
                    return_value=dict(state='replace', code='fixture', details={})):
             plan = self.plan(records)
         self.assertEqual((plan['state'], plan['command']), ('handoff', 'search review-packet'))
         self.assertEqual(plan['code'], 'native_review_attestation_required')
+
+    def test_two_refused_native_outputs_need_a_new_controller_attestation(self):
+        records = self.case.read_records()
+        records['review_assignment']['bar-first'].update(role='native_math',
+            context=dict(native_packet={'fixture': 'native'}))
+        records['review_attempt'] = {str(number): dict(id=str(number), assignment_id='bar-first',
+            status='completed', recorded_revision=200 + number) for number in range(2)}
+        refused = [dict(attempt_id=str(number)) for number in range(2)]
+        with patch.object(protocol, '_context_observed', return_value=True), \
+                patch.object(protocol, 'assignment_state', return_value=dict(
+                    output=None, obligations=[], refused_attempts=refused)), \
+                patch('research_harness.native_review.load_packet',
+                      return_value=dict(contract={}, scientific_context={})), \
+                patch('research_harness.review_output_correction.prepare_packet',
+                      side_effect=ResearchError('review_output_correction_unavailable', 'Synthetic refusal')):
+            plan = self.plan(records)
+        self.assertEqual((plan['state'], plan['command']), ('handoff', 'search review-packet'))
+        self.assertEqual(plan['code'], 'review_slot_exhausted')
+        self.assertEqual(plan['details']['refused_attempts'], refused)
 
     def test_capacity_wait_names_existing_call_reconciliation(self):
         records = self.case.read_records()
@@ -287,7 +308,7 @@ class ContinuationTests(unittest.TestCase):
                 self.assertEqual((plan['state'], plan['command']), ('handoff', command))
                 self.assertNotIn('payload', plan)
 
-    def test_two_refusals_hand_off_correction(self):
+    def test_two_initial_bar_refusals_hand_off_a_new_reviewer(self):
         for number in range(2):
             output = self.case.build_review_output('bar')
             output['value']['status'] = 'invented'
@@ -301,7 +322,15 @@ class ContinuationTests(unittest.TestCase):
         plan = self.plan()
         self.assertEqual(plan['state'], 'handoff')
         self.assertEqual(plan['code'], 'review_slot_exhausted')
-        self.assertEqual(plan['command'], 'review-output-correction')
+        self.assertEqual(plan['command'], 'review-assignment')
+        self.assertEqual(plan['details']['assignment_id'], 'bar-first')
+        self.assertEqual([row['attempt_id'] for row in plan['details']['refused_attempts']],
+                         ['bar-first-run-1', 'bar-first-run-2'])
+        self.assertNotIn('payload', plan)
+        with patch('research_harness.review_output_correction.prepare_packet',
+                   side_effect=RuntimeError('eligibility defect')):
+            with self.assertRaises(RuntimeError):
+                self.plan()
 
 if __name__ == '__main__':
     unittest.main()

@@ -93,85 +93,113 @@ def read_attempt_delivery(records, artifacts, assignment, attempt=None):
 
 def _read_authenticated_delivery(records, evaluation, assignment, attempt):
     """Project a delivery after explicit authentication or ready-state selection."""
-    evidence_parts = assignment.get('prompt', {}).get('parameters', {}).get('evidence_parts')
-    legacy_series = isinstance(evidence_parts, str) and evidence_parts.startswith(parts.PROTOCOL + '/')
-    try:
-        raw = protocol.read_raw_observation(records, evaluation, attempt['id'])
-        if raw['request_digest'] != attempt.get('request_digest'):
-            raise ResearchError('review_invocation_unverified', 'Delivery requires the exact recorded request digest')
-        request = protocol._read_json(evaluation, raw['request'])
-        route = records['review_route'][assignment['route_id']]
-        ancestors, pending, seen = [], [assignment['id']], set()
-        while pending:
-            identifier = pending.pop()
-            if identifier in seen:
-                continue
-            seen.add(identifier)
-            ancestor = records.get('review_assignment', {}).get(identifier)
-            if ancestor is None:
-                if legacy_series:
+    for name in ('request', 'response', 'output'):
+        reference = attempt.get(name)
+        if reference is not None:
+            evaluation.read(reference)
+
+    def project():
+        evidence_parts = assignment.get('prompt', {}).get('parameters', {}).get('evidence_parts')
+        legacy_series = isinstance(evidence_parts, str) and evidence_parts.startswith(parts.PROTOCOL + '/')
+        try:
+            raw = protocol.read_raw_observation(records, evaluation, attempt['id'])
+            if raw['request_digest'] != attempt.get('request_digest'):
+                raise ResearchError('review_invocation_unverified', 'Delivery requires the exact recorded request digest')
+            request = protocol._read_json(evaluation, raw['request'])
+            route = records['review_route'][assignment['route_id']]
+            ancestors, pending, seen = [], [assignment['id']], set()
+            while pending:
+                identifier = pending.pop()
+                if identifier in seen:
                     continue
-                raise ResearchError('review_input_unreadable', 'The exact bound input ancestry is missing')
-            ancestors.append(ancestor)
-            from .review_supplied_evidence import find_scientific_predecessor
-            parents = [ancestor.get('history_assignment_id'), ancestor.get('context', {}).get('prior_assignment_id'),
-                       find_scientific_predecessor(ancestor)]
-            if not any(parents) and ancestor.get('role') == 'slate' and ancestor.get('session_id') != identifier:
-                parents.append(ancestor.get('session_id'))
-            pending.extend(parent for parent in parents if parent is not None)
-        binding = assignment.get('staged_review') or {}
-        if binding.get('kind') == 'task':
-            from .review_excerpts import read_sent_packet
-            from .review_input_projection import collect_attachments, project_evidence
-            from .review_transport import logical_messages
-            packet = read_sent_packet(request)
-            if (packet is None or packet.get('digest') != assignment['packet_digest']
-                    or packet.get('staged_review', {}).get('epoch_id') != binding['epoch_id']
-                    or packet['staged_review'].get('task', {}).get('id') != binding['task_id']
-                    or packet.get('role') != assignment['role'] or packet.get('subject') != assignment.get('subject')):
-                raise ResearchError('review_input_unreadable', 'Bind the exact staged task input')
-            content = logical_messages(request)[-1]['content']
-            project_evidence(packet, collect_attachments(content) if isinstance(content, list) else {})
-            packets = [packet]
-        else:
-            packets = (packets_from_visual_request(request, assignments=ancestors)
-                       if route['adapter'] == 'codex_cli_visual_v1' else
-                       packets_from_request(request, native_attachments=route['adapter'] == 'openai_responses_v1',
-                                            assignments=None if legacy_series else ancestors))
-            if not packets or packets[-1]['digest'] != assignment['packet_digest']:
-                raise ResearchError('review_input_unreadable', 'The deciding request must carry its exact current packet')
-        current = project_delivery_view(records, evaluation, packets)
-        citation, coverage = list(packets), list(packets)
-        if parts.find_stage(packets[-1]) is not None:
-            # Never select this attempt again while its output is being classified.
-            prior = assignment.get('history_assignment_id')
-            earlier = parts.collect_series_packets(records, evaluation, prior) if prior else []
-            coverage = parts.verified_coverage_packets(records, evaluation, assignment['id'], packets + earlier)
-            citation += earlier + parts.collect_earlier_series_packets(records, evaluation, assignment)
-        if fresh.find_kind(packets[-1]) is not None:
-            prior = assignment.get('context', {}).get('prior_assignment_id')
-            earlier = fresh.collect_series_packets(records, evaluation, prior) if prior else []
-            series_id = packets[-1][fresh.KEY]['series_assignment_id']
-            earlier = [packet for packet in earlier if packet[fresh.KEY]['series_assignment_id'] == series_id]
-            coverage = earlier + packets
-            citation = earlier + packets
-        identities = []
-        for packet in packets:
-            owner = next((owner for owner in ancestors if owner['packet_digest'] == packet['digest']), None)
-            if owner is None and not legacy_series:
-                raise ResearchError('review_input_unreadable', 'Bind each actual packet to its input ancestry')
-            owner = owner or {}
-            identities.append(dict(assignment_id=owner.get('id'),
-                **{key: copy.deepcopy(packet.get(key, owner.get(key))) for key in
-                   ('digest', 'protocol', 'role', 'reviewer_id', 'dossier_id', 'subject')}))
-        return dict(assignment_id=assignment['id'], attempt_id=attempt['id'], request_digest=raw['request_digest'],
-                    packet_identities=identities, current_input=current,
-                    citation_history=fresh.read_series_delivery(records, evaluation, packets=citation),
-                    coverage_witnesses=fresh.read_series_delivery(records, evaluation, packets=coverage))
-    except ResearchError:
-        raise
-    except json.JSONDecodeError as error:
-        raise ResearchError('review_input_unreadable', 'The exact authenticated input cannot be decoded') from error
+                seen.add(identifier)
+                ancestor = records.get('review_assignment', {}).get(identifier)
+                if ancestor is None:
+                    if legacy_series:
+                        continue
+                    raise ResearchError('review_input_unreadable', 'The exact bound input ancestry is missing')
+                ancestors.append(ancestor)
+                from .review_supplied_evidence import find_scientific_predecessor
+                parents = [ancestor.get('history_assignment_id'), ancestor.get('context', {}).get('prior_assignment_id'),
+                           find_scientific_predecessor(ancestor)]
+                if not any(parents) and ancestor.get('role') == 'slate' and ancestor.get('session_id') != identifier:
+                    parents.append(ancestor.get('session_id'))
+                pending.extend(parent for parent in parents if parent is not None)
+            binding = assignment.get('staged_review') or {}
+            if binding.get('kind') == 'task':
+                from .review_excerpts import read_sent_packet
+                from .review_input_projection import collect_attachments, project_evidence
+                from .review_transport import logical_messages
+                packet = read_sent_packet(request)
+                if (packet is None or packet.get('digest') != assignment['packet_digest']
+                        or packet.get('staged_review', {}).get('epoch_id') != binding['epoch_id']
+                        or packet['staged_review'].get('task', {}).get('id') != binding['task_id']
+                        or packet.get('role') != assignment['role'] or packet.get('subject') != assignment.get('subject')):
+                    raise ResearchError('review_input_unreadable', 'Bind the exact staged task input')
+                content = logical_messages(request)[-1]['content']
+                project_evidence(packet, collect_attachments(content) if isinstance(content, list) else {})
+                packets = [packet]
+            else:
+                packets = (packets_from_visual_request(request, assignments=ancestors)
+                           if route['adapter'] == 'codex_cli_visual_v1' else
+                           packets_from_request(request, native_attachments=route['adapter'] == 'openai_responses_v1',
+                                                assignments=None if legacy_series else ancestors))
+                if not packets or packets[-1]['digest'] != assignment['packet_digest']:
+                    raise ResearchError('review_input_unreadable', 'The deciding request must carry its exact current packet')
+            current = project_delivery_view(records, evaluation, packets)
+            citation, coverage = list(packets), list(packets)
+            if parts.find_stage(packets[-1]) is not None:
+                # Never select this attempt again while its output is being classified.
+                prior = assignment.get('history_assignment_id')
+                earlier = parts.collect_series_packets(records, evaluation, prior) if prior else []
+                coverage = parts.verified_coverage_packets(records, evaluation, assignment['id'], packets + earlier)
+                citation += earlier + parts.collect_earlier_series_packets(records, evaluation, assignment)
+            if fresh.find_kind(packets[-1]) is not None:
+                prior = assignment.get('context', {}).get('prior_assignment_id')
+                earlier = fresh.collect_series_packets(records, evaluation, prior) if prior else []
+                series_id = packets[-1][fresh.KEY]['series_assignment_id']
+                earlier = [packet for packet in earlier if packet[fresh.KEY]['series_assignment_id'] == series_id]
+                coverage = earlier + packets
+                citation = earlier + packets
+            identities = []
+            for packet in packets:
+                owner = next((owner for owner in ancestors if owner['packet_digest'] == packet['digest']), None)
+                if owner is None and not legacy_series:
+                    raise ResearchError('review_input_unreadable', 'Bind each actual packet to its input ancestry')
+                owner = owner or {}
+                identities.append(dict(assignment_id=owner.get('id'),
+                    **{key: copy.deepcopy(packet.get(key, owner.get(key))) for key in
+                       ('digest', 'protocol', 'role', 'reviewer_id', 'dossier_id', 'subject')}))
+            dependencies = [assignment['packet']]
+            series_digests = {packet['digest'] for packet in citation + coverage
+                              if parts.find_stage(packet) is not None or fresh.find_kind(packet) is not None}
+            for ancestor in ancestors:
+                if ancestor['id'] == assignment['id'] or ancestor.get('packet_digest') not in series_digests:
+                    continue
+                dependencies.append(ancestor['packet'])
+                state = protocol.assignment_state(records, evaluation, ancestor['id'])
+                selected = records.get('review_attempt', {}).get(state.get('attempt_id'), {})
+                dependencies.extend(selected[name] for name in ('request', 'response', 'output')
+                                    if selected.get(name) is not None)
+            result = dict(assignment_id=assignment['id'], attempt_id=attempt['id'], request_digest=raw['request_digest'],
+                        packet_identities=identities, current_input=current,
+                        citation_history=fresh.read_series_delivery(records, evaluation, packets=citation),
+                        coverage_witnesses=fresh.read_series_delivery(records, evaluation, packets=coverage))
+            return result, dependencies
+        except ResearchError:
+            raise
+        except json.JSONDecodeError as error:
+            raise ResearchError('review_input_unreadable', 'The exact authenticated input cannot be decoded') from error
+
+    scope = evaluation.find_root()._runtime_scope[0]
+    if scope is None or scope['fingerprint'] is None or assignment.get('staged_review'):
+        result, dependencies = project()
+    else:
+        key = ('authenticated_delivery', assignment['id'], attempt['id'], scope['fingerprint'])
+        result, dependencies = evaluation.reuse_value(key, project)
+    for reference in dependencies:
+        evaluation.read(reference)
+    return result
 
 
 def read_selected_delivery(records, artifacts, assignment_id, *, require_ready=True):

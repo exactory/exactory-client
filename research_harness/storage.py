@@ -1208,6 +1208,11 @@ class Store:
     def build_artifact_store(self):
         return ArtifactStore(self.root)
 
+    def describe_runtime(self):
+        """Describe the running harness for the receipts and reports of this store."""
+        from .provenance import runtime_provenance
+        return runtime_provenance()
+
     @contextmanager
     def guarded_snapshot(self):
         """Prevent common commits until the consumer releases this snapshot."""

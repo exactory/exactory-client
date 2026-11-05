@@ -11,7 +11,6 @@ from datetime import date, datetime
 import math
 
 from .errors import ResearchError
-from .provenance import runtime_provenance
 from .storage import _canonical, _PreparedSnapshot, _ScopedPreparation, _text
 
 
@@ -123,7 +122,7 @@ def prepared_mutation(store, operation, payload, prepare, *, expected_revision, 
         raise ResearchError("stale_revision", "Research state changed; read the current revision before a new mutation",
                             {"expected_revision": expected_revision, "revision": snapshot.revision})
     changes, result = prepare(snapshot.records, payload)
-    runtime = runtime_provenance()
+    runtime = store.describe_runtime()
 
     def apply(transaction):
         if validate_commit is not None:
@@ -172,7 +171,7 @@ def prepared_task_mutation(store, operation, payload, prepare, *, request_id, ex
         snapshot.bind_record(kind, key)
     snapshot.bind_record("literature_operation", request_id)
     write_targets = tuple((kind, key) for kind, key, _ in changes)
-    runtime = runtime_provenance()
+    runtime = store.describe_runtime()
 
     def apply(transaction, revision):
         current_changes, current_result = changes, result
