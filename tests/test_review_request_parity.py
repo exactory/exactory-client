@@ -27,7 +27,7 @@ class ReviewRequestParityTests(unittest.TestCase):
         self.assertEqual(self.frozen["serialization"], "review_protocol._put_json")
 
     def expect_current_result_report(self, name, field, expected):
-        """Pin the 0.73.0 presentation changes without changing the byte oracle."""
+        """Pin the 0.73.0 and 0.73.3 presentation changes without changing the byte oracle."""
         if field not in ('gate', 'status') or name not in ('result-history-06918', 'result-parts-v2'):
             return expected
         expected = copy.deepcopy(expected)
@@ -43,10 +43,27 @@ class ReviewRequestParityTests(unittest.TestCase):
             pair['review_ids'] = []
             report['obligations'].remove(pending)
             report['obligations'].insert(0, pending)
+            # Since 0.73.3 the pending parts v1 head reports its occupancy. The
+            # other slot has no head, so the missing pair stays beside it.
+            head = dict(slot_id='bar-first', epoch_id='series-3-part-2', state='pending', outcome=None,
+                        role='result', current=True)
+            occupancy = dict(code='review_task_pending',
+                             explanation='Complete the current assessment in its existing logical slot.',
+                             occupied=1, incomplete=[], pending=[head])
+            report['obligations'].insert(report['obligations'].index(pair) + 1, occupancy)
+            report['counts'] = dict(report['counts'], obligations=len(report['obligations']))
+            report['slot_outcomes'] = dict(slots=[head], occupied=1, complete=[], incomplete=[], pending=[head],
+                                           adverse_findings=[], assessment_complete=False, ready=False)
             report['digest'] = digest(dict(problem_evidence_digest=report['problem_evidence_digest'],
                                           decision=None, obligations=report['obligations']))
             if field == 'status':
                 report['next'] = copy.deepcopy(pending)
+                # status sorts the obligations of a record with a pending head;
+                # the digest stays the gate's.
+                order = ('problem_evidence_part_pending', 'review_task_pending', 'problem_review_pair_required',
+                         'problem_decision_missing', 'problem_openness_missing', 'problem_attempt_missing',
+                         'problem_slate_missing', 'problem_value_missing', 'problem_assessment_missing')
+                report['obligations'] = sorted(report['obligations'], key=lambda row: order.index(row['code']))
         else:
             # Reconstruct the complete outcome solely from the frozen observed
             # final and the fixture's fixed identities/revision, not the report
