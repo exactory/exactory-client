@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.73.3](docs/releases/0.73.3.md) records the time of a problem post that was made outside the harness, and adds `problem-post-time` for such a post that an earlier version recorded. The post gate keeps a valid adjudication while the result reviews are refreshed, and it reports a refreshed result slot as pending work.
+
 Version [0.73.2](docs/releases/0.73.2.md) raises the default time budget of `record-check` from 900 to 3600 seconds, so that a record whose readers work but take longer than 15 minutes passes the report step.
 
 Version [0.73.1](docs/releases/0.73.1.md) makes the integrity step of `record-check` read only the artifacts of the store. It counts the other file descriptors of the history, such as the publication scope's projections of workspace files, as `workspace_descriptors` instead of refusing the record.
