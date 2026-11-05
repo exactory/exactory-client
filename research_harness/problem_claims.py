@@ -289,22 +289,25 @@ def record_post_time(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         require_problem(records)
         fields(value, ("post_id", "posted_at", "evidence"))
-        text(value["post_id"], "External post ID")
+        text(value["post_id"], "Time statement post ID")
         timestamp(value["posted_at"])
         if isinstance(value["evidence"], dict):
             validate_reference(value["evidence"])
             artifacts.verify(value["evidence"])
         else:
-            text(value["evidence"], "External post time evidence")
+            text(value["evidence"], "Time statement evidence")
         post = records.get("problem_post", {}).get(value["post_id"])
         if post is None:
-            raise ResearchError("problem_post_missing", "The target problem post does not exist",
+            raise ResearchError("problem_post_missing", "No recorded problem post has this post ID",
                                 {"post_id": value["post_id"]})
         if post.get("gate") != "bypassed" or "recorded_at" in post:
-            raise ResearchError("problem_post_time_inapplicable", "The post already has its time contract",
+            raise ResearchError("problem_post_time_inapplicable",
+                                "This post is not an older external post: a time statement is possible only "
+                                "for a post with gate bypassed and no recorded_at",
                                 {"post_id": value["post_id"], "gate": post.get("gate")})
         if value["post_id"] in records.get("problem_post_time", {}):
-            raise ResearchError("problem_post_time_already_recorded", "The post already has a time statement",
+            raise ResearchError("problem_post_time_already_recorded",
+                                "A post has at most one time statement, and this post already has one",
                                 {"post_id": value["post_id"]})
         record = dict(value, recorded_at=datetime.now(timezone.utc).isoformat(),
                       recorded_revision=expected_revision + 1)
