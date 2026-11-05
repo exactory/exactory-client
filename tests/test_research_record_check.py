@@ -874,11 +874,44 @@ class RecordCheckFollowupTests(unittest.TestCase):
         self.assertEqual(result['error']['code'], 'record_command_timeout')
         self.assertEqual(handler.call_count, 2)
 
-    def test_cli_time_budget_defaults_to_900_and_accepts_an_override(self):
+    def test_cli_time_budget_defaults_to_3600_and_accepts_an_override(self):
         parser = cli.build_parser()
-        self.assertEqual(parser.parse_args(['record-check', '--workspace', '/snapshot']).time_budget, 900)
+        self.assertEqual(parser.parse_args(['record-check', '--workspace', '/snapshot']).time_budget, 3600)
         args = parser.parse_args(['record-check', '--workspace', '/snapshot', '--time-budget', '17.5'])
         self.assertEqual(args.time_budget, 17.5)
+
+    def test_cli_time_budget_default_uses_record_check_constant(self):
+        from research_harness import record_check
+        args = ['record-check', '--workspace', '/snapshot']
+        self.assertEqual(cli.build_parser().parse_args(args).time_budget,
+                         record_check.DEFAULT_TIME_BUDGET_SECONDS)
+        with patch.object(cli, 'DEFAULT_TIME_BUDGET_SECONDS', 1234.5, create=True):
+            self.assertEqual(cli.build_parser().parse_args(args).time_budget, 1234.5)
+
+    def test_default_budget_allows_measured_report_reader_times(self):
+        from research_harness import record_check
+        timed_check = record_check.run_timed_check
+        for release, durations in (('0.72.4', (1392, 1333, 1311)),
+                                   ('0.73.0', (1344, 1331, 1303))):
+            with self.subTest(release=release), tempfile.TemporaryDirectory() as directory:
+                Store(directory, create=True)
+                store = record_check.OfflineStore(directory)
+                seconds = dict(zip(('status', 'next', 'obligations'), durations))
+
+                def measure(name, check, **kwargs):
+                    with patch.object(record_check.time, 'monotonic', return_value=0) as clock:
+                        def read():
+                            result = check()
+                            clock.return_value = seconds.get(name, 0)
+                            return result
+                        return timed_check(name, read, **kwargs)
+
+                with patch.object(record_check, 'run_timed_check', side_effect=measure):
+                    report = record_check.check_report(store)
+                self.assertTrue(report['ready'], report)
+                for command, duration in seconds.items():
+                    self.assertEqual(report['commands'][command]['status'], 'passed')
+                    self.assertEqual(report['commands'][command]['seconds'], duration)
 
     def test_each_report_reader_uses_the_supplied_budget(self):
         from research_harness import record_check
