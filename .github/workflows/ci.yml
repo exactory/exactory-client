@@ -77,11 +77,6 @@ jobs:
           EOF
           sudo apt-get -o Dir::Etc::SourceList=/dev/null -o Dir::Etc::SourceParts="$apt_sources" update
           sudo apt-get -o Dir::Etc::SourceList=/dev/null -o Dir::Etc::SourceParts="$apt_sources" install -y poppler-utils
-      - name: Install Lean and build the real smoke fixture
-        uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
-        with:
-          lake-package-directory: client/skills/math-solver/harness/fixtures/lean-smoke
-          build: true
       - name: Run the complete assigned unittest partition
         run: >-
           python3 ci/unittest_shards.py run
@@ -131,11 +126,35 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install Lean and build the real smoke fixture
-        uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596 # v1.6.0
+      # Cache entries cannot be overwritten; raise v1 to replace one. The installer
+      # checks a restored installation and installs it again when it does not run.
+      # The cache only saves downloads. If the service fails or stalls, the next
+      # step installs Lean from the network; a failed save means a later run
+      # installs it again. Installation and fixture build failures fail the job.
+      - name: Restore the Lean toolchain of the smoke fixture
+        id: lean-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        timeout-minutes: 15
+        continue-on-error: true
         with:
-          lake-package-directory: client/skills/math-solver/harness/fixtures/lean-smoke
-          build: true
+          path: ~/.elan
+          key: elan-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('client/skills/math-solver/harness/fixtures/lean-smoke/lean-toolchain') }}
+      - name: Install Lean, retrying failed downloads
+        run: python3 ci/install_lean.py skills/math-solver/harness/fixtures/lean-smoke
+      - name: Build the real smoke fixture
+        working-directory: client/skills/math-solver/harness/fixtures/lean-smoke
+        run: |
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/lake" build
+      # A failed or stalled cache save only means a later run installs Lean again.
+      - name: Save the Lean toolchain for later runs
+        if: steps.lean-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        timeout-minutes: 15
+        continue-on-error: true
+        with:
+          path: ~/.elan
+          key: ${{ steps.lean-cache.outputs.cache-primary-key }}
       - name: Compile every Python source
         run: |
           for file in bin/*; do
@@ -153,7 +172,12 @@ jobs:
           python3 -m coverage combine --rcfile=codex/coverage.ini
           python3 -m coverage report --rcfile=codex/coverage.ini
       - name: Run the math-solver harness tests
-        run: python3 -m unittest discover -s skills/math-solver/harness/tests -t skills/math-solver/harness -v
+        run: >-
+          python3 ci/unittest_shards.py run
+          --start-directory skills/math-solver/harness/tests
+          --top-level-directory skills/math-solver/harness
+          --shard-index 0 --shard-count 1 --marketplace ../marketplace
+          --result ci-results/harness-result.json
       - name: Validate every JSON file
         run: |
           find . -name '*.json' -not -path './.git/*' -print0 \
