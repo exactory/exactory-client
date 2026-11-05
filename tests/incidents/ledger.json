@@ -3655,6 +3655,42 @@
         "test_problem_successor_occupancy.LegacyPartsOccupancyTests.test_resolved_pair_reopens_objections_for_one_then_two_successors_and_after_post",
         "test_problem_successor_occupancy.FreshPartsOccupancyTests.test_resolved_pair_reopens_objections_for_one_then_two_successors_and_after_post"
       ]
+    },
+    {
+      "id": "ci-lean-toolchain-download",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "release-ci (CI infrastructure)",
+      "summary": "Every CI test job installed Lean without retries, including the 12 general shards that do not use it. In 200 runs from 2026-10-24 to 2026-11-05, installer HTTP 504 or connection failures and toolchain HTTP 504, TLS or stalled downloads failed 18 jobs in 15 runs before any tests ran, also failing their Python summary jobs.",
+      "fixed_in": "0.73.5",
+      "expected": "Only jobs that run Lean install it. They restore and probe the pinned smoke fixture installation or install it with bounded, timed attempts that terminate stalled process groups. Incomplete toolchain directories and partial downloads are removed before every attempt, and failed probes trigger a fresh install. The cache is optional and saved only after installation and the fixture build succeed. Persistent installation failures and any harness test skip still fail the job.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_lean_install.LeanInstallTests.test_installer_http_504_retries_then_succeeds",
+        "test_ci_lean_install.LeanInstallTests.test_toolchain_504_or_tls_error_retries_twice_then_succeeds",
+        "test_ci_lean_install.LeanInstallTests.test_timeout_kills_command_and_child_before_retry_succeeds",
+        "test_ci_lean_install.LeanInstallTests.test_attempt_deadline_is_shared_by_all_three_commands",
+        "test_ci_lean_install.LeanInstallTests.test_persistent_failure_stops_after_exact_attempt_count",
+        "test_ci_lean_install.LeanInstallTests.test_default_attempt_count_is_four",
+        "test_ci_lean_install.LeanInstallTests.test_successful_commands_without_lake_or_lean_still_fail",
+        "test_ci_lean_install.LeanInstallTests.test_warm_installation_performs_only_version_probes",
+        "test_ci_lean_install.LeanInstallTests.test_unset_elan_home_uses_home_dot_elan",
+        "test_ci_lean_install.LeanInstallTests.test_stripped_pinned_release_candidate_is_installed",
+        "test_ci_lean_install.LeanInstallTests.test_channels_other_repositories_and_unpinned_values_run_no_commands",
+        "test_ci_lean_install.LeanInstallTests.test_restored_broken_lean_warns_and_reinstalls_clean_toolchain",
+        "test_ci_lean_install.LeanInstallTests.test_partial_failed_install_is_removed_before_next_attempt",
+        "test_ci_lean_install.LeanInstallTests.test_missing_lake_proxy_or_nonexecutable_lean_is_reinstalled",
+        "test_ci_lean_install.LeanInstallTests.test_elan_init_shell_failure_retries_then_succeeds",
+        "test_ci_lean_install.LeanInstallTests.test_stale_elan_partial_download_is_removed_and_other_toolchains_survive",
+        "test_ci_lean_install.LeanInstallTests.test_attempt_tmpdir_contains_elan_init_temporary_files_and_is_removed",
+        "test_ci_lean_install.LeanInstallTests.test_failed_postinstall_version_probe_fails_attempt_and_retries",
+        "test_ci_lean_install.LeanInstallTests.test_postinstall_version_probes_share_attempt_deadline",
+        "test_ci_lean_install.LeanWorkflowTests.test_only_checks_restore_install_build_and_save_lean_before_harness_tests",
+        "test_ci_lean_install.LeanWorkflowTests.test_workflow_mutations_detect_each_broken_step_contract",
+        "test_ci_lean_install.LeanWorkflowTests.test_fixture_pins_a_lean_release_and_has_a_lake_manifest",
+        "test_ci_shards.CIShardTests.test_cli_top_level_package_imports_its_sibling_support",
+        "test_ci_shards.CIShardTests.test_cli_top_level_package_skip_fails_the_shard",
+        "test_ci_shards.CIShardTests.test_cli_default_discovery_keeps_top_level_module_names"
+      ]
     }
   ]
 }
