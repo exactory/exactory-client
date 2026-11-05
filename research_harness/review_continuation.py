@@ -358,6 +358,10 @@ def _plan_head(records, artifacts, assignment):
             try:
                 review_output_correction.prepare_packet(records, artifacts, assignment['id'])
             except ResearchError:
+                if (assignment['role'] in ('bar', 'slate', 'result', 'adjudicator')
+                        and (assignment['role'] != 'bar'
+                             or assignment.get('context', {}).get('prior_assignment_id'))):
+                    return dict(state='stop', code='review_slot_exhausted', details=details)
                 command = 'review-assignment'
                 if assignment['role'] == 'native_math':
                     from .native_review import load_packet

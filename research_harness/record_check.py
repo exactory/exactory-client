@@ -536,7 +536,8 @@ def build_sandbox_profile(clone, report_directory, source):
         '(version 1)', '(allow default)', '(deny network-outbound)',
         '(deny file-read* (subpath ' + json.dumps(str(source.resolve())) + '))',
         '(deny file-write* (require-all (require-not (subpath ' + json.dumps(str(clone.resolve()))
-        + ')) (require-not (subpath ' + json.dumps(str(report_directory.resolve())) + '))))',
+        + ')) (require-not (subpath ' + json.dumps(str(report_directory.resolve()))
+        + ')) (require-not (literal "/dev/null"))))',
     ))
 
 

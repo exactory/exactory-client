@@ -623,6 +623,51 @@ class RecordCheckTests(unittest.TestCase):
         self.assertIn('(deny file-read* (subpath "/private/tmp/live"))' if sys.platform == 'darwin'
                       else '(deny file-read* (subpath "/tmp/live"))', profile)
         self.assertIn('(deny file-write*', profile)
+        self.assertIn('(require-not (literal "/dev/null"))', profile)
+
+    def test_sandbox_profile_allows_devnull_subprocess_and_denies_outside_write_when_available(self):
+        from research_harness.record_check import build_sandbox_profile
+        if sys.platform != 'darwin':
+            self.skipTest('sandbox-exec is available only on macOS')
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            clone, reports = base / 'clone', base / 'reports'
+            clone.mkdir()
+            reports.mkdir()
+            profile = build_sandbox_profile(clone, reports, self.case.root)
+            executable = '/usr/bin/sandbox-exec'
+            try:
+                probe = subprocess.run([executable, '-p', profile, '/usr/bin/true'],
+                                       capture_output=True, text=True, timeout=15)
+            except (OSError, subprocess.TimeoutExpired) as error:
+                self.skipTest('sandbox-exec could not apply the record-check profile: ' + str(error))
+            if probe.returncode:
+                self.skipTest('sandbox-exec could not apply the record-check profile: '
+                              + (probe.stderr.strip() or 'probe exited ' + str(probe.returncode)))
+            forbidden = base / 'outside'
+            script = '''
+import subprocess
+import sys
+from pathlib import Path
+
+subprocess.run([sys.executable, '-c', 'print("discarded output")'],
+               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+               check=True, timeout=15)
+print('devnull subprocess passed', flush=True)
+try:
+    Path(sys.argv[1]).write_text('forbidden')
+except PermissionError:
+    print('outside write denied', flush=True)
+else:
+    raise AssertionError('The sandbox allowed an outside write')
+'''
+            result = subprocess.run([executable, '-p', profile, sys.executable, '-c',
+                                     script, str(forbidden)],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.splitlines(),
+                             ['devnull subprocess passed', 'outside write denied'])
+            self.assertFalse(forbidden.exists())
 
     def test_sandbox_profile_enforces_outside_write_denial_when_available(self):
         from research_harness.record_check import build_sandbox_profile
