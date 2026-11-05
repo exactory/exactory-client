@@ -17,6 +17,7 @@ import unittest
 from unittest.mock import patch
 
 from research_harness import cli, review_protocol as protocol
+from research_harness.artifacts import _OBJECT_DIRECTORY, _SEALED_DIRECTORY
 from research_harness.errors import ResearchError
 from research_harness.storage import Store
 import test_research_problem_reviews as fixtures
@@ -30,6 +31,92 @@ BASELINE_READERS_ARCHIVE_SHA256 = '05e3c70b94cae2d384bc74c5a8b373c1fe29da74e75f5
 def digest_tree(root):
     return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
             for path in root.rglob('*') if path.is_file()}
+
+
+class RecordIntegrityTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.store = Store(self.root, create=True)
+        self.artifacts = self.store.build_artifact_store()
+
+    def record_scope(self, references):
+        payload = dict(id='scope', scientific_delivery=dict(files=references))
+        saved = dict(id='scope', payload=payload)
+
+        def apply(transaction):
+            transaction.put('publication_scope', 'scope', saved)
+            return saved
+
+        self.store.mutate('publication.scope', payload, apply,
+                          expected_revision=0, request_id='scope')
+
+    def test_integrity_skips_publication_scope_workspace_descriptor(self):
+        from research_harness.record_check import check_integrity
+        reference = dict(media_type='text/csv', path='data/synthetic.csv',
+                         projection='workspace', sha256='a' * 64)
+        self.record_scope([reference])
+        self.assertEqual(check_integrity(self.store),
+                         {'artifacts': 0, 'workspace_descriptors': 1})
+
+    def test_integrity_counts_workspace_folders_and_store_prefix_siblings(self):
+        from research_harness.record_check import check_integrity
+        references = [dict(media_type='application/json', path=path,
+                           projection='workspace', sha256='b' * 64)
+                      for path in ('data', _OBJECT_DIRECTORY + '-archive/file',
+                                   _SEALED_DIRECTORY + '-archive/file')]
+        self.record_scope(references)
+        self.assertEqual(check_integrity(self.store),
+                         {'artifacts': 0, 'workspace_descriptors': 3})
+
+    def test_integrity_rejects_object_reference_without_size(self):
+        from research_harness.record_check import check_integrity
+        reference = self.artifacts.put(b'Synthetic retained evidence.', 'text/plain')
+        del reference['size']
+        self.record_scope([reference])
+        with self.assertRaises(ResearchError) as caught:
+            check_integrity(self.store)
+        self.assertEqual(caught.exception.code, 'invalid_input')
+
+    def test_integrity_rejects_sealed_reference_without_size(self):
+        from research_harness.record_check import check_integrity
+        reference = self.artifacts.put_sealed(b'Synthetic sealed evidence.', 'text/plain')
+        del reference['size']
+        self.record_scope([reference])
+        with self.assertRaises(ResearchError) as caught:
+            check_integrity(self.store)
+        self.assertEqual(caught.exception.code, 'invalid_input')
+
+    def test_integrity_verifies_object_and_sealed_references(self):
+        from research_harness.record_check import check_integrity
+        references = [self.artifacts.put(b'Synthetic retained evidence.', 'text/plain'),
+                      self.artifacts.put_sealed(b'Synthetic sealed evidence.', 'text/plain')]
+        self.record_scope(references)
+        self.assertEqual(check_integrity(self.store),
+                         {'artifacts': 2, 'workspace_descriptors': 0})
+
+    def test_integrity_rejects_damaged_store_artifact(self):
+        from research_harness.record_check import check_integrity
+        reference = self.artifacts.put(b'Synthetic retained evidence.', 'text/plain')
+        self.record_scope([reference])
+        path = self.root / reference['path']
+        path.chmod(0o600)
+        path.write_bytes(b'Damaged synthetic evidence.')
+        with self.assertRaises(ResearchError) as caught:
+            check_integrity(self.store)
+        self.assertEqual(caught.exception.code, 'artifact_corrupt')
+
+    def test_integrity_rejects_damaged_sealed_artifact(self):
+        from research_harness.record_check import check_integrity
+        reference = self.artifacts.put_sealed(b'Synthetic sealed evidence.', 'text/plain')
+        self.record_scope([reference])
+        path = self.root / reference['path']
+        path.chmod(0o600)
+        path.write_bytes(b'Damaged synthetic evidence.')
+        with self.assertRaises(ResearchError) as caught:
+            check_integrity(self.store)
+        self.assertEqual(caught.exception.code, 'artifact_corrupt')
 
 
 class RecordCheckTests(unittest.TestCase):
