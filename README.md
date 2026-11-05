@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.73.1](docs/releases/0.73.1.md) makes the integrity step of `record-check` read only the artifacts of the store. It counts the other file descriptors of the history, such as the publication scope's projections of workspace files, as `workspace_descriptors` instead of refusing the record.
+
 Version [0.73.0](docs/releases/0.73.0.md) adds `review-series`, which runs a review chain to its end, and `record-check`, which checks a copy of a record offline before the record moves to a new version. A failed reviewer call now has an outcome that decides the next step. An answer with exactly one reading is kept, a stuck parts v1 series continues in parts v2, and a posted problem stays posted. Every recorded incident is in a regression ledger with its test.
 
 Version [0.72.4](docs/releases/0.72.4.md) makes the request memo of 0.72.2 call the pinned request builder with the arguments of the pinned iterator, so test replacements without an `order` parameter work again. Requests, reports and refusals do not change.
