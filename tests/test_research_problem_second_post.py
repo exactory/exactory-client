@@ -118,7 +118,7 @@ class ProblemSecondPostTests(ProblemDeliveryCase):
             "explanation": "A major scientific decision requires two distinct independent assessments",
             "review_ids": []}, {
             "code": "review_series_superseded",
-            "explanation": "PLACEHOLDER: Select finals of the current result slots.",
+            "explanation": "Select only the recorded finals of the current result slots. Older finals stay as history.",
             "review_ids": ["review-result-first", "review-result-second"]}]})
 
         for reviewer in ("first", "second"):

@@ -28,9 +28,12 @@ STOP_CHECKS = ("stop", "demand")
 ALL_CHECKS = CONTINUE_CHECKS + ("stop",)
 BOUNDARIES = ("target", "cycle", "write", "publication", "round")
 ARTIFACT_DISPOSITIONS = ("none", "result_report", "prepare_manuscript", "deliver_under_instruction")
-_SUPERSEDED_RESULT_NOTE = 'PLACEHOLDER: Record the final of the current result series.'
-_PARTS_RESULT_PENDING_NOTE = 'PLACEHOLDER: Complete the authenticated parts final before recording a result.'
-_CURRENT_RESULTS_NOTE = 'PLACEHOLDER: Select finals of the current result slots.'
+_SUPERSEDED_RESULT_NOTE = ('The result names a superseded series. A new result must belong to the current '
+                           'assignment of its slot. The details name the superseded assignment and the '
+                           'current assignment.')
+_PARTS_RESULT_PENDING_NOTE = ('A result must bind the authenticated complete final of the current parts v2 series. '
+                              'Intermediate or incomplete work records no result.')
+_CURRENT_RESULTS_NOTE = 'Select only the recorded finals of the current result slots. Older finals stay as history.'
 _LIMITS = ("These are mechanical evidence, attribution and transition checks. Scientific truth, importance, "
            "semantic materiality and the meaning of a user instruction require substantive review. "
            "No ordinal score establishes sufficient contribution or native mathematical proof acceptance.")

@@ -209,7 +209,7 @@ OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": recor
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
-RECORD_CHECK_HELP_MSG = "PLACEHOLDER: qualify a cloned research record offline."
+RECORD_CHECK_HELP_MSG = "Qualify a copy of a research record offline; print a JSON report and exit 0 when ready is true, 1 otherwise."
 
 
 def add_identity(parser, *, required=True):
@@ -296,11 +296,9 @@ def build_parser():
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
         item.add_argument("--check", action="store_true",
-                          help="Validate the payload against one snapshot of the existing store, print the first "
-                               "refusal or {check: accepted, revision, recorded: false, ...}, and write nothing: an "
-                               "accepted check is no record. A request ID already committed returns its original "
-                               "receipt. Acquisitions, reviewer calls, reconciliations and a preparation that needs "
-                               "the reviewer CLI, a PDF tool or a second commit refuse with check_unsupported.")
+                          help="Validate against one snapshot, write nothing; acquisitions, reviewer calls, "
+                               "reconciliations, a result PDF page count (pdfinfo) and a second commit refuse with "
+                               "check_unsupported.")
         add_identity(item, required=command != "import-response")
         if command == "import-response":
             item.add_argument("--preview", action="store_true",
@@ -311,10 +309,12 @@ def build_parser():
     job_status.add_argument("--cursor", type=int, default=0)
     job_status.add_argument("--limit", type=int, default=30)
     series = commands.add_parser("review-series", allow_abbrev=False,
-                                 help="PLACEHOLDER: execute one recorded review chain.")
+                                 help="Execute the planned actions of one review chain, in process, until the chain "
+                                      "is done or needs the agent.")
     series.add_argument("--workspace", default=".")
     series.add_argument("--assignment", required=True)
-    series.add_argument("--check", action="store_true", help="PLACEHOLDER: series check is unsupported.")
+    series.add_argument("--check", action="store_true",
+                        help="Refused with check_unsupported: review-series has no check mode.")
     record_check = commands.add_parser("record-check", allow_abbrev=False,
                                       help=RECORD_CHECK_HELP_MSG)
     record_check.add_argument("--workspace", required=True)

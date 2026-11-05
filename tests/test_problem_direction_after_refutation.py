@@ -306,7 +306,7 @@ class ProblemDirectionTests(ProblemDeliveryCase):
             'explanation': 'A major scientific decision requires two distinct independent assessments',
             'review_ids': ['review-result-second']}, {
             'code': 'review_series_superseded',
-            'explanation': 'PLACEHOLDER: Select finals of the current result slots.',
+            'explanation': 'Select only the recorded finals of the current result slots. Older finals stay as history.',
             'review_ids': ['review-result-first']}, {
             'code': 'problem_rubric_regrade_required', 'explanation': REGRADE_EXPLANATION,
             'assessment_id': 'assessment-1', 'review_ids': ['review-result-second']}])
