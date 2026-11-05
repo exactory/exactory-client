@@ -1369,14 +1369,18 @@ A new assessment of the slot is that authorized successor, bounded by
 The post gate. The gate reads the occupancy of every current result head,
 whatever kind of series it is. The kinds are an ordinary review, a parts v1
 series (0.69.x), a parts v2 series and a staged review. A head without a
-recorded final is pending, and a staged head can also be incomplete. A pending or
-incomplete head is listed as `review_task_pending` or `assessment_incomplete`
-with `occupied` (the number of occupied slots), `incomplete` and `pending`.
-Only completed heads form the pair, and the gate asks for no replacement
-second reviewer while both slots are occupied. When fewer than two slots are
-occupied, the gate also gives `problem_review_pair_required` for the slot
-without a head, next to the pending work. A completed peer of a pending head
-is checked for independence, assurances, rubric and coverage. A record can
+recorded final is pending, and a staged head can also be incomplete. When a
+current result head is incomplete, the gate lists `assessment_incomplete`
+with `occupied` (the number of occupied slots), `incomplete` and `pending`,
+also when another head is pending. When heads are pending and none is
+incomplete, it lists `review_task_pending` with the same fields. Only
+completed heads form the pair, and the gate asks for no replacement second
+reviewer while both slots are occupied. When fewer than two slots are
+occupied, the gate also lists `problem_review_pair_required` next to the
+pending work of the occupied slot. That obligation reports that the
+independent pair is missing, does not name a slot, and carries `review_ids`
+(the current recorded reviews, possibly empty). A completed peer of a pending
+head is checked for independence, assurances, rubric and coverage. A record can
 therefore show the findings of that peer while the other slot is pending.
 When every head is complete, the gate checks the pair as before. `next` names
 concrete continuation work, such as `problem_evidence_part_pending`, before the
@@ -1625,15 +1629,18 @@ and of requested source deliveries stay protected. Frozen inventories,
 packets and request reconstruction are unchanged. Each result slot
 contributes only the recorded final of its current series: an older final no
 longer supplies the slot, for automatic, explicit and saved-decision pairs
-alike, and a pending successor occupies its slot. An objection that a
-superseded final resolved is therefore unresolved
-(`research_objection_unresolved`). It stays so until a final of the current
-series resolves it, or a focused adjudication of its current version finds
-it not upheld. Superseded finals stay as history: they keep their historical
-findings and resolve nothing in the current gate. (One live record had 4
-unresolved objections under 0.72.4 and 14 under 0.73.2 after both slots were
-refreshed.) A recorded post moves these findings unchanged into `after_post`.
-Recording a new result of
+alike, and a pending successor occupies its slot. The current result reviews
+are the recorded finals of the current series of the two result slots. An
+objection is resolved when both of them record an evidenced resolution of
+it, and the packet of each delivered its current material version. It is
+also resolved when a ready focused adjudication of its current material
+version, bound to the current evidence digest, finds it `not_upheld` (or
+`not_binding` for the problem). Superseded finals stay as history: they keep
+their historical findings and resolve nothing in the current gate. An
+objection that a superseded final resolved is therefore unresolved
+(`research_objection_unresolved`) until both current finals, or such an
+adjudication, resolve it. A recorded post moves these findings unchanged into
+`after_post`. Recording a new result of
 a superseded series is refused (`review_series_superseded`, details
 `assignment_id` and `current_assignment_id`), and a result needs the
 authenticated complete final of the current v2 series (`review_parts_pending`
@@ -3350,8 +3357,8 @@ since 0.73.0, and is checked, not refused.
 | `problem-formal-check` | `{evidence: {execution_id, output_id}, native_closure_digest}` | `problem_formal_check/<id>` binds a requested support check to an authenticated native completion in this store. Invalid bindings return `problem_formal_check_unbound`. |
 | `problem-decision` | `{id, action, review_ids, bar_review_ids, reason}` | `problem_decision/<id>` binds the current evidence digest. Action is `post`, `revise` or `withdraw`; `post` requires the minimum and observed review coverage, otherwise `problem_minimum_unmet`. The other actions record the reason. |
 | `problem-posted` | `{problem_id, export_directory}` | Rebuilds the approved export and compares every file byte for byte before recording `problem_post/<id>`. A changed file, even with a changed manifest hash, returns `problem_export_mismatch`. It requires the approved exact export. |
-| `problem-post-external` | `{id, problem_id, statement_digest, reason, evidence, posted_at}` | Records a post made outside the harness as a `problem_post` with `gate` `bypassed` and no export: `problem_id` is the exactory.ai problem id (a UUID), `statement_digest` the digest of the store's current statement, `reason` a non-empty text, and `evidence` a non-empty text such as the owner's instruction, or an artifact reference, which is verified. `posted_at` is optional: the time of the post on exactory.ai, for example the `createdAt` of the server's response. It must be a timestamp with an explicit timezone (ISO 8601, `Z` accepted), and the record keeps it exactly as given (fractional seconds and offsets keep their text). Without it the record stores `posted_at` null. The record adds `recorded_at`, the recording time in UTC. The harness does not compare `posted_at` with the local clock, so a time in the future is accepted. A record that 0.73.0 to 0.73.2 made has no `recorded_at`, and its `posted_at` holds the recording time (the paragraph on a posted problem, below). Refusals: `invalid_input` (the problem id is not a UUID, a field is empty, or `posted_at` is given and is not such a timestamp, `null` and a non-string included), `problem_statement_missing`, `problem_statement_mismatch` (with the current digest) and `problem_already_posted`. The same request replays its result. |
-| `problem-post-time` | `{post_id, posted_at, evidence}` | Records a statement of the time of an older external post: a `problem_post` with `gate` `bypassed` and no `recorded_at`, which 0.73.0 to 0.73.2 recorded. The immutable record `problem_post_time/<post_id>` holds the payload fields, `recorded_at` (UTC) and `recorded_revision`. `post_id` is a non-empty text. `posted_at` is required: a timestamp with an explicit timezone, kept exactly as given, as in `problem-post-external`. `evidence` is a non-empty text or an artifact reference, which is verified (`artifact_missing` and the other artifact errors when its bytes are not stored). The post is found by its id, also when another problem statement is now current, and nothing compares `posted_at` with the stored recording time. One statement is accepted per post. `status` shows the statement with the post (the paragraph on a posted problem, below). The output views export each statement at `problem/post-times`, and the post's own export keeps its bytes. The statement is not part of the problem evidence or its digest, the post gate, or the reconstruction of review requests. Refusals, after the field checks and in this order: `problem_post_missing` (no `problem_post` has that id, details `post_id`), `problem_post_time_inapplicable` (the post has a `gate` other than `bypassed`, or it has `recorded_at`, details `post_id` and `gate`) and `problem_post_time_already_recorded` (a statement exists for that post, details `post_id`). Outside a problem record the command is refused with `orchestration_conflict`, as `problem-post-external` is. It follows the normal `--file`, `--expected-revision`, `--request-id` and `--check` contract. The same request id with the same payload returns its original receipt before any of these checks, and with another payload it fails with `request_id_conflict`. |
+| `problem-post-external` | `{id, problem_id, statement_digest, reason, evidence, posted_at}` | Records a post made outside the harness as a `problem_post` with `gate` `bypassed` and no export: `problem_id` is the exactory.ai problem id (a UUID), `statement_digest` the digest of the store's current statement, `reason` a non-empty text, and `evidence` a non-empty text such as the owner's instruction, or an artifact reference, which is verified. `posted_at` is the time of the post on exactory.ai, for example the `createdAt` of the server's response. It must be a timestamp with an explicit timezone (ISO 8601, `Z` accepted), and the record keeps it exactly as given (fractional seconds and offsets keep their text). When that time is known, pass it as `posted_at`. When it is not known, omit `posted_at`. A post recorded without `posted_at` stores `posted_at` null, and `problem-post-time` does not accept it (it has `recorded_at`), so no later command can state its time. The record adds `recorded_at`, the recording time in UTC. The harness does not compare `posted_at` with the local clock, so a time in the future is accepted. For the display of older posts, see the paragraph on a posted problem, below. Refusals: `invalid_input` (the problem id is not a UUID, a field is empty, or `posted_at` is given and is not such a timestamp, `null` and a non-string included), `problem_statement_missing`, `problem_statement_mismatch` (with the current digest) and `problem_already_posted`. The same request replays its result. |
+| `problem-post-time` | `{post_id, posted_at, evidence}` | Records a statement of the time of an older external post: a `problem_post` with `gate` `bypassed` and no `recorded_at`, which 0.73.0 to 0.73.2 recorded. The immutable record `problem_post_time/<post_id>` holds the payload fields, `recorded_at` (UTC) and `recorded_revision`. `post_id` must be a non-empty text, the id of the stored `problem_post`. `posted_at` must be a timestamp with an explicit timezone, as defined for `problem-post-external`, and the record keeps it exactly as given. `evidence` must be a non-empty text or an artifact reference, which is verified (`artifact_missing` and the other artifact errors when its bytes are not stored). The post is found by its id, also when another problem statement is now current, and nothing compares `posted_at` with the stored recording time. One statement is accepted per post. `status` shows the statement with the post (the paragraph on a posted problem, below). The output views export each statement at `problem/post-times`, and the post's own export keeps its bytes. The statement is not part of the problem evidence or its digest, the post gate, or the reconstruction of review requests. Refusals, after the field checks and in this order: `problem_post_missing` (no `problem_post` has that id, details `post_id`), `problem_post_time_inapplicable` (the post has a `gate` other than `bypassed`, or it has `recorded_at`, details `post_id` and `gate`) and `problem_post_time_already_recorded` (a statement exists for that post, details `post_id`). Outside a problem record the command is refused with `orchestration_conflict`, as `problem-post-external` is. It follows the normal `--file`, `--expected-revision`, `--request-id` and `--check` contract. The same request id with the same payload returns its original receipt before any of these checks, and with another payload it fails with `request_id_conflict`. |
 
 An exploration records its candidates with `problem-candidate` and compares
 them in a slate with `problem-slate`. The slate gives every current candidate
@@ -4515,14 +4522,13 @@ the current version, or an independent focused adjudication of the current
 version must find the objection not upheld; a resolution or an adjudication of an
 earlier version disposes of nothing later, and the changed currency lets the same
 reviewers reassess. The gate computes the problem evidence digest whenever it
-checks the evidence, also while the current result pair is empty. A focused
-adjudication (`not_upheld`, or `not_binding` for the problem) against the
-current evidence digest and the current material version therefore keeps its
-effect while both result slots have pending successors. A resolved objection
-does not satisfy the pair: the gate still requires two completed independent
-result reviews. A resolution in a superseded final resolves nothing until a
-final of the current series, or such an adjudication, resolves the objection
-([Problem evidence in parts](#problem-evidence-in-parts)). The
+checks the evidence, also while the current result pair is empty. A ready
+focused adjudication (`not_upheld`, or `not_binding` for the problem) bound to
+the current evidence digest and material version therefore keeps its effect
+while both result slots have pending successors. A resolved objection does
+not satisfy the pair: the gate still requires two completed independent
+result reviews. For resolution after a refresh of a result slot, see
+[Problem evidence in parts](#problem-evidence-in-parts). The
 `material_objections` of a result packet leave out the
 results given on the current problem evidence: the other current result review
 and the superseded reviews of both lineages. A refreshed reviewer sees its own
@@ -4729,7 +4735,7 @@ example the population of the cohort tool. The post decision is
 | `problem_citation_evidence_unbound` | Bind each span to a retained object of this store, the `response.sha256` of the named source record or the `text.sha256` of a `fulltext` capture of this exact version with that source, and keep the object retained; `source_id` and `sha256` name the span. Without details, the source record of a span changed after the record was made: record new metadata under a new id. |
 | `problem_citation_span_mismatch` | Make the field value equal the selected bytes exactly, or move `start` and `end` to the bytes that hold it; `source_id` and `sha256` name the span. |
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
-| `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. When fewer than two result slots are occupied, `problem_review_pair_required` names the slot without a head, also while the head of the other slot is pending. |
+| `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. When fewer than two result slots are occupied, `problem_review_pair_required` reports that the independent pair is missing, also when the occupied slot has pending work. It does not name a slot, and it carries `review_ids` (the current recorded reviews, possibly empty). |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. |
 | `review_evidence_undelivered` | The named recorded review cites content that the request of its authenticated attempt did not deliver (`review_id`, `undelivered_references`); since 0.71.0 the audit reads that request, so an older review can carry this obligation for content that only a saved packet of its lineage held. Assign the same reviewer and role again with an empty context to refresh it. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
@@ -4738,7 +4744,7 @@ example the population of the cohort tool. The post decision is
 | `review_parts_pending` | A series of fresh-input turns ([Reviews in fresh parts](#reviews-in-fresh-parts)) is not complete; a recording that names a series whose current v2 successor has no authenticated complete final is refused with the same code. The obligation carries the plan of the chain (`state`, `command`, `payload`, `request_id`, `not_before`, `code`, `details`); run `review-series --assignment ID`, which executes it ([Review chains and `review-series`](#review-chains-and-review-series)). `adapter`, `series_assignment_id`, `kind`, `turn`, `units_carded` and `units_remaining` show the progress, and `blocked` names the code when the turn cannot continue. |
 | `review_series_superseded` | A saved selection or a result names a final of a superseded series. Select only the recorded finals of the current result slots; older finals stay as history ([Problem evidence in parts](#problem-evidence-in-parts)). |
 | `review_result_pending` | The current series of a slot has an observed complete final that is not recorded. Record it with `value-review` from its exact output; no further reviewer call is needed. |
-| `review_task_pending` | A task of a staged review is ready, blocked or not yet planned: run the `review-assignment` or `review-run` payload in `next`; `review-assignment {controller_assignment_id}` plans and assigns the next task ([Staged problem reviews](#staged-problem-reviews)). The post gate also lists this code, with `occupied`, `incomplete` and `pending`, when a current result head of any series (an ordinary review, a parts v1 series, a parts v2 series or a staged review) has no recorded final. Do the work that `next` lists for the pending series. That is a continuation obligation such as `problem_evidence_part_pending`, or the planned action of the pending head, for example `review-run`. |
+| `review_task_pending` | A task of a staged review is ready, blocked or not yet planned: run the `review-assignment` or `review-run` payload in `next`; `review-assignment {controller_assignment_id}` plans and assigns the next task ([Staged problem reviews](#staged-problem-reviews)). The post gate also lists this code, with `occupied`, `incomplete` and `pending`, when a current result head is pending and no head is incomplete. The head can be of any series: an ordinary review, a parts v1 series, a parts v2 series or a staged review. When a current result head is incomplete, the gate lists `assessment_incomplete` instead, also when another head is pending. Do the work that `next` lists for the pending series. That is a continuation obligation such as `problem_evidence_part_pending`, or the planned action of the pending head, for example `review-run`. |
 | `review_capacity_wait` | The reviewer capacity is occupied: reconcile the named reservations with `review-run ... action: "reconcile"` and start no other call. |
 | `review_worker_reconciliation_required`, `review_observation_acceptance_pending` | Reconcile the task's worker, or resume the acceptance of its committed capture, with the `review-run` payload in `next`; neither makes a reviewer call. |
 | `review_epoch_stale` | The problem evidence, the subject or the slot head changed under a frozen epoch; open an authorized successor with `context: {staged_upgrade: {assignment_id}}`. |
@@ -4847,9 +4853,10 @@ A posted problem. Since 0.73.0, when the store holds a `problem_post` for the
 current statement, `next` is `problem_already_posted` alone, and `status`
 lists the problem's other findings under `after_post`, each with its `code`
 and `reason`, so that nothing is hidden. `next --summary` reports `after_post`
-as a count. `status` shows the post under `post`, with its `gate` (`passed`,
-or `bypassed`) and `reason`; a post recorded before 0.73.0 reads as `gate`
-`passed`. A problem posted outside the harness, without `gate post`, is
+as a count. `status` shows the stored post under `post`, with `gate` set to
+`passed` when the record has no `gate` (a post recorded before 0.73.0). An
+external post also carries its `reason`. A post recorded by `problem-posted`
+has no `reason`. A problem posted outside the harness, without `gate post`, is
 recorded with `problem-post-external` (the table above): the record is a
 `problem_post` with `gate` `bypassed` and no export, it makes the record
 terminal under the same rule, and `status` shows the bypass. An older

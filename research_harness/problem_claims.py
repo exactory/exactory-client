@@ -302,12 +302,11 @@ def record_post_time(store, payload, *, expected_revision, request_id):
                                 {"post_id": value["post_id"]})
         if post.get("gate") != "bypassed" or "recorded_at" in post:
             raise ResearchError("problem_post_time_inapplicable",
-                                "This post is not an older external post: a time statement is possible only "
-                                "for a post with gate bypassed and no recorded_at",
+                                "Only posts with gate bypassed and no recorded_at accept a time statement",
                                 {"post_id": value["post_id"], "gate": post.get("gate")})
         if value["post_id"] in records.get("problem_post_time", {}):
             raise ResearchError("problem_post_time_already_recorded",
-                                "A post has at most one time statement, and this post already has one",
+                                "This post already has a time statement",
                                 {"post_id": value["post_id"]})
         record = dict(value, recorded_at=datetime.now(timezone.utc).isoformat(),
                       recorded_revision=expected_revision + 1)
