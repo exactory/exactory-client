@@ -4888,19 +4888,20 @@ recorded by `gate post` and `problem-posted` or by `problem-post-external`) is
 terminal for review work on the posted statement. New review work on that
 statement is refused with `problem_already_posted`, the message "This exact
 statement already has a recorded post." and the details
-`{post_id, statement_id}`, and nothing is written. Where a command accepts
-`--check`, the check gives the same refusal. `review-run --check` and
-`review-output-correction --check` refuse with `check_unsupported` first, as
-before. A `bar`, `result` or `adjudicator` assignment of a problem record is of
-a posted statement when two conditions hold. Its subject has `kind: "problem"`
-and a non-null `statement_id`. The statement under that id has the digest of a
-recorded post. The digest covers the claim and the resolution criteria
-(`statement`, `resolution_criteria`), so a statement under another id with the
-same claim and criteria is posted too. A statement whose claim or criteria
-differ is not posted, and its reviews work as before. A child of a staged
-review takes the subject of its controller. The other roles (`slate`,
-`native_math`, `readiness`, `verification`, `manuscript`, `standalone`), a
-subject with a null `statement_id`, and study records are not affected.
+`{post_id, statement_id}`, and nothing is recorded in the store. Where a
+command accepts `--check`, the check gives the same refusal.
+`review-run --check` and `review-output-correction --check` refuse with
+`check_unsupported` first, as before. A `bar`, `result` or `adjudicator`
+assignment of a problem record is of a posted statement when two conditions
+hold. Its subject has `kind: "problem"` and a non-null `statement_id`. The
+statement under that id has the digest of a recorded post. The digest covers
+the claim and the resolution criteria (`statement`, `resolution_criteria`), so
+a statement under another id with the same claim and criteria is posted too. A
+statement whose claim or criteria differ is not posted, and its reviews work as
+before. A child of a staged review takes the subject of its controller. The
+other roles (`slate`, `native_math`, `verification`, `manuscript`,
+`standalone`), a subject with a null `statement_id`, and study records are not
+affected.
 
 Refused review work. For a posted statement, `review-assignment` refuses every
 new `bar`, `result` or `adjudicator` assignment, the initial assignment
@@ -4924,24 +4925,34 @@ staged controller is refused with `problem_already_posted` instead of
 staged task is refused for a new reservation and for a new attempt id. The
 retry after a refused capture or a failed worker, and the launch of a reserved
 worker that is not launched yet, are refused too. The reservation and the
-launch check the post again inside their own serialized writes. A post recorded
-in between therefore stops them before any charge or worker launch.
-`review-output-correction` is refused before the correction packet and its
-request are built.
+launch check the post again inside their own serialized writes. A staged
+`review-run` commits its dispatch before the reservation. A post recorded while
+the run is in progress therefore stops it at the reservation or at the launch
+authorization. The records committed before that point stay. A worker process
+that started its launch handshake exits without a reviewer call, and the
+reservation stays until it is reconciled. When a reservation stays, reconcile
+it with `review-run` and `action: "reconcile"`, which releases its capacity
+without a call. The post starts no new reviewer call. A call that started
+before the post (an ordinary run whose start was recorded, or a staged worker
+whose launch was authorized) completes, and its capture can be accepted (Work
+that stays available, below). `review-output-correction` is refused before the
+correction packet and its request are built.
 
 Work that stays available. After a post, the replay of a committed request with
 the same payload still returns its original receipt. This holds also for an
 assignment that 0.73.3 to 0.73.5 recorded after a post. Another payload under
-the same request id fails with `request_id_conflict`. `review-run` under the
-attempt that owns a committed capture accepts that capture without a reviewer
-call, as does `action: "accept"`. `review-run` with `action: "reconcile"` stays
-available for a call or a staged worker. The reconciliation of a reservation
-whose worker never launched releases its capacity without a call. A review that
-was already observed is recorded with `value-review` or `review-adjudication`,
-and `review-context` events can be recorded too. `plan_next` keeps its rule of
-0.73.0: `done` for every chain of a problem record that holds a post, for the
-whole record. `review-series` ends at `done` before any operation, and
-`record-check` stops as before.
+the same request id fails with `request_id_conflict`. For an ordinary call,
+`review-run` with the original payload and the original request ID records the
+run from its committed capture without a reviewer call. For a staged task, the
+task payload with `action: "accept"`, or a rerun under the attempt that owns
+the capture, accepts the committed capture without a call. `review-run` with
+`action: "reconcile"` stays available for a call or a staged worker. The
+reconciliation of a reservation whose worker never launched releases its
+capacity without a call. A review that was already observed is recorded with
+`value-review` or `review-adjudication`, and `review-context` events can be
+recorded too. `plan_next` keeps its rule of 0.73.0: `done` for every chain of a
+problem record that holds a post, for the whole record. `review-series` ends at
+`done` before any operation, and `record-check` stops as before.
 
 What the views show. Every reader keeps its results: `status`, `next`, `gate`,
 the output views, authentication, the reconstruction of review requests,
