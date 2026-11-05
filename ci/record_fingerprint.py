@@ -123,13 +123,40 @@ def fingerprint_snapshot(workspace):
     return {'assignments': result}
 
 
+def fingerprint_probe(workspace, identifier):
+    """Compare the retained probe request with every supported fit order."""
+    from research_harness.artifacts import ArtifactStore
+    from research_harness.errors import ResearchError
+    from research_harness import review_transport as transport
+    from research_harness.storage import Store
+
+    records = Store(workspace).snapshot()['records']
+    artifacts = ArtifactStore(workspace)
+    invocation = records['review_probe_invocation'][identifier]
+    try:
+        raw = artifacts.read(invocation['request'])
+        route = records['review_route'][invocation['route_id']]
+        for request in transport.list_built_requests(
+                route, json.loads(raw)['instructions'], invocation['positive_controls'], []):
+            rebuilt = json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
+            if raw == rebuilt:
+                return {'sha256': hashlib.sha256(rebuilt).hexdigest()}
+        return {'error': 'record_request_changed'}
+    except (ResearchError, json.JSONDecodeError) as error:
+        return {'error': error.code if isinstance(error, ResearchError) else 'record_json_invalid'}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--harness', required=True, type=Path)
     parser.add_argument('--workspace', required=True, type=Path, help='A workspace snapshot, never a live record')
+    parser.add_argument('--probe-invocation')
     args = parser.parse_args(argv)
     sys.path.insert(0, str(args.harness.resolve(strict=True)))
-    print(json.dumps(fingerprint_snapshot(args.workspace.resolve(strict=True)),
+    workspace = args.workspace.resolve(strict=True)
+    result = ({'probe_requests': {args.probe_invocation: fingerprint_probe(workspace, args.probe_invocation)}}
+              if args.probe_invocation is not None else fingerprint_snapshot(workspace))
+    print(json.dumps(result,
                      sort_keys=True, ensure_ascii=False, allow_nan=False))
 
 

@@ -6,10 +6,12 @@ review-run is never executed, including capture recovery and reconciliation.
 """
 
 import argparse
+from contextlib import contextmanager
 import ctypes
 import errno
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -35,7 +37,7 @@ from .storage import Store, _RecordHistory, _RecordedSnapshot, _validate
 LOCAL_OPERATIONS = frozenset(('review-assignment', 'value-review',
                               'review-adjudication', 'problem-openness'))
 # These are scientific limitations or explicit requests for external evidence or
-# an agent decision. All other stops fail, including input/parts dead ends.
+# an agent decision. Capacity refusals of allowed actions are handled separately.
 EXPECTED_STOP_CODES = frozenset((
     'review_provider_unavailable', 'review_provider_refused', 'review_output_over_cap',
     'review_execution_incomplete', 'review_timeout', 'review_answer_malformed',
@@ -48,8 +50,9 @@ EXPECTED_STOP_CODES = frozenset((
     'review_recording_required', 'review_worker_reconciliation_required',
     'review_context_repair_required', 'review_context_repair_stale',
     'assessment_incomplete',
+    'openness_review_not_approved',
 ))
-COMMAND_BUDGET_SECONDS = 60
+DEFAULT_TIME_BUDGET_SECONDS = 900
 SNAPSHOT_ATTEMPTS = 3
 
 
@@ -80,6 +83,8 @@ class OfflineArtifacts(ArtifactStore):
         if kind.startswith('route_runtime:'):
             adapter = kind.split(':', 1)[1]
             row['executable'] = (shutil.which('codex') if adapter.startswith('codex_') else None)
+        if kind == 'pdf_render':
+            row.update(executable=shutil.which('pdftoppm'), directory=tempfile.tempdir)
         self.local_reads.append(row)
         if (kind == 'route_runtime:openai_responses_v1'
                 and (False, False) not in getattr(platform, '_platform_cache', {})):
@@ -109,6 +114,7 @@ class OfflineStore(Store):
         return OfflineArtifacts(self.root, self.local_reads, step=self.current_step)
 
     def describe_runtime(self):
+        """Describe the harness without the Git processes, which qualification refuses."""
         root = Path(__file__).resolve().parents[1]
         version = json.loads((root / '.claude-plugin/plugin.json').read_text(encoding='utf-8'))['version']
         return {'harness_version': version, 'harness_root': str(root),
@@ -174,16 +180,42 @@ def check_integrity(store):
     return {'artifacts': len(verified)}
 
 
+@contextmanager
+def confine_local_reads(root):
+    """Keep the pinned renderer's stdlib temporary files inside the clone."""
+    with tempfile.TemporaryDirectory(prefix='.record-check-render-', dir=root) as directory:
+        previous = tempfile.tempdir
+        previous_environment = os.environ.get('TMPDIR')
+        tempfile.tempdir = directory
+        os.environ['TMPDIR'] = directory
+        try:
+            yield directory
+        finally:
+            tempfile.tempdir = previous
+            if previous_environment is None:
+                os.environ.pop('TMPDIR', None)
+            else:
+                os.environ['TMPDIR'] = previous_environment
+
+
 def rebuild_invocation(records, artifacts, invocation, *, kind='review_invocation'):
+    route_id = invocation.get('route_id')
+    if route_id is None:
+        route_id = records['review_assignment'][invocation['assignment_id']]['route_id']
+    if records['review_route'][route_id]['adapter'] == 'codex_cli_visual_v1':
+        with confine_local_reads(artifacts.root):
+            store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
+            store.require_local_read('pdf_render')
+            return _rebuild_invocation(records, artifacts, invocation, kind=kind)
+    return _rebuild_invocation(records, artifacts, invocation, kind=kind)
+
+
+def _rebuild_invocation(records, artifacts, invocation, *, kind):
     """Match exact retained JSON bytes to a request built under a supported order."""
     raw = artifacts.read(invocation['request'])
     recorded = json.loads(raw)
     if kind == 'review_probe_invocation':
         route = records['review_route'][invocation['route_id']]
-        if route['adapter'] == 'codex_cli_visual_v1':
-            # The pinned probe builder renders fresh control images, without
-            # an artifact-store argument through which to request permission.
-            artifacts.require_external_effect()
         prompt, packet, history = recorded['instructions'], invocation['positive_controls'], []
         if digest(prompt) != invocation['input_manifest']['instructions']:
             raise ResearchError('record_request_changed', 'Probe instructions no longer match their manifest')
@@ -365,11 +397,22 @@ def check_prospective_request(records, artifacts, plan):
     return {'assignment_id': assignment['id'], 'request_digest': digest(request), 'preflight': report}
 
 
+def describe_capacity_decision(error, plan):
+    """Recognize material that cannot finish on the selected route."""
+    if (error.code in ('review_parts_frame_too_large', 'review_parts_inventory_too_large',
+                       'review_parts_final_too_large')
+            or (error.code == 'review_input_too_large'
+                and (error.details or {}).get('phase') == 'final_preflight')):
+        return {'head_id': plan['head_id'], 'command': plan['command'],
+                'code': error.code, 'details': error.details}
+    return None
+
+
 def check_continuation(store):
     from .cli import OPERATIONS
     snapshot = store.snapshot()
     heads = list_chain_heads(snapshot['records'], store.build_artifact_store())
-    chains = []
+    chains, decision_stops = [], []
     for head_id in heads:
         actions, executed = [], set()
         chain = {'head_id': head_id, 'actions': actions}
@@ -380,6 +423,14 @@ def check_continuation(store):
             artifacts = Evaluation(records, store.build_artifact_store())
             plan = plan_next(records, artifacts, head_id)
             actions.append(plan)
+            assignment = records['review_assignment'][head_id]
+            if assignment['role'] == 'native_math':
+                from .native_review import load_packet
+                from .openness_reading import is_openness_packet
+                native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+                if not is_openness_packet(native):
+                    chain['boundary'] = 'controller'
+                    break
             state = plan['state']
             if state == 'done':
                 chain['boundary'] = 'done'
@@ -398,7 +449,15 @@ def check_continuation(store):
                 pending = (state == 'resume' or plan.get('code') in (
                     'review_invocation_pending', 'review_capacity_wait')
                     or plan.get('payload', {}).get('action') in ('accept', 'reconcile'))
-                chain['request'] = check_prospective_request(records, artifacts, plan)
+                try:
+                    chain['request'] = check_prospective_request(records, artifacts, plan)
+                except ResearchError as error:
+                    decision = describe_capacity_decision(error, plan)
+                    if decision is None:
+                        raise
+                    decision_stops.append(decision)
+                    chain['boundary'] = 'decision'
+                    break
                 chain['boundary'] = 'pending' if pending else state
                 break
             if state not in ('continue', 'replace', 'plan', 'record'):
@@ -415,6 +474,11 @@ def check_continuation(store):
                 OPERATIONS[command](store, plan['payload'], expected_revision=snapshot['revision'],
                                     request_id='record-check:' + uuid.uuid4().hex)
             except ResearchError as error:
+                decision = describe_capacity_decision(error, plan)
+                if decision is not None:
+                    decision_stops.append(decision)
+                    chain['boundary'] = 'decision'
+                    break
                 current = store.snapshot()['records']
                 if current.get('review_output_refusal', {}) != records.get('review_output_refusal', {}):
                     plan['refusal'] = error.as_dict()
@@ -424,7 +488,7 @@ def check_continuation(store):
                     chain['boundary'] = 'handoff'
                     break
                 raise
-    return {'chains': chains}
+    return {'chains': chains, 'decision_stops': decision_stops}
 
 
 def run_timed_check(name, check, *, budget=None):
@@ -439,11 +503,12 @@ def run_timed_check(name, check, *, budget=None):
         return {'code': 'record_command_timeout', 'message': 'The record reader exceeded its time budget',
                 'details': {'command': name, 'budget_seconds': budget}}
 
-    if budget is not None and hasattr(signal, 'setitimer'):
-        previous_handler = signal.signal(signal.SIGALRM, expire)
-        previous_timer = signal.setitimer(signal.ITIMER_REAL, budget)
     row = {'step': name, 'status': 'passed'}
     try:
+        if budget is not None and hasattr(signal, 'setitimer'):
+            previous_timer = signal.getitimer(signal.ITIMER_REAL)
+            previous_handler = signal.signal(signal.SIGALRM, expire)
+            signal.setitimer(signal.ITIMER_REAL, budget)
         row['result'] = check()
     except _CommandDeadline:
         row.update(status='failed', error=describe_timeout())
@@ -475,7 +540,7 @@ def build_sandbox_profile(clone, report_directory, source):
     ))
 
 
-def check_math_roots(clone, harness_root):
+def check_math_roots(clone, harness_root, *, time_budget=DEFAULT_TIME_BUDGET_SECONDS):
     """Discover roots on disk, never read or follow the absolute-path registry."""
     results = []
     for directory, directories, files in os.walk(clone, followlinks=False, onerror=raise_tree_error):
@@ -492,7 +557,7 @@ def check_math_roots(clone, harness_root):
             started = time.monotonic()
             try:
                 completed = subprocess.run(arguments, cwd=harness_root, capture_output=True,
-                                           text=True, timeout=COMMAND_BUDGET_SECONDS,
+                                           text=True, timeout=time_budget,
                                            env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
             except subprocess.TimeoutExpired as error:
                 raise ResearchError('record_command_timeout', 'Math reader exceeded its time budget',
@@ -507,7 +572,7 @@ def check_math_roots(clone, harness_root):
     return results
 
 
-def check_report(store):
+def check_report(store, *, time_budget=DEFAULT_TIME_BUDGET_SECONDS):
     from .cli import status_report
     from .report_views import next_summary, obligations_page
     commands = {}
@@ -520,28 +585,31 @@ def check_report(store):
                 codes = sorted({row['code'] for row in report['obligations']}) or ['review_output_pending']
                 return [obligations_page(report, code, limit=50, cursor=None) for code in codes]
             return report
-        result = run_timed_check(command, read_command, budget=COMMAND_BUDGET_SECONDS)
+        result = run_timed_check(command, read_command, budget=time_budget)
         # Keep reports bounded without dropping their timing or refusal.
         result.pop('result', None)
         commands[command] = result
-    math = run_timed_check('math', lambda: check_math_roots(store.root, Path(__file__).resolve().parents[1]))
+    math = run_timed_check('math', lambda: check_math_roots(
+        store.root, Path(__file__).resolve().parents[1], time_budget=time_budget))
     return {'commands': commands, 'math': math,
             'ready': math['status'] == 'passed' and all(row['status'] == 'passed' for row in commands.values())}
 
 
 def qualify_snapshot(clone, report):
     store = OfflineStore(clone, report['local_reads'])
-    for name, check in (('integrity', check_integrity), ('reconstruction', check_reconstruction),
-                        ('authentication', check_authentication), ('continuation', check_continuation),
-                        ('report', check_report)):
-        store.current_step = name
-        row = run_timed_check(name, lambda: check(store))
-        if name == 'report' and row['status'] == 'passed' and not row['result']['ready']:
-            row.update(status='failed', error={
-                'code': 'record_report_failed', 'message': 'One or more record readers failed qualification'})
-        report['steps'].append(row)
-        if row['status'] != 'passed':
-            break
+    with confine_local_reads(clone):
+        for name, check in (('integrity', check_integrity), ('reconstruction', check_reconstruction),
+                            ('authentication', check_authentication), ('continuation', check_continuation),
+                            ('report', lambda store: check_report(
+                                store, time_budget=report.get('time_budget_seconds', DEFAULT_TIME_BUDGET_SECONDS)))):
+            store.current_step = name
+            row = run_timed_check(name, lambda: check(store))
+            if name == 'report' and row['status'] == 'passed' and not row['result']['ready']:
+                row.update(status='failed', error={
+                    'code': 'record_report_failed', 'message': 'One or more record readers failed qualification'})
+            report['steps'].append(row)
+            if row['status'] != 'passed':
+                break
     report['ready'] = (len(report['steps']) == 6
                        and all(row['status'] == 'passed' for row in report['steps'])
                        and report['steps'][-1]['result']['ready'])
@@ -585,12 +653,15 @@ def check_isolated_snapshot(clone, source, report, report_directory):
     return json.loads(report_path.read_text(encoding='utf-8'))
 
 
-def check_record(workspace, *, keep_clone=None, isolate=True):
+def check_record(workspace, *, keep_clone=None, isolate=True, time_budget=DEFAULT_TIME_BUDGET_SECONDS):
     """Clone W before opening any SQLite connection; always remove temporary work."""
+    if not isinstance(time_budget, (int, float)) or not math.isfinite(time_budget) or time_budget <= 0:
+        raise ResearchError('invalid_input', 'The time budget must be a finite positive number of seconds')
     source = Path(workspace).resolve(strict=True)
     harness_root = Path(__file__).resolve().parents[1]
     version = json.loads((harness_root / '.claude-plugin/plugin.json').read_text(encoding='utf-8'))['version']
     report = {'ready': False, 'workspace': str(source), 'steps': [], 'local_reads': [],
+              'time_budget_seconds': time_budget,
               'isolation': 'unavailable', 'runtime': {
                   'harness_version': version, 'harness_root': str(harness_root),
                   'python_executable': sys.executable, 'python_version': platform.python_version()}}

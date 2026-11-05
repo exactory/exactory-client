@@ -17,8 +17,7 @@ def _runtime_fingerprint(records, artifacts):
         representatives = {}
         for route in records.get('review_route', {}).values():
             representatives.setdefault(route['adapter'], route)
-        from .review_protocol import read_route_runtime
-        return digest({'adapters': {adapter: read_route_runtime(artifacts, representatives[adapter])
+        return digest({'adapters': {adapter: artifacts.store.read_runtime_fingerprint(representatives[adapter])
                                    for adapter in sorted(representatives)},
                        'exact_text_cost': profile()})
     except Exception:

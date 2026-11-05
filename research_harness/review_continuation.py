@@ -240,8 +240,18 @@ def _plan_recording(records, artifacts, assignment, state):
         output = copy.deepcopy(effective['effective_output'])
     role = assignment['role']
     if role == 'native_math':
-        packet = protocol._read_json(artifacts, assignment['packet'])
-        if openness_reading.is_openness_packet(packet['native']):
+        from .native_review import load_packet
+        packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+        if openness_reading.is_openness_packet(packet):
+            from .problem_openness import prepare_openness
+            try:
+                prepare_openness(records, artifacts, dict(assignment_id=assignment['id']),
+                                 assignment['recorded_revision'] + 1)
+            except ResearchError as error:
+                return dict(state='handoff', code='openness_review_not_approved', command='export',
+                            details=dict(assignment_id=assignment['id'], decision=output.get('decision'),
+                                         reason=output.get('reason'), kind='problem-openness',
+                                         refusal=dict(code=error.code, message=error.message)))
             return dict(state='record', command='problem-openness',
                         payload=dict(assignment_id=assignment['id']))
     command = {'bar': 'value-review', 'slate': 'value-review', 'result': 'value-review',
@@ -356,6 +366,8 @@ def _plan_head(records, artifacts, assignment):
                     if openness_reading.is_openness_packet(native):
                         command = 'export'
                         details['kind'] = 'problem-openness'
+                    else:
+                        command = 'search review-packet'
             return dict(state='handoff', command=command, code='review_slot_exhausted', details=details)
         if attempts and not usable:
             latest = max(attempts, key=lambda row: row.get('recorded_revision', 0))
@@ -372,9 +384,9 @@ def _plan_head(records, artifacts, assignment):
             return plan_route_handoff(assignment)
         if result['state'] == 'replace':
             if assignment['role'] == 'native_math' and not assignment.get('context', {}).get('prior_assignment_id'):
-                packet = protocol._read_json(artifacts, assignment['packet'])
-                common = openness_reading.is_openness_packet(packet.get('native', {
-                    'contract': {}, 'scientific_context': {}}))
+                from .native_review import load_packet
+                packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+                common = openness_reading.is_openness_packet(packet)
                 return dict(state='handoff', command='export' if common else 'search review-packet',
                             code='native_review_attestation_required',
                             details=dict(assignment_id=assignment['id'],
@@ -482,10 +494,11 @@ def annotate_review_obligations(records, artifacts, report):
             assignment = records['review_assignment'][identifier]
             if assignment['role'] == 'native_math':
                 try:
-                    packet = protocol._read_json(artifacts, assignment['packet'])
+                    from .native_review import load_packet
+                    packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
                 except (ResearchError, json.JSONDecodeError):
                     continue
-                if not openness_reading.is_openness_packet(packet['native']):
+                if not openness_reading.is_openness_packet(packet):
                     continue
             state = protocol.assignment_state(records, artifacts, identifier)
             rows.extend(dict(item, assignment_id=identifier) for item in state.get('obligations', []))

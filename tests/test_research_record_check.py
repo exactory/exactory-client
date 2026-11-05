@@ -215,6 +215,63 @@ class RecordCheckTests(unittest.TestCase):
         self.assertEqual(self.step(report, 'continuation')['error']['code'], 'review_input_too_large')
         self.assertFalse(self.case.read_records().get('review_invocation'))
 
+    def test_allowed_capacity_refusals_are_reported_as_decision_stops(self):
+        from research_harness import record_check
+        action = dict(state='continue', command='review-assignment', payload={},
+                      head_id=self.assignment['id'], progress={})
+        before = digest_tree(self.case.root)
+        codes = ('review_input_too_large', 'review_parts_frame_too_large',
+                 'review_parts_inventory_too_large', 'review_parts_final_too_large')
+        for code in codes:
+            details = {'input_characters': 101, 'input_limit_characters': 100}
+            if code == 'review_input_too_large':
+                details['phase'] = 'final_preflight'
+            with self.subTest(code=code), patch.object(record_check, 'plan_next', return_value=action), \
+                    patch.dict(cli.OPERATIONS, {'review-assignment': unittest.mock.Mock(
+                        side_effect=ResearchError(code, 'Synthetic route capacity', details))}):
+                report = self.check()
+            self.assertTrue(report['ready'], report)
+            result = self.step(report, 'continuation')['result']
+            self.assertEqual(result['chains'][0]['boundary'], 'decision')
+            self.assertEqual(result['decision_stops'], [dict(
+                head_id=self.assignment['id'], command='review-assignment', code=code, details=details)])
+        self.assertEqual(digest_tree(self.case.root), before)
+
+    def test_final_preflight_capacity_is_a_decision_without_running_the_invocation(self):
+        from research_harness import record_check
+        details = {'phase': 'final_preflight', 'input_characters': 101, 'input_limit_characters': 100}
+        with patch.object(record_check, 'check_prospective_request', side_effect=ResearchError(
+                'review_input_too_large', 'Synthetic final input', details)):
+            report = self.check()
+        self.assertTrue(report['ready'], report)
+        result = self.step(report, 'continuation')['result']
+        self.assertEqual(result['decision_stops'][0]['command'], 'review-run')
+        self.assertEqual(result['decision_stops'][0]['details'], details)
+        self.assertFalse(self.case.read_records().get('review_invocation'))
+
+    def test_nonfinal_input_capacity_refusal_still_fails(self):
+        from research_harness import record_check
+        action = dict(state='continue', command='review-assignment', payload={},
+                      head_id=self.assignment['id'], progress={})
+        for details in (None, {}, {'phase': 'continuation'}):
+            with self.subTest(details=details), patch.object(record_check, 'plan_next', return_value=action), \
+                    patch.dict(cli.OPERATIONS, {'review-assignment': unittest.mock.Mock(side_effect=ResearchError(
+                        'review_input_too_large', 'Synthetic ordinary input', details))}):
+                report = self.check()
+            self.assertFalse(report['ready'])
+            self.assertEqual(self.step(report, 'continuation')['error']['code'], 'review_input_too_large')
+
+    def test_capacity_code_does_not_allow_an_external_action_or_a_planner_stop(self):
+        from research_harness import record_check
+        for state, command, expected in [('continue', 'review-probe', 'qualification_unavailable'),
+                                         ('stop', 'review-assignment', 'review_parts_final_too_large')]:
+            action = dict(state=state, command=command, payload={}, head_id=self.assignment['id'],
+                          progress={}, code='review_parts_final_too_large', details={})
+            with self.subTest(state=state), patch.object(record_check, 'plan_next', return_value=action):
+                report = self.check()
+            self.assertFalse(report['ready'])
+            self.assertEqual(self.step(report, 'continuation')['error']['code'], expected)
+
     def test_unknown_state_never_executes_an_otherwise_allowed_operation(self):
         from research_harness import record_check
         unknown = dict(state='unknown', command='review-assignment', payload={},
@@ -367,20 +424,40 @@ class RecordCheckTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'unsafe_path')
         self.assertEqual(marker.read_text(), 'Concurrent user data')
 
-    def test_visual_probe_reconstruction_refuses_renderer_before_process_launch(self):
+    def test_visual_probe_reconstruction_allows_only_a_confined_local_renderer(self):
         from research_harness.record_check import OfflineArtifacts, rebuild_invocation
-        from research_harness.artifacts import _CheckEffectRequired
+        from research_harness import review_visual_inputs, review_pdf_pages, review_transport
         records = self.case.read_records()
-        records['review_route']['route']['adapter'] = 'codex_cli_visual_v1'
-        records['review_route']['route']['endpoint'] = 'codex://local'
-        from research_harness import review_visual_inputs, review_pdf_pages
+        route = records['review_route']['route']
+        route.update(adapter='codex_cli_visual_v1', endpoint='codex://local')
+        invocation = dict(records['review_probe_invocation']['probe'])
+        original = json.loads(self.case.artifacts.read(invocation['request']))
+        request = next(review_transport.list_built_requests(
+            route, original['instructions'], invocation['positive_controls'], []))
+        invocation['request'] = self.case.artifacts.put(
+            json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False).encode(), 'application/json')
         review_visual_inputs.control_image.cache_clear()
         review_pdf_pages._profile.cache_clear()
-        invocation = records['review_probe_invocation']['probe']
-        with patch('subprocess.Popen', side_effect=AssertionError('renderer launched')):
-            with self.assertRaises(_CheckEffectRequired):
-                rebuild_invocation(records, OfflineArtifacts(self.case.root, []), invocation,
-                                   kind='review_probe_invocation')
+        real_popen = subprocess.Popen
+        calls, reads = [], []
+
+        def renderer_only(arguments, *args, **kwargs):
+            calls.append(arguments)
+            self.assertEqual(Path(arguments[0]).name, 'pdftoppm')
+            if arguments[-1] != '-v':
+                for name in arguments[-2:]:
+                    self.assertIn(self.case.root.resolve(), Path(name).resolve().parents)
+            return real_popen(arguments, *args, **kwargs)
+
+        artifacts = OfflineArtifacts(self.case.root, reads)
+        with patch('subprocess.Popen', side_effect=renderer_only), \
+                patch('socket.socket.connect', side_effect=AssertionError('network reached')):
+            rebuilt = rebuild_invocation(records, artifacts, invocation, kind='review_probe_invocation')
+        self.assertEqual(rebuilt['sha256'], invocation['request']['sha256'])
+        self.assertTrue(calls)
+        self.assertTrue(any(row['kind'] == 'pdf_render' for row in reads))
+        with self.assertRaises(BaseException):
+            artifacts.require_external_effect()
 
     def test_live_workers_are_reported_pending_without_reconciliation(self):
         with patch('research_harness.review_protocol._observed', side_effect=RuntimeError('interrupted')):
@@ -450,6 +527,19 @@ class RecordCheckTests(unittest.TestCase):
         self.assertTrue(assignment['assignment_state']['ready'])
         self.assertTrue(assignment['authentication']['observed'])
         self.assertTrue(assignment['rebuilt_requests']['observed']['sha256'])
+
+    def test_fingerprint_can_rebuild_an_individual_historical_probe(self):
+        from research_harness.record_check import copy_snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            clone = Path(directory) / 'snapshot'
+            copy_snapshot(self.case.root, clone)
+            result = subprocess.run([sys.executable, str(PLUGIN / 'ci/record_fingerprint.py'),
+                                     '--harness', str(PLUGIN), '--workspace', str(clone),
+                                     '--probe-invocation', 'probe'], cwd=PLUGIN,
+                                    capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        entry = json.loads(result.stdout)['probe_requests']['probe']
+        self.assertEqual(entry['sha256'], self.case.read_records()['review_probe_invocation']['probe']['request']['sha256'])
 
     def test_fingerprint_matches_0724_on_the_same_snapshot(self):
         self.observe()
@@ -641,6 +731,139 @@ class RecordCheckTests(unittest.TestCase):
             report = self.check()
         self.assertFalse(report['ready'])
         self.assertEqual(self.step(report, 'continuation')['error']['code'], 'qualification_unavailable')
+
+
+class RecordCheckFollowupTests(unittest.TestCase):
+    def test_deadline_during_timer_installation_still_reports_a_budget_failure(self):
+        from research_harness import record_check
+        with patch('signal.getitimer', return_value=(0, 0)), patch('signal.signal') as handler, \
+                patch('signal.setitimer', side_effect=[record_check._CommandDeadline(), (0, 0)]):
+            result = record_check.run_timed_check('status', lambda: {}, budget=0.001)
+        self.assertEqual(result['error']['code'], 'record_command_timeout')
+        self.assertEqual(handler.call_count, 2)
+
+    def test_cli_time_budget_defaults_to_900_and_accepts_an_override(self):
+        parser = cli.build_parser()
+        self.assertEqual(parser.parse_args(['record-check', '--workspace', '/snapshot']).time_budget, 900)
+        args = parser.parse_args(['record-check', '--workspace', '/snapshot', '--time-budget', '17.5'])
+        self.assertEqual(args.time_budget, 17.5)
+
+    def test_each_report_reader_uses_the_supplied_budget(self):
+        from research_harness import record_check
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory) / 'workspace', create=True)
+            calls = []
+
+            def timed(name, check, **kwargs):
+                calls.append((name, kwargs.get('budget')))
+                return dict(step=name, status='passed', result=[], seconds=1)
+
+            with patch.object(record_check, 'run_timed_check', side_effect=timed):
+                record_check.check_report(store, time_budget=17.5)
+            self.assertEqual(calls[:3], [('status', 17.5), ('next', 17.5), ('obligations', 17.5)])
+
+    def test_invalid_time_budget_never_clones(self):
+        from research_harness import record_check
+        with tempfile.TemporaryDirectory() as directory:
+            for budget in (0, -1, float('inf'), float('nan')):
+                with self.subTest(budget=budget), patch.object(record_check, 'copy_snapshot') as clone:
+                    with self.assertRaises(ResearchError) as refused:
+                        record_check.check_record(directory, time_budget=budget)
+                    self.assertEqual(refused.exception.code, 'invalid_input')
+                    clone.assert_not_called()
+
+    def build_openness_case(self):
+        from openness_reading_fixtures import OpennessReadingCase
+        case = OpennessReadingCase()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        return case
+
+    def test_native_packet_without_inline_native_field_can_be_annotated(self):
+        from research_harness.review_continuation import annotate_review_obligations
+        case = self.build_openness_case()
+        case.limit_input()
+        reference = case.export(assignment_id='reading-first')
+        case.assign('reading-first', reference)
+        self.assertNotIn('native', case.read_packet('reading-first'))
+        report = annotate_review_obligations(case.store.snapshot()['records'], case.artifacts,
+                                            dict(review={}, obligations=[]))
+        self.assertTrue(any(row.get('assignment_id') == 'reading-first' for row in report['obligations']))
+
+    def test_final_native_refusals_with_and_without_version_handoff_a_new_export(self):
+        from research_harness.problem_openness import prepare_openness
+        from research_harness.review_continuation import plan_next
+        for version, decision in ((2, 'revise'), (None, 'revise'), (None, 'reject')):
+            with self.subTest(version=version, decision=decision):
+                case = self.build_openness_case()
+                reference = case.export()
+                case.assign('turn-1', reference)
+                packet = case.read_packet('turn-1')['native']
+                output = dict(subject_digest=packet['subject_digest'], claim_digest=packet['claim_digest'],
+                              reviewer=packet['reviewer'], decision=decision,
+                              reason='The synthetic evidence needs another finding.', objections=[])
+                if version is not None:
+                    output['schema_version'] = version
+                case.invoke('turn-1', output, attempt='declined-' + str(version) + '-' + decision)
+                records = case.store.snapshot()['records']
+                with self.assertRaises(ResearchError) as refused:
+                    prepare_openness(records, case.artifacts, dict(assignment_id='turn-1'), case.store.revision + 1)
+                plan = plan_next(records, case.artifacts, 'turn-1')
+                self.assertEqual((plan['state'], plan['code'], plan['command']),
+                                 ('handoff', 'openness_review_not_approved', 'export'))
+                self.assertEqual(plan['details'], dict(
+                    assignment_id='turn-1', decision=decision, reason=output['reason'], kind='problem-openness',
+                    refusal=dict(code=refused.exception.code, message=refused.exception.message)))
+
+    def test_accepted_native_openness_output_plans_the_real_record_preparation(self):
+        from research_harness.problem_openness import prepare_openness
+        from research_harness.review_continuation import plan_next
+        case = self.build_openness_case()
+        reference = case.export()
+        case.assign('turn-1', reference)
+        output = case.build_native_result(case.read_packet('turn-1'), outcome='unresolved')
+        case.invoke('turn-1', output)
+        before = digest_tree(case.root)
+        records = case.store.snapshot()['records']
+        prepare_openness(records, case.artifacts, dict(assignment_id='turn-1'), case.store.revision + 1)
+        plan = plan_next(records, case.artifacts, 'turn-1')
+        self.assertEqual((plan['state'], plan['command']), ('record', 'problem-openness'))
+        self.assertEqual(digest_tree(case.root), before)
+        with patch('research_harness.problem_openness.prepare_openness', side_effect=RuntimeError('defect')):
+            with self.assertRaisesRegex(RuntimeError, 'defect'):
+                plan_next(records, case.artifacts, 'turn-1')
+
+    def test_time_budget_is_retained_by_the_isolated_worker(self):
+        from research_harness import record_check
+        with tempfile.TemporaryDirectory() as directory:
+            clone = Path(directory) / 'clone'
+            Store(clone, create=True)
+            report_path = Path(directory) / 'report.json'
+            report_path.write_text(json.dumps(dict(time_budget_seconds=17.5, local_reads=[],
+                steps=[dict(step='snapshot', status='passed')])))
+            with ExitStack() as stack:
+                for name in ('check_integrity', 'check_reconstruction', 'check_authentication', 'check_continuation'):
+                    stack.enter_context(patch.object(record_check, name, return_value={}))
+                checked = stack.enter_context(patch.object(record_check, 'check_report', return_value={'ready': True}))
+                record_check.main(['--snapshot', str(clone), '--report', str(report_path)])
+            self.assertEqual(checked.call_args.kwargs['time_budget'], 17.5)
+            self.assertTrue(json.loads(report_path.read_text())['ready'])
+
+    def test_non_openness_native_head_is_only_a_controller_plan(self):
+        from research_harness import record_check
+        case = self.build_openness_case()
+        reference = case.export(assignment_id='math-first')
+        native = json.loads(case.artifacts.read(reference))
+        native['contract'].pop('orchestration')
+        native['scientific_context'].pop('openness_minimum')
+        reference = case.artifacts.put(json.dumps(native).encode(), 'application/json')
+        case.assign('math-first', reference)
+        plan = dict(state='stop', chain='native_math', head_id='math-first', code='review_input_too_large')
+        with patch.object(record_check, 'plan_next', return_value=plan):
+            result = record_check.check_continuation(record_check.OfflineStore(case.root))
+        chain = result['chains'][0]
+        self.assertEqual(chain['boundary'], 'controller')
+        self.assertEqual(chain['actions'], [plan])
 
 
 if __name__ == '__main__':

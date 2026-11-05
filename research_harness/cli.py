@@ -23,7 +23,6 @@ from .limits import describe_depth, limits_report
 from .operations import fields, text
 from .output_views import (PROBLEM_EXPORTS_FOLDER, find_view_advisories, find_workspace_root, render_all,
                            render_views_after_command)
-from .provenance import runtime_provenance
 from .report_views import (annotate_parts_obligations, current_obligations, next_summary, obligations_page,
                            order_obligations, status_summary)
 from .storage import Store, check_command_bounds
@@ -320,6 +319,7 @@ def build_parser():
                                       help=RECORD_CHECK_HELP_MSG)
     record_check.add_argument("--workspace", required=True)
     record_check.add_argument("--keep-clone", type=Path)
+    record_check.add_argument("--time-budget", type=float, default=900)
     for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
                     "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
@@ -539,7 +539,7 @@ def status_report(store, *, counters=False):
     started = time.monotonic()
     snapshot = store.snapshot()
     evaluation = Evaluation(snapshot['records'], store.build_artifact_store())
-    runtime = store.describe_runtime() if hasattr(store, 'describe_runtime') else runtime_provenance()
+    runtime = store.describe_runtime()
     with runtime_scope(snapshot['records'], evaluation):
         records = snapshot["records"]
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
@@ -687,7 +687,7 @@ def describe_review_budget_refusal(error):
 def run(args):
     if args.command == "record-check":
         from .record_check import check_record
-        return check_record(Path(args.workspace), keep_clone=args.keep_clone)
+        return check_record(Path(args.workspace), keep_clone=args.keep_clone, time_budget=args.time_budget)
     if args.command == "example":
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]

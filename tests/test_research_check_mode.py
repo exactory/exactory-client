@@ -358,7 +358,7 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
         self.assertEqual(json.loads(response[2])["error"]["code"], "check_unsupported")
         self.assertEqual(self.read_workspace(), before)
 
-    def test_check_refuses_visual_delivery_before_inspecting_the_renderer(self):
+    def test_check_allows_local_visual_delivery_reads_without_workspace_changes(self):
         from research_harness.review_visual_sources import prepare_packet
 
         def record_fixture(store, payload, **identity):
@@ -370,10 +370,10 @@ class ResearchCheckModeTests(CheckCommandMixin, unittest.TestCase):
         before = self.read_workspace()
         with mock.patch.dict(cli.OPERATIONS, {"artifact": record_fixture}), \
                 mock.patch("research_harness.review_pdf_pages.profile",
-                           side_effect=AssertionError("Check inspected PDF renderer")):
+                           return_value={}) as profile:
             response = self.invoke_command("artifact", {})
-        self.assertEqual(response[0], 1, response[2])
-        self.assertEqual(json.loads(response[2])["error"]["code"], "check_unsupported")
+        self.assert_accepted_check(response, 0)
+        self.assertTrue(profile.call_args_list)
         self.assertEqual(self.read_workspace(), before)
 
     def test_check_replays_a_recorded_acquisition_before_refusing_external_effects(self):
