@@ -418,8 +418,11 @@ turn and `<assignment id>-run-<k>` for a run.
 | `stop` | A typed limit or refusal; `code`, `details`. |
 
 The `record` action of an openness chain is `problem-openness` with the
-head's `assignment_id`, whatever the openness outcome. The final of a staged
-bar, slate or result review is a `record` action (`value-review`).
+head's `assignment_id`, planned only when `problem-openness` accepts the
+final output by its own checks (an approved version 2 native result with an
+openness finding, whatever the openness outcome); any other final output is
+the handoff `openness_review_not_approved` (the handoffs below). The final of
+a staged bar, slate or result review is a `record` action (`value-review`).
 
 The driver. `review-series --assignment HEAD` (`--workspace` defaults to `.`,
 and any assignment of the chain resolves to the chain's current head) executes
@@ -467,12 +470,20 @@ The handoffs:
 | `native_review_attestation_required` | `search review-packet` (openness chains: `export`, kind `problem-openness`) | A native first turn needs a replacement, which needs a new attestation. |
 | `verification_verdict_body_required` | `bind-verdict` | A verification review has its output; recording needs the verdict body. |
 | `review_recording_required` | `manuscript-review`, `export` (standalone, kind `outputs`) or `review` | Another role's output needs its recording step. |
-| `review_slot_exhausted` | `review-output-correction` when that operation accepts the head (a problem result reassessment whose latest failure is `review_reassessment_mismatch`); `export`, kind `problem-openness`, for an openness chain (a new chain); otherwise `review-assignment` (a new eligible reviewer for the slot) | Two outputs of the head were refused; the assignment is exhausted. |
+| `review_slot_exhausted` | `review-output-correction` when that operation accepts the head (a problem result reassessment whose latest failure is `review_reassessment_mismatch`); `export`, kind `problem-openness`, for an openness chain (a new chain); `search review-packet` for another native mathematical review (a new attestation); otherwise `review-assignment` (a new eligible reviewer for the slot) | Two outputs of the head were refused; the assignment is exhausted. |
 | `review_resampling_forbidden` | `review-assignment` | An initial bar, slate or result review ended without an output; the same reviewer identity is not sampled again, so a new eligible reviewer is needed. |
 | `review_worker_reconciliation_required` | `review-attempt` | A pending invocation has no pool membership (a call of an earlier version). |
 | `assessment_incomplete` | `review-assignment` | A staged assessment is incomplete. |
 | `review_context_*`, `review_route_retired` | `review-assignment` | A context repair is needed. |
 | `review_route_runtime_stale` | `review-route` | The head's route pins another reviewer runtime; record and probe a new route, then a replacement turn on it. |
+| `openness_review_not_approved` | `export`, kind `problem-openness` | The final turn of an openness chain returned a result that `problem-openness` does not accept (for example the decision `revise` or `reject`, or an approved finding whose evidence or statement does not match); `details` hold `assignment_id`, `decision`, `reason`, `kind` and `refusal` (the `code` and `message` of the `problem-openness` refusal). Obtain a new finding after the reviewer's reason and the refusal are addressed. |
+
+In this table an openness chain is a problem-creation openness chain, whose
+packets come from `export --kind problem-openness`. A math-solver openness
+reading chain (`exactory-openness-reading-math-v1`, packets from
+`search review-packet`) is another native mathematical review: its
+`review_slot_exhausted` and `native_review_attestation_required` handoffs name
+`search review-packet`, and its head belongs to the math-solver controller.
 
 Outcomes of a failed reviewer call. New observations record `observed_at`
 (UTC, ISO 8601, seconds). A failed Codex call with an empty answer also
@@ -774,9 +785,10 @@ role; the assignment result holds `review_parts` and `review_parts_plan`
 from the series' own turns only). Before the first step that calls a model,
 read `review_parts_plan` in the assignment result, and the allowances,
 estimates, progress and next action in `status` under
-`review.assignments.<id>.review_parts`; `review-assignment --check` refuses a
-parts preparation with `check_unsupported`, because it needs the reviewer
-CLI, and writes nothing. Then run `review-series --assignment ID`
+`review.assignments.<id>.review_parts`; `review-assignment --check` checks a
+parts preparation and writes nothing, since 0.73.0 a check reads the reviewer
+CLI version when a preparation needs it
+([Inputs and receipts](#inputs-and-receipts)). Then run `review-series --assignment ID`
 ([Review chains and `review-series`](#review-chains-and-review-series)): it
 runs each turn and assigns each next turn with the complete payload (for
 `review-assignment`, a new id, the same role, dossier, route, reviewer and
@@ -1906,12 +1918,13 @@ A check opens the store read-only, reads one snapshot, and runs the operation's 
 
 A check refuses with `check_unsupported` when the operation acts outside the store:
 
-- `collect`, `resume`, `acquire`, `expand`, `fulltext`, `fulltext-start`, `fulltext-resume`, `import-response`, `import-oai-cohort` and `visual`, which acquire sources; `review-probe`, `review-run` and `review-output-correction`, which call a reviewer, and `review-series`, which executes the calls of a review chain and refuses before any workspace or model effect; and `reconcile-run`. A new request is refused before any effect. A request already recorded returns its receipt. `fulltext-status` only reads and has no `--check` flag.
+- `collect`, `resume`, `acquire`, `expand`, `fulltext`, `fulltext-start`, `fulltext-resume`, `import-response`, `import-oai-cohort` and `visual`, which acquire sources; `review-probe`, `review-run` and `review-output-correction`, which call a reviewer, and `review-series`, which executes the calls of a review chain and refuses before any workspace or model effect; and `reconcile-run`. A new request is refused before any effect. A request already recorded returns its receipt. `fulltext-status` only reads and has no `--check` flag; `record-check` checks a copy of the record ([Record check](#record-check)) and has no `--check` flag either.
 - `batches`, `export`, `recover` and `restore`, which write files or recovery state, and `strategy-packet`, which can store a file in the artifact store while it builds the packet, for example a projected claim file, without a revision change. These five refuse before they open the workspace.
 - `exactory-lab init`, `run`, `probe` and `colab-serve`, and every `exactory-draft` command: `init`, `package`, `deposit`, `reconcile` and `attach-problem`. They create a workspace, run a program, write an archive or call Zenodo or exactory, and they refuse before they read anything.
-- A preparation that needs the installed reviewer CLI: `review-route` with a local adapter (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1` or `codex_cli_visual_v1`), and, in a workspace that holds a route of a local adapter, every command whose validation evaluates a route or an assignment state, for example `review-assignment`, `value-review`, `review-adjudication` and `problem-openness`. That evaluation reads the installed runtime of each local adapter in use, and reading a Codex runtime runs the Codex CLI.
-- A preparation that needs a PDF tool or renders images: a `result` locator into a PDF output, whose page count `pdfinfo` reads, and `review-assignment` on a `codex_cli_visual_v1` route.
+- A preparation that reads the page count of a `result` locator into a PDF output with `pdfinfo`.
 - A preparation that commits in two steps: `artifact` on a probe path.
+
+Since 0.73.0 a check permits two local reads, the reviewer CLI version and PDF page rendering, so a preparation that needs them is checked instead of refused: `review-route` with a local adapter (`claude_cli_v1`, `codex_cli_v1`, `codex_cli_framed_v1` or `codex_cli_visual_v1`); in a workspace that holds a route of a local adapter, every command whose validation evaluates a route or an assignment state, for example `review-assignment`, `value-review`, `review-adjudication` and `problem-openness` (that evaluation reads the installed runtime of each local adapter in use, and reading a Codex runtime runs the Codex CLI); and `review-assignment` on a `codex_cli_visual_v1` route. The check still writes nothing.
 
 `check_unsupported` says that check mode cannot prepare the operation. It says nothing about the payload; run the write for that answer. A test derives the commands of `exactory-research`, `exactory-math`, `exactory-lab` and `exactory-draft` from their parsers and fails when a writing command lacks `--check`. It runs `--check` for every writing command and compares the whole workspace tree before and after. No check writes.
 
@@ -3236,9 +3249,9 @@ retains its original identity and payload. These operations append immutable
 records and move explicit selections. Each also accepts `--check`
 ([Inputs and receipts](#inputs-and-receipts)). In a record that holds a Claude or
 Codex route, a check whose validation evaluates a route or an assignment state,
-such as `review-assignment`, `value-review` or `problem-openness`, is refused with
-`check_unsupported`, because that evaluation reads the runtime of the installed
-reviewer adapter.
+such as `review-assignment`, `value-review` or `problem-openness`, reads the
+runtime of the installed reviewer adapter, a local read that a check permits
+since 0.73.0, and is checked, not refused.
 
 | Command | JSON payload | Records and behavior |
 | --- | --- | --- |
@@ -3756,10 +3769,21 @@ Run a reading chain turn by turn:
    `review-assignment` does not continue from it; `review-series` runs the
    same turn once more (the `scientific_refused` outcome), and after a second
    refusal it ends with the handoff `review_slot_exhausted`, whose command for
-   an openness chain is `export`, kind `problem-openness`: a new chain.
+   an openness chain is `export`, kind `problem-openness`: a new chain. A
+   native result review that `problem-openness` does not accept is not run
+   again; its plan is the handoff of step 5.
 5. `review-series` records the final turn that returned the native result
-   with `problem-openness` and its `assignment_id` (state `record`), whatever
-   the openness outcome.
+   with `problem-openness` and its `assignment_id` (state `record`) when
+   `problem-openness` accepts that output by its own checks: an approved
+   version 2 native result with an openness finding, whatever the openness
+   outcome. Any other result (for example the decision `revise` or `reject`,
+   or an approved finding whose evidence or statement does not match) ends
+   the command with the handoff `openness_review_not_approved` (exit status
+   3), whose command is `export`, kind `problem-openness`; its `details` hold
+   `assignment_id`, the reviewer's `decision` and `reason`, `kind` and
+   `refusal`, the `code` and `message` of the `problem-openness` refusal.
+   Address the reason and the refusal, then export the packet again under a
+   new assignment id and start a new chain for a new finding.
 
 `problem-openness` on a final turn keeps every check and also checks the chain:
 each turn is ready, the reading record names the observed attempts of the
@@ -4978,6 +5002,36 @@ Each folder has `README.md` and `index.json`. The index lists every file with it
 
 A genuine hot SQLite rollback journal makes default reads return `store_recovery_required`. Use `exactory-research recover`, optionally with `--expected-revision`, to request native SQLite rollback recovery after path checks. This preserves committed history, migrates no schema, resets no accounts, and satisfies no research gate.
 
+### Record check
+
+`record-check --workspace W [--keep-clone DIR] [--time-budget SECONDS]` qualifies a copy of a research record offline, in six steps, and prints a JSON report. `--workspace` is required, and the command has no `--check` flag. It never opens a SQLite connection on `W`. It copies `W` file by file (APFS `clonefile` on macOS) into a clone in a new temporary directory outside `W` and checks the copy (`PRAGMA integrity_check` and the store's full history validation); it copies up to three times until one copy is consistent, otherwise the `snapshot` step fails with `record_snapshot_inconsistent`. The clone is removed when the command ends. `--keep-clone DIR` keeps the clone at `DIR`, which must not exist and must be outside `W` (`unsafe_path` otherwise).
+
+The six steps run in this order. The first failed step ends the check, and the later steps do not run:
+
+1. `snapshot`: the consistent copy, with its revision and the number of copies.
+2. `integrity`: every artifact named by any historical event verifies, superseded records included; the result is the count.
+3. `reconstruction`: every retained probe request, reviewer request, output-correction request and frozen staged request rebuilds byte for byte under one of the supported fit orders; otherwise `record_request_changed` with the invocation id and kind. A request that no longer rebuilds stays a failure of this step, also when the previous release fails on it in the same way.
+4. `authentication`: each observation authenticates as before and keeps its classification; failed, imported and pending history stays as it is (a failed attempt need not become ready).
+5. `continuation`: for every chain head, `plan_next` and the transitions that stay local. The offline executor runs only `review-assignment`, `value-review`, `review-adjudication` and `problem-openness`, and only on the clone. A `review-run` action (`run`, `wait`, `resume`) is never executed: its request is rebuilt, its delivery validated and `review_preflight.check_request` applied. Each chain ends at a boundary: `done`; `pending` (a live worker or a call to finish); `handoff` or `stop` with an enumerated code (the handoffs and the outcomes of [Review chains and `review-series`](#review-chains-and-review-series)); `decision` (below); or `controller` (a native head that is not an openness chain belongs to the math-solver controller, which the `report` step reads). The step fails on an unknown stop code, an action outside the allowlist (`qualification_unavailable`), an unknown plan state (`record_unknown_action`) or a repeated unchanged action (`review_series_no_progress`).
+6. `report`: `status`, `next` and `obligations` (one page of each obligation code) each run within the time budget and report their time; a slower reader fails with `record_command_timeout`. The math-solver controllers found on disk inside the clone (never through the registry of absolute paths) are read with `exactory-math search status` and `search next` with `--attack-root` set to the cloned root (`record_math_read_failed` when one refuses). A failed reader fails the step with `record_report_failed`.
+
+Decision stops. A refusal of an allowed action for route capacity means that the chain cannot finish on that route with that material; the next step is a decision (a route with a larger limit, or less material). The codes are `review_input_too_large` in the phase `final_preflight` (the mandatory final input of a reading chain is over the route limit), `review_parts_frame_too_large`, `review_parts_inventory_too_large` and `review_parts_final_too_large`. Each is listed under the continuation result's `decision_stops` with `head_id`, `command`, `code` and `details`, and the record passes the step. Every other refusal keeps its result.
+
+`--time-budget SECONDS` is a finite positive number (`invalid_input` otherwise), default 900. It is the ceiling of each of `status`, `next`, `obligations` and each math-solver reader; it catches a runaway cost. The comparison with the previous release is part of the release procedure, not of the command.
+
+Local reads. The command permits, and records in `local_reads` with `kind`, `step`, `executable` and `directory`, the reads of a reviewer runtime (`route_runtime:<adapter>`: a Codex route reads `codex --version`; the Claude route launches nothing), the runtime fingerprint of a route, and `pdf_render` (the pinned PDF renderer `pdftoppm`; its temporary files stay inside the clone). Every other external effect is refused: network connections, acquisitions, reviewer calls, publication, worker launches and other processes. A step that needs one fails with `qualification_unavailable` and its step and reason.
+
+Isolation. On macOS the steps after `snapshot` run under `/usr/bin/sandbox-exec` with a profile that denies outbound network, every read under `W`, and writes outside the clone and the report directory; the report says `isolation` `sandbox-exec`. Where the profile cannot be applied (for example inside another sandbox), `isolation` is `unavailable` with `isolation_reason`, and the refusal of external effects inside the process stays active.
+
+The report: `ready`, `workspace`, `clone`, `steps` (each with `step`, `status`, `seconds` and `result` or `error`), `local_reads`, `time_budget_seconds`, `isolation` (and `isolation_reason`) and `runtime` (`harness_version`, `harness_root`, `python_executable`, `python_version`). `runtime` names the version and the files that actually ran; run through a record's own wrapper, the command shows the version that the wrapper runs. The command prints the report and exits 0 when `ready` is true, 1 otherwise. An error before the report (`invalid_input`, `unsafe_path`) prints the error JSON on stderr and exits 1.
+
+Activation of a new version for a record:
+
+1. A record moves to a new version only after `record-check` with that version passes on a copy of the record (the command makes the copy). A failure that the previous release shares is reported and decided by the release procedure.
+2. The session then updates the version that the record's own wrapper pins, verifies the executable path and the version that the wrapper actually runs (the report's `runtime`), and starts a new session so that the new hooks load.
+3. A running session keeps the version it loaded; the plugin cache is updated only when no session that loaded it runs.
+
+The release procedure for live records is for maintainers; `misc/harness-improvement/LIVE-RECORDS.md` states it.
 
 ### Import an original OAI cohort traversal
 

@@ -243,6 +243,21 @@ authorized budget. When a required condition prevents further progress, preserve
 its exact obligation, evidence, next action, and named wait. Missing credentials
 belong at the stage that uses them; do not ask for secret values in chat.
 
+Before the first command on an existing study whose record's own wrapper pins
+a harness version other than the one you run, activate the new version. Run
+`exactory-research record-check --workspace W` with the new version, where `W`
+is the study workspace; the command checks a copy of the record and opens no
+SQLite connection on the record itself. Continue on the new version only when the report says
+`ready` true (exit status 0); otherwise keep the record on its pinned version
+and report the failed step and its `error` in your summary (a failure that the
+previous release shares is decided by the release procedure). Then update the
+version that the wrapper pins, verify the executable path and the version that
+the wrapper runs (the report's `runtime`), and start a new session so that the
+new hooks load. A running session keeps the version it loaded; update the
+plugin cache only when no session that loaded it runs. The
+[CLI reference](../../docs/research-cli.md#record-check) states the check and
+the activation.
+
 On resume, read `exactory-research status --summary` and `next --summary`, then the `obligations` page for the code in hand first, then the search tree,
 checkpoints, pending admissions or remote intents, decisions, and user context.
 The current step results are shown in `final/` and every other output in

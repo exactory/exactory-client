@@ -1110,9 +1110,9 @@ Run `exactory-research review-assignment --workspace WORKSPACE --file assignment
 and `exactory-research review-run --workspace WORKSPACE --file invocation.json`,
 each with its current `--expected-revision` and unique `--request-id`. `--check`
 on either command records nothing: `review-run --check` is refused for a new
-request, and `review-assignment --check` is refused while the store holds a
-Claude or Codex route, because recording the route state needs the installed
-reviewer adapter (`check_unsupported`).
+request (`check_unsupported`), and `review-assignment --check` is checked while
+the store holds a Claude or Codex route, since 0.73.0 a check reads the version
+of the installed reviewer adapter as a permitted local read.
 The invocation is `{id: AttemptID, assignment_id: ASSIGNMENT_ID}`. These are real
 reviewer calls and must remain within the user's authorized resources. Read the
 retained observed output and submit it unchanged in the appropriate native
@@ -1148,9 +1148,10 @@ delivers those passages. At least one request of such an answer must deliver
 characters. An answer whose requests all have an absent anchor, name no single
 stored body, or exceed the remaining allowance is refused with
 `invalid_reading_response`; `review-series` runs the same turn once more, and
-after a second refusal it ends with the handoff `review_slot_exhausted`: the
-chain cannot continue from a refused turn, so export a new packet under a new
-assignment id and start a new chain. When every attempt of a turn ended
+after a second refusal it ends with the handoff `review_slot_exhausted`
+(command `search review-packet`): the chain cannot continue from a refused
+turn, so export a new packet under a new assignment id and start a new chain.
+When every attempt of a turn ended
 without a completed output, `review-series` plans the next action under the
 outcomes of a failed reviewer call: a run of the same assignment under a new
 invocation id (attempts without a completed output do not block a run while

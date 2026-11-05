@@ -209,7 +209,9 @@ OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": recor
 
 ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
-RECORD_CHECK_HELP_MSG = "PLACEHOLDER: qualify a cloned research record offline."
+RECORD_CHECK_HELP_MSG = ("Qualify a copy of a research record offline in six steps and print a JSON report; ready decides the "
+                         "exit status (0 when true, 1 otherwise). --workspace W names the record, --keep-clone DIR keeps "
+                         "the clone, --time-budget SECONDS (default 900) bounds each reader of the report step.")
 
 
 def add_identity(parser, *, required=True):
@@ -300,7 +302,8 @@ def build_parser():
                                "refusal or {check: accepted, revision, recorded: false, ...}, and write nothing: an "
                                "accepted check is no record. A request ID already committed returns its original "
                                "receipt. Acquisitions, reviewer calls, reconciliations and a preparation that needs "
-                               "the reviewer CLI, a PDF tool or a second commit refuse with check_unsupported.")
+                               "a second commit refuse with check_unsupported; a check reads the reviewer CLI version "
+                               "and renders PDF pages when a preparation needs them.")
         add_identity(item, required=command != "import-response")
         if command == "import-response":
             item.add_argument("--preview", action="store_true",

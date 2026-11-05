@@ -45,10 +45,22 @@ repeating `review-run` by hand ("Reviews and the decision", step 3).
 names the first missing condition with the action that clears it. Add `--check` to validate a payload without writing: the harness reports the first refusal
 or `{check: "accepted", revision, recorded: false, ...}` from one snapshot of the store and
 records nothing, so an accepted check is no evidence for any gate, and the write validates
-again. `review-probe` and `review-run` refuse the flag for a new request, and so does every
+again. `review-probe` and `review-run` refuse the flag for a new request (`check_unsupported`); a
 command whose validation evaluates a route or an assignment state while the record holds a
-Claude or Codex route (`check_unsupported`); see
+Claude or Codex route is checked, since 0.73.0 a check reads the reviewer CLI version; see
 [Inputs and receipts](../../docs/research-cli.md#inputs-and-receipts).
+
+Before the first command on an existing problem record whose own wrapper pins a harness version
+other than the one you run, activate the new version. Run `exactory-research record-check
+--workspace W` with the new version, where `W` is the record's workspace; the command checks a
+copy of the record and opens no SQLite connection on the record itself. Continue on the new version only when the
+report says `ready` true (exit status 0); otherwise keep the record on its pinned version and
+report the failed step and its `error` in your summary (a failure that the previous release
+shares is decided by the release procedure). Then update the version that the wrapper pins,
+verify the executable path and the version that the wrapper runs (the report's `runtime`), and
+start a new session so that the new hooks load. A running session keeps the version it loaded;
+update the plugin cache only when no session that loaded it runs. The
+[CLI reference](../../docs/research-cli.md#record-check) states the check and the activation.
 
 The `exactory` command is on PATH while this plugin is enabled. It prints JSON on success.
 It prints an error message on stderr and exits non-zero on failure.
@@ -524,12 +536,23 @@ result and its source; start no solver work to reproduce an established result.
      chain. When `review-series` assigned the turn, it ends with a `stop` of that code (exit
      status 3). Report the components in your summary, with the route limit, and continue the
      work that does not depend on this chain.
+   - When the final turn returns a native result that `problem-openness` does not accept, the
+     command does not run the turn again; it ends with the handoff
+     `openness_review_not_approved` (step 7).
 7. Record the observed finding with `exactory-research problem-openness` and
    `{assignment_id}`: the single assignment, or the final turn of a reading chain that returned the
    native result. For a chain that `review-series` ran, the command records the finding itself
-   with `problem-openness` and the head's `assignment_id` (state `record`, exit status 0),
-   whatever the openness outcome, and this step is then done; run the command yourself for a
-   single assignment that you ran with `review-run`. For a chain, the record adds `reading_turns`, and every unit of the packet, full
+   with `problem-openness` and the head's `assignment_id` (state `record`, exit status 0) when
+   `problem-openness` accepts the final output by its own checks (an approved version 2 native
+   result with an openness finding, whatever the openness outcome), and this step is then done.
+   Any other final result (for example the decision `revise` or `reject`, or an approved finding
+   whose evidence or statement does not match) ends the command with the handoff
+   `openness_review_not_approved` (exit status 3), whose command is `export`, kind
+   `problem-openness`; its `details` hold `assignment_id`, the reviewer's `decision` and
+   `reason`, `kind` and `refusal`, the `code` and `message` of the `problem-openness` refusal.
+   Address the reason and the refusal, then export the packet again under a new assignment id
+   (step 4) and obtain a new finding. Run the command yourself for a single assignment that you
+   ran with `review-run`. For a chain, the record adds `reading_turns`, and every unit of the packet, full
    texts and records, must have reached a reading turn complete or arrived complete in the final
    turn's request (`openness_reading_incomplete` names the missing ones by kind and identity). In
    a v5 chain, the entry of the first reading turn that completes an original search under the
@@ -739,7 +762,9 @@ instead of one request. The
      when that operation accepts the head (a problem result reassessment whose latest failure is
      `review_reassessment_mismatch`), and otherwise `review-assignment` for a new eligible
      reviewer of the slot; for an openness chain it names `export`, kind `problem-openness`
-     (Openness, step 6). `review_resampling_forbidden`
+     (Openness, step 6). `openness_review_not_approved` (the final turn of an openness chain
+     returned a result that `problem-openness` does not accept) names `export`, kind
+     `problem-openness` (Openness, step 7). `review_resampling_forbidden`
      (an initial bar, slate or result review ended without an output, and the same reviewer
      identity is not sampled again) names `review-assignment` for a new eligible reviewer.
      `review_context_*` and `review_route_retired` name `review-assignment` for the context
