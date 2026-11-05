@@ -55,7 +55,7 @@ EXPECTED_STOP_CODES = frozenset((
     'assessment_incomplete',
     'openness_review_not_approved',
 ))
-DEFAULT_TIME_BUDGET_SECONDS = 900
+DEFAULT_TIME_BUDGET_SECONDS = 3600
 SNAPSHOT_ATTEMPTS = 3
 
 

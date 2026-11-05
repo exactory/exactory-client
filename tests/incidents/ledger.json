@@ -3442,7 +3442,7 @@
       "class": "cost (report readers on large stores)",
       "summary": "status takes about 310 to 330 s on the bunkbed copy under load, about 170 s of it JSON serialization inside the pinned transports while recorded attempts are authenticated.",
       "fixed_in": "open",
-      "expected": "record-check reports the time of status, next and obligations and fails a record over its time budget (900 s by default); the release procedure blocks a candidate slower than 1.25 times the previous release plus 10 s. An authentication path that rebuilds only the requests that decide the current report remains open for 0.74.0.",
+      "expected": "record-check reports the time of status, next and obligations and fails a record over its time budget (3600 s by default); the release procedure blocks a candidate slower than 1.25 times the previous release plus 10 s. An authentication path that rebuilds only the requests that decide the current report remains open for 0.74.0.",
       "test_kind": "same_path",
       "tests": [
         "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_clock",
@@ -3568,6 +3568,20 @@
         "test_research_record_check.RecordIntegrityTests.test_integrity_verifies_object_and_sealed_references",
         "test_research_record_check.RecordIntegrityTests.test_integrity_rejects_damaged_store_artifact",
         "test_research_record_check.RecordIntegrityTests.test_integrity_rejects_damaged_sealed_artifact"
+      ]
+    },
+    {
+      "id": "integration-record-check-default-budget",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "classification (record check budget)",
+      "summary": "On a copy of a live deposited study under load, status, next and obligations took 1392, 1333 and 1311 s under 0.72.4 and 1344, 1331 and 1303 s under 0.73.0. Each reader stopped at record-check's 900 s ceiling with record_command_timeout, failing the report step although the readers work.",
+      "fixed_in": "0.73.2",
+      "expected": "The default ceiling is 3600 s per report or math-solver reader, defined once by record_check.DEFAULT_TIME_BUDGET_SECONDS and used by the CLI parser. The measured reader durations pass within that default; explicit overrides, finite positive validation and timeout failures remain unchanged. The release procedure still compares reader times with the previous release to detect regressions.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_defaults_to_3600_and_accepts_an_override",
+        "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_default_uses_record_check_constant",
+        "test_research_record_check.RecordCheckFollowupTests.test_default_budget_allows_measured_report_reader_times"
       ]
     }
   ]

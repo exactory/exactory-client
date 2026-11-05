@@ -33,6 +33,7 @@ from . import research_decisions, review_protocol, strategy
 from .depth import record_depth
 from .review_budget import record_budget
 from .probe import record_probe_intent, record_probe, summarize_probes
+from .record_check import DEFAULT_TIME_BUDGET_SECONDS
 from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata
 
 
@@ -319,7 +320,7 @@ def build_parser():
                                       help=RECORD_CHECK_HELP_MSG)
     record_check.add_argument("--workspace", required=True)
     record_check.add_argument("--keep-clone", type=Path)
-    record_check.add_argument("--time-budget", type=float, default=900)
+    record_check.add_argument("--time-budget", type=float, default=DEFAULT_TIME_BUDGET_SECONDS)
     for command in ("status", "next", "obligations", "batches", "population-query", "policy-report", "gate", "export",
                     "recover", "check-claims"):
         item = commands.add_parser(command, allow_abbrev=False,
