@@ -11,7 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 LEDGER_PATH = ROOT / "tests" / "incidents" / "ledger.json"
 NONE_COUNT = 63
-SAME_PATH_COUNT = 128
+SAME_PATH_COUNT = 129
 
 # Resolve in a child process: the native harness has its own package called
 # tests, which must not become the plugin suite's tests package during discovery.

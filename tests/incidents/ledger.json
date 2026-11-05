@@ -3402,6 +3402,136 @@
         "test_review_continuation_regressions.ContinuationRegressionTests.test_wait_actions_do_not_change_gate_or_status_digests",
         "test_review_continuation_staged.StagedContinuationTests.test_staged_diagnostic_identity_is_attached_after_gate_digest"
       ]
+    },
+    {
+      "id": "record-states-check-mode-local-route",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "check-mode (local route)",
+      "summary": "review-assignment --check and problem-posted --check refused with check_unsupported on a local reviewer route, because reading the reviewer CLI version and verifying the recorded context counted as external effects (bunkbed copy, 0.72.4).",
+      "fixed_in": "0.73.0",
+      "expected": "Reading the reviewer CLI version and verifying recorded context are local reads that check mode and the record check permit; review-assignment --check plans a turn on every local route and writes nothing, while model calls, network access and writes stay refused.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_local_reads.LocalReadTests.test_claude_and_codex_assignment_checks_plan_without_workspace_changes",
+        "test_research_check_mode_audit.PartsPlanCheckTests.test_local_parts_assignment_check_plans_turn_without_workspace_changes"
+      ]
+    },
+    {
+      "id": "record-states-report-repeated-work",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "cost (repeated work in one command)",
+      "summary": "One status on the bunkbed copy read 10,170 artifacts, parsed 12,598 packets and rebuilt 1,431 requests, because the readers of one command repeated the same derivations.",
+      "fixed_in": "0.73.0",
+      "expected": "Within one command, verified artifact parses and series derivations are reused through the bounded evaluation arena; each artifact is parsed once and each selected turn and paged history is materialized once, with outputs unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_status_series_evaluation_costs.ArtifactParseCostTests.test_command_parses_each_artifact_once_and_returns_independent_values",
+        "test_status_series_evaluation_costs.LegacySeriesCostTests.test_series_readers_materialize_each_selected_turn_once_per_command",
+        "test_status_series_evaluation_costs.HistoryCostTests.test_shared_lineages_read_each_paged_history_once"
+      ]
+    },
+    {
+      "id": "record-states-report-cost-on-large-stores",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "cost (report readers on large stores)",
+      "summary": "status takes about 310 to 330 s on the bunkbed copy under load, about 170 s of it JSON serialization inside the pinned transports while recorded attempts are authenticated.",
+      "fixed_in": "open",
+      "expected": "record-check reports the time of status, next and obligations and fails a record over its time budget (900 s by default); the release procedure blocks a candidate slower than 1.25 times the previous release plus 10 s. An authentication path that rebuilds only the requests that decide the current report remains open for 0.74.0.",
+      "test_kind": "same_path",
+      "tests": [
+        "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_clock",
+        "test_research_record_check.RecordCheckFollowupTests.test_each_report_reader_uses_the_supplied_budget"
+      ]
+    },
+    {
+      "id": "record-states-registry-absolute-paths",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "isolation (record copies)",
+      "summary": "The math-solver registry of a record copy names live absolute paths, so a reader of the copy that follows it reads or writes the live record.",
+      "fixed_in": "0.73.0",
+      "expected": "The record check finds math-solver roots on disk inside the clone, never reads or follows the registry, and runs search status and search next with --attack-root set to each cloned root.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.RecordCheckTests.test_math_roots_ignore_registry_paths_and_keep_command_cwd_outside_clone",
+        "test_research_record_check.RecordCheckTests.test_real_math_readers_use_only_controller_inside_clone"
+      ]
+    },
+    {
+      "id": "record-states-record-version-binding",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "upgrade (record version binding)",
+      "summary": "Records stayed on old versions because none could show that a newer version was safe for it, and the version a record ran was held in its own wrappers.",
+      "fixed_in": "0.73.0",
+      "expected": "record-check qualifies a copy of a record with a version before the record moves to it, and reports the harness version, path and Python it ran with, so a run through the record's wrapper shows the version that the wrapper runs.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.RecordCheckTests.test_cli_and_pinned_wrapper_report_running_tree_version"
+      ]
+    },
+    {
+      "id": "integration-native-packet-keyerror",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "crash (native review packet)",
+      "summary": "The first record check of the candidate failed status on the unknotting copy with KeyError('native'): the obligation annotation read the stored packet of a native head instead of its native packet.",
+      "fixed_in": "0.73.0",
+      "expected": "Native heads load their packet through native_review.load_packet from the assignment's native packet reference; status annotates their obligations without a crash.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.RecordCheckFollowupTests.test_native_packet_without_inline_native_field_can_be_annotated"
+      ]
+    },
+    {
+      "id": "integration-openness-refused-final-planned-as-record",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "dead end (openness final)",
+      "summary": "On the graph rigidity and bunkbed copies, plan_next planned record for an openness final (decision revise) that problem-openness refuses, so the planned step could never succeed.",
+      "fixed_in": "0.73.0",
+      "expected": "record is planned only for an output that problem-openness accepts by its own checks; any other final is the handoff openness_review_not_approved (export, kind problem-openness) with the decision, the reason and the refusal.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.RecordCheckFollowupTests.test_final_native_refusals_with_and_without_version_handoff_a_new_export",
+        "test_research_record_check.RecordCheckFollowupTests.test_accepted_native_openness_output_plans_the_real_record_preparation"
+      ]
+    },
+    {
+      "id": "integration-native-slot-exhausted-command",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "agent-text (handoff command)",
+      "summary": "After two refused outputs, a native mathematical review that is not an openness chain was handed off with a plain new assignment, which needs a new attestation from the controller.",
+      "fixed_in": "0.73.0",
+      "expected": "The review_slot_exhausted handoff of such a head names search review-packet, as native_review_attestation_required does.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_continuation.ContinuationTests.test_two_refused_native_outputs_need_a_new_controller_attestation"
+      ]
+    },
+    {
+      "id": "integration-visual-reconstruction-local-render",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "check-mode (visual delivery)",
+      "summary": "The reconstruction of a visual request on the extremal copy needed PDF page rendering, which check mode refused as an external effect.",
+      "fixed_in": "0.73.0",
+      "expected": "The visual manifest and preparation request the local read pdf_render; the record check permits only the pinned renderer, keeps its temporary files inside the clone and lists the read.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_local_reads.LocalRenderReadTests.test_visual_manifest_and_preparation_request_local_read_permission",
+        "test_research_record_local_reads.LocalRenderReadTests.test_full_visual_probe_check_only_runs_version_and_confined_renderer",
+        "test_research_record_check.RecordCheckTests.test_visual_probe_reconstruction_allows_only_a_confined_local_renderer"
+      ]
+    },
+    {
+      "id": "integration-route-capacity-decision-stop",
+      "record": "20261104074403-harness-problems-closed-for-good",
+      "class": "classification (route capacity)",
+      "summary": "Both bunkbed copies failed the continuation step at assign-openness-4-t18, whose mandatory final input (1,303,063 characters) is over the route limit of 1,300,000, although the next step is a decision on the route or the material.",
+      "fixed_in": "0.73.0",
+      "expected": "review_input_too_large in the phase final_preflight and the three parts planning refusals of an allowed action are decision stops listed with their head, command, code and details; every other refusal keeps its result.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.RecordCheckTests.test_allowed_capacity_refusals_are_reported_as_decision_stops",
+        "test_research_record_check.RecordCheckTests.test_final_preflight_capacity_is_a_decision_without_running_the_invocation",
+        "test_research_record_check.RecordCheckTests.test_nonfinal_input_capacity_refusal_still_fails"
+      ]
     }
   ]
 }
