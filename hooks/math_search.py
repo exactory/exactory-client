@@ -416,6 +416,8 @@ def lifecycle(payload, stop=False):
         found = discover(payload)
         if not found["roots"]:
             return None
+        if stop and not found["bindings"] and not found["direct"]:
+            return None
         root, focus, identity = selected_root(payload, found)
         session = session_id(payload)
         spec = None
@@ -442,7 +444,19 @@ def guard(payload):
     deadline = time.monotonic() + CONTROLLER_TIMEOUT
     payload = normalize(payload)
     inputs = [normalize(item) for item in payload.get("_math_guard_batch", [payload])]
-    targets = [operation_paths(item) for item in inputs]
+    targets = []
+    for item in inputs:
+        paths = operation_paths(item)
+        for path in tuple(paths):
+            try:
+                canonical = path.resolve()
+            except OSError as error:
+                if error.errno in _ABSENT_ERRNOS:
+                    continue
+                raise
+            if canonical != path:
+                paths.append(canonical)
+        targets.append(paths)
     found = discover(payload, [path for paths in targets for path in paths])
     queried = set()
     for item, paths in zip(inputs, targets):
@@ -460,6 +474,7 @@ def guard(payload):
                 return "Unsupported managed payload; use a direct apply_patch or exec_command so its targets can be checked"
             continue
         writing = tool in {"Write", "Edit", "Delete"}
+        write_paths = paths
         if tool == "Bash":
             try:
                 tokens = shell_tokens(raw.get("command") if isinstance(raw, dict) else None)
@@ -469,19 +484,76 @@ def guard(payload):
                 continue
             if not tokens:
                 continue
-            executable = Path(tokens[0]).name
-            if executable in {"python", "python3"} and len(tokens) > 1 and Path(tokens[1]).name in {"exactory-math", "attack.py"}:
-                executable = "exactory-math"
-            writing = (executable in {"tee", "cp", "mv", "rm", "truncate", "dd"}
-                       or any(token in {">", ">>", ">|"} for token in tokens)
-                       or (executable == "sed" and any(token.startswith("-i") for token in tokens[1:])))
-            simple = not any(token in {";", "&&", "||", "|", "&", "<<", "<<<"} for token in tokens)
-            supported = {"exactory-math", "attack.py", "cat", "ls", "rg", "grep", "head", "tail", "wc", "pwd",
-                         "printf", "echo", "tee", "cp", "mv", "rm", "truncate", "dd", "sed"}
-            if (relevant or found["direct"]) and (not simple or executable not in supported):
-                return "Unsupported managed shell operation; use a direct supported command or controller search run"
+            managed = relevant or found["direct"] or visible_roots or any(
+                path in {pointer, pointer.with_suffix(".lock")} or is_same_or_ancestor(path, pointer)
+                for path in paths for pointer in found["registries"])
+            if not managed:
+                continue
+            unsupported = ("Unsupported managed shell operation; use a direct supported command "
+                           "or controller search run")
+            separators = {index for index, token in enumerate(tokens) if token in SHELL_SEPARATORS}
+            commands = list(iter_simple_commands(tokens, separators))
+            if (tokens[-1] in SHELL_SEPARATORS or any(
+                    token in {"&", "<", "<<", "<<<"} or re.fullmatch(r"[;&|<>]+", token)
+                    and token not in {";", "&&", "||", "|", ">", ">>", ">|"} for token in tokens)):
+                return unsupported
+            read_only = {"cat", "ls", "rg", "grep", "head", "tail", "wc", "pwd", "printf", "echo", "du"}
+            supported = read_only | {
+                "exactory-math", "attack.py", "tee", "cp", "mv", "rm", "truncate", "dd", "sed"}
+            for start, command, end, _ in commands:
+                prefix_end = start
+                while (prefix_end < end
+                       and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[prefix_end])):
+                    prefix_end += 1
+                if prefix_end < end and Path(tokens[prefix_end]).name == "env":
+                    prefix_end += 1
+                    while (prefix_end < end
+                           and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[prefix_end])):
+                        prefix_end += 1
+                if command >= end or prefix_end >= end:
+                    return unsupported
+                executable = Path(tokens[command]).name
+                python_launcher = (command == prefix_end + 1
+                                   and Path(tokens[prefix_end]).name in {"python", "python3"}
+                                   and executable in {"exactory-math", "attack.py"})
+                if (prefix_end != command and not python_launcher) or executable not in supported:
+                    return unsupported
+                arguments = tokens[command + 1:end]
+                command_writes = (executable in {"tee", "cp", "mv", "rm", "truncate", "dd"}
+                                  or any(token in {">", ">>", ">|"} for token in arguments)
+                                  or (executable == "sed"
+                                      and any(token.startswith("-i") for token in arguments)))
+                if len(commands) > 1 and (executable not in read_only or command_writes):
+                    return unsupported
+                if executable in read_only and any(
+                        any(character in token for character in "*?[") for token in arguments):
+                    return unsupported
+                if executable == "rg" and any(
+                        token.startswith(("--pre", "--hostname-bin")) for token in arguments):
+                    return unsupported
+                writing = writing or command_writes
+                if executable == "cp":
+                    operands = []
+                    options_done = False
+                    for token in arguments:
+                        if token == "--" and not options_done:
+                            options_done = True
+                        elif token.startswith("-") and not options_done:
+                            if not re.fullmatch(r"-[afHiLnPpRrv]+", token):
+                                return unsupported
+                        else:
+                            if token in {">", ">>", ">|"} or any(character in token for character in "*?["):
+                                return unsupported
+                            operands.append(token)
+                    if len(operands) < 2:
+                        return unsupported
+                    # A copy reads its sources. A move still modifies both ends.
+                    write_paths = []
+                    if is_path_candidate(operands[-1]):
+                        destination = resolve(operands[-1], cwd)
+                        write_paths = [destination, destination.resolve()]
         if writing:
-            for path in paths:
+            for path in write_paths:
                 if any(path in {pointer, pointer.with_suffix(".lock")} or is_same_or_ancestor(path, pointer)
                        for pointer in found["registries"]):
                     return "Discovery pointers and locks are owned by search init/focus/resume; use the controller command"

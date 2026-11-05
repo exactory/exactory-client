@@ -116,7 +116,7 @@ class MathSearchHookTests(unittest.TestCase):
 
     def test_missing_or_conflicting_focus_requests_handoff_without_charge(self):
         for session in [None, "another-session"]:
-            output = self.hook("continue_attack.py", session_id=session)
+            output = self.hook("continue_attack.py", session_id=session, cwd=str(self.root))
             self.assertIsNotNone(output, "Ambiguous managed focus needs explicit recovery context")
             self.assertNotEqual(output.get("decision"), "block")
             self.assertIn("focus", json.dumps(output).lower())

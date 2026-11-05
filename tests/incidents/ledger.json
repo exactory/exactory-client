@@ -868,13 +868,19 @@
     },
     {
       "id": "v19-stop-hook-session-focus",
-      "record": "v19",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "paths-hooks",
       "summary": "A read-only session repeatedly received a missing-focus Stop notice.",
-      "fixed_in": "open",
-      "expected": "The session-focus notice fix remains untraced; a session without a unique binding can still require explicit focus and the incident stays open.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "Repeated Stop events in a passive parent workspace with neither a session binding nor a direct root are silent and make no selection or controller calls. Focused and direct-root continuation, explicit cleared or conflicting bindings and SessionStart diagnostics keep their checks.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_repeated_passive_parent_stops_have_no_output_calls_or_mutation",
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_passive_stop_is_silent_through_both_host_adapters",
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_focused_parent_and_direct_root_stops_still_continue",
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_explicit_cleared_ambiguous_and_conflicting_focus_still_reports_recovery",
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_session_start_and_unbound_direct_root_keep_focus_diagnostics"
+      ]
     },
     {
       "id": "v19-bar-history-fulltexts",
@@ -2115,13 +2121,21 @@
     },
     {
       "id": "20261026230912-discovery-pointer-source",
-      "record": "20261026230912",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "paths-hooks (hook reads shell text)",
       "summary": "The guard refused a writing command that named the discovery pointer only as a source.",
-      "fixed_in": "open",
-      "expected": "The pointer-source shell classification remains deferred; search status and next provide supported read-only inspection without claiming this guard case is fixed.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "A literal cp reads the discovery pointer as a source and checks only its destination for writes; reverse copies, moves, deletes, ambiguous forms, symlink destinations and mixed write chains remain protected.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_discovery_pointer_copy_uses_only_the_destination_as_a_write",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_reverse_copy_move_delete_and_mixed_chains_remain_denied",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_ambiguous_shell_forms_are_denied",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_copy_sources_are_readable_but_symlink_destinations_are_protected",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_real_permission_error_remains_an_error",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_unexpected_stat_failure_on_a_copy_is_not_treated_as_absence",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_recorded_shell_shapes_pass_both_host_adapters"
+      ]
     },
     {
       "id": "20261027085554-bar-source-requests-exceed-route-capacity-source-union-over-limit",
@@ -2495,13 +2509,22 @@
     },
     {
       "id": "20261030154844-shell-prefix-and-compound-read",
-      "record": "20261030154844",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "paths-hooks (hook reads shell text)",
       "summary": "The math guard rejected permitted compound read-only commands and environment-prefixed invocations.",
-      "fixed_in": "open",
-      "expected": "The shell-guard redesign remains deferred; these command forms can still be refused and the incident remains open.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "Literal environment prefixes, understood read-only command lists and du are accepted without weakening protected writes, unsupported-command refusals, path-length handling or permission errors.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_literal_environment_prefixed_read_is_allowed",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_compound_reads_and_du_are_allowed",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_reverse_copy_move_delete_and_mixed_chains_remain_denied",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_ambiguous_shell_forms_are_denied",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_overlong_text_does_not_hide_a_protected_write",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_real_permission_error_remains_an_error",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_unexpected_stat_failure_on_a_copy_is_not_treated_as_absence",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_recorded_shell_shapes_pass_both_host_adapters"
+      ]
     },
     {
       "id": "20261030154844-absolute-packet-root",
@@ -3787,6 +3810,21 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_posted_status_and_series_views_have_no_review_actions",
         "test_problem_post_review_terminal.PostedReviewTests.test_staged_status_preserves_tasks_and_incomplete_recovery_evidence",
         "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags"
+      ]
+    },
+    {
+      "id": "ci-lean-default-branch-cache-maintenance",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "release-ci (CI infrastructure)",
+      "summary": "Main caches could be evicted during idle periods because Lean CI ran only on pushes and pull requests.",
+      "fixed_in": "0.74.0",
+      "expected": "Daily and manual default-branch maintenance restores the CI cache identity, runs the bounded installer and real smoke build, and saves only after success. Cache operations are optional and timed; installation and compilation remain mandatory.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_lean_install.LeanCacheWarmWorkflowTests.test_real_workflow_maintains_the_default_branch_cache",
+        "test_ci_lean_install.LeanCacheWarmWorkflowTests.test_mutations_reject_missing_maintenance_or_changed_scope_and_identity",
+        "test_ci_lean_install.LeanCacheWarmWorkflowTests.test_mutations_reject_early_save_and_optional_install_or_build",
+        "test_ci_lean_install.LeanInstallTests.test_warm_installation_performs_only_version_probes"
       ]
     }
   ]

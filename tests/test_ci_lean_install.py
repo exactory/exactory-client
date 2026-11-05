@@ -204,7 +204,9 @@ class LeanInstallTests(unittest.TestCase):
         self.assert_failures(result, 2, "elan", "exit status 1")
 
     def test_timeout_kills_command_and_child_before_retry_succeeds(self):
-        result = self.run_installer({"sh": ["stall", 0]}, attempt_seconds=2)
+        # The successful retry starts six Python processes; allow their startup
+        # while the first attempt still has to kill its 60-second stalled group.
+        result = self.run_installer({"sh": ["stall", 0]}, attempt_seconds=6)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_calls(["curl", "sh", "curl", "sh", "elan"] + PROBE_CALLS)
         self.assert_failures(result, 1, "sh", "ran out of time")
@@ -221,9 +223,11 @@ class LeanInstallTests(unittest.TestCase):
                 self.fail("Timed out attempt left process %s alive" % pid)
 
     def test_attempt_deadline_is_shared_by_all_three_commands(self):
-        result = self.run_installer({"curl": [{"delay": 1.8}],
-                                     "sh": [{"delay": 1.8}]},
-                                    attempts=1, attempt_seconds=3)
+        # Leave room for process startup on a busy runner. Each delay fits the
+        # attempt budget alone; together they must exhaust the shared deadline.
+        result = self.run_installer({"curl": [{"delay": 2}],
+                                     "sh": [{"delay": 5}]},
+                                    attempts=1, attempt_seconds=6)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assert_calls(["curl", "sh"])
         self.assert_failures(result, 1, "sh", "ran out of time")
@@ -256,7 +260,7 @@ class LeanInstallTests(unittest.TestCase):
 
     def test_warm_installation_performs_only_version_probes(self):
         self.create_installation()
-        result = self.run_installer()
+        result = self.run_installer({"curl": [22], "sh": [1], "elan": [1]})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_calls(PROBE_CALLS)
         self.assertIn("nothing was downloaded", result.stdout.splitlines()[-1])
@@ -374,7 +378,7 @@ class LeanInstallTests(unittest.TestCase):
         self.assert_failures(result, 1, "lean", "ran out of time")
 
 
-def find_workflow_problems(workflow):
+def find_workflow_problems(workflow, maintenance=False):
     """Check the Lean contract in its jobs and steps without a YAML dependency."""
     problems = []
     if "lean-action" in workflow:
@@ -382,12 +386,37 @@ def find_workflow_problems(workflow):
     if "elan-init" in workflow:
         problems.append("workflow contains elan-init")
     jobs = dict(re.findall(r"^  ([a-z]+):\n(.*?)(?=^  [a-z]+:|\Z)",
-                           workflow, re.MULTILINE | re.DOTALL))
-    if "general" not in jobs:
+                           workflow.split("\njobs:\n")[-1], re.MULTILINE | re.DOTALL))
+    if maintenance:
+        if set(jobs) != {"warm"}:
+            problems.append("maintenance must have exactly one warm job")
+        if not re.search(r"^    - cron: '23 4 \* \* \*'$", workflow, re.MULTILINE):
+            problems.append("daily maintenance schedule is missing")
+        if not re.search(r"^  workflow_dispatch:$", workflow, re.MULTILINE):
+            problems.append("manual maintenance trigger is missing")
+        job = jobs.get("warm", "")
+        condition = "${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}"
+        if not re.search(r"^    if: " + re.escape(condition) + r"$", job, re.MULTILINE):
+            problems.append("maintenance must run only on the default branch")
+        if "    runs-on: ubuntu-24.04\n" not in job:
+            problems.append("maintenance must use ubuntu-24.04")
+        if "    timeout-minutes: 90\n" not in job:
+            problems.append("maintenance must have a 90-minute bound")
+        ci = (ROOT / ".github/workflows/ci.yml").read_text()
+        for action in ("checkout", "setup-python"):
+            pin = re.search(r"actions/" + action + r"@[a-f0-9]{40}", ci)[0]
+            if pin not in job:
+                problems.append("maintenance must use the pinned " + action)
+        if "          path: client\n" not in job:
+            problems.append("checkout must use the cache key's client path")
+        if "        working-directory: client\n" not in job:
+            problems.append("installer must run from client")
+    elif "general" not in jobs:
         problems.append("general job is missing")
     elif re.search(r"\b(?:lean|elan|lake)\b", jobs["general"], re.IGNORECASE):
         problems.append("general contains a Lean step")
-    steps = re.split(r"^      - ", jobs.get("checks", ""), flags=re.MULTILINE)[1:]
+    steps = re.split(r"^      - ", jobs.get("warm" if maintenance else "checks", ""),
+                     flags=re.MULTILINE)[1:]
     named = {}
     for index, step in enumerate(steps):
         match = re.match(r"name: ([^\n]+)", step)
@@ -400,6 +429,8 @@ def find_workflow_problems(workflow):
         "save": "Save the Lean toolchain for later runs",
         "harness": "Run the math-solver harness tests",
     }
+    if maintenance:
+        del required["harness"]
     selected = {}
     for role, name in required.items():
         if name not in named:
@@ -441,6 +472,9 @@ def find_workflow_problems(workflow):
     for role, step in (("install", install), ("build", build)):
         if re.search(r"^        continue-on-error: (?!false$)", step, re.MULTILINE):
             problems.append(role + " must fail the job")
+        if maintenance and (re.search(r"^        if:", step, re.MULTILINE)
+                            or "||" in step or "--skip" in step):
+            problems.append(role + " must be mandatory")
     if "run: python3 ci/install_lean.py " + FIXTURE not in install:
         problems.append("install must run the bounded installer on the fixture")
     if ("working-directory: client/" + FIXTURE not in build
@@ -453,7 +487,7 @@ def find_workflow_problems(workflow):
         "--shard-index 0 --shard-count 1 --marketplace ../marketplace "
         "--result ci-results/harness-result.json")
     normalized_harness = " ".join(harness.split())
-    if harness_command not in normalized_harness:
+    if not maintenance and harness_command not in normalized_harness:
         problems.append("harness tests must run through the skip-rejecting shard runner")
     return problems
 
@@ -510,6 +544,63 @@ class LeanWorkflowTests(unittest.TestCase):
         value = (ROOT / FIXTURE / "lean-toolchain").read_text().strip()
         self.assertIsNotNone(re.fullmatch(PINNED_RELEASE_PATTERN, value), value)
         self.assertTrue((ROOT / FIXTURE / "lake-manifest.json").is_file())
+
+
+class LeanCacheWarmWorkflowTests(unittest.TestCase):
+    def setUp(self):
+        path = ROOT / ".github/workflows/lean-cache.yml"
+        self.assertTrue(path.is_file(), "Default-branch cache maintenance is missing")
+        self.workflow = path.read_text()
+
+    def test_real_workflow_maintains_the_default_branch_cache(self):
+        self.assertEqual(find_workflow_problems(self.workflow, maintenance=True), [])
+
+    def test_mutations_reject_missing_maintenance_or_changed_scope_and_identity(self):
+        mutations = [
+            ("    - cron: '23 4 * * *'\n", "", "daily maintenance schedule is missing"),
+            ("  workflow_dispatch:\n", "", "manual maintenance trigger is missing"),
+            ("    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}\n",
+             "", "maintenance must run only on the default branch"),
+            ("github.event.repository.default_branch", "github.head_ref",
+             "maintenance must run only on the default branch"),
+            ("key: elan-v1-", "key: elan-v2-",
+             "restore key must include epoch, OS, architecture and fixture hash"),
+            ("path: ~/.elan", "path: ~/other", "restore must cache ~/.elan"),
+            ("timeout-minutes: 90", "timeout-minutes: 180", "maintenance must have a 90-minute bound"),
+            ("timeout-minutes: 15", "timeout-minutes: 60", "restore must bound the cache step"),
+            ("continue-on-error: true", "continue-on-error: false",
+             "restore must tolerate cache infrastructure failures"),
+        ]
+        for old, new, expected in mutations:
+            with self.subTest(expected=expected, old=old):
+                mutated = self.workflow.replace(old, new)
+                self.assertNotEqual(mutated, self.workflow)
+                self.assertIn(expected, find_workflow_problems(mutated, maintenance=True))
+
+    def test_mutations_reject_early_save_and_optional_install_or_build(self):
+        build = re.search(r"      - name: Build the real smoke fixture\n.*?(?=      - )",
+                          self.workflow, re.DOTALL)[0]
+        save = re.search(r"      - name: Save the Lean toolchain for later runs\n.*\Z",
+                         self.workflow, re.DOTALL)[0]
+        mutations = [(self.workflow.replace(build + save, save + build),
+                      "Lean steps must restore, install, build and save in order"),
+                     (self.workflow.replace("if: steps.", "if: always() && steps."),
+                      "save must require successful build and cache miss")]
+        for role, name in (("install", "Install Lean, retrying failed downloads"),
+                           ("build", "Build the real smoke fixture")):
+            marker = "- name: " + name + "\n"
+            mutations.extend([
+                (self.workflow.replace(marker, marker + "        continue-on-error: true\n"),
+                 role + " must fail the job"),
+                (self.workflow.replace(marker, marker + "        if: false\n"),
+                 role + " must be mandatory"),
+                (self.workflow.replace(marker, "- name: Removed " + name + "\n"),
+                 role + " step is missing"),
+            ])
+        for mutated, expected in mutations:
+            with self.subTest(expected=expected):
+                self.assertNotEqual(mutated, self.workflow)
+                self.assertIn(expected, find_workflow_problems(mutated, maintenance=True))
 
 
 if __name__ == "__main__":
