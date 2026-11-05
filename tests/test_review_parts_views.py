@@ -150,9 +150,13 @@ class PartsStatusTests(PartsViewCase):
                 self.case.store, dict(id='failed-run', assignment_id=second['id']),
                 credential='fixture', expected_revision=self.case.store.revision,
                 request_id='failed-run')
-        _, progress = self.read_progress(second)
+        with mock.patch('research_harness.review_failure_class.plan_after_failure',
+                        return_value=dict(state='replace', code='fixture_failure', details={})):
+            _, progress = self.read_progress(second)
         self.assertEqual(progress['next'][0]['workflow'], 'review-assignment')
         self.assertEqual(progress['next'][0]['scope']['prior_assignment_id'], first['id'])
+        self.assertEqual(progress['next'][0]['state'], 'replace')
+        self.assertEqual(progress['next'][0]['payload']['context'], dict(prior_assignment_id=first['id']))
 
     def test_unobserved_output_does_not_credit_units(self):
         self.prepare_parts()
@@ -202,7 +206,11 @@ class PartsStatusTests(PartsViewCase):
         self.assertEqual(progress.get('blocked'), 'review_slot_exhausted')
         self.assertEqual(progress['next'], [])
         self.assertEqual(report['next']['code'], 'review_parts_pending')
-        self.assertEqual(report['next']['next'], [])
+        action = report['next']['next'][0]
+        self.assertEqual(action['state'], 'stop')
+        self.assertEqual(action['code'], 'review_slot_exhausted')
+        self.assertNotIn('command', action)
+        self.assertNotIn('payload', action)
         self.assertEqual(report_views.next_summary(report)['next_hint']['review_parts']['blocked'],
                          'review_slot_exhausted')
         self.assertEqual(report_views.status_summary(report)['review_parts']['examples'][0]['blocked'],

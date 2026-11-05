@@ -136,24 +136,27 @@ class ResearchGuidanceTests(unittest.TestCase):
 
     def test_release_manifests_and_notes_describe_the_same_final_version(self):
         for relative in (".claude-plugin/plugin.json", ".codex-plugin/plugin.json"):
-            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.72.4")
-        self.assertTrue((PLUGIN / "docs/releases/0.72.4.md").is_file())
+            self.assertEqual(json.loads((PLUGIN / relative).read_text())["version"], "0.73.0")
+        self.assertTrue((PLUGIN / "docs/releases/0.73.0.md").is_file())
 
     def test_staged_plugin_runs_common_and_native_entrypoints_without_repository_cwd(self):
         from research_harness.cli import ACQUISITION, OPERATIONS
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             plugin = root / "Plugin with spaces"
+            # The staging directory can itself be below PLUGIN through TMPDIR.
             shutil.copytree(PLUGIN, plugin, ignore=shutil.ignore_patterns(
-                ".git", ".superpowers", ".lake", "__pycache__", ".coverage*"))
+                ".git", ".superpowers", ".lake", "__pycache__", ".coverage*",
+                ".lane-scratch", root.name))
             workspace = root / "Independent workspace"
             workspace.mkdir()
             environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
+            environment["GIT_CEILING_DIRECTORIES"] = str(root)
             environment.pop("PYTHONPATH", None)
 
             def invoke(command, *arguments):
                 result = subprocess.run([sys.executable, "-B", str(plugin / "bin" / command), *arguments],
-                    cwd=workspace, env=environment, capture_output=True, text=True, timeout=20)
+                    cwd=workspace, env=environment, capture_output=True, text=True, timeout=60)
                 self.assertEqual((result.returncode, result.stderr), (0, ""), result.stdout)
                 return result.stdout
 

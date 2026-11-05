@@ -862,7 +862,11 @@ class ProblemObjectionTests(fixtures.ProblemDeliveryCase):
         output["value"]["objection_findings"] = [finding]
         payload = self.observe("result", "first", output, record=False, identifier="unsupported-refresh")
         self.assert_error("invalid_strategy", lambda: self.mutate(decisions.record_value_review, payload))
-        self.assert_blocked_delivery("problem_evidence_unassessed")
+        # The unrecorded current final leaves this slot pending. Its older
+        # result cannot fill the pair; its material objection still blocks.
+        reviews = decisions.assess_problem_reviews(self.store.snapshot()["records"], self.artifacts)
+        self.assertEqual(reviews["review_ids"], ["review-result-second"])
+        self.assert_blocked_delivery("problem_review_pair_required")
 
     def test_a_recorded_resolution_requires_its_evidence_to_remain_available(self):
         self.prepare_reviews(result_reviewer="first")

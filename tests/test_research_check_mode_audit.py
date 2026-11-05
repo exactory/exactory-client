@@ -3,6 +3,7 @@
 import copy
 import argparse
 from contextlib import contextmanager
+from functools import partial
 import importlib.machinery
 import importlib.util
 import hashlib
@@ -18,7 +19,7 @@ import unittest
 from unittest import mock
 
 from development_fixtures import DevelopmentCase
-from integration_fixtures import observed_candidate, prepare_manuscript
+from integration_fixtures import admit_lab, observed_candidate, prepare_manuscript
 from research_harness import cli
 from research_harness.artifacts import ArtifactStore
 from research_harness.storage import Store
@@ -32,18 +33,19 @@ from test_review_parts_views import PartsViewCase
 
 PLUGIN = Path(__file__).resolve().parents[1]
 EXTERNAL_COMMANDS = frozenset((*cli.ACQUISITION, "review-probe", "review-run", "review-output-correction",
-                               "reconcile-run", "batches", "export", "recover", "restore", "strategy-packet"))
+                               "reconcile-run", "batches", "export", "recover", "restore", "strategy-packet", "review-series"))
 OTHER_ARGUMENTS = {
     "batches": ["--destination", "check-batches"],
     "export": [],
     "recover": [],
     "restore": ["--bundle", "0" * 64],
     "strategy-packet": ["--role", "standalone", "--reviewer-id", "check-reviewer"],
+    "review-series": ["--assignment", "check-reviewer"],
 }
 
 READ_ONLY_COMMANDS = {
     "exactory-research": frozenset((name,) for name in (
-        "status", "next", "fulltext-status", "obligations", "population-query", "policy-report", "gate", "check-claims", "example",
+        "status", "next", "record-check", "fulltext-status", "obligations", "population-query", "policy-report", "gate", "check-claims", "example",
         "research-decision-assess", "review-route-assess")),
     "exactory-lab": frozenset({("keys",), ("state", "show"), ("colab-status",)}),
     "exactory-draft": frozenset(),
@@ -125,15 +127,16 @@ class PartsPlanCheckTests(CheckCommandMixin, PartsViewCase):
         self.assertFalse(any(row['assignment_id'] == assignment['id']
                              for row in self.store.snapshot()['records'].get('review_invocation', {}).values()))
 
-    def test_local_parts_assignment_check_is_refused_without_workspace_changes(self):
+    def test_local_parts_assignment_check_plans_turn_without_workspace_changes(self):
         self.prepare_parts()
         self.root, self.store = self.case.root, self.case.store
         payload = dict(id='checked-read', route_id='route', dossier_id=None,
                        role='result', reviewer_id='first', author_id='author', context={})
         before = self.read_workspace()
         checked = self.invoke_command('review-assignment', payload)
-        self.assertEqual(checked[0], 1, checked[2])
-        self.assertEqual(json.loads(checked[2])['error']['code'], 'check_unsupported')
+        self.assertEqual(checked[0], 0, checked[2])
+        self.assertEqual(json.loads(checked[1])['check'], 'accepted')
+        self.assertFalse(json.loads(checked[1])['recorded'])
         self.assertEqual(self.read_workspace(), before)
 
 
@@ -389,6 +392,7 @@ REFUSED_OUTCOMES = {
     "problem-formal-check": "problem_formal_check_unbound",
     "problem-openness": "review_context_unverified",
     "problem-posted": "readiness_required",
+    "problem-post-external": "problem_statement_mismatch",
     "problem-slate": "problem_slate_incomplete",
     "publication-scope": "publication_scope_stale",
     "read-batch": "invalid_batch",
@@ -502,7 +506,10 @@ class CommandTableCheckTests(CheckCommandMixin, DevelopmentCase, ProblemCase):
                 self.assert_command_preserves_workspace(command, arguments=arguments)
 
         self.audit_stage = "candidate"
-        execution = observed_candidate(self)
+        # This audit checks workspace preservation, not the fixture's runtime.
+        # Keep a real launch while allowing slow worker startup on a busy host.
+        with mock.patch("integration_fixtures.admit_lab", partial(admit_lab, timeout=120)):
+            execution = observed_candidate(self)
         imported_execution = copy.deepcopy(execution)
         imported_execution["id"] = "audit-imported-result"
         imported_execution["origin"] = dict(examples["result"]["origin"], original={

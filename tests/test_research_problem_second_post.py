@@ -114,7 +114,11 @@ class ProblemSecondPostTests(ProblemDeliveryCase):
                 "reason": "Check whether first-statement result reviews can authorize the second statement."})
         self.assertEqual(caught.exception.code, "problem_review_pair_required")
         self.assertEqual(caught.exception.details, {"obligations": [{
-            "code": "problem_review_pair_required", "explanation": "Use reviews of the exact current problem statement",
+            "code": "problem_review_pair_required",
+            "explanation": "A major scientific decision requires two distinct independent assessments",
+            "review_ids": []}, {
+            "code": "review_series_superseded",
+            "explanation": "Select only the recorded finals of the current result slots. Older finals stay as history.",
             "review_ids": ["review-result-first", "review-result-second"]}]})
 
         for reviewer in ("first", "second"):

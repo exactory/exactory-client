@@ -51,6 +51,9 @@ class _CheckingStore:
     def build_artifact_store(self):
         return self._artifacts
 
+    def describe_runtime(self):
+        return self._store.describe_runtime()
+
     def read_committed_request(self, request_id):
         _text(request_id, "Request ID")
         if request_id != self._request_id:

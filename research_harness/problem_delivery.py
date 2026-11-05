@@ -17,6 +17,9 @@ from .problem_claims import find_current_statement, find_latest, find_value, com
 from .problem_evidence import assess_formal_checks, project_citations, validate_value
 from .problem_openness import assess_openness
 
+_RECORD_RESULT_NOTE = ('Record the observed complete final of the current series with value-review from its '
+                       'exact output. No further reviewer call is needed.')
+
 
 def assess_minimum(records, artifacts):
     return _assess_minimum(records, Evaluation.of(records, artifacts))[0]
@@ -51,6 +54,11 @@ def _assess_minimum(records, artifacts):
 def collect_review_outcomes(records, artifacts):
     """Read current assignment science, keeping staged slots separate from raw outputs."""
     from .review_protocol import assignment_state
+    from .research_decisions import select_problem_slot_assignments
+    result_heads = {assignment['id'] for subject in {
+        digest(row.get('subject')): row.get('subject') for row in records.get('review_assignment', {}).values()
+        if row['role'] == 'result' and row.get('subject', {}).get('kind') == 'problem'}.values()
+        for assignment in select_problem_slot_assignments(records, 'result', subject).values()}
     parents = {parent for row in records.get("review_assignment", {}).values()
                for parent in (row.get("history_assignment_id"), row.get("context", {}).get("prior_assignment_id"),
                               (row.get("context", {}).get("context_repair") or {}).get("assignment_id"))
@@ -59,6 +67,9 @@ def collect_review_outcomes(records, artifacts):
     for identifier, assignment in records.get("review_assignment", {}).items():
         binding = assignment.get("staged_review", {})
         if identifier in parents or binding.get("kind") == "task":
+            continue
+        if (assignment['role'] == 'result' and assignment.get('subject', {}).get('kind') == 'problem'
+                and identifier not in result_heads):
             continue
         state = assignment_state(records, artifacts, identifier)
         epoch_id = binding.get("epoch_id") or state.get("epoch_id") or assignment.get("epoch_id")
@@ -236,12 +247,25 @@ def assess_source_requests(records, artifacts, *, outcomes=None):
                     next_step = dict(kind='review', workflow='review-run', scope=dict(assignment_id=identifier))
                 pending.append(obligation('review_parts_pending', 'Complete the current parts review series.',
                     assignment_id=identifier, **state.get(review_parts.KEY, {}), next=[next_step]))
+            elif assignment['role'] == 'result' and not any(
+                    review['assignment_id'] == identifier for review in records.get('value_review', {}).values()):
+                from .research_decisions import read_effective_result
+                output, _ = read_effective_result(state)
+                pending.append(obligation('review_result_pending', _RECORD_RESULT_NOTE,
+                    assignment_id=identifier, next=[dict(kind='review', workflow='value-review',
+                        scope=dict(output, dossier_id=assignment['dossier_id'], assignment_id=identifier))]))
         if state.get('output') is not None and state.get(review_problem_parts.KEY, {}).get('stage') == 'part':
+            if not state['ready']:
+                pending.extend(state['obligations'])
+                continue
             assignment = records['review_assignment'][identifier]
             packet = json.loads(artifacts.read(assignment['packet']))
             plan = packet[review_problem_parts.KEY]
             pending.append(obligation('problem_evidence_part_pending', 'Continue the observed problem evidence part.',
-                                      assignment_id=identifier, turn=plan['turn'], remaining=plan['remaining']))
+                assignment_id=identifier, turn=plan['turn'], remaining=plan['remaining'],
+                next=[dict(kind='review', workflow='review-assignment', scope=dict(
+                    {key: assignment[key] for key in ('role', 'route_id', 'reviewer_id', 'author_id', 'dossier_id')},
+                    prior_assignment_id=identifier))]))
         if state.get("pending_source_requests"):
             pending.append(obligation("review_sources_pending", "Deliver the sources requested by the observed reviewer.",
                                       assignment_id=identifier, requests=state["pending_source_requests"]))
@@ -323,6 +347,8 @@ def assess_post(records, artifacts):
     if records.get("review_epoch"):
         pending = describe_problem_work(records, pending)
     unique = list({digest(row): row for row in pending}.values())
+    continuation_codes = ('problem_evidence_part_pending', 'review_parts_pending', 'review_result_pending')
+    unique.sort(key=lambda row: row['code'] not in continuation_codes)
     slate = find_current_slate(records)
     milestone = "exploration"
     if slate is not None:
@@ -337,12 +363,20 @@ def assess_post(records, artifacts):
         milestone = "value"
     if posted is not None:
         milestone = "post"
-    slots = {"slot_outcomes": collect_staged_slots(outcomes)} if records.get("review_epoch") else {}
+    posted_state = {}
+    if posted is not None:
+        after_post = [dict(row, reason=row.get("reason", row["explanation"])) for row in unique
+                      if row["code"] != "problem_already_posted"]
+        unique = [row for row in unique if row["code"] == "problem_already_posted"]
+        posted_state = dict(after_post=after_post,
+                            post=dict(posted, gate=posted.get("gate", "passed")))
+    slots = ({"slot_outcomes": reviews['slot_outcomes']} if 'slot_outcomes' in reviews else
+             {"slot_outcomes": collect_staged_slots(outcomes)} if records.get('review_epoch') else {})
     return dict({"ready": not unique, "obligations": unique, "counts": {"obligations": len(unique)},
             "digest": digest({"problem_evidence_digest": evidence_digest, "decision": decision, "obligations": unique}),
             "orchestration": "problem_creation", "milestone": milestone,
             "problem_evidence_digest": evidence_digest, "statement_id": None if statement is None else statement["id"],
-            "decision_id": None if decision is None else decision["id"]}, **slots)
+            "decision_id": None if decision is None else decision["id"]}, **slots, **posted_state)
 
 
 def prepare_decision(records, artifacts, value, revision):

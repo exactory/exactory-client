@@ -376,7 +376,9 @@ exactly three backticks. Blank lines can precede the first block, follow the las
 surround a marker and separate the fence lines from the object. Prose, examples,
 arrays, indented blocks, other fences and two markers without a block between them
 refuse the recovery. The whole answer is then read as one object, which fails as
-before, and the failed attempt keeps the bounded operational retry. On recovery the
+before, and the failed attempt keeps the retry of a failed call under the
+outcomes of [Review chains and `review-series`](research-cli.md#review-chains-and-review-series).
+On recovery the
 route records the last object as the output. It keeps the whole original text in
 `execution.result_text` with `result_text_digest`, `self_corrected: true` and
 `retracted_object_count`, the number of withdrawn blocks. The output contract
@@ -405,10 +407,14 @@ a final value or support review. A bar request also retains its unassessed
 objective and method fields. Slate and result request turns may defer their
 remaining findings until the requested evidence is supplied.
 
-Continue that review with a new assignment whose context contains only
-`prior_assignment_id`. The harness supplies the requested inventory pages or
-native captured source content and preserves the assessor's own exchange. The
-continuation retains the same reviewer, dossier, role, route and original slot.
+`exactory-research review-series --assignment ID` continues that review with
+a new assignment whose context keeps the context keys of the head
+(`native_packet`, `verification_task_id`, `review_ids`, `objection_id`,
+`correction` and `source_delivery`) and adds `prior_assignment_id` (state
+`continue`; [Review chains and `review-series`](research-cli.md#review-chains-and-review-series)).
+The harness supplies the requested inventory pages or native captured source
+content and preserves the assessor's own exchange. The continuation retains the
+same reviewer, dossier, role, route and original slot.
 The actual scientific packet and the assessor's preceding outputs remain in its
 observed history; a source turn cannot substitute a changed author proposal. It cannot
 replace a final assessment or fork a completed continuation to obtain another
@@ -463,8 +469,14 @@ text arrives in parts over consecutive turns. On 2026-10-28 a reading turn with
 956,141 characters of new full text and a bar continuation with about 600,000
 were stopped at the route's 600-second limit before the reviewer had read them
 and written its excerpts. The input limit was not the constraint; the work of
-one turn was. A turn that ended without output can therefore be replaced by a
-new continuation of the same parent.
+one turn was. Since 0.73.0 `plan_next` plans the next action of a turn that
+ended without output under the outcomes of a failed reviewer call, and
+`review-series` executes it
+([Review chains and `review-series`](research-cli.md#review-chains-and-review-series)):
+a run that the route's time limit stopped is the outcome `timeout`, which
+stops with `review_timeout`, and a replacement by a new continuation of the
+same parent (state `replace`) is planned only in the cases of those outcomes
+that name one.
 
 The records that an openness packet carries as evidence (its bound search
 records, its reading records and the statement record) are reading units like
@@ -547,9 +559,10 @@ An adjudication resolves its exact original dossier and objection. A later
 dossier must retain and assess new evidence on that objection; an earlier
 favorable adjudication cannot override current unresolved findings.
 
-Failed calls remain operational failures with attempt identity and cost. Retry
-the same packet under the bounded operational policy; do not replace an unfavorable
-scientific answer by selecting another assessor. An ordinary replacement for a
+Failed calls remain operational failures with attempt identity and cost.
+`review-series` retries the same packet under the outcomes of a failed reviewer
+call ([Review chains and `review-series`](research-cli.md#review-chains-and-review-series));
+do not replace an unfavorable scientific answer by selecting another assessor. An ordinary replacement for a
 failed initial assignment inherits its fixed slot. Replacing a failed repair
 requires another explicit repair in that same slot. The superseded assignment
 cannot later be invoked or supply current approval. A decision needs two distinct
@@ -608,9 +621,12 @@ paper-review packet is not a substitute for these native subjects.
 
 ## Commands and shared state
 
-All mutations below use the existing `--file`, `--workspace`,
-`--expected-revision` and `--request-id` conventions. Use the current revision for
-a new mutation and the original payload, revision and identity for its replay.
+All mutations below except `review-series` use the existing `--file`,
+`--workspace`, `--expected-revision` and `--request-id` conventions. Use the
+current revision for a new mutation and the original payload, revision and
+identity for its replay. `review-series` takes `--workspace`,
+`--assignment HEAD` and a refused `--check` only; the driver supplies the
+revision and the request id of each action it executes.
 
 | Command | Record |
 | --- | --- |
@@ -622,6 +638,7 @@ a new mutation and the original payload, revision and identity for its replay.
 | `review-probe` | Observed invocation testing intended input delivery and context exclusions for that route. |
 | `review-assignment` | Role, packet/prompt binding, identity and delivery context; an exact prior assignment can continue a pending bar source request or the series of a review in fresh parts. A packet that does not fit one input is delivered as a series of fresh-input turns when an adapter applies to its role (a problem result or adjudicator packet, a context repair, a verification or readiness packet, a native packet without an openness minimum; [Reviews in fresh parts](#reviews-in-fresh-parts)) and its route is `claude_cli_v1`, `codex_cli_v1` or `codex_cli_framed_v1` with a local input limit, a recorded 0.69.x result series continues in parts, and a staged review opens only through an explicit `staged_upgrade` of a recorded slot; `{controller_assignment_id}` plans and assigns its next task, and a child context runs one task ([Staged problem reviews](#staged-problem-reviews)). |
 | `review-run` | Invoke the assigned canonical packet, retaining observed output, failure and usage. For a turn of a series in fresh parts: the turn's own call, checked under the contract of its kind. For a staged task: the owned worker's call, its committed capture and its acceptance. |
+| `review-series` | The records of the actions it executes: it runs, continues, replaces, resumes and records one review chain through the same operations as the CLI, until the chain is done or needs the agent ([Review chains and `review-series`](research-cli.md#review-chains-and-review-series)). |
 | `review-attempt` | Import historical invocation evidence; imported assertions alone do not verify a route. |
 | `review-context` | Later exposure or context status affecting the assignment. |
 | `review-adjudication` | Evidence-bound disposition of a specific objection or correction. |
@@ -706,9 +723,15 @@ call", "usage": {"input_tokens": null, "output_tokens": null, "cost_usd": null,
 `origin: "imported"`, which never counts as observed transport. The import ends
 the pending state. After either step a `review-run` of the assignment under a
 new `id` and request ID is permitted, while the replay of the original request
-ID stays refused. In a reading chain the turn then counts as ended without
-output: the same assignment can run again, and a turn after the first can be
-replaced by assigning the next turn again with the same `prior_assignment_id`.
+ID stays refused. The turn then counts as ended without output, and
+`plan_next` plans its next action under the outcomes of a failed reviewer call
+([Review chains and `review-series`](research-cli.md#review-chains-and-review-series)).
+An attempt imported with `review-attempt` has no error, no response and no
+measured wall time: it is the outcome `unknown`, which is not eligible for the
+provider schedule, so its plan stops with `review_failure_unknown`. A call
+that the reconciliation ended without a capture is recorded with the error
+`review_invocation_interrupted`: the outcome `execution_incomplete`, one more
+call, which `review-series` executes.
 A blank request ID is refused before the call (`invalid_input`).
 
 From 0.70.0, shared store and route capacity counts only calls with a
@@ -1165,8 +1188,11 @@ conditions and the exceptions. The decisions:
   its automatic scores need blinded human assessment of the reasoning and do
   not establish general quality equivalence.
 
-Recorded 0.69.x series continue under their protocol until their final;
-frozen 0.70.0 staged epochs continue under their frozen contracts, and an
+Recorded 0.69.x series continue under their protocol while their reduced
+continuations fit; since 0.73.0, when the v1 planner still refuses with
+`review_input_too_large`, `review-assignment` starts a parts v2 successor in
+the same slot ([Problem evidence in parts](research-cli.md#problem-evidence-in-parts)).
+Frozen 0.70.0 staged epochs continue under their frozen contracts, and an
 explicit `staged_upgrade` still enters staged v2. The eleven modules that a
 route pins by their bytes are unchanged. The design, its independent review
 and the measurements are recorded in

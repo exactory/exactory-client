@@ -33,6 +33,7 @@ PRIORITY = ("migration_required", "profile_mismatch", "configuration_missing", "
             "innovation_candidates_missing", "innovation_case_not_candidate", "context_missing",
             "review_worker_reconciliation_required", "review_observation_acceptance_pending", "review_capacity_wait",
             "review_task_dependency_changed", "review_epoch_stale", "review_task_pending", "review_parts_pending",
+            "problem_evidence_part_pending", "review_result_pending",
             "review_composition_conflict", "review_composition_pending", "review_assurance_dependency_pending",
             "assessment_incomplete", "problem_assurance_pending",
             "problem_rubric_below_threshold", "research_objection_unresolved",
@@ -57,12 +58,13 @@ def describe_parts_turn(assignment, state, series, *, ended_without_output=False
     from . import review_parts
 
     header = assignment[review_parts.KEY]
-    plan = assignment['review_parts_plan']
+    plan = review_parts.describe_plan(assignment)
     result = {key: header[key] for key in
               ('protocol', 'adapter', 'series_assignment_id', 'kind', 'turn')}
     result['recorded_revision'] = assignment['recorded_revision']
     result.update({key: copy.deepcopy(plan[key]) for key in
                    ('unit_allowance', 'card_allowance', 'remaining_turns')})
+    result['unit_allowance_floor'] = plan.get('unit_allowance_floor')
     total = plan['units_carded'] + plan['units_remaining']
     result.update(units_carded=0, units_remaining=total)
     packets = series['packets']
@@ -123,6 +125,8 @@ def annotate_parts_obligations(report, review):
                         'units_carded', 'units_remaining', 'next')}
             if 'blocked' in progress:
                 details['blocked'] = progress['blocked']
+            if any(action.get('command') for action in item.get('next', [])):
+                details['next'] = item['next']
             item = dict(item, **copy.deepcopy(details))
         obligations.append(item)
     return dict(report, obligations=obligations)
@@ -186,6 +190,8 @@ def next_summary(report, *, counters=False):
     if report.get("orchestration") == "problem_creation":
         result.update(orchestration=report["orchestration"], milestone=report["milestone"],
                       post_obligations=_obligations(report["obligations"]))
+        if "after_post" in report:
+            result["after_post"] = len(report["after_post"])
     if report.get("advisories"):
         # Stale output views are advisory and never replace the next hint.
         result["advisories"] = [{"code": item["code"], "reason": item["reason"]} for item in report["advisories"]]

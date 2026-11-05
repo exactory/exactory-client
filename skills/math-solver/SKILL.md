@@ -128,6 +128,8 @@ A session can end before the objective does. The controller event record is the 
 
 Resume, instead of starting at stage 1, when the input asks to resume, restart, or continue, or when the session-start hook reports a managed objective. Run `search status --json`, then `search next --json`, and perform exactly the returned controller action. This includes an open objective whose native attacks all have `units/FINISHED.json`: local completion can leave another obligation, result review, root audit, or required deliverable pending. When a command fails with `recovery_required` and `node_ids`, run `search refresh --spec FILE` with exactly `{"node_ids": [...]}` of those IDs. A Stop that returned them with `has_more: true` recorded nothing and goes on after the refresh. A native or journal command that returned them has already recorded its work; do not repeat it (`SEARCH.md#filesystem-service-and-cli`). For the selected node, also run `status <slug>` and read `tasks.json`; these give local stage detail but do not override `search next`. `status <slug>` is also a harness command. After a harness command on the attack in this session, the activity hook also records this session's ordinary shell calls on the attack. A session without one records only its writes and edits there. Activity is advisory: it never changes controller work, proof credit or the stage. A recorded pause survives status checks and session resume. Only an explicit authorized `search resume` clears it. Existing unmanaged work requires explicit reviewed adoption; never migrate or resume it automatically.
 
+Before you use a new harness version on a resumed objective, run `exactory-research record-check --workspace W` with that version, where `W` is the research workspace of the objective; the command reads the controllers inside its copy with `search status` and `search next`. This holds for every existing record: one whose wrapper pins a version, and one that runs the harness from PATH. The command checks a copy of the record and opens no SQLite connection on the record itself. When the report says `ready` true (exit status 0), update the version that the record's wrapper pins, or the command resolution that the record uses. Verify the executable path and the version that the record's command actually runs (the report's `runtime`, when the check ran through that command). Start a new session so that the new hooks load. When `ready` is false (exit status 1), keep the record on the version it runs. Report the failed step and its `error` in your summary. Continue the work on that version. A running session keeps the version it loaded; update the plugin cache only when no session that loaded it runs. The [CLI reference](../../docs/research-cli.md#record-check) states the check and the activation.
+
 Keep the action list current from the first move: when a strategy is entered, add one task per plan step it will dispatch; mark each done after the move that ran it; add a task for every deterministic run before writing its code. A task named nowhere in the record is the one thing a resumed session cannot recover.
 
 ## Stage 1: detect and activate
@@ -200,24 +202,61 @@ On a text route with a local input limit (`claude_cli_v1`, `codex_cli_v1` or
 `codex_cli_framed_v1`), a packet whose captured responses, full texts and
 records do not fit one input complete, or together exceed 120,000 characters, is
 read as a reading chain (`SEARCH.md#observed-native-review-delivery`):
-`review-assignment` records `reading_chain` on the first assignment. Run each
-turn with `review-run`, assign the next turn with the same reviewer, route,
-author and packet and with `context.prior_assignment_id`, and submit the native
-output of the final turn unchanged to `search accept` or `search complete`. The
-service verifies the whole chain and stores its `reading_turns` on the
-acceptance or closure. A turn whose attempts all ended without output can run
-again under a new invocation id while its route is not retired, not changed and
-its pinned runtime equals the installed adapter. A turn after the first can
-instead be replaced by assigning the next turn again with the same
-`prior_assignment_id`. When the first turn cannot run again, export a new packet
-under a new assignment id and start a new chain. A refusal of
+`review-assignment` records `reading_chain` on the first assignment. Run the
+chain with `exactory-research review-series --assignment ID`, where ID is any
+assignment of the chain: it runs each turn, assigns the next turn with the same
+reviewer, route, author and packet and with `context.prior_assignment_id`,
+resumes a captured call with its original request id, and runs again, waits,
+replaces or stops a turn whose attempts all ended without output under the
+outcomes of a failed reviewer call in the
+[CLI reference](../../docs/research-cli.md#review-chains-and-review-series) (a
+replacement only in the cases that name one; a replacement of a turn after the
+first is the next turn assigned again with the
+same `prior_assignment_id`). Do not write your own driver, turn limit or retry
+loop around reviewer calls. The command prints one JSON object per line for
+each step and ends in one of four ways. Exit status 3 with the handoff
+`native_review_acceptance_required` (command `search accept`; the plan names
+only this command): the final turn has its output; submit that native output
+unchanged to `search accept`, or to `search complete` for the closure review.
+The service verifies the whole chain and stores its `reading_turns` on the
+acceptance or closure. The controller records the acceptance, and
+`review-series` does not see the chain as done through it: continue with
+`search next` and do not run `review-series` on that head again. Exit status 3
+with the handoff
+`native_review_attestation_required` (command `search review-packet`): the
+first turn needs a replacement, which needs a new attestation; export a new
+packet under a new assignment id, start a new chain and run `review-series`
+with the new assignment id. Exit status 3 with the
+handoff `review_route_runtime_stale` (command `review-route`): the head's route
+pins another reviewer runtime. The planner keeps the route of the chain, so
+`review-series` on the same head gives this handoff again. Record a new route
+with a new id and the same adapter, model, endpoint and configuration. Probe
+it. Then assign the review again on the new route (the stale-route procedure
+of the [route instructions](../../docs/research-decisions.md#commands-and-shared-state)):
+a native first turn needs a new attestation, so export a new packet under a
+new assignment id with `search review-packet`, as for
+`native_review_attestation_required`, and assign it on the new route. Then
+run `review-series` with the new assignment. Exit status 3 with a `stop`: a typed limit or
+refusal with its `code` and `details`; the harness cannot continue the chain.
+A refused action of the chain ends the command this way with the refusal's
+code (for example `review_input_too_large` or a `review_parts_*` code); when
+the refusal recorded an output refusal, or its code is
+`review_invocation_pending`, the command plans again instead. Read `code`
+and `details`. When the CLI reference names a step for that code, take it.
+Otherwise report the stop with its code and details in your summary and
+continue the work that does not depend on this chain. Exit status 4 with the
+plan and its `not_before` on the last line: a wait of more than 30 minutes; run
+`review-series` again at `not_before`. Exit status 0: the plan is `done`, and
+the chain's final is recorded. A refusal of
 `review-assignment` with `review_input_too_large` and `phase:
 "final_preflight"`, before a turn is planned, says that the mandatory final
 input (the required proof bytes and the protected bodies, the excerpts and
 passages so far and the final prompt) exceeds the route's limit: the chain
 cannot finish on that route with that material, nothing was written, and
-`mandatory_components` names each body; report them to the user, with the
-route limits, and wait for the decision. A final turn
+`mandatory_components` names each body; when `review-series` assigned the
+turn, it ends with a `stop` of that code. Report them in your summary, with
+the route limits, and continue the work that does not depend on this chain. A
+final turn
 that cannot judge yet requests passages that deliver characters. Reading in a
 chain changes no requirement of the finding: an unavailable decisive source
 stays a gap, and the finding stays unresolved.
@@ -227,28 +266,30 @@ such a route is delivered as a series of fresh-input turns instead
 (`exactory-review-parts-v2`): read turns that card the units of the packet (the
 entries of the dependency closure and of the list collections of the scientific
 context), combine and check turns when needed, possibly more than one of each,
-followed by final turns, each a new assignment. Before `review-run`, read
-`review_parts_plan` in the assignment result; read the allowances, estimates,
-progress and next action in `status` under
-`review.assignments.<id>.review_parts`. Run each turn with `review-run`. Then
-read the next action's `workflow` and `scope` in `next` and build that
-command's complete payload: for `review-assignment`, a new id, the same role,
-`dossier_id: null`, route, reviewer and author, and
-`context: {native_packet, prior_assignment_id}` with the same packet and the
-turn that just ran, the current expected revision and a new request id. Submit
-the native output of the final turn unchanged to `search accept` or
-`search complete`: the attestation names the first turn, and the service
-verifies the whole series and stores its receipts as `reading_turns`. If every
-attempt of a turn ended without completed output and no invocation remains
-pending, replace the assignment with a new id: for a continuation, keep its
-original `prior_assignment_id`; for the first turn, first export a new packet
-whose attestation names the replacement assignment, then start the series
-again. If `review-assignment` refuses with `review_parts_frame_too_large`,
+followed by final turns, each a new assignment. Read `review_parts_plan` in the
+assignment result, and the allowances, estimates, progress and next action in
+`status` under `review.assignments.<id>.review_parts`. Then run
+`review-series` as for a reading chain above: it assigns each next turn with
+the complete payload (a new id, the same role, `dossier_id: null`, route,
+reviewer and author, and `context: {native_packet, prior_assignment_id}` with
+the same packet and the turn that just ran), runs it, and runs again, waits,
+replaces or stops a turn whose attempts all ended without completed output
+under the same outcomes (a replacement of a continuation keeps its original
+`prior_assignment_id`). At the handoff
+`native_review_acceptance_required`, submit the native output of the final turn
+unchanged to `search accept`, or to `search complete` for the closure review:
+the attestation names the first turn, and the service verifies the whole series
+and stores its receipts as `reading_turns`. At the handoff `native_review_attestation_required` (a
+failed first turn), first export a new packet whose attestation names the
+replacement assignment (`search review-packet`), then start the series again.
+If `review-assignment` refuses with `review_parts_frame_too_large`,
 `review_parts_inventory_too_large`, `review_parts_final_too_large` or
-`review_parts_no_progress`, the proposed turn cannot be planned with the
+`review_parts_no_progress` (a `stop` of `review-series` with that code when the
+command assigned the turn), the proposed turn cannot be planned with the
 current route and material; no assignment or invocation is recorded, although
 the preparation can have stored artifacts. Report the refusal code and any
-supplied size details to the user and wait for the decision. A native
+supplied size details in your summary and continue the work that does not
+depend on this chain. A native
 assignment does not accept `context_repair`: report a retired route or a
 contaminated context instead of submitting a repair. A packet that fits stays
 a single assignment, and a packet with an openness minimum keeps its reading

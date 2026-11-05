@@ -227,6 +227,27 @@ class ArtifactStore:
     def require_external_effect(self):
         pass
 
+    def require_local_read(self, kind):
+        """Permit runtime identification and verification of retained context."""
+        wrapped = self._find_wrapped_store()
+        if wrapped is not None:
+            wrapped.require_local_read(kind)
+
+    def read_runtime_fingerprint(self, route):
+        """Observe the dependencies of one command's optional state memo."""
+        wrapped = self._find_wrapped_store()
+        if wrapped is not None:
+            return wrapped.read_runtime_fingerprint(route)
+        from .review_protocol import read_route_runtime
+        return read_route_runtime(self, route)
+
+    def _find_wrapped_store(self):
+        wrapped = getattr(self, '_store', None)
+        from .evaluation import Evaluation
+        while isinstance(wrapped, Evaluation):
+            wrapped = wrapped.store
+        return wrapped
+
     def put_sealed(self, data: bytes, media_type: str) -> dict:
         reference = describe_artifact(data, media_type)
         reference["path"] = _SEALED_DIRECTORY + "/" + reference["sha256"]

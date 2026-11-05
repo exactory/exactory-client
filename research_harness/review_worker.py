@@ -254,12 +254,23 @@ def _authorize_launch(store, reservation_id, identity):
                            request_id="review-worker-authorize:" + reservation_id)["result"]
 
 
+def read_polling_store(read):
+    """Return no value for a busy read; the polling caller owns its wait and deadline."""
+    try:
+        return read()
+    except ResearchError as error:
+        if error.code != "store_busy":
+            raise
+        return None
+
+
 def launch_worker(store, reservation_id, *, handshake_timeout=60.0):
     """Allow a loaded worker to start, retaining a reconcilable claim on refusal."""
     if not isinstance(handshake_timeout, (int, float)) or not 0 < handshake_timeout <= 60:
         raise ResearchError("invalid_input", "Worker handshake timeout must be positive and at most 60 seconds")
     with _owner(store.root, reservation_id):
-        current = _get(store.snapshot()["records"], "review_reservation", reservation_id)
+        snapshot = retry_store_write(store.snapshot, codes=("store_busy",))
+        current = _get(snapshot["records"], "review_reservation", reservation_id)
         if current["launch"] is not None or current["state"] != "reserved" or current["released"]:
             raise ResearchError("review_invocation_pending", "Resume the original worker reservation instead of relaunching")
         with _owner(store.root, reservation_id, worker=True) as descriptor:
@@ -281,14 +292,16 @@ def launch_worker(store, reservation_id, *, handshake_timeout=60.0):
             try:
                 deadline = time.monotonic() + handshake_timeout
                 while time.monotonic() < deadline and process.poll() is None:
-                    current = _get(store.snapshot()["records"], "review_reservation", reservation_id)
-                    identity = current["worker"]
-                    if identity is not None:
-                        if identity["pid"] != process.pid or identity["pgid"] != process.pid or identity != _identity(process.pid):
-                            raise ResearchError("review_worker_reconciliation_required", "The detached worker did not establish its process identity")
-                        _authorize_launch(store, reservation_id, identity)
-                        process.stdin.write((reservation["token"] + "\n").encode())
-                        return process
+                    snapshot = read_polling_store(store.snapshot)
+                    if snapshot is not None:
+                        current = _get(snapshot["records"], "review_reservation", reservation_id)
+                        identity = current["worker"]
+                        if identity is not None:
+                            if identity["pid"] != process.pid or identity["pgid"] != process.pid or identity != _identity(process.pid):
+                                raise ResearchError("review_worker_reconciliation_required", "The detached worker did not establish its process identity")
+                            _authorize_launch(store, reservation_id, identity)
+                            process.stdin.write((reservation["token"] + "\n").encode())
+                            return process
                     time.sleep(.01)
                 raise ResearchError("review_worker_reconciliation_required", "The worker launch handshake did not complete")
             except OSError as error:

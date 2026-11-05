@@ -8,8 +8,14 @@ independence without rewriting the original assessment.
 
 import base64
 import copy
+from datetime import datetime, timezone
+import glob
+import hashlib
 import json
 import os
+from pathlib import Path
+import stat
+import time
 import uuid
 from collections import ChainMap
 
@@ -20,6 +26,7 @@ from .graph import obligation
 from .operations import fields, immutable_record, normalized_text, prepared_mutation, prepared_task_mutation, text
 from .finishing import retry_store_write
 from . import review_transport as transport
+from .review_answer_recovery import derive_output, extract_answer_text, recover_answer
 from . import bar_sources
 from . import openness_reading
 from . import review_excerpts
@@ -627,6 +634,9 @@ def _read_context_records(records, assignment):
 
 
 def _read_json(artifacts, reference):
+    from .evaluation import Evaluation
+    if isinstance(artifacts, Evaluation):
+        return artifacts.read_json(reference)
     return json.loads(artifacts.read(reference))
 
 
@@ -1586,19 +1596,35 @@ def source_delivery_packet(records, artifacts, assignment):
     to equal this same reconstruction. Caller-authored delivery flags are not
     accepted as a substitute for computing the actual transport request.
     """
-    packet = _read_json(artifacts, assignment['packet'])
+    from .evaluation import Evaluation
+    evaluation = Evaluation.of(records, artifacts)
+    packet = _read_json(evaluation, assignment['packet'])
     from .review_source_capacity import MARKER, PROTOCOL
     from .review_source_complete import MARKER as COMPLETE_MARKER, PROTOCOL as COMPLETE_PROTOCOL
     if assignment['role'] not in bar_sources.ROLES or not (packet.get('continuation') or MARKER in packet or COMPLETE_MARKER in packet):
         return packet
-    request = build_assignment_request(records, artifacts, assignment)
-    content = transport.logical_messages(request)[-1].get('content')
-    if isinstance(content, str) and content.startswith(transport.PACKET_LABEL):
-        actual = json.loads(content[len(transport.PACKET_LABEL):])
-        if (actual.get(MARKER, {}).get('protocol') == PROTOCOL
-                or actual.get(COMPLETE_MARKER, {}).get('protocol') == COMPLETE_PROTOCOL):
-            return actual
-    return packet
+    def project():
+        request = build_assignment_request(records, evaluation, assignment)
+        content = transport.logical_messages(request)[-1].get('content')
+        if isinstance(content, str) and content.startswith(transport.PACKET_LABEL):
+            actual = json.loads(content[len(transport.PACKET_LABEL):])
+            if (actual.get(MARKER, {}).get('protocol') == PROTOCOL
+                    or actual.get(COMPLETE_MARKER, {}).get('protocol') == COMPLETE_PROTOCOL):
+                return actual
+        return packet
+
+    route = records['review_route'][assignment['route_id']]
+    if route['adapter'] == 'codex_cli_visual_v1' or assignment.get('staged_review'):
+        return project()
+    read_history(evaluation, assignment)
+    attempts = _read_review_group(records, evaluation, 'review_attempt', 'assignment_id', assignment['id'])
+    references = [attempt['request'] for attempt in attempts
+                  if attempt['status'] == 'completed' and attempt.get('request')]
+    for reference in references:
+        evaluation.read(reference)
+    key = ('source_delivery_packet', digest(assignment), digest(route), digest(references),
+           transport.local_input_limit(route))
+    return evaluation.reuse_value(key, project, namespace=evaluation._byte_namespace)
 
 
 def _find_session_bodies(records, artifacts, prior):
@@ -1939,31 +1965,154 @@ def record_route(store, payload, *, expected_revision, request_id):
 
 
 def read_route_runtime(artifacts, route):
-    if route['adapter'] in transport.LOCAL_ADAPTERS:
-        artifacts.require_external_effect()
+    from .evaluation import Evaluation
+    store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
+    store.require_local_read('route_runtime:' + route['adapter'])
     return transport.runtime(route)
 
 
 def verify_route_context(artifacts, route, request, response):
     if route['adapter'] in transport.LOCAL_ADAPTERS:
-        artifacts.require_external_effect()
+        from .evaluation import Evaluation
+        store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
+        store.require_local_read('route_context:' + route['adapter'])
     return transport.context_verified(route, request, response)
 
 
+_RUNTIME_RETRY_SECONDS = (1, 2, 4, 8, 16)
+_CODEX_ROLLOUT_LIMIT_BYTES = 64 * 1024 * 1024
+
+
+def retry_runtime_check(check, *args):
+    """Retry only a missing CLI runtime, before any model process can start."""
+    for index in range(len(_RUNTIME_RETRY_SECONDS) + 1):
+        try:
+            result = check(*args)
+        except ResearchError as error:
+            if error.code != 'review_runtime_missing' or index == len(_RUNTIME_RETRY_SECONDS):
+                raise
+        else:
+            if (not isinstance(result, dict)
+                    or (result.get('error') or {}).get('code') != 'review_runtime_missing'
+                    or index == len(_RUNTIME_RETRY_SECONDS)):
+                return result
+        time.sleep(_RUNTIME_RETRY_SECONDS[index])
+
+
 def _require_route_runtime(route):
-    if transport.runtime(route) != route['runtime']:
+    if retry_runtime_check(transport.runtime, route) != route['runtime']:
         raise ResearchError('review_route_runtime_stale',
                             'The installed reviewer adapter differs from the one this route pins; record and probe a new route')
 
 
+def validate_observation_fields(observation):
+    """Validate optional scheduling metadata without adding an authentication dependency."""
+    code = 'invalid_review_attempt'
+    if 'observed_at' in observation:
+        value = text(observation['observed_at'], 'Observation time', code=code)
+        try:
+            observed_at = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError as error:
+            raise ResearchError(code, 'Observation time must be an ISO 8601 UTC timestamp') from error
+        if observed_at.tzinfo is None or observed_at.utcoffset() != timezone.utc.utcoffset(observed_at):
+            raise ResearchError(code, 'Observation time must be an ISO 8601 UTC timestamp')
+    if 'provider_diagnostic' not in observation:
+        return
+    diagnostic = observation['provider_diagnostic']
+    fields(diagnostic, ('source', 'thread_id', 'codex_error_info', 'message', 'rollout_sha256'), code=code)
+    text(diagnostic['thread_id'], 'Diagnostic thread ID', code=code)
+    checksum = diagnostic['rollout_sha256']
+    if (diagnostic['source'] != 'codex_rollout'
+            or diagnostic['message'] is not None and not isinstance(diagnostic['message'], str)
+            or diagnostic['codex_error_info'] is not None and not isinstance(diagnostic['codex_error_info'], (str, dict))
+            or not isinstance(checksum, str) or len(checksum) != 64
+            or any(character not in '0123456789abcdef' for character in checksum)):
+        raise ResearchError(code, 'A provider diagnostic must retain the Codex error and rollout digest')
+
+
+def read_codex_diagnostic(response):
+    """Read advisory failure evidence from the same sessions location as the transport."""
+    from .review_codex_transport import clean_environment
+    thread_id = (response.get('context_evidence') or {}).get('thread_id')
+    if not isinstance(thread_id, str) or not thread_id or '/' in thread_id:
+        return None
+    environment = clean_environment(os.environ)
+    home = Path(environment.get('CODEX_HOME', str(Path.home() / '.codex')))
+    try:
+        matches = list((home / 'sessions').rglob('*' + glob.escape(thread_id) + '*.jsonl'))
+        if len(matches) != 1:
+            return None
+        descriptor = os.open(matches[0], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(descriptor, 'rb') as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size > _CODEX_ROLLOUT_LIMIT_BYTES:
+                return None
+            data = stream.read(_CODEX_ROLLOUT_LIMIT_BYTES)
+            after = os.fstat(stream.fileno())
+            if len(data) != after.st_size or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                return None
+    except OSError:
+        return None
+    last_error = None
+    try:
+        for line in data.splitlines():
+            if not line.strip():
+                continue
+            event = json.loads(line)
+            if not isinstance(event, dict):
+                continue
+            payload = event.get('payload')
+            if isinstance(payload, dict) and payload.get('type') == 'task_complete':
+                last_error = payload.get('error')
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(last_error, dict):
+        return None
+    diagnostic = dict(source='codex_rollout', thread_id=thread_id,
+                      codex_error_info=last_error.get('codex_error_info'), message=last_error.get('message'),
+                      rollout_sha256=hashlib.sha256(data).hexdigest())
+    try:
+        validate_observation_fields(dict(provider_diagnostic=diagnostic))
+    except ResearchError:
+        return None
+    return diagnostic
+
+
 def _observed(artifacts, route, request, credential):
     from .review_codex_notices import record_disabled_exec_notices
-    _require_route_runtime(route)
-    observed = transport.observe(route, request, credential)
-    record_disabled_exec_notices(route, observed['response'])
+    try:
+        _require_route_runtime(route)
+        observed = retry_runtime_check(transport.observe, route, request, credential)
+    except ResearchError as error:
+        if error.code not in ('review_runtime_missing', 'review_route_runtime_stale'):
+            raise
+        observed = dict(request_digest=digest(request), route_digest=digest(route), runtime=route['runtime'],
+                        response=None, output=None, status='failed',
+                        error=dict(kind='ResearchError', code=error.code),
+                        usage=dict(input_tokens=None, output_tokens=None, cost_usd=None, wall_seconds=None))
+    if (observed['status'] == 'failed'
+            and (observed.get('error') or {}).get('kind') == 'JSONDecodeError'):
+        recovered = recover_answer(observed['response'])
+        if recovered is not None:
+            recovered_response = observed['response']
+            observed.update(status='completed', output=recovered['output'], error=None,
+                            provider_response_id=recovered_response['id'],
+                            observed_model=recovered_response.get('model'),
+                            answer_recovery=recovered['certificate'])
+    observed['observed_at'] = datetime.now(timezone.utc).isoformat(timespec='seconds')
+    response = observed['response']
+    if (observed['status'] != 'completed' and response is not None
+            and route['adapter'] in ('codex_cli_v1', 'codex_cli_framed_v1', 'codex_cli_visual_v1')):
+        answer = ''.join(part['text'] for item in response.get('output', []) if item.get('type') == 'message'
+                         for part in item.get('content', []) if part.get('type') == 'output_text')
+        if not answer.strip():
+            diagnostic = read_codex_diagnostic(response)
+            if diagnostic is not None:
+                observed['provider_diagnostic'] = diagnostic
+    record_disabled_exec_notices(route, response)
     record = {key: value for key, value in observed.items() if key not in ('request', 'response', 'output')}
     record['request'] = _put_json(artifacts, request)
-    record['response'] = None if observed['response'] is None else _put_json(artifacts, observed['response'])
+    record['response'] = None if response is None else _put_json(artifacts, response)
     record['output'] = None if observed['output'] is None else _put_json(artifacts, observed['output'])
     return record
 
@@ -2119,7 +2268,7 @@ def _route_state(records, artifacts, route_id):
                 bounded = request.get('tools') == [] and request.get('store') is False and 'previous_response_id' not in request
                 if (saved['status'] == 'completed' and saved['request_digest'] == digest(request) and no_excluded
                         and complete_sources and positives and bounded and output.get('excluded_controls') == []
-                        and transport.response_output(_read_json(artifacts, saved['response'])) == output
+                        and derive_output(dict(saved, output=output), _read_json(artifacts, saved['response'])) == output
                         and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']))):
                     status, proof = 'verified_for_route', saved['id']
             except (ResearchError, ValueError, TypeError, KeyError):
@@ -2897,27 +3046,43 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 slot_identifier = value['id']
             history = []
             prompt = review_parts.build_turn_prompt(value['role'], base_prompt_parameters, packet[review_parts.KEY])
-        history = review_problem_history.bound_history(
-            records, artifacts, value, route, packet, prompt, history, history_assignment_id)
-        if route['adapter'] == 'codex_cli_visual_v1':
-            from . import review_visual_sources, review_visual_route
-            review_visual_sources.prepare_packet(records, artifacts, packet, history=history)
-            if visual_transition:
-                packet[review_visual_route.MARKER] = review_visual_route.validate_transition(
-                    records, artifacts, parent, route,
-                    {'packet': packet, 'history': history, 'reviewer_id': value['reviewer_id'],
-                     'author_id': value['author_id'], 'slot_id': slot_identifier, 'subject': value['subject'], 'role': value['role']})
-            packet.pop('digest', None)
-            packet['digest'] = digest(packet)
-        if upgrade is not None or staged_repair:
-            from .review_staged import PROTOCOL as STAGED_PROTOCOL
-            packet.pop('digest', None)
-            packet['staged_review'] = dict(protocol=STAGED_PROTOCOL, kind='controller')
-            packet['digest'] = digest(packet)
-            if upgrade is not None:
-                value = dict(value, context=dict(value['context'], staged_upgrade=upgrade))
-        else:
-            packet = review_problem_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history)
+        restart = None
+        try:
+            history = review_problem_history.bound_history(
+                records, artifacts, value, route, packet, prompt, history, history_assignment_id)
+            if route['adapter'] == 'codex_cli_visual_v1':
+                from . import review_visual_sources, review_visual_route
+                review_visual_sources.prepare_packet(records, artifacts, packet, history=history)
+                if visual_transition:
+                    packet[review_visual_route.MARKER] = review_visual_route.validate_transition(
+                        records, artifacts, parent, route,
+                        {'packet': packet, 'history': history, 'reviewer_id': value['reviewer_id'],
+                         'author_id': value['author_id'], 'slot_id': slot_identifier, 'subject': value['subject'], 'role': value['role']})
+                packet.pop('digest', None)
+                packet['digest'] = digest(packet)
+            if upgrade is not None or staged_repair:
+                from .review_staged import PROTOCOL as STAGED_PROTOCOL
+                packet.pop('digest', None)
+                packet['staged_review'] = dict(protocol=STAGED_PROTOCOL, kind='controller')
+                packet['digest'] = digest(packet)
+                if upgrade is not None:
+                    value = dict(value, context=dict(value['context'], staged_upgrade=upgrade))
+            else:
+                packet = review_problem_parts.prepare_packet(records, artifacts, value, route, packet, prompt, history)
+        except ResearchError as error:
+            if error.code != 'review_input_too_large' or upgrade is not None or staged_repair:
+                raise
+            successor = review_parts.prepare_packet(
+                records, artifacts, value, route, packet, prompt, history,
+                base_prompt_parameters=base_prompt_parameters, slot_id=slot_identifier,
+                legacy_refusal=error)
+            if review_parts.find_kind(successor) is None:
+                raise
+            previous = _read_json(artifacts, history_parent['packet'])
+            restart = dict(series_assignment_id=previous[review_problem_parts.KEY]['series_assignment_id'],
+                           reason=error.code, details=error.details)
+            packet, history = successor, []
+            prompt = review_parts.build_turn_prompt(value['role'], base_prompt_parameters, packet[review_parts.KEY])
         if review_problem_parts.find_stage(packet) is not None:
             prompt = canonical_prompt(value['role'], orchestration='problem_creation', excerpts=True,
                                       evidence_parts=review_problem_parts.find_stage(packet))
@@ -2937,11 +3102,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if review_parts.find_kind(packet) is not None:
             record[review_parts.KEY] = {key: packet[review_parts.KEY][key] for key in
                 ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest')}
-            record['review_parts_plan'] = packet[review_parts.KEY]['plan']
+            record['review_parts_plan'] = review_parts.describe_plan(packet)
         if not controller and review_parts.find_kind(packet) is None and route['adapter'] != 'codex_cli_visual_v1':
             previous = records.get('review_assignment', {}).get(history_assignment_id)
             record['history_ref'] = write_history(artifacts, record, history, previous=previous)
             record.pop('history')
+        if restart is not None:
+            record['review_parts_restart'] = restart
         if slot_identifier is not None:
             record['slot_id'] = slot_identifier
         changes = []
@@ -2966,7 +3133,9 @@ def record_attempt(store, payload, *, expected_revision, request_id):
     """Imported attempts retain provenance but cannot masquerade as observed transport."""
     artifacts = store.build_artifact_store()
     def prepare(records, value):
-        fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'))
+        fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'),
+               ('observed_at', 'provider_diagnostic'))
+        validate_observation_fields(value)
         _get(records, 'review_assignment', value['assignment_id'])
         from .review_task_execution import has_call_terminated, identify_call
         if value['id'] in records.get('review_invocation', {}):
@@ -3130,7 +3299,7 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
                     artifacts, route, assignment['prompt']['text'], packet, read_history(artifacts, assignment)))
                 and attempt.get('packet_digest') == assignment['packet_digest']
                 and attempt.get('prompt_hash') == assignment['prompt_hash']
-                and transport.response_output(response) == output)
+                and derive_output(dict(attempt, output=output), response) == output)
     except (ResearchError, ValueError, TypeError, KeyError):
         return False
 
@@ -3170,11 +3339,15 @@ def _read_raw_observation(artifacts, attempt_id, attempt, captured=None):
                   instrumented=attempt.get('origin') == 'instrumented',
                   provenance={key: copy.deepcopy(attempt.get(key)) for key in
                               ('origin', 'runtime', 'route_digest', 'invocation_id', 'recorded_revision')})
+    if 'answer_recovery' in observation:
+        result['answer_recovery'] = copy.deepcopy(observation['answer_recovery'])
     for name in ('request', 'response', 'output'):
         reference = observation.get(name)
         result[name] = copy.deepcopy(reference)
         value = _read_json(artifacts, reference) if reference is not None else None
         result[name + '_digest'] = digest(value) if reference is not None else None
+        if name == 'response':
+            result['answer_text'] = extract_answer_text(value) if value is not None else None
         if name == 'output':
             result['raw_output'] = value
             result['raw_output_digest'] = result['output_digest']
@@ -3263,6 +3436,8 @@ def _assignment_state(records, artifacts, assignment_id):
     if binding is not None:
         attempt = binding
         state['attempt_id'] = attempt['id']
+        if 'answer_recovery' in attempt:
+            state['answer_recovery'] = copy.deepcopy(attempt['answer_recovery'])
         try:
             state['output'] = _read_json(artifacts, attempt['output'])
             state['output_digest'] = digest(state['output'])
@@ -3291,6 +3466,9 @@ def _assignment_state(records, artifacts, assignment_id):
         else:
             state.update(output=correction['output'], output_digest=digest(correction['output']),
                          attempt_id=correction['attempt_id'], output_correction_id=correction['id'])
+            original = records['review_attempt'][correction['attempt_id']]
+            if 'answer_recovery' in original:
+                state['answer_recovery'] = copy.deepcopy(original['answer_recovery'])
     else:
         state['obligations'].append(obligation('review_output_pending', 'A complete observed reviewer response is required.'))
     if binding is None and assignment['route_id'] in retired_routes(records):
@@ -3573,5 +3751,8 @@ def usage_report(records, dossier_id=None):
                 unknown[metric] += 1
     return {'review_budget': read_budget_usage(records),
             'calls': len(calls), 'pending_calls': pending, 'failed_calls': failed,
+            'recovered_calls': sum('answer_recovery' in (result or {}) for _, result in calls),
+            'answer_recoveries': {identifier: result['answer_recovery'] for identifier, result in calls
+                                  if result is not None and 'answer_recovery' in result},
             'observed': observed, 'unknown': unknown, 'call_ids': [identifier for identifier, _ in calls],
             'scope': 'all review calls including shared route probes' if dossier_id is None else 'dossier calls excluding shared route probes'}

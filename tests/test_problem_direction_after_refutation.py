@@ -299,9 +299,17 @@ class ProblemDirectionTests(ProblemDeliveryCase):
         except ResearchError as error:
             self.fail('The old result must continue on the current contract: ' + str(error))
         report = gate_state(self.store.snapshot()['records'], self.artifacts, 'post')
+        # The saved decision still selects the replaced first result. Its
+        # historical final cannot fill that slot alongside the current final.
         self.assertEqual(report['obligations'], [{
+            'code': 'problem_review_pair_required',
+            'explanation': 'A major scientific decision requires two distinct independent assessments',
+            'review_ids': ['review-result-second']}, {
+            'code': 'review_series_superseded',
+            'explanation': 'Select only the recorded finals of the current result slots. Older finals stay as history.',
+            'review_ids': ['review-result-first']}, {
             'code': 'problem_rubric_regrade_required', 'explanation': REGRADE_EXPLANATION,
-            'assessment_id': 'assessment-1', 'review_ids': ['review-result-first', 'review-result-second']}])
+            'assessment_id': 'assessment-1', 'review_ids': ['review-result-second']}])
 
     def test_previous_result_refresh_retains_reviewer_session_slot_and_recorded_requests(self):
         self.prepare_previous_record()

@@ -10,9 +10,11 @@ import copy
 from .artifacts import _StagedArtifacts
 from . import review_protocol as protocol
 from . import review_transport as transport
+from .review_answer_recovery import derive_output
 from . import review_excerpts, review_problem_parts
 from .errors import ResearchError
 from .evidence import digest
+from .finishing import retry_store_write
 from .graph import obligation
 from .operations import _read_preparation, fields, immutable_record, prepared_mutation, text
 from .storage import _canonical, read_epoch_tasks
@@ -1426,21 +1428,26 @@ def wait_for_capture(store, route, reservation, request_id):
     """Launch once or reconcile the owned worker, then await its durable capture."""
     import time
     from . import review_task_execution as execution, review_worker
+    snapshot = retry_store_write(store.snapshot, codes=('store_busy',))
+    reservation = protocol._get(snapshot['records'], 'review_reservation', reservation['id'])
     process = None
     if reservation['launch'] is not None and reservation['observation_id'] is None:
         execution.reconcile_worker(store, {'reservation_id': reservation['id']},
-                                   request_id=request_id + ':resume:' + str(reservation['generation']))
+                                   request_id=request_id + ':resume:' + str(reservation['generation'])
+                                   + ':' + str(snapshot['revision']))
     if reservation['launch'] is None and reservation['state'] == 'reserved' and not reservation['released']:
         process = review_worker.launch_worker(store, reservation['id'])
     deadline = time.monotonic() + route['configuration']['timeout_seconds'] + 15
     while True:
-        records = store.snapshot()['records']
-        current = records['review_reservation'][reservation['id']]
-        if current['observation_id'] is not None:
-            break
-        if current['released'] or process is not None and process.poll() is not None:
-            execution.reconcile_worker(store, {'reservation_id': current['id']}, request_id=request_id + ':reconcile')
-            raise ResearchError('review_worker_reconciliation_required', 'The worker ended without a committed observation')
+        snapshot = review_worker.read_polling_store(store.snapshot)
+        if snapshot is not None:
+            records = snapshot['records']
+            current = records['review_reservation'][reservation['id']]
+            if current['observation_id'] is not None:
+                break
+            if current['released'] or process is not None and process.poll() is not None:
+                execution.reconcile_worker(store, {'reservation_id': current['id']}, request_id=request_id + ':reconcile')
+                raise ResearchError('review_worker_reconciliation_required', 'The worker ended without a committed observation')
         if time.monotonic() >= deadline:
             raise ResearchError('review_worker_reconciliation_required', 'Resume the owned reservation; its outcome is still pending')
         time.sleep(.05)
@@ -1527,12 +1534,15 @@ def authenticate_observation(records, artifacts, assignment, attempt, *, require
         return (captured['origin'] == 'instrumented' and attempt['origin'] == 'instrumented'
                 and captured['task_id'] == assignment['staged_review']['task_id']
                 and all(attempt.get(name) == observation.get(name) for name in ('status', 'request', 'response', 'output'))
+                and ('answer_recovery' in attempt) == ('answer_recovery' in observation)
+                and _canonical(attempt.get('answer_recovery')) == _canonical(observation.get('answer_recovery'))
                 and digest(route) == assignment['route_digest'] == observation['route_digest']
                 and observation['runtime'] == route['runtime']
                 and protocol._read_json(artifacts, observation['request']) == request
                 and request.get('history') == [] and len(transport.logical_messages(request)) == 1
                 and digest(request) == assignment['planned_request_digest']
-                and transport.response_output(response) == protocol._read_json(artifacts, observation['output'])
+                and derive_output(dict(observation, output=protocol._read_json(artifacts, observation['output'])),
+                                  response) == protocol._read_json(artifacts, observation['output'])
                 and (not require_verified_context or observation['status'] == 'completed'
                      and protocol.verify_route_context(artifacts, route, request, response)))
     except (ResearchError, KeyError, TypeError, ValueError):
@@ -1649,6 +1659,8 @@ def build_selection(records, artifacts, epoch, controller_id, binding, observati
         raw = read_raw_observation(records, artifacts, attempt['id'])
         if binding['kind'] == 'controller':
             state.update(raw_output=raw['raw_output'], raw_output_digest=raw['raw_output_digest'], attempt_id=attempt['id'])
+            if 'answer_recovery' in raw:
+                state['answer_recovery'] = raw['answer_recovery']
         selection.update(terminal_attempt_id=attempt['id'], terminal_raw_output_digest=raw['raw_output_digest'])
         if completion['complete'] and 'assessment_incomplete' not in observed['output']:
             if paged is not None:
@@ -1695,11 +1707,15 @@ def build_state(records, artifacts, assignment, *, include_contaminated=False):
         if capture is not None:
             raw = read_raw_observation(records, artifacts, capture['id'])
             state.update(raw_output=raw['raw_output'], raw_output_digest=raw['raw_output_digest'])
+            if 'answer_recovery' in raw:
+                state['answer_recovery'] = raw['answer_recovery']
         selected = next((row for row in observations if row['task_id'] == binding['task_id']), None)
         if selected is not None:
             raw = read_raw_observation(records, artifacts, selected['id'])
             state.update(raw_output=raw['raw_output'], raw_output_digest=raw['raw_output_digest'],
                          attempt_id=selected['id'])
+            if 'answer_recovery' in raw:
+                state['answer_recovery'] = raw['answer_recovery']
     selection, completion, paged = build_selection(records, artifacts, epoch, controller_id,
                                                    binding, observations, terminal, state)
     if repair_obligations:
