@@ -603,9 +603,10 @@ found work with a disposition (relevant, contradictory, potentially relevant, ou
 of scope, duplicate, unresolved) and a reason; a later search for the same purpose
 carries its contradictory and unresolved findings forward or resolves them by name. Tool or web
 responses can be retained through `import-response` with original JSON pointer
-mappings. A complete captured response of the Springer Nature Meta API is
-imported with `publisher_capture` instead of mappings and records the exact
-DOI's complete abstract (the CLI reference, `import-response`). Before a later import, `import-response --preview` reports the DOI
+mappings. `import-response` with `publisher_capture` in place of `mappings`
+imports one complete captured response of the Springer Nature Meta API v2, the
+only publisher format, and records the exact DOI's complete abstract (the CLI
+reference, `import-response`). Before a later import, `import-response --preview` reports the DOI
 families of the store that the batch makes ambiguous, without writing; a real
 import continues and records the same report as `identity_conflicts`. When the
 reference of an earlier reading turns `reference_identity_ambiguous` after such

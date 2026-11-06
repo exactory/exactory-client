@@ -54,12 +54,11 @@ record existed recovers the entry from the native reservation of its
 first move. On the same claim and statement, the strategy stays
 eligible while questions 2, 3, 4 and 7 hold (yes, or unknown). A
 changed claim or statement, a mode other than construction
-(certificate included), a move of another strategy, a failure signal
-fired on the branch (`failed_after_move` included) or a stale plan ends
-the continuation. A changed problem needs a current plan and the
-observed reassessment before the next move. A new entry with the mode
-already construction is not eligible. Budgets and failure history do
-not reset.
+(certificate included), a move of another strategy, or `fail` (its
+`failed_after_move` stamp) ends the continuation. A stale plan does
+not end it. It blocks the next move: a changed problem needs a current
+plan and the observed reassessment before the next move. Budgets and
+failure history do not reset.
 
 ## Plan
 
@@ -104,7 +103,8 @@ not reset.
 At most six moves: one at steps 2, 4, 5, and 6, two at step 3, whose
 run stops at the first parameter the solver cannot settle. A firing
 ends the strategy (the third, with question 6 yes, only the seed
-branch); the harness then sets the verdict to no:
+branch). When the strategy ends, run
+`fail <slug> make-the-proof-constructive`, which sets the verdict to no:
 
 - Step 1 finds no branch: neither question 5 nor 6 is yes, no route in
   print. The record gains the study.

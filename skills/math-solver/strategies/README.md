@@ -154,7 +154,10 @@ The rules the harness code applies:
 
 - The plan admits every strategy whose verdict is not no, and prints them
   as the openings: verdict yes before unknown, name order within, each
-  with its component and its declared costs.
+  with its component and its declared costs. The verdict is the recorded
+  one, except for `make-the-proof-constructive` after its mode move,
+  whose verdict the harness derives under the continuation rule of its
+  strategy file.
 - The solver writes `ranking.json`: the same strategies, in the order it
   would open with them, each row citing the fields of the problem record
   and the costs that put it there. `rank` refuses a ranking that is not

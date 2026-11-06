@@ -1003,7 +1003,9 @@ Every file pinned in `inputs` reaches the packet by its exact digest, also when 
 exported record references it. The exporter lists each as `{kind, digest, artifact}`
 in `scientific_context.supplementary_inputs` (`schema_version` 1), where `artifact`
 is the descriptor of its evidence entry, and delivers its bytes as evidence. The
-export refuses a pinned file whose bytes differ from its digest (`digest_mismatch`).
+export checks each digest under the rule of its `kind`, raw bytes for `artifact`
+and strict canonical JSON for `blob`, and refuses a pinned file that does not
+match (`digest_mismatch`).
 When the review returns, the controller checks that list against the packet's
 evidence (`review_packet_mismatch`) and does not import the files again. The
 delivery gives the reviewer the bytes and gives no proof credit. A packet exported
@@ -2555,10 +2557,10 @@ declared analytical proof; this is not an automatic natural-language proof check
 Certificate evidence needs both certificate and checker artifacts. Lean evidence
 needs theorem and toolchain artifacts. Missing dependency bytes, cycles, mismatched
 claims and insufficient transitive policies fail closed. Where the digest of a
-structured evidence manifest is required, a digest that names a valid
-authenticated artifact fails with `evidence_manifest_required`. The record is
-unchanged. The checkpoint needs the digest of the manifest that binds the claim
-and lists the proof artifacts.
+structured evidence manifest is required, a digest with no blob that names a
+valid authenticated artifact fails with `evidence_manifest_required`. The record
+is unchanged. The checkpoint needs the digest of the manifest that binds the
+claim and lists the proof artifacts.
 
 Relative artifact paths describe the frozen version. Editing a later working copy
 does not edit accepted evidence. Explicit absolute external dependencies are
