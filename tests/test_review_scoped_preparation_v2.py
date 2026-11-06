@@ -10,6 +10,7 @@ import test_research_review_protocol as fixtures
 import test_research_context_repair_integration as repair_fixtures
 from literature_fixtures import LiteratureCase
 from research_harness import operations, review_protocol as protocol, storage
+from research_harness import review_request_evaluation
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
 
@@ -357,7 +358,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
     def test_new_preparation_does_not_reuse_previous_request_evaluation(self):
         self.assign()
         builds = []
-        build = protocol.transport.request_body
+        build = review_request_evaluation._build_request
 
         def count(*args, **kwargs):
             builds.append(True)
@@ -368,7 +369,7 @@ store.mutate('other-process', row, lambda tx: tx.put('review_attempt', row['id']
             protocol.build_assignment_request(records, self.artifacts, assignment)
             protocol.build_assignment_request(records, self.artifacts, assignment)
             return [], {}
-        with patch.object(protocol.transport, 'request_body', side_effect=count):
+        with patch.object(review_request_evaluation, '_build_request', side_effect=count):
             for index in range(2):
                 protocol._prepare_review_mutation(self.store, 'prepare', {}, prepare,
                     expected_revision=self.store.revision, request_id='fresh-' + str(index))

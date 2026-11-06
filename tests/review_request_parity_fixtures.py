@@ -25,7 +25,7 @@ import test_problem_openness_native_reviews as native_fixtures
 import test_problem_result_history as history_fixtures
 import test_research_review_protocol as ordinary_fixtures
 from research_harness import cli, gates, openness_reading, review_protocol as protocol
-from research_harness import review_transport as transport
+from research_harness import review_request_evaluation, review_transport as transport
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
 from research_harness.review_bodies import read_history
@@ -231,7 +231,7 @@ def build_earlier_fit_case():
             return original(route, prompt, packet, history,
                             order=earlier_order if order == transport.FIT_ORDER else order)
 
-        with patch.object(transport, "request_body", side_effect=build_with_earlier_order):
+        with patch.object(review_request_evaluation, "_build_request", side_effect=build_with_earlier_order):
             codex_fixtures.invoke_codex(case, "assignment", {"assessment": "The earlier fit is retained."})
         records = case.records()
         recorded = json.loads(case.artifacts.read(records["review_attempt"]["attempt-assignment"]["request"]))

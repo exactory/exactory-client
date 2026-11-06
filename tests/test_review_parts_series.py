@@ -24,6 +24,7 @@ class SeriesTests(PartsResultCase):
         import json
         from unittest.mock import patch
         from research_harness import review_protocol as protocol, review_transport as transport
+        from research_harness import review_request_evaluation
         from research_harness import review_input_projection as projection
         from research_harness.evaluation import Evaluation
         from research_harness.evidence import digest
@@ -44,7 +45,9 @@ class SeriesTests(PartsResultCase):
             self.assertEqual(protocol.build_assignment_request(records, evaluation, assignment), request)
             expected.append(request)
         with patch.object(projection, 'packets_from_request', wraps=projection.packets_from_request) as project, \
-                patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+                patch.object(transport, 'request_body', wraps=transport.request_body) as derive, \
+                patch.object(review_request_evaluation, '_build_request',
+                             wraps=review_request_evaluation._build_request) as derive_shared:
             report = parts.verify_series(records, evaluation, final['id'])
             delivery = parts.read_series_delivery(records, evaluation, final['id'])
         self.assertTrue(report['complete'], report)
@@ -52,6 +55,7 @@ class SeriesTests(PartsResultCase):
         for request in expected:
             self.assertIn(request, actual)
         self.assertEqual(derive.call_count, 0)
+        self.assertEqual(derive_shared.call_count, 0)
         self.assertEqual(delivery['actual_packets'], report['packets'])
         forged = copy.deepcopy(records)
         attempt = forged['review_attempt']['attempt-' + turns[0]['id']]

@@ -29,8 +29,11 @@ def _encode_exact(value):
 
 
 def _build_request(route, prompt, packet, history, order):
-    """Call the pinned builder with the arguments that list_built_requests passes: no order for the current fit
-    order, and the order as the fifth positional argument for an earlier one."""
+    """Fit supported recorded text; pass every other representation to the pinned builder."""
+    from .review_request_fit import try_build_request
+    request = try_build_request(route, prompt, packet, history, order)
+    if request is not None:
+        return request
     if order is transport.FIT_ORDER:
         return transport.request_body(route, prompt, packet, history)
     return transport.request_body(route, prompt, packet, history, order)
