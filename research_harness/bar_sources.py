@@ -15,6 +15,7 @@ from .evidence import digest
 from .operations import describe_received_value, fields, text
 from .reading import current_readings, validate_read_evidence
 from .source_links import captured_source, validate_link
+from .source_candidates import find_source_candidates
 
 PAGE_SIZE = 10
 PROTOCOL = 'exactory-independent-review-sources-v2'
@@ -471,6 +472,17 @@ def _source(records, artifacts, request, original_rows):
     current_digest = _capture_digest(work, records) if work is not None else None
     result['native_source_delta'] = {'inventory_capture_digest': prior_digest, 'current_capture_digest': current_digest,
                                      'changed': prior_digest != current_digest}
+    if request['depth'] == 'abstract':
+        candidates = find_source_candidates(records, artifacts, request['version_id'])
+        if candidates['candidates'] or candidates['ambiguities']:
+            result.update(abstract_candidates=candidates['candidates'], identity_ambiguities=candidates['ambiguities'])
+            result['candidate_source_deltas'] = [
+                {'version_id': candidate['version_id'],
+                 'inventory_capture_digest': original_rows.get(candidate['version_id'], {}).get('source_capture_digest'),
+                 'current_capture_digest': _capture_digest(records['work'][candidate['version_id']], records),
+                 'changed': original_rows.get(candidate['version_id'], {}).get('source_capture_digest') !=
+                    _capture_digest(records['work'][candidate['version_id']], records)}
+                for candidate in candidates['candidates']]
     if work is None:
         return dict(result, reason='The exact requested version is not held in the current native source records.')
     if request['depth'] == 'abstract':

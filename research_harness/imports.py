@@ -124,3 +124,19 @@ def parse_mapped(data, media_type, mappings):
         work["reference_metadata"] = _references(references, None)
         page.works.append(work)
     return page
+
+
+def parse_publisher_capture(data, media_type, source_url, capture):
+    """Dispatch an explicitly versioned complete-response parser, without mappings."""
+    from .artifacts import describe_artifact
+    from .publisher_springer_v1 import FORMAT_ID, parse_capture
+    if (not isinstance(capture, dict) or set(capture) != {'format', 'identifier'}
+            or capture['format'] != FORMAT_ID or parse_base_media_type(media_type) != 'message/http'):
+        raise ResearchError('invalid_publisher_capture', 'Select a supported publisher capture format and its exact identity')
+    try:
+        describe_artifact(data, media_type)
+    except ResearchError as error:
+        if error.code != 'invalid_input':
+            raise
+        raise ResearchError('invalid_publisher_capture', 'The capture media type must be a valid artifact media type') from error
+    return parse_capture(data, source_url, capture['identifier'])
