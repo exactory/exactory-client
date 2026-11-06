@@ -437,7 +437,9 @@ def current_readings(records, artifacts, version_id, *, target=None, eligible_re
     eligible = None if eligible_reading_ids is None else frozenset(eligible_reading_ids)
 
     def compute():
-        bundle_index = evaluation.compute_once_in_root(("bundle_index",), lambda: index_bundles(records))
+        bundle_index = None
+        if target is not None and target.get("id") == version_id and target.get("sha256") is not None:
+            bundle_index = evaluation.compute_once_in_root(("bundle_index",), lambda: index_bundles(records))
         selected = selected_bundle(records, version_id, target, bundle_index=bundle_index)
         accepted, partial = [], []
         for value in evaluation.readings_for(version_id):
@@ -503,7 +505,14 @@ def fulltext_coverage(records, artifacts, version_id, *, target=None, eligible_r
     def compute():
         work = exact_work(records, version_id)
         accepted, missing = {}, []
-        bundle_index = evaluation.compute_once_in_root(("bundle_index",), lambda: index_bundles(records))
+        has_main_candidate = any(
+            not is_component(capture) and capture["availability"] == "available"
+            and (not target or target.get("id") != work["id"]
+                 or capture["original"]["sha256"] == target.get("sha256"))
+            for capture in work["fulltexts"])
+        bundle_index = {}
+        if has_main_candidate:
+            bundle_index = evaluation.compute_once_in_root(("bundle_index",), lambda: index_bundles(records))
         captures = main_captures(records, work, target, bundle_index=bundle_index)
         for capture in captures:
             pin = {"id": version_id, "sha256": capture["original"]["sha256"]}

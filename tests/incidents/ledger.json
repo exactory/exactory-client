@@ -3962,6 +3962,25 @@
       "tests": [
         "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews"
       ]
+    },
+    {
+      "id": "report-cost-oversized-bundle-index",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "performance (growth)",
+      "summary": "Untargeted cohort readings repeatedly built a payload-sized bundle index that exceeded the evaluation arena.",
+      "fixed_in": "0.74.0",
+      "expected": "Untargeted readings and coverage without available main bodies build no bundle index; exact lookups retain IDs with unchanged sequence ties, supplements and historical results.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_bundle_index.BundleIndexTests.test_oversized_bundle_is_not_indexed_for_2526_untargeted_readings",
+        "test_bundle_index.BundleIndexTests.test_coverage_without_available_main_bodies_does_not_build_an_index",
+        "test_bundle_index.BundleIndexTests.test_oversized_payload_is_not_retained_in_the_targeted_index",
+        "test_bundle_index.BundleIndexTests.test_nonexact_targets_and_unavailable_bodies_do_not_build_an_index",
+        "test_bundle_index.BundleIndexTests.test_selection_preserves_sequence_ties_and_explicit_selection",
+        "test_bundle_index.BundleIndexTests.test_supplement_ids_preserve_main_captures_and_graph",
+        "test_bundle_index.BundleIndexTests.test_targeted_readings_match_the_released_outputs_in_historical_views",
+        "test_bundle_index.BundleIndexTests.test_historical_index_does_not_select_a_later_bundle_of_the_same_original"
+      ]
     }
   ]
 }
