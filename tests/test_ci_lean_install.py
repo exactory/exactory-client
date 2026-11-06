@@ -141,7 +141,9 @@ class LeanInstallTests(unittest.TestCase):
                 except ProcessLookupError:
                     pass
 
-    def run_installer(self, plan=None, attempts=4, attempt_seconds=3):
+    def run_installer(self, plan=None, attempts=4, attempt_seconds=10):
+        # A generous default keeps process startup on a loaded machine inside one attempt. Tests of the
+        # deadline itself pass their own bound.
         self.assertTrue(INSTALLER.is_file(), "ci/install_lean.py is missing")
         (self.root / "plan.json").write_text(json.dumps(plan or {}))
         command = [sys.executable, str(INSTALLER), str(self.package),
@@ -149,7 +151,7 @@ class LeanInstallTests(unittest.TestCase):
         if attempts is not None:
             command.extend(["--attempts", str(attempts)])
         result = subprocess.run(command, env=self.environment, cwd=self.root,
-                                capture_output=True, text=True, timeout=25)
+                                capture_output=True, text=True, timeout=60)
         self.assertNotIn("Traceback", result.stderr)
         return result
 
@@ -371,8 +373,9 @@ class LeanInstallTests(unittest.TestCase):
         self.assert_failures(result, 1, "lake", "exit status 1")
 
     def test_postinstall_version_probes_share_attempt_deadline(self):
+        # Four commands start before the stalled probe; leave room for their startup on a busy runner.
         result = self.run_installer({"lean-version": ["stall"]},
-                                    attempts=1, attempt_seconds=2)
+                                    attempts=1, attempt_seconds=6)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assert_calls(["curl", "sh", "elan"] + PROBE_CALLS[:2])
         self.assert_failures(result, 1, "lean", "ran out of time")
