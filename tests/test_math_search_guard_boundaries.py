@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from research_harness.native_writes import write_atomic
 from test_math_search_hooks import managed_objective
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -174,7 +175,7 @@ class MathSearchStopFocusTests(ManagedHookBoundaryTests):
                 self.assertEqual(result["decision"], "block")
         registry = json.loads(self.pointer.read_text())
         del registry["sessions"]["claude:session"]
-        self.pointer.write_text(json.dumps(registry))
+        write_atomic(self.pointer, json.dumps(registry).encode("utf-8"))
         with patch.object(math_search, "controller_call", wraps=math_search.controller_call) as calls:
             result = math_search.lifecycle(self.build_payload(cwd=self.root), stop=True)
         self.assertGreater(calls.call_count, 0)
@@ -185,14 +186,14 @@ class MathSearchStopFocusTests(ManagedHookBoundaryTests):
         registry = json.loads(self.pointer.read_text())
         cleared = json.loads(json.dumps(registry))
         cleared["sessions"]["claude:session"]["target"] = None
-        self.pointer.write_text(json.dumps(cleared))
+        write_atomic(self.pointer, json.dumps(cleared).encode("utf-8"))
         result = math_search.lifecycle(self.build_payload(), stop=True)
         self.assertIn("cleared", json.dumps(result))
-        self.pointer.write_text(json.dumps(registry))
+        write_atomic(self.pointer, json.dumps(registry).encode("utf-8"))
 
         nested = self.root / ".exactory/math-search.json"
         nested.parent.mkdir(exist_ok=True)
-        nested.write_text(json.dumps(cleared))
+        write_atomic(nested, json.dumps(cleared).encode("utf-8"))
         result = math_search.lifecycle(self.build_payload(cwd=self.root), stop=True)
         self.assertIn("ambiguous", json.dumps(result))
         nested.unlink()

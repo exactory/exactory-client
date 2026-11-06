@@ -516,6 +516,7 @@ class TestRecordAttackActivity(unittest.TestCase):
     def _assert_inspection_keeps_the_harness_session(self, command: str) -> None:
         log_path = self.workspace / "activity.jsonl"
         for old_count in (0, 198):
+            log_path.unlink(missing_ok=True)
             log_path.write_text('{"at":"old","tool":"Write","target":"old.md"}\n' * old_count)
             self._run("Bash", {"command": "exactory-math status sample"}, session="solver")
             self._run("Write", {"file_path": "attack/sample/notes.md"}, session="solver")
@@ -813,6 +814,7 @@ class TestRecordAttackActivity(unittest.TestCase):
         self._run("Bash", {"command": "exactory-math status sample"})
         retained = json.dumps({"at": "old", "tool": "Write", "target": "notes.md",
                                "session_id": "claude:session", "harness_command": False})
+        log_path.chmod(0o644)
         log_path.write_text(log_path.read_text() + (retained + "\n") * 199)
         self._run("Write", {"file_path": "attack/sample/notes.md"})
         self.assertEqual(len(self.read_log()), 201)

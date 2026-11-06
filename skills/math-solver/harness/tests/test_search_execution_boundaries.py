@@ -169,6 +169,7 @@ class NativeReviewBoundaryTests(WorkspaceTest):
                         "policy_review": policy, "requested_declaration": None, "requested_type_digest": None})
         audit_verification(state, manifest, self.controller.store)
         spec_path = self.controller.store.root / "blobs" / (run["spec_digest"] + ".json")
+        spec_path.chmod(0o644)
         spec_path.write_text('{"input_review":"changed after launch"}')
         with self.assertRaises(SearchError):
             audit_verification(state, manifest, self.controller.store)

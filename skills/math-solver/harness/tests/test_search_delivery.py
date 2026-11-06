@@ -16,6 +16,7 @@ class DeliveryTests(SearchCLIWorkspace, unittest.TestCase):
         store = Store(self.root / ".search")
         unit = workspace / "units" / "1"
         unit.mkdir()
+        (workspace / "journal.jsonl").chmod(0o644)
         (workspace / "journal.jsonl").write_text(json.dumps(make_move(1, closes=True)) + "\n")
         (workspace / "units" / "INVENTORY.md").write_text("The exact root result was inventoried.\n")
         (workspace / "units" / "consolidation.md").write_text("Each proof step and its assumptions were consolidated.\n")

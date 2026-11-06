@@ -50,6 +50,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness import providers
 from research_harness.errors import ResearchError
+from research_harness.native_writes import write_atomic
 
 _CROSSREF_API_URL = "https://api.crossref.org/works"
 _DATACITE_API_URL = "https://api.datacite.org/dois"
@@ -1373,9 +1374,9 @@ def _run_lookup(args: argparse.Namespace) -> None:
         "manuscript": manuscript,
     }
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    cache_path.write_text(json.dumps({"version": _CACHE_SCHEMA_VERSION, "records": cache}, indent=2) + "\n",
-                          encoding="utf-8")
+    write_atomic(out_path, (json.dumps(report, indent=2) + "\n").encode("utf-8"))
+    write_atomic(cache_path, (json.dumps({"version": _CACHE_SCHEMA_VERSION, "records": cache}, indent=2)
+                              + "\n").encode("utf-8"))
     _print_lookup_summary(report, out_path, continuation)
     if not report["ok"]:
         sys.exit(1)

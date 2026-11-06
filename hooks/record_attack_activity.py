@@ -33,11 +33,11 @@ import fcntl
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 from math_search import (
     SHELL_SEPARATORS, build_shell_lexer, is_path_candidate, iter_simple_commands, normalize, session_id, workspace_for,
 )
+from research_harness.native_writes import write_atomic
 
 _LOG_NAME = "activity.jsonl"
 _KEPT_ENTRIES = 200
@@ -180,13 +180,7 @@ def _append(workspace: Path, tool_name: str, target: str, session_identity: str 
                 latest_harness[identity] = index
         kept_markers = {latest_harness[identity] for identity in recent_sessions if identity in latest_harness}
         retained = [line for index, line in enumerate(lines) if index >= tail_start or index in kept_markers]
-        descriptor, temporary_name = tempfile.mkstemp(prefix=".activity-", dir=workspace)
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as temporary:
-                temporary.write("".join(line + "\n" for line in retained))
-            os.replace(temporary_name, log_path)
-        finally:
-            Path(temporary_name).unlink(missing_ok=True)
+        write_atomic(log_path, "".join(line + "\n" for line in retained).encode("utf-8"))
     finally:
         os.close(directory)
 

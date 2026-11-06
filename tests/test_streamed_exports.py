@@ -68,6 +68,9 @@ class DeliveryEvaluationRetentionTests(RoundsCase):
             after = deliver(destination)
         self.assertEqual(self.collect_files(destination), self.collect_files(control))
         self.assertEqual(after["artifacts"], before["artifacts"])
+        for path in destination.rglob("*"):
+            if path.is_file():
+                self.assertEqual(path.stat().st_mode & 0o222, 0, str(path))
         assert_no_retention(self, evaluations)
 
     def test_readiness_construction_retains_no_optional_values(self):
@@ -92,6 +95,9 @@ class DeliveryEvaluationRetentionTests(RoundsCase):
         with capture_evaluations() as evaluations:
             after = native_export.export_native(self.store, attack, destination)
         self.assertEqual((destination / "snapshot.json").read_bytes(), (control / "snapshot.json").read_bytes())
+        for path in destination.rglob("*"):
+            if path.is_file():
+                self.assertEqual(path.stat().st_mode & 0o222, 0, str(path))
         self.assertEqual(after["foundation"], before["foundation"])
         self.assertEqual([(item["kind"], item["digest"]) for item in after["inputs"]],
                          [(item["kind"], item["digest"]) for item in before["inputs"]])

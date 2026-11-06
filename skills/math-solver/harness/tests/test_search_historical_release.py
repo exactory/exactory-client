@@ -32,6 +32,8 @@ class HistoricalReleaseTests(WorkspaceTest):
         for relative, encoded in fixture["files"].items():
             path = self.attack_root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists():
+                path.chmod(0o644)
             path.write_bytes(base64.b64decode(encoded))
         tree = self.attack_root / ".search/tree.json"
         tree.write_bytes(raw)

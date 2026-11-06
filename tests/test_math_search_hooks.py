@@ -88,6 +88,8 @@ class MathSearchHookTests(unittest.TestCase):
         pointer = self.workspace / ".exactory/math-search.json"
         registry = json.loads(pointer.read_text())
         registry["roots"].append({**registry["roots"][0], "path": str(self.workspace / "removed-fixture")})
+        if pointer.exists():
+            pointer.chmod(0o644)
         pointer.write_text(json.dumps(registry))
         before = pointer.read_bytes()
         self.assertIsNone(self.hook("continue_attack.py", cwd=str(unrelated)))
@@ -261,6 +263,7 @@ class MathSearchHookTests(unittest.TestCase):
         proposal = next(event for event in tree["events"] if "proposal" in json.dumps(event) and '"main"' in json.dumps(event))
         text = json.dumps(proposal).replace('"main"', '"a-category-of-a-newer-controller"', 1)
         tree["events"][tree["events"].index(proposal)] = json.loads(text)
+        self.controller.store.tree_path.chmod(0o644)
         self.controller.store.tree_path.write_text(json.dumps(tree))
         reason = self.denied(self.hook("guard_attack_files.py", "PreToolUse", tool_name="Write",
             tool_input={"file_path": str(self.root / "attempt/notes.md")}))
@@ -296,6 +299,7 @@ class MathSearchHookTests(unittest.TestCase):
 
     def test_malformed_managed_state_without_runtime_denies_edits_and_reports_unreadable_record(self):
         (self.controller.store.root / "writer-runtime.json").unlink(missing_ok=True)
+        self.controller.store.tree_path.chmod(0o644)
         self.controller.store.tree_path.write_text("{invalid")
         output = self.hook("guard_attack_files.py", "PreToolUse", tool_name="Write",
             tool_input={"file_path": str(self.root / "attempt/notes.md")})

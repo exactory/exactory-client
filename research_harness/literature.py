@@ -41,8 +41,6 @@ results and does not establish universal novelty.
 
 import copy
 import json
-import os
-import uuid
 from urllib.parse import parse_qsl, urlsplit
 
 from .artifacts import ArtifactStore, _Workspace
@@ -50,6 +48,7 @@ from .cohort_evidence import cohort_report
 from .errors import ResearchError
 from .components import compute_binding_identity, is_component, validate_binding
 from .evaluation import Evaluation
+from .native_writes import write_atomic
 from .evidence import digest
 from .graph import (citation_graph, find_active_requirements, find_bound_requirements, format_search_requirement_id, obligation,
                     selected_bundle, validate_target)
@@ -880,8 +879,9 @@ def depth_is_exact_fulltext(requirements, work):
 
 
 def export_foundation(store, profile):
-    """Write safe mutable inventory/coverage projections into intermediate/literature/exports/ of the workspace root
-    and return their paths from that root; never read them as state."""
+    """Publish the two read-only exports, inventory and coverage, under intermediate/literature/exports/ of the
+    workspace root. Return their paths from that root and the report digest. Never read them as authoritative
+    state."""
     report = foundation_report(store, profile)
     inventory = ["# Literature inventory", "", "Profile: " + profile, "", "| Exact version | Tier | Required depth | Saved sources |", "| --- | --- | --- | --- |"]
     for item in report["inventory"]:
@@ -895,19 +895,6 @@ def export_foundation(store, profile):
     with workspace.directory(LITERATURE_EXPORTS_FOLDER, create=True) as directory:
         for kind, lines in (("inventory", inventory), ("coverage", coverage)):
             name = profile + "-" + kind + ".md"
-            temporary = ".export-" + uuid.uuid4().hex
-            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
-            try:
-                with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-                    stream.write("\n".join(lines) + "\n")
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
-                os.fsync(directory)
-            finally:
-                try:
-                    os.unlink(temporary, dir_fd=directory)
-                except FileNotFoundError:
-                    pass
+            write_atomic(name, ("\n".join(lines) + "\n").encode("utf-8"), directory_fd=directory)
             paths[kind] = LITERATURE_EXPORTS_FOLDER + "/" + name
     return dict(paths, digest=report["digest"])

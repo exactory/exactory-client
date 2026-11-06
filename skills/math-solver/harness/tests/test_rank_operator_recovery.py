@@ -256,6 +256,7 @@ class RankOperatorRecoveryTests(WorkspaceTest):
     def test_unaccounted_original_journal_cannot_be_hidden_by_zero_counters(self):
         from tests.support import make_move
         def prepare(fixture):
+            (fixture.workspace / "journal.jsonl").chmod(0o644)
             (fixture.workspace / "journal.jsonl").write_text(json.dumps(make_move(1)) + "\n")
         fixture = self.prepared_fixture(prepare)
         fixture.assert_rejected()
@@ -276,10 +277,10 @@ class RankOperatorRecoveryTests(WorkspaceTest):
         from tests.support import admit_native_child
         self.assertEqual(self.repair()[0], 0)
         original = service.replace_text
-        def interrupted(path, value):
+        def interrupted(path, value, **kwargs):
             if path.name == "journal.jsonl":
                 raise OSError("Interrupted later child initialization")
-            return original(path, value)
+            return original(path, value, **kwargs)
         with mock.patch.object(service, "replace_text", side_effect=interrupted):
             with self.assertRaises(OSError):
                 admit_native_child(self.controller)

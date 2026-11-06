@@ -116,10 +116,10 @@ class WorkspaceSkeletonTests(unittest.TestCase):
                 before = self.read_workspace_files(workspace)
                 replace_original_text = service.replace_text
 
-                def interrupt_journal(path, value):
+                def interrupt_journal(path, value, **kwargs):
                     if path.name == "journal.jsonl":
                         raise OSError("Interrupted skeleton initialization")
-                    return replace_original_text(path, value)
+                    return replace_original_text(path, value, **kwargs)
 
                 with mock.patch.object(service, "replace_text", side_effect=interrupt_journal):
                     with self.assertRaisesRegex(OSError, "Interrupted skeleton initialization"):
@@ -206,10 +206,10 @@ class WorkspaceSkeletonTests(unittest.TestCase):
                 if repair == "interrupted":
                     replace_original_text = service.replace_text
 
-                    def interrupt_journal(path, value):
+                    def interrupt_journal(path, value, **kwargs):
                         if path.name == "journal.jsonl":
                             raise OSError("Interrupted legacy skeleton repair")
-                        return replace_original_text(path, value)
+                        return replace_original_text(path, value, **kwargs)
 
                     with mock.patch.object(service, "replace_text", side_effect=interrupt_journal):
                         with self.assertRaisesRegex(OSError, "Interrupted legacy skeleton repair"):

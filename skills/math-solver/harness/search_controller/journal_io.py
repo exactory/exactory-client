@@ -56,7 +56,7 @@ def apply_journal_intent(controller, state, reservation_id, content, line=None):
     path = safe_path(controller.root, node["attack_slug"] + "/journal.jsonl")
     actual = path.read_bytes()
     s.require(actual in {before, after}, "Journal conflicts with its durable intent", "recovery_conflict")
-    if actual == before:
+    if actual == before or path.stat().st_mode & 0o222:
         replace_text(path, after.decode("utf-8"))
 
 

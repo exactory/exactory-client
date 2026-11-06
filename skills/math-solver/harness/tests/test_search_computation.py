@@ -90,6 +90,7 @@ class ComputationHistoricalTests(WorkspaceTest):
         invoke(controller, "amend-computation", spec)
         review_path = controller.store.root / "blobs" / (digest(spec["review"]) + ".json")
         self.assertTrue(review_path.exists())
+        review_path.chmod(0o644)
         review_path.write_text("{}")
         step = self.workspace / "deterministic" / "job"
         step.mkdir()
@@ -327,6 +328,7 @@ class ComputationBasisTests(WorkspaceTest):
 
     def test_unpinned_corrupted_named_tail_cannot_authorize_admission(self):
         candidate, artifact, _ = self.accepted_tail(pin=False)
+        (self.controller.store.root / "artifacts" / artifact).chmod(0o644)
         (self.controller.store.root / "artifacts" / artifact).write_text("Corrupted independent tail proof")
         marker = self.attack_root / "tail-based-producer-ran"
         before = self.controller.status()["accounts"]
@@ -348,6 +350,7 @@ class ComputationBasisTests(WorkspaceTest):
         candidate, artifact, _ = self.accepted_tail()
         node, marker, spec = self.finite_producer(candidate)
         before = self.controller.status()["accounts"]
+        (self.controller.store.root / "artifacts" / artifact).chmod(0o644)
         (self.controller.store.root / "artifacts" / artifact).write_text("Corrupted after move reservation")
         with self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", spec, node["id"])
@@ -359,6 +362,7 @@ class ComputationBasisTests(WorkspaceTest):
         candidate, artifact, tail = self.accepted_tail()
         node, marker, spec = self.finite_producer(candidate)
         before = self.controller.status()["accounts"]
+        (self.controller.store.root / "artifacts" / artifact).chmod(0o644)
         (self.controller.store.root / "artifacts" / artifact).write_text("Corrupted before explicit audit")
         invoke(self.controller, "audit", {}, None)
         self.assertNotEqual(self.controller.status()["acceptances"][tail["id"]]["status"], "accepted")
@@ -372,6 +376,7 @@ class ComputationBasisTests(WorkspaceTest):
         candidate["computation"]["basis"]["bound_acceptance_id"] = "acceptance-000001"
         proof = self.controller.status()["checkpoints"]["checkpoint-000001"]["evidence_digests"][0]
         artifact = self.controller.store.get_blob(proof)["artifacts"][0]["digest"]
+        (self.controller.store.root / "artifacts" / artifact).chmod(0o644)
         (self.controller.store.root / "artifacts" / artifact).write_text("Corrupted accepted bound")
         before = self.controller.status()["accounts"]
         with self.assertRaises(SearchError):
@@ -544,6 +549,7 @@ class ComputationTests(WorkspaceTest):
         _, run = self.run_admitted_finite_question()
         result = self.controller.store.get_blob(run["result_digest"])
         log = self.controller.store.root / "artifacts" / result["commands"][0]["stdout_digest"]
+        log.chmod(0o644)
         log.write_text("Tampered mathematical conclusion")
         with self.assertRaises(SearchError):
             invoke(self.controller, "interpret", self.interpretation(run), run["id"])

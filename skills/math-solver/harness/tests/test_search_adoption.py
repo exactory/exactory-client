@@ -19,6 +19,8 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
         self.finish = b'{"outcome":"solved-in-literature","units":[]}\n'
         (node / "units" / "FINISHED.json").write_bytes(self.finish)
         (node / "LINEAGE.md").write_text("Historical hand-authored lineage.\n")
+        if (self.root / "SEARCH_TREE.md").exists():
+            (self.root / "SEARCH_TREE.md").chmod(0o644)
         (self.root / "SEARCH_TREE.md").write_text("Historical hand-authored search index.\n")
 
     def adoption_spec(self, slug="legacy"):
@@ -152,6 +154,7 @@ class AdoptionTests(SearchCLIWorkspace, unittest.TestCase):
     def test_adoption_admission_audits_transitive_inherited_evidence_atomically(self):
         spec, proof = self.inherited_adoption()
         before = (self.root / ".search" / "tree.json").read_bytes()
+        (self.root / ".search" / "artifacts" / proof).chmod(0o644)
         (self.root / ".search" / "artifacts" / proof).write_text("Corrupted inherited child proof")
         result = self.search("adopt", spec, revision=2, success=False)
         self.assertEqual(result["error"]["code"], "corrupt_artifact")

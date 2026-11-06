@@ -280,12 +280,14 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         self.record_post_decision()
         directory = self.root / "post"
         export_problem(self.store, directory)
+        (directory / "statement.md").chmod((directory / "statement.md").stat().st_mode | 0o200)
         (directory / "statement.md").write_text("An unreviewed claim.\n")
         self.assert_error("problem_export_mismatch", lambda: self.mutate(self.load_problem_module().record_posted,
             {"problem_id": "changed", "export_directory": str(directory)}))
         import hashlib
         manifest = json.loads((directory / "problem-export.json").read_text())
         manifest["files"]["statement.md"] = hashlib.sha256((directory / "statement.md").read_bytes()).hexdigest()
+        (directory / "problem-export.json").chmod((directory / "problem-export.json").stat().st_mode | 0o200)
         (directory / "problem-export.json").write_text(json.dumps(manifest))
         self.assert_error("problem_export_mismatch", lambda: self.mutate(self.load_problem_module().record_posted,
             {"problem_id": "forged-manifest", "export_directory": str(directory)}))
@@ -303,6 +305,7 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         elsewhere = self.root.parent / "elsewhere"
         self.assertEqual(export_problem(self.store, elsewhere)["destination"], str(elsewhere))
         self.assertEqual(export_problem(self.store, elsewhere)["destination"], str(elsewhere))
+        (elsewhere / "statement.md").chmod((elsewhere / "statement.md").stat().st_mode | 0o200)
         (elsewhere / "statement.md").write_text("An unreviewed claim.\n")
         self.assert_error("review_destination_exists", lambda: export_problem(self.store, elsewhere))
         self.assertEqual((elsewhere / "statement.md").read_text(), "An unreviewed claim.\n")

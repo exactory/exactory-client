@@ -94,6 +94,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         original = path.read_bytes()
         # A valid artifact of the same digest must not conceal an actually corrupt manifest.
         self.assertEqual(controller.store.put_artifact(original), manifest_digest)
+        path.chmod(0o644)
         path.write_bytes(b'corrupt manifest')
         with self.assertRaises(SearchError) as error:
             audit_manifest(self.root, state, manifest_digest, controller.store)
@@ -136,6 +137,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         before = (self.root / ".search" / "tree.json").read_bytes()
         artifact = self.root / ".search" / "artifacts" / evidence["inputs"][0]["digest"]
         original = artifact.read_bytes()
+        artifact.chmod(0o644)
         artifact.write_text("Corrupted after acceptance and before admission")
         result = self.search("admit", {}, target="proposal-000002", revision=revision + 2, success=False)
         self.assertEqual(result["error"]["code"], "corrupt_artifact")
@@ -161,6 +163,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         self.search("propose", prepared, revision=9)
         self.search("review", {"proposal_id": "proposal-000003", "review": review(proposed), "inputs": []}, revision=10)
         original = artifact.read_bytes()
+        artifact.chmod(0o644)
         artifact.write_text("Corrupt the implicit current allowance basis")
         before = (self.root / ".search" / "tree.json").read_bytes()
         result = self.search("admit", {}, target="proposal-000003", revision=11, success=False)
@@ -197,6 +200,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
     def test_corrupt_immutable_dependency_prevents_acceptance(self):
         cp = self.setup_external()
         proof_digest = cp["inputs"][0]["digest"]
+        (self.root / ".search" / "artifacts" / proof_digest).chmod(0o644)
         (self.root / ".search" / "artifacts" / proof_digest).write_text("Corrupted accepted boundary")
         result = self.search("accept", self.accept_spec(), target="checkpoint-000001", revision=2, success=False)
         self.assertEqual(result["error"]["code"], "corrupt_artifact")
@@ -219,6 +223,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
     def test_tampered_accepted_artifact_invalidates_on_audit(self):
         cp = self.setup_external()
         self.search("accept", self.accept_spec(), target="checkpoint-000001", revision=2)
+        (self.root / ".search" / "artifacts" / cp["inputs"][0]["digest"]).chmod(0o644)
         (self.root / ".search" / "artifacts" / cp["inputs"][0]["digest"]).write_text("Tampered immutable proof")
         self.search("audit", revision=3)
         self.assertEqual(self.search("status")["acceptances"]["acceptance-000001"]["status"], "invalidated")
@@ -250,6 +255,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
     def test_completed_deliverable_corruption_is_detected_by_full_audit(self):
         self.test_complete_requires_exact_deliverable_and_final_review()
         output = hashlib.sha256(b"Complete conventional proof with all eleven dimension cases.").hexdigest()
+        (self.root / ".search" / "artifacts" / output).chmod(0o644)
         (self.root / ".search" / "artifacts" / output).write_text("Corrupted final deliverable")
         self.search("audit", revision=4)
         self.assertEqual(self.search("status")["proof_status"], "invalidated")
@@ -391,6 +397,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         from search_controller.errors import SearchError
         from tests.search_execution_support import begin_spec, invoke
         controller, workspace, artifact = self.executable_renewal()
+        artifact.chmod(0o644)
         artifact.write_text("Corrupted after successful renewal admission")
         before = controller.store.tree_path.read_bytes()
         with self.assertRaises(SearchError) as caught:
@@ -418,6 +425,7 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         step.mkdir()
         (step / "job.py").write_text("print('must not launch')\n")
         invoke(controller, "begin", begin_spec(), "node-000002")
+        artifact.chmod(0o644)
         artifact.write_text("Corrupted between begin and run")
         before = controller.store.tree_path.read_bytes()
         with self.assertRaises(SearchError) as caught:

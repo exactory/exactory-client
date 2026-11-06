@@ -5,11 +5,11 @@ import json
 import os
 from pathlib import Path
 import stat
-import uuid
 
 from .artifacts import _Workspace, _regular_file, _relative_parts, _filesystem_error
 from .errors import ResearchError
 from .storage import _canonical
+from .native_writes import write_atomic
 
 
 def strict_json(data):
@@ -105,23 +105,10 @@ def parse_workspace_marker(raw):
     return marker
 
 
-def write_projection(root, relative, data):
+def write_projection(root, relative, data, *, writable=False):
     """Atomically replace a disposable view; never follow an existing symlink."""
     with checked_parent(root, relative, create=True) as (directory, name):
-        temporary = ".projection-" + uuid.uuid4().hex
-        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=directory)
-        try:
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(data)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, name, src_dir_fd=directory, dst_dir_fd=directory)
-            os.fsync(directory)
-        finally:
-            try:
-                os.unlink(temporary, dir_fd=directory)
-            except FileNotFoundError:
-                pass
+        write_atomic(name, data, mode=0o600 if writable else 0o400, directory_fd=directory)
 
 
 def json_projection(root, relative, value):

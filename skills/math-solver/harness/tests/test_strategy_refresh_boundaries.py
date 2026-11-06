@@ -158,6 +158,7 @@ class StrategyRefreshBoundaryTests(WorkspaceTest):
                     payload.pop("journal_line", None)
                 elif operation["kind"] == "native_intended":
                     payload.pop("strategy", None)
+        self.controller.store.tree_path.chmod(0o644)
         self.controller.store.tree_path.write_text(json.dumps(document))
         controller = Controller(self.attack_root, FIXTURE_STRATEGIES)
         old = controller.store.tree_path.read_bytes()

@@ -188,10 +188,10 @@ class SearchCLITests(SearchCLIWorkspace, unittest.TestCase):
         self.search("review", {"proposal_id": "proposal-000001", "review": review(proposed["proposal"]), "inputs": []}, revision=2)
         controller = service.Controller(self.root)
         original = service.replace_text
-        def interrupted(path, value):
+        def interrupted(path, value, **kwargs):
             if path.name == "journal.jsonl":
                 raise OSError("Simulated interrupted legacy initialization")
-            return original(path, value)
+            return original(path, value, **kwargs)
         with mock.patch.object(service, "replace_text", side_effect=interrupted):
             with self.assertRaises(OSError):
                 controller.command("admit", {}, 3, "admit-interrupted", "proposal-000001")

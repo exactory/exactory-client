@@ -22,6 +22,9 @@ milestone progress. Every path is relative to the workspace root.
 │   ├── deposit.json       projection of the observed deposit
 │   ├── citation-check.json
 │   ├── citation-cache.json
+│   ├── derivation-check.json  exactory-derive check report
+│   ├── authorship.json    written_by_exactory record of the paper hook
+│   ├── autopilot_count    advances of the Stop hook toward the safety cap
 │   └── output-views.json  marker of the last render of final/ and intermediate/
 ├── context/               preserved human material and constraints
 ├── cohort/                source-linked notes and doctrine
@@ -74,8 +77,17 @@ each folder lists every file with the kind, id, revision and status of its
 record. Read the outputs there, and never copy them elsewhere.
 
 The harness writes both folders after each command that records something, and
-it owns them: the guard hook refuses `Write`, `Edit` and `NotebookEdit` into
-them, and every render rewrites the files it owns. Keep your own files, payload
+it owns them: it publishes their files read-only, like the files it writes into
+`.exactory/` (`study.json`, `decisions.jsonl`, `draft.json`, `deposit.json`,
+`citation-check.json`, `citation-cache.json`, `derivation-check.json`,
+`authorship.json`, `autopilot_count` and `output-views.json`), the guard hook
+refuses `Write`, `Edit` and `NotebookEdit` into them, and each render brings
+the files it owns up to date. A shell redirection or a Python `open` for
+writing into one of these files fails with a permission error, and the commands
+and the hooks still update them. When a direct write to a file that a command
+owns fails with a permission error, use that command. When the file belongs to
+a hook (`authorship.json`, `autopilot_count`), leave its updates to the hook.
+Never change the mode of a harness-owned file. Keep your own files, payload
 files, notes and scripts, in `work/`. `learnings/` stays the loop's ledger, and
 the other agent folders (`context/`, `idea/`, `evidence/`, `cohort/notes/`,
 `experiment/code/`, `draft/`) stay work areas. The one exception is

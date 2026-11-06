@@ -57,6 +57,9 @@ class WorkspaceTest(unittest.TestCase):
         return run(argv, self.attack_root)
 
     def write_json(self, name, data):
+        path = self.workspace / name
+        if path.exists():
+            path.chmod(0o644)
         (self.workspace / name).write_text(json.dumps(data))
 
     def read_json(self, name):
@@ -231,6 +234,9 @@ def write_journal(workspace, moves):
             if status:
                 raise AssertionError(err)
         return
+    # Unmanaged fixture history is installed explicitly, outside native admission.
+    if (workspace / "journal.jsonl").exists():
+        (workspace / "journal.jsonl").chmod(0o644)
     (workspace / "journal.jsonl").write_text("".join(json.dumps(m) + "\n" for m in moves))
 
 

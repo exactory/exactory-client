@@ -310,6 +310,7 @@ class NodeDeferralServiceTests(WorkspaceTest):
 
     def test_nonempty_native_journal_is_refused_without_erasure(self):
         journal = self.workspace / "journal.jsonl"
+        journal.chmod(0o644)
         journal.write_text(json.dumps(make_move(1)) + "\n")
         before = journal.read_bytes()
         self.assert_public_refused("deferral_unavailable")
@@ -317,6 +318,7 @@ class NodeDeferralServiceTests(WorkspaceTest):
 
     def test_inconsistent_native_journal_is_refused_without_erasure(self):
         journal = self.workspace / "journal.jsonl"
+        journal.chmod(0o644)
         journal.write_text("invalid fixture journal\n")
         before = journal.read_bytes()
         self.assert_public_refused("deferral_unavailable")
@@ -333,11 +335,13 @@ class NodeDeferralServiceTests(WorkspaceTest):
         openings = self.workspace / "openings.json"
         value = json.loads(openings.read_text())
         value["openings"] = []
+        openings.chmod(0o644)
         openings.write_text(json.dumps(value))
         self.assertIsNone(self.controller.status()["control"]["node_facts"]["node-000001"]["cashout_action"])
         self.assert_public_refused("deferral_unavailable")
 
     def test_every_requested_native_node_is_audited_atomically(self):
+        (self.alternative / "journal.jsonl").chmod(0o644)
         (self.alternative / "journal.jsonl").write_text(json.dumps(make_move(1)) + "\n")
         self.assert_public_refused("deferral_unavailable", dict(
             deferral_spec(), deferred_node_ids=["node-000001", "node-000002"]))
@@ -367,6 +371,7 @@ class NodeDeferralServiceTests(WorkspaceTest):
         self.assertEqual(next_action(self.controller.status()), {"kind": "execute_node", "node_id": "node-000002"})
 
     def test_legacy_replan_does_not_add_a_native_deferral_audit(self):
+        (self.workspace / "journal.jsonl").chmod(0o644)
         (self.workspace / "journal.jsonl").write_text(json.dumps(make_move(1)) + "\n")
         spec = deferral_spec()
         del spec["deferred_node_ids"]

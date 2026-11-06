@@ -387,7 +387,10 @@ class LiteratureTests(LiteratureCase):
                          ("intermediate/literature/exports/research-inventory.md",
                           "intermediate/literature/exports/research-coverage.md"))
         self.assertTrue((self.root / exported["inventory"]).exists())
+        for kind in ("inventory", "coverage"):
+            self.assertEqual((self.root / exported[kind]).stat().st_mode & 0o222, 0)
         self.assertFalse((self.root / "research/exports").exists())
+        (self.root / exported["coverage"]).chmod(0o644)
         (self.root / exported["coverage"]).write_text("Fabricated readiness", encoding="utf-8")
         self.assertEqual(report["digest"], foundation_report(self.store, "research")["digest"])
 

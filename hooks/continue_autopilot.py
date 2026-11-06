@@ -17,6 +17,9 @@ import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from research_harness.native_writes import write_atomic
+
 _STUDY_STATE_PATH = Path(".exactory") / "study.json"
 _COUNTER_PATH = Path(".exactory") / "autopilot_count"
 _PAUSED_COUNT = -1
@@ -25,7 +28,7 @@ _MAX_ADVANCES = int(os.environ.get("EXACTORY_AUTOPILOT_MAX", "50"))
 
 def _allow_stop(counter_path: Path) -> None:
     if counter_path.exists():
-        counter_path.write_text("0", encoding="utf-8")
+        write_atomic(counter_path, b"0")
     sys.exit(0)
 
 
@@ -72,14 +75,14 @@ def main() -> None:
             sys.exit(0)
         count = 0
     if count >= _MAX_ADVANCES:
-        counter_path.write_text(str(_PAUSED_COUNT), encoding="utf-8")
+        write_atomic(counter_path, str(_PAUSED_COUNT).encode("utf-8"))
         _block(
             f"[ai-science] Reached the {_MAX_ADVANCES}-advance safety cap for"
             f" study '{state.get('slug')}'. Pausing. Summarize progress for the"
             " user and ask whether to continue; they can raise"
             " EXACTORY_AUTOPILOT_MAX."
         )
-    counter_path.write_text(str(count + 1), encoding="utf-8")
+    write_atomic(counter_path, str(count + 1).encode("utf-8"))
     _block(
         f"[ai-science advance {count + 1}/{_MAX_ADVANCES}] Study"
         f" '{state.get('slug')}' is at stage '{state.get('stage')}'"

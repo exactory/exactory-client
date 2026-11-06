@@ -115,6 +115,50 @@ class HookRuntimeLifetimeTests(unittest.TestCase):
         from hook_runtime.state import read_binding
         return read_binding(self.state, session)
 
+    def test_bundled_authorship_and_autopilot_hooks_publish_readonly(self):
+        from test_native_writers import assert_rejects_direct_writes
+
+        source = self.make_plugin("real writers", real=True)
+        self.publish(source)
+        self.assertEqual(self.invoke("SessionStart").returncode, 0)
+        shutil.rmtree(source)
+        state = self.workspace / ".exactory"
+        state.mkdir()
+        (state / "draft.json").write_text("{}")
+        authorship = next(handler for _, handler in self.handlers("PostToolUse")
+                          if "record_paper_authorship.py" in handler["command"])
+        payload = {"hook_event_name": "PostToolUse", "session_id": "A", "cwd": str(self.workspace),
+                   "tool_name": "apply_patch", "tool_input": {"command":
+                   "*** Begin Patch\n*** Add File: draft/paper.tex\n+synthetic\n*** End Patch"}}
+        for _ in range(2):
+            record = state / "authorship.json"
+            record.unlink(missing_ok=True)
+            record.write_text('{"written_by_exactory": false}')
+            result = self.invoke("PostToolUse", authorship, raw=json.dumps(payload))
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+            self.assertEqual(json.loads(record.read_text()), {"written_by_exactory": True})
+            assert_rejects_direct_writes(self, record)
+        study = {"slug": "synthetic", "stage": "experiment", "status": "running",
+                 "autopilot": True, "waiting": None}
+        (state / "study.json").write_text(json.dumps(study))
+        counter = state / "autopilot_count"
+        counter.write_text("1")
+        stop = next(handler for _, handler in self.handlers("Stop")
+                    if "continue_autopilot.py" in handler["command"])
+        payload = {"hook_event_name": "Stop", "session_id": "A", "cwd": str(self.workspace),
+                   "stop_hook_active": True}
+        for expected in ("2", "-1", "-1"):
+            result = self.invoke("Stop", stop, raw=json.dumps(payload),
+                                 EXACTORY_AUTOPILOT_MAX="2", EXACTORY_ASSIGNED_SESSION="")
+            self.assertEqual((result.returncode, result.stderr), (0, ""))
+            self.assertEqual(counter.read_text(), expected)
+            assert_rejects_direct_writes(self, counter)
+        (state / "study.json").write_text(json.dumps(dict(study, stage="complete")))
+        result = self.invoke("Stop", stop, raw=json.dumps(payload))
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+        self.assertEqual(counter.read_text(), "0")
+        assert_rejects_direct_writes(self, counter)
+
     def test_every_loaded_command_keeps_a_after_cache_removal_and_new_session_gets_b(self):
         plugin_a = self.make_plugin("A")
         digest_a = self.publish(plugin_a)

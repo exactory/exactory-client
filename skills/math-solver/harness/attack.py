@@ -3,6 +3,7 @@
 
 import argparse
 import datetime
+import fcntl
 import hashlib
 import json
 import os
@@ -10,6 +11,8 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+
+from search_controller.render import replace_bytes
 
 MOVES_PER_PASS = 8
 PASS_COUNT = 3
@@ -171,8 +174,8 @@ def run_init(args):
     (workspace / "units").mkdir()
     (workspace / "study").mkdir()
     (workspace / "novelty.md").write_text("")
-    (workspace / "journal.jsonl").write_text("")
-    write_json(workspace / "problem.json", build_problem_skeleton())
+    replace_bytes(workspace / "journal.jsonl", b"")
+    write_json(workspace / "problem.json", build_problem_skeleton(), writable=True)
     if link is None:
         print("created %s" % workspace)
         return
@@ -545,8 +548,15 @@ def run_journal_add(args):
     moves = read_journal(workspace)
     from search_controller.journal_io import append_managed_journal
     if not append_managed_journal(args, line):
-        with (workspace / "journal.jsonl").open("a") as journal:
-            journal.write(json.dumps(line) + "\n")
+        directory = os.open(workspace, os.O_RDONLY)
+        try:
+            fcntl.flock(directory, fcntl.LOCK_EX)
+            line = validated_journal_line(args)
+            moves = read_journal(workspace)
+            path = workspace / "journal.jsonl"
+            replace_bytes(path, path.read_bytes() + (json.dumps(line) + "\n").encode("utf-8"))
+        finally:
+            os.close(directory)
     print_budget(compute_budget(moves + [line], read_failure_window_start(workspace)))
 
 
@@ -865,7 +875,7 @@ def run_fail(args):
     preconditions[args.strategy].update(
         verdict="no", note=FAIL_NOTE, failed_after_move=len(read_journal(workspace))
     )
-    write_json(path, preconditions)
+    write_json(path, preconditions, writable=True)
     run_plan(args)
 
 
@@ -1513,8 +1523,8 @@ def read_json(path):
         raise ValidationError(["%s: not valid JSON (%s)" % (path.name, error)]) from error
 
 
-def write_json(path, data):
-    path.write_text(json.dumps(data, indent=2) + "\n")
+def write_json(path, data, *, writable=False):
+    replace_bytes(path, (json.dumps(data, indent=2) + "\n").encode("utf-8"), writable=writable)
 
 
 def build_parser():

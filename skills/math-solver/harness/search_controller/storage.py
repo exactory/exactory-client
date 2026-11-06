@@ -8,12 +8,13 @@ import math
 import os
 from pathlib import Path
 import re
-import tempfile
+import stat
 import time
 from typing import Any, Callable, Dict, Iterator, Optional
 
 from .errors import SearchError
 from .runtime import WRITER_RUNTIME_FILENAME, read_runtime_identity
+from research_harness.native_writes import write_atomic
 
 try:
     import fcntl
@@ -538,62 +539,27 @@ class Store:
     def _atomic_replace(self, target: Path, content: bytes) -> None:
         if target.is_symlink():
             raise SearchError("unsafe_path", "controller file cannot be a symlink")
-        descriptor, temporary_name = tempfile.mkstemp(
-            prefix="." + target.name + ".", suffix=".tmp", dir=str(target.parent)
-        )
-        temporary_path = Path(temporary_name)
-        try:
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(str(temporary_path), str(target))
-            self._fsync_directory(target.parent)
-        finally:
-            try:
-                temporary_path.unlink()
-            except FileNotFoundError:
-                pass
+        write_atomic(target, content)
 
     def _check_immutable(self, target: Path, content: bytes) -> bool:
-        if target.is_symlink():
+        try:
+            info = target.lstat()
+        except FileNotFoundError:
+            return False
+        if stat.S_ISLNK(info.st_mode):
             raise SearchError("unsafe_path", "immutable content cannot be a symlink")
-        if target.exists():
-            existing = self._read_content(target, "immutable_collision")
-            if existing == content:
-                return True
-            raise SearchError(
-                "immutable_collision", "digest path already contains different bytes"
-            )
-        return False
+        existing = self._read_content(target, "immutable_collision")
+        if existing == content:
+            return True
+        raise SearchError(
+            "immutable_collision", "digest path already contains different bytes"
+        )
 
     def _write_immutable(self, target: Path, content: bytes) -> None:
-        if self._check_immutable(target, content):
+        if self._check_immutable(target, content) and not target.stat().st_mode & 0o222:
             return
-        descriptor, temporary_name = tempfile.mkstemp(
-            prefix="." + target.name + ".", suffix=".tmp", dir=str(target.parent)
-        )
-        temporary_path = Path(temporary_name)
-        try:
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(content)
-                stream.flush()
-                os.fsync(stream.fileno())
-            try:
-                os.link(str(temporary_path), str(target))
-            except FileExistsError:
-                existing = self._read_content(target, "immutable_collision")
-                if existing != content:
-                    raise SearchError(
-                        "immutable_collision",
-                        "digest path already contains different bytes",
-                    )
-            self._fsync_directory(target.parent)
-        finally:
-            try:
-                temporary_path.unlink()
-            except FileNotFoundError:
-                pass
+        # All content publication holds tree.lock, including the collision check.
+        self._atomic_replace(target, content)
 
     @staticmethod
     def _read_content(path: Path, error_code: str) -> bytes:

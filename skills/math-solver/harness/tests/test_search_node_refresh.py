@@ -56,6 +56,7 @@ class NodeRefreshTests(unittest.TestCase):
             (workspace / 'journal.jsonl').write_bytes(b'')
         # Install a validated historical fixture without changing public ingress.
         state = model.replay(document)
+        self.controller.store.tree_path.chmod(0o644)
         self.controller.store.tree_path.write_bytes(canonical_bytes(document))
         return state
 

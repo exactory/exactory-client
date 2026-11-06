@@ -127,8 +127,30 @@ failures map keyed by acceptance id.
 The files the harness and the hooks write (`openings.json`,
 `journal.jsonl`, `tasks.json`, `activity.jsonl`, `parent.json`,
 `result.json`, `check-unit.json`, `FINISHED.json`) are written by their
-commands only; the plugin's hooks refuse an edit to them from any other
-tool.
+commands only, and each command publishes the complete file read-only. It
+writes a temporary file in the same directory, sets the final mode `0400`,
+syncs it, renames it over the target and syncs the directory, so an
+interruption before the rename leaves the previous file intact. An append
+(`journal add` outside the controller, the activity hook) reads the file,
+extends it and replaces it the same way under the lock its writer holds.
+A direct write to one of these files, a shell redirection `>` or `>>` or a
+Python `open` for writing or appending, fails with a permission error; the
+commands still update them. This stops accidental direct writes only: the
+same user can still change the mode, unlink or replace a file through its
+writable directory, and full protection needs host-enforced read-only
+access with a separately authorized writer, which this plugin does not
+establish. The attack-file guard stays: it refuses a `Write` or an `Edit` of
+these files and a shell command that writes to one of them in a form its
+parser recognizes, and the read-only mode covers the direct writes that the
+guard does not see. The files the agent writes by design (`problem.json`,
+`novelty.md`, `preconditions.json`, `ranking.json`, the `study/` files,
+`units/INVENTORY.md` and the unit files) stay writable. A reader never
+requires the read-only mode: a record written before 0.76.0 with writable
+files reads and plans as before, and the next native write of such a file
+publishes it again read-only, also when its bytes are unchanged. When a
+direct write to a file that a command owns fails with a permission error,
+use that command. When the file belongs to a hook (`activity.jsonl`), leave
+its updates to the hook. Never change the mode of a harness-owned file.
 
 A native child record has the same format whether historical or managed:
 its `parent.json` is `{"parent": "<slug>", "opened_after_move": n}`,

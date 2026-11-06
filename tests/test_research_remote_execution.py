@@ -132,6 +132,7 @@ class RemoteExecutionTests(DevelopmentCase):
             {"admission_id": admission["id"], "resolution": "not_released", "reason": "A released worker may already have run."},
             expected_revision=self.store.revision, request_id="cannot-cancel-released"))
         result_directory = next((self.sync / "results").iterdir())
+        (result_directory / "stdout").chmod(0o644)
         (result_directory / "stdout").write_text("tampered")
         self.assert_error("execution_identity_mismatch", lambda: execution.reconcile_execution(self.store,
             {"admission_id": admission["id"]}, expected_revision=self.store.revision, request_id="tampered-result"))

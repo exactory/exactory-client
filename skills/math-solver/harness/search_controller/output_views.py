@@ -9,8 +9,10 @@ collection and every inner operation kind by the view group that shows it.
 A render reads the event document, the controller's content stores and the node workspaces, and publishes Markdown
 and these folders under its render lock, after the command's last commit and outside the writer lock. Markdown is
 repaired even when the JSON marker already shows the last event under the installed plugin version. Otherwise the
-JSON render builds the whole model, writes files whose bytes differ, and removes files no longer produced. A failed
-render never changes the command's result: it prints one warning, and status and next report output_views_stale.
+JSON render builds the whole model, writes files whose bytes differ, publishes a writable existing file with the same
+bytes again so that it ends read-only, and removes files no longer produced. Every file it publishes is read-only
+(mode 0400); the read-only mode is not a condition for reading a view. A failed render never changes the command's
+result: it prints one warning, and status and next report output_views_stale.
 """
 
 import errno
@@ -471,7 +473,7 @@ def is_unchanged(path, owned, digest):
         info = path.stat()
     except FileNotFoundError:
         return False
-    return (info.st_size, info.st_mtime_ns) == (owned["size"], owned["mtime_ns"])
+    return not info.st_mode & 0o222 and (info.st_size, info.st_mtime_ns) == (owned["size"], owned["mtime_ns"])
 
 
 def describe_stat(path, digest):
@@ -532,7 +534,10 @@ def write_views(views, marker):
         if is_unchanged(path, owned.get(relative), digest):
             files[relative] = owned[relative]
         elif is_real_file(path) and path.read_bytes() == data:
-            files[relative] = describe_stat(path, digest)
+            if path.stat().st_mode & 0o222:
+                pending[relative] = (path, data, digest)
+            else:
+                files[relative] = describe_stat(path, digest)
         elif relative in owned or not (path.exists() or path.is_symlink()):
             pending[relative] = (path, data, digest)
         else:

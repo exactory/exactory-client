@@ -178,6 +178,7 @@ class SearchRuntimeTests(unittest.TestCase):
         from search_controller.runtime import read_runtime_identity
         previous_runtime = dict(read_runtime_identity(), plugin_version="previous-runtime", controller_digest="f" * 64)
         sidecar_path = store.root / "writer-runtime.json"
+        sidecar_path.chmod(0o644)
         sidecar_path.write_text(json.dumps(previous_runtime))
         replace_file = store._atomic_replace
         identity = {"command": "render", "target": None, "spec_digest": "a" * 64}

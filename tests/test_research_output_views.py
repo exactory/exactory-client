@@ -1010,8 +1010,10 @@ class RenderTests(ViewCase):
         marker = json.loads((self.root / output_views.MARKER_PATH).read_bytes())
         for changed in (dict(marker, plugin_version="0.0.0"), dict(marker, event_digest="0" * 64)):
             # The same size with other bytes, and a removed file: the render checks every owned file.
+            statement.chmod(0o644)
             statement.write_bytes(original.replace(b"statement-2", b"statement-X"))
             (self.root / "intermediate/problem/candidates/candidate-1.json").unlink()
+            (self.root / output_views.MARKER_PATH).chmod(0o644)
             (self.root / output_views.MARKER_PATH).write_text(json.dumps(changed), encoding="utf-8")
             with mock.patch.object(Store, "read_kinds", wraps=self.store.read_kinds) as read:
                 self.render()

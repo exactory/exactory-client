@@ -291,6 +291,7 @@ class ProblemTransitionTests(WorkspaceTest):
         before = self.controller.status()
         digest = before["service"]["moves"]["move-node-000001-1"]["problem_digest"]
         artifact = self.controller.store.root / "artifacts" / digest
+        artifact.chmod(0o644)
         artifact.write_bytes(b"corrupted fixture bytes")
 
         result = self.journal_process("--problem-before", self.slug + "/before.json")
