@@ -4,11 +4,14 @@ historical ones, and intermediate/ every other output of the process.
 This module is the only owner of their placement rules. PLACEMENT_BY_KIND names the view group of every record kind
 that the harness writes, or none, and each group in VIEW_GROUPS builds its files from the current records. The status of
 a record (current, superseded, historical or not_selected) follows the harness's own rules and decides its folder.
-A render computes the whole view model from the records, writes the files whose bytes differ from the marker's
-digests, publishes a writable existing file with the same bytes again so that it ends read-only, and removes the owned
-files that the model no longer produces. Every file it publishes is read-only (write_projection, mode 0400); the
-read-only mode is not a condition for reading a view. Each command renders once, at its boundary, after its last
-commit and outside every lock (render_workspace_views); export --kind outputs renders on request (render_all).
+An automatic render (render_workspace_views) runs once per command, at its boundary, after its last commit, outside
+the store's locks and under its own render lock. It builds no model when nothing needs an update: the marker shows a
+complete render under the installed plugin version with the current inputs, no dirty marker is pending, and no record
+of a view kind changed since the marker's revision. Otherwise, and on every export --kind outputs (render_all), the
+render builds the whole view model from the records and writes it: a file whose bytes are unchanged and that has no
+write bits stays in place, a writable owned file is published again even when its bytes match, a file whose bytes
+differ is written, and the owned files that the model no longer produces are removed. Every file it publishes is
+read-only (write_projection, mode 0400); the read-only mode is not a condition for reading a view.
 """
 
 from contextlib import contextmanager
@@ -1320,8 +1323,8 @@ def _build_index(workspace_root, folder, model, errors):
 
 
 def _write_view_file(workspace_root, relative, content, owned, artifacts):
-    """Write one view file unless the owned file already holds its bytes; returns its size, modification time and
-    digest. content is bytes, or an artifact reference that is read only when the file must be written."""
+    """Write one view file unless the owned file is unchanged and has no write bits; returns its size, modification
+    time and digest. content is bytes, or an artifact reference that is read only when the file must be written."""
     expected = content["sha256"] if isinstance(content, dict) else hashlib.sha256(content).hexdigest()
     if owned is not None and owned["sha256"] == expected:
         info = _stat_view_file(workspace_root, relative)
