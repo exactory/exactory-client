@@ -207,6 +207,65 @@ class BarSourceTests(StrategyCase):
         self.assertEqual(protocol._find_session_bodies(records, self.artifacts,
             records['review_assignment']['qualified']), {})
 
+    def test_binary_qualification_stays_pending_on_text_only_route(self):
+        from research_harness.review_transport import text_only_delivery
+        version = self.metadata()
+        failure = self.capture(version, abstract=False, status=404, pdf_text='Unused extraction')
+        availability = {'id': 'binary-terminal', 'profile': 'research', 'version_id': version,
+            'depth': 'fulltext', 'source_ids': [failure['source_id']],
+            'reason': 'The origin returned a complete binary HTTP 404 response.',
+            'policy': {'id': 'terminal-origin', 'minimum_attempts': 1, 'allowed_statuses': [404],
+                       'rationale': 'A terminal origin response documents retrieval failure.'}}
+        from research_harness import bar_sources
+        self.mutate(record_availability, availability)
+        self.assign()
+        request = {'id': 'qualified', 'kind': 'source', 'version_id': version, 'depth': 'fulltext'}
+        output = self.request([request])
+        with text_only_delivery(True):
+            packet = bar_sources.continuation(self.store.snapshot()['records'], self.artifacts,
+                                              self.packet(), output)
+        delivery = packet['source_deliveries'][0]
+        self.assertEqual(packet['pending_source_requests'], [request])
+        self.assertEqual(delivery['status'], 'unavailable')
+        self.assertIn('text-only', delivery['reason'])
+        self.assertEqual(delivery['evidence'], [])
+        self.assertEqual(delivery['source_provenance'], [])
+        self.assertNotIn('availability', delivery)
+        self.assertFalse(delivery['reading_credit'])
+        self.assertFalse(delivery['scientific_truth_certified'])
+        with text_only_delivery(True):
+            self.assign('qualified', prior_assignment_id='a')
+        self.assertEqual(self.packet('qualified')['pending_source_requests'], [request])
+
+    def test_binary_qualification_settles_on_capable_route(self):
+        version = self.metadata()
+        failure = self.capture(version, abstract=False, status=404, pdf_text='Unused extraction')
+        availability = {'id': 'binary-terminal', 'profile': 'research', 'version_id': version,
+            'depth': 'fulltext', 'source_ids': [failure['source_id']],
+            'reason': 'The origin returned a complete binary HTTP 404 response.',
+            'policy': {'id': 'terminal-origin', 'minimum_attempts': 1, 'allowed_statuses': [404],
+                       'rationale': 'A terminal origin response documents retrieval failure.'}}
+        _, packet, delivery = self.qualified_continuation(availability, 'fulltext')
+        self.assertEqual(delivery['status'], 'unavailable_qualified')
+        self.assertEqual(packet['pending_source_requests'], [])
+        self.assertEqual(delivery['evidence'], [failure['original']])
+        self.assertEqual(delivery['source_provenance'][0]['delivered_sha256'],
+                         [failure['original']['sha256']])
+        self.assertFalse(delivery['reading_credit'])
+        self.assertFalse(delivery['scientific_truth_certified'])
+
+    def test_json_qualification_settles_on_text_only_route(self):
+        from research_harness.review_transport import text_only_delivery
+        availability = registry_absence(self)
+        with text_only_delivery(True):
+            _, packet, delivery = self.qualified_continuation(availability)
+        self.assertEqual(delivery['status'], 'unavailable_qualified')
+        self.assertEqual(packet['pending_source_requests'], [])
+        records = self.store.snapshot()['records']
+        self.assertEqual(delivery['evidence'],
+                         [records['source'][s]['response'] for s in availability['source_ids']])
+        self.assertTrue(all(p['delivery_mode'] == 'exact-bytes' for p in delivery['source_provenance']))
+
     def test_terminal_failure_cannot_excuse_required_units(self):
         from research_harness.literature import import_bundle
         version = self.metadata()

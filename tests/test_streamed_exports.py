@@ -115,12 +115,30 @@ class ScientificEvaluationRetentionTests(unittest.TestCase):
             for ref, locator in zip(self.refs, self.locators)]}}
 
     def test_initial_private_and_terminal_reads_do_not_fill_the_supplied_evaluation(self):
+        terminal = self.refs[0]
+        self.refs = [self.artifacts.put(b"\xff" + self.artifacts.read(ref), "application/octet-stream")
+                     for ref in self.refs]
+        records = {"readiness_review": {str(i): {"artifact": ref} for i, ref in enumerate(self.refs)},
+                   "execution_observation": {"run": {"terminal": terminal}}}
+        supplied = Evaluation(records, self.artifacts)
+        with capture_evaluations() as evaluations:
+            projector = scientific_delivery.ScientificDelivery(records, supplied, self.contract, {})
+        self.assertEqual(projector.private_bytes, tuple(self.artifacts.read(ref) for ref in self.refs))
+        self.assertEqual(supplied.retention_report()["optional_bytes"], 0)
+        assert_no_retention(self, evaluations)
+
+    def test_unicode_private_patterns_preserve_nonretaining_evaluation(self):
         records = {"readiness_review": {str(i): {"artifact": ref} for i, ref in enumerate(self.refs)},
                    "execution_observation": {"run": {"terminal": self.refs[0]}}}
         supplied = Evaluation(records, self.artifacts)
         with capture_evaluations() as evaluations:
             projector = scientific_delivery.ScientificDelivery(records, supplied, self.contract, {})
-        self.assertEqual(projector.private_bytes, tuple(self.artifacts.read(ref) for ref in self.refs))
+            private_text = self.artifacts.read(self.refs[0]).decode()
+            for encoding in ("utf-16-le", "utf-16-be", "utf-32-le", "utf-32-be"):
+                with self.subTest(encoding=encoding):
+                    with self.assertRaises(ResearchError) as error:
+                        projector._check_bytes(private_text.encode(encoding))
+                    self.assertEqual(error.exception.code, "private_mixed_artifact_required")
         self.assertEqual(supplied.retention_report()["optional_bytes"], 0)
         assert_no_retention(self, evaluations)
 

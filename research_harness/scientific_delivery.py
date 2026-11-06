@@ -255,7 +255,17 @@ class ScientificDelivery:
             response = contract["payload"]["correction"]["response"]
             if response["sha256"] not in protected:
                 self.private.pop(response["sha256"], None)
-        self.private_bytes = tuple(artifacts.read(ref) for ref in self.private.values())
+        private_byte_forms = []
+        for reference in self.private.values():
+            content = artifacts.read(reference)
+            private_byte_forms.append(content)
+            try:
+                private_text = content.decode('utf-8-sig')
+            except UnicodeError:
+                continue
+            private_byte_forms.extend(private_text.encode(encoding) for encoding in
+                                      ('utf-16-le', 'utf-16-be', 'utf-32-le', 'utf-32-be'))
+        self.private_bytes = tuple(private_byte_forms)
         self.minimum_private_bytes = min((len(data) for data in self.private_bytes if data), default=0)
         for checkpoint in records.get("checkpoint", {}).values():
             self.generated[checkpoint["artifact"]["sha256"]] = _project_scientific_record({k: v for k, v in checkpoint.items() if k != "artifact"})
