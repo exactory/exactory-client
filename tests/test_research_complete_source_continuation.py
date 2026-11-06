@@ -7,10 +7,11 @@ from unittest.mock import patch
 
 from research_harness.review_bodies import read_history
 from research_harness import research_decisions, review_protocol as protocol, review_transport as transport
-from research_harness import review_codex_transport as codex, review_source_complete as complete
-from research_harness.evidence import digest
+from research_harness import review_source_complete as complete
+from research_harness import review_codex_invocation as invocation
 from research_harness.errors import ResearchError
 from research_harness import problem_candidates
+from codex_route_fixtures import bind_codex_response, install_codex_runtime
 import test_research_problem_reviews as reviewers
 
 
@@ -20,17 +21,7 @@ class NativeCompleteSourceTests(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
         self.store, self.artifacts = fixture.store, fixture.artifacts
-        # These synthetic source continuations retain their historical rollout
-        # profile, which predates the native model and effort capture facade.
-        from research_harness import review_codex_invocation
-        capture = patch.object(review_codex_invocation, 'supports_route', return_value=False)
-        capture.start()
-        self.addCleanup(capture.stop)
-        for target, value in (('runtime', lambda: {'adapter': 'codex_cli_v1', 'fixture': 'native-record-test'}),
-                              ('NATIVE_DECLARATIONS', ()), ('NATIVE_DECLARATION_SETS', {()})):
-            patcher = patch.object(codex, target, value)
-            patcher.start()
-            self.addCleanup(patcher.stop)
+        install_codex_runtime(self)
         fixture.supporting = self.artifacts.put(b'Exact independently supplied field evidence.', 'text/plain')
         fixture.mutate(protocol.record_route, {'id': 'route', 'adapter': 'codex_cli_v1', 'model': 'fixture-model',
             'endpoint': 'codex://local', 'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}})
@@ -52,15 +43,7 @@ class NativeCompleteSourceTests(unittest.TestCase):
         self.invoke('result-first', self.output([self.request]))
 
     def response(self, route, request, output):
-        response = self.fixture.build_provider_response(output)
-        events = [{'type': 'session_meta', 'payload': {'id': response['id'], 'source': 'exec',
-                    'base_instructions': {'text': request['instructions']}}},
-                  {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
-                    'content': [{'type': 'input_text', 'text': codex.packet_text(request)}]}}]
-        evidence = codex.inspect_rollout(events, request, response['id'], '/fixture', [])
-        evidence.update(inspected=True, route_digest=digest(route), runtime=codex.runtime(), event_digest=digest(events))
-        response['context_evidence'] = evidence
-        return response
+        return bind_codex_response(route, request, self.fixture.build_provider_response(output))
 
     def respond_to_probe(self, route, request, credential):
         packet = json.loads(request['input'][0]['content'][len(transport.PACKET_LABEL):])
@@ -83,6 +66,28 @@ class NativeCompleteSourceTests(unittest.TestCase):
 
     def packet(self, assignment):
         return json.loads(self.artifacts.read(assignment['packet']))
+
+    def test_native_probe_and_source_attempt_require_retained_model_and_effort_capture(self):
+        records = self.store.snapshot()['records']
+        assignment = records['review_assignment']['result-first']
+        attempt = records['review_attempt']['attempt-result-first']
+        probe = records['review_route_probe']['probe']
+        self.assertEqual(assignment.get(invocation.KEY), invocation.PROTOCOL)
+        self.assertEqual(attempt.get(invocation.KEY), invocation.PROTOCOL)
+        self.assertEqual(probe.get(invocation.KEY), invocation.PROTOCOL)
+        route = records['review_route']['route']
+        response = json.loads(self.artifacts.read(attempt['response']))
+        request = json.loads(self.artifacts.read(attempt['request']))
+        contexts = [event['payload'] for event in response[invocation.KEY]['native_rollout']
+                    if event.get('type') == 'turn_context']
+        self.assertEqual(len(contexts), 1)
+        self.assertEqual(contexts[0]['model'], route['model'])
+        self.assertEqual(contexts[0]['effort'], 'high')
+        self.assertTrue(contexts[0]['cwd'].startswith('/'))
+        self.assertTrue(invocation.verify_context(route, request, response, required=True))
+        self.assertTrue(protocol.authenticate_attempt(records, self.artifacts, assignment, attempt))
+        response.pop(invocation.KEY)
+        self.assertFalse(invocation.verify_context(route, request, response, required=True))
 
     def test_native_observation_closure_inherited_mode_and_later_acquisition_stability(self):
         assignment = self.assign('complete', source_delivery=complete.MODE)

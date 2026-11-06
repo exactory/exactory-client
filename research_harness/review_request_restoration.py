@@ -76,7 +76,8 @@ def restore_request(route, packet, request, policy):
     current = messages[-1]
     content = current.get('content')
     if (current.get('role') != 'user' or not isinstance(content, str)
-            or not content.startswith(transport.PACKET_LABEL)):
+            or not content.startswith(transport.PACKET_LABEL)
+            or not any(delivery in content for delivery in _RESTORABLE_DELIVERIES)):
         return request
     measure = transport._local_adapter(route).packet_text
     limit = transport.local_input_limit(route)

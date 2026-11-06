@@ -336,10 +336,10 @@ class DeliveredEvidenceTests(unittest.TestCase):
         attempt = dict(records['review_attempt']['attempt-' + final['id']], packet_digest=packet['digest'])
         request = transport.request_body(records['review_route']['route'], changed['prompt']['text'], packet, read_history(builder.case.artifacts, changed))
         attempt.update(request=protocol._put_json(builder.case.artifacts, request), request_digest=digest(request))
-        from codex_route_fixtures import build_codex_response
+        from codex_route_fixtures import capture_codex_response
         output = protocol._read_json(builder.case.artifacts, attempt['output'])
         attempt['response'] = protocol._put_json(builder.case.artifacts,
-            build_codex_response(records['review_route']['route'], request, output))
+            capture_codex_response(records['review_route']['route'], request, output))
         records['review_attempt'][attempt['id']] = attempt
         delivered = module.read_attempt_delivery(records, builder.case.artifacts, changed, attempt)
         self.assertEqual(delivered['coverage_witnesses']['packets'], [])

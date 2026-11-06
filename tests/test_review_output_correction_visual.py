@@ -50,7 +50,7 @@ class VisualCorrectionTests(unittest.TestCase):
             events.extend([
                 {'type': 'session_meta', 'payload': {'id': response['id'], 'source': 'exec',
                     'base_instructions': {'text': request['instructions']}}},
-                {'type': 'turn_context', 'payload': {'model': route['model'], 'effort': 'high'}},
+                {'type': 'turn_context', 'payload': {'model': route['model'], 'effort': 'high', 'cwd': '/fixture'}},
                 {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
                     'content': [{'type': 'input_text', 'text': codex.packet_text(request)}]}},
                 {'type': 'response_item', 'payload': {'type': 'message', 'role': 'assistant',

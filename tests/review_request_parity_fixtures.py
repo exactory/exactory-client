@@ -28,8 +28,10 @@ import test_research_review_protocol as ordinary_fixtures
 from research_harness import cli, gates, openness_reading, review_protocol as protocol
 from research_harness import review_request_evaluation, review_transport as transport
 from research_harness import review_codex_invocation, review_request_restoration
+from research_harness import review_codex_transport as codex
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
+from research_harness.evidence import digest
 from research_harness.review_bodies import read_history
 
 
@@ -59,6 +61,22 @@ def record_outcome(call):
         return {"error": error.as_dict()}
 
 
+def build_legacy_codex_response(route, request, output):
+    """Keep the native response shape that the ceb050b oracle recorded."""
+    response = {'id': 'provider-response', 'model': 'fixture-model', 'status': 'completed',
+                'output': [{'type': 'message', 'role': 'assistant',
+                            'content': [{'type': 'output_text', 'text': json.dumps(output)}]}],
+                'usage': {'input_tokens': 37, 'output_tokens': 12}}
+    events = [{'type': 'session_meta', 'payload': {'id': response['id'], 'source': 'exec',
+               'base_instructions': {'text': request['instructions']}}},
+              {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
+               'content': [{'type': 'input_text', 'text': codex.packet_text(request)}]}}]
+    evidence = codex.inspect_rollout(events, request, response['id'], '/fixture', [])
+    evidence.update(inspected=True, route_digest=digest(route), runtime=codex.runtime(), event_digest=digest(events))
+    response['context_evidence'] = evidence
+    return response
+
+
 @contextmanager
 def fix_external_inputs():
     """Fix external observations before storing them, rather than scrubbing requests."""
@@ -77,6 +95,7 @@ def fix_external_inputs():
         return original_observe(route, request, credential)
 
     with patch.object(transport, "runtime", side_effect=describe_fixture_runtime), \
+            patch.object(codex_fixtures, "build_codex_response", new=build_legacy_codex_response), \
             patch.object(review_codex_invocation, "supports_route", return_value=False), \
             patch.object(review_request_restoration, "select_policy", return_value=None), \
             patch.object(uuid, "uuid4", side_effect=lambda: uuid.UUID(int=next(numbers))), \

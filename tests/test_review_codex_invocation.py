@@ -333,23 +333,10 @@ class CodexInvocationTests(unittest.TestCase):
 
 class CodexInvocationProtocolTests(unittest.TestCase):
     def prepare_case(self, adapter):
-        from research_harness import review_codex_invocation as facade
         case = protocol_fixtures.ReviewProtocolTests()
         self.addCleanup(case.doCleanups)
         case.setUp()
-        native_selection = facade.supports_route
         codex_route_fixtures.install_codex_runtime(case)
-        selection = patch.object(facade, 'supports_route', new=native_selection)
-        selection.start()
-        self.addCleanup(selection.stop)
-        if adapter is framed:
-            runtime = patch.object(framed, 'runtime', return_value={
-                'adapter': framed.ADAPTER, 'fixture': 'reviewer-excerpt-test'})
-            runtime.start()
-            self.addCleanup(runtime.stop)
-            declarations = patch.object(framed, 'NATIVE_DECLARATION_SETS', {()})
-            declarations.start()
-            self.addCleanup(declarations.stop)
         case.mutate(case.protocol().record_route, {
             'id': 'route', 'adapter': adapter.ADAPTER, 'model': 'fixture-model',
             'endpoint': 'codex://local', 'configuration': {
@@ -423,6 +410,29 @@ class CodexInvocationProtocolTests(unittest.TestCase):
                 altered['response'] = case.artifacts.put(json.dumps(response).encode(), 'application/json')
                 self.assertFalse(case.protocol().authenticate_attempt(records, case.artifacts,
                     records['review_assignment']['assignment'], altered))
+
+    def test_shared_codex_fixture_retains_native_settings_for_plain_and_framed_calls(self):
+        from research_harness import review_codex_invocation as facade
+        for adapter in (plain, framed):
+            with self.subTest(adapter=adapter.ADAPTER):
+                case = self.prepare_case(adapter)
+                codex_route_fixtures.probe_codex_route(case, 'shared-probe')
+                case.assign()
+                attempt = codex_route_fixtures.invoke_codex(
+                    case, 'assignment', {'verdict': 'sound'}, 'shared-attempt')['result']
+                records = case.records()
+                for record in (records['review_route_probe']['shared-probe'],
+                               records['review_assignment']['assignment'],
+                               records['review_invocation']['shared-attempt'], attempt):
+                    self.assertEqual(record[facade.KEY], facade.PROTOCOL)
+                response = case.protocol()._read_json(case.artifacts, attempt['response'])
+                events = response[facade.KEY]['native_rollout']
+                contexts = [event['payload'] for event in events if event['type'] == 'turn_context']
+                self.assertEqual(contexts, [{'model': 'fixture-model', 'effort': 'high', 'cwd': '/fixture'}])
+                self.assertTrue(case.protocol().authenticate_attempt(records, case.artifacts,
+                    records['review_assignment']['assignment'], attempt))
+                state = case.protocol().assignment_state(records, case.artifacts, 'assignment')
+                self.assertTrue(state['ready'], state['obligations'])
 
     def test_public_invocations_retain_wrong_settings_without_scientific_credit(self):
         from research_harness import review_codex_invocation as facade

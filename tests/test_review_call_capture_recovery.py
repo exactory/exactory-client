@@ -363,9 +363,10 @@ class NativeCorrectionCaptureTests(LiteratureCase):
             response = case.build_provider_response(delta)
             events = [dict(type='session_meta', payload=dict(id=response['id'], source='exec',
                 base_instructions=dict(text=request['instructions']))),
-                dict(type='turn_context', payload=dict(model=route['model'], effort='high')),
+                dict(type='turn_context', payload=dict(model=route['model'], effort='high', cwd='/fixture')),
                 dict(type='response_item', payload=dict(type='message', role='user',
-                    content=[dict(type='input_text', text=codex.packet_text(request))]))]
+                    content=[dict(type='input_text', text=codex.packet_text(request))])),
+                dict(type='response_item', payload=copy.deepcopy(response['output'][0]))]
             evidence = codex.inspect_rollout(events, request, response['id'], '/fixture', [])
             evidence.update(inspected=True, route_digest=digest(route), runtime=codex.runtime(), event_digest=digest(events))
             response['context_evidence'] = evidence
