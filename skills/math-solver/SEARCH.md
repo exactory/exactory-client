@@ -2545,7 +2545,11 @@ or a computational dependency. Reviews assess the mathematical meaning of the
 declared analytical proof; this is not an automatic natural-language proof checker.
 Certificate evidence needs both certificate and checker artifacts. Lean evidence
 needs theorem and toolchain artifacts. Missing dependency bytes, cycles, mismatched
-claims and insufficient transitive policies fail closed.
+claims and insufficient transitive policies fail closed. Where the digest of a
+structured evidence manifest is required, a digest that names a valid
+authenticated artifact fails with `evidence_manifest_required`. The record is
+unchanged. The checkpoint needs the digest of the manifest that binds the claim
+and lists the proof artifacts.
 
 Relative artifact paths describe the frozen version. Editing a later working copy
 does not edit accepted evidence. Explicit absolute external dependencies are

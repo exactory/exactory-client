@@ -263,6 +263,13 @@ finding. No majority or new reviewer erases an unresolved counterexample.
 Every gate review is still recorded with `manuscript-review`, so it appears in
 `final/reviews/manuscript/` and in the generated score history.
 
+When the user authorized the deposit before this gate passed, the deposit took
+the direct path. `status` then reports it as `external_deposit` with
+`managed_credit: false`, the publication gate keeps its obligations, and the
+pending manuscript review is `next` as `managed_wait` with
+`workflow: "manuscript-review"`. Record the missing reviews for the exact
+bundle. The same deposit is not recommended again.
+
 For managed publication, pin the exact current `manuscript` and export its actual
 bytes with `exactory-research export --kind manuscript`. Without `--destination`
 the packet goes to `intermediate/reviews/packets/manuscript-r<revision>/` (a

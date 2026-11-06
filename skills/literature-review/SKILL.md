@@ -88,7 +88,10 @@ grants no reading credit; the finished capture is read like any other. A
 download is
 acquisition; a source-linked reading records the actual inspection. A reading
 stays current while its bundle's units are unchanged; parsed bibliography entries
-do not require re-reading. Record critical missing sources as pending.
+do not require re-reading. Record critical missing sources as pending. A
+complete abstract from a publisher is imported as the complete captured
+response of its API, with `publisher_capture` on `import-response` (the CLI
+reference). A mapped excerpt of a publisher page stays partial.
 
 Identity conflicts stay stored: provider families are never merged. Before an
 import that registers the arXiv version of a paper the store knows by its DOI,
