@@ -213,7 +213,7 @@
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "dead-end",
       "summary": "A user-authorized deposit could not move the study into the deposit stage.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "Confirmed external publication is reported separately from managed progress; evaluate names the manuscript-review wait without granting gate credit or recommending the same confirmed deposit again. Later bundles and unconfirmed or sandbox deposits retain their distinctions.",
       "test_kind": "real_shape",
       "tests": [
@@ -256,7 +256,7 @@
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "gate (gap)",
       "summary": "The round gate did not bind revised.previous to the opening claim text.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "New closing decisions and current round gates bind new or changed revised markers to the immediately opening bundle exact claim text, including scoped markers; unchanged claims retain identical inherited markers and historical progress derivations keep their original interpretation.",
       "test_kind": "real_shape",
       "tests": [
@@ -271,7 +271,7 @@
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "uncommon-input",
       "summary": "A BOM-free UTF-16 or UTF-32 body beginning with a non-ASCII character escaped text decoding.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "Private text is matched in its original bytes and BOM-free UTF-16LE, UTF-16BE, UTF-32LE and UTF-32BE forms, including non-ASCII prefixes and encodings shorter than UTF-8; exact delivered bytes, JSON interpretation and binary privacy remain unchanged.",
       "test_kind": "real_shape",
       "tests": [
@@ -4094,7 +4094,7 @@
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "sources (delivery)",
       "summary": "Qualified unavailability settled a source request using binary evidence that a text-only route could not deliver.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "Required qualification evidence must be deliverable before settlement; binary evidence stays pending on text-only routes, while capable routes and JSON qualifications retain settlement without scientific credit.",
       "test_kind": "real_shape",
       "tests": [
@@ -4108,7 +4108,7 @@
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "diagnostic (evidence)",
       "summary": "A valid raw proof artifact digest supplied at the manifest boundary was reported as a corrupt manifest.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "A valid artifact where a manifest is required gives evidence_manifest_required without mutation; genuinely missing or corrupt blobs retain their errors and valid manifests retain their audits.",
       "test_kind": "real_shape",
       "tests": [
@@ -4121,7 +4121,7 @@
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "reviewer prompt (contract)",
       "summary": "The base verification prompt omitted executable stance, prediction-band and sampled-binding rules.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "New verification prompts name the executable stance, ordered integer prediction band, sample estimate, containing and widened bands, and refusal of an unplaced sample; recorded base and parts prompts retain their exact template ids, hashes and authentication.",
       "test_kind": "real_shape",
       "tests": [
@@ -4310,7 +4310,7 @@
       "parent": "20261103024324-abstract-source-request-unresolvable-for-doi-only-works-doi-only-abstract-request",
       "class": "dead-end (sources)",
       "summary": "DOI and OpenAlex abstract requests did not discover related captured donors.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "Discover every donor with provenance, validation failures and competing identities. Existing same_work aliases never establish exact version equivalence, so cross-identity abstracts remain alternatives, qualified absence keeps no scientific credit, exact requested captures still deliver, and saved assignments replay unchanged.",
       "test_kind": "real_shape",
       "tests": [
@@ -4336,7 +4336,7 @@
       "parent": "20261103024324-abstract-source-request-unresolvable-for-doi-only-works-doi-only-abstract-request",
       "class": "dead-end (sources)",
       "summary": "Generic publisher excerpts could not establish complete abstract boundaries.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "An explicitly selected springer-meta-json-v1 parser admits a single exact DOI abstract only from a complete captured HTTP response with unambiguous JSON boundaries. The positive fixture is synthetic from documented format, not an original publisher capture. Old mapped imports remain partial and old receipts replay unchanged.",
       "test_kind": "real_shape",
       "tests": [
@@ -4397,7 +4397,7 @@
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "cost (snapshot history replay)",
       "summary": "Snapshot replay serializes full events, receipts and current rows again after their event components have already passed canonical validation.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "Replay reuses validated canonical segments for event hashing and receipt comparison and decodes projection-equal current rows without another encoding, removing two encodes per event and one per current row while preserving snapshots, histories, corruption errors and bounded UTF-8 buffers.",
       "test_kind": "real_shape",
       "tests": [
