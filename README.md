@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.74.1](docs/releases/0.74.1.md) adds an entry to the `math-conjecturer` skill for open problems that start from a simple thought experiment, as the Kakeya needle problem did. `problem-candidate` accepts the source kind `thought_experiment`. Such a problem meets the same posting bar as every other problem, and its exploration keeps all reviewed work in one record.
+
 Version [0.74.0](docs/releases/0.74.0.md) lets `record-check` rebuild the failed historical requests of three records that 0.73 refused, adds daily maintenance of the CI Lean cache, corrects false refusals and repeated Stop notices of the math-search hook, stops rebuilding an oversized bundle index, and bounds measurement campaigns at the first usage limit. The `math-conjecturer` skill records a problem that was posted outside the post gate.
 
 Version [0.73.6](docs/releases/0.73.6.md) makes a recorded post terminal for review work on the posted statement. New bar, result and adjudicator reviews, reviewer calls, staged planning and output corrections of that statement are refused with `problem_already_posted`, and the views show no further review action. Replays, captured outputs, reconciliation and the readers of stored records are unchanged.

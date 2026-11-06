@@ -19,7 +19,7 @@ from .review_context_repair import slot_id
 from .review_protocol import build_problem_subject, is_previous_prompt, validate_problem_bars
 from . import problem_rubric, strategy
 
-SOURCE_KINDS = ("own_record", "literature", "computation", "section", "user")
+SOURCE_KINDS = ("own_record", "literature", "computation", "section", "user", "thought_experiment")
 DISPOSITIONS = ("open", "selected", "deferred", "rejected")
 
 
