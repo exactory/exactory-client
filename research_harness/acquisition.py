@@ -101,7 +101,7 @@ from .evidence import derived_id, digest, media_type as response_media_type, pre
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_media_type, extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, find_doi_family_conflicts, normalize_identifier, version_of
-from .imports import parse_mapped
+from .imports import parse_mapped, parse_publisher_capture
 from .import_io import read_import_input, validate_import_size
 from .workspace import checked_parent
 from .operations import text
@@ -771,7 +771,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                     "work_id": identifier, "capture": capture, "attempts_used": budget.used}, apply=commit)
 
 
-def _import_page(provider, response, source_url, captured_at, media_type, mappings):
+def _import_page(provider, response, source_url, captured_at, media_type, mappings, publisher_capture=None):
     source_url = safe_url(source_url)
     if not isinstance(response, bytes):
         raise ResearchError("invalid_import", "Import response must be original bytes")
@@ -781,7 +781,11 @@ def _import_page(provider, response, source_url, captured_at, media_type, mappin
             raise ValueError()
     except (TypeError, ValueError, AttributeError) as error:
         raise ResearchError("invalid_import", "Import capture time must contain an explicit timezone") from error
-    if provider in ("web", "mcp"):
+    if publisher_capture is not None:
+        if provider not in ("web", "mcp") or mappings is not None:
+            raise ResearchError("invalid_publisher_capture", "Publisher captures require web/MCP import without mappings")
+        page = parse_publisher_capture(response, media_type, source_url, publisher_capture)
+    elif provider in ("web", "mcp"):
         if parse_base_media_type(media_type) not in ("application/json", "text/plain", "text/html"):
             raise ResearchError("invalid_import", "Web/MCP import must declare JSON, text or HTML media type")
         try:
@@ -809,26 +813,37 @@ def _import_pending(page):
     return pending
 
 
-def preview_import_response(store, provider, response, *, source_url, captured_at, media_type=None, mappings=None):
+def preview_import_response(store, provider, response, *, source_url, captured_at, media_type=None,
+                            mappings=None, publisher_capture=None):
     """Parse local response bytes and report new DOI-family conflicts without writing evidence."""
     validate_import_size(len(response), input_kind="response")
-    _, _, page = _import_page(provider, response, source_url, captured_at, media_type, mappings)
+    _, _, page = _import_page(provider, response, source_url, captured_at, media_type, mappings, publisher_capture)
     snapshot = store.snapshot()
-    return {"status": "preview", "scope": "metadata_import", "revision": snapshot["revision"],
-            "work_ids": [work["id"] for work in page.works], "pending": _import_pending(page),
-            "warnings": list(page.warnings),
-            "identity_conflicts": find_doi_family_conflicts(snapshot["records"], page.works)}
+    result = {"status": "preview", "scope": "metadata_import", "revision": snapshot["revision"],
+              "work_ids": [work["id"] for work in page.works], "pending": _import_pending(page),
+              "warnings": list(page.warnings),
+              "identity_conflicts": find_doi_family_conflicts(snapshot["records"], page.works)}
+    if publisher_capture is not None:
+        from .source_candidates import find_source_candidates
+        artifacts = ArtifactStore(store.root)
+        result["source_candidates"] = [dict(version_id=work["id"], **find_source_candidates(
+            snapshot["records"], artifacts, work["id"])) for work in page.works]
+    return result
 
 
-def build_import_payload(provider, response_sha256, *, source_url, captured_at, media_type=None, mappings=None):
+def build_import_payload(provider, response_sha256, *, source_url, captured_at, media_type=None,
+                         mappings=None, publisher_capture=None):
     if provider not in ("web", "mcp"):
         media_type = media_type or ("application/atom+xml" if provider == "arxiv" else "application/json")
-    return {"provider": provider, "source_url": safe_url(source_url), "captured_at": captured_at,
-            "response_sha256": response_sha256, "media_type": media_type, "mappings": mappings}
+    payload = {"provider": provider, "source_url": safe_url(source_url), "captured_at": captured_at,
+               "response_sha256": response_sha256, "media_type": media_type, "mappings": mappings}
+    if publisher_capture is not None:
+        payload["publisher_capture"] = publisher_capture
+    return payload
 
 
 def import_response_file(store, provider, response_file, *, source_url, captured_at, request_id, expected_revision,
-                         media_type=None, mappings=None):
+                         media_type=None, mappings=None, publisher_capture=None):
     if store.committed_request(request_id) is not None:
         hasher = hashlib.sha256()
         descriptor = os.open(response_file, os.O_RDONLY | os.O_NONBLOCK)
@@ -838,26 +853,28 @@ def import_response_file(store, provider, response_file, *, source_url, captured
             for block in iter(lambda: source.read(65536), b""):
                 hasher.update(block)
         payload = build_import_payload(provider, hasher.hexdigest(), source_url=source_url, captured_at=captured_at,
-                                       media_type=media_type, mappings=mappings)
+                                       media_type=media_type, mappings=mappings, publisher_capture=publisher_capture)
         return _begin(store, "response.import", payload, request_id, expected_revision, target=payload["source_url"])
     response = read_import_input(response_file, input_kind="response")
     return import_response(store, provider, response, source_url=source_url, captured_at=captured_at,
-                           media_type=media_type, mappings=mappings, request_id=request_id, expected_revision=expected_revision)
+                           media_type=media_type, mappings=mappings, publisher_capture=publisher_capture,
+                           request_id=request_id, expected_revision=expected_revision)
 
 
 def import_response(store, provider, response, *, source_url, captured_at, request_id, expected_revision,
-                    media_type=None, mappings=None):
+                    media_type=None, mappings=None, publisher_capture=None):
     if not isinstance(response, bytes):
         raise ResearchError("invalid_import", "Import response must be original bytes")
     payload = build_import_payload(provider, digest_bytes(response), source_url=source_url, captured_at=captured_at,
-                                   media_type=media_type, mappings=mappings)
+                                   media_type=media_type, mappings=mappings, publisher_capture=publisher_capture)
     if store.committed_request(request_id) is not None:
         return _begin(store, "response.import", payload, request_id, expected_revision, target=payload["source_url"])
     validate_import_size(len(response), input_kind="response")
     from .storage import _canonical
     validate_import_size(len(_canonical(payload).encode("utf-8")), input_kind="payload")
     with hold_operation(store, payload['source_url'], request_id):
-        source_url, media_type, page = _import_page(provider, response, source_url, captured_at, media_type, mappings)
+        source_url, media_type, page = _import_page(
+            provider, response, source_url, captured_at, media_type, mappings, publisher_capture)
         replay = _begin(store, "response.import", payload, request_id, expected_revision, target=source_url)
         if replay is not None:
             return replay
@@ -872,6 +889,9 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
         sources[0]["imported"] = True
         sources[0].update({"capture_method": "external_import", "content_scope": "tool_response" if provider in ("web", "mcp") else "provider_response",
                            "origin_verified": False})
+        if publisher_capture is not None:
+            sources[0].update(publisher_capture=publisher_capture, content_scope="publisher_metadata",
+                              observed_identifier=page.works[0]["id"])
         prepared = [prepare_work(artifacts, work, sources[0]["id"]) for work in page.works]
         pending = _import_pending(page)
         identity_conflicts = find_doi_family_conflicts(snapshot["records"], page.works)

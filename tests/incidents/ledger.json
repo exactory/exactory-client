@@ -4049,6 +4049,54 @@
         "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0663_still_verifies",
         "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0715_still_verifies"
       ]
+    },
+    {
+      "id": "doi-only-alias-discovery",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "parent": "20261103024324-abstract-source-request-unresolvable-for-doi-only-works-doi-only-abstract-request",
+      "class": "dead-end (sources)",
+      "summary": "DOI and OpenAlex abstract requests did not discover related captured donors.",
+      "fixed_in": "0.74.0",
+      "expected": "Discover every donor with provenance, validation failures and competing identities. Existing same_work aliases never establish exact version equivalence, so cross-identity abstracts remain alternatives, qualified absence keeps no scientific credit, exact requested captures still deliver, and saved assignments replay unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_four_pairs_and_springer_1115_byte_excerpt_remain_qualified",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_forward_and_reverse_discovery_keeps_complete_donors_as_alternatives",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_discovery_does_not_require_a_separate_requested_work_row",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_competing_doi_families_never_choose_the_first",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_competing_unacquired_doi_identities_still_report_ambiguity",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_reverse_competing_openalex_assertions_remain_alternatives",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_preprint_and_journal_versions_are_only_family_alternatives",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_family_only_mapping_is_an_alternative_without_identity_credit",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_corrupt_or_misbound_donor_cannot_supply_exact_identity",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_corrupt_optional_donor_does_not_block_exact_requested_source",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_corrupt_partial_candidate_keeps_qualified_absence",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_openalex_multiple_locations_do_not_establish_abstract_version",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_candidate_delta_reports_donor_acquired_after_inventory",
+        "test_doi_alias_discovery.AliasReplayTests.test_saved_assignment_request_and_packet_replay_without_new_discovery"
+      ]
+    },
+    {
+      "id": "doi-only-publisher-completeness",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "parent": "20261103024324-abstract-source-request-unresolvable-for-doi-only-works-doi-only-abstract-request",
+      "class": "dead-end (sources)",
+      "summary": "Generic publisher excerpts could not establish complete abstract boundaries.",
+      "fixed_in": "0.74.0",
+      "expected": "An explicitly selected springer-meta-json-v1 parser admits a single exact DOI abstract only from a complete captured HTTP response with unambiguous JSON boundaries. The positive fixture is synthetic from documented format, not an original publisher capture. Old mapped imports remain partial and old receipts replay unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_publisher_completeness.PublisherCompletenessTests.test_complete_documented_response_delivers_only_the_exact_doi_abstract",
+        "test_publisher_completeness.PublisherCompletenessTests.test_truncated_json_and_missing_abstract_boundary_are_rejected",
+        "test_publisher_completeness.PublisherCompletenessTests.test_wrong_doi_and_conflicting_identifier_are_rejected",
+        "test_publisher_completeness.PublisherCompletenessTests.test_partial_transfer_and_ambiguous_http_framing_are_rejected",
+        "test_publisher_completeness.PublisherCompletenessTests.test_duplicate_or_multiple_abstract_boundaries_are_rejected",
+        "test_publisher_completeness.PublisherCompletenessTests.test_generic_span_and_complete_true_do_not_upgrade_a_partial_excerpt",
+        "test_publisher_completeness.PublisherCompletenessTests.test_complete_true_cannot_replace_transport_or_parser_evidence",
+        "test_publisher_completeness.PublisherCompletenessTests.test_invalid_media_type_refuses_before_admission_and_in_preview",
+        "test_publisher_completeness.PublisherCompletenessTests.test_publisher_preview_reports_existing_alias_candidates_without_writes",
+        "test_publisher_completeness.PublisherCompletenessTests.test_preview_file_cli_and_replay_bind_the_parser_and_bytes"
+      ]
     }
   ]
 }

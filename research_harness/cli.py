@@ -452,7 +452,7 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
     if command == "visual":
         fields(payload, ("link", "url"), ("max_requests",))
         return visual_assets.acquire_visual_asset(store, **payload, **identity)
-    fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
+    fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings", "publisher_capture"))
     text(payload["response_file"], "Response file")
     values = dict(payload)
     if response_bytes is not None:
@@ -797,7 +797,7 @@ def run(args):
                     or Store(existing_workspace).committed_request(args.request_id) is None):
                 raise
     if args.command == "import-response" and original is None:
-        fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
+        fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings", "publisher_capture"))
         text(payload["response_file"], "Response file")
         response_bytes = read_import_input(payload["response_file"], input_kind="response")
     if args.command in ("init", "adopt", "problem-init"):
