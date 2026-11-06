@@ -12,8 +12,8 @@ from .storage import safe_path, _strict_json
 
 
 EVIDENCE_MANIFEST_REQUIRED_NOTE = (
-    'PLACEHOLDER: This digest names a valid artifact; supply a structured evidence manifest digest binding '
-    'the claim and listing the proof artifacts.')
+    'This digest names a valid authenticated artifact, not an evidence manifest. Supply the digest of a '
+    'structured evidence manifest that binds the claim and lists the proof artifacts.')
 
 
 class _AuditContext:

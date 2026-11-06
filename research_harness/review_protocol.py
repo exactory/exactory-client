@@ -44,19 +44,21 @@ PAPER_ROLES = ('manuscript', 'standalone')
 PROTOCOL = 'exactory-independent-review-v1'
 _VERIFICATION_PROTOCOL = 'exactory-verification-review-v2'
 VERIFICATION_STANCE_NOTE = (
-    'PLACEHOLDER: verdict.stance is sound or not_sound and verdict.summary is nonempty.')
+    'verdict.stance must be sound or not_sound. verdict.summary must not be empty.')
 VERIFICATION_BAND_NOTE = (
-    'PLACEHOLDER: verdict.prediction.percentile, verdict.prediction.band.best and verdict.prediction.band.worst '
-    'are integers from 1 to 100 with best <= percentile <= worst; 1 is best.')
+    'verdict.prediction.percentile, verdict.prediction.band.best and verdict.prediction.band.worst must be '
+    'integers from 1 to 100, where 1 is best. Keep best <= percentile <= worst.')
 VERIFICATION_SAMPLE_BINDING_NOTE = (
-    'PLACEHOLDER: When paper.sampling_context is present, verdict.prediction.percentile equals '
-    'paper.sampling_context.prediction.percentile and the verdict band contains paper.sampling_context.prediction.band.')
+    'If paper.sampling_context is present, verdict.prediction.percentile must equal '
+    'paper.sampling_context.prediction.percentile. Make sure that verdict.prediction.band contains '
+    'paper.sampling_context.prediction.band (verdict best <= sample best and verdict worst >= sample worst).')
 VERIFICATION_SAMPLE_WIDEN_NOTE = (
-    'PLACEHOLDER: When paper.sampling_context.prediction.widen_required is true, at least one verdict band '
-    'endpoint lies beyond the sample band.')
+    'If paper.sampling_context.prediction.widen_required is true, at least one endpoint of verdict.prediction.band '
+    'must lie strictly beyond paper.sampling_context.prediction.band (verdict best < sample best or verdict '
+    'worst > sample worst).')
 VERIFICATION_EMPTY_SAMPLE_NOTE = (
-    'PLACEHOLDER: When paper.sampling_context.prediction.percentile is null, the sample places no member and '
-    'no verdict binds until placements are revised.')
+    'If paper.sampling_context.prediction.percentile is null, the sample places no member, and no verdict binds '
+    'until the placements are revised.')
 POLICY = 'fresh-focused-adjudicator-v1'
 # The common text that opens every reviewer prompt, by version. An envelope without parameters.common_version was
 # rendered with version 1 (0.55.0 to 0.66.3). Version 2 is used by 0.67.0 to 0.71.6, and version 3 from 0.71.7.

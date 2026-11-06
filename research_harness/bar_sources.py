@@ -394,8 +394,8 @@ def _fulltext_source(records, artifacts, work, capture):
 
 
 QUALIFICATION_DELIVERY_PENDING_NOTE = (
-    'PLACEHOLDER: Required unavailability evidence is binary and cannot be delivered on this text-only route; '
-    'the source request remains pending without reading or scientific credit.')
+    'The required evidence of this unavailability is binary, and this text-only route cannot deliver it. '
+    'The request stays pending, with no reading or scientific-support credit.')
 
 
 def _qualified_unavailability(records, artifacts, work, request, result, captures):
