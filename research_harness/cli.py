@@ -35,7 +35,7 @@ from .depth import record_depth
 from .review_budget import record_budget
 from .probe import record_probe_intent, record_probe, summarize_probes
 from .record_check import DEFAULT_TIME_BUDGET_SECONDS
-from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata
+from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata, problem_evidence
 
 
 OPERATIONS = {
@@ -47,6 +47,7 @@ OPERATIONS = {
     "problem-openness": problem_claims.record_openness,
     "problem-value": problem_claims.record_value,
     "problem-citation-metadata": problem_citation_metadata.record_citation_metadata,
+    "problem-citation-locator": problem_evidence.record_citation_locator,
     "problem-assessment": problem_claims.record_assessment,
     "problem-formal-check": problem_claims.record_formal_check,
     "problem-decision": problem_claims.record_decision,

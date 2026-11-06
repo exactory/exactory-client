@@ -222,12 +222,36 @@ def deliver_round(store, destination=None):
     decisions = [d for d in records.get("round_decision", {}).values() if d["bundle_digest"] == bundle["digest"]]
     if not decisions:
         raise ResearchError("round_decision_missing", "Record the round decision before delivering it for review")
-    packet = round_packet(records, bundle, max(decisions, key=lambda d: d["decided_revision"]), artifacts)
+    decision = max(decisions, key=lambda item: item["decided_revision"])
+    packet, derived, _, captures = build_round_projection(records, artifacts, bundle, decision)
     if bundle.get("publication_scope") is not None:
-        from .scientific_delivery import project_delivery
-        from .publication_scope import find_publication_scope
-        captures = find_round_investigation_responses(records, packet)
-        packet, derived = project_delivery(records, ArtifactStore(store.root), find_publication_scope(records), packet,
-            manuscript_files=[bundle["files"][kind]["artifact"] for kind in ("pdf", "abstract", "bibliography", "claims")])
         return deliver_packet(store, destination, packet, derived=derived, transitive=True, empty_captures=captures)
     return deliver_packet(store, destination, packet)
+
+
+def build_round_projection(records, artifacts, bundle, decision):
+    """Build the exact round packet and its authenticated native evidence mappings."""
+    native = round_packet(records, bundle, decision, artifacts)
+    if bundle.get("publication_scope") is None:
+        return native, {}, {}, []
+    from .scientific_delivery import project_delivery
+    from .publication_scope import find_publication_scope
+    captures = find_round_investigation_responses(records, native)
+    projected, derived = project_delivery(
+        records, artifacts, find_publication_scope(records), native,
+        manuscript_files=[bundle["files"][kind]["artifact"]
+                          for kind in ("pdf", "abstract", "bibliography", "claims")])
+    mappings = {}
+
+    def bind(original, delivered):
+        if isinstance(original, dict):
+            if original.get("kind") in ("source", "result", "review") and original != delivered:
+                mappings[digest(delivered)] = {"reference": delivered, "native_reference": original}
+            for key in original.keys() & delivered.keys():
+                bind(original[key], delivered[key])
+        elif isinstance(original, list):
+            for before, after in zip(original, delivered):
+                bind(before, after)
+
+    bind(native, projected)
+    return projected, derived, mappings, captures

@@ -999,6 +999,15 @@ and closure; use `recovery` for the original recovery review without a claim
 digest. Recovery alone uses `claim_digest: null`. `subject` is exactly the native
 record whose canonical hash the existing review contract requires, excluding its
 review. Supply any as-yet uncommitted referenced native files through `inputs`.
+Every file pinned in `inputs` reaches the packet by its exact digest, also when no
+exported record references it. The exporter lists each as `{kind, digest, artifact}`
+in `scientific_context.supplementary_inputs` (`schema_version` 1), where `artifact`
+is the descriptor of its evidence entry, and delivers its bytes as evidence. The
+export refuses a pinned file whose bytes differ from its digest (`digest_mismatch`).
+When the review returns, the controller checks that list against the packet's
+evidence (`review_packet_mismatch`) and does not import the files again. The
+delivery gives the reviewer the bytes and gives no proof credit. A packet exported
+without `inputs` keeps its earlier form.
 The exporter captures typed verifier inputs, adoption/recovery snapshots, and
 strategy context and plans under their existing exact-byte contracts.
 An adoption allowance whose subject contains `proposal_digest` and

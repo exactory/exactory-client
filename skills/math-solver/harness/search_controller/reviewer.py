@@ -13,7 +13,7 @@ import re
 
 from . import schema as s
 from .errors import SearchError
-from .storage import ContentSink, canonical_bytes
+from .storage import ContentSink, _strict_json, canonical_bytes
 
 PREFIX = "review-assignment:"
 
@@ -183,9 +183,17 @@ def _closure(seed, state, content, artifacts, *, write, common_records=None):
     from research_harness.artifacts import describe_artifact
     index = {s.digest(record): record for record in objects([seed, state, common_records or {}])}
     from research_harness.review_delivery import references
-    common_artifacts = {row["sha256"]: row for row in references(common_records or {})}
-    pending, seen, found, unavailable = list(_digests(seed)), set(), {}, []
+    common_artifacts = {row["sha256"]: row for row in references(
+        [common_records or {}, seed.get("scientific_context", {}).get("supplementary_inputs", {})])}
+    context = seed.get("scientific_context", {})
+    closure_seed = dict(seed, scientific_context={key: value for key, value in context.items()
+                                                 if key != "supplementary_inputs"})
+    pending = list(_digests(closure_seed))
+    pending.extend(item["digest"] for item in context.get("supplementary_inputs", {}).get("inputs", []))
+    seen, found, unavailable = set(), {}, []
     executables, inventories = _native_executables(seed, state, content)
+    supplementary = {item["digest"]: item for item in seed.get("scientific_context", {}).get(
+        "supplementary_inputs", {}).get("inputs", [])}
     provenance, materialized = {}, {}
     while pending:
         digest = pending.pop()
@@ -193,7 +201,7 @@ def _closure(seed, state, content, artifacts, *, write, common_records=None):
             continue
         seen.add(digest)
         s.require(len(seen) <= 10000, "Native review evidence exceeds the explicit closure bound", "review_packet_too_large")
-        if digest in executables:
+        if digest in executables and digest not in supplementary:
             provenance[digest] = executables[digest]
             continue
         value = _read_optional(content, digest, "blob")
@@ -203,6 +211,8 @@ def _closure(seed, state, content, artifacts, *, write, common_records=None):
                 value = index[digest]
             if raw is None and value is None and digest in common_artifacts:
                 raw = artifacts.read(common_artifacts[digest])
+                if supplementary.get(digest, {}).get("kind") == "blob":
+                    value = _strict_json(raw, "review_packet_mismatch")
         if value is not None:
             raw, category = canonical_bytes(value), "blob"
             # The complete typed toolchain inventory is delivered as evidence;
@@ -245,17 +255,52 @@ def _closure(seed, state, content, artifacts, *, write, common_records=None):
             [provenance[key] for key in sorted(provenance)])
 
 
+def validate_supplementary_inputs(binding, evidence=None):
+    """Validate the versioned inventory and its exact delivered byte identities."""
+    if binding is None:
+        return
+    s.closed(binding, "schema_version inputs")
+    s.require(type(binding["schema_version"]) is int and binding["schema_version"] == 1,
+              "Unknown supplementary-input contract", "review_packet_mismatch")
+    seen = set()
+    delivered = {(entry["kind"], entry["digest"]) for entry in evidence or []}
+    for item in s.records(binding["inputs"]):
+        s.closed(item, "kind digest" + (" artifact" if "artifact" in item else ""))
+        s.choice(item["kind"], {"artifact", "blob"})
+        s.digest_string(item["digest"])
+        key = (item["kind"], item["digest"])
+        s.require(key not in seen, "Supplementary inputs must be distinct", "review_packet_mismatch")
+        seen.add(key)
+        if evidence is not None:
+            s.require(key in delivered, "Every supplementary input must be delivered by exact digest", "review_packet_mismatch")
+            entry = next(entry for entry in evidence if (entry["kind"], entry["digest"]) == key)
+            s.require(item.get("artifact") == entry["artifact"],
+                      "Supplementary inputs bind their exact portable descriptors", "review_packet_mismatch")
+
+
 def packet(root, state, content, subject, review_kind, claim_digest, reviewer, artifacts, *, write=False,
-           openness=None, common_records=None):
+           openness=None, common_records=None, supplementary=None):
     from research_harness.native_review import PROTOCOL
     context = scientific_context(state, subject, review_kind)
     if openness is not None:
         from .openness import validate_minimum
         validate_minimum(openness)
         context["openness_minimum"] = copy.deepcopy(openness)
+    validate_supplementary_inputs(supplementary)
+    if supplementary is not None:
+        context["supplementary_inputs"] = copy.deepcopy(supplementary)
     seed = {"subject": subject, "contract": state["contract"], "scientific_context": context,
             "claim_digest": claim_digest}
     evidence, unavailable, provenance = _closure(seed, state, content, artifacts, write=write, common_records=common_records)
+    if supplementary is not None:
+        entries = {(entry["kind"], entry["digest"]): entry for entry in evidence}
+        binding = context["supplementary_inputs"]
+        for item in binding["inputs"]:
+            entry = entries.get((item["kind"], item["digest"]))
+            s.require(entry is not None, "Every supplementary input must reach the packet", "review_packet_mismatch")
+            if "artifact" not in item:
+                item["artifact"] = entry["artifact"]
+        validate_supplementary_inputs(binding, evidence)
     return {"protocol": PROTOCOL, "kind": review_kind, "root": str(Path(root).resolve()),
             "objective_id": state["objective_id"], "contract": copy.deepcopy(state["contract"]),
             "subject": copy.deepcopy(subject), "subject_digest": s.digest(subject), "claim_digest": claim_digest,
@@ -337,7 +382,10 @@ def export_packet(controller, spec):
             validate_minimum_bindings(spec["openness"], claim, records)
         value = packet(controller.root, state, content, spec["subject"], spec["kind"],
                        spec["claim_digest"], spec["reviewer"], artifacts, write=True,
-                       openness=spec.get("openness"), common_records=records)
+                       openness=spec.get("openness"), common_records=records,
+                       supplementary={"schema_version": 1, "inputs": sorted(
+                           [{"kind": item["kind"], "digest": item["digest"]} for item in spec["inputs"]],
+                           key=lambda item: (item["kind"], item["digest"]))} if spec["inputs"] else None)
         reference = artifacts.put(canonical_bytes(value), "application/json")
         load_packet(artifacts, reference, spec["reviewer"]["actor_id"])
         return {"workspace": str(common), "native_packet": reference,
@@ -456,10 +504,12 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
             s.require(normalized_text(supplied["subject"]["author"]["actor_id"])
                       != normalized_text(value["reviewer"]["actor_id"]),
                       "The native proposal author cannot supply its independent review", "review_not_independent")
+        supplementary = supplied["scientific_context"].get("supplementary_inputs")
+        validate_supplementary_inputs(supplementary, supplied["evidence"])
         if new:
             minimum = value.get("findings", {}).get("openness", {}).get("minimum")
             expected = packet(root, state, content, subject, kind(value), value.get("claim_digest"), value["reviewer"], artifacts,
-                              openness=minimum, common_records=records)
+                              openness=minimum, common_records=records, supplementary=supplementary)
             drift = validate_packet_context(supplied, expected, state)
             if drift:
                 current = dict(current, context_drift=drift)

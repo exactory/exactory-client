@@ -196,13 +196,17 @@
     },
     {
       "id": "v7-round-projected-evidence",
-      "record": "v7",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "identity",
       "summary": "Round export and round-review used different representations of the same evidence.",
-      "fixed_in": "open",
-      "expected": "The projected-evidence recording path remains unresolved; round-review can still refuse a copied projected reference and the incident stays open.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "Round review authenticates the entire exported projected reference against the exact decision and bundle, retains its native mapping, and applies native evidence validation and independence checks.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_round_projection.RoundProjectionTests.test_exported_result_records_unchanged_for_stop_and_demand",
+        "test_research_round_projection.RoundProjectionTests.test_entire_projected_reference_is_authenticated_without_mutation",
+        "test_research_round_projection.RoundProjectionTests.test_projection_keeps_independence_and_decision_binding"
+      ]
     },
     {
       "id": "v7-authorized-deposit-stage",
@@ -844,13 +848,21 @@
     },
     {
       "id": "v19-strategy-input-files-undelivered",
-      "record": "v19",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "delivery",
       "summary": "Strategy reassessment packets did not deliver the files pinned by their input list.",
-      "fixed_in": "open",
-      "expected": "The missing strategy-input delivery remains untraced and open; pinning an input does not establish that the reviewer received its bytes.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "Versioned supplementary-input bindings deliver every pinned native strategy input by exact digest and portable descriptor; replay authenticates retained inputs without reimport, delivery grants no proof credit, and old packets keep their bytes.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_eleven_unreferenced_pinned_files_are_delivered_by_digest",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_observed_packet_revalidates_frozen_inputs_without_reimporting_files",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_corruption_refuses_and_unrelated_artifacts_are_excluded",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_binding_and_inventory_changes_are_refused",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_old_packets_rebuild_unchanged_without_supplementary_bindings",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_oversized_inputs_remain_units_for_native_parts_planning",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_normalized_blob_keeps_its_raw_identity_when_revalidated"
+      ]
     },
     {
       "id": "v19-strategy-review-semantics",
@@ -880,13 +892,17 @@
     },
     {
       "id": "v19-strategy-staleness-diagnostics",
-      "record": "v19",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "agent-text",
-      "summary": "Missing planning guidance and an unclear manifest refusal caused avoidable reassessment work.",
-      "fixed_in": "open",
-      "expected": "The proposed strategy refresh guidance and manifest-specific diagnostic remain untraced; these agent-text defects stay open.",
-      "test_kind": "none",
-      "tests": []
+      "summary": "Planning staleness must require a new native plan and an observed strategy reassessment; the constructive continuation and manifest diagnostic have separate entries.",
+      "fixed_in": "0.75.0",
+      "expected": "A changed problem requires a fresh plan before reassessment, and replanning cannot substitute for reassessment. Constructive continuation is covered by v19-constructive-strategy-continuation; the 0.74.0 manifest refusal is covered by v19-evidence-manifest-diagnostic.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_strategy_refresh.StrategyRefreshExecutionTests.test_reassessment_requires_a_plan_for_the_changed_problem",
+        "tests.test_strategy_refresh.StrategyRefreshExecutionTests.test_replan_cannot_substitute_for_strategy_reassessment",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_continuation_requires_the_current_reviewed_plan"
+      ]
     },
     {
       "id": "v19-stop-hook-session-focus",
@@ -1447,14 +1463,19 @@
     },
     {
       "id": "20261021192416-citation-locator-of-url-work-found-late-late-url-locator",
-      "record": "20261021192416-citation-locator-of-url-work-found-late",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "identity (late check)",
       "summary": "A URL-only work lacked a bundle locator and produced a late post obligation.",
-      "fixed_in": "open",
-      "expected": "Bundle import warns about problem_citation_locator_missing before readings depend on it; the URL identifier still does not substitute for a locator and later rebinding can stale readings.",
-      "test_kind": "same_path",
+      "fixed_in": "0.75.0",
+      "expected": "Append-only HTTPS locator provenance binds the exact version, original bytes and existing reading without changing historical unit digests or granting credit to stale readings.",
+      "test_kind": "real_shape",
       "tests": [
-        "test_research_problem_value_readings.ProblemValueReadingTests.test_a_read_https_work_without_a_bundle_locator_has_an_explicit_post_obligation"
+        "test_research_citation_locators.CitationLocatorTests.test_unchanged_github_pdf_gains_verified_locator_without_rereading",
+        "test_research_citation_locators.CitationLocatorTests.test_locator_guards_hash_version_identity_and_https_without_mutation",
+        "test_research_citation_locators.CitationLocatorTests.test_locator_does_not_repair_real_reading_staleness",
+        "test_research_citation_locators.CitationLocatorTests.test_historical_urls_and_exports_keep_their_dependencies",
+        "test_research_citation_locators.CitationLocatorTests.test_changed_retained_bytes_and_provenance_are_refused",
+        "test_research_citation_locators.CitationLocatorTests.test_locator_check_mode_authenticates_without_writing"
       ]
     },
     {
@@ -4048,6 +4069,24 @@
         "test_research_verification.WidenedSampleVerificationTests.test_an_unplaced_heavy_sample_needs_a_band_wider_than_the_computed_one",
         "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0663_still_verifies",
         "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0715_still_verifies"
+      ]
+    },
+    {
+      "id": "v19-constructive-strategy-continuation",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "strategy eligibility",
+      "summary": "A constructive strategy invalidated its entry condition by making its required first mode change.",
+      "fixed_in": "0.75.0",
+      "expected": "A versioned entry basis binds the exact claim; an active constructive strategy may continue through replan and observed reassessment after its own mode move. New construction entries, changed claims, stale plans and fired failure signals remain ineligible.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_entry_construction_replan_reassessment_and_continuation",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_new_entry_already_in_construction_is_ineligible",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_changed_claim_cannot_continue",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_fired_failure_cannot_continue",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_continuation_requires_the_current_reviewed_plan",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_legacy_active_entry_is_recovered_from_its_exact_native_reservation",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_active_entry_metadata_is_reauthenticated_against_the_reservation"
       ]
     }
   ]

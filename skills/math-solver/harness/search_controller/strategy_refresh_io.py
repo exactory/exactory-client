@@ -63,6 +63,47 @@ def _plan_files(controller, node, content=None):
     return result
 
 
+def restore_strategy_entries(workspace, previous, moves):
+    """Recover a legacy active entry only from its authenticated native reservation."""
+    name = "make-the-proof-constructive"
+    s.require(isinstance(previous, dict), "Strategy entry bindings must be an object", "strategy_plan_stale")
+    if not moves or moves[-1]["strategy"] != name:
+        return previous
+    try:
+        (workspace.parent / ".search" / "tree.json").stat()
+    except FileNotFoundError:
+        return previous
+    from .service import Controller
+    from .storage import ContentSink
+    from .problem_records import load_problem_before
+    controller = Controller(workspace.parent)
+    state = controller.status()
+    node = next((row for row in state["nodes"].values() if row["attack_slug"] == workspace.name), None)
+    s.require(node is not None, "The active strategy needs its exact native node", "strategy_plan_stale")
+    receipt = state["service"]["journal_receipts"].get("{}:{}".format(node["id"], moves[-1]["move"]))
+    s.require(receipt is not None and controller.store.get_artifact(receipt["journal_prefix_digest"])
+              == (workspace / "journal.jsonl").read_bytes(),
+              "The active strategy needs its authenticated journal prefix", "recovery_required")
+    first = moves[-1]
+    for move in reversed(moves):
+        if move["strategy"] != name:
+            break
+        first = move
+    reservation = next((row for row in state["service"]["moves"].values()
+                        if row["node_id"] == node["id"] and row["move"] == first["move"]
+                        and row["strategy"] == name), None)
+    s.require(reservation is not None, "The active strategy needs its original reservation", "strategy_plan_stale")
+    original = load_problem_before(controller, node, reservation, ContentSink(controller.store))
+    mode = original["quadruple"]["mode"]
+    if mode not in {"existence", "computation", "undecided"}:
+        return {key: value for key, value in previous.items() if key != name}
+    entry = {"schema_version": 1, "mode": mode,
+             "claim_digest": s.digest({"claim": original["claim"], "statement": original["quadruple"]["statement"]})}
+    s.require(name not in previous or previous[name] == entry,
+              "The strategy entry basis differs from its native reservation", "strategy_plan_stale")
+    return dict(previous, **{name: entry})
+
+
 def plan_binding(controller, node):
     import attack
     files = _plan_files(controller, node)

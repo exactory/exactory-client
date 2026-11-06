@@ -1,10 +1,12 @@
 """Validate and deliver the exact readings and empirical support a post cites."""
 
+from urllib.parse import urlsplit
+
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
 from .graph import obligation
-from .operations import fields, strings, text
+from .operations import fields, immutable_record, prepared_mutation, strings, text
 from .problem_claims import find_current_statement, find_latest, find_value, find_assessment, compute_statement_digest
 from .reading import fulltext_coverage, validate_read_evidence
 
@@ -15,7 +17,7 @@ BINDING_RECORD_KINDS = (
     "problem_selection", "problem_statement", "problem_openness", "problem_value", "problem_assessment",
     "problem_attempt", "native_attempt", "native_attempt_current", "literature_search", "reading", "work",
     "source", "source_bundle", "bundle_selection", "work_assertion", "alias", "work_family",
-    "problem_citation_metadata", "visual_asset", "visual_asset_selection", "source_deferral",
+    "problem_citation_metadata", "citation_locator", "visual_asset", "visual_asset_selection", "source_deferral",
     "source_deferral_selection", "configuration", "literature_scope", "fulltext_requirement", "search_selection",
     "reference_occurrence", "reference_resolution", "workspace", "execution_admission", "execution_outcome",
     "execution", "cycle_assessment", "problem_formal_check", "native_closure", "native_import_identity",
@@ -365,6 +367,69 @@ def collect_readings(records):
             if identifier in identifiers or digest(row) in digests]
 
 
+def validate_citation_locator(records, artifacts, value):
+    """Authenticate a location against its exact reading and retained HTTP original."""
+    code = "problem_citation_locator_unbound"
+    fields(value, ("id", "version_id", "reading_id", "original_sha256", "url", "source_id"),
+           ("reading_digest", "source_digest", "recorded_revision"), code=code)
+    for key in ("id", "version_id", "reading_id", "original_sha256", "url", "source_id"):
+        text(value[key], "Citation locator " + key, code=code)
+    try:
+        location = urlsplit(value["url"])
+        valid_url = (location.scheme == "https" and location.hostname and location.port != 0
+                     and not location.username and not location.password and not location.fragment
+                     and not any(character.isspace() for character in value["url"]))
+    except ValueError:
+        valid_url = False
+    reading = records.get("reading", {}).get(value["reading_id"])
+    work = records.get("work", {}).get(value["version_id"])
+    source = records.get("source", {}).get(value["source_id"])
+    bundle = records.get("source_bundle", {}).get((reading or {}).get("bundle_id"))
+    if (not valid_url or reading is None or work is None
+            or reading["version_id"] != value["version_id"] or bundle is None
+            or bundle["original_sha256"] != value["original_sha256"]
+            or source is None or source.get("url") != value["url"]
+            or source.get("status") != "captured" or source.get("response_complete") is not True
+            or source.get("origin_verified") is not True
+            or (source.get("response") or {}).get("sha256") != value["original_sha256"]
+            or (work["id"].startswith("url:") and work["id"][4:] != value["url"])
+            or not any(capture.get("source_id") == value["source_id"]
+                       and (capture.get("original") or {}).get("sha256") == value["original_sha256"]
+                       for capture in work.get("fulltexts", []))):
+        raise ResearchError(code, "Bind an HTTPS capture of the exact original, version and reading")
+    artifacts.read(source["response"])
+    validate_reading(records, artifacts, {"kind": "reading", "version_id": value["version_id"],
+                                         "reading_id": reading["id"]})
+    provenance = {"reading_digest": digest(reading), "source_digest": digest(source)}
+    if any(key in value and value[key] != expected for key, expected in provenance.items()):
+        raise ResearchError(code, "The reading or location provenance changed")
+    return provenance
+
+
+def record_citation_locator(store, payload, *, expected_revision, request_id):
+    """Append location metadata without replacing a reading or its bundle."""
+    artifacts = store.build_artifact_store()
+
+    def prepare(records, value):
+        provenance = validate_citation_locator(records, artifacts, value)
+        saved = records.get("citation_locator", {}).get(value["id"])
+        record = dict(value, **provenance,
+                      recorded_revision=saved["recorded_revision"] if saved else expected_revision + 1)
+        return [immutable_record(records, "citation_locator", value["id"], record)], record
+
+    return prepared_mutation(store, "literature.citation_locator", payload, prepare,
+                             expected_revision=expected_revision, request_id=request_id)
+
+
+def find_reading_locator(records, artifacts, reading):
+    record = max((row for row in records.get("citation_locator", {}).values()
+                  if row["reading_id"] == reading["id"]),
+                 key=lambda row: (row["recorded_revision"], row["id"]), default=None)
+    if record is not None:
+        validate_citation_locator(records, artifacts, record)
+    return record
+
+
 def find_citation_locator(work, units):
     """The locator of a cited work: its DOI, else its arXiv id, else the first HTTPS url of a unit of the bundle that
     its reading binds. None when the work has none of them."""
@@ -399,7 +464,10 @@ def project_citations(records, artifacts):
         if arxiv_work_key is not None and arxiv_work_key in seen_arxiv_works:
             continue
         bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
+        location = find_reading_locator(records, artifacts, reading)
         locator = find_citation_locator(work, (bundle or {}).get("units", []))
+        if locator is None and location is not None:
+            locator = location["url"]
         if locator is None:
             raise ResearchError("problem_citation_locator_missing", "Record a DOI, arXiv id or HTTPS locator for the read source",
                                 {"version_id": version, "reading_id": reading["id"]})
@@ -464,6 +532,10 @@ def describe_binding(records, artifacts):
             metadata.append({"version_id": version, "id": record["id"], "digest": digest(record)})
     if metadata:
         binding["citation_metadata"] = metadata
+    locators = [record for row in collect_readings(records)
+                for record in [find_reading_locator(records, artifacts, row)] if record is not None]
+    if locators:
+        binding["citation_locators"] = [{"id": row["id"], "digest": digest(row)} for row in locators]
     return binding
 
 
@@ -518,6 +590,9 @@ def describe_evidence(records, artifacts):
                                    "depth": row["depth"], "reading": dict(
                                        {key: value for key, value in row.items() if key != "inspections"},
                                        inspections=inspections)})
+        location = find_reading_locator(records, artifacts, row)
+        if location is not None:
+            delivered_readings[-1]["citation_locator"] = dict(location, digest=digest(location))
         metadata = find_citation_metadata(records, row["version_id"])
         if metadata is not None:
             delivered_readings[-1]["citation_metadata"] = describe_citation_metadata(records, artifacts, metadata)
