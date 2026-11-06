@@ -27,6 +27,9 @@ what the evidence does not support; it does not supply the judgment. The milesto
 `exploration`, `slate`, `formulation`, `attempt`, `openness`, `value` and `post` name the state of
 the record, not an order of tools: every tool is available at every milestone, and only
 `exactory-research gate post` requires every condition at once.
+When a step stops and only the user can pass it, report it and go on only as
+[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes; the post
+then uses `export --kind problem-override` and `problem-post-external`.
 
 Every `exactory-research` mutation below takes `--file FILE --expected-revision REVISION
 --request-id ID`. Read `exactory-research status` before each mutation and use its revision.
@@ -936,8 +939,9 @@ instead of one request. The
    the slots that 0.70.0 staged on assignment continue in it. Its result cannot post before the
    quality measurement: every staged review lists `review_quality_measurement_pending`, because
    the measurement of its quality against a single-input review has not run, so the gate stays
-   not ready for a staged review in this release; report that to the user instead of working
-   around it, since in this release only an ordinary review or a series reaches the post. In a
+   not ready for a staged review in this release. Report the stop; only an ordinary review or a
+   series satisfies the gate, and when the user's instruction covers the stop, follow Stops and
+   overrides for the direct export and post. In a
    staged review, `review-series` plans and assigns each next task
    (`review-assignment {controller_assignment_id}`, state `plan`), runs it
    (`review-run {assignment_id, epoch_id, task_id}`), resumes an interrupted acceptance

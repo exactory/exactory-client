@@ -605,9 +605,9 @@ def prepare_decision(records, artifacts, value, revision):
     return [immutable_record(records, "problem_decision", value["id"], record)], record
 
 
-def build_projection(records, artifacts):
+def build_post_files(records, artifacts):
+    """Compose the statement, value paragraphs and citations without claiming any decision or review."""
     statement, value = find_current_statement(records), find_value(records)
-    decision = find_latest(records, "problem_decision")
     files = {"title.txt": statement["title"], "statement.md": statement["statement"],
              "criteria.md": statement["resolution_criteria"],
              "motivation.md": "\n\n".join(row["text"] for row in value["motivation"]),
@@ -616,6 +616,14 @@ def build_projection(records, artifacts):
     formal = statement["formal_statement"]
     if formal is not None:
         files["formal-statement.txt"] = formal["text"]
+    return files
+
+
+def build_projection(records, artifacts):
+    statement = find_current_statement(records)
+    decision = find_latest(records, "problem_decision")
+    files = build_post_files(records, artifacts)
+    formal = statement["formal_statement"]
     from .review_protocol import assignment_state
     from .research_decisions import _response
     reviews = []
@@ -671,6 +679,38 @@ def export_problem(store, destination=None):
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
     require_ready(assess_post(records, artifacts), "post")
     files, manifest = build_projection(records, artifacts)
+    return write_problem_export(store, files, manifest, destination)
+
+
+def export_problem_override(store, destination=None):
+    """Compose the exact post material on a recorded instruction, with no reviewed decision claim."""
+    records = store.snapshot()["records"]
+    require_problem(records)
+    statement = find_current_statement(records)
+    statement_digest = None if statement is None else compute_statement_digest(statement)
+    override = max((row for row in records.get("gate_override", {}).values()
+                    if row["gate"] == "post" and row.get("statement_digest") == statement_digest),
+                   key=lambda row: row["recorded_revision"], default=None)
+    if override is None:
+        raise ResearchError("gate_override_required", "This export needs a recorded post override whose statement digest "
+                            "matches the current statement text and resolution criteria. If the user has instructed you to "
+                            "pass this stop, record their words with gate-override, gate post; otherwise report the stop")
+    if find_value(records) is None:
+        raise ResearchError("problem_value_missing", "Record the problem's motivation and current state with problem-value "
+                            "before this export")
+    artifacts = Evaluation.of(records, ArtifactStore(store.root))
+    files = {name: (content + "\n").encode("utf-8") for name, content in build_post_files(records, artifacts).items()}
+    formal = statement["formal_statement"]
+    manifest = dict(statement_id=statement["id"], statement_digest=statement_digest, area=statement["area"],
+                    formal_statement_language=None if formal is None else formal["language"],
+                    files={name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())},
+                    decision_id=None, problem_evidence_digest=None, override_id=override["id"], gate="bypassed")
+    files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+    return write_problem_export(store, files, manifest, destination)
+
+
+def write_problem_export(store, files, manifest, destination):
+    """Write or reuse the exact file set under the export's digest."""
     if destination is None:
         from .output_views import PROBLEM_EXPORTS_FOLDER, find_workspace_root
         destination = find_workspace_root(store.root) / PROBLEM_EXPORTS_FOLDER / compute_export_digest(files)

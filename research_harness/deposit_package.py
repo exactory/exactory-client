@@ -25,6 +25,7 @@ RECORD_KINDS = (
     "cycle_assessment", "checkpoint", "development_selection", "bundle_selection", "readiness_review",
     "manuscript_review", "manuscript_prediction", "contribution_analysis", "round_decision", "round_review",
     "source_deferral", "workspace_decision", "publication_bundle", "publication_selection", "local_artifact",
+    "gate_override",
 )
 _SUFFIXES = {"application/json": ".json", "image/svg+xml": ".svg", "image/png": ".png",
              "application/pdf": ".pdf", "text/plain": ".txt"}

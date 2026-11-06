@@ -182,6 +182,45 @@ def _obligations(values):
             "by_code": [{"code": _short(code, 48), "count": count, "code_truncated": len(code) > 48} for code, count in selected]}
 
 
+def summarize_overrides(report):
+    """Keep bounded instruction quotes and obligation codes in both navigation summaries."""
+    result = {}
+    for key in ("overrides", "unrecorded_overrides"):
+        if key not in report:
+            continue
+        rows = report[key]
+        examples = []
+        for row in rows[:3]:
+            instruction = row["instruction"]
+            if isinstance(instruction, dict):
+                instruction = instruction["text"]
+            strings = dict(id=row["id"], gate=row["gate"], stop_code=row.get("stop_code"), instruction=instruction)
+            limits = dict(id=64, gate=48, stop_code=48, instruction=120)
+            example = {name: _short(value, limits[name]) for name, value in strings.items()}
+            example["truncated_fields"] = [name for name, value in strings.items()
+                                            if isinstance(value, str) and len(value) > limits[name]]
+            example["transition"] = row.get("transition")
+            if "obligations" in row:
+                codes = row["obligations"]
+                example["obligations"] = [_short(code, 48) for code in codes[:6]]
+                example["omitted_obligations"] = max(0, len(codes) - 6)
+            examples.append(example)
+        result[key] = examples
+        result["omitted_" + key] = max(0, len(rows) - len(examples))
+    return result
+
+
+def bound_override_summaries(result, limit):
+    """Trim optional previews until they fit the view's existing byte bound."""
+    while len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > limit:
+        removable = [key for key in ("overrides", "unrecorded_overrides") if len(result.get(key, [])) > 1]
+        if not removable:
+            break
+        key = max(removable, key=lambda key: len(result[key]))
+        result[key].pop()
+        result["omitted_" + key] += 1
+
+
 def next_summary(report, *, counters=False):
     """Return a navigation hint, never a stage-transition authorization."""
     preparation = report.get("preparation") or {}
@@ -189,6 +228,7 @@ def next_summary(report, *, counters=False):
             "preparation_ready": preparation.get("ready"), "advisory_only": True, "detail_available": True,
             "next_hint": _hint(report.get("next")),
             "details": "exactory-research obligations --code CODE [--limit N] [--cursor CURSOR]"}
+    result.update(summarize_overrides(report))
     if "external_deposit" in report:
         deposit = report["external_deposit"]
         result["external_deposit"] = {key: deposit[key] for key in
@@ -219,6 +259,7 @@ def next_summary(report, *, counters=False):
         hint["omitted_next_steps"] += 1
     if counters:
         result["evaluation"] = report.get("evaluation")
+    bound_override_summaries(result, 4096)
     hint = result.get("next_hint")
     while hint and len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > 4096:
         fields = [key for key, value in hint.items() if isinstance(value, str) and value]
@@ -332,6 +373,7 @@ def status_summary(report):
            and len(json.dumps(result, ensure_ascii=False, indent=2).encode('utf-8')) > 16 * 1024):
         progress['examples'].pop()
         progress['omitted'] += 1
+    bound_override_summaries(result, 16 * 1024)
     return result
 
 

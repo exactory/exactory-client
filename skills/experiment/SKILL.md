@@ -242,7 +242,9 @@ the realized supported advance and actual evidence. `deliver_requested` can use 
 instruction for a valid limited result while retaining an unmet bar and objective.
 An explicit quality condition remains binding. Selected source-limited publication
 contracts retain `gate manuscript-readiness`; whole-objective `gate readiness`
-continues to report the original objective.
+continues to report the original objective. After an override of a gate
+([Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)),
+`exactory-lab probe` is the path for a calculation; `run` still needs its admission.
 
 Address findings with source corrections, appropriate validity checks, or further
 scoped cycles and affected independent reassessment. A material disagreement uses

@@ -37,6 +37,7 @@ from .review_budget import record_budget
 from .probe import record_probe_intent, record_probe, summarize_probes
 from .record_check import DEFAULT_TIME_BUDGET_SECONDS
 from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata, problem_evidence
+from . import overrides
 
 
 OPERATIONS = {
@@ -54,6 +55,7 @@ OPERATIONS = {
     "problem-decision": problem_claims.record_decision,
     "problem-posted": problem_claims.record_posted,
     "problem-post-external": problem_claims.record_post_external,
+    "gate-override": overrides.record_override,
     "problem-post-time": problem_claims.record_post_time,
     "init": principles.initialize_research,
     "adopt": adopt_workspace,
@@ -226,12 +228,19 @@ def add_identity(parser, *, required=True):
                         help="Stable unique request identity; identical retries return the original receipt.")
 
 
-def note_managed_record_skipped(error):
+def note_managed_record_skipped(error, store=None):
     """One stderr line: the command ran, and the study's receipt was not written.
 
     A readiness refusal carries its obligations; their codes name what the study still owes."""
     pending = [item["code"] for item in (error.details or {}).get("obligations", [])]
     suffix = " Pending: " + ", ".join(pending) + "." if pending else ""
+    if store is not None:
+        try:
+            recorded = store.snapshot()["records"].get("gate_override", {})
+        except ResearchError:
+            recorded = {}
+        if recorded:
+            suffix += " Overrides: " + ", ".join(sorted(recorded)) + "."
     print("Managed record skipped (" + error.code + "): " + error.message + suffix, file=sys.stderr)
 
 
@@ -287,7 +296,7 @@ def select_managed_path(check, start=None, *, managed_only=False, scope_contract
     except ResearchError as error:
         if managed_only:
             raise
-        note_managed_record_skipped(error)
+        note_managed_record_skipped(error, store)
         return store, None, None
 
 
@@ -376,7 +385,7 @@ def build_parser():
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
-            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-openness", "outputs"), default="workspace")
+            item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-override", "problem-openness", "outputs"), default="workspace")
             item.add_argument("--spec", help="JSON assignment identity, openness minimum, optional analytical native_reviews [{attempt_id,assignment_id}], and source_evidence [{source_id,reason,locator?}] for problem-openness.")
             item.add_argument("--destination", help=(
                 "Directory of the export. A problem export goes under final/problem/exports/ of the workspace, by "
@@ -559,6 +568,7 @@ def status_report(store, *, counters=False):
             status_scope.callback(scope.pop, 'review_closure_roots', None)
         scope['review_closure_roots'] = {}
         records = snapshot["records"]
+        override_status = overrides.describe_overrides(records, store.root)
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
         advisories = find_view_advisories(store, snapshot["revision"])
         if "problem" in records.get("workspace", {}):
@@ -602,7 +612,7 @@ def status_report(store, *, counters=False):
                            for action in describe_next_actions(records, evaluation, assignment['id'])]
                 if actions:
                     result['next'] = dict(upcoming, next=actions)
-            return result
+            return dict(result, **override_status)
         config = records.get("configuration", {}).get("research")
         profile = config["profile"] if config else "research"
         study = records.get("workspace", {}).get("study")
@@ -706,7 +716,15 @@ def status_report(store, *, counters=False):
                 if study and study["stage"] == "evaluate" and wait is not None:
                     result["managed_wait"] = dict(wait, workflow="manuscript-review")
                     result["next"] = wait
-        return annotate_review_obligations(records, evaluation, result)
+        return dict(annotate_review_obligations(records, evaluation, result), **override_status)
+
+
+def build_gate_report(records, artifacts, action, revision):
+    """Compute the same annotated findings for the gate command and a recorded override."""
+    from .review_continuation import annotate_review_obligations
+    artifacts = Evaluation.of(records, artifacts)
+    report = gate_state(records, artifacts, action)
+    return annotate_review_obligations(records, artifacts, dict(report, revision=revision))
 
 
 def load_candidates(path, *, include_coverage=False):
@@ -804,6 +822,15 @@ def run(args):
             if (existing_workspace is None or not (existing_workspace / ".exactory/research.sqlite3").exists()
                     or Store(existing_workspace).committed_request(args.request_id) is None):
                 raise
+    if args.command == "gate-override":
+        root = find_workspace(root)
+        identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
+        try:
+            return OPERATIONS[args.command](Store(root), payload, **identity)
+        except ResearchError as error:
+            if error.code not in ("corrupt_state", "storage_io"):
+                raise
+            return overrides.append_unrecorded_override(root, payload, **identity)
     if args.command == "import-response" and original is None:
         fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings", "publisher_capture"))
         text(payload["response_file"], "Response file")
@@ -919,23 +946,21 @@ def run(args):
         reference = strict_json(Path(args.reference).read_bytes()) if args.reference else None
         return screening.policy_report(store, policy=args.policy, reference=reference)
     if args.command == "gate":
-        from .review_continuation import annotate_review_obligations
         snapshot = store.snapshot()
         evaluation = Evaluation(snapshot['records'], ArtifactStore(store.root))
-        report = gate_state(snapshot['records'], evaluation, args.action)
-        report = annotate_review_obligations(snapshot['records'], evaluation,
-                                            dict(report, revision=snapshot['revision']))
+        report = build_gate_report(snapshot['records'], evaluation, args.action, snapshot['revision'])
         require_ready(report, args.action)
         return report
-    if args.kind == "problem":
+    if args.kind in ("problem", "problem-override"):
         folder = find_workspace_root(store.root) / PROBLEM_EXPORTS_FOLDER
         if args.destination is not None and folder not in Path(os.path.realpath(args.destination)).parents:
             raise ResearchError("export_destination_outside_final",
                                 "Leave out --destination, or give a directory under " + PROBLEM_EXPORTS_FOLDER + "/ of the workspace. Without "
                                 "--destination the export goes to " + PROBLEM_EXPORTS_FOLDER + "/<export digest>/.",
                                 {"destination": args.destination, "folder": str(folder)})
-        from .problem_delivery import export_problem
-        return export_problem(store, args.destination)
+        from .problem_delivery import export_problem, export_problem_override
+        export = export_problem if args.kind == "problem" else export_problem_override
+        return export(store, args.destination)
     if args.kind == "problem-openness":
         if not args.spec:
             raise ResearchError("invalid_input", "Problem openness export requires --spec")

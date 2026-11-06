@@ -72,6 +72,8 @@ reading credit. Verification keeps the fixed preset below.
 Under `lineage-v1`, the research default, enumeration creates no cohort-member
 reading obligation. Incomplete acquisition stays visible as a notice, and the
 `cohort` gate can pass with enumeration pending. Keep that limit in the study.
+A refused `cohort` gate is passed only on the user's instruction
+([Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)).
 Use stored abstracts as a local search source with
 `exactory-research population-query --terms TERM [TERM ...] --limit N`, then
 `exactory-research batches --destination DIR --loop --candidates FILE`.
