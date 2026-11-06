@@ -1,6 +1,7 @@
 """Supported standard-library CLI over the accepted research domain operations."""
 
 import argparse
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -178,7 +179,7 @@ def _review_run(store, payload, **identity):
                         break
             if owner and payload.get("id", owner["id"]) != owner["id"]:
                 from .problem_delivery import require_unposted_review
-                require_unposted_review(records, child)
+                require_unposted_review(records, child, store.build_artifact_store())
                 raise ResearchError("review_resampling_forbidden", "Resume the attempt that owns this captured reservation.")
             # Replaying acceptance retains its original attempt identity. Before
             # acceptance, a deterministic identity also survives CLI interruption.
@@ -501,7 +502,7 @@ def _review_status(records, artifacts):
         series = series_results[assignment[review_parts.KEY]['series_assignment_id']]
         result['assignments'][identifier]['review_parts'] = describe_parts_turn(
             assignment, state, series,
-            is_posted=find_review_post(records, assignment) is not None,
+            is_posted=find_review_post(records, assignment, artifacts) is not None,
             ended_without_output=review_protocol.has_ended_without_output(records, identifier))
         progress = result['assignments'][identifier]['review_parts']
         if progress['next']:
@@ -517,7 +518,7 @@ def _review_status(records, artifacts):
             continue
         assignment, state, effective = row["assignment"], row["state"], row["effective"] or {}
         tasks = describe_review_tasks(records, row["epoch"], state)
-        if find_review_post(records, assignment) is not None:
+        if find_review_post(records, assignment, artifacts) is not None:
             tasks = [dict(task, next=[]) for task in tasks]
         result["assignments"][assignment["id"]].update(
             epoch_id=row["epoch"]["id"], kind=effective.get("kind", "pending"),
@@ -550,7 +551,13 @@ def status_report(store, *, counters=False):
     snapshot = store.snapshot()
     evaluation = Evaluation(snapshot['records'], store.build_artifact_store())
     runtime = store.describe_runtime()
-    with runtime_scope(snapshot['records'], evaluation):
+    with runtime_scope(snapshot['records'], evaluation) as scoped_evaluation, ExitStack() as status_scope:
+        scope = scoped_evaluation.find_root()._runtime_scope[0]
+        if 'review_closure_roots' in scope:
+            status_scope.callback(scope.__setitem__, 'review_closure_roots', scope['review_closure_roots'])
+        else:
+            status_scope.callback(scope.pop, 'review_closure_roots', None)
+        scope['review_closure_roots'] = {}
         records = snapshot["records"]
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
         advisories = find_view_advisories(store, snapshot["revision"])

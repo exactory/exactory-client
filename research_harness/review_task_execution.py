@@ -100,6 +100,9 @@ class _TransactionRecords(Mapping):
     def __len__(self):
         raise ResearchError("invalid_input", "Admission reads explicit record kinds")
 
+    def read_creation_revision(self, kind, key):
+        return self._transaction.read_creation_revision(kind, key)
+
 
 def _mutate_current(store, operation, payload, apply, *, request_id, expected_revision=None):
     """Evaluate admission/lifecycle predicates in the serialized write, never in a caller read set."""

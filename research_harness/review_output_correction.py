@@ -203,7 +203,7 @@ def invoke_correction(store, payload, *, expected_revision, request_id, credenti
         fields(value, ('id', 'assignment_id', 'route_id'))
         from .problem_delivery import require_unposted_review
         assignment = protocol._get(records, 'review_assignment', value['assignment_id'])
-        require_unposted_review(records, assignment)
+        require_unposted_review(records, assignment, artifacts)
         if any(invocation['assignment_id'] == value['assignment_id']
                for invocation in records.get('review_output_correction_invocation', {}).values()):
             raise ResearchError('review_correction_exhausted', 'One correction invocation exhausts this assignment, including failure or decline.')

@@ -706,7 +706,7 @@ def _build_series(records, artifacts, inputs):
                 verified = review_parts.verify_series(records, artifacts, identifier)
                 parts_progress = describe_parts_turn(
                     assignment, state, verified,
-                    is_posted=find_review_post(records, assignment) is not None,
+                    is_posted=find_review_post(records, assignment, artifacts) is not None,
                     ended_without_output=has_ended_without_output(records, identifier))
             turns.append({
                 "turn": numbers[identifier], "assignment_id": identifier, "parent_assignment_id": parent, "link": link,

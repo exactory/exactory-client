@@ -262,6 +262,9 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         self.assertTrue(json.loads((destination / "citations.json").read_text())[0]["locator"].startswith("2601."))
         post = self.mutate(self.load_problem_module().record_posted, {"problem_id": "posted-id", "export_directory": str(destination)})["result"]
         self.assertEqual(post["statement_id"], self.selected["id"])
+        self.assertEqual(post["recorded_revision"], self.store.revision)
+        self.assertEqual(self.store.snapshot()["records"].read_creation_revision("problem_post", post["id"]),
+                         post["recorded_revision"])
         self.assertEqual(status_report(self.store)["milestone"], "post")
         self.assert_error("problem_already_posted", lambda: self.mutate(self.load_problem_module().record_posted,
             {"problem_id": "again", "export_directory": str(destination)}))
