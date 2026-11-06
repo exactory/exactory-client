@@ -3826,6 +3826,94 @@
         "test_ci_lean_install.LeanCacheWarmWorkflowTests.test_mutations_reject_early_save_and_optional_install_or_build",
         "test_ci_lean_install.LeanInstallTests.test_warm_installation_performs_only_version_probes"
       ]
+    },
+    {
+      "id": "historical-request-unlabelled-probe",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the unlabelled-probe form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unlabelled_probe",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_new_requests_keep_the_frozen_ordinary_bytes_and_do_not_need_observations",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unknown_runtime_or_adapter_never_matches_even_with_coherent_route_digests",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_altered_retained_inputs_never_match",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_probe_checks_both_positive_control_manifests",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_builder_errors_and_artifact_failures_are_not_reinterpreted",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unknown_profile_and_invocation_kind_are_not_supported",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_protected_bytes_and_fit_orders_remain_at_the_released_baseline",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_missing_or_detached_invocation_is_not_positive_identification",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_route_identity_must_match_its_record_key",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_history_reader_runs_once_only_after_every_ordinary_candidate_misses"
+      ]
+    },
+    {
+      "id": "historical-request-labelled-pre-fit-local",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the labelled-pre-fit-local form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_labelled_pre_fit_local",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_altered_assignment_and_invocation_bindings_never_match",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_oversized_history_and_codec_boundaries_keep_current_request_bytes",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_paged_history_rebuilds_and_keeps_its_digest_validation",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_failure_receipt_is_still_failed_and_assignment_uses_the_current_builder",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_retained_body_descriptors_cover_utf8_base64_and_prior_elisions"
+      ]
+    },
+    {
+      "id": "historical-request-codex-order-before-source-capacity",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the codex-order-before-source-capacity form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_codex_order_before_source_capacity",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_altered_evidence_in_elided_history_is_not_hidden_by_reduction"
+      ]
+    },
+    {
+      "id": "historical-request-claude-order-before-full-text-steps",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the claude-order-before-full-text-steps form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_claude_order_before_full_text_steps",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_oversized_history_and_codec_boundaries_keep_current_request_bytes"
+      ]
+    },
+    {
+      "id": "historical-request-complete-source-exact-text-v1",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the complete-source-exact-text-v1 form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_complete_source_exact_text_v1",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_oversized_history_and_codec_boundaries_keep_current_request_bytes"
+      ]
     }
   ]
 }
