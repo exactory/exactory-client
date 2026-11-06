@@ -3788,6 +3788,22 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_staged_status_preserves_tasks_and_incomplete_recovery_evidence",
         "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags"
       ]
+    },
+    {
+      "id": "report-cost-repeated-replay-encoding",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "cost (snapshot history replay)",
+      "summary": "Snapshot replay serializes full events, receipts and current rows again after their event components have already passed canonical validation.",
+      "fixed_in": "0.74.0",
+      "expected": "Replay reuses validated canonical segments for event hashing and receipt comparison and decodes projection-equal current rows without another encoding, removing two encodes per event and one per current row while preserving snapshots, histories, corruption errors and bounded UTF-8 buffers.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_replay_encoding.ReplayEncodingTests.test_large_repeated_replay_encodes_each_component_and_change_once",
+        "test_research_replay_encoding.ReplayEncodingTests.test_snapshots_histories_and_fingerprint_equal_released_0736",
+        "test_research_replay_encoding.ReplayEncodingTests.test_all_scalar_results_and_escaped_identifiers_keep_their_receipts",
+        "test_research_replay_encoding.ReplayEncodingTests.test_corruption_keeps_the_released_error_and_diagnostic_precedence",
+        "test_research_replay_encoding.ReplayEncodingTests.test_digest_keeps_utf8_scratch_bounded"
+      ]
     }
   ]
 }

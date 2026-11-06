@@ -430,14 +430,14 @@ class ResearchStorageTests(unittest.TestCase):
         encoded_records = ('{"authors":["One"],"title":"Last"}',
                            '{"title":"First"}', '{"read":true}')
         counts = {encoded: 0 for encoded in encoded_records}
-        original = storage._load
+        original = storage.json.loads
 
         def count_load(encoded, *args):
             if encoded in counts:
                 counts[encoded] += 1
             return original(encoded, *args)
 
-        with mock.patch.object(storage, "_load", count_load):
+        with mock.patch.object(storage.json, "loads", count_load):
             snapshot = store.snapshot()
         self.assertEqual(counts, dict.fromkeys(encoded_records, 1))
         self.assertEqual(snapshot, {"revision": 1, "records": {

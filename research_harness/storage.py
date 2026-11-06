@@ -169,10 +169,11 @@ def _encode_json(value, code: str) -> str:
         raise ResearchError(code, "Expected finite JSON data with string object keys") from error
 
 
-def _digest(encoded: str) -> str:
+def _digest(*segments: str) -> str:
     hasher = hashlib.sha256()
-    for offset in range(0, len(encoded), _UTF8_CHUNK_CHARACTERS):
-        hasher.update(encoded[offset:offset + _UTF8_CHUNK_CHARACTERS].encode("utf-8"))
+    for encoded in segments:
+        for offset in range(0, len(encoded), _UTF8_CHUNK_CHARACTERS):
+            hasher.update(encoded[offset:offset + _UTF8_CHUNK_CHARACTERS].encode("utf-8"))
     return hasher.hexdigest()
 
 
@@ -302,7 +303,14 @@ the caller must discard it if any validation fails.
         _text(row["request_id"], "Stored request ID", "corrupt_state")
         _text(row["operation"], "Stored operation", "corrupt_state")
         event = _event_value(row)
-        if _digest(_encode_json(event, "corrupt_state")) != row["digest"]:
+        encoded_request_id = json.dumps(row["request_id"], ensure_ascii=False)
+        encoded_revision = str(row["revision"])
+        # _event_value has checked each component's canonical bytes. Hash those
+        # segments in sorted-key order without encoding the complete event again.
+        if _digest('{"changes":', row["changes"], ',"operation":',
+                   json.dumps(row["operation"], ensure_ascii=False), ',"payload":', row["payload"],
+                   ',"request_id":', encoded_request_id, ',"result":', row["result"],
+                   ',"revision":', encoded_revision, '}') != row["digest"]:
             raise ResearchError("corrupt_state", "Research event digest does not match its original values")
         for change in event["changes"]:
             if not isinstance(change, dict) or set(change) != {"kind", "key", "value"} or not isinstance(change["value"], dict):
@@ -317,10 +325,15 @@ the caller must discard it if any validation fails.
             del change
         receipt = connection.execute("SELECT * FROM receipts WHERE request_id = ?",
                                      (row["request_id"],)).fetchone()
-        expected_response = {"revision": row["revision"], "request_id": row["request_id"],
-                             "result": event["result"]}
+        response_prefix = '{"request_id":' + encoded_request_id + ',"result":'
+        response_suffix = ',"revision":' + encoded_revision + '}'
+        # Match the exact canonical segments without a second result-sized string.
         if (receipt is None or receipt["revision"] != row["revision"]
-                or receipt["response"] != _encode_json(expected_response, "corrupt_state")
+                or not isinstance(receipt["response"], str)
+                or len(receipt["response"]) != len(response_prefix) + len(row["result"]) + len(response_suffix)
+                or not receipt["response"].startswith(response_prefix)
+                or not receipt["response"].startswith(row["result"], len(response_prefix))
+                or not receipt["response"].endswith(response_suffix)
                 or _digest(receipt["response"]) != receipt["digest"]):
             raise ResearchError("corrupt_state", "Research request receipt does not match its original event")
         if fingerprint is not None:
@@ -328,15 +341,18 @@ the caller must discard it if any validation fails.
         if requests is not None:
             requests.add(row["request_id"])
         # Release the completed event before decoding another event or the current records.
-        del event, expected_response, receipt, row
+        del event, receipt, row
     if event_count != revision or connection.execute("SELECT COUNT(*) FROM receipts").fetchone()[0] != revision:
         raise ResearchError("corrupt_state", "Research revision, events, and receipts disagree")
     record_count = 0
     for row in connection.execute("SELECT kind, key, value, digest FROM records ORDER BY kind, key"):
         record_count += 1
-        value = _load(row["value"], dict)
         if projections.get((row["kind"], row["key"])) != (row["value"], row["digest"]):
+            # Keep the original JSON diagnostics ahead of the projection error.
+            _load(row["value"], dict)
             raise ResearchError("corrupt_state", "Research record differs from its committed history")
+        # The matching projection is already a canonical JSON object with this digest.
+        value = json.loads(row["value"])
         if fingerprint is not None:
             _fingerprint_entry(fingerprint, ("record", row["kind"], row["key"], row["digest"]))
         if records is not None:
