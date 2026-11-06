@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.76.0](docs/releases/0.76.0.md) makes the files that the harness owns read-only on disk. The native commands and hooks publish each such file atomically and without write bits. A direct write by an agent, such as a shell redirection into the journal of an attack, then fails with a permission error. The files that agents write by design stay writable, and records from earlier releases keep working.
+
 Version [0.75.0](docs/releases/0.75.0.md) makes `status` faster on review-heavy records, closes review work per posted statement instead of per record, and adds managed Codex hooks that survive a plugin update. It also corrects source delivery, round evidence, citation locators, native review packets, the continuation of `make-the-proof-constructive`, the restoration of withheld review bodies, and the check of the actual Codex model and effort.
 
 Version [0.74.1](docs/releases/0.74.1.md) adds an entry to the `math-conjecturer` skill for open problems that start from a simple thought experiment, as the Kakeya needle problem did. `problem-candidate` accepts the source kind `thought_experiment`. Such a problem meets the same posting bar as every other problem, and its exploration keeps all reviewed work in one record.
