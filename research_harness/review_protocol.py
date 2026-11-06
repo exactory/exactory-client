@@ -42,6 +42,21 @@ from .storage import _canonical, read_filtered_records, select_record_groups
 ROLES = ('bar', 'slate', 'result', 'adjudicator', 'manuscript', 'standalone', 'verification', 'native_math')
 PAPER_ROLES = ('manuscript', 'standalone')
 PROTOCOL = 'exactory-independent-review-v1'
+_VERIFICATION_PROTOCOL = 'exactory-verification-review-v2'
+VERIFICATION_STANCE_NOTE = (
+    'PLACEHOLDER: verdict.stance is sound or not_sound and verdict.summary is nonempty.')
+VERIFICATION_BAND_NOTE = (
+    'PLACEHOLDER: verdict.prediction.percentile, verdict.prediction.band.best and verdict.prediction.band.worst '
+    'are integers from 1 to 100 with best <= percentile <= worst; 1 is best.')
+VERIFICATION_SAMPLE_BINDING_NOTE = (
+    'PLACEHOLDER: When paper.sampling_context is present, verdict.prediction.percentile equals '
+    'paper.sampling_context.prediction.percentile and the verdict band contains paper.sampling_context.prediction.band.')
+VERIFICATION_SAMPLE_WIDEN_NOTE = (
+    'PLACEHOLDER: When paper.sampling_context.prediction.widen_required is true, at least one verdict band '
+    'endpoint lies beyond the sample band.')
+VERIFICATION_EMPTY_SAMPLE_NOTE = (
+    'PLACEHOLDER: When paper.sampling_context.prediction.percentile is null, the sample places no member and '
+    'no verdict binds until placements are revised.')
 POLICY = 'fresh-focused-adjudicator-v1'
 # The common text that opens every reviewer prompt, by version. An envelope without parameters.common_version was
 # rendered with version 1 (0.55.0 to 0.66.3). Version 2 is used by 0.67.0 to 0.71.6, and version 3 from 0.71.7.
@@ -799,7 +814,7 @@ def find_common_prompt_version(prompt):
     return value if type(value) is int and value != 1 and value in _COMMON_PROMPTS else None
 
 
-def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestration=None, repair_prompt=None,
+def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestration=None, repair_prompt=None,
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
                      reading_protocol=None, common_version=None, evidence_parts=None, part_suffix=None,
                      staged_task=None, composed=False, claim_range=False, review_parts=None):
@@ -812,6 +827,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
+    if version is None:
+        version = 7 if role == 'verification' else 6
     if review_parts is not None:
         from . import review_parts as parts
         from .review_parts_roles import get_adapter
@@ -932,6 +949,11 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=6, orchestrati
     elif role == 'manuscript':
         prompt += _MANUSCRIPT_RESPONSE
     template_version = PROTOCOL
+    if role == 'verification' and version >= 7:
+        prompt += ' ' + ' '.join((VERIFICATION_STANCE_NOTE, VERIFICATION_BAND_NOTE,
+                                 VERIFICATION_SAMPLE_BINDING_NOTE, VERIFICATION_SAMPLE_WIDEN_NOTE,
+                                 VERIFICATION_EMPTY_SAMPLE_NOTE))
+        template_version = _VERIFICATION_PROTOCOL
     if role in bar_sources.ROLES and not legacy:
         prompt += bar_sources.PROMPT
         template_version = bar_sources.PROTOCOL

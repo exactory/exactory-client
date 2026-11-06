@@ -55,6 +55,37 @@ class ScopedClaimMarkerTests(SourceLimitedCase):
         claims[0]["revised"] = {"previous": self.original[0]["claim"], "reason": "Widened."}
         self.assert_error("publication_scope_claim_mismatch", lambda: self.pin_with(claims, "changed-text"))
 
+    def test_current_round_continuity_checks_scoped_revision_history(self):
+        from research_harness.rounds import find_claim_revision_obligations
+        admission = {'opening': {'bundle_id': self.bundle['id']}}
+        claims = copy.deepcopy(self.original)
+        claims[0]['revised'] = {'previous': claims[0]['claim'], 'reason': 'The scope retains this exact claim.'}
+        valid = self.pin_with(claims, 'valid-round-history')
+        self.assertEqual(find_claim_revision_obligations(
+            self.store.snapshot()['records'], self.artifacts, admission, valid), [])
+        claims[0]['revised']['previous'] = 'Invented opening wording.'
+        invalid = self.pin_with(claims, 'invalid-round-history')
+        obligations = find_claim_revision_obligations(
+            self.store.snapshot()['records'], self.artifacts, admission, invalid)
+        self.assertEqual([item['code'] for item in obligations], ['round_claim_revision_mismatch'])
+        self.assertEqual(obligations[0]['claim_ids'], [claims[0]['id']])
+
+    def test_unchanged_opening_claim_retains_its_earlier_revision_marker(self):
+        from research_harness.rounds import find_claim_revision_obligations
+        claims = copy.deepcopy(self.original)
+        claims[0]['revised'] = {'previous': 'Earlier wording before this round opened.',
+                                'reason': 'The preceding round established the current wording.'}
+        opening = self.pin_with(claims, 'opening-with-revision-history')
+        current = self.pin_with(claims, 'unchanged-revision-history')
+        admission = {'opening': {'bundle_id': opening['id']}}
+        records = self.store.snapshot()['records']
+        self.assertEqual(find_claim_revision_obligations(records, self.artifacts, admission, current), [])
+        claims[0]['revised']['previous'] = 'A newly invented earlier wording.'
+        changed = self.pin_with(claims, 'changed-revision-history')
+        records = self.store.snapshot()['records']
+        self.assertEqual([item['code'] for item in find_claim_revision_obligations(
+            records, self.artifacts, admission, changed)], ['round_claim_revision_mismatch'])
+
     def test_a_superseded_approved_claim_is_still_a_mismatch(self):
         claims = copy.deepcopy(self.original)
         claims[0]["superseded"] = {"reason": "Withdrawn although the scope still supports it."}

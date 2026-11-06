@@ -189,6 +189,16 @@ def next_summary(report, *, counters=False):
             "preparation_ready": preparation.get("ready"), "advisory_only": True, "detail_available": True,
             "next_hint": _hint(report.get("next")),
             "details": "exactory-research obligations --code CODE [--limit N] [--cursor CURSOR]"}
+    if "external_deposit" in report:
+        deposit = report["external_deposit"]
+        result["external_deposit"] = {key: deposit[key] for key in
+            ("status", "bundle_digest", "current_bundle", "managed_credit")}
+        result["external_deposit"].update({key: _short(deposit.get(key), 128) for key in
+                                          ("environment", "doi", "record_url")})
+        result["external_deposit"]["deposition_id"] = deposit["deposition_id"]
+    if "managed_wait" in report:
+        result["managed_wait"] = _hint(report["managed_wait"])
+        result["managed_wait"]["workflow"] = "manuscript-review"
     if report.get("orchestration") == "problem_creation":
         result.update(orchestration=report["orchestration"], milestone=report["milestone"],
                       post_obligations=_obligations(report["obligations"]))

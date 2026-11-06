@@ -393,10 +393,16 @@ def _fulltext_source(records, artifacts, work, capture):
     return source
 
 
+QUALIFICATION_DELIVERY_PENDING_NOTE = (
+    'PLACEHOLDER: Required unavailability evidence is binary and cannot be delivered on this text-only route; '
+    'the source request remains pending without reading or scientific credit.')
+
+
 def _qualified_unavailability(records, artifacts, work, request, result, captures):
     """Settle retrieval with current evidence, without waiving reading or source obligations."""
     from .identities import normalize_identifier
     from .reading import qualify_availability, registries_addressing
+    from .review_transport import is_binary_evidence, text_only_enabled
     if request['depth'] == 'fulltext' and any(c.get('availability') == 'available' for c in work.get('fulltexts', [])):
         return result
     for value in sorted(records.get('availability', {}).values(), key=lambda value: value['id']):
@@ -413,6 +419,11 @@ def _qualified_unavailability(records, artifacts, work, request, result, capture
             continue
         # Failed terminal responses are evidence of retrieval failure, not captured reading sources.
         sources = [records['source'][source_id] for source_id in value['source_ids']]
+        if text_only_enabled() and any(
+                is_binary_evidence(artifacts.read(source['response']), source['response']['media_type'])
+                for source in sources):
+            result['reason'] = QUALIFICATION_DELIVERY_PENDING_NOTE
+            continue
         result['evidence'] = []
         provenance = []
 
