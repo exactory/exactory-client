@@ -12,7 +12,7 @@ import sys
 SHARED_HOOKS = Path(__file__).resolve().parent.parent / "hooks"
 if str(SHARED_HOOKS) not in sys.path:
     sys.path.insert(0, str(SHARED_HOOKS))
-from math_search import normalize, workspace_for
+from math_search import CANNOT_CHECK_GUIDANCE_MSG, normalize, workspace_for
 
 
 def parse_patch_targets(command: str) -> list[tuple[str, str]]:
@@ -101,7 +101,7 @@ def main() -> None:
             raise
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PreToolUse", "permissionDecision": "deny",
-            "permissionDecisionReason": f"[exactory] Cannot check this patch: {exc}",
+            "permissionDecisionReason": f"[exactory] Cannot check this patch: {exc}. " + CANNOT_CHECK_GUIDANCE_MSG,
         }}))
         return
     contexts = []

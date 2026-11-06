@@ -30,6 +30,20 @@ from search_controller.runtime import WRITER_RUNTIME_FILENAME, is_runtime_identi
 _SHELL_NAMES = {"Bash", "exec_command", "functions.exec_command"}
 _FILE_NAMES = {"Write", "Edit", "Delete", "Read"}
 SHELL_SEPARATORS = {";", "&&", "||", "|", "&"}
+READ_ONLY_TOOLS = {"Read", "Glob", "Grep", "WebSearch", "WebFetch", "ToolSearch"}
+READ_ONLY_COMMANDS = {"cat", "ls", "rg", "grep", "head", "tail", "wc", "pwd", "printf", "echo", "du"}
+READ_ONLY_FALLBACK_COMMANDS = READ_ONLY_COMMANDS - {"rg", "printf", "pwd"}
+CANNOT_CHECK_GUIDANCE_MSG = (
+    "The guard still passes `Read`, `Glob`, `Grep`, `WebSearch`, `WebFetch` and `ToolSearch`. "
+    "It also passes shell commands made only of `cat`, `ls`, `grep`, `head`, `tail`, `wc`, `echo` or `du` "
+    "with plain arguments (no `$`, `*`, `?`, `[`, parentheses, braces, redirection or assignment, even quoted). "
+    "Tell the user which call was denied and quote the diagnostic. Only the user can do the rest. "
+    "`/cd <path>` to a directory outside the workspace that holds the record lets unrelated work continue, "
+    "but other calls that name the record stay denied. To work in the record, the user can disable the plugin. "
+    "On Claude Code, the user runs `/plugin disable exactory@exactory-ai`, then `/reload-plugins --force`. "
+    "On Codex, the user disables the Exactory hooks in `/hooks`. "
+    "An administrator-managed plugin or hook cannot be disabled this way."
+)
 
 
 class ManagedError(ValueError):
@@ -183,6 +197,39 @@ def iter_simple_commands(tokens, separator_positions):
                     command += 1
         yield start, command, end, data_position
         start = end + 1
+
+
+def is_read_only(payload):
+    """Recognize calls that can still run when the file guard cannot check them."""
+    try:
+        payload = normalize(payload)
+        if payload.get("tool_name") in READ_ONLY_TOOLS:
+            return True
+        if payload.get("tool_name") != "Bash":
+            return False
+        command = payload["tool_input"]["command"]
+        # shell_tokens accepts a PATH bootstrap for normal managed commands;
+        # the fallback accepts neither that assignment nor expansions or newlines.
+        if any(character in command for character in ("\n", "\r", "$", "`")):
+            return False
+        tokens = shell_tokens(command)
+        allowed_separators = {";", "&&", "||", "|"}
+        if not tokens or tokens[-1] in allowed_separators or any(
+                (re.fullmatch(r"[;&|<>]+", token) and token not in allowed_separators)
+                or any(character in token for character in "(){}") for token in tokens):
+            return False
+        separators = {index for index, token in enumerate(tokens) if token in allowed_separators}
+        for start, command, end, _ in iter_simple_commands(tokens, separators):
+            if start != command or command >= end:
+                return False
+            executable = tokens[command]
+            arguments = tokens[command + 1:end]
+            if executable not in READ_ONLY_FALLBACK_COMMANDS or any(
+                    any(character in token for character in "*?[") for token in arguments):
+                return False
+        return True
+    except Exception:
+        return False
 
 
 def argument_data(tokens):
@@ -467,11 +514,12 @@ def guard(payload):
         visible = json.dumps(raw)
         visible_roots = {root for root in found["roots"] if str(root) in visible
                          or os.path.relpath(root, cwd) + "/" in visible}
-        if tool in {"Read", "Glob", "Grep", "WebSearch", "WebFetch"}:
+        if tool in READ_ONLY_TOOLS:
             continue
         if tool not in _FILE_NAMES | {"Bash"}:
             if visible_roots or any(is_same_or_ancestor(root, cwd) for root in found["roots"]):
-                return "Unsupported managed payload; use a direct apply_patch or exec_command so its targets can be checked"
+                return ("Unsupported managed payload; use a direct apply_patch or exec_command so its targets can be checked. "
+                        + CANNOT_CHECK_GUIDANCE_MSG)
             continue
         writing = tool in {"Write", "Edit", "Delete"}
         write_paths = paths
@@ -480,7 +528,7 @@ def guard(payload):
                 tokens = shell_tokens(raw.get("command") if isinstance(raw, dict) else None)
             except ValueError as error:
                 if relevant or found["direct"] or visible_roots:
-                    return str(error) + "; use a supported direct call"
+                    return str(error) + "; use a supported direct call. " + CANNOT_CHECK_GUIDANCE_MSG
                 continue
             if not tokens:
                 continue
@@ -490,15 +538,14 @@ def guard(payload):
             if not managed:
                 continue
             unsupported = ("Unsupported managed shell operation; use a direct supported command "
-                           "or controller search run")
+                           "or controller search run. " + CANNOT_CHECK_GUIDANCE_MSG)
             separators = {index for index, token in enumerate(tokens) if token in SHELL_SEPARATORS}
             commands = list(iter_simple_commands(tokens, separators))
             if (tokens[-1] in SHELL_SEPARATORS or any(
                     token in {"&", "<", "<<", "<<<"} or re.fullmatch(r"[;&|<>]+", token)
                     and token not in {";", "&&", "||", "|", ">", ">>", ">|"} for token in tokens)):
                 return unsupported
-            read_only = {"cat", "ls", "rg", "grep", "head", "tail", "wc", "pwd", "printf", "echo", "du"}
-            supported = read_only | {
+            supported = READ_ONLY_COMMANDS | {
                 "exactory-math", "attack.py", "tee", "cp", "mv", "rm", "truncate", "dd", "sed"}
             for start, command, end, _ in commands:
                 prefix_end = start
@@ -523,9 +570,9 @@ def guard(payload):
                                   or any(token in {">", ">>", ">|"} for token in arguments)
                                   or (executable == "sed"
                                       and any(token.startswith("-i") for token in arguments)))
-                if len(commands) > 1 and (executable not in read_only or command_writes):
+                if len(commands) > 1 and (executable not in READ_ONLY_COMMANDS or command_writes):
                     return unsupported
-                if executable in read_only and any(
+                if executable in READ_ONLY_COMMANDS and any(
                         any(character in token for character in "*?[") for token in arguments):
                     return unsupported
                 if executable == "rg" and any(

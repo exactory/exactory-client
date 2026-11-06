@@ -2320,19 +2320,45 @@ shorter token with a slash remains a candidate path, subject to the hook's other
 filters for options, interpreter code or module arguments, and newline or NUL
 characters.
 The hooks read a record with the controller of their own plugin. Read, Glob, Grep,
-WebSearch and WebFetch calls make no controller call, but discovery runs before
-that exemption, so a malformed or conflicting discovery registry denies them
-too. The pre-tool guard checks every target of a call, both ends of a move in a
-patch included, with the protected-path and native-record checks above, and
+WebSearch, WebFetch and ToolSearch calls make no controller call. Discovery runs
+before that exemption, so a malformed or conflicting discovery registry stops it
+for them too. The guard then cannot check the call, and a read-only call passes,
+as described below. The pre-tool guard checks every target of a call, both ends
+of a move in a patch included, with the protected-path and native-record checks
+above, and
 then queries each distinct registered root that a target lies under once, with
 the read-only `search guard-status --json` and the root's registered
 `--objective-id` and `--contract-digest`. One 20-second deadline covers the
 queries for all roots and the diagnostic fallback below; the host's hook
 timeout stays 30 seconds. A Codex `apply_patch` reaches the guard as one call
 that carries every file of the patch; the other hooks still receive one payload
-per file. A failure of the guard's own checks that it did not expect denies the
-call with a message that names the error and asks that it be reported to the
-user. When a controller query fails, the hook confirms the failure with one
+per file. When one of the guard's own checks fails with an error, the guard
+cannot check the call and decides by the call alone. A call passes when every
+item of it is a read-only tool (Read, Glob, Grep, WebSearch, WebFetch,
+ToolSearch) or a shell command made only of the bare names `cat`, `ls`, `grep`,
+`head`, `tail`, `wc`, `echo` and `du`, joined at most by `;`, `&&`, `||` or
+`|`. That check reads characters, not shell syntax. It rejects a newline or
+carriage return, `$`, a backtick, an assignment, a redirection, a token that
+contains a parenthesis or a brace, and an argument that contains `*`, `?` or
+`[`, also inside quotes, so `grep 'a[0-9]' FILE` is rejected. `rg`, `printf`
+and `pwd` are not in the list: `rg` can start another program, `printf` can
+assign a variable, and in POSIX mode bash's `pwd -P` assigns `PWD`. An empty
+batch is denied on this path. When the guard can check, it passes as before.
+Every other call is denied with a message that names the error and ends with
+three things: what still passes, the instruction to tell the user which call
+was denied and to quote the diagnostic, and the controls that only the user
+has. `/cd <path>` to a directory outside the workspace that holds the record
+lets unrelated work continue. Any other call that names the record stays denied,
+and so does a session whose directory is still inside that workspace, for example
+in the parent of the record. Codex changes directory only in an idle primary
+session with no queued input or background terminals, and Claude Code can
+restrict `/cd` targets by permission rule. To work in the record, the user
+disables the plugin: `/plugin disable exactory@exactory-ai` followed by
+`/reload-plugins --force` on Claude Code, or the Exactory hooks in `/hooks` on
+Codex. A plugin or hook that an administrator manages cannot be disabled this
+way. An error at the hook's outer boundary also asks that it be
+reported to the user, because the plugin needs a fix or an update. When a
+controller query fails, the hook confirms the failure with one
 plain `search guard-status --json` call inside the same deadline. If that call
 succeeds, the record is readable and the message keeps its operational diagnostic,
 `Controller recovery required: DIAGNOSTIC`, for example a focus or revision
@@ -2347,15 +2373,19 @@ installed controller ... cannot read this record: DIAGNOSTIC. No writer runtime
 identity is recorded; use the runtime that wrote the record.` Only a matching
 version and digest keeps `Controller recovery required: DIAGNOSTIC`; a different
 launcher path alone is not a mismatch. The hook never runs the recorded launcher.
-PreToolUse denies the operation with `[math-solver] ` and the message, and
-SessionStart and Stop add the same as context.
+PreToolUse passes a read-only call as above and denies every other call with
+`[math-solver] `, the message and the statement of how the user can continue.
+SessionStart and Stop add the message as context.
 `Controller recovery required: ...` arrives with a second prefix after
 `[math-solver] `: `Recovery required before this managed operation: ` from
 PreToolUse, and `Recovery or explicit focus is required: ` from SessionStart
 and Stop. A record that the installed controller replays is handled as before,
 whichever runtime wrote it.
-Recognized managed mutations with corrupt state or unsupported visible shell or
-wrapper payloads fail closed with direct-call recovery guidance. The adapter does
+A recognized managed mutation with corrupt state is denied with the recovery
+diagnostic above. An unsupported visible shell or wrapper payload is denied with
+direct-call guidance. Both denials, and the Codex adapter's denial of a patch
+that it cannot read (`[exactory] Cannot check this patch: ...`), end with the
+same statement of how the user can continue. The adapter does
 not parse arbitrary shell programs or JavaScript. Nested operations that the host
 never reports remain an observability boundary, not an enforced sandbox. Tests use
 synthetic host payloads; they do not establish a live host smoke result.
