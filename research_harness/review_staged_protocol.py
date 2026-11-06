@@ -1581,7 +1581,8 @@ def authenticate_observation(records, artifacts, assignment, attempt, *, require
                 and derive_output(dict(observation, output=protocol._read_json(artifacts, observation['output'])),
                                   response) == protocol._read_json(artifacts, observation['output'])
                 and (not require_verified_context or observation['status'] == 'completed'
-                     and protocol.verify_route_context(artifacts, route, request, response)))
+                     and protocol.verify_route_context(artifacts, route, request, response,
+                                                       required=observation.get('codex_invocation') is not None)))
     except (ResearchError, KeyError, TypeError, ValueError):
         return False
 

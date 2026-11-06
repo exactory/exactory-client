@@ -328,4 +328,3 @@ class SlateClosureSlotTests(unittest.TestCase):
         self.assertEqual(new['slot_id'], 'bar-second')
         self.assertIsNone(problem_delivery.find_review_post(case.read_records(), new, case.artifacts))
         self.assertEqual(problem_delivery.find_review_closure_root(case.read_records(), new)['id'], new['id'])
-

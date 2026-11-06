@@ -251,4 +251,3 @@ class PostedHeadPlanningTests(unittest.TestCase):
                 with self.assertRaises(ResearchError) as caught:
                     record_check.check_continuation(case.store)
                 self.assertEqual(caught.exception.code, code)
-
