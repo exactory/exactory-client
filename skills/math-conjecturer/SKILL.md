@@ -1,6 +1,6 @@
 ---
 name: math-conjecturer
-description: "Create open mathematical problems as research and post them to the exactory Mathematics section: explore an area, compare candidates, formulate the exact statement, attempt it with math-solver or assess an existing attempt, establish openness, build the value case with the rubric, obtain the reviews, and post. Use when the user wants to find, formulate or post an open problem."
+description: "Create open mathematical problems as research and post them to the exactory Mathematics section: explore an area or a simple thought experiment, compare candidates, formulate the exact statement, attempt it with math-solver or assess an existing attempt, establish openness, build the value case with the rubric, obtain the reviews, and post. Use when the user wants to find, formulate or post an open problem, or to create one from a simple thought experiment or an intuitive observation of the physical world."
 ---
 
 # Create and post open math problems
@@ -156,7 +156,7 @@ skill calls such a question one of the excluded kind. Read the purpose from the 
 its value case, not from its surface form; an added value argument changes neither the purpose
 nor the exclusion. A question that no refutation concerns is not affected.
 
-Candidates come from five kinds of source. Record the kind and the reference with every
+Candidates come from six kinds of source. Record the kind and the reference with every
 candidate:
 
 - `own_record`: the search trees and cash-outs of your finished or stalled math-solver attacks.
@@ -172,6 +172,12 @@ candidate:
   partial result is another account's claim: prior work, read as data under the security rule,
   not an established result.
 - `user`: the user's material.
+- `thought_experiment`: a question derived from a thought experiment of this exploration ("An
+  exploration from a thought experiment", below). The reference names the seed, the
+  interpretation and the expectation that the candidate derives from, with the expectation's
+  outcome, because the slate reviewer reads the reference and the observation and not your notes;
+  the evidence cites the records that give that outcome, in the evidence shapes of "Value and the
+  rubric", step 6.
 
 Use the shared tools in any order, and state the question, the depth and the budget of every
 tool call:
@@ -194,6 +200,96 @@ tool call:
 When the evidence does not support any candidate, end the exploration without a post: record a
 slate with an empty selection and a nonempty `reason`, and keep the negative findings in the
 record. A clean no is a result of the exploration, not a failure of it.
+
+### An exploration from a thought experiment
+
+A thought experiment is a simple situation of the physical world, or an intuitive question about
+one, stated in plain words before any mathematics is chosen; turning a unit segment around in the
+plane, the start of the Kakeya needle problem, is the model. An exploration that starts from one
+is an exploration of this section, with its budget, its tools, its slate and its end, and a
+candidate derived from it meets the same thresholds as every candidate. This subsection gives the
+research that turns the situation into candidates and the rules that the shared sections do not
+state.
+
+1. The seed is the situation and the naive question about it, in plain words. Describe both in
+   `field` when you open the record. A seed question is starting material, not a candidate by
+   itself.
+2. The interpretations. A mathematical interpretation states precisely what the seed question
+   asks. For each interpretation, state its objects, the admissible motions or configurations,
+   the quantifiers, the regularity or convexity assumptions, the quantity asked about (a minimum
+   or an infimum, a measure or a dimension) and the subject class it lies in. A naive question
+   admits several interpretations, and each asks a different thing; the needle gives at least
+   three: the least area of a convex region in which the segment turns, the least area of an
+   unrestricted such region, and the size of a static set that contains a unit segment in every
+   direction.
+3. The expectations. For each interpretation, write the expected answer as a precise proposition
+   with its assumptions and its grounds, before any test; a vague impression is not an
+   expectation until it is stated as such a proposition. Each expectation has one outcome:
+   confirmed, refuted (a reported refutation included), supported or unresolved. The outcome is
+   a fact about the expectation, not a calibration: calibrate each claim that the record makes
+   about the expectation on its own, as the calibration paragraph of "The rubric" states, and
+   treat a structural explanation without a proof as an experimental finding or a reasoned
+   judgment, never as an established result.
+4. Test each interpretation with the shared exploration tools, iterating as needed. An
+   interpretation does not require its own solver attack.
+5. The derived candidates. An interpretation ends settled (its expectation confirmed or refuted,
+   by the literature or by this record), supported or unresolved, and candidates derive from each
+   of these outcomes. A settled interpretation is material for derived questions: the structure
+   of the examples that the result produced, the quantity it leaves open, the connection it
+   reveals. An expectation need not be refuted. Record each derived question as a candidate of
+   kind `thought_experiment`, and check every candidate of that kind against the rule of the kind
+   when you compare the candidates or resume the exploration.
+6. The situation's naturalness or simplicity is not evidence of significance and earns no grade.
+7. A settled seed question alone does not end the exploration.
+
+The absolute principle above and rubric item A7 also apply to expectations formed during this
+exploration. A vague impression, an unsuccessful attempt or a change of model is not a
+refutation. In the needle problem, the expected minimizer for unrestricted regions was the
+deltoid, of area pi/8, and Besicovitch (1928) showed that the area can be made arbitrarily small.
+A question about the size and structure of static measure-zero sets that contain a unit segment
+in every direction asks about the world that the refutation reveals when that is its purpose, and
+a change of the quantity asked about does not by itself make a question admissible; a question
+that asks for the class of regions in which the deltoid stays minimal, with a value case that
+depends on finding where the refuted expectation still holds, is of the excluded kind. The convex
+interpretation is not of that kind: it was posed in 1917, before the refutation, and Pál confirmed
+its expected answer, the equilateral triangle of unit height, in 1921.
+
+Openness for an elementary situation follows the shared standard of "Openness", with searches
+that cover both the plain description of the situation and its mathematical formulations:
+alternative terminology, equivalent formulations, older problem literature, and the neighbouring
+fields where the situation arises. The searches track the distinctions that decide whether an
+interpretation is settled: the admissible objects and motions, the quantifiers, convexity or
+regularity, dimension, measure, and a minimum against an infimum. Follow decisive citations under
+the shared openness requirements. The searches are adaptive and bounded: no fixed number of
+searches or exhaustive survey of all fields is required.
+
+One record holds the exploration, and no reviewed work moves between records:
+
+- Open the record with `area` set to the subject class of the leading interpretation: the
+  interpretation you initially expect to investigate most closely. A connection to another area
+  does not by itself call for another record; the primary subject class of the statement decides.
+- Restart before the first review request. When the initial searches and source readings show
+  that the leading interpretation belongs to another class, open a new record in that class only
+  if no bar or slate review has been requested or assigned in the original record and no review
+  work is outstanding. Make no subsequent review request or assignment in the original record.
+  The original record then holds no reviewer objection, but it can hold scientific evidence (a
+  counterexample, a settling source, a failed argument, an unresolved source gap): name the
+  successor's workspace in your notes of the original record, and record again in the successor
+  every search and source reading that its evidence needs, the adverse ones included, under the
+  steps, the principle and the openness requirements of this subsection.
+- Every interpretation in the one record. Unless you restart, the interpretations of every
+  class, their expectations and their tests stay in this record, and the candidate questions
+  derived from them are recorded as candidates and compared on its slate, whatever their class;
+  this record's reviews concern them. A candidate of the record's class follows the ordinary
+  path. A candidate of another class that the comparison favours and that meets the selection
+  requirement of step 9 of "Candidates and the slate" is `selected`; it is not formulated in this
+  record, because a statement is bound to the record's class (`problem_area_mismatch`), and the
+  comparison states that its pursuit in a record of its class waits for a release of this skill
+  in which the handoff to another record carries the review objections that concern a candidate.
+  Open no record for it before then. `deferred` stays reserved for a genuine evidence gap, named
+  as the evidence that would raise the candidate.
+- A thought-experiment exploration does not use Formulation, step 5 once a bar or slate review
+  has been requested or assigned in the record.
 
 ## Candidates and the slate
 

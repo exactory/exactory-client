@@ -1,6 +1,6 @@
 ---
 name: math-conjecturer
-description: "Create open mathematical problems as research and post them to the exactory Mathematics section: explore an area, compare candidates, formulate the exact statement, attempt it with math-solver or assess an existing attempt, establish openness, build the value case with the rubric, obtain the reviews, and post. Use when the user wants to find, formulate or post an open problem."
+description: "Create open mathematical problems as research and post them to the exactory Mathematics section: explore an area or a simple thought experiment, compare candidates, formulate the exact statement, attempt it with math-solver or assess an existing attempt, establish openness, build the value case with the rubric, obtain the reviews, and post. Use when the user wants to find, formulate or post an open problem, or to create one from a simple thought experiment or an intuitive observation of the physical world."
 ---
 
 # Exactory: math-conjecturer
