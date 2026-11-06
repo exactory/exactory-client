@@ -202,6 +202,35 @@ When the evidence does not support any candidate, end the exploration without a 
 slate with an empty selection and a nonempty `reason`, and keep the negative findings in the
 record. A clean no is a result of the exploration, not a failure of it.
 
+One record holds the exploration, and no reviewed work moves between records. A bar or slate
+objection binds the candidates of its own record only, and no release carries it into another
+record:
+
+- A connection to another area does not by itself call for another record; the primary subject
+  class of the statement decides.
+- When the initial searches and source readings show that the exploration belongs to another
+  class, and no bar or slate review has been requested or assigned in the original record and no
+  review work is outstanding, open a new record in that class. Make no subsequent review request
+  or assignment in the original record. The original record then holds no reviewer objection,
+  but it can hold scientific evidence: a counterexample, a settling source, a failed argument, an
+  unresolved source gap. Name the successor's workspace in your notes of the original record. In
+  the successor, record again every search and source reading that its evidence needs, the
+  adverse ones included.
+- Once a bar or slate review has been requested or assigned, keep every candidate of the
+  exploration in this record. Compare every candidate on its slate, whatever its class. This
+  record's reviews concern every candidate. For a candidate of the record's class, follow the
+  ordinary path. When the comparison favours a candidate of another class and the candidate
+  meets the selection requirement of step 9 of "Candidates and the slate", select it. Do not
+  formulate it in this record: a statement is bound to the record's class
+  (`problem_area_mismatch`). In `comparison`, state that its pursuit in a record of its class
+  waits for a release of this skill in which the handoff to another record carries the review
+  objections that concern a candidate. Until that release, open no record for it, including a
+  sibling record on the same field question or seed. Use `deferred` only for a genuine evidence
+  gap. While no statement exists, the post gate lists `problem_statement_missing`. While a
+  current statement formulates a candidate that the latest slate does not select, it lists
+  `problem_candidate_unselected`. `next` reports the leading obligation, and the wait holds
+  whatever code `next` reports.
+
 ### An exploration from a thought experiment
 
 A thought experiment is a simple situation of the physical world, or an intuitive question about
@@ -264,33 +293,15 @@ regularity, dimension, measure, and a minimum against an infimum. Follow decisiv
 the shared openness requirements. The searches are adaptive and bounded: no fixed number of
 searches or exhaustive survey of all fields is required.
 
-One record holds the exploration, and no reviewed work moves between records:
+The rule of "Exploration" that one record holds the exploration applies with these particulars:
 
 - Open the record with `area` set to the subject class of the leading interpretation: the
-  interpretation you initially expect to investigate most closely. A connection to another area
-  does not by itself call for another record; the primary subject class of the statement decides.
-- Restart before the first review request. When the initial searches and source readings show
-  that the leading interpretation belongs to another class, open a new record in that class only
-  if no bar or slate review has been requested or assigned in the original record and no review
-  work is outstanding. Make no subsequent review request or assignment in the original record.
-  The original record then holds no reviewer objection, but it can hold scientific evidence (a
-  counterexample, a settling source, a failed argument, an unresolved source gap): name the
-  successor's workspace in your notes of the original record, and record again in the successor
-  every search and source reading that its evidence needs, the adverse ones included, under the
-  steps, the principle and the openness requirements of this subsection.
-- Every interpretation in the one record. Unless you restart, the interpretations of every
-  class, their expectations and their tests stay in this record, and the candidate questions
-  derived from them are recorded as candidates and compared on its slate, whatever their class;
-  this record's reviews concern them. A candidate of the record's class follows the ordinary
-  path. A candidate of another class that the comparison favours and that meets the selection
-  requirement of step 9 of "Candidates and the slate" is `selected`; it is not formulated in this
-  record, because a statement is bound to the record's class (`problem_area_mismatch`), and the
-  comparison states that its pursuit in a record of its class waits for a release of this skill
-  in which the handoff to another record carries the review objections that concern a candidate.
-  Open no record for it before then. `deferred` stays reserved for a genuine evidence gap, named
-  as the evidence that would raise the candidate.
-- A thought-experiment exploration does not use Formulation, step 5 once a bar or slate review
-  has been requested or assigned in the record.
+  interpretation you initially expect to investigate most closely.
+- When that rule permits a restart because the leading interpretation belongs to another class,
+  apply the steps, the principle and the openness requirements of this subsection in the
+  successor.
+- Unless you restart, keep the interpretations of every class, their expectations and their
+  tests in this record. Their derived candidates follow that rule.
 
 ## Candidates and the slate
 
@@ -331,8 +342,8 @@ significance.
    two bar reviewers; the harness builds the packet from the current candidates and the two
    bars and uses the template `exactory-problem-review-v5/slate`. Run it with `review-run` and
    record it with `value-review`. A slate review's objection names the candidates it concerns;
-   such an objection follows the candidate into the result reviews and the post gate until it is
-   resolved with evidence or found not upheld.
+   such an objection follows the candidate into the result reviews and the post gate of this
+   record until it is resolved with evidence or found not upheld.
 8. Record the selection with `exactory-research problem-slate`. Give every current candidate
    exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
    `rejected` with the reason. A candidate of the excluded kind is `rejected` with the
@@ -349,8 +360,9 @@ significance.
     cite it; the harness refreshes it in the same session and slot, and the refreshed review
     gives a finding on every objection its earlier review stated.
 
-Take each selected candidate through the following steps in turn, and post each one that meets
-the bar. Several problems from one exploration is the normal case, not an exception.
+For each selected candidate of the record's class, take the following steps in turn. Post each
+one that meets the bar. For a selected candidate of another class, follow the rule of
+"Exploration". Several problems from one exploration is the normal case, not an exception.
 
 ## Formulation
 
@@ -377,8 +389,8 @@ the bar. Several problems from one exploration is the normal case, not an except
 4. Record a changed statement or changed criteria under a new statement id. After a change,
    reassess the openness finding, the attempt, the value arguments and the reviews that the
    change affects, and reuse the work that still applies.
-5. For another subject class, open a new problem record and repeat the candidate, bar and slate
-   steps there.
+5. By this step the slate's bars have been requested. For a candidate of another class, follow
+   the rule of "Exploration" that keeps it in this record.
 
 ## The attempt
 

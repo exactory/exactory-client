@@ -4442,6 +4442,16 @@
         "tests.test_constructive_continuation.ConstructiveContinuationTests.test_legacy_active_entry_is_recovered_from_its_exact_native_reservation",
         "tests.test_constructive_continuation.ConstructiveContinuationTests.test_active_entry_metadata_is_reauthenticated_against_the_reservation"
       ]
+    },
+    {
+      "id": "20261105171520-objections-lost-on-area-handoff",
+      "record": "20261105171520-objections-lost-on-area-handoff",
+      "class": "gate (cross-record objection carry)",
+      "summary": "A candidate moved to a record of another subject class, or taken up in a sibling record, loses the bar and slate objections of its source record.",
+      "fixed_in": "open",
+      "expected": "Until a release carries objections across records, the math-conjecturer skill keeps every candidate of an exploration in its record after the record's first bar or slate review request (0.77.0). The planned fix carries every material bar and slate objection of the source with authenticated provenance and evidence, delivers it to the destination's slate and result reviewers, and blocks the destination's post with research_objection_unresolved while one stays unresolved.",
+      "test_kind": "none",
+      "tests": []
     }
   ]
 }
