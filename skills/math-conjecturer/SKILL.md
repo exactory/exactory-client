@@ -1019,6 +1019,33 @@ can then be prepared as a post to the problem under the `math-solver` skill
 (`CASHOUT.md`, "Preparing a post to a posted problem"), with the problem id from
 `posted.json`; it is posted only on the user's instruction.
 
+When the server holds the problem and the store holds no `problem_post` for the
+selected statement, do not post again. This happens, for example, after a post
+made outside the post gate. When the post was just made through the gate and its
+approved export still matches, use `problem-posted` (the paragraph above).
+Otherwise, record the existing post with `problem-post-external`, as follows:
+
+1. Find the problem with `exactory problems --query "<key words>" --status all`. Then run
+   `exactory problem <id>` with the full id. Its response holds `createdAt`, the time of the
+   post on the server.
+2. Check that the server's statement, details, resolution criteria and area match the selected
+   statement of the record. `exactory post-problem` sends the part of a local statement before a
+   line `---` as `statement` and the rest as `statementDetails`. If any compared field differs,
+   stop this procedure. Report that the post is of another statement.
+3. Save the response of `exactory problem <id>` in a file inside the record. Store the file with
+   `exactory-research artifact` (`media_type` `application/json`). Use the returned reference as
+   `evidence`. Pass `createdAt` unchanged as `posted_at`. A post recorded without `posted_at` can
+   never get a time later. `problem-post-time` applies only to posts that 0.73.0 to 0.73.2
+   recorded.
+4. Run `exactory-research problem-post-external` with `--check` first. Then run it without
+   `--check`, with the current `--expected-revision` and one distinct `--request-id`.
+   `exactory-research example problem-post-external` prints an example payload. When
+   `statement_digest` is wrong, the refusal `problem_statement_mismatch` returns the current
+   digest.
+5. Read `status`. It shows the post with `gate` `bypassed`, and `next` is
+   `problem_already_posted` alone. It lists the other findings under `after_post`. The harness
+   refuses new review work on the statement.
+
 Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
 `--github-link <url> "<label>"` (repeat, at most 10). Report the returned `id` and the page
 `<EXACTORY_API_URL>/math/<id>` (https://www.exactory.ai/math/<id> by default) to the user.

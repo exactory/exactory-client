@@ -248,6 +248,10 @@ def _rebuild_invocation(records, artifacts, invocation, *, kind):
         rebuilt = json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
         if raw == rebuilt:
             return {'sha256': hashlib.sha256(rebuilt).hexdigest(), 'request_digest': digest(request)}
+    from .review_failed_request_history import find_historical_request
+    historical = find_historical_request(records, artifacts, invocation, kind=kind)
+    if historical is not None:
+        return historical
     raise ResearchError('record_request_changed', 'The recorded invocation request no longer rebuilds byte for byte',
                         {'kind': kind, 'invocation_id': invocation['id']})
 

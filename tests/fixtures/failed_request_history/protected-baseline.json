@@ -1,0 +1,64 @@
+{
+  "hashes": {
+    "research_harness/review_claude_transport.py": "ee183e027eaad81de13cfab1149000c027b4504842070537a1068c93dfb1a7bf",
+    "research_harness/review_codex_framed_transport.py": "1f8824a96003c0885df028533c0df676f2957b33beb986851a191486c534053d",
+    "research_harness/review_codex_transport.py": "a53baa420784a146340ae595aadbd370b1917b33725a1abf805d3bab6126d078",
+    "research_harness/review_codex_visual_transport.py": "5ee79b4655535023cd22b41233dc08d9dc69b231715c39e74dd6ac43ec264dd6",
+    "research_harness/review_exact_text.py": "bdaa6f03311ea602fe4579d9fdb1db0baf5db2a571dba419650acff40fbb931d",
+    "research_harness/review_exact_text_cost_v1.py": "f017125ec32bf89c8aa71c2ccba96ba8e0fcdf1abb53c050d8bd16b90adf7cf5",
+    "research_harness/review_exact_text_v2.py": "fcae2720e7f584936e026427203c945dc18be0794d003113c800e0de898e2bf8",
+    "research_harness/review_pdf_pages.py": "5b884cdf50483225f24868b211b188b6d62879d01098d89710ec92c62f573147",
+    "research_harness/review_transport.py": "eb08185b87656093ea3895582c01eb57758afc385718909cec0f1ccf60e7a3d3",
+    "research_harness/review_verbatim_text.py": "97df5c8b8d48e7e763546ba8e42e7fba65651e9e683dcc853367aca3a5db9c56",
+    "research_harness/review_visual_inputs.py": "976b95d2a24346db337acdfaa66708df6ee73eb6a15c891159c7ad2ce9aeb96d",
+    "ci/record_fingerprint.py": "6e0ea0c194b879a802fba98344972403c878d3c2bacd70b804814b1103076ccc"
+  },
+  "fit_order": [
+    "history_bodies",
+    "scientific_history_bodies",
+    "html_originals",
+    "previously_supplied",
+    "text_priority",
+    "search_responses",
+    "scientific_history_packets",
+    "history_packets",
+    "read_full_texts",
+    "source_capacity",
+    "other_bodies"
+  ],
+  "earlier_fit_orders": [
+    [
+      "history_bodies",
+      "scientific_history_bodies",
+      "html_originals",
+      "previously_supplied",
+      "text_priority",
+      "source_capacity"
+    ],
+    [
+      "scientific_history_bodies",
+      "previously_supplied",
+      "text_priority",
+      "search_responses",
+      "scientific_history_packets",
+      "history_bodies",
+      "history_packets",
+      "read_full_texts",
+      "other_bodies"
+    ],
+    [
+      "scientific_history_bodies",
+      "previously_supplied",
+      "text_priority",
+      "scientific_history_packets",
+      "history_bodies",
+      "history_packets"
+    ],
+    [
+      "scientific_history_bodies",
+      "previously_supplied",
+      "text_priority",
+      "history_bodies"
+    ]
+  ]
+}

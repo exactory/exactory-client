@@ -132,13 +132,14 @@ def set_roots(store, payload, *, expected_revision, request_id):
 
 
 def index_bundles(records):
+    bundles = records.get("source_bundle", {})
     by_version = {}
-    for bundle in records.get("source_bundle", {}).values():
+    for bundle in bundles.values():
         entry = by_version.setdefault(bundle["version_id"], {"originals": {}, "supplements": set()})
         original = bundle["original_sha256"]
         previous = entry["originals"].get(original)
-        if previous is None or bundle["sequence"] > previous["sequence"]:
-            entry["originals"][original] = bundle
+        if previous is None or bundle["sequence"] > bundles[previous]["sequence"]:
+            entry["originals"][original] = bundle["id"]
         entry["supplements"].update(unit["link"]["source_id"] for unit in bundle["units"]
             if unit["kind"] == "supplement" and unit["link"] is not None
             and unit["link"]["source_id"] != bundle["source_id"])
@@ -156,7 +157,8 @@ def selected_bundle(records, version_id, target=None, *, bundle_index=None):
         candidates = (bundle for bundle in records.get("source_bundle", {}).values()
                       if bundle["version_id"] == version_id and bundle.get("original_sha256") == target["sha256"])
         return max(candidates, key=lambda bundle: bundle["sequence"], default=None)
-    return bundle_index.get(version_id, {}).get("originals", {}).get(target["sha256"])
+    bundle_id = bundle_index.get(version_id, {}).get("originals", {}).get(target["sha256"])
+    return records.get("source_bundle", {}).get(bundle_id)
 
 
 def main_captures(records, work, target=None, *, bundle_index=None):

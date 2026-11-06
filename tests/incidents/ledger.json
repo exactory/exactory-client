@@ -868,13 +868,19 @@
     },
     {
       "id": "v19-stop-hook-session-focus",
-      "record": "v19",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "paths-hooks",
       "summary": "A read-only session repeatedly received a missing-focus Stop notice.",
-      "fixed_in": "open",
-      "expected": "The session-focus notice fix remains untraced; a session without a unique binding can still require explicit focus and the incident stays open.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "Repeated Stop events in a passive parent workspace with neither a session binding nor a direct root are silent and make no selection or controller calls. Focused and direct-root continuation, explicit cleared or conflicting bindings and SessionStart diagnostics keep their checks.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_repeated_passive_parent_stops_have_no_output_calls_or_mutation",
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_passive_stop_is_silent_through_both_host_adapters",
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_focused_parent_and_direct_root_stops_still_continue",
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_explicit_cleared_ambiguous_and_conflicting_focus_still_reports_recovery",
+        "test_math_search_guard_boundaries.MathSearchStopFocusTests.test_session_start_and_unbound_direct_root_keep_focus_diagnostics"
+      ]
     },
     {
       "id": "v19-bar-history-fulltexts",
@@ -2115,13 +2121,21 @@
     },
     {
       "id": "20261026230912-discovery-pointer-source",
-      "record": "20261026230912",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "paths-hooks (hook reads shell text)",
       "summary": "The guard refused a writing command that named the discovery pointer only as a source.",
-      "fixed_in": "open",
-      "expected": "The pointer-source shell classification remains deferred; search status and next provide supported read-only inspection without claiming this guard case is fixed.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "A literal cp reads the discovery pointer as a source and checks only its destination for writes; reverse copies, moves, deletes, ambiguous forms, symlink destinations and mixed write chains remain protected.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_discovery_pointer_copy_uses_only_the_destination_as_a_write",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_reverse_copy_move_delete_and_mixed_chains_remain_denied",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_ambiguous_shell_forms_are_denied",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_copy_sources_are_readable_but_symlink_destinations_are_protected",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_real_permission_error_remains_an_error",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_unexpected_stat_failure_on_a_copy_is_not_treated_as_absence",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_recorded_shell_shapes_pass_both_host_adapters"
+      ]
     },
     {
       "id": "20261027085554-bar-source-requests-exceed-route-capacity-source-union-over-limit",
@@ -2495,13 +2509,22 @@
     },
     {
       "id": "20261030154844-shell-prefix-and-compound-read",
-      "record": "20261030154844",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "paths-hooks (hook reads shell text)",
       "summary": "The math guard rejected permitted compound read-only commands and environment-prefixed invocations.",
-      "fixed_in": "open",
-      "expected": "The shell-guard redesign remains deferred; these command forms can still be refused and the incident remains open.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "Literal environment prefixes, understood read-only command lists and du are accepted without weakening protected writes, unsupported-command refusals, path-length handling or permission errors.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_literal_environment_prefixed_read_is_allowed",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_compound_reads_and_du_are_allowed",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_reverse_copy_move_delete_and_mixed_chains_remain_denied",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_ambiguous_shell_forms_are_denied",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_overlong_text_does_not_hide_a_protected_write",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_real_permission_error_remains_an_error",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_unexpected_stat_failure_on_a_copy_is_not_treated_as_absence",
+        "test_math_search_guard_boundaries.MathSearchShellGuardTests.test_recorded_shell_shapes_pass_both_host_adapters"
+      ]
     },
     {
       "id": "20261030154844-absolute-packet-root",
@@ -3787,6 +3810,176 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_posted_status_and_series_views_have_no_review_actions",
         "test_problem_post_review_terminal.PostedReviewTests.test_staged_status_preserves_tasks_and_incomplete_recovery_evidence",
         "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags"
+      ]
+    },
+    {
+      "id": "ci-lean-default-branch-cache-maintenance",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "release-ci (CI infrastructure)",
+      "summary": "Main caches could be evicted during idle periods because Lean CI ran only on pushes and pull requests.",
+      "fixed_in": "0.74.0",
+      "expected": "Daily and manual default-branch maintenance restores the CI cache identity, runs the bounded installer and real smoke build, and saves only after success. Cache operations are optional and timed; installation and compilation remain mandatory.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_ci_lean_install.LeanCacheWarmWorkflowTests.test_real_workflow_maintains_the_default_branch_cache",
+        "test_ci_lean_install.LeanCacheWarmWorkflowTests.test_mutations_reject_missing_maintenance_or_changed_scope_and_identity",
+        "test_ci_lean_install.LeanCacheWarmWorkflowTests.test_mutations_reject_early_save_and_optional_install_or_build",
+        "test_ci_lean_install.LeanInstallTests.test_warm_installation_performs_only_version_probes"
+      ]
+    },
+    {
+      "id": "historical-request-unlabelled-probe",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the unlabelled-probe form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unlabelled_probe",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_new_requests_keep_the_frozen_ordinary_bytes_and_do_not_need_observations",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unknown_runtime_or_adapter_never_matches_even_with_coherent_route_digests",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_altered_retained_inputs_never_match",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_probe_checks_both_positive_control_manifests",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_builder_errors_and_artifact_failures_are_not_reinterpreted",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unknown_profile_and_invocation_kind_are_not_supported",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_protected_bytes_and_fit_orders_remain_at_the_released_baseline",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_missing_or_detached_invocation_is_not_positive_identification",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_route_identity_must_match_its_record_key",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_history_reader_runs_once_only_after_every_ordinary_candidate_misses"
+      ]
+    },
+    {
+      "id": "historical-request-labelled-pre-fit-local",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the labelled-pre-fit-local form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_labelled_pre_fit_local",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_altered_assignment_and_invocation_bindings_never_match",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_oversized_history_and_codec_boundaries_keep_current_request_bytes",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_paged_history_rebuilds_and_keeps_its_digest_validation",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_failure_receipt_is_still_failed_and_assignment_uses_the_current_builder",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_retained_body_descriptors_cover_utf8_base64_and_prior_elisions"
+      ]
+    },
+    {
+      "id": "historical-request-codex-order-before-source-capacity",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the codex-order-before-source-capacity form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_codex_order_before_source_capacity",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_altered_evidence_in_elided_history_is_not_hidden_by_reduction"
+      ]
+    },
+    {
+      "id": "historical-request-claude-order-before-full-text-steps",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the claude-order-before-full-text-steps form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_claude_order_before_full_text_steps",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_oversized_history_and_codec_boundaries_keep_current_request_bytes"
+      ]
+    },
+    {
+      "id": "historical-request-complete-source-exact-text-v1",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility (failed request reconstruction)",
+      "summary": "The ordinary builders no longer reproduce failed, output-null observations in the complete-source-exact-text-v1 form.",
+      "fixed_in": "0.74.0",
+      "expected": "historical reconstruction passes; the failed observation stays failed",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_complete_source_exact_text_v1",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_unidentified_or_successful_observations_never_use_history",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_independent_fingerprint_and_receipts_keep_the_ordinary_failure",
+        "test_review_failed_request_history.FailedRequestHistoryTests.test_oversized_history_and_codec_boundaries_keep_current_request_bytes"
+      ]
+    },
+    {
+      "id": "measurement-usage-limit-global-stop",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "resource-limits",
+      "summary": "Paired measurements continued into later modes and cases after a provider usage limit and lost admissions on restart.",
+      "fixed_in": "0.74.0",
+      "expected": "The first retained Claude or Codex usage limit, including probes, stops the durable campaign; interrupted admissions remain charged and dispatch is capped. Live series use authenticated disposable prefixes, require a ready candidate record-check and never write their source copies. A staged worker launch is refused, because its calls bypass the counted sender; credentials are never copied into the output.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_measurement_tools.CampaignStopTests.test_claude_limit_shapes_stop_and_restart_refuses_dispatch",
+        "test_review_measurement_tools.CampaignStopTests.test_codex_empty_limit_rollout_stops_including_probe",
+        "test_review_measurement_tools.CampaignStopTests.test_cap_is_durable_and_checked_before_sender",
+        "test_review_measurement_tools.CampaignStopTests.test_interrupted_admission_stays_charged_after_restart",
+        "test_review_measurement_tools.CampaignStopTests.test_sender_receives_identical_inputs_and_response_is_unchanged",
+        "test_review_measurement_tools.CampaignStopTests.test_usage_limit_prevents_later_modes_repeats_and_cases",
+        "test_review_measurement_tools.CampaignStopTests.test_cli_stops_scheduling_after_a_probe_usage_limit",
+        "test_review_measurement_tools.CampaignStopTests.test_cli_restart_reads_stop_before_writing_campaign_outputs",
+        "test_review_measurement_tools.CampaignStopTests.test_hard_interruption_blocks_restart_even_below_the_cap",
+        "test_review_measurement_tools.CampaignStopTests.test_interruption_during_classification_cannot_reopen_campaign",
+        "test_review_measurement_live.HistoricalFixtureTests.test_prefix_preserves_exact_events_receipts_and_artifacts_without_source_writes",
+        "test_review_measurement_live.HistoricalFixtureTests.test_source_overlap_is_refused_before_writing",
+        "test_review_measurement_live.HistoricalFixtureTests.test_source_or_output_symlink_cannot_escape_into_source",
+        "test_review_measurement_live.HistoricalFixtureTests.test_invalid_revision_and_corrupt_history_are_refused",
+        "test_review_measurement_live.HistoricalFixtureTests.test_fixture_symlink_replacement_cannot_overwrite_source_database",
+        "test_review_measurement_live.HistoricalFixtureTests.test_output_symlink_replacement_cannot_write_metadata_into_source",
+        "test_review_measurement_live.LiveSeriesTests.test_ready_fixture_runs_actual_series_and_preserves_sender_inputs",
+        "test_review_measurement_live.LiveSeriesTests.test_record_check_must_be_ready_before_dispatch",
+        "test_review_measurement_live.LiveSeriesTests.test_cap_prevents_second_turn_dispatch_without_changing_route",
+        "test_review_measurement_live.LiveSeriesTests.test_usage_limit_stops_driver_before_wait_and_next_case",
+        "test_review_measurement_live.LiveSeriesTests.test_source_output_is_refused_without_dispatch",
+        "test_review_measurement_live.LiveSeriesTests.test_temporary_files_stay_under_output_and_credentials_are_never_copied",
+        "test_review_measurement_live.LiveCasePreparationTests.test_focused_case_recreates_retained_payload_with_fixed_route",
+        "test_review_measurement_live.LiveCasePreparationTests.test_openness_case_reexports_exact_spec_for_a_fresh_v5_chain",
+        "test_review_measurement_live.LiveSeriesTests.test_staged_worker_launch_is_refused_inside_the_campaign"
+      ]
+    },
+    {
+      "id": "external-post-recorded-after-server-post",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "recovery",
+      "summary": "A graph problem was posted on the server without its local terminal post record.",
+      "fixed_in": "0.74.0",
+      "expected": "The existing external-post operation records the exact statement with details, saved server evidence and server time without an export, replays without writes and refuses duplicate publication and new review work.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews"
+      ]
+    },
+    {
+      "id": "report-cost-oversized-bundle-index",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "performance (growth)",
+      "summary": "Untargeted cohort readings repeatedly built a payload-sized bundle index that exceeded the evaluation arena.",
+      "fixed_in": "0.74.0",
+      "expected": "Untargeted readings and coverage without available main bodies build no bundle index; exact lookups retain IDs with unchanged sequence ties, supplements and historical results.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_bundle_index.BundleIndexTests.test_oversized_bundle_is_not_indexed_for_2526_untargeted_readings",
+        "test_bundle_index.BundleIndexTests.test_coverage_without_available_main_bodies_does_not_build_an_index",
+        "test_bundle_index.BundleIndexTests.test_oversized_payload_is_not_retained_in_the_targeted_index",
+        "test_bundle_index.BundleIndexTests.test_nonexact_targets_and_unavailable_bodies_do_not_build_an_index",
+        "test_bundle_index.BundleIndexTests.test_selection_preserves_sequence_ties_and_explicit_selection",
+        "test_bundle_index.BundleIndexTests.test_supplement_ids_preserve_main_captures_and_graph",
+        "test_bundle_index.BundleIndexTests.test_targeted_readings_match_the_released_outputs_in_historical_views",
+        "test_bundle_index.BundleIndexTests.test_historical_index_does_not_select_a_later_bundle_of_the_same_original"
       ]
     }
   ]

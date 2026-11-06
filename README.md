@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.74.0](docs/releases/0.74.0.md) lets `record-check` rebuild the failed historical requests of three records that 0.73 refused, adds daily maintenance of the CI Lean cache, corrects false refusals and repeated Stop notices of the math-search hook, stops rebuilding an oversized bundle index, and bounds measurement campaigns at the first usage limit. The `math-conjecturer` skill records a problem that was posted outside the post gate.
+
 Version [0.73.6](docs/releases/0.73.6.md) makes a recorded post terminal for review work on the posted statement. New bar, result and adjudicator reviews, reviewer calls, staged planning and output corrections of that statement are refused with `problem_already_posted`, and the views show no further review action. Replays, captured outputs, reconciliation and the readers of stored records are unchanged.
 
 Version [0.73.5](docs/releases/0.73.5.md) stops failed Lean downloads from failing CI. Only the jobs that run Lean install it, from the GitHub Actions cache or in up to four timed attempts, and a skipped harness test now fails CI. The harness code does not change.

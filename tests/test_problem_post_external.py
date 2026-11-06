@@ -7,7 +7,9 @@ from unittest.mock import patch
 
 import test_research_check_mode as checks
 import test_research_problem_claims as fixtures
-from research_harness import cli, operations, problem_claims
+from codex_route_fixtures import record_codex_route
+from research_harness import cli, operations, problem_claims, problem_delivery
+from research_harness import review_continuation, review_protocol
 from research_harness.output_views import render_all
 from research_harness.report_views import next_summary
 
@@ -62,6 +64,85 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
                          {row["code"] for row in before["obligations"]})
         self.assertTrue(all("next" not in row for row in report["after_post"]))
         self.assertEqual(next_summary(report)["after_post"], len(report["after_post"]))
+
+    def test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews(self):
+        statement = self.select_statement(identifier='statement-1b',
+            title='A synthetic graph realization bound',
+            statement='Does every graph in the synthetic rigid family satisfy $R(G) \\leq 3^{|V(G)|}$?\n\n'
+                      '---\n\nHere $R(G)$ counts labelled real realizations of generic edge lengths.',
+            resolution_criteria='Prove the bound for the stated family or supply a certified counterexample.')
+        record_codex_route(self)
+        assignment_payload = dict(id='outstanding-bar', role='bar', route_id='route',
+                                  dossier_id=None, reviewer_id='first', author_id='problem-author', context={})
+        assignment = self.mutate(review_protocol.record_assignment, assignment_payload)['result']
+        self.mutate(review_protocol.record_assignment,
+                    dict(assignment_payload, id='outstanding-second-bar', reviewer_id='second'))
+        server_response = dict(
+            id='656c336e-e892-4c47-80d2-a71d022f4116', title=statement['title'], area='math.CO',
+            statement=statement['statement'].split('---')[0].strip(),
+            statementDetails=statement['statement'].split('---')[1].strip(),
+            resolutionCriteria=statement['resolution_criteria'], createdAt='2026-11-05T02:53:34.915Z',
+            status='open')
+        response_path = self.root / 'server-response.json'
+        response_bytes = json.dumps(server_response, sort_keys=True).encode()
+        response_path.write_bytes(response_bytes)
+        evidence = self.mutate(cli.OPERATIONS['artifact'], dict(id='server-response',
+            path='server-response.json', media_type='application/json'))['result']['artifact']
+        payload = dict(self.payload, id='external-graph-post', problem_id=server_response['id'],
+                       statement_digest='b8d4383cb07b38b136eebfea8feda1fa08f7ff743ed47b85996fe6af68c42bcd',
+                       evidence=evidence, posted_at=server_response['createdAt'])
+        before_report = cli.status_report(self.store)
+        self.assertTrue(before_report['obligations'])
+        before_findings = problem_delivery.assess_post(self.store.snapshot()['records'], self.artifacts)['obligations']
+        self.assertEqual(review_continuation.plan_next(self.store.snapshot()['records'], self.artifacts,
+                                                     assignment['id'])['state'], 'run')
+        before = self.read_workspace()
+        revision = self.store.revision
+        request_id = 'record-existing-server-post'
+        checked = self.invoke_command('problem-post-external', payload, revision=revision, request=request_id)
+        self.assert_accepted_check(checked, revision)
+        self.assertEqual(self.read_workspace(), before)
+        written = self.invoke_command('problem-post-external', payload, check=False,
+                                      revision=revision, request=request_id)
+        self.assertEqual(written[0], 0, written[2])
+        receipt = json.loads(written[1])
+        post = receipt['result']
+        self.assertEqual(post['statement_id'], 'statement-1b')
+        self.assertEqual(post['problem_id'], server_response['id'])
+        self.assertEqual(post['statement_digest'], payload['statement_digest'])
+        self.assertEqual(post['evidence'], evidence)
+        self.assertEqual(self.artifacts.read(evidence), response_bytes)
+        self.assertEqual(post['posted_at'], '2026-11-05T02:53:34.915Z')
+        self.assertNotEqual(post['recorded_at'], post['posted_at'])
+        self.assertEqual(post['gate'], 'bypassed')
+        self.assertNotIn('export_digest', post)
+        self.assertNotIn('export_directory', post)
+        self.assertFalse((self.root / 'final/problem/exports').exists())
+        report = cli.status_report(self.store)
+        self.assertEqual(report['next']['code'], 'problem_already_posted')
+        self.assertEqual(report['after_post'], [dict(
+            {key: value for key, value in row.items() if key != 'next'},
+            reason=row.get('reason', row['explanation'])) for row in before_findings])
+        self.assertEqual(review_continuation.plan_next(self.store.snapshot()['records'], self.artifacts,
+                                                     assignment['id'])['state'], 'done')
+        after = self.read_workspace()
+        for check in (False, True):
+            replay = self.invoke_command('problem-post-external', payload, check=check,
+                                         revision=revision, request=request_id)
+            self.assertEqual(replay[0], 0, replay[2])
+            self.assertEqual(json.loads(replay[1]), receipt)
+            self.assertEqual(self.read_workspace(), after)
+        self.assert_refusal_parity('problem-post-external', dict(payload, id='duplicate'),
+                                  'problem_already_posted', request='duplicate-server-post')
+        self.assert_refusal_parity('review-assignment', dict(assignment_payload, id='new-review'),
+                                  'problem_already_posted', request='review-after-server-post')
+        before_call = self.store.snapshot()
+        with patch.object(review_protocol.transport, 'send_request', side_effect=AssertionError('No new call')):
+            written = self.invoke_command('review-run', dict(id='new-call', assignment_id=assignment['id']),
+                                          check=False, request='call-after-server-post')
+        self.assertEqual(written[0], 1, written[2])
+        self.assertEqual(json.loads(written[2])['error']['code'], 'problem_already_posted')
+        self.assertEqual(self.store.snapshot(), before_call)
 
     def test_wrong_statement_digest_is_refused_without_writing(self):
         self.assertIn("problem-post-external", cli.OPERATIONS)
