@@ -28,6 +28,8 @@ below are what the ai-science loop (LOOP.md) refers to.
 │   ├── research.sqlite3        authoritative research and operation history
 │   ├── citation-check.json     exactory-check lookup report (version 2)
 │   ├── citation-cache.json     positive-only verification cache
+│   ├── derivation-check.json   exactory-derive check report
+│   ├── authorship.json         written_by_exactory record of the paper hook
 │   └── output-views.json       marker of the last render of final/ and intermediate/
 ├── draft/                      LaTeX sources; references.bib lives here
 ├── evidence/claims.json        claim -> source ledger
