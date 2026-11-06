@@ -279,24 +279,195 @@ def find_post(records, statement):
                  if row["statement_digest"] == compute_statement_digest(statement)), None)
 
 
-def find_review_post(records, assignment):
-    """Match a review's bound claim, including aliases of a posted statement."""
-    from .strategy import find_orchestration
-    subject = assignment.get("subject") or {}
-    if (assignment.get("role") not in ("bar", "result", "adjudicator")
-            or subject.get("kind") != "problem" or subject.get("statement_id") is None
-            or find_orchestration(records) != "problem_creation"):
+def _read_review_binding(assignment, name):
+    value = assignment.get(name, {})
+    if value is None and name in ('subject', 'staged_review'):
+        return {}
+    if not isinstance(value, dict):
+        raise ResearchError('invalid_review_context', 'The review binding must be an object',
+                            dict(assignment_id=assignment.get('id'), binding=name))
+    return value
+
+
+def find_review_closure_root(records, assignment):
+    """Resolve the first assignment of this phase and retained publication slot."""
+    assignments = records.get('review_assignment', {})
+    visited, active = {}, set()
+
+    def read_assignment(identifier):
+        text(identifier, 'Closure predecessor', code='invalid_review_context')
+        row = assignments.get(identifier)
+        if not isinstance(row, dict) or row.get('id') != identifier:
+            raise ResearchError('invalid_review_context', 'The closure predecessor is missing',
+                                dict(assignment_id=identifier))
+        return row
+
+    def visit(row):
+        identifier = row.get('id')
+        text(identifier, 'Closure assignment', code='invalid_review_context')
+        if identifier in active:
+            raise ResearchError('invalid_review_context', 'The closure ancestry contains a cycle',
+                                dict(assignment_id=identifier))
+        if identifier in visited:
+            return
+        active.add(identifier)
+        context = _read_review_binding(row, 'context')
+        if row.get('slot_id') is not None:
+            text(row['slot_id'], 'Closure slot', code='invalid_review_context')
+        staged = _read_review_binding(row, 'staged_review')
+        if staged.get('kind') == 'task':
+            controller = read_assignment(staged.get('controller_assignment_id'))
+            if (_read_review_binding(controller, 'staged_review').get('kind') != 'controller'
+                    or controller.get('role') != row.get('role')
+                    or controller.get('dossier_id') != row.get('dossier_id')):
+                raise ResearchError('invalid_review_context', 'The staged closure controller is invalid')
+            visit(controller)
+        else:
+            revision = row.get('recorded_revision')
+            if type(revision) is not int or revision < 1:
+                raise ResearchError('invalid_review_context', 'The closure assignment needs its local revision',
+                                    dict(assignment_id=identifier))
+            parents = [(context.get('prior_assignment_id'), False),
+                       (row.get('history_assignment_id'), True)]
+            for key in ('context_repair', 'staged_upgrade'):
+                binding = context.get(key)
+                if binding is not None:
+                    if not isinstance(binding, dict) or not binding.get('assignment_id'):
+                        raise ResearchError('invalid_review_context', 'The closure predecessor binding is invalid')
+                    parents.append((binding['assignment_id'], False))
+            for parent_id, scientific_history in parents:
+                if parent_id is None:
+                    continue
+                parent = read_assignment(parent_id)
+                if parent.get('role') == row.get('role') and parent.get('dossier_id') == row.get('dossier_id'):
+                    visit(parent)
+                elif not scientific_history:
+                    raise ResearchError('invalid_review_context', 'The closure predecessor belongs to another phase')
+            visited[identifier] = row
+        active.remove(identifier)
+
+    visit(assignment)
+    controller = min(visited.values(), key=lambda row: row['recorded_revision'])
+    slot_ids = {row['slot_id'] for row in visited.values() if row.get('slot_id') is not None}
+    if len(slot_ids) > 1:
+        raise ResearchError('invalid_review_context', 'The closure lineage changes its retained slot')
+    for slot_id in slot_ids:
+        text(slot_id, 'Closure slot', code='invalid_review_context')
+        for row in assignments.values():
+            if ((row.get('slot_id') or row.get('id')) == slot_id and row.get('role') == controller.get('role')
+                    and row.get('dossier_id') == controller.get('dossier_id')):
+                visit(row)
+    if any(row.get('slot_id') not in (None, *slot_ids) for row in visited.values()):
+        raise ResearchError('invalid_review_context', 'The closure predecessor changes its retained slot')
+    return min(visited.values(), key=lambda row: (row['recorded_revision'], row['id']))
+
+
+def _find_scoped_review_closure_root(records, assignment, artifacts):
+    """Share successful walks only inside the current status command."""
+    if artifacts is None:
+        return find_review_closure_root(records, assignment)
+    evaluation = Evaluation.of(records, artifacts)
+    scope = evaluation.find_root()._runtime_scope[0]
+    roots = None if scope is None else scope.get('review_closure_roots')
+    if roots is None:
+        return find_review_closure_root(records, assignment)
+    binding = {name: assignment[name] for name in (
+        'id', 'role', 'dossier_id', 'context', 'staged_review', 'slot_id',
+        'history_assignment_id', 'recorded_revision') if name in assignment}
+    key = (id(records), digest(binding))
+    if key not in roots:
+        roots[key] = (records, find_review_closure_root(records, assignment))
+    return roots[key][1]
+
+
+def find_review_post(records, assignment, artifacts=None, *, check_unbound=True):
+    """Classify publication closure by verified claim binding, then chain chronology."""
+    posts = records.get('problem_post', {})
+    if not posts:
         return None
-    statement = records.get("problem_statement", {}).get(subject["statement_id"])
-    return find_post(records, statement)
+    from .strategy import find_orchestration
+    if find_orchestration(records) != 'problem_creation':
+        return None
+    role = assignment.get('role')
+    staged = _read_review_binding(assignment, 'staged_review')
+    if staged.get('kind') == 'task':
+        text(staged.get('controller_assignment_id'), 'Closure controller', code='invalid_review_context')
+        controller = records.get('review_assignment', {}).get(staged.get('controller_assignment_id'))
+        if not isinstance(controller, dict) or controller is assignment:
+            raise ResearchError('invalid_review_context', 'The staged closure controller is missing')
+        # The dedicated ancestry walk detects controller and predecessor cycles.
+        _find_scoped_review_closure_root(records, assignment, artifacts)
+        assignment = controller
+        role = assignment.get('role')
+    if role not in ('bar', 'slate', 'result', 'adjudicator', 'native_math'):
+        return None
+    context = _read_review_binding(assignment, 'context')
+    statement_digest = None
+    if role == 'native_math':
+        from .native_review import load_packet
+        from .openness_reading import is_openness_packet
+        reference = context.get('native_packet')
+        if reference is None or artifacts is None:
+            raise ResearchError('invalid_native_review_packet', 'The native closure binding must be verified',
+                                dict(assignment_id=assignment.get('id')))
+        packet = load_packet(Evaluation.of(records, artifacts), reference, assignment['reviewer_id'])
+        if not is_openness_packet(packet):
+            return None
+        subject = packet['subject']
+        if (packet['kind'] != 'result' or not isinstance(subject.get('statement'), str)
+                or not isinstance(subject.get('resolution_criteria'), str)
+                or compute_statement_digest(subject) != packet['claim_digest']):
+            raise ResearchError('invalid_native_review_packet', 'The openness claim digest must bind its statement')
+        statement_digest = packet['claim_digest']
+    else:
+        subject = _read_review_binding(assignment, 'subject')
+        if subject.get('kind') not in (None, 'problem'):
+            return None
+        identifier = subject.get('statement_id')
+        if identifier is not None:
+            text(identifier, 'Closure statement', code='invalid_review_context')
+            statement = records.get('problem_statement', {}).get(identifier)
+            if (not isinstance(statement, dict) or not isinstance(statement.get('statement'), str)
+                    or not isinstance(statement.get('resolution_criteria'), str)):
+                raise ResearchError('problem_statement_missing', 'The exact bound statement is missing or invalid',
+                                    dict(statement_id=identifier))
+            statement_digest = compute_statement_digest(statement)
+    if statement_digest is not None:
+        if check_unbound and (assignment.get('history_assignment_id') is not None
+                              or assignment.get('slot_id') is not None
+                              or any(key in context for key in
+                                     ('prior_assignment_id', 'context_repair', 'staged_upgrade'))):
+            _find_scoped_review_closure_root(records, assignment, artifacts)
+        return next((post for post in posts.values() if post['statement_digest'] == statement_digest), None)
+    if not check_unbound:
+        return None
+    root = _find_scoped_review_closure_root(records, assignment, artifacts)
+    for post in posts.values():
+        read_revision = getattr(records, 'read_creation_revision', None)
+        created = read_revision('problem_post', post['id']) if callable(read_revision) else None
+        revision = post.get('recorded_revision', created)
+        if (type(revision) is not int or revision < 1
+                or created is not None and revision != created):
+            raise ResearchError('problem_post_revision_missing', 'The post needs its authenticated local creation revision',
+                                dict(post_id=post['id']))
+        if revision > root['recorded_revision']:
+            return post
+    return None
 
 
-def require_unposted_review(records, assignment):
+def require_unposted_review(records, assignment, artifacts=None, *, check_unbound=True):
     """Refuse prospective review work while leaving historical readers usable."""
-    post = find_review_post(records, assignment)
+    post = find_review_post(records, assignment, artifacts, check_unbound=check_unbound)
     if post is not None:
+        details = dict(post_id=post['id'])
+        subject = _read_review_binding(assignment, 'subject')
+        if subject.get('statement_id') is not None:
+            details['statement_id'] = subject['statement_id']
+        elif check_unbound:
+            details['closure_root_id'] = _find_scoped_review_closure_root(
+                records, assignment, artifacts)['id']
         raise ResearchError("problem_already_posted", "This exact statement already has a recorded post.",
-                            {"post_id": post["id"], "statement_id": assignment["subject"]["statement_id"]})
+                            details)
 
 
 def describe_problem_work(records, pending):
@@ -518,7 +689,7 @@ def export_problem(store, destination=None):
     return result
 
 
-def prepare_posted(records, artifacts, value):
+def prepare_posted(records, artifacts, value, recorded_revision=None):
     artifacts = Evaluation.of(records, artifacts)
     require_problem(records)
     fields(value, ("problem_id", "export_directory"))
@@ -545,4 +716,7 @@ def prepare_posted(records, artifacts, value):
     record = {"id": identifier, "problem_id": value["problem_id"], "statement_id": statement["id"],
               "statement_digest": manifest["statement_digest"], "problem_evidence_digest": manifest["problem_evidence_digest"],
               "export_digest": export_digest, "posted_at": datetime.now(timezone.utc).isoformat()}
+    if type(recorded_revision) is not int or recorded_revision < 1:
+        raise ResearchError('invalid_input', 'A new post needs its local recording revision')
+    record['recorded_revision'] = recorded_revision
     return [immutable_record(records, "problem_post", identifier, record)], record

@@ -9,12 +9,27 @@ from . import review_protocol as protocol
 from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
+from .operations import text
 from .review_task_execution import has_call_terminated, identify_call
 
 
 def _find_parent(records, assignment):
     context = assignment.get('context', {})
     history_id = assignment.get('history_assignment_id')
+    if records.get('problem_post'):
+        if not isinstance(context, dict):
+            raise ResearchError('invalid_review_context', 'Review ancestry requires an object context')
+        if not isinstance(assignment.get('staged_review', {}), dict):
+            raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
+        for key in ('context_repair', 'staged_upgrade'):
+            binding = context.get(key)
+            if binding is not None:
+                if not isinstance(binding, dict) or 'assignment_id' not in binding:
+                    raise ResearchError('invalid_review_context', 'Review ancestry requires an exact predecessor')
+                text(binding['assignment_id'], 'Review predecessor', code='invalid_review_context')
+        for identifier in (history_id, context.get('prior_assignment_id'), assignment.get('slot_id')):
+            if identifier is not None:
+                text(identifier, 'Review ancestry identity', code='invalid_review_context')
     history_parent = records.get('review_assignment', {}).get(history_id, {})
     # A result may inherit its bar's scientific history. That history is a
     # different phase, not another turn of the result chain.
@@ -59,9 +74,20 @@ def list_chain_heads(records, artifacts):
 def _find_head(records, artifacts, identifier):
     assignments = records.get('review_assignment', {})
     assignment = protocol._get(records, 'review_assignment', identifier)
-    if assignment.get('staged_review', {}).get('kind') == 'task':
+    staged = assignment.get('staged_review', {})
+    has_posts = bool(records.get('problem_post'))
+    if has_posts and not isinstance(staged, dict):
+        raise ResearchError('invalid_review_context', 'Review staging requires an object binding')
+    if staged.get('kind') == 'task':
+        if has_posts:
+            text(staged.get('controller_assignment_id'), 'Review controller', code='invalid_review_context')
         identifier = assignment['staged_review']['controller_assignment_id']
-        assignment = assignments[identifier]
+        if has_posts:
+            assignment = assignments.get(identifier)
+            if not isinstance(assignment, dict):
+                raise ResearchError('invalid_review_context', 'The review controller is missing')
+        else:
+            assignment = assignments[identifier]
     candidates = []
     for head in list_chain_heads(records, artifacts):
         row = assignments[head]
@@ -447,7 +473,8 @@ def plan_next(records, artifacts, head_id):
         assignment = _find_head(records, artifacts, head_id)
         result.update(chain=_describe_chain(assignment), head_id=assignment['id'],
                       progress=_describe_progress(records, artifacts, assignment))
-        if 'problem' in records.get('workspace', {}) and records.get('problem_post'):
+        from .problem_delivery import find_review_post
+        if find_review_post(records, assignment, artifacts) is not None:
             result['state'] = 'done'
         else:
             result.update(_plan_head(records, artifacts, assignment))
@@ -464,7 +491,8 @@ def describe_next_actions(records, artifacts, assignment_id, actions=()):
     plan = plan_next(records, artifacts, assignment_id)
     from .problem_delivery import find_review_post
     assignment = records.get('review_assignment', {}).get(assignment_id, {})
-    is_posted = find_review_post(records, assignment) is not None
+    resolved_assignment = records.get('review_assignment', {}).get(plan['head_id'], {})
+    is_posted = find_review_post(records, resolved_assignment, artifacts) is not None
     result = []
     for original in actions or [dict(kind='review', workflow=plan.get('command'),
                                      scope=dict(assignment_id=assignment_id))]:

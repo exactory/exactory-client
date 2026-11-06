@@ -3725,7 +3725,11 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_excluded_roles_and_null_subjects_do_not_inherit_current_statement",
         "test_problem_post_review_terminal.AdvisoryProjectionTests.test_passed_post_refuses_assignments_in_both_modes_without_workspace_writes",
         "test_problem_post_review_terminal.AdvisoryProjectionTests.test_context_events_remain_recordable_but_repair_cannot_reopen_post",
-        "test_problem_post_review_terminal.AdvisoryProjectionTests.test_focused_adjudication_cannot_reopen_posted_results"
+        "test_problem_post_review_terminal.AdvisoryProjectionTests.test_focused_adjudication_cannot_reopen_posted_results",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_new_root_for_posted_openness_claim_is_refused_in_both_modes",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_unknotting_five_failed_attempts_close_before_sixth_call_or_continuation",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_native_publication_race_invalidates_assignment_and_call_admission",
+        "test_posted_chain_closure.SlateClosureSlotTests.test_new_slate_root_uses_final_reviewer_slot_after_another_slot_was_posted"
       ]
     },
     {
@@ -3745,7 +3749,12 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_post_between_reservation_preparation_and_admission_prevents_charge",
         "test_problem_post_review_terminal.PostedReviewTests.test_post_between_launch_read_and_claim_prevents_worker_launch",
         "test_problem_post_review_terminal.PostedReviewTests.test_post_before_launch_authorization_stops_provider_and_allows_reconciliation",
-        "test_problem_post_review_terminal.PostedReviewTests.test_new_retry_after_post_is_refused_and_committed_failed_run_replays"
+        "test_problem_post_review_terminal.PostedReviewTests.test_new_retry_after_post_is_refused_and_committed_failed_run_replays",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_unknotting_five_failed_attempts_close_before_sixth_call_or_continuation",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_native_publication_race_invalidates_assignment_and_call_admission",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_captured_openness_result_replays_after_post_without_new_call",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_unbound_controller_refuses_frontier_child_call_and_correction",
+        "test_problem_post_review_terminal.PostedReviewTests.test_unbound_post_races_refuse_reservation_and_launch"
       ]
     },
     {
@@ -3759,7 +3768,8 @@
       "tests": [
         "test_problem_post_review_terminal.PostedReviewTests.test_posted_controller_frontier_and_child_refusal",
         "test_problem_post_review_terminal.PostedReviewTests.test_child_of_unposted_controller_uses_frozen_subject_despite_posted_selection",
-        "test_problem_post_review_terminal.PostedReviewTests.test_posted_frontier_check_changes_no_workspace_bytes"
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_frontier_check_changes_no_workspace_bytes",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_unbound_controller_refuses_frontier_child_call_and_correction"
       ]
     },
     {
@@ -3772,7 +3782,9 @@
       "test_kind": "real_shape",
       "tests": [
         "test_problem_post_review_terminal.PostedReviewTests.test_posted_correction_refusal_preserves_history",
-        "test_problem_post_review_terminal.PostedReviewTests.test_historical_correction_replay_and_fingerprints_survive_post"
+        "test_problem_post_review_terminal.PostedReviewTests.test_historical_correction_replay_and_fingerprints_survive_post",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_kmp_retired_route_and_digest_alias_show_no_retry_or_repair_hint",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_unbound_controller_refuses_frontier_child_call_and_correction"
       ]
     },
     {
@@ -3786,7 +3798,162 @@
       "tests": [
         "test_problem_post_review_terminal.PostedReviewTests.test_posted_status_and_series_views_have_no_review_actions",
         "test_problem_post_review_terminal.PostedReviewTests.test_staged_status_preserves_tasks_and_incomplete_recovery_evidence",
-        "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags"
+        "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_status_closes_the_pending_openness_head_without_mutation",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_next_exposes_no_review_command_or_navigation",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_review_series_resolves_the_ancestor_to_the_closed_head",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_output_export_keeps_the_openness_chain_and_observed_reading",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_status_and_output_parts_use_their_verified_artifact_evaluation"
+      ]
+    },
+    {
+      "id": "posted-first-statement-stops-second-review-chain",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "planning",
+      "summary": "Record-wide publication closure finished independent statement and solver review heads, while subject-only closure reopened posted native openness and old unbound chains.",
+      "fixed_in": "0.75.0",
+      "expected": "Classify the resolved head by its verified statement or native openness digest, or by the authenticated post revision after an unbound chain root; preserve independent work, supersession, preflight and handoff boundaries.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_second_statement_series_runs_records_and_posts_independently",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_posted_aliases_stop_but_changed_claim_or_criteria_plan_normally",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_excluded_roles_survive_and_old_unbound_slots_close",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_independent_native_math_keeps_pending_plan_after_post",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_native_openness_closes_pending_plan_after_post",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_cross_statement_slot_successor_still_resolves_to_revision_560",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_record_check_checks_excluded_head_and_hands_off_scientific_rejection",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_changed_statement_openness_started_before_or_after_another_post_stays_eligible",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_independent_native_solver_packet_remains_eligible_after_post",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_series_and_record_check_stop_before_any_operation",
+        "test_review_continuation_regressions.ContinuationRegressionTests.test_a_recorded_problem_post_finishes_its_statement_chain"
+      ]
+    },
+    {
+      "id": "posted-resolved-head-retains-review-hints",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "reporting",
+      "summary": "A null-statement ancestor resolving to a posted head retained stale workflow and scope fields.",
+      "fixed_in": "0.75.0",
+      "expected": "Review hints use the resolved head's post state and retain evidence labels without prospective navigation or actions.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_posted_successor_removes_ancestor_navigation_fields"
+      ]
+    },
+    {
+      "id": "posted-native-openness-reopens",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "planning",
+      "summary": "Native problem-openness reviews without assignment subjects invited sixth calls, retired-route repairs and prospective preflight after publication.",
+      "fixed_in": "0.75.0",
+      "expected": "Validate the native openness packet and close its exact posted claim regardless of assignment age; remove new-work hints and refuse calls or continuations while retaining captured evidence and independent native solver work.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_unknotting_five_failed_attempts_close_before_sixth_call_or_continuation",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_sidorenko_oversized_posted_openness_has_no_prospective_preflight",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_kmp_retired_route_and_digest_alias_show_no_retry_or_repair_hint",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_new_root_for_posted_openness_claim_is_refused_in_both_modes",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_missing_or_corrupt_native_binding_is_a_validation_error",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_captured_openness_result_replays_after_post_without_new_call",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_changed_statement_openness_started_before_or_after_another_post_stays_eligible",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_independent_native_solver_packet_remains_eligible_after_post"
+      ]
+    },
+    {
+      "id": "posted-unbound-chain-reopens",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "admission",
+      "summary": "Unbound publication reviews reopened through newer heads, staged children or replacements retaining a pre-publication slot.",
+      "fixed_in": "0.75.0",
+      "expected": "Close truly unbound publication reviews when a post follows the earliest assignment of their actual same-phase lineage and retained slot; normalize staged children to controllers and reject malformed ancestry without blocking a new independent slot.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_chain_closure.UnboundClosureTests.test_unbound_retained_slot_root_predates_legacy_post_even_when_head_is_newer",
+        "test_posted_chain_closure.UnboundClosureTests.test_missing_post_revision_and_invalid_ancestry_are_never_unbound_fallbacks",
+        "test_posted_chain_closure.UnboundClosureTests.test_malformed_falsey_bindings_are_validation_errors",
+        "test_posted_chain_closure.SlateClosureSlotTests.test_new_slate_root_uses_final_reviewer_slot_after_another_slot_was_posted",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_unbound_controller_refuses_frontier_child_call_and_correction",
+        "test_problem_post_review_terminal.PostedReviewTests.test_unbound_post_races_refuse_reservation_and_launch"
+      ]
+    },
+    {
+      "id": "posted-chain-closure-missing-revision",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility",
+      "summary": "Normal posts lacked a recorded revision needed to close pre-publication unbound review chains.",
+      "fixed_in": "0.75.0",
+      "expected": "Recover post creation revisions only from authenticated events, retain the small index through snapshots and preparations, stamp new normal posts, and preserve historical record, event and receipt bytes while tracking concurrent publication.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_chain_closure.UnboundClosureTests.test_unbound_retained_slot_root_predates_legacy_post_even_when_head_is_newer",
+        "test_posted_chain_closure.UnboundClosureTests.test_missing_post_revision_and_invalid_ancestry_are_never_unbound_fallbacks",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_legacy_post_uses_earliest_event_and_ignores_later_writes",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_problem_snapshots_and_copies_retain_only_post_creation_metadata",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_full_preparations_and_copies_preserve_creation_metadata",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_managed_and_historical_snapshots_bound_creation_revision",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_scoped_views_and_copies_preserve_creation_metadata",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_scoped_creation_lookup_binds_only_selected_key",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_scoped_creation_lookup_rejects_changed_or_newly_created_key",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_scoped_post_membership_rejects_concurrent_publication",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_corrupt_history_cannot_supply_creation_metadata",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_transaction_reads_use_authenticated_committed_creation_revisions",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_creation_reads_preserve_record_event_receipt_and_database_bytes",
+        "test_research_problem_delivery.ProblemDeliveryTests.test_post_decision_export_and_posted_are_bound_to_the_observed_claim"
+      ]
+    },
+    {
+      "id": "unposted-review-closure-validates-legacy-lineage",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility",
+      "summary": "Publication closure and head selection validated bindings and ancestry even without a post, refusing unposted legacy reviews.",
+      "fixed_in": "0.75.0",
+      "expected": "Read post membership first and return without binding, packet or ancestry validation while no post exists; retain released legacy head selection, planning and authenticated call admission, while a concurrent post still invalidates admission.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_closure_compatibility.UnpostedClosureValidationTests.test_no_posts_return_before_review_binding_validation",
+        "test_posted_closure_compatibility.UnpostedClosureValidationTests.test_no_posts_return_before_closure_ancestry_validation",
+        "test_posted_closure_compatibility.UnpostedClosureValidationTests.test_existing_post_keeps_binding_and_ancestry_validation_strict",
+        "test_posted_closure_compatibility.LegacyUnpostedAdmissionTests.test_unposted_native_review_without_revision_plans_and_invokes",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_native_publication_race_invalidates_assignment_and_call_admission",
+        "test_unposted_legacy_head_selection.LegacyUnpostedHeadSelectionTests.test_legacy_empty_metadata_keeps_the_unposted_run_plan",
+        "test_unposted_legacy_head_selection.LegacyUnpostedHeadSelectionTests.test_existing_post_keeps_empty_metadata_validation_strict",
+        "test_unposted_legacy_head_selection.LegacyUnpostedHeadSelectionTests.test_unrelated_legacy_metadata_does_not_stop_the_requested_unposted_head"
+      ]
+    },
+    {
+      "id": "posted-status-repeats-closure-root-walks",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "performance",
+      "summary": "One posted status report repeatedly walked the same assignment lineage while classifying and decorating review hints.",
+      "fixed_in": "0.75.0",
+      "expected": "Within each status call reuse a successful closure root only for the exact records view and closure binding; discard the local memo on return or error, restore nested status scopes, and keep statement, native packet and ancestry validation intact.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_closure_cost.PostedClosureCostTests.test_posted_status_walks_each_identical_view_and_binding_once",
+        "test_posted_closure_cost.PostedClosureCostTests.test_second_status_recomputes_with_the_same_snapshot_and_evaluation",
+        "test_posted_closure_cost.PostedClosureCostTests.test_same_assignment_in_distinct_record_views_resolves_distinct_roots",
+        "test_posted_closure_cost.PostedClosureCostTests.test_changed_closure_bindings_do_not_share_roots",
+        "test_posted_closure_cost.PostedClosureCostTests.test_unrelated_transport_history_does_not_repeat_a_closure_walk",
+        "test_posted_closure_cost.PostedClosureCostTests.test_post_refusal_details_share_the_successful_classification_walk",
+        "test_posted_closure_cost.PostedClosureCostTests.test_current_malformed_ancestry_is_rechecked_and_errors_are_not_reused",
+        "test_posted_closure_cost.PostedClosureCostTests.test_warm_roots_do_not_bypass_native_or_statement_validation",
+        "test_posted_closure_cost.PostedClosureCostTests.test_memo_retains_each_records_view_only_until_status_returns",
+        "test_posted_closure_cost.PostedClosureCostTests.test_other_runtime_scopes_do_not_reuse_closure_walks",
+        "test_posted_closure_cost.PostedClosureCostTests.test_status_memo_does_not_escape_into_a_surrounding_runtime_scope",
+        "test_posted_closure_cost.PostedClosureCostTests.test_failed_status_removes_its_memo_from_a_surrounding_runtime_scope",
+        "test_posted_closure_cost.PostedClosureCostTests.test_nested_status_restores_the_surrounding_status_memo"
+      ]
+    },
+    {
+      "id": "external-post-recorded-after-server-post",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "recovery",
+      "summary": "A graph problem was posted on the server without its local terminal post record.",
+      "fixed_in": "0.74.0",
+      "expected": "The existing external-post operation records the exact statement with details, saved server evidence and server time without an export, replays without writes and refuses duplicate publication and new review work.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews"
       ]
     }
   ]

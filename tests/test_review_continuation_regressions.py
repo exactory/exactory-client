@@ -443,10 +443,12 @@ class ContinuationRegressionTests(unittest.TestCase):
                 finally:
                     packet_path.write_bytes(original)
 
-    def test_a_recorded_problem_post_finishes_every_chain(self):
+    def test_a_recorded_problem_post_finishes_its_statement_chain(self):
         fixture = self.fixture()
         records = fixture.case.read_records()
-        records['problem_post'] = dict(post=dict(id='post', gate='bypassed'))
+        from research_harness.problem_claims import compute_statement_digest
+        records['problem_post'] = dict(post=dict(id='post', gate='bypassed',
+            statement_digest=compute_statement_digest(fixture.case.statement)))
         plan = fixture.plan(records)
         self.assertEqual(plan['state'], 'done')
         self.assertNotIn('command', plan)

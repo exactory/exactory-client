@@ -262,7 +262,8 @@ def _encode_record_change(key, value):
 
 
 def _validate(connection: sqlite3.Connection, *, replay: bool = True,
-              records: Optional[dict] = None, history=None, fingerprint=None, requests=None) -> int:
+              records: Optional[dict] = None, history=None, fingerprint=None, requests=None,
+              creation_revisions=None) -> int:
     """Check the store's structure, and with replay, its complete history.
 
 Construction checks the structure so unsupported, corrupt or hot stores fail
@@ -288,6 +289,8 @@ the caller must discard it if any validation fails.
         raise ResearchError("corrupt_state", "Research store must use rollback journaling")
     if not replay:
         return revision
+    if creation_revisions is None and history is not None:
+        creation_revisions = history._creation_revisions
     if [row[0] for row in connection.execute("PRAGMA quick_check")] != ["ok"]:
         raise ResearchError("corrupt_state", "Research SQLite integrity check failed")
     if fingerprint is not None:
@@ -312,6 +315,8 @@ the caller must discard it if any validation fails.
             encoded = _encode_json(change["value"], "corrupt_state")
             identity = _digest(encoded)
             projections[(change["kind"], change["key"])] = (encoded, identity)
+            if creation_revisions is not None and change["kind"] == "problem_post":
+                creation_revisions.setdefault((change["kind"], change["key"]), event_count)
             if history is not None:
                 history.record_version(change["kind"], change["key"], event_count, encoded, identity)
             del change
@@ -363,8 +368,9 @@ def _fingerprint_entry(fingerprint, entry):
 class _RecordHistory:
     """An immutable-after-validation index shared by one snapshot's copies and views."""
 
-    def __init__(self):
+    def __init__(self, creation_revisions=None):
         self._versions, self._digests = {}, {}
+        self._creation_revisions = {} if creation_revisions is None else creation_revisions
 
     def __deepcopy__(self, memo):
         return self
@@ -469,6 +475,9 @@ class _HistoricalSnapshot(Mapping):
     def read_revision(self):
         return self._revision
 
+    def read_creation_revision(self, kind, key):
+        return _read_creation_revision(self._history._creation_revisions, kind, key, self._revision)
+
     def read_record(self, kind, key, recorded_digest):
         read = self._history.read_record if self._cache is None else self._cache.read_record
         return read(kind, key, self._revision, recorded_digest)
@@ -495,7 +504,26 @@ class _HistoricalSnapshot(Mapping):
             return False
 
 
-class _RecordedSnapshot(dict):
+def _read_creation_revision(creation_revisions, kind, key, revision):
+    created = creation_revisions.get((kind, key))
+    return created if created is not None and created <= revision else None
+
+
+class _PostCreationSnapshot(dict):
+    """Current records with only authenticated post creation chronology."""
+
+    def __init__(self, records=(), *, creation_revisions, revision):
+        super().__init__(records)
+        self._creation_revisions, self._revision = creation_revisions, revision
+
+    def copy(self):
+        return _PostCreationSnapshot(self, creation_revisions=self._creation_revisions, revision=self._revision)
+
+    def read_creation_revision(self, kind, key):
+        return _read_creation_revision(self._creation_revisions, kind, key, self._revision)
+
+
+class _RecordedSnapshot(_PostCreationSnapshot):
     """Current JSON records or a shallow historical overlay with authenticated inputs.
 
     Only managed research retains indexed history. Copies share its immutable
@@ -503,7 +531,7 @@ class _RecordedSnapshot(dict):
     """
 
     def __init__(self, records=(), *, history, revision, current_source=None):
-        super().__init__(records)
+        super().__init__(records, creation_revisions=history._creation_revisions, revision=revision)
         self._history, self._revision = history, revision
         self._current_source = current_source
 
@@ -536,10 +564,15 @@ def _read_snapshot(connection: sqlite3.Connection, *, fingerprint=None, requests
             "(kind = 'workspace' AND key IN ('study', 'draft')) OR kind = 'research_intent' LIMIT 1"):
         markers[row["kind"]] = {row["key"]: {}}
     records = {}
-    history = _RecordHistory() if uses_claim_dependencies(markers) else None
-    revision = _validate(connection, records=records, history=history, fingerprint=fingerprint, requests=requests)
-    return {"revision": revision, "records": records if history is None else
-            _RecordedSnapshot(records, history=history, revision=revision)}
+    creation_revisions = {}
+    history = _RecordHistory(creation_revisions) if uses_claim_dependencies(markers) else None
+    revision = _validate(connection, records=records, history=history, fingerprint=fingerprint, requests=requests,
+                         creation_revisions=creation_revisions)
+    if history is None:
+        snapshot = _PostCreationSnapshot(records, creation_revisions=creation_revisions, revision=revision)
+    else:
+        snapshot = _RecordedSnapshot(records, history=history, revision=revision)
+    return {"revision": revision, "records": snapshot}
 
 
 class _PreparationKind(Mapping):
@@ -578,7 +611,7 @@ class _PreparationRecords(Mapping):
         return len(self._records)
 
     def __getattr__(self, name):
-        if name in ("read_revision", "read_record", "read_snapshot", "verify_record_version",
+        if name in ("read_revision", "read_creation_revision", "read_record", "read_snapshot", "verify_record_version",
                     "_history", "_current_source", "_cache"):
             return getattr(self._records, name)
         raise AttributeError(name)
@@ -587,6 +620,9 @@ class _PreparationRecords(Mapping):
         if isinstance(self._records, _RecordedSnapshot):
             return _RecordedSnapshot(self, history=self._records._history, revision=self._records.read_revision(),
                                      current_source=self._records)
+        if isinstance(self._records, _PostCreationSnapshot):
+            return _PostCreationSnapshot(self, creation_revisions=self._records._creation_revisions,
+                                         revision=self._records._revision)
         return dict(self)
 
 
@@ -797,12 +833,21 @@ class _ScopedRecords(Mapping):
         return sum(1 for _ in self)
 
     def copy(self):
-        return {kind: dict(self[kind]) for kind in self}
+        records = {kind: dict(self[kind]) for kind in self}
+        return _PostCreationSnapshot(records, creation_revisions=self._scope._source._creation_revisions,
+                                     revision=self._scope.revision)
+
+    def __deepcopy__(self, memo):
+        return _ScopedRecords(self._scope, copy.deepcopy(self._groups, memo))
 
     def read_revision(self):
         self._scope.check_open()
         self._scope._global_revision = True
         return self._scope.revision
+
+    def read_creation_revision(self, kind, key):
+        self._scope.bind_record(kind, key)
+        return self._scope._source.read_creation_revision(kind, key)
 
     def read_epoch_tasks(self, epoch_id):
         return self.read_filtered_records('review_task', epoch_id=epoch_id)
@@ -958,10 +1003,12 @@ class _GuardedSnapshot:
 class Transaction:
     """A callback's isolated record view, usable only during Store.mutate."""
 
-    def __init__(self, connection: sqlite3.Connection):
+    def __init__(self, connection: sqlite3.Connection, *, creation_revisions=None, revision=0):
         self._connection = connection
         self._changes = []
         self._active = True
+        self._creation_revisions = {} if creation_revisions is None else creation_revisions
+        self._revision = revision
 
     def _check(self, kind):
         if not self._active:
@@ -979,6 +1026,11 @@ class Transaction:
         self._check(kind)
         return {row["key"]: _load(row["value"], dict) for row in self._connection.execute(
             "SELECT key, value FROM records WHERE kind = ? ORDER BY key", (kind,))}
+
+    def read_creation_revision(self, kind, key):
+        self._check(kind)
+        _text(key, "Record key")
+        return _read_creation_revision(self._creation_revisions, kind, key, self._revision)
 
     def put(self, kind: str, key: str, value: dict) -> None:
         self._check(kind)
@@ -1283,7 +1335,8 @@ class Store:
         with self._connection(writable=True) as connection:
             fingerprint = hashlib.sha256() if _preparation is not None else None
             identity = self._read_database_identity() if _preparation is not None else None
-            revision = _validate(connection, fingerprint=fingerprint)
+            creation_revisions = {}
+            revision = _validate(connection, fingerprint=fingerprint, creation_revisions=creation_revisions)
             original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload,
                                                request_id)
             if original is not None:
@@ -1298,7 +1351,7 @@ class Store:
             # A committed request returns above without this check, so a retry of a request that an earlier
             # release stored beyond the bounds still gets its original receipt.
             _check_stored_bounds(payload)
-            transaction = Transaction(connection)
+            transaction = Transaction(connection, creation_revisions=creation_revisions, revision=revision)
             try:
                 result = apply(transaction)
                 _check_stored_bounds(result)
@@ -1313,7 +1366,8 @@ class Store:
         encoded_payload = _encode_mutation_input(operation, payload, apply,
                                                  0 if expected_revision is None else expected_revision, request_id)
         with self._connection(writable=True) as connection:
-            revision = _validate(connection)
+            creation_revisions = {}
+            revision = _validate(connection, creation_revisions=creation_revisions)
             original = _read_original_response(_request_row(connection, request_id), operation, encoded_payload, request_id)
             if original is not None:
                 return original
@@ -1325,7 +1379,7 @@ class Store:
                 raise ResearchError("invalid_input", "Research revision exhausted its SQLite integer range")
             _check_stored_bounds(payload)
             next_revision = revision + 1
-            transaction = Transaction(connection)
+            transaction = Transaction(connection, creation_revisions=creation_revisions, revision=revision)
             try:
                 result = apply(transaction, next_revision)
                 _check_stored_bounds(result)
