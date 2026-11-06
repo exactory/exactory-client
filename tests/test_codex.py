@@ -58,6 +58,44 @@ class TestCodexPackage(unittest.TestCase):
                                  text=True, capture_output=True, timeout=60)
         self.assertEqual(process.returncode, 0, process.stderr)
 
+    def test_managed_registrations_preserve_all_matchers_timeouts_and_entrypoints(self):
+        from hook_runtime.policy import build_managed_config, render_requirements
+        managed = build_managed_config(Path("/tmp/managed owner's prefix"), sys.executable)
+        plugin = json.loads((ROOT / "codex/hooks.json").read_text())
+        self.assertEqual(set(managed["hooks"]), set(plugin["hooks"]))
+        for event, groups in plugin["hooks"].items():
+            actual = managed["hooks"][event]
+            self.assertEqual(len(actual), len(groups))
+            for expected_group, actual_group in zip(groups, actual):
+                self.assertEqual(actual_group.get("matcher"), expected_group.get("matcher"))
+                self.assertEqual(len(actual_group["hooks"]), len(expected_group["hooks"]))
+                for expected, handler in zip(expected_group["hooks"], actual_group["hooks"]):
+                    self.assertEqual(handler["timeout"], expected["timeout"])
+                    self.assertEqual(handler["type"], expected["type"])
+                    self.assertIn("/v1/dispatch.py", handler["command"])
+                    self.assertIn(event, handler["command"])
+                    self.assertEqual(handler["command"].split()[-1], expected["command"].split()[-1].rstrip('"').split("/")[-1])
+        block = render_requirements(Path("/tmp/managed owner's prefix"), sys.executable)
+        self.assertIn('[hooks]\nmanaged_dir = ' + json.dumps(str(Path("/tmp/managed owner's prefix").resolve())), block)
+        self.assertNotIn("allow_managed_hooks_only", block)
+
+    def test_check_rejects_stale_managed_registrations_without_rewriting(self):
+        namespace = runpy.run_path(str(ROOT / "codex/generate.py"))
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / "skills").mkdir()
+            (root / "hooks").mkdir()
+            (root / "hooks/hooks.json").write_bytes((ROOT / "hooks/hooks.json").read_bytes())
+            with patch.dict(namespace["main"].__globals__, {"ROOT": root}):
+                with patch.object(sys, "argv", ["generate.py"]):
+                    self.assertEqual(namespace["main"](), 0)
+                generated = root / "hook_runtime/registrations.json"
+                generated.write_text("{}\n")
+                with patch.object(sys, "argv", ["generate.py", "--check"]):
+                    with contextlib.redirect_stderr(io.StringIO()):
+                        self.assertEqual(namespace["main"](), 1)
+                self.assertEqual(generated.read_text(), "{}\n")
+
     def test_generator_detects_changed_descriptions_and_removed_skills(self):
         namespace = runpy.run_path(str(ROOT / "codex/generate.py"))
         with tempfile.TemporaryDirectory() as scratch:

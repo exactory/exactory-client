@@ -164,6 +164,7 @@ class TestHookStartup(unittest.TestCase):
         files = namespace["build_files"]()
         self.assertIn(ROOT / "hooks/hooks.json", files)
         self.assertIn(ROOT / "codex/hooks.json", files)
+        self.assertIn(ROOT / "hook_runtime/registrations.json", files)
         for path, contents in files.items():
             with self.subTest(path=str(path.relative_to(ROOT))):
                 self.assertEqual(path.read_bytes(), contents.encode("utf-8"))

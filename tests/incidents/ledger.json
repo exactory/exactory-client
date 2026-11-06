@@ -3788,6 +3788,46 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_staged_status_preserves_tasks_and_incomplete_recovery_evidence",
         "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags"
       ]
+    },
+    {
+      "id": "codex-plugin-hooks-skipped-after-update",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "deployment (hook trust)",
+      "summary": "Changed plugin scripts and expanded cache paths invalidate Codex hook trust after each update.",
+      "fixed_in": "0.75.0",
+      "expected": "Administrator-managed registrations pin the stable dispatcher outside the plugin cache and preserve every matcher and timeout. The smoke driver checks actual hooks/list and executes all managed commands; real Codex 0.163.0 scheduling acceptance remains the supervisor's deployment check.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_codex.TestCodexPackage.test_managed_registrations_preserve_all_matchers_timeouts_and_entrypoints",
+        "test_codex.TestCodexPackage.test_check_rejects_stale_managed_registrations_without_rewriting",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_smoke_driver_uses_app_server_inventory_and_all_real_managed_commands"
+      ]
+    },
+    {
+      "id": "hook-runtime-survives-cache-replacement",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "upgrade (runtime lifetime)",
+      "summary": "Deleting a plugin cache removes code and resources still used by a running session.",
+      "fixed_in": "0.75.0",
+      "expected": "A session retains its approved immutable release, CLI, skills and documents after a new default is published and its source cache deleted. Bindings live in private user state outside the administrator prefix. Publication and startup verify all payload hashes; later events check approval, the manifest and entrypoints without rehashing payloads. Invalid bindings and unavailable state retain event-specific refusal, and referenced bundles cannot be removed.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_every_loaded_command_keeps_a_after_cache_removal_and_new_session_gets_b",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_real_handlers_guard_cli_documents_and_stop_survive_cache_deletion",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_invalid_bundles_and_bindings_refuse_every_event_without_execution",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_corrupt_registry_and_missing_binding_refuse_without_reenrollment",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_concurrent_publication_and_enrollment_leave_one_binding",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_interrupted_publication_keeps_previous_default_and_install_is_stable",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_referenced_bundle_cannot_be_removed_or_republished_with_changed_bytes",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_unreadable_source_subtree_cannot_publish_a_partial_release",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_startup_hashes_every_payload_file_and_later_events_hash_none",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_enrollment_and_all_commands_use_writable_state_with_read_only_prefix",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_missing_unwritable_or_symlink_state_refuses_without_execution",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_init_state_creates_private_storage_without_writing_prefix",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_default_state_is_under_user_home_when_no_override_is_set",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_state_inside_prefix_is_refused_without_creating_it",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_later_events_authenticate_manifest_and_check_both_entrypoints"
+      ]
     }
   ]
 }
