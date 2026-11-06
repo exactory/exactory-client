@@ -20,6 +20,12 @@ class NativeCompleteSourceTests(unittest.TestCase):
         self.addCleanup(fixture.doCleanups)
         fixture.setUp()
         self.store, self.artifacts = fixture.store, fixture.artifacts
+        # These synthetic source continuations retain their historical rollout
+        # profile, which predates the native model and effort capture facade.
+        from research_harness import review_codex_invocation
+        capture = patch.object(review_codex_invocation, 'supports_route', return_value=False)
+        capture.start()
+        self.addCleanup(capture.stop)
         for target, value in (('runtime', lambda: {'adapter': 'codex_cli_v1', 'fixture': 'native-record-test'}),
                               ('NATIVE_DECLARATIONS', ()), ('NATIVE_DECLARATION_SETS', {()})):
             patcher = patch.object(codex, target, value)

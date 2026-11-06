@@ -1,6 +1,7 @@
 """Small stored-workspace replays for the ceb050b request parity oracle.
 
-Only fixture construction fixes UUIDs, transport runtimes and observation time.
+Fixture construction retains the original unversioned request and invocation
+policies, and fixes UUIDs, transport runtimes and observation time.
 No packet, request, scientific assessment or authentication function is replaced
 while collecting the oracle. See review_request_parity.md for the exclusions.
 """
@@ -26,6 +27,7 @@ import test_problem_result_history as history_fixtures
 import test_research_review_protocol as ordinary_fixtures
 from research_harness import cli, gates, openness_reading, review_protocol as protocol
 from research_harness import review_request_evaluation, review_transport as transport
+from research_harness import review_codex_invocation, review_request_restoration
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
 from research_harness.review_bodies import read_history
@@ -75,6 +77,8 @@ def fix_external_inputs():
         return original_observe(route, request, credential)
 
     with patch.object(transport, "runtime", side_effect=describe_fixture_runtime), \
+            patch.object(review_codex_invocation, "supports_route", return_value=False), \
+            patch.object(review_request_restoration, "select_policy", return_value=None), \
             patch.object(uuid, "uuid4", side_effect=lambda: uuid.UUID(int=next(numbers))), \
             patch("time.monotonic", return_value=1000.0), \
             patch("research_harness.problem_claims.datetime", FixtureDatetime), \

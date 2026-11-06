@@ -9,6 +9,12 @@ from research_harness.evidence import digest
 
 
 def install_codex_runtime(case):
+    # These historical synthetic rollouts intentionally predate native settings
+    # capture. Prospective invocation tests supply their own turn_context.
+    from research_harness import review_codex_invocation
+    capture = patch.object(review_codex_invocation, 'supports_route', return_value=False)
+    capture.start()
+    case.addCleanup(capture.stop)
     for target, value in (('runtime', lambda: {'adapter': 'codex_cli_v1', 'fixture': 'reviewer-excerpt-test'}),
                           ('NATIVE_DECLARATIONS', ()), ('NATIVE_DECLARATION_SETS', {()})):
         patcher = patch.object(codex, target, value)
