@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 from problem_parts_fixtures import KEY, ResultPartsCase
 from research_harness.review_bodies import read_history
 from research_harness import review_protocol as protocol, review_transport as transport
+from research_harness import review_request_evaluation
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
 from research_harness.storage import Store
@@ -80,7 +81,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
         self.evaluation = Evaluation(self.records, self.case.artifacts)
 
     def test_repeated_request_is_built_once_and_returns_independent_copies(self):
-        with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
+        with patch.object(review_request_evaluation, '_build_request', wraps=review_request_evaluation._build_request) as build:
             first = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
             second = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
             self.assertEqual(build.call_count, 1)
@@ -94,7 +95,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
 
     def test_another_records_view_reuses_identical_derivation_inputs(self):
         other_records = copy.deepcopy(self.records)
-        with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
+        with patch.object(review_request_evaluation, '_build_request', wraps=review_request_evaluation._build_request) as build:
             first = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
             second = protocol.build_assignment_request(other_records, self.evaluation,
                                                        other_records['review_assignment'][self.assignment['id']])
@@ -113,7 +114,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
         views = ((earlier_records, earlier_evaluation, current), (self.records, self.evaluation, recorded))
         def derive(route, prompt, packet, history=(), order=transport.FIT_ORDER):
             return copy.deepcopy(current if order == transport.FIT_ORDER else recorded)
-        with patch.object(transport, 'request_body', side_effect=derive) as build:
+        with patch.object(review_request_evaluation, '_build_request', side_effect=derive) as build:
             for records, evaluation, expected in views + views[::-1]:
                 assignment = records['review_assignment'][self.assignment['id']]
                 self.assertEqual(protocol.build_assignment_request(records, evaluation, assignment), expected)
@@ -130,7 +131,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
         self.assignment['history'][0]['content'] = 'Changed by the input owner.'
         self.assignment['history'][1]['content'] = 'A substituted assessment.'
         first['input'][0]['content'] = 'Changed by the caller.'
-        with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
+        with patch.object(review_request_evaluation, '_build_request', wraps=review_request_evaluation._build_request) as build:
             changed = protocol.build_assignment_request(self.records, self.evaluation, self.assignment)
         self.assertEqual(build.call_count, 1)
         self.assertEqual(changed['input'][:2], self.assignment['history'])
@@ -163,7 +164,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
         current['input'][-1]['content'] = 'The current fit differs from the recorded fit.'
         def derive(route, prompt, packet, history=(), order=transport.FIT_ORDER):
             return current if order == transport.FIT_ORDER else recorded
-        with patch.object(transport, 'request_body', side_effect=derive):
+        with patch.object(review_request_evaluation, '_build_request', side_effect=derive):
             self.assertEqual(protocol.build_assignment_request(self.records, self.evaluation, self.assignment), recorded)
 
     def test_only_completed_attempts_with_a_request_select_an_earlier_fit(self):
@@ -177,7 +178,7 @@ class AssignmentRequestOnceTests(ResultPartsCase):
                 records = copy.deepcopy(self.records)
                 records['review_attempt'] = {attempt['id']: dict(attempt, status=status, request=request),
                                              other_attempt['id']: dict(other_attempt, request=attempt['request'])}
-                with patch.object(transport, 'request_body', return_value=current):
+                with patch.object(review_request_evaluation, '_build_request', return_value=current):
                     self.assertEqual(protocol.build_assignment_request(records, self.evaluation, self.assignment), current)
 
     def test_another_assignments_attempt_without_status_is_ignored(self):

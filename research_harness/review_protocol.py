@@ -2251,10 +2251,12 @@ def _route_state(records, artifacts, route_id):
     if route:
         from .evaluation import Evaluation
         evaluation = Evaluation.of(records, artifacts)
-        for saved in _read_review_group(records, evaluation, 'review_route_probe', 'route_id', route_id, order='recorded_revision'):
-            if saved['route_id'] != route_id or saved.get('route_digest') != digest(route) or saved.get('runtime') != route['runtime']:
-                continue
-            status, proof = 'unverified', None
+        route_digest = digest(route)
+        matching = [saved for saved in _read_review_group(
+            records, evaluation, 'review_route_probe', 'route_id', route_id, order='recorded_revision')
+            if saved['route_id'] == route_id and saved.get('route_digest') == route_digest
+            and saved.get('runtime') == route['runtime']]
+        for saved in matching[-1:]:
             try:
                 request = _read_json(artifacts, saved['request'])
                 output = _read_json(artifacts, saved['output']) if saved['output'] else {}

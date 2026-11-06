@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 from contextlib import contextmanager
 from unittest.mock import patch
+from research_harness import review_request_evaluation
 
 from codex_route_fixtures import limit_codex_input
 from problem_parts_fixtures import ResultPartsCase
@@ -152,12 +153,13 @@ class ProblemResultRestartTests(PartsResultCase):
         replay = transport.logical_messages(self.request(prior))
         original = transport.request_body
 
-        def request(route, text, supplied, messages=None, **kwargs):
+        def request(route, text, supplied, messages=None, order=transport.FIT_ORDER, **kwargs):
             self.assertFalse(supplied is packet and messages is replay,
                              'A restart must bypass the ordinary request fast path entirely.')
-            return original(route, text, supplied, messages, **kwargs)
+            return original(route, text, supplied, messages, order=order, **kwargs)
 
-        with patch.object(transport, 'request_body', side_effect=request):
+        with patch.object(transport, 'request_body', side_effect=request), \
+                patch.object(review_request_evaluation, '_build_request', side_effect=request):
             prepared = parts.prepare_packet(records, self.case.artifacts, value, records['review_route']['route'],
                 packet, prompt, replay, legacy_refusal=protocol.ResearchError('review_input_too_large', 'No progress.'))
         self.assertEqual(parts.find_kind(prepared), 'read')
