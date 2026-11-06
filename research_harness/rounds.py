@@ -253,14 +253,32 @@ class _RoundEvidence:
     A malformed list or review item fails with the caller's `error_code`, so another operation that takes
     round evidence answers with its own code."""
 
-    def __init__(self, context, bundle, error_code=_ERROR):
-        self.records, self.bundle, self.error_code = context.records, bundle, error_code
+    def __init__(self, context, bundle, error_code=_ERROR, *, decision=None):
+        self.context, self.records, self.bundle, self.error_code = context, context.records, bundle, error_code
+        self.decision = decision
+        self.projections = None
         self.development = development._Evidence(context)
         self.items = {}
 
+    def _find_native_reference(self, submitted):
+        """The native evidence behind a reference copied unchanged from this decision's delivered round packet."""
+        if self.decision is not None and self.bundle.get("publication_scope") is not None:
+            if self.projections is None:
+                from .review_delivery import build_round_projection
+                self.projections = build_round_projection(self.records, self.context.artifacts, self.bundle,
+                                                          self.decision)[2]
+            mapping = self.projections.get(digest(submitted))
+            if mapping is not None and mapping["reference"] == submitted:
+                return mapping["native_reference"]
+        raise ResearchError("round_evidence_mismatch", "Use the exact projected evidence of this decision and bundle")
+
     def many(self, values, name):
         linked = []
-        for value in _items(values, name, code=self.error_code):
+        for submitted in _items(values, name, code=self.error_code):
+            value = submitted
+            if isinstance(submitted, dict) and any(
+                    key in submitted for key in ("derivative", "original_sha256", "original_locator")):
+                value = self._find_native_reference(submitted)
             if isinstance(value, dict) and value.get("kind") == "review":
                 fields(value, ("kind", "review_id"), code=self.error_code)
                 text(value["review_id"], "Review evidence ID", code=self.error_code)
@@ -270,7 +288,11 @@ class _RoundEvidence:
                 item = {"reference": value, "review_digest": review["digest"]}
             else:
                 item = self.development.one(value)
-            self.items[digest(value)] = item
+            if value != submitted:
+                item = dict(item, reference=submitted, native_reference=value,
+                            projection_binding={"decision_digest": self.decision["digest"],
+                                                "bundle_digest": self.bundle["digest"]})
+            self.items[digest(submitted)] = item
             linked.append(item)
         return linked
 
@@ -548,7 +570,7 @@ def record_round_review(store, payload, *, expected_revision, request_id):
         _choice(value["verdict"], VERDICTS, "Round verdict")
         _strings(value["limitations"], "Review limitations", nonempty=True)
         kinds = CHECKS_CONTINUE if decision["decision"] == "continue" else CHECKS_STOP
-        evidence = _RoundEvidence(context, bundle)
+        evidence = _RoundEvidence(context, bundle, decision=decision)
         seen = set()
         for check in _items(value["checks"], "Round checks"):
             _fields(check, ("kind", "status", "reason", "evidence"))
@@ -573,6 +595,8 @@ def record_round_review(store, payload, *, expected_revision, request_id):
         record = {"id": value["id"], "payload": value, "round_id": decision["id"], "round_digest": decision["digest"],
                   "closes": decision["closes"], "decision": decision["decision"], "verdict": value["verdict"],
                   "reviewed_revision": expected_revision + 1, "request_id": request_id}
+        if evidence.projections:
+            record["evidence"] = evidence.summary()
         record["digest"] = digest(record)
         return [immutable_record(records, "round_review", value["id"], record)], record
 

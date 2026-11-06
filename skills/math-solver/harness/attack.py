@@ -290,15 +290,24 @@ def run_plan(args):
     defects = list(find_precondition_defects(preconditions, front_matters, problem, requirements))
     if defects:
         raise ValidationError(defects)
-    openings = list_openings(front_matters, read_verdicts(preconditions))
-    write_json(
-        workspace / "openings.json",
-        {
-            "generated_from": "preconditions.json",
-            "problem_digest": compute_problem_digest(problem),
-            "openings": openings,
-        },
-    )
+    from search_controller.strategy_refresh import derive_strategy_eligibility
+    path = workspace / "openings.json"
+    try:
+        path.stat()
+    except FileNotFoundError:
+        previous = {}
+    else:
+        previous = read_json(path).get("strategy_entries", {})
+    from search_controller.strategy_refresh_io import restore_strategy_entries
+    moves = read_journal(workspace)
+    previous = restore_strategy_entries(workspace, previous, moves)
+    verdicts, entries = derive_strategy_eligibility(preconditions, problem, previous, moves)
+    openings = list_openings(front_matters, verdicts)
+    planned = {"generated_from": "preconditions.json",
+               "problem_digest": compute_problem_digest(problem), "openings": openings}
+    if entries:
+        planned["strategy_entries"] = entries
+    write_json(path, planned)
     print_openings(openings)
 
 
@@ -618,7 +627,13 @@ def find_move_flow_defects(move, moves, workspace, front_matters, problem):
     it dispatches, where the entry's trigger matched a shape field that carries a value; and
     it opens the walk, continues its current strategy, or steps into another one."""
     strategy = move["strategy"]
-    verdicts = read_verdicts(read_json(workspace / "preconditions.json"))
+    from search_controller.strategy_refresh import derive_strategy_eligibility
+    from search_controller.strategy_refresh_io import restore_strategy_entries
+    previous = restore_strategy_entries(
+        workspace, read_json(workspace / "openings.json").get("strategy_entries", {}), moves)
+    verdicts, _ = derive_strategy_eligibility(
+        read_json(workspace / "preconditions.json"), problem, previous, moves,
+        allow_mode_move=move.get("problem_changed") is True)
     if strategy not in verdicts:
         yield "move: strategy %s has no precondition record" % strategy
         return

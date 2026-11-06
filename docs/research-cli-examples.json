@@ -87,6 +87,14 @@
       "year": {"kind": "response", "source_id": "readme-response-1", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "start": 26, "end": 30}
     }
   },
+  "problem-citation-locator": {
+    "id": "citation-locator-1",
+    "version_id": "url:https://github.com/example/math/raw/main/bound.pdf",
+    "reading_id": "reading-1",
+    "original_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "url": "https://github.com/example/math/raw/main/bound.pdf",
+    "source_id": "paper-fulltext-1"
+  },
   "problem-assessment": {
     "id": "problem-assessment-1",
     "statement_id": "statement-1",

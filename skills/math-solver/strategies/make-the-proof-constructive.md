@@ -12,9 +12,12 @@ costs: [constructivity, bound_quality, axioms, object, obligations]
 
 The mode. Before: existence, computation, or undecided. After:
 construction, a written search procedure that produces the object.
-Construction has already moved, certificate is final: question 1 says
-no to both. The branch's first move carries the mode move
-(`problem_changed` true); `quadruple.mode` then reads construction.
+Certificate is final, and a new entry with the mode already
+construction is not eligible: question 1 says no to both. The branch's
+first move carries the mode move (`problem_changed` true);
+`quadruple.mode` then reads construction, and the strategy continues
+on the same claim under the continuation rule of the precondition
+procedure.
 
 Bound quality is paid at steps 2 and 3: the value an explicit family
 attains can sit below what a non-constructive existence argument gives.
@@ -37,10 +40,26 @@ still owes.
 6. Is existence undecided by the base theory, the difficulty starting at an uncountable cardinal? (from: shape.base_theory; optional)
 7. Does the base theory record whether the construction stays inside it, and which hypotheses beyond it decide the statement? (from: shape.base_theory; required)
 
-Verdict: yes when questions 1 to 4 and 7 are yes; unknown when one is
-unknown and none is no; no otherwise. Question 5 selects the seed branch (steps
-2 and 3), question 6 the approximation branch (steps 4 to 6), seed
-first when both, step 1's route when neither.
+Verdict of a fresh entry: yes when questions 1 to 4 and 7 are yes;
+unknown when one is unknown and none is no; no otherwise. Question 5
+selects the seed branch (steps 2 and 3), question 6 the approximation
+branch (steps 4 to 6), seed first when both, step 1's route when
+neither.
+
+Continuation. After the branch's first move, answer question 1 from the
+current mode: it is no, and the recorded verdict is no. The harness
+derives the continuation from the entry it recorded at planning
+(`strategy_entries` in `openings.json`); a branch planned before that
+record existed recovers the entry from the native reservation of its
+first move. On the same claim and statement, the strategy stays
+eligible while questions 2, 3, 4 and 7 hold (yes, or unknown). A
+changed claim or statement, a mode other than construction
+(certificate included), a move of another strategy, a failure signal
+fired on the branch (`failed_after_move` included) or a stale plan ends
+the continuation. A changed problem needs a current plan and the
+observed reassessment before the next move. A new entry with the mode
+already construction is not eligible. Budgets and failure history do
+not reset.
 
 ## Plan
 
