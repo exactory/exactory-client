@@ -182,6 +182,14 @@
     "evidence": "Owner instruction of 2026-11-04: \"Post this problem on exactory.ai now, without gate post.\"",
     "posted_at": "2026-11-04T14:49:22.236Z"
   },
+  "gate-override": {
+    "id": "override-1",
+    "gate": "readiness",
+    "instruction": "context/instruction.txt",
+    "reason": "The study stopped at the readiness gate. The user instructed it to go on to writing, with the unmet obligations kept in the record.",
+    "stop_code": "readiness_required",
+    "transition": {"from": "experiment", "to": "write"}
+  },
   "problem-post-time": {
     "post_id": "external-post-1",
     "posted_at": "2026-11-04T14:49:22.236Z",

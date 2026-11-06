@@ -295,6 +295,7 @@ def _find_current_adjudications(records):
 # The record kinds whose records are each one file under <tree>/<id>.json, with the rule that names the current ones;
 # a record that the rule does not name is superseded.
 _RECORD_TREES = {
+    "gate_override": ("overrides", lambda records: set(records.get("gate_override", {}))),
     "review_adjudication": ("reviews/adjudicator", _find_current_adjudications),
     "manuscript_review": ("reviews/manuscript", lambda records: {review["id"] for review in latest_reviews(
         records, _find_selected_bundle_digest(records)).values()}),

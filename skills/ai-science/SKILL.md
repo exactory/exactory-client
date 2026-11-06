@@ -49,6 +49,8 @@ toward them rigorous: each follows from established evidence.
 | `complete` | Current status | Retained study and confirmed final state |
 
 Advance with the actual `exactory-lab state set` transitions and current gates.
+A move that a gate refuses is reported, and passed only on the user's instruction, as
+[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes.
 When entering unfinished work after a completed stage, include `--status pending`.
 A stage name or historical receipt does not establish readiness.
 

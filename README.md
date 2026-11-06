@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.79.0](docs/releases/0.79.0.md) adds recorded overrides on the user's instruction for the stage moves of a study and for the export of a problem post. `exactory-research gate-override` pins the user's own words and records what the gate still owes; no gate reads the record, no review or decision is created in place of a skipped step, and a deposit names the recorded gates in its public description. The math-solver controller is not included, and without an instruction nothing passes a gate.
+
 Version [0.78.0](docs/releases/0.78.0.md) keeps a session working when the file guard cannot check a tool call. Six read-only tools and eight plain shell commands pass, and every other call is denied with a reason that names the error, tells the agent to report it, and names the controls that only the user has. A definite write to a file that the harness owns is denied as before.
 
 Version [0.77.0](docs/releases/0.77.0.md) keeps every candidate of a math-conjecturer exploration in its record once the record's first review is requested. A review objection binds the candidates of its own record only, so a reviewed candidate no longer moves to another record without its objections. The full fix, which carries the objections across records, is planned.

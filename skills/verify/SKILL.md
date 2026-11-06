@@ -323,8 +323,13 @@ Preserve the returned `verdict` as the body file. In `bind-verdict`, include
 independence basis, `blind: true` and the unchanged returned `checks`. Both the
 body and checks must match the observed verified assignment. A local edit or a
 manually imported response cannot stand in for that invocation. If it fails,
-repair the source or context problem and preserve the failed attempt; do not
-move outside the managed workspace to bypass its requirements.
+repair the source or context problem and preserve the failed attempt. Do not
+move outside the managed workspace to bypass its requirements on your own
+judgment. On the user's instruction, record the override and send the verdict
+through the direct path, as
+[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)
+describes; the verdict then carries no managed receipt, and the record keeps
+the instruction and what stays owed.
 
 Then send the verdict body, not the `{verdict, checks}` wrapper:
 

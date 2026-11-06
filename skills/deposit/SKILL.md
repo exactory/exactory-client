@@ -54,6 +54,12 @@ plugin is enabled.
   review is `next`, as `managed_wait` with `workflow: "manuscript-review"`. A
   published production deposit of the selected bundle with unchanged files
   (`current_bundle`) is not recommended again.
+- A recorded override of a gate ([Stops and overrides](../../docs/research-workflow.md#stops-and-overrides))
+  is named in that line. The deposit then adds one paragraph to the record's
+  public description that names the recorded gates, and an archive that
+  `package` builds from the pinned bundle after the override holds the override
+  records and their instruction files, which become public when the archive is
+  attached with `--sources` and the deposit is published.
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.

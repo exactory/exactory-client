@@ -109,6 +109,14 @@ _DEPOSITED_THROUGH_EXACTORY_DISCLOSURE_TEMPLATE = (
     " exactory.ai (https://www.exactory.ai). The human author, {author},"
     " is responsible for its content."
 )
+_PASSED_GATES_DISCLOSURE_TEMPLATE = (
+    "This paper was deposited from a workspace of a research harness that checks each step of the work before "
+    "the next one. Some of these checks require independent reviews. The record of that workspace holds entries "
+    "for these checks: {gates}. A readable entry says that the user of the session instructed the work to go on "
+    "without waiting for that check. The agent that ran the work recorded the entry. An entry named unknown could "
+    "not be read. The record does not show who that user was, whether the entry was used, or whether the check "
+    "was completed later."
+)
 
 # One keyword, sent only with the disclosure that names exactory.ai as the
 # writer, because it rests on the same evidence. The keyword answers "did
@@ -489,7 +497,8 @@ def _has_exactory_authorship_evidence(pdf_path: Path) -> bool:
 
 
 def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
-                            has_exactory_authorship_evidence: bool, problem_target: dict | None = None) -> dict:
+                            has_exactory_authorship_evidence: bool, problem_target: dict | None = None,
+                            passed_gates=()) -> dict:
     # Zenodo renders the description as HTML. The abstract paragraphs come
     # first, the disclosure closes the description as its own paragraph.
     paragraph_texts = [" ".join(block.split()) for block in abstract_text.split("\n\n")]
@@ -498,6 +507,8 @@ def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
                            if has_exactory_authorship_evidence
                            else _DEPOSITED_THROUGH_EXACTORY_DISCLOSURE_TEMPLATE)
     paragraph_texts.append(disclosure_template.format(author=creators[0]))
+    if passed_gates:
+        paragraph_texts.append(_PASSED_GATES_DISCLOSURE_TEMPLATE.format(gates=", ".join(passed_gates)))
     metadata = {
         "upload_type": "publication",
         "publication_type": "preprint",
@@ -626,11 +637,13 @@ def _run_deposit(args: argparse.Namespace) -> None:
     # preflight still precedes every new remote write, including the new-version action. It runs
     # once whether the direct path opens a version or continues a version draft that it read back.
     def prepare_deposit():
+        from research_harness.overrides import list_passed_gates
         problem_target = _resolve_problem_target(args.math_problem_id) if args.math_problem_id is not None else None
         if args.production:
             report_citation_gate(Path.cwd(), _CHECK_COMMAND_PATH)
         metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text,
-                                           has_exactory_authorship_evidence, problem_target)
+                                           has_exactory_authorship_evidence, problem_target,
+                                           passed_gates=list_passed_gates(store))
         return metadata, problem_target
 
     # A study whose publication and round gates are ready records the receipt;
@@ -964,7 +977,7 @@ def _save_deposit_state(store, store_open_error, state: dict) -> None:
         if recorded:
             _stop_with_unconfirmed_deposit_record(store.root, state, error)
         if isinstance(error, ResearchError):
-            note_managed_record_skipped(error)
+            note_managed_record_skipped(error, store)
         else:
             print(f"The workspace store could not record the deposit. Cause: {error}.", file=sys.stderr)
         _stop_with_only_the_local_deposit_copy(store.root, state)

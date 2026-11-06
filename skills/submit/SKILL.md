@@ -13,7 +13,8 @@ inside a study whose publication gate is ready, the CLI also records the submiss
 receipt that closes the study's `submit` stage. A workspace that refuses the receipt
 prints one line, `Managed record skipped (<code>): <message>`, and sends the request
 anyway. A directory with no workspace, or a workspace with no store, sends it with
-no line.
+no line. A recorded override of a gate is named in that line
+([Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)).
 Inside a draft workspace it first runs the offline citation check; a failing check
 prints one `Citation report:` line, which is information for the user, and the
 submit continues.

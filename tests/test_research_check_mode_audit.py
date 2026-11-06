@@ -380,6 +380,7 @@ REFUSED_OUTCOMES = {
     "contribution-analysis": "publication_bundle_missing",
     "cycle": "objective_mismatch",
     "defer-source": "artifact_missing",
+    "gate-override": "gate_override_transition",
     "intent": "intent_instruction_missing",
     "loop-close": "policy_inapplicable",
     "manuscript": "readiness_required",

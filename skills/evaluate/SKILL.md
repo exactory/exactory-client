@@ -271,7 +271,9 @@ the deposit is a production deposit with a DOI and the gate still owes a
 manuscript review, that review is `next` as `managed_wait` with
 `workflow: "manuscript-review"`. Record the missing reviews for the exact
 bundle. A published production deposit of the selected bundle with unchanged
-files is not recommended again.
+files is not recommended again. A recorded override of the gate
+([Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)) appears in
+`status` and in the deposit's public description.
 
 For managed publication, pin the exact current `manuscript` and export its actual
 bytes with `exactory-research export --kind manuscript`. Without `--destination`

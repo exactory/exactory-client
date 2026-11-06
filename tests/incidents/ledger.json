@@ -4485,6 +4485,40 @@
       "expected": "Until a release carries objections across records, the math-conjecturer skill keeps every candidate of an exploration in its record after the record's first bar or slate review request (0.77.0). The planned fix carries every material bar and slate objection of the source with authenticated provenance and evidence, delivers it to the destination's slate and result reviewers, and blocks the destination's post with research_objection_unresolved while one stays unresolved.",
       "test_kind": "none",
       "tests": []
+    },
+    {
+      "id": "override-stage-transition",
+      "record": "20261106085323-override-of-harness-stops",
+      "class": "gate (user instruction)",
+      "summary": "A study stopped at an unmet stage gate cannot continue on a pinned user instruction.",
+      "expected": "An exact recorded transition permits progress to complete while all gate findings and missing reviews remain unchanged.",
+      "fixed_in": "0.79.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_gate_override.StudyOverrideTests.test_each_gated_hop_and_same_stage_completion_require_the_exact_override",
+        "test_gate_override.StudyOverrideTests.test_all_fourteen_gate_commands_keep_their_reports",
+        "test_gate_override.StudyOverrideTests.test_direct_jump_requires_its_own_override",
+        "test_gate_override.StudyOverrideTests.test_damaged_local_log_rows_preserve_reports_summaries_and_deposit_disclosure",
+        "test_gate_override.StudyOverrideTests.test_unreadable_local_log_preserves_reports_summaries_and_deposit_disclosure",
+        "test_gate_override.StudyOverrideTests.test_deposit_disclosure_keeps_local_gates_when_store_snapshot_fails",
+        "test_gate_override.StudyOverrideTests.test_deposit_without_store_finds_workspace_from_subdirectory_and_falls_back_to_cwd",
+        "test_gate_override.StudyOverrideTests.test_second_local_append_replaces_read_only_log_and_keeps_lock_private"
+      ]
+    },
+    {
+      "id": "override-problem-composer",
+      "record": "20261106085323-override-of-harness-stops",
+      "class": "delivery (user instruction)",
+      "summary": "A problem stopped before review completion needs a hand-written composer to post on user instruction.",
+      "expected": "A matching post override composes the post files without claiming a decision; normal exports and managed posting keep requiring their gates.",
+      "fixed_in": "0.79.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_gate_override.ProblemOverrideTests.test_problem_composer_exports_without_reviews_and_external_post_keeps_bypassed_gate",
+        "test_gate_override.ProblemOverrideTests.test_new_statement_requires_a_new_override",
+        "test_gate_override.NormalProblemExportTests.test_normal_problem_export_preserves_every_file_byte",
+        "test_gate_override.ProblemOverrideTests.test_damaged_local_log_is_visible_in_problem_reports_summaries_and_deposit_disclosure"
+      ]
     }
   ]
 }
