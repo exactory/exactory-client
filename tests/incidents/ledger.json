@@ -4274,18 +4274,6 @@
       ]
     },
     {
-      "id": "external-post-recorded-after-server-post",
-      "record": "20261105155433-open-items-after-0-73-6",
-      "class": "recovery",
-      "summary": "A graph problem was posted on the server without its local terminal post record.",
-      "fixed_in": "0.74.0",
-      "expected": "The existing external-post operation records the exact statement with details, saved server evidence and server time without an export, replays without writes and refuses duplicate publication and new review work.",
-      "test_kind": "real_shape",
-      "tests": [
-        "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews"
-      ]
-    },
-    {
       "id": "report-cost-oversized-bundle-index",
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "performance (growth)",
