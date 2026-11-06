@@ -1030,8 +1030,8 @@ Otherwise, record the existing post with `problem-post-external`, as follows:
    post on the server.
 2. Check that the server's statement, details, resolution criteria and area match the selected
    statement of the record. `exactory post-problem` sends the part of a local statement before a
-   line `---` as `statement` and the rest as `statementDetails`. If the parts differ, stop and
-   report that the post is of another statement.
+   line `---` as `statement` and the rest as `statementDetails`. If any compared field differs,
+   stop this procedure. Report that the post is of another statement.
 3. Save the response of `exactory problem <id>` in a file inside the record. Store the file with
    `exactory-research artifact` (`media_type` `application/json`). Use the returned reference as
    `evidence`. Pass `createdAt` unchanged as `posted_at`. A post recorded without `posted_at` can
