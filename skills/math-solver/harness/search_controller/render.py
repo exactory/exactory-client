@@ -1,12 +1,12 @@
 """Deterministic, recoverable Markdown projections of controller state."""
 
 import json
-import os
 from pathlib import Path
-import tempfile
+
+from research_harness.native_writes import write_atomic
 
 from .proof import coverage, obligation_support
-from .storage import safe_path, Store
+from .storage import safe_path
 from .errors import SearchError
 from . import schema as s
 
@@ -56,26 +56,21 @@ def strategy_assessment_lines(state, node_id=None, *, status=None, assessments=N
     return lines
 
 
-def replace_text(path, text):
-    replace_bytes(path, text.encode("utf-8"))
+def replace_text(path, text, *, writable=False):
+    replace_bytes(path, text.encode("utf-8"), writable=writable)
 
 
-def replace_bytes(path, data):
+def replace_bytes(path, data, *, writable=False):
     if path.is_symlink():
         raise SearchError("unsafe_path", "Generated views cannot be symlinks")
-    if path.exists() and path.read_bytes() == data:
-        return
-    descriptor, temporary = tempfile.mkstemp(prefix="." + path.name, dir=str(path.parent))
     try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, str(path))
-        Store._fsync_directory(path.parent)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+        info = path.stat()
+    except FileNotFoundError:
+        pass
+    else:
+        if bool(info.st_mode & 0o222) == writable and path.read_bytes() == data:
+            return
+    write_atomic(path, data, mode=0o600 if writable else 0o400)
 
 
 def render(root, state):

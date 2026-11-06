@@ -345,6 +345,7 @@ class SearchStorageTests(unittest.TestCase):
         )
         for raw in corrupt_documents:
             with self.subTest(raw=raw):
+                (self.root / "tree.json").chmod(0o644)
                 (self.root / "tree.json").write_bytes(raw)
                 self.assert_error_code("corrupt_state", store.read)
 
@@ -406,6 +407,7 @@ class SearchStorageTests(unittest.TestCase):
         store = self.initialized_store()
         for document in malformed:
             with self.subTest(document=document):
+                (self.root / "tree.json").chmod(0o644)
                 (self.root / "tree.json").write_bytes(canonical_bytes(document))
                 self.assert_error_code("corrupt_state", store.read)
 
@@ -431,6 +433,7 @@ class SearchStorageTests(unittest.TestCase):
                 document["events"][0][field] = "\ud800"
             with self.subTest(field=field):
                 raw = json.dumps(document, ensure_ascii=True).encode("utf-8")
+                (self.root / "tree.json").chmod(0o644)
                 (self.root / "tree.json").write_bytes(raw)
                 self.assert_error_code("corrupt_state", store.read)
 
@@ -457,6 +460,7 @@ class SearchStorageTests(unittest.TestCase):
         self.assertEqual(digest, hashlib.sha256(canonical_bytes(value)).hexdigest())
         self.assertEqual(store.get_blob(digest), value)
         blob_path = self.root / "blobs" / f"{digest}.json"
+        blob_path.chmod(0o644)
         blob_path.write_bytes(b'{"claim":"changed"}')
         self.assert_error_code("corrupt_blob", lambda: store.get_blob(digest))
 
@@ -484,6 +488,7 @@ class SearchStorageTests(unittest.TestCase):
         self.assertEqual(digest, hashlib.sha256(content).hexdigest())
         self.assertEqual(store.get_artifact(digest), content)
         artifact_path = self.root / "artifacts" / digest
+        artifact_path.chmod(0o644)
         artifact_path.write_bytes(b"tampered")
         self.assert_error_code("corrupt_artifact", lambda: store.get_artifact(digest))
 

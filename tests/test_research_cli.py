@@ -429,6 +429,7 @@ class ResearchCliTests(unittest.TestCase):
         path = self.root / ".exactory/study.json"
         state = json.loads(path.read_text())
         state.update(stage="write", status="done")
+        path.chmod(0o644)
         path.write_text(json.dumps(state))
         result = self.run_cli("exactory-lab", "state", "set", "--stage", "evaluate")
         self.assertNotEqual(result.returncode, 0)

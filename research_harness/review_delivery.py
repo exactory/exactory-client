@@ -20,6 +20,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .evaluation import Evaluation
 from .file_streams import _copy_stream, freeze_file
+from .native_writes import atomic_output
 from .output_views import PACKETS_FOLDER, _format_file_name, find_workspace_root
 from .publication import _bundle, publication_state
 from .review_packets import manuscript_packet, readiness_packet, round_packet, find_round_investigation_responses
@@ -96,13 +97,8 @@ def deliver_packet(store, destination, manifest, *, derived=None, transitive=Fal
                           else artifacts.open_verified(ref))
                 with source as frozen:
                     with checked_parent(staging, ref["path"], create=True) as (directory, name):
-                        descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
-                                             0o600, dir_fd=directory)
-                        with os.fdopen(descriptor, "wb") as target:
+                        with atomic_output(name, directory_fd=directory) as target:
                             _copy_stream(frozen.stream, target, ref)
-                            target.flush()
-                            os.fsync(target.fileno())
-                        os.fsync(directory)
                     values.append(ref)
                     if transitive and (frozen.size or ref not in empty_captures):
                         if frozen.size > 64 * 1024 * 1024:

@@ -471,7 +471,7 @@ def is_unchanged(path, owned, digest):
         info = path.stat()
     except FileNotFoundError:
         return False
-    return (info.st_size, info.st_mtime_ns) == (owned["size"], owned["mtime_ns"])
+    return not info.st_mode & 0o222 and (info.st_size, info.st_mtime_ns) == (owned["size"], owned["mtime_ns"])
 
 
 def describe_stat(path, digest):
@@ -532,7 +532,10 @@ def write_views(views, marker):
         if is_unchanged(path, owned.get(relative), digest):
             files[relative] = owned[relative]
         elif is_real_file(path) and path.read_bytes() == data:
-            files[relative] = describe_stat(path, digest)
+            if path.stat().st_mode & 0o222:
+                pending[relative] = (path, data, digest)
+            else:
+                files[relative] = describe_stat(path, digest)
         elif relative in owned or not (path.exists() or path.is_symlink()):
             pending[relative] = (path, data, digest)
         else:

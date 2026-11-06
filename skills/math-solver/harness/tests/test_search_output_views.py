@@ -368,9 +368,22 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(written, [])
         self.assertEqual(json.loads(self.marker.read_bytes())["revision"], 2)
 
+    def test_identical_writable_views_without_a_marker_are_republished_readonly(self):
+        marker = json.loads(self.marker.read_bytes())
+        before = {relative: (self.workspace / relative).read_bytes() for relative in marker["files"]}
+        for relative in before:
+            (self.workspace / relative).chmod(0o644)
+        self.marker.unlink()
+        output_views.render_views(self.root, self.controller.store)
+        for relative, raw in before.items():
+            path = self.workspace / relative
+            self.assertEqual(path.read_bytes(), raw)
+            self.assertEqual(path.stat().st_mode & 0o222, 0)
+
     def test_only_files_whose_bytes_differ_are_written(self):
         objective = self.workspace / "final/math/attack/objective.json"
         original = objective.read_bytes()
+        objective.chmod(0o644)
         objective.write_bytes(original + b"edited")
         index = self.workspace / "intermediate/math/attack/index.json"
         later = time.time() + 5
@@ -387,12 +400,15 @@ class RenderTests(unittest.TestCase):
     def test_the_marker_identity_decides_the_fast_skip(self):
         objective = self.workspace / "final/math/attack/objective.json"
         original = objective.read_bytes()
+        objective.chmod(0o644)
         objective.write_bytes(b"edited")
         self.assertIsNone(output_views.render_views(self.root, self.controller.store))
         self.assertEqual(objective.read_bytes(), b"edited")
         for field, value in (("event_digest", "0" * 64), ("plugin_version", "0.0.0")):
+            objective.chmod(0o644)
             objective.write_bytes(b"edited")
             marker = json.loads(self.marker.read_bytes())
+            self.marker.chmod(0o644)
             self.marker.write_bytes(json.dumps(dict(marker, **{field: value})).encode())
             self.assertIsNotNone(output_views.render_views(self.root, self.controller.store))
             self.assertEqual(objective.read_bytes(), original)
@@ -443,6 +459,7 @@ class RenderTests(unittest.TestCase):
         for field, value, reason, rendered in (("plugin_version", "0.0.0", "plugin_changed", 1),
                                                ("event_digest", "0" * 64, "history_changed", 1),
                                                ("revision", 2, "history_changed", 2)):
+            self.marker.chmod(0o644)
             self.marker.write_bytes(json.dumps(dict(marker, **{field: value})).encode())
             self.assertEqual(read_advisories(), [advise(reason, rendered)] * 2, field)
         self.marker.unlink()

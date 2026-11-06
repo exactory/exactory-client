@@ -208,6 +208,7 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
                 if repeat:
                     self.search("deliver-attempt", {}, revision=7)
                 before = CommonStore(self.root).snapshot()
+                artifact.chmod(0o644)
                 artifact.write_text("Altered evidence after acceptance")
                 result = self.search("deliver-attempt", {}, revision=7, success=False)
                 self.assertEqual(result["error"]["code"], "audit_failed")
@@ -315,6 +316,7 @@ class DeliverAttemptTests(SearchCLIWorkspace, unittest.TestCase):
         receipt = next(item for item in state["service"]["native_receipts"].values()
                        if item["command"] == "finish" and item["outcome"] == "succeeded")
         # Delivery uses the acknowledged snapshot, even after a local file edit.
+        (self.root / "sample" / "units" / "FINISHED.json").chmod(0o644)
         (self.root / "sample" / "units" / "FINISHED.json").write_text("Changed working copy")
         result = controller.command("deliver-attempt", {}, state["revision"], "finished-attempt")
         record = self.delivered_record(controller, result)

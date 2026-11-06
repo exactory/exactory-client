@@ -65,6 +65,7 @@ class HookBoundaryTests(unittest.TestCase):
         self.invoke('pause', {'reason': 'Fixture pause'})
         document = self.controller.store.read()
         document['events'][0]['payload']['operations'][0]['kind'] = 'unknown_operation'
+        self.controller.store.tree_path.chmod(0o644)
         self.controller.store.tree_path.write_bytes(canonical_bytes(document))
         with self.assertRaises(SearchError) as caught:
             self.controller.command('guard-status', {}, None, None)
@@ -179,6 +180,7 @@ class HookBoundaryTests(unittest.TestCase):
                 controller.command('pause', {'reason': 'Fixture pause'}, 0, 'pause')
                 markdown = root / 'SEARCH_TREE.md'
                 expected = markdown.read_bytes()
+                markdown.chmod(0o644)
                 markdown.write_bytes(b'Interrupted Markdown publication')
                 output_views.render_views(root, controller.store)
                 self.assertEqual(markdown.read_bytes(), expected)
@@ -192,6 +194,7 @@ class HookBoundaryTests(unittest.TestCase):
                 controller.command('init', {'contract': contract()}, 0, 'init')
                 markdown = root / 'SEARCH_TREE.md'
                 expected = markdown.read_bytes()
+                markdown.chmod(0o644)
                 markdown.write_bytes(b'Interrupted initial Markdown publication')
                 output_views.render_views(root, controller.store)
                 self.assertEqual(markdown.read_bytes(), expected)

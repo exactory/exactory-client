@@ -1324,9 +1324,11 @@ def _write_view_file(workspace_root, relative, content, owned, artifacts):
     expected = content["sha256"] if isinstance(content, dict) else hashlib.sha256(content).hexdigest()
     if owned is not None and owned["sha256"] == expected:
         info = _stat_view_file(workspace_root, relative)
-        if info is not None and (info.st_size, info.st_mtime_ns) == (owned["size"], owned["mtime_ns"]):
+        if (info is not None and not info.st_mode & 0o222
+                and (info.st_size, info.st_mtime_ns) == (owned["size"], owned["mtime_ns"])):
             return owned
-        if info is not None and hashlib.sha256(read_file(workspace_root, relative)).hexdigest() == expected:
+        if (info is not None and not info.st_mode & 0o222
+                and hashlib.sha256(read_file(workspace_root, relative)).hexdigest() == expected):
             return {"size": info.st_size, "mtime_ns": info.st_mtime_ns, "sha256": expected}
     write_projection(workspace_root, relative, content if isinstance(content, bytes) else artifacts.read(content))
     info = _stat_view_file(workspace_root, relative)

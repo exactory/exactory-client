@@ -434,6 +434,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         self.assertNotIn("sealed", records.get("probe", {}))
         self.assertEqual(account_report(records, "research")["experiment"]["wall_seconds"]["reserved"], 5)
         directory = self.workspace / records["probe_launch"]["sealed"]["directory"]
+        (directory / "outcome.json").chmod(0o644)
         (directory / "outcome.json").write_text("{", encoding="utf-8")
         marker.unlink()
         receipt = launch_probe(store, identifier="sealed", question="Lifecycle check?", script="missing.py", timeout=5)
@@ -455,6 +456,7 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         original = json.loads(path.read_text())
         for changes in ({"exit_status": True}, {"elapsed_seconds": -1}, {"id": "another-intent"}, {"command": "different"},
                         {"stdout": dict(original["outcome"]["stdout"], sha256="0" * 64, path="research/sources/objects/" + "0" * 64)}):
+            path.chmod(0o644)
             path.write_text(json.dumps(dict(original, outcome=dict(original["outcome"], **changes))))
             with unittest.mock.patch("research_harness.probe.record_probe", side_effect=ResearchError("response_lost", "Lost response")) as record:
                 with self.assertRaises(ResearchError):
@@ -474,8 +476,10 @@ class TestProbeLifecycle(_InsideWorkspaceTestCase):
         launch = store.snapshot()["records"]["probe_launch"]["incomplete"]
         directory = self.workspace / launch["directory"]
         (directory / "outcome.json").unlink()
+        (directory / "terminal.json").chmod(0o644)
         (directory / "terminal.json").write_text('{"exit_status":true,"elapsed_seconds":0,"config_sha256":'
             + json.dumps(launch["config_artifact"]["sha256"]) + '}')
+        (directory / "usage.json").chmod(0o644)
         (directory / "usage.json").write_text("42")
         saved = launch_probe(store, identifier="incomplete", question="Lifecycle check?", script="missing.py", timeout=5)["result"]
         self.assertEqual(saved["exit_status"], "interrupted")

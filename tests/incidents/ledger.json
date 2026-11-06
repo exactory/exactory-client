@@ -2,6 +2,26 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "h15-accidental-direct-write-protection",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "accidental direct write",
+      "summary": "Harness-owned text files could be overwritten or appended to directly outside their native writers.",
+      "fixed_in": "0.76.0",
+      "expected": "Native writers atomically publish complete harness-owned files without write bits, preventing accidental direct overwrite and append while native updates and locked appends continue. Readers accept writable old files and record-check copies. This is accidental direct-write protection only: the same user can still chmod, unlink or replace a file through its writable directory. Full H15 closure requires host-enforced read-only access with a separately authorized writer, which this repository does not establish. The shell-reading guards stay in place.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_native_writers.NativeWritersTest.test_cli_journal_rejects_bare_name_cd_and_python_direct_writes",
+        "tests.test_native_writers.NativeWritersTest.test_native_updates_owned_files_and_leaves_author_files_writable",
+        "tests.test_native_writers.NativeWritersTest.test_rename_interruption_preserves_previous_cli_journal",
+        "tests.test_native_writers.NativeWritersTest.test_writable_old_record_replays_and_plans_without_a_mode_requirement",
+        "test_native_writers.ResearchNativeWritersTests.test_cli_output_views_and_compatibility_projections_are_readonly",
+        "test_native_writers.ResearchNativeWritersTests.test_concurrent_activity_appends_keep_every_entry_under_the_directory_lock",
+        "test_native_writers.ResearchNativeWritersTests.test_process_exit_before_rename_leaves_previous_cli_view_intact",
+        "test_native_writers.ResearchNativeWritersTests.test_old_writable_record_passes_record_check_without_source_changes",
+        "test_native_writers.ResearchNativeWritersTests.test_record_check_makes_its_copy_writable_and_native_render_republishes_readonly"
+      ]
+    },
+    {
       "id": "writing-harness-analysis-ja-md-thin-manuscript",
       "record": "writing-harness-analysis-ja.md",
       "class": "outcome-quality",

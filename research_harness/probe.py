@@ -398,7 +398,7 @@ def launch_owned_probe(store, identifier, question, script, inputs, relative_out
         directory = build_probe_directory(identifier) + "/run-" + uuid.uuid4().hex
         initial = {}
         for (name, data, _), artifact in zip(files, pinned):
-            write_projection(store.root, directory + "/work/" + name, data)
+            write_projection(store.root, directory + "/work/" + name, data, writable=True)
             initial[name] = {"mtime_ns": (store.root / directory / "work" / name).stat().st_mtime_ns, "sha256": artifact["sha256"]}
         with checked_parent(store.root, directory + "/work/" + (relative_output.as_posix() + "/" if str(relative_output) != "." else "") + ".probe-directory", create=True):
             pass

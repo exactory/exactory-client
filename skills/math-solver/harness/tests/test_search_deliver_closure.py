@@ -127,6 +127,7 @@ class DeliverClosureTests(SearchCLIWorkspace, unittest.TestCase):
                 if repeat:
                     self.search("deliver-closure", {}, revision=4)
                 before = common.snapshot()
+                artifact.chmod(0o644)
                 artifact.write_text("Altered evidence after acceptance")
                 result = self.search("deliver-closure", {}, revision=4, success=False)
                 self.assertEqual(result["error"]["code"], "audit_failed")

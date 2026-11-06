@@ -5,7 +5,8 @@ from contextlib import contextmanager
 import fcntl
 import os
 from pathlib import Path
-import tempfile
+
+from research_harness.native_writes import write_atomic
 
 from . import schema as s
 from .storage import canonical_bytes, safe_path, _strict_json
@@ -164,24 +165,10 @@ def publish(controller, intent):
         value["roots"].sort(key=lambda root: root["path"])
         path = registry_path(workspace)
         raw = canonical_bytes(validate_registry(value))
-        if path.exists() and path.read_bytes() == raw:
+        if path.exists() and path.read_bytes() == raw and not path.stat().st_mode & 0o222:
             return
-        descriptor, temporary = tempfile.mkstemp(prefix=".math-search-", dir=str(path.parent))
-        try:
-            with os.fdopen(descriptor, "wb") as stream:
-                stream.write(raw)
-                stream.flush()
-                os.fsync(stream.fileno())
-            registry_path(workspace)
-            os.replace(temporary, path)
-            directory = os.open(str(path.parent), os.O_RDONLY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
-        finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
+        registry_path(workspace)
+        write_atomic(path, raw)
 
 
 def validate_session(state, session, request=None):

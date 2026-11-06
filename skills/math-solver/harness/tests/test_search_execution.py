@@ -83,6 +83,10 @@ class SearchExecutionTests(WorkspaceTest):
             self.fail("A reserved command must execute: " + error.code)
         state = self.controller.status()
         run = state["runs"]["run-000001"]
+        directory = Path(run["snapshot_root"]).parent
+        for name in ("config.json", "ready.json", "started.json", "terminal.json", "0.stdout", "0.stderr"):
+            with self.subTest(name=name):
+                self.assertEqual((directory / name).stat().st_mode & 0o222, 0)
         self.assertEqual(run["status"], "terminal")
         self.assertEqual(state["totals"]["used_runs"], 1)
         self.assertEqual(state["totals"]["reserved_runs"], 0)
@@ -406,6 +410,7 @@ class SearchExecutionTests(WorkspaceTest):
     def test_run_that_cannot_be_recorded_as_never_started_stays_reserved(self):
         spec = self.begin_a_move_for_a_job()
         path_open = Path.open
+        open_descriptor = os.open
         # A full disk refuses every file written in the run's directory, the record of the never started run included.
         disk_full_error = OSError(errno.ENOSPC, "No space left on device")
 
@@ -414,7 +419,13 @@ class SearchExecutionTests(WorkspaceTest):
                 raise disk_full_error
             return path_open(path, mode, *args, **kwargs)
 
+        def refuse_native_run_writes(path, flags, *args, **kwargs):
+            if "/.search/runs/" in str(path) and flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT):
+                raise disk_full_error
+            return open_descriptor(path, flags, *args, **kwargs)
+
         with patch.object(Path, "open", autospec=True, side_effect=refuse_run_directory_writes), \
+                patch.object(os, "open", side_effect=refuse_native_run_writes), \
                 self.assertRaises(SearchError) as caught:
             invoke(self.controller, "run", spec)
         self.assertEqual((caught.exception.code, caught.exception.message, caught.exception.details),
@@ -520,6 +531,9 @@ class SearchExecutionTests(WorkspaceTest):
         run = self.controller.status()["runs"]["run-000001"]
         self.assertNotEqual(run["cwd"], str(step.resolve()))
         self.assertEqual(json.loads((step / "result.json").read_text())["status"], "pass")
+        self.assertEqual((step / "result.json").stat().st_mode & 0o222, 0)
+        marker = Path(run["snapshot_root"]).parent / "result-published.json"
+        self.assertEqual(marker.stat().st_mode & 0o222, 0)
 
     def test_nonzero_axiom_inspection_cannot_pass_with_plausible_output(self):
         step = self.workspace / "deterministic" / "formal"

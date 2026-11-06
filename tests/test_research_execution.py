@@ -357,6 +357,7 @@ class ResearchExecutionTests(DevelopmentCase):
                 api.launch_execution(self.store, admission["id"], expected_revision=self.store.revision,
                                      request_id="duration-beyond-floats")
         terminal = self.root / api._directory(admission["id"]) / "terminal.json"
+        terminal.chmod(0o644)
         terminal.write_text(json.dumps(dict(json.loads(terminal.read_bytes()), duration_s=10 ** 309)))
         original_record_execution = api.record_execution
 
@@ -467,6 +468,8 @@ class ResearchExecutionTests(DevelopmentCase):
                 if changed is None:
                     (copy_root / directory / relative).unlink()
                 else:
+                    if (copy_root / directory / relative).exists():
+                        (copy_root / directory / relative).chmod(0o644)
                     (copy_root / directory / relative).write_bytes(changed)
                 self.assertEqual((copy_root / directory / "terminal.json").read_bytes(), terminal)
                 self.assert_error("execution_output_mismatch", lambda: api.reconcile_execution(copied,
@@ -478,6 +481,7 @@ class ResearchExecutionTests(DevelopmentCase):
             copied = Store(copy_root)
             legacy = json.loads(terminal)
             legacy.pop("output_seal")
+            (copy_root / directory / "terminal.json").chmod(0o644)
             (copy_root / directory / "terminal.json").write_text(json.dumps(legacy))
             self.assert_error("execution_output_seal_required", lambda: api.reconcile_execution(copied,
                 {"admission_id": admission["id"]}, expected_revision=copied.revision, request_id="unsealed-terminal"))

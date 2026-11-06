@@ -23,6 +23,7 @@ from search_controller.errors import SearchError
 from search_controller.evidence import freeze_execution_inputs, installed_lean, capture_toolchain, audit_toolchain, file_digest
 from search_controller.execution_state import account_for_work
 from search_controller.storage import safe_path, canonical_bytes, _strict_json
+from research_harness.native_writes import write_atomic
 
 
 OUTPUT_LIMIT = 1024 * 1024
@@ -30,17 +31,7 @@ THREAD_VARIABLES = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"
 
 
 def atomic_record(path, value):
-    temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
-    with temporary.open("xb") as stream:
-        stream.write(canonical_bytes(value))
-        stream.flush()
-        os.fsync(stream.fileno())
-    os.replace(str(temporary), str(path))
-    descriptor = os.open(str(path.parent), os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    write_atomic(path, canonical_bytes(value))
 
 
 def read_record(path):
@@ -238,7 +229,7 @@ def materialize(controller, run):
             target.chmod(modes[item["path"]])
     if run["kind"] == "lean":
         project = Path(run["cwd"])
-        (project / "axioms-check.lean").write_bytes(controller.store.get_artifact(run["inspection_source_digest"]))
+        write_atomic(project / "axioms-check.lean", controller.store.get_artifact(run["inspection_source_digest"]))
     inventory = None if run["toolchain_inventory_digest"] is None else controller.store.get_blob(run["toolchain_inventory_digest"])
     atomic_record(directory / "config.json", {"run": run, "inputs": inputs, "toolchain_inventory": inventory})
     return directory
@@ -469,7 +460,7 @@ def bounded_command(argv, cwd, environment, deadline, directory, number):
     except ProcessLookupError:
         pass
     for stream, raw in streams.items():
-        (directory / (str(number) + "." + stream)).write_bytes(raw)
+        write_atomic(directory / (str(number) + "." + stream), raw)
     return {"argv": argv, "exit_code": code,
             "stdout_file": str(number) + ".stdout", "stderr_file": str(number) + ".stderr",
             "stdout_digest": hashlib.sha256(streams["stdout"]).hexdigest(),

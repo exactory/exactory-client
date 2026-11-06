@@ -639,8 +639,7 @@ class Controller:
                 raw = self.store.get_artifact(item["digest"])
                 if path.exists():
                     s.require(path.read_bytes() == raw, "Interrupted workspace initialization conflicts with existing bytes", "recovery_conflict")
-                else:
-                    replace_text(path, raw.decode("utf-8"))
+                replace_text(path, raw.decode("utf-8"), writable=item["path"] in {"problem.json", "novelty.md"})
             replace_text(marker, canonical_bytes(effect).decode("utf-8"))
 
     def guard_legacy(self, command, slug, details):

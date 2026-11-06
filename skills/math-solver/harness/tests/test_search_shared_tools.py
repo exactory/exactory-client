@@ -155,6 +155,7 @@ class SharedToolsFoundationTests(SearchCLIWorkspace, unittest.TestCase):
         snapshot = controller.store.get_blob(proposal["foundation"]["snapshot_digest"])
         from research_harness.review_delivery import references
         pinned = next(iter(references(snapshot)))
+        (self.root / ".search/artifacts" / pinned["sha256"]).chmod(0o644)
         (self.root / ".search/artifacts" / pinned["sha256"]).write_bytes(b"corrupt pinned bytes")
         with self.assertRaises(SearchError):
             audit_foundation(self.root, controller.status(), proposal, proposal["foundation"], controller.store)

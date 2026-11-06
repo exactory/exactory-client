@@ -88,10 +88,10 @@ class TaskRecoveryTests(WorkspaceTest):
         from search_controller import service
         self.assertEqual(self.run_cli("task", "add", self.slug, "Existing question")[0], 0)
         original = service.replace_text
-        def interrupted(path, value):
+        def interrupted(path, value, **kwargs):
             if path.name == "journal.jsonl":
                 raise OSError("Interrupted child initialization")
-            return original(path, value)
+            return original(path, value, **kwargs)
         with mock.patch.object(service, "replace_text", side_effect=interrupted):
             with self.assertRaises(OSError):
                 admit_native_child(self.controller)

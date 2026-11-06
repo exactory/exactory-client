@@ -8,6 +8,7 @@ import tempfile
 from .artifacts import ArtifactStore, _Workspace, _filesystem_error
 from .errors import ResearchError
 from .file_streams import _copy_stream, freeze_file
+from .native_writes import atomic_output
 from .review_delivery import _stage_delivery, references
 from .storage import _canonical, _json_types
 from .synthesis import synthesis_state
@@ -59,22 +60,13 @@ def export_native(store, attack_root, destination, *, claim_binding=None):
                         written.add(ref["path"])
                         path = "artifacts/" + ref["sha256"]
                         with checked_parent(staging, path, create=True) as (directory, name):
-                            descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
-                                                 0o600, dir_fd=directory)
-                            with os.fdopen(descriptor, "wb") as target:
+                            with atomic_output(name, directory_fd=directory) as target:
                                 _copy_stream(frozen.stream, target, ref)
-                                target.flush()
-                                os.fsync(target.fileno())
-                            os.fsync(directory)
                         inputs.append({"path": relative + "/" + path, "kind": "artifact", "digest": ref["sha256"]})
                 with checked_parent(staging, "snapshot.json") as (directory, name):
-                    descriptor = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                                         0o600, dir_fd=directory)
-                    with os.fdopen(descriptor, "wb") as target:
+                    with atomic_output(name, directory_fd=directory) as target:
                         _copy_stream(snapshot_file.stream, target,
                                      {"path": "snapshot.json", "sha256": snapshot_file.sha256, "size": snapshot_file.size})
-                        target.flush()
-                        os.fsync(target.fileno())
                 result = {"foundation": reference, "inputs": inputs, "revision": snapshot["revision"],
                           "mechanical_only": True, "native_proof_acceptance": False}
                 write_projection(staging, "manifest.json", (_canonical(result) + "\n").encode())

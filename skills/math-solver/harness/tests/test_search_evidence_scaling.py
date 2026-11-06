@@ -301,6 +301,7 @@ class EvidenceScalingTests(unittest.TestCase):
     def test_separate_manifest_invocations_detect_corrupt_immutable_bytes(self):
         root = self.make_manifest("root")
         self.assertEqual(evidence.audit_manifest(self.root, self.state, root, self.content), ("analytical", "reviewed"))
+        (self.content.root / "artifacts" / self.proofs[root]).chmod(0o644)
         (self.content.root / "artifacts" / self.proofs[root]).write_bytes(b"Corrupt after preparation")
         with self.assertRaises(SearchError) as caught:
             evidence.audit_manifest(self.root, self.state, root, self.content)
