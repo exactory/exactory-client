@@ -23,12 +23,8 @@ def derive_strategy_eligibility(preconditions, problem, previous, moves, *, allo
              and entry["claim_digest"] == claim_digest
              and entry["mode"] in entry_modes)
     active = bool(moves and moves[-1]["strategy"] == name)
-    branch = []
-    for move in reversed(moves):
-        if move["strategy"] != name:
-            break
-        branch.append(move)
-    failed = any(move["failure_signal_fired"] for move in branch) or "failed_after_move" in record
+    # The strategy ends with `fail`, as every strategy does; a move whose entry signal fired does not end it.
+    failed = "failed_after_move" in record
     answers = {answer["question"]: answer["answer"] for answer in record["answers"]}
     remaining = [answers.get(number) for number in (2, 3, 4, 7)]
     remaining_hold = all(answer in {"yes", "unknown"} for answer in remaining)

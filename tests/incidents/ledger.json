@@ -4247,13 +4247,14 @@
       "class": "strategy eligibility",
       "summary": "A constructive strategy invalidated its entry condition by making its required first mode change.",
       "fixed_in": "0.75.0",
-      "expected": "A versioned entry basis binds the exact claim; an active constructive strategy may continue through replan and observed reassessment after its own mode move. New construction entries, changed claims, stale plans and fired failure signals remain ineligible.",
+      "expected": "A versioned entry basis binds the exact claim; an active constructive strategy may continue through replan and observed reassessment after its own mode move. New construction entries and changed claims remain ineligible, a stale plan blocks the next move until replanning, and the strategy ends with fail; an entry signal on a move does not end it.",
       "test_kind": "real_shape",
       "tests": [
         "tests.test_constructive_continuation.ConstructiveContinuationTests.test_entry_construction_replan_reassessment_and_continuation",
         "tests.test_constructive_continuation.ConstructiveContinuationTests.test_new_entry_already_in_construction_is_ineligible",
         "tests.test_constructive_continuation.ConstructiveContinuationTests.test_changed_claim_cannot_continue",
-        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_fired_failure_cannot_continue",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_fail_ends_the_continuation",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_an_entry_signal_on_a_move_does_not_end_the_continuation",
         "tests.test_constructive_continuation.ConstructiveContinuationTests.test_continuation_requires_the_current_reviewed_plan",
         "tests.test_constructive_continuation.ConstructiveContinuationTests.test_legacy_active_entry_is_recovered_from_its_exact_native_reservation",
         "tests.test_constructive_continuation.ConstructiveContinuationTests.test_active_entry_metadata_is_reauthenticated_against_the_reservation"

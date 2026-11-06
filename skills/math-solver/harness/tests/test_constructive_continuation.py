@@ -122,12 +122,17 @@ class ConstructiveContinuationTests(WorkspaceTest):
         state = self.controller.status()
         self.assertTrue(plan_defects(self.controller, state["nodes"]["node-000001"], STRATEGY))
 
-    def test_fired_failure_cannot_continue(self):
-        self.construct(failed=True)
-        self.plan()
+    def test_fail_ends_the_continuation(self):
+        self.construct()
+        self.assertEqual(self.run_cli("fail", self.slug, STRATEGY)[0], 0)
         node = self.controller.status()["nodes"]["node-000001"]
         self.assertTrue(plan_defects(self.controller, node, STRATEGY))
         self.assertNotIn(STRATEGY, [row["strategy"] for row in self.read_json("openings.json")["openings"]])
+
+    def test_an_entry_signal_on_a_move_does_not_end_the_continuation(self):
+        self.construct(failed=True)
+        self.plan()
+        self.assertIn(STRATEGY, [row["strategy"] for row in self.read_json("openings.json")["openings"]])
 
     def test_changed_claim_cannot_continue(self):
         self.construct()
