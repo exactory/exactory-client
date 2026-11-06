@@ -999,6 +999,17 @@ and closure; use `recovery` for the original recovery review without a claim
 digest. Recovery alone uses `claim_digest: null`. `subject` is exactly the native
 record whose canonical hash the existing review contract requires, excluding its
 review. Supply any as-yet uncommitted referenced native files through `inputs`.
+Every file pinned in `inputs` reaches the packet by its exact digest, also when no
+exported record references it. The exporter lists each as `{kind, digest, artifact}`
+in `scientific_context.supplementary_inputs` (`schema_version` 1), where `artifact`
+is the descriptor of its evidence entry, and delivers its bytes as evidence. The
+export checks each digest under the rule of its `kind`, raw bytes for `artifact`
+and strict canonical JSON for `blob`, and refuses a pinned file that does not
+match (`digest_mismatch`).
+When the review returns, the controller checks that list against the packet's
+evidence (`review_packet_mismatch`) and does not import the files again. The
+delivery gives the reviewer the bytes and gives no proof credit. A packet exported
+without `inputs` keeps its earlier form.
 The exporter captures typed verifier inputs, adoption/recovery snapshots, and
 strategy context and plans under their existing exact-byte contracts.
 An adoption allowance whose subject contains `proposal_digest` and
@@ -2545,7 +2556,11 @@ or a computational dependency. Reviews assess the mathematical meaning of the
 declared analytical proof; this is not an automatic natural-language proof checker.
 Certificate evidence needs both certificate and checker artifacts. Lean evidence
 needs theorem and toolchain artifacts. Missing dependency bytes, cycles, mismatched
-claims and insufficient transitive policies fail closed.
+claims and insufficient transitive policies fail closed. Where the digest of a
+structured evidence manifest is required, a digest with no blob that names a
+valid authenticated artifact fails with `evidence_manifest_required`. The record
+is unchanged. The checkpoint needs the digest of the manifest that binds the
+claim and lists the proof artifacts.
 
 Relative artifact paths describe the frozen version. Editing a later working copy
 does not edit accepted evidence. Explicit absolute external dependencies are

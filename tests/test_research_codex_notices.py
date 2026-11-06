@@ -11,6 +11,7 @@ from codex_route_fixtures import record_codex_route
 from literature_fixtures import LiteratureCase
 from test_research_codex_controls import ADAPTERS, build_png
 from research_harness import review_codex_transport as codex, review_codex_visual_transport as visual
+from research_harness import review_codex_framed_transport as framed
 from research_harness import review_protocol as protocol, review_transport as transport
 from research_harness.artifacts import describe_artifact
 from research_harness.errors import ResearchError
@@ -23,6 +24,13 @@ def read_disabled_exec():
 
 
 class CodexNoticeTests(LiteratureCase):
+    def setUp(self):
+        super().setUp()
+        for adapter in (codex, framed):
+            declarations = patch.object(adapter, 'NATIVE_DECLARATION_SETS', {()})
+            declarations.start()
+            self.addCleanup(declarations.stop)
+
     def build_response(self, adapter, route, request, items):
         parts = (visual.native_user_parts(request, '/safe/work') if adapter is visual
                  else [{'type': 'input_text', 'text': adapter.packet_text(request)}])

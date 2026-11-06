@@ -5,6 +5,37 @@ import copy
 from . import schema as s
 
 
+def derive_strategy_eligibility(preconditions, problem, previous, moves, *, allow_mode_move=False):
+    """Distinguish constructive entry from continuation of its admitted mode change."""
+    verdicts = {name: record["verdict"] for name, record in preconditions.items()}
+    name = "make-the-proof-constructive"
+    if name not in preconditions:
+        return verdicts, {}
+    record = preconditions[name]
+    mode = problem["quadruple"]["mode"]
+    claim_digest = s.digest({"claim": problem["claim"], "statement": problem["quadruple"]["statement"]})
+    entry_modes = {"existence", "computation", "undecided"}
+    if mode in entry_modes and verdicts[name] != "no":
+        return verdicts, {name: {"schema_version": 1, "claim_digest": claim_digest, "mode": mode}}
+    entry = previous.get(name)
+    bound = (isinstance(entry, dict) and set(entry) == {"schema_version", "claim_digest", "mode"}
+             and type(entry["schema_version"]) is int and entry["schema_version"] == 1
+             and entry["claim_digest"] == claim_digest
+             and entry["mode"] in entry_modes)
+    active = bool(moves and moves[-1]["strategy"] == name)
+    # The strategy ends with `fail`, as every strategy does; a move whose entry signal fired does not end it.
+    failed = "failed_after_move" in record
+    answers = {answer["question"]: answer["answer"] for answer in record["answers"]}
+    remaining = [answers.get(number) for number in (2, 3, 4, 7)]
+    remaining_hold = all(answer in {"yes", "unknown"} for answer in remaining)
+    moving_mode = allow_mode_move and not active and verdicts[name] != "no"
+    if mode == "construction" and bound and not failed and remaining_hold and (active or moving_mode):
+        verdicts[name] = "unknown" if "unknown" in remaining else "yes"
+        return verdicts, {name: copy.deepcopy(entry)}
+    verdicts[name] = "no"
+    return verdicts, {}
+
+
 def initial_policy():
     return {"enabled": False, "assessments": [], "failures": {}, "evidence_ordinals": {}}
 

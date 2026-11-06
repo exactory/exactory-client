@@ -1,6 +1,7 @@
 """Supported standard-library CLI over the accepted research domain operations."""
 
 import argparse
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -18,7 +19,8 @@ from .errors import ResearchError
 from .evaluation import Evaluation
 from .evidence import digest
 from .gates import gate_state, require_ready
-from .integration import adopt_workspace, current_store, export_workspace, pin_artifact
+from .integration import (adopt_workspace, current_store, export_workspace, matches_direct_deposit_files,
+                          pin_artifact)
 from .limits import describe_depth, limits_report
 from .operations import fields, text
 from .output_views import (PROBLEM_EXPORTS_FOLDER, find_view_advisories, find_workspace_root, render_all,
@@ -34,7 +36,7 @@ from .depth import record_depth
 from .review_budget import record_budget
 from .probe import record_probe_intent, record_probe, summarize_probes
 from .record_check import DEFAULT_TIME_BUDGET_SECONDS
-from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata
+from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata, problem_evidence
 
 
 OPERATIONS = {
@@ -46,6 +48,7 @@ OPERATIONS = {
     "problem-openness": problem_claims.record_openness,
     "problem-value": problem_claims.record_value,
     "problem-citation-metadata": problem_citation_metadata.record_citation_metadata,
+    "problem-citation-locator": problem_evidence.record_citation_locator,
     "problem-assessment": problem_claims.record_assessment,
     "problem-formal-check": problem_claims.record_formal_check,
     "problem-decision": problem_claims.record_decision,
@@ -176,7 +179,7 @@ def _review_run(store, payload, **identity):
                         break
             if owner and payload.get("id", owner["id"]) != owner["id"]:
                 from .problem_delivery import require_unposted_review
-                require_unposted_review(records, child)
+                require_unposted_review(records, child, store.build_artifact_store())
                 raise ResearchError("review_resampling_forbidden", "Resume the attempt that owns this captured reservation.")
             # Replaying acceptance retains its original attempt identity. Before
             # acceptance, a deterministic identity also survives CLI interruption.
@@ -451,7 +454,7 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
     if command == "visual":
         fields(payload, ("link", "url"), ("max_requests",))
         return visual_assets.acquire_visual_asset(store, **payload, **identity)
-    fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
+    fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings", "publisher_capture"))
     text(payload["response_file"], "Response file")
     values = dict(payload)
     if response_bytes is not None:
@@ -499,7 +502,7 @@ def _review_status(records, artifacts):
         series = series_results[assignment[review_parts.KEY]['series_assignment_id']]
         result['assignments'][identifier]['review_parts'] = describe_parts_turn(
             assignment, state, series,
-            is_posted=find_review_post(records, assignment) is not None,
+            is_posted=find_review_post(records, assignment, artifacts) is not None,
             ended_without_output=review_protocol.has_ended_without_output(records, identifier))
         progress = result['assignments'][identifier]['review_parts']
         if progress['next']:
@@ -515,7 +518,7 @@ def _review_status(records, artifacts):
             continue
         assignment, state, effective = row["assignment"], row["state"], row["effective"] or {}
         tasks = describe_review_tasks(records, row["epoch"], state)
-        if find_review_post(records, assignment) is not None:
+        if find_review_post(records, assignment, artifacts) is not None:
             tasks = [dict(task, next=[]) for task in tasks]
         result["assignments"][assignment["id"]].update(
             epoch_id=row["epoch"]["id"], kind=effective.get("kind", "pending"),
@@ -548,7 +551,13 @@ def status_report(store, *, counters=False):
     snapshot = store.snapshot()
     evaluation = Evaluation(snapshot['records'], store.build_artifact_store())
     runtime = store.describe_runtime()
-    with runtime_scope(snapshot['records'], evaluation):
+    with runtime_scope(snapshot['records'], evaluation) as scoped_evaluation, ExitStack() as status_scope:
+        scope = scoped_evaluation.find_root()._runtime_scope[0]
+        if 'review_closure_roots' in scope:
+            status_scope.callback(scope.__setitem__, 'review_closure_roots', scope['review_closure_roots'])
+        else:
+            status_scope.callback(scope.pop, 'review_closure_roots', None)
+        scope['review_closure_roots'] = {}
         records = snapshot["records"]
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
         advisories = find_view_advisories(store, snapshot["revision"])
@@ -602,13 +611,15 @@ def status_report(store, *, counters=False):
         scoped_report = gate_state(records, evaluation, "manuscript-readiness") if has_publication_scope(records) else None
         report = scoped_report if scoped_report is not None and action == "readiness" else gate_state(records, evaluation, action, profile=profile)
         round_report = None
+        publication_report = None
         if config is not None and profile == "research":
             from .rounds import round_state, round_summary
             round_report = round_state(records, evaluation)
             if study and study["stage"] == "evaluate":
                 # At evaluate the study is led first through the manuscript measurement, then to the round decision.
                 from .publication import publication_state
-                merged = report["obligations"] + publication_state(records, evaluation, "publication")["obligations"] + round_report["obligations"]
+                publication_report = publication_state(records, evaluation, "publication")
+                merged = report["obligations"] + publication_report["obligations"] + round_report["obligations"]
                 obligations = order_obligations({digest(o): o for o in merged}.values())
                 report = dict(report, ready=not obligations, obligations=obligations, counts=dict(report["counts"], obligations=len(obligations)))
         # Before later gates are applicable, expose the actual next unread cohort
@@ -670,6 +681,31 @@ def status_report(store, *, counters=False):
                     remote_observations=list(records.get("remote_observation", {}).values()),
                     historical_adoptions=list(records.get("workspace_adoption", {}).values()), review=review,
                     advisories=advisories)
+        workspace = records.get("workspace", {})
+        deposit = workspace.get("deposit")
+        if deposit is not None and deposit in records.get("direct_deposit", {}).values():
+            from .publication import find_selected_bundle
+            bundle = find_selected_bundle(records)
+            context = workspace.get("direct_deposit_context", {})
+            is_bound = records.get("direct_deposit", {}).get(context.get("request_id")) == deposit
+            bundle_digest = context.get("bundle_digest") if is_bound else None
+            is_current_bundle = (bundle_digest is not None and bundle is not None
+                                 and bundle_digest == bundle["digest"]
+                                 and matches_direct_deposit_files(evaluation, bundle))
+            is_published = isinstance(deposit.get("doi"), str) and bool(deposit["doi"].strip())
+            is_production = deposit.get("environment") == "production"
+            result["external_deposit"] = dict(deposit, status=(
+                "published" if is_production else "sandbox_published") if is_published else "draft",
+                bundle_digest=bundle_digest, current_bundle=is_current_bundle, managed_credit=False)
+            if is_published and is_production and is_current_bundle:
+                if "publication_commands" in result:
+                    result["publication_commands"].pop("deposit", None)
+            if is_published and is_production and publication_report is not None:
+                wait = next((item for item in publication_report["obligations"]
+                             if item["code"] == "manuscript_reviews_required" or "review_id" in item), None)
+                if study and study["stage"] == "evaluate" and wait is not None:
+                    result["managed_wait"] = dict(wait, workflow="manuscript-review")
+                    result["next"] = wait
         return annotate_review_obligations(records, evaluation, result)
 
 
@@ -769,7 +805,7 @@ def run(args):
                     or Store(existing_workspace).committed_request(args.request_id) is None):
                 raise
     if args.command == "import-response" and original is None:
-        fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings"))
+        fields(payload, ("provider", "response_file", "source_url", "captured_at"), ("media_type", "mappings", "publisher_capture"))
         text(payload["response_file"], "Response file")
         response_bytes = read_import_input(payload["response_file"], input_kind="response")
     if args.command in ("init", "adopt", "problem-init"):

@@ -22,12 +22,12 @@ from research_harness.errors import ResearchError
 _WORKER_SCRIPT = '''
 import sys
 from pathlib import Path
+from unittest import TestCase
 sys.path[:0] = %r
 from research_harness import review_worker, review_protocol, review_transport, review_codex_transport, review_excerpts
-from codex_route_fixtures import build_codex_response
-review_codex_transport.runtime = lambda: {'adapter':'codex_cli_v1','fixture':'reviewer-excerpt-test'}
-review_codex_transport.NATIVE_DECLARATIONS = ()
-review_codex_transport.NATIVE_DECLARATION_SETS = {()}
+from codex_route_fixtures import bind_codex_response, build_codex_response, install_codex_runtime
+fixture = TestCase()
+install_codex_runtime(fixture)
 def send(route, request, credential):
     with (Path(sys.argv[1]) / 'calls').open('a') as stream: stream.write('call\\n')
     packet = review_excerpts.read_sent_packet(request)['staged_review']
@@ -240,6 +240,29 @@ class StagedEntryTests(ResultPartsCase):
         self.assertIsNone(state['output'])
         self.assertEqual(state['raw_output'], raw['raw_output'])
         self.assertTrue(state['accepted'])
+    def test_staged_codex_observation_requires_its_retained_rollout(self):
+        from research_harness import review_codex_invocation as invocation
+        self.oversized()
+        controller = self.assign_staged('capture-controller')
+        child = self.case.assign('result', 'first', identifier='capture-child',
+            controller_assignment_id=controller['id'], task_id=controller['staged_review']['task_ids'][0])
+        payload = dict(id='staged-capture', assignment_id=child['id'])
+        with patch.object(review_worker, '_entry_command', return_value=[sys.executable, '-c', _WORKER_SCRIPT]):
+            protocol.invoke_assignment(self.case.store, payload, expected_revision=self.case.store.revision,
+                                       request_id='staged-capture')
+        records = self.case.read_records()
+        attempt = records['review_attempt'][payload['id']]
+        observation = records['review_observation'][attempt['reservation_id']]['observation']
+        self.assertEqual(observation.get(invocation.KEY), invocation.PROTOCOL)
+        self.assertTrue(staged_protocol.authenticate_observation(records, self.case.artifacts, child, attempt))
+        response = json.loads(self.case.artifacts.read(observation['response']))
+        response.pop(invocation.KEY)
+        stripped = protocol._put_json(self.case.artifacts, response)
+        changed = copy.deepcopy(records)
+        changed['review_observation'][attempt['reservation_id']]['observation']['response'] = stripped
+        self.assertFalse(staged_protocol.authenticate_observation(
+            changed, self.case.artifacts, child, dict(attempt, response=stripped)))
+
     def test_core_task_envelope_can_be_assigned_after_the_initial_frontier(self):
         from research_harness import review_staged as staged
         self.oversized()

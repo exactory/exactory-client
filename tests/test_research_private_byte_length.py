@@ -37,11 +37,18 @@ class PrivateByteLengthTests(unittest.TestCase):
         self.assertEqual(data.comparisons, 0)
 
     def test_eligible_candidate_still_checks_every_private_pattern(self):
-        projector = self.projector([b"private-A", b"private-B", b"private-C"])
+        projector = self.projector([b"\xffprivate-A", b"\xffprivate-B", b"\xffprivate-C"])
         data = ObservedBytes(b"A harmless candidate longer than every pattern")
         data.comparisons = 0
         projector._check_bytes(data)
         self.assertEqual(data.comparisons, 3)
+
+    def test_text_candidate_checks_original_and_unicode_private_patterns(self):
+        projector = self.projector([b"private-A", b"private-B", b"private-C"])
+        data = ObservedBytes(b"A harmless candidate longer than every pattern")
+        data.comparisons = 0
+        projector._check_bytes(data)
+        self.assertEqual(data.comparisons, 15)
 
     def test_empty_one_byte_and_exact_length_containment_decisions(self):
         cases = [([], b"anything", False), ([b""], b"", False), ([b"", b"x"], b"", False),

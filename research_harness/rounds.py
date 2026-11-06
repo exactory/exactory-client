@@ -30,6 +30,10 @@ VERDICTS = ("approved", "not_approved", "unresolved")
 CHECK_STATUSES = ("passed", "failed", "unresolved")
 OPENING_PURPOSES = literature.SEARCH_PURPOSES + literature.DEVELOPMENT_PURPOSES
 _ERROR = "invalid_round"
+CLAIM_REVISION_MISMATCH_NOTE = (
+    "This check covers only the claims that the round's opening bundle holds. A claim whose text and `revised` "
+    'marker both equal the opening values keeps the marker. Otherwise `revised.previous` must hold the exact text '
+    'of the claim in the opening bundle.')
 
 
 def _text(value, name):
@@ -106,6 +110,12 @@ def _canonical_adapter(store, payload, name, *, expected_revision, request_id):
         _text(value['id'], 'Round adapter ID')
         _text(value['reason'], 'Round adapter reason')
         state = require_decision(records, artifacts, 'round', decision_id=value['research_decision_id'])
+        if name == 'decide':
+            continuity = find_claim_revision_obligations(
+                records, artifacts, latest_admission(records), publication.find_selected_bundle(records))
+            if continuity:
+                item = continuity[0]
+                raise ResearchError(item['code'], item['explanation'], {'claim_ids': item['claim_ids']})
         decision = state['decision']
         continuing = decision['payload']['action'] in ('investigate', 'pivot')
         if name == 'admit' and not continuing:
@@ -184,12 +194,14 @@ def _canonical_state(records, artifacts):
         current_bundle = None
     progress = (derive_progress(records, evaluation, historical, current_bundle)
                 if historical is not None and 'resource_limits' in historical else None)
+    continuity = find_claim_revision_obligations(records, evaluation, historical, current_bundle)
+    obligations = obligations + continuity
     active = (historical is not None and historical_assessment is None) or any(
         cycle.get('status') in ('planned', 'executed', 'active') for cycle in records.get('cycle', {}).values())
     assessed = (historical_assessment is not None and current_bundle is not None
                 and historical_assessment['bundle_digest'] == current_bundle['digest'])
-    return {'ready': state['ready'], 'obligations': obligations, 'decision_obligations': obligations,
-            'progress_obligations': [], 'round': current_number(records), 'active': active,
+    return {'ready': not obligations, 'obligations': obligations, 'decision_obligations': obligations,
+            'progress_obligations': continuity, 'round': current_number(records), 'active': active,
             'assessed': assessed or (decision is not None and decision['payload']['phase'] != 'prospective'),
             'decision': None if decision is None else 'continue' if continuing else 'stop',
             'decision_id': None if decision is None else decision['id'],
@@ -241,14 +253,32 @@ class _RoundEvidence:
     A malformed list or review item fails with the caller's `error_code`, so another operation that takes
     round evidence answers with its own code."""
 
-    def __init__(self, context, bundle, error_code=_ERROR):
-        self.records, self.bundle, self.error_code = context.records, bundle, error_code
+    def __init__(self, context, bundle, error_code=_ERROR, *, decision=None):
+        self.context, self.records, self.bundle, self.error_code = context, context.records, bundle, error_code
+        self.decision = decision
+        self.projections = None
         self.development = development._Evidence(context)
         self.items = {}
 
+    def _find_native_reference(self, submitted):
+        """The native evidence behind a reference copied unchanged from this decision's delivered round packet."""
+        if self.decision is not None and self.bundle.get("publication_scope") is not None:
+            if self.projections is None:
+                from .review_delivery import build_round_projection
+                self.projections = build_round_projection(self.records, self.context.artifacts, self.bundle,
+                                                          self.decision)[2]
+            mapping = self.projections.get(digest(submitted))
+            if mapping is not None and mapping["reference"] == submitted:
+                return mapping["native_reference"]
+        raise ResearchError("round_evidence_mismatch", "Use the exact projected evidence of this decision and bundle")
+
     def many(self, values, name):
         linked = []
-        for value in _items(values, name, code=self.error_code):
+        for submitted in _items(values, name, code=self.error_code):
+            value = submitted
+            if isinstance(submitted, dict) and any(
+                    key in submitted for key in ("derivative", "original_sha256", "original_locator")):
+                value = self._find_native_reference(submitted)
             if isinstance(value, dict) and value.get("kind") == "review":
                 fields(value, ("kind", "review_id"), code=self.error_code)
                 text(value["review_id"], "Review evidence ID", code=self.error_code)
@@ -258,7 +288,11 @@ class _RoundEvidence:
                 item = {"reference": value, "review_digest": review["digest"]}
             else:
                 item = self.development.one(value)
-            self.items[digest(value)] = item
+            if value != submitted:
+                item = dict(item, reference=submitted, native_reference=value,
+                            projection_binding={"decision_digest": self.decision["digest"],
+                                                "bundle_digest": self.bundle["digest"]})
+            self.items[digest(submitted)] = item
             linked.append(item)
         return linked
 
@@ -483,6 +517,10 @@ def record_round(store, payload, *, expected_revision, request_id):
             assessment = assessment_for(records, latest["id"])
             if assessment is None or assessment["bundle_digest"] != bundle["digest"]:
                 raise ResearchError("round_assessment_missing", "Assess the current round against its goal on this bundle before deciding")
+            continuity = find_claim_revision_obligations(records, context.artifacts, latest, bundle)
+            if continuity:
+                item = continuity[0]
+                raise ResearchError(item['code'], item['explanation'], {'claim_ids': item['claim_ids']})
             unkept = _unkept_claim_ids(derive_progress(records, context.artifacts, latest, bundle))
             if unkept:
                 raise ResearchError("round_claims_dropped", "Keep, revise or supersede every claim of the round's opening bundle", {"claim_ids": unkept})
@@ -532,7 +570,7 @@ def record_round_review(store, payload, *, expected_revision, request_id):
         _choice(value["verdict"], VERDICTS, "Round verdict")
         _strings(value["limitations"], "Review limitations", nonempty=True)
         kinds = CHECKS_CONTINUE if decision["decision"] == "continue" else CHECKS_STOP
-        evidence = _RoundEvidence(context, bundle)
+        evidence = _RoundEvidence(context, bundle, decision=decision)
         seen = set()
         for check in _items(value["checks"], "Round checks"):
             _fields(check, ("kind", "status", "reason", "evidence"))
@@ -557,6 +595,8 @@ def record_round_review(store, payload, *, expected_revision, request_id):
         record = {"id": value["id"], "payload": value, "round_id": decision["id"], "round_digest": decision["digest"],
                   "closes": decision["closes"], "decision": decision["decision"], "verdict": value["verdict"],
                   "reviewed_revision": expected_revision + 1, "request_id": request_id}
+        if evidence.projections:
+            record["evidence"] = evidence.summary()
         record["digest"] = digest(record)
         return [immutable_record(records, "round_review", value["id"], record)], record
 
@@ -672,6 +712,29 @@ def derive_progress(records, evaluation, admission, bundle):
             "usage": _compute_usage(records, opening["accounts"]),
             "measurement": predictions.measurement_summary(records, bundle) if bundle else None,
             "unproductive": not (new and len(fresh) == len(literature.DEVELOPMENT_PURPOSES) and exemplar and cycles)}
+
+
+def find_claim_revision_obligations(records, artifacts, admission, bundle):
+    """Check new boundaries against the opening text without changing stored progress derivations."""
+    if admission is None or bundle is None or 'bundle_id' not in admission['opening']:
+        return []
+    opening = records['publication_bundle'][admission['opening']['bundle_id']]
+    evaluation = Evaluation.of(records, artifacts)
+    opening_claims = {claim['id']: claim for claim in
+                      strict_json(evaluation.read(opening['files']['claims']['artifact']))}
+    claims = strict_json(evaluation.read(bundle['files']['claims']['artifact']))
+    mismatches = []
+    for claim in claims:
+        original = opening_claims.get(claim['id'])
+        if original is None or 'revised' not in claim:
+            continue
+        if claim['claim'] == original['claim'] and claim['revised'] == original.get('revised'):
+            continue
+        if claim['revised']['previous'] != original['claim']:
+            mismatches.append(claim['id'])
+    if mismatches:
+        return [obligation('round_claim_revision_mismatch', CLAIM_REVISION_MISMATCH_NOTE, claim_ids=sorted(mismatches))]
+    return []
 
 
 def _validate_judgments(values, expected, name, evidence):
@@ -829,6 +892,7 @@ def round_state(records, artifacts):
                 decision_obligations.append(obligation("round_assessment_missing", "Assess the current round against its goal on this bundle before deciding.",
                                                        round_id=latest["id"]))
             progress_obligations = _continuity_obligations(progress)
+        progress_obligations.extend(find_claim_revision_obligations(records, evaluation, latest, bundle))
     decision = None
     if bundle is not None and not decision_obligations and not progress_obligations:
         decision, pending = _decision_obligations(records, bundle, number)

@@ -88,7 +88,12 @@ grants no reading credit; the finished capture is read like any other. A
 download is
 acquisition; a source-linked reading records the actual inspection. A reading
 stays current while its bundle's units are unchanged; parsed bibliography entries
-do not require re-reading. Record critical missing sources as pending.
+do not require re-reading. Record critical missing sources as pending. For an
+article of the Springer Nature Meta API v2 (a DOI under `10.1007` or
+`10.1038`), import its complete captured HTTP response with `publisher_capture`
+on `import-response`, in place of `mappings` (the CLI reference, format
+`springer-meta-json-v1`). That import records the DOI's complete abstract. A
+mapped excerpt of a publisher page stays partial.
 
 Identity conflicts stay stored: provider families are never merged. Before an
 import that registers the arXiv version of a paper the store knows by its DOI,

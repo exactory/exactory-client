@@ -41,7 +41,7 @@ class TestPluginManifest(unittest.TestCase):
     def test_plugin_manifest_parses_and_carries_the_release_version(self) -> None:
         manifest = json.loads((_PLUGIN_ROOT / ".claude-plugin" / "plugin.json").read_text())
         self.assertEqual(manifest["name"], "exactory")
-        self.assertEqual(manifest["version"], "0.74.1")
+        self.assertEqual(manifest["version"], "0.75.0")
 
     def test_every_bin_user_agent_carries_the_manifest_version(self) -> None:
         version = json.loads(
@@ -57,14 +57,15 @@ class TestPluginManifest(unittest.TestCase):
             "exactory-research": f"exactory-research/{version}",
         }
         # `exactory-math` makes no request: it runs the math-solver harness in place,
-        # so it carries no user agent and is not in the mapping above.
+        # so it carries no user agent and is not in the mapping above. Neither does
+        # `exactory-runtime`, which installs and publishes managed hook releases locally.
         # Files only. CI compiles every bin before it runs the tests, and on Python 3.12
         # that writes a `bin/__pycache__` directory, which is a build artifact and not a
         # command this assertion is about.
         bin_names = sorted(
             path.name for path in (_PLUGIN_ROOT / "bin").iterdir() if path.is_file()
         )
-        self.assertEqual(bin_names, sorted(list(expected_ua_prefixes) + ["exactory-math"]))
+        self.assertEqual(bin_names, sorted(list(expected_ua_prefixes) + ["exactory-math", "exactory-runtime"]))
         for command_name, expected_ua_prefix in expected_ua_prefixes.items():
             with self.subTest(command=command_name):
                 module = _load_bin_module(command_name)

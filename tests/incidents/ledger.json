@@ -196,23 +196,35 @@
     },
     {
       "id": "v7-round-projected-evidence",
-      "record": "v7",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "identity",
       "summary": "Round export and round-review used different representations of the same evidence.",
-      "fixed_in": "open",
-      "expected": "The projected-evidence recording path remains unresolved; round-review can still refuse a copied projected reference and the incident stays open.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "Round review authenticates the entire exported projected reference against the exact decision and bundle, retains its native mapping, and applies native evidence validation and independence checks.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_round_projection.RoundProjectionTests.test_exported_result_records_unchanged_for_stop_and_demand",
+        "test_research_round_projection.RoundProjectionTests.test_entire_projected_reference_is_authenticated_without_mutation",
+        "test_research_round_projection.RoundProjectionTests.test_projection_keeps_independence_and_decision_binding"
+      ]
     },
     {
       "id": "v7-authorized-deposit-stage",
-      "record": "v7",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "dead-end",
       "summary": "A user-authorized deposit could not move the study into the deposit stage.",
-      "fixed_in": "open",
-      "expected": "The stage transition still needs an implemented authorized-deposit path; readiness_required remains an open dead end for this shape.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "Confirmed external publication is reported separately from managed progress; evaluate names the manuscript-review wait without granting gate credit or recommending the same confirmed deposit again. Later bundles and unconfirmed or sandbox deposits retain their distinctions.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_confirmed_deposit_names_manuscript_review_wait_without_gate_credit",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_sandbox_and_open_deposits_do_not_claim_production_publication",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_lost_or_missing_confirmation_does_not_claim_publication",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_later_bundle_keeps_external_outcome_without_current_bundle_credit",
+        "test_research_direct_deposit_reporting.ScopedDirectDepositReportingTests.test_confirmed_scoped_deposit_stops_recommending_the_same_deposit",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_changed_measured_files_do_not_bind_or_match_the_external_deposit",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_historical_acceptances_without_assignments_name_the_manuscript_wait"
+      ]
     },
     {
       "id": "v8-citation-metadata-and-coverage",
@@ -241,23 +253,37 @@
     },
     {
       "id": "v7-unbound-previous-claim",
-      "record": "v7",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "gate (gap)",
       "summary": "The round gate did not bind revised.previous to the opening claim text.",
-      "fixed_in": "open",
-      "expected": "The missing previous-claim binding remains open; passing the current gate does not establish that this continuity check occurred.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "New closing decisions and current round gates bind new or changed revised markers to the immediately opening bundle exact claim text, including scoped markers; unchanged claims retain identical inherited markers and historical progress derivations keep their original interpretation.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_round_claim_continuity.RoundClaimContinuityTests.test_invented_previous_refuses_closing_decision_and_current_gate",
+        "test_research_round_claim_continuity.RoundClaimContinuityTests.test_revision_markers_bind_the_immediate_opening_bundle_across_rounds",
+        "test_research_scoped_claim_markers.ScopedClaimMarkerTests.test_current_round_continuity_checks_scoped_revision_history",
+        "test_research_scoped_claim_markers.ScopedClaimMarkerTests.test_unchanged_opening_claim_retains_its_earlier_revision_marker"
+      ]
     },
     {
       "id": "v7-bomless-unicode-delivery",
-      "record": "v7",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "uncommon-input",
       "summary": "A BOM-free UTF-16 or UTF-32 body beginning with a non-ASCII character escaped text decoding.",
-      "fixed_in": "open",
-      "expected": "The encoding gap remains open; raw-byte privacy checking alone does not establish exact decoded scientific delivery.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "Private text is matched in its original bytes and BOM-free UTF-16LE, UTF-16BE, UTF-32LE and UTF-32BE forms, including non-ASCII prefixes and encodings shorter than UTF-8; exact delivered bytes, JSON interpretation and binary privacy remain unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_sniffed_text_delivery.SniffedTextDeliveryTests.test_bomless_non_ascii_private_text_is_refused_in_all_byte_orders",
+        "test_research_sniffed_text_delivery.SniffedTextDeliveryTests.test_clean_unicode_and_large_inputs_keep_bytes_and_json_interpretation",
+        "test_research_sniffed_text_delivery.SniffedTextDeliveryTests.test_binary_private_artifact_keeps_literal_byte_protection",
+        "test_research_sniffed_text_delivery.SniffedTextDeliveryTests.test_text_in_another_unicode_encoding_is_checked_as_text",
+        "test_research_private_byte_length.PrivateByteLengthTests.test_eligible_candidate_still_checks_every_private_pattern",
+        "test_research_private_byte_length.PrivateByteLengthTests.test_text_candidate_checks_original_and_unicode_private_patterns",
+        "test_streamed_exports.ScientificEvaluationRetentionTests.test_initial_private_and_terminal_reads_do_not_fill_the_supplied_evaluation",
+        "test_streamed_exports.ScientificEvaluationRetentionTests.test_unicode_private_patterns_preserve_nonretaining_evaluation"
+      ]
     },
     {
       "id": "v10-mapped-publication-dates",
@@ -822,13 +848,21 @@
     },
     {
       "id": "v19-strategy-input-files-undelivered",
-      "record": "v19",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "delivery",
       "summary": "Strategy reassessment packets did not deliver the files pinned by their input list.",
-      "fixed_in": "open",
-      "expected": "The missing strategy-input delivery remains untraced and open; pinning an input does not establish that the reviewer received its bytes.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "Versioned supplementary-input bindings deliver every pinned native strategy input by exact digest and portable descriptor; replay authenticates retained inputs without reimport, delivery grants no proof credit, and old packets keep their bytes.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_eleven_unreferenced_pinned_files_are_delivered_by_digest",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_observed_packet_revalidates_frozen_inputs_without_reimporting_files",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_corruption_refuses_and_unrelated_artifacts_are_excluded",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_binding_and_inventory_changes_are_refused",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_old_packets_rebuild_unchanged_without_supplementary_bindings",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_oversized_inputs_remain_units_for_native_parts_planning",
+        "tests.test_native_supplementary_inputs.SupplementaryInputTests.test_normalized_blob_keeps_its_raw_identity_when_revalidated"
+      ]
     },
     {
       "id": "v19-strategy-review-semantics",
@@ -858,13 +892,17 @@
     },
     {
       "id": "v19-strategy-staleness-diagnostics",
-      "record": "v19",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "agent-text",
-      "summary": "Missing planning guidance and an unclear manifest refusal caused avoidable reassessment work.",
-      "fixed_in": "open",
-      "expected": "The proposed strategy refresh guidance and manifest-specific diagnostic remain untraced; these agent-text defects stay open.",
-      "test_kind": "none",
-      "tests": []
+      "summary": "Planning staleness must require a new native plan and an observed strategy reassessment; the constructive continuation and manifest diagnostic have separate entries.",
+      "fixed_in": "0.75.0",
+      "expected": "A changed problem requires a fresh plan before reassessment, and replanning cannot substitute for reassessment. Constructive continuation is covered by v19-constructive-strategy-continuation; the 0.74.0 manifest refusal is covered by v19-evidence-manifest-diagnostic.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_strategy_refresh.StrategyRefreshExecutionTests.test_reassessment_requires_a_plan_for_the_changed_problem",
+        "tests.test_strategy_refresh.StrategyRefreshExecutionTests.test_replan_cannot_substitute_for_strategy_reassessment",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_continuation_requires_the_current_reviewed_plan"
+      ]
     },
     {
       "id": "v19-stop-hook-session-focus",
@@ -1425,14 +1463,19 @@
     },
     {
       "id": "20261021192416-citation-locator-of-url-work-found-late-late-url-locator",
-      "record": "20261021192416-citation-locator-of-url-work-found-late",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "identity (late check)",
       "summary": "A URL-only work lacked a bundle locator and produced a late post obligation.",
-      "fixed_in": "open",
-      "expected": "Bundle import warns about problem_citation_locator_missing before readings depend on it; the URL identifier still does not substitute for a locator and later rebinding can stale readings.",
-      "test_kind": "same_path",
+      "fixed_in": "0.75.0",
+      "expected": "Append-only HTTPS locator provenance binds the exact version, original bytes and existing reading without changing historical unit digests or granting credit to stale readings.",
+      "test_kind": "real_shape",
       "tests": [
-        "test_research_problem_value_readings.ProblemValueReadingTests.test_a_read_https_work_without_a_bundle_locator_has_an_explicit_post_obligation"
+        "test_research_citation_locators.CitationLocatorTests.test_unchanged_github_pdf_gains_verified_locator_without_rereading",
+        "test_research_citation_locators.CitationLocatorTests.test_locator_guards_hash_version_identity_and_https_without_mutation",
+        "test_research_citation_locators.CitationLocatorTests.test_locator_does_not_repair_real_reading_staleness",
+        "test_research_citation_locators.CitationLocatorTests.test_historical_urls_and_exports_keep_their_dependencies",
+        "test_research_citation_locators.CitationLocatorTests.test_changed_retained_bytes_and_provenance_are_refused",
+        "test_research_citation_locators.CitationLocatorTests.test_locator_check_mode_authenticates_without_writing"
       ]
     },
     {
@@ -1449,13 +1492,28 @@
     },
     {
       "id": "20261021193215-refresh-overwithholding",
-      "record": "20261021193215",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "route-limit (over-reduction)",
       "summary": "A refresh could withhold more evidence bodies than necessary.",
-      "fixed_in": "open",
-      "expected": "The give-back reduction remains deferred; the request can still omit otherwise fitting bodies and the incident stays open without delivery credit for them.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "A prospective assignment records a restoration policy that gives back exact current text bodies in packet order only when the fully encoded route request fits; historical requests and retry bytes remain unchanged and withheld content earns no delivery credit. record-check and the record fingerprint rebuild a restored request under its recorded policy.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_request_restoration.RequestRestorationTests.test_refresh_restores_a_body_when_later_history_reduction_makes_room",
+        "test_review_request_restoration.RequestRestorationTests.test_unversioned_assignment_rebuilds_old_request_bytes_for_every_order",
+        "test_review_request_restoration.RequestRestorationTests.test_retry_retains_the_exact_restored_request_and_independent_copies",
+        "test_review_request_restoration.RequestRestorationTests.test_required_current_sources_survive_and_omitted_content_gets_no_credit",
+        "test_review_request_restoration.RequestRestorationTests.test_builder_substitutions_remain_effective_under_the_new_policy",
+        "test_review_request_restoration.RequestRestorationTests.test_each_text_route_uses_its_fully_encoded_restoration_boundary",
+        "test_review_request_restoration.RequestRestorationTests.test_cache_keeps_historical_and_prospective_policies_separate",
+        "test_review_request_restoration.RequestRestorationTests.test_capacity_deferrals_and_html_substitutions_cannot_be_restored_as_body_omissions",
+        "test_review_request_restoration.RequestRestorationTests.test_transport_wrapper_still_observes_the_pinned_fallback",
+        "test_review_request_restoration.ProspectiveAssignmentTests.test_new_assignment_records_the_policy_without_changing_prompt_or_packet",
+        "test_review_request_restoration.RequestRestorationTests.test_corrupt_or_conflicting_originals_cannot_gain_restoration_credit",
+        "test_review_request_restoration.RequestRestorationTests.test_policy_metadata_cannot_silently_fall_back_on_another_representation",
+        "test_review_request_restoration.RequestRestorationTests.test_local_measurement_emulation_does_not_select_a_policy_for_other_routes",
+        "test_review_request_restoration.RequestRestorationTests.test_record_check_rebuilds_a_restored_request_under_its_recorded_policy"
+      ]
     },
     {
       "id": "20261021193215-retry-fit-order-change",
@@ -1577,14 +1635,22 @@
     },
     {
       "id": "20261021163114-visual-repair-history-size",
-      "record": "20261021163114",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "growth",
       "summary": "Nested visual review history prevented a context repair from fitting.",
-      "fixed_in": "open",
-      "expected": "An eligible fresh visual repair preserves exact scientific history and original provenance; unsupported nested-history shapes still refuse and the remaining limit stays open.",
-      "test_kind": "same_path",
+      "fixed_in": "0.75.0",
+      "expected": "Versioned visual ancestry authenticates every native predecessor and delivers scientific history once per assignment through repeated fresh repairs, retaining negative findings, source requests and fixed slots; v1 requests still reconstruct and overflow refuses before dispatch.",
+      "test_kind": "real_shape",
       "tests": [
-        "test_visual_context_repair.VisualContextRepairTests.test_public_repair_keeps_actual_history_and_records_a_new_independent_final"
+        "test_visual_context_repair.VisualContextRepairTests.test_public_repair_keeps_actual_history_and_records_a_new_independent_final",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_repair_source_continuation_second_contamination_and_fresh_repair",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_ancestry_authenticates_each_native_assignment_attempt_and_output",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_duplicate_or_conflicting_ancestry_and_science_are_refused",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_second_repair_retains_required_sources_and_exact_slot",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_v1_request_bytes_and_native_authentication_survive_a_v2_successor",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_second_repair_overflow_is_refused_before_native_dispatch",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_conflicting_inherited_outputs_in_an_authenticated_predecessor_are_refused",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_identical_inherited_outputs_collapse_to_one_authenticated_assignment"
       ]
     },
     {
@@ -1638,14 +1704,36 @@
     },
     {
       "id": "20261021163114-unchecked-model-effort",
-      "record": "20261021163114",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "identity",
       "summary": "The adapter reported the requested model without checking the actual native turn settings.",
-      "fixed_in": "open",
-      "expected": "Output correction validates the retained rollout's model and effort, but ordinary adapter-wide verification remains incomplete; the broader incident stays open.",
-      "test_kind": "same_path",
+      "fixed_in": "0.75.0",
+      "expected": "New plain and framed Codex invocations retain the native rollout and authenticate exactly one turn_context with the assigned model and adapter-required high effort; invalid or missing evidence cannot approve, while visual and legacy authentication and correction bindings remain intact. A staged observation that carries the invocation marker also requires its retained rollout.",
+      "test_kind": "real_shape",
       "tests": [
-        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta"
+        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
+        "test_review_codex_invocation.CodexInvocationTests.test_wrong_native_model_is_rejected_for_plain_and_framed",
+        "test_review_codex_invocation.CodexInvocationTests.test_wrong_adapter_required_effort_is_rejected_for_plain_and_framed",
+        "test_review_codex_invocation.CodexInvocationTests.test_missing_or_duplicate_native_turn_context_is_rejected",
+        "test_review_codex_invocation.CodexInvocationTests.test_matching_settings_retain_native_context_and_sender_bytes",
+        "test_review_codex_invocation.CodexInvocationTests.test_legacy_authentication_does_not_invent_settings_evidence",
+        "test_review_codex_invocation.CodexInvocationTests.test_retained_rollout_and_correction_digest_cannot_be_substituted",
+        "test_review_codex_invocation.CodexInvocationTests.test_rebound_rollout_digest_still_checks_input_and_output",
+        "test_review_codex_invocation.CodexInvocationTests.test_request_route_and_response_model_remain_exact",
+        "test_review_codex_invocation.CodexInvocationTests.test_capture_reads_the_persistent_rollout_after_unchanged_sender_returns",
+        "test_review_codex_invocation.CodexInvocationTests.test_failed_native_capture_is_retained_without_invented_context",
+        "test_review_codex_invocation.CodexInvocationTests.test_visual_and_non_codex_observations_stay_unchanged",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_public_calls_pin_capture_and_matching_settings_become_ready",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_public_invocations_retain_wrong_settings_without_scientific_credit",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_public_probe_refuses_wrong_native_model_and_effort",
+        "test_review_codex_invocation.CodexInvocationTests.test_metadata_binding_accepts_only_legacy_or_the_exact_protocol",
+        "test_review_codex_invocation.CodexInvocationTests.test_malformed_native_record_shapes_are_rejected_without_reader_exceptions",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_public_protocol_rejects_unsupported_assignment_attempt_and_probe_bindings",
+        "test_review_codex_invocation.CodexInvocationTests.test_disabled_exec_notice_keeps_raw_capture_and_authenticates_exact_normalization",
+        "test_review_codex_invocation.CodexInvocationTests.test_capture_uses_the_exact_adapter_rollout_reader_and_clean_environment",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_shared_codex_fixture_retains_native_settings_for_plain_and_framed_calls",
+        "test_research_complete_source_continuation.NativeCompleteSourceTests.test_native_probe_and_source_attempt_require_retained_model_and_effort_capture",
+        "test_review_staged_protocol.StagedEntryTests.test_staged_codex_observation_requires_its_retained_rollout"
       ]
     },
     {
@@ -3461,15 +3549,37 @@
     },
     {
       "id": "record-states-report-cost-on-large-stores",
-      "record": "20261104074403-harness-problems-closed-for-good",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "cost (report readers on large stores)",
-      "summary": "status takes about 310 to 330 s on the bunkbed copy under load, about 170 s of it JSON serialization inside the pinned transports while recorded attempts are authenticated.",
-      "fixed_in": "open",
-      "expected": "record-check reports the time of status, next and obligations and fails a record over its time budget (3600 s by default); the release procedure blocks a candidate slower than 1.25 times the previous release plus 10 s. An authentication path that rebuilds only the requests that decide the current report remains open for 0.74.0.",
-      "test_kind": "same_path",
+      "summary": "Recorded ordinary text requests were fully materialized after every pinned reduction and source-capacity trial; superseded route-probe authentication added report cost. Predicate reuse through fresh verification namespaces increased verified work instead of saving it.",
+      "fixed_in": "0.75.0",
+      "expected": "Reconstruct supported recorded text requests with exact nested JSON character lengths and one final materialization per fit-order candidate. Preserve all five fit orders, request bytes, whole-source selection, first observed binding, refusal order and complete reports. Keep provenance and refusal classification on the caller's verified evaluation without additional predicate caches or verification namespaces; authenticate the last metadata-matching probe. No evaluation counter increases against the native path. Exhaustive record-check reconstruction and protected module bytes stay unchanged.",
+      "test_kind": "real_shape",
       "tests": [
         "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_clock",
-        "test_research_record_check.RecordCheckFollowupTests.test_each_report_reader_uses_the_supplied_budget"
+        "test_research_record_check.RecordCheckFollowupTests.test_each_report_reader_uses_the_supplied_budget",
+        "test_review_request_fit.ExactFitTests.test_differential_at_every_observed_boundary_for_all_five_orders",
+        "test_review_request_fit.ExactFitTests.test_each_fit_candidate_materializes_once_including_source_trials",
+        "test_review_request_fit.ExactFitTests.test_json_lengths_include_nested_escaping_and_independent_container_occurrences",
+        "test_review_request_fit.ExactFitTests.test_unsupported_representations_call_the_unchanged_builder",
+        "test_review_request_fit.RecordedFitTests.test_large_recorded_continuation_materializations_bindings_and_complete_report",
+        "test_review_request_fit.RecordedFitTests.test_repeated_provenance_derives_output_once_within_runtime_scope",
+        "test_review_request_fit.RecordedFitTests.test_refusal_selection_does_not_add_verification_or_request_entries",
+        "test_review_request_fit.RecordedFitTests.test_predicates_bind_same_id_substitutions_and_historical_views",
+        "test_review_request_fit.RecordedFitTests.test_refusal_reuse_preserves_order_first_binding_and_budget_policy",
+        "test_review_request_fit.RecordedFitTests.test_only_last_metadata_matching_probe_is_authenticated_even_when_failed",
+        "test_review_request_fit.RecordedFitTests.test_runtime_and_emitter_drift_discard_command_predicates",
+        "test_review_request_fit.ExactFitTests.test_malformed_binary_descriptor_preserves_the_pinned_exception",
+        "test_review_request_fit.ExactFitTests.test_deep_native_json_keeps_the_pinned_request_and_character_length",
+        "test_review_request_fit.ExactFitTests.test_circular_values_use_the_pinned_refusal",
+        "test_review_request_fit.ExactFitTests.test_surrogate_pairs_keep_the_pinned_json_roundtrip",
+        "test_review_request_fit.ExactFitTests.test_long_history_does_not_remeasure_unchanged_packet_scalars",
+        "test_review_request_fit.RecordedFitTests.test_failed_cheap_provenance_predicates_do_not_read_history",
+        "test_review_request_fit.RefusalDependencyTests.test_evicted_locator_bytes_are_reverified_before_reusing_a_refusal",
+        "test_review_request_fit.RefusalDependencyTests.test_dependency_tracing_keeps_the_callers_active_ancestry_guards",
+        "test_review_request_fit.ExactFitTests.test_untracked_reduction_mutations_fall_back_to_the_pinned_builder",
+        "test_review_request_fit.ExactFitTests.test_untracked_source_capacity_mutation_falls_back_to_the_pinned_builder",
+        "test_review_request_parity.ReviewRequestParityTests.test_recorded_earlier_fit"
       ]
     },
     {
@@ -3748,7 +3858,11 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_excluded_roles_and_null_subjects_do_not_inherit_current_statement",
         "test_problem_post_review_terminal.AdvisoryProjectionTests.test_passed_post_refuses_assignments_in_both_modes_without_workspace_writes",
         "test_problem_post_review_terminal.AdvisoryProjectionTests.test_context_events_remain_recordable_but_repair_cannot_reopen_post",
-        "test_problem_post_review_terminal.AdvisoryProjectionTests.test_focused_adjudication_cannot_reopen_posted_results"
+        "test_problem_post_review_terminal.AdvisoryProjectionTests.test_focused_adjudication_cannot_reopen_posted_results",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_new_root_for_posted_openness_claim_is_refused_in_both_modes",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_unknotting_five_failed_attempts_close_before_sixth_call_or_continuation",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_native_publication_race_invalidates_assignment_and_call_admission",
+        "test_posted_chain_closure.SlateClosureSlotTests.test_new_slate_root_uses_final_reviewer_slot_after_another_slot_was_posted"
       ]
     },
     {
@@ -3768,7 +3882,12 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_post_between_reservation_preparation_and_admission_prevents_charge",
         "test_problem_post_review_terminal.PostedReviewTests.test_post_between_launch_read_and_claim_prevents_worker_launch",
         "test_problem_post_review_terminal.PostedReviewTests.test_post_before_launch_authorization_stops_provider_and_allows_reconciliation",
-        "test_problem_post_review_terminal.PostedReviewTests.test_new_retry_after_post_is_refused_and_committed_failed_run_replays"
+        "test_problem_post_review_terminal.PostedReviewTests.test_new_retry_after_post_is_refused_and_committed_failed_run_replays",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_unknotting_five_failed_attempts_close_before_sixth_call_or_continuation",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_native_publication_race_invalidates_assignment_and_call_admission",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_captured_openness_result_replays_after_post_without_new_call",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_unbound_controller_refuses_frontier_child_call_and_correction",
+        "test_problem_post_review_terminal.PostedReviewTests.test_unbound_post_races_refuse_reservation_and_launch"
       ]
     },
     {
@@ -3782,7 +3901,8 @@
       "tests": [
         "test_problem_post_review_terminal.PostedReviewTests.test_posted_controller_frontier_and_child_refusal",
         "test_problem_post_review_terminal.PostedReviewTests.test_child_of_unposted_controller_uses_frozen_subject_despite_posted_selection",
-        "test_problem_post_review_terminal.PostedReviewTests.test_posted_frontier_check_changes_no_workspace_bytes"
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_frontier_check_changes_no_workspace_bytes",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_unbound_controller_refuses_frontier_child_call_and_correction"
       ]
     },
     {
@@ -3795,7 +3915,9 @@
       "test_kind": "real_shape",
       "tests": [
         "test_problem_post_review_terminal.PostedReviewTests.test_posted_correction_refusal_preserves_history",
-        "test_problem_post_review_terminal.PostedReviewTests.test_historical_correction_replay_and_fingerprints_survive_post"
+        "test_problem_post_review_terminal.PostedReviewTests.test_historical_correction_replay_and_fingerprints_survive_post",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_kmp_retired_route_and_digest_alias_show_no_retry_or_repair_hint",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_unbound_controller_refuses_frontier_child_call_and_correction"
       ]
     },
     {
@@ -3809,7 +3931,208 @@
       "tests": [
         "test_problem_post_review_terminal.PostedReviewTests.test_posted_status_and_series_views_have_no_review_actions",
         "test_problem_post_review_terminal.PostedReviewTests.test_staged_status_preserves_tasks_and_incomplete_recovery_evidence",
-        "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags"
+        "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_status_closes_the_pending_openness_head_without_mutation",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_next_exposes_no_review_command_or_navigation",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_review_series_resolves_the_ancestor_to_the_closed_head",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_output_export_keeps_the_openness_chain_and_observed_reading",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_status_and_output_parts_use_their_verified_artifact_evaluation"
+      ]
+    },
+    {
+      "id": "posted-first-statement-stops-second-review-chain",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "planning",
+      "summary": "Record-wide publication closure finished independent statement and solver review heads, while subject-only closure reopened posted native openness and old unbound chains.",
+      "fixed_in": "0.75.0",
+      "expected": "Classify the resolved head by its verified statement or native openness digest, or by the authenticated post revision after an unbound chain root; preserve independent work, supersession, preflight and handoff boundaries.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_second_statement_series_runs_records_and_posts_independently",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_posted_aliases_stop_but_changed_claim_or_criteria_plan_normally",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_excluded_roles_survive_and_old_unbound_slots_close",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_independent_native_math_keeps_pending_plan_after_post",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_native_openness_closes_pending_plan_after_post",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_cross_statement_slot_successor_still_resolves_to_revision_560",
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_record_check_checks_excluded_head_and_hands_off_scientific_rejection",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_changed_statement_openness_started_before_or_after_another_post_stays_eligible",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_independent_native_solver_packet_remains_eligible_after_post",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_series_and_record_check_stop_before_any_operation",
+        "test_review_continuation_regressions.ContinuationRegressionTests.test_a_recorded_problem_post_finishes_its_statement_chain"
+      ]
+    },
+    {
+      "id": "posted-resolved-head-retains-review-hints",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "reporting",
+      "summary": "A null-statement ancestor resolving to a posted head retained stale workflow and scope fields.",
+      "fixed_in": "0.75.0",
+      "expected": "Review hints use the resolved head's post state and retain evidence labels without prospective navigation or actions.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_head_planning.PostedHeadPlanningTests.test_posted_successor_removes_ancestor_navigation_fields"
+      ]
+    },
+    {
+      "id": "posted-native-openness-reopens",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "planning",
+      "summary": "Native problem-openness reviews without assignment subjects invited sixth calls, retired-route repairs and prospective preflight after publication.",
+      "fixed_in": "0.75.0",
+      "expected": "Validate the native openness packet and close its exact posted claim regardless of assignment age; remove new-work hints and refuse calls or continuations while retaining captured evidence and independent native solver work.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_unknotting_five_failed_attempts_close_before_sixth_call_or_continuation",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_sidorenko_oversized_posted_openness_has_no_prospective_preflight",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_kmp_retired_route_and_digest_alias_show_no_retry_or_repair_hint",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_new_root_for_posted_openness_claim_is_refused_in_both_modes",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_missing_or_corrupt_native_binding_is_a_validation_error",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_captured_openness_result_replays_after_post_without_new_call",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_changed_statement_openness_started_before_or_after_another_post_stays_eligible",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_independent_native_solver_packet_remains_eligible_after_post"
+      ]
+    },
+    {
+      "id": "posted-unbound-chain-reopens",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "admission",
+      "summary": "Unbound publication reviews reopened through newer heads, staged children or replacements retaining a pre-publication slot.",
+      "fixed_in": "0.75.0",
+      "expected": "Close truly unbound publication reviews when a post follows the earliest assignment of their actual same-phase lineage and retained slot; normalize staged children to controllers and reject malformed ancestry without blocking a new independent slot.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_chain_closure.UnboundClosureTests.test_unbound_retained_slot_root_predates_legacy_post_even_when_head_is_newer",
+        "test_posted_chain_closure.UnboundClosureTests.test_missing_post_revision_and_invalid_ancestry_are_never_unbound_fallbacks",
+        "test_posted_chain_closure.UnboundClosureTests.test_malformed_falsey_bindings_are_validation_errors",
+        "test_posted_chain_closure.SlateClosureSlotTests.test_new_slate_root_uses_final_reviewer_slot_after_another_slot_was_posted",
+        "test_problem_post_review_terminal.PostedReviewTests.test_posted_unbound_controller_refuses_frontier_child_call_and_correction",
+        "test_problem_post_review_terminal.PostedReviewTests.test_unbound_post_races_refuse_reservation_and_launch"
+      ]
+    },
+    {
+      "id": "posted-chain-closure-missing-revision",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility",
+      "summary": "Normal posts lacked a recorded revision needed to close pre-publication unbound review chains.",
+      "fixed_in": "0.75.0",
+      "expected": "Recover post creation revisions only from authenticated events, retain the small index through snapshots and preparations, stamp new normal posts, and preserve historical record, event and receipt bytes while tracking concurrent publication.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_chain_closure.UnboundClosureTests.test_unbound_retained_slot_root_predates_legacy_post_even_when_head_is_newer",
+        "test_posted_chain_closure.UnboundClosureTests.test_missing_post_revision_and_invalid_ancestry_are_never_unbound_fallbacks",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_legacy_post_uses_earliest_event_and_ignores_later_writes",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_problem_snapshots_and_copies_retain_only_post_creation_metadata",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_full_preparations_and_copies_preserve_creation_metadata",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_managed_and_historical_snapshots_bound_creation_revision",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_scoped_views_and_copies_preserve_creation_metadata",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_scoped_creation_lookup_binds_only_selected_key",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_scoped_creation_lookup_rejects_changed_or_newly_created_key",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_scoped_post_membership_rejects_concurrent_publication",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_corrupt_history_cannot_supply_creation_metadata",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_transaction_reads_use_authenticated_committed_creation_revisions",
+        "test_post_creation_revisions.PostCreationRevisionTests.test_creation_reads_preserve_record_event_receipt_and_database_bytes",
+        "test_research_problem_delivery.ProblemDeliveryTests.test_post_decision_export_and_posted_are_bound_to_the_observed_claim"
+      ]
+    },
+    {
+      "id": "unposted-review-closure-validates-legacy-lineage",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "compatibility",
+      "summary": "Publication closure and head selection validated bindings and ancestry even without a post, refusing unposted legacy reviews.",
+      "fixed_in": "0.75.0",
+      "expected": "Read post membership first and return without binding, packet or ancestry validation while no post exists; retain released legacy head selection, planning and authenticated call admission, while a concurrent post still invalidates admission.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_closure_compatibility.UnpostedClosureValidationTests.test_no_posts_return_before_review_binding_validation",
+        "test_posted_closure_compatibility.UnpostedClosureValidationTests.test_no_posts_return_before_closure_ancestry_validation",
+        "test_posted_closure_compatibility.UnpostedClosureValidationTests.test_existing_post_keeps_binding_and_ancestry_validation_strict",
+        "test_posted_closure_compatibility.LegacyUnpostedAdmissionTests.test_unposted_native_review_without_revision_plans_and_invokes",
+        "test_posted_chain_closure.PostedOpennessClosureTests.test_native_publication_race_invalidates_assignment_and_call_admission",
+        "test_unposted_legacy_head_selection.LegacyUnpostedHeadSelectionTests.test_legacy_empty_metadata_keeps_the_unposted_run_plan",
+        "test_unposted_legacy_head_selection.LegacyUnpostedHeadSelectionTests.test_existing_post_keeps_empty_metadata_validation_strict",
+        "test_unposted_legacy_head_selection.LegacyUnpostedHeadSelectionTests.test_unrelated_legacy_metadata_does_not_stop_the_requested_unposted_head"
+      ]
+    },
+    {
+      "id": "posted-status-repeats-closure-root-walks",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "performance",
+      "summary": "One posted status report repeatedly walked the same assignment lineage while classifying and decorating review hints.",
+      "fixed_in": "0.75.0",
+      "expected": "Within each status call reuse a successful closure root only for the exact records view and closure binding; discard the local memo on return or error, restore nested status scopes, and keep statement, native packet and ancestry validation intact.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_posted_closure_cost.PostedClosureCostTests.test_posted_status_walks_each_identical_view_and_binding_once",
+        "test_posted_closure_cost.PostedClosureCostTests.test_second_status_recomputes_with_the_same_snapshot_and_evaluation",
+        "test_posted_closure_cost.PostedClosureCostTests.test_same_assignment_in_distinct_record_views_resolves_distinct_roots",
+        "test_posted_closure_cost.PostedClosureCostTests.test_changed_closure_bindings_do_not_share_roots",
+        "test_posted_closure_cost.PostedClosureCostTests.test_unrelated_transport_history_does_not_repeat_a_closure_walk",
+        "test_posted_closure_cost.PostedClosureCostTests.test_post_refusal_details_share_the_successful_classification_walk",
+        "test_posted_closure_cost.PostedClosureCostTests.test_current_malformed_ancestry_is_rechecked_and_errors_are_not_reused",
+        "test_posted_closure_cost.PostedClosureCostTests.test_warm_roots_do_not_bypass_native_or_statement_validation",
+        "test_posted_closure_cost.PostedClosureCostTests.test_memo_retains_each_records_view_only_until_status_returns",
+        "test_posted_closure_cost.PostedClosureCostTests.test_other_runtime_scopes_do_not_reuse_closure_walks",
+        "test_posted_closure_cost.PostedClosureCostTests.test_status_memo_does_not_escape_into_a_surrounding_runtime_scope",
+        "test_posted_closure_cost.PostedClosureCostTests.test_failed_status_removes_its_memo_from_a_surrounding_runtime_scope",
+        "test_posted_closure_cost.PostedClosureCostTests.test_nested_status_restores_the_surrounding_status_memo"
+      ]
+    },
+    {
+      "id": "external-post-recorded-after-server-post",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "recovery",
+      "summary": "A graph problem was posted on the server without its local terminal post record.",
+      "fixed_in": "0.74.0",
+      "expected": "The existing external-post operation records the exact statement with details, saved server evidence and server time without an export, replays without writes and refuses duplicate publication and new review work.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews"
+      ]
+    },
+    {
+      "id": "doi-only-qualification-delivery-filter",
+      "parent": "20261103024324-abstract-source-request-unresolvable-for-doi-only-works-doi-only-abstract-request",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "sources (delivery)",
+      "summary": "Qualified unavailability settled a source request using binary evidence that a text-only route could not deliver.",
+      "fixed_in": "0.75.0",
+      "expected": "Required qualification evidence must be deliverable before settlement; binary evidence stays pending on text-only routes, while capable routes and JSON qualifications retain settlement without scientific credit.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_bar_sources.BarSourceTests.test_binary_qualification_stays_pending_on_text_only_route",
+        "test_research_bar_sources.BarSourceTests.test_binary_qualification_settles_on_capable_route",
+        "test_research_bar_sources.BarSourceTests.test_json_qualification_settles_on_text_only_route"
+      ]
+    },
+    {
+      "id": "v19-evidence-manifest-diagnostic",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "diagnostic (evidence)",
+      "summary": "A valid raw proof artifact digest supplied at the manifest boundary was reported as a corrupt manifest.",
+      "fixed_in": "0.75.0",
+      "expected": "A valid artifact where a manifest is required gives evidence_manifest_required without mutation; genuinely missing or corrupt blobs retain their errors and valid manifests retain their audits.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_search_evidence.EvidenceTests.test_checkpoint_with_raw_proof_digest_requires_manifest_without_mutation",
+        "tests.test_search_evidence.EvidenceTests.test_manifest_diagnostic_preserves_absent_corrupt_and_valid_blobs"
+      ]
+    },
+    {
+      "id": "0720-base-verification-prompt-contract",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "reviewer prompt (contract)",
+      "summary": "The base verification prompt omitted executable stance, prediction-band and sampled-binding rules.",
+      "fixed_in": "0.75.0",
+      "expected": "New verification prompts name the executable stance, ordered integer prediction band, sample estimate, containing and widened bands, and refusal of an unplaced sample; recorded base and parts prompts retain their exact template ids, hashes and authentication.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_verification.VerificationPromptContractTests.test_current_base_prompt_states_the_executable_prediction_contract",
+        "test_research_verification.VerificationPromptContractTests.test_historical_base_and_parts_prompt_envelopes_retain_bytes_and_authentication",
+        "test_research_verification.SampledVerificationTests.test_example_following_current_base_prompt_binds",
+        "test_research_verification.UnplacedSampleVerificationTests.test_a_sample_that_places_no_member_binds_no_verdict",
+        "test_research_verification.WidenedSampleVerificationTests.test_an_unplaced_heavy_sample_needs_a_band_wider_than_the_computed_one",
+        "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0663_still_verifies",
+        "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0715_still_verifies"
       ]
     },
     {
@@ -3952,18 +4275,6 @@
       ]
     },
     {
-      "id": "external-post-recorded-after-server-post",
-      "record": "20261105155433-open-items-after-0-73-6",
-      "class": "recovery",
-      "summary": "A graph problem was posted on the server without its local terminal post record.",
-      "fixed_in": "0.74.0",
-      "expected": "The existing external-post operation records the exact statement with details, saved server evidence and server time without an export, replays without writes and refuses duplicate publication and new review work.",
-      "test_kind": "real_shape",
-      "tests": [
-        "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews"
-      ]
-    },
-    {
       "id": "report-cost-oversized-bundle-index",
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "performance (growth)",
@@ -3980,6 +4291,129 @@
         "test_bundle_index.BundleIndexTests.test_supplement_ids_preserve_main_captures_and_graph",
         "test_bundle_index.BundleIndexTests.test_targeted_readings_match_the_released_outputs_in_historical_views",
         "test_bundle_index.BundleIndexTests.test_historical_index_does_not_select_a_later_bundle_of_the_same_original"
+      ]
+    },
+    {
+      "id": "doi-only-alias-discovery",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "parent": "20261103024324-abstract-source-request-unresolvable-for-doi-only-works-doi-only-abstract-request",
+      "class": "dead-end (sources)",
+      "summary": "DOI and OpenAlex abstract requests did not discover related captured donors.",
+      "fixed_in": "0.75.0",
+      "expected": "Discover every donor with provenance, validation failures and competing identities. Existing same_work aliases never establish exact version equivalence, so cross-identity abstracts remain alternatives, qualified absence keeps no scientific credit, exact requested captures still deliver, and saved assignments replay unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_four_pairs_and_springer_1115_byte_excerpt_remain_qualified",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_forward_and_reverse_discovery_keeps_complete_donors_as_alternatives",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_discovery_does_not_require_a_separate_requested_work_row",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_competing_doi_families_never_choose_the_first",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_competing_unacquired_doi_identities_still_report_ambiguity",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_reverse_competing_openalex_assertions_remain_alternatives",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_preprint_and_journal_versions_are_only_family_alternatives",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_family_only_mapping_is_an_alternative_without_identity_credit",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_corrupt_or_misbound_donor_cannot_supply_exact_identity",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_corrupt_optional_donor_does_not_block_exact_requested_source",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_corrupt_partial_candidate_keeps_qualified_absence",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_openalex_multiple_locations_do_not_establish_abstract_version",
+        "test_doi_alias_discovery.AliasDiscoveryTests.test_candidate_delta_reports_donor_acquired_after_inventory",
+        "test_doi_alias_discovery.AliasReplayTests.test_saved_assignment_request_and_packet_replay_without_new_discovery"
+      ]
+    },
+    {
+      "id": "doi-only-publisher-completeness",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "parent": "20261103024324-abstract-source-request-unresolvable-for-doi-only-works-doi-only-abstract-request",
+      "class": "dead-end (sources)",
+      "summary": "Generic publisher excerpts could not establish complete abstract boundaries.",
+      "fixed_in": "0.75.0",
+      "expected": "An explicitly selected springer-meta-json-v1 parser admits a single exact DOI abstract only from a complete captured HTTP response with unambiguous JSON boundaries. The positive fixture is synthetic from documented format, not an original publisher capture. Old mapped imports remain partial and old receipts replay unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_publisher_completeness.PublisherCompletenessTests.test_complete_documented_response_delivers_only_the_exact_doi_abstract",
+        "test_publisher_completeness.PublisherCompletenessTests.test_truncated_json_and_missing_abstract_boundary_are_rejected",
+        "test_publisher_completeness.PublisherCompletenessTests.test_wrong_doi_and_conflicting_identifier_are_rejected",
+        "test_publisher_completeness.PublisherCompletenessTests.test_partial_transfer_and_ambiguous_http_framing_are_rejected",
+        "test_publisher_completeness.PublisherCompletenessTests.test_duplicate_or_multiple_abstract_boundaries_are_rejected",
+        "test_publisher_completeness.PublisherCompletenessTests.test_generic_span_and_complete_true_do_not_upgrade_a_partial_excerpt",
+        "test_publisher_completeness.PublisherCompletenessTests.test_complete_true_cannot_replace_transport_or_parser_evidence",
+        "test_publisher_completeness.PublisherCompletenessTests.test_invalid_media_type_refuses_before_admission_and_in_preview",
+        "test_publisher_completeness.PublisherCompletenessTests.test_publisher_preview_reports_existing_alias_candidates_without_writes",
+        "test_publisher_completeness.PublisherCompletenessTests.test_preview_file_cli_and_replay_bind_the_parser_and_bytes"
+      ]
+    },
+    {
+      "id": "codex-plugin-hooks-skipped-after-update",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "deployment (hook trust)",
+      "summary": "Changed plugin scripts and expanded cache paths invalidate Codex hook trust after each update.",
+      "fixed_in": "0.75.0",
+      "expected": "Administrator-managed registrations pin the stable dispatcher outside the plugin cache and preserve every matcher and timeout. The smoke driver checks actual hooks/list and executes all managed commands; real Codex 0.163.0 scheduling acceptance remains the supervisor's deployment check.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_codex.TestCodexPackage.test_managed_registrations_preserve_all_matchers_timeouts_and_entrypoints",
+        "test_codex.TestCodexPackage.test_check_rejects_stale_managed_registrations_without_rewriting",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_smoke_driver_uses_app_server_inventory_and_all_real_managed_commands"
+      ]
+    },
+    {
+      "id": "hook-runtime-survives-cache-replacement",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "upgrade (runtime lifetime)",
+      "summary": "Deleting a plugin cache removes code and resources still used by a running session.",
+      "fixed_in": "0.75.0",
+      "expected": "A session retains its approved immutable release, CLI, skills and documents after a new default is published and its source cache deleted. Bindings live in private user state outside the administrator prefix. Publication and startup verify all payload hashes; later events check approval, the manifest and entrypoints without rehashing payloads. Invalid bindings and unavailable state retain event-specific refusal, and referenced bundles cannot be removed.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_every_loaded_command_keeps_a_after_cache_removal_and_new_session_gets_b",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_real_handlers_guard_cli_documents_and_stop_survive_cache_deletion",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_invalid_bundles_and_bindings_refuse_every_event_without_execution",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_corrupt_registry_and_missing_binding_refuse_without_reenrollment",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_concurrent_publication_and_enrollment_leave_one_binding",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_interrupted_publication_keeps_previous_default_and_install_is_stable",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_referenced_bundle_cannot_be_removed_or_republished_with_changed_bytes",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_unreadable_source_subtree_cannot_publish_a_partial_release",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_startup_hashes_every_payload_file_and_later_events_hash_none",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_enrollment_and_all_commands_use_writable_state_with_read_only_prefix",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_missing_unwritable_or_symlink_state_refuses_without_execution",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_init_state_creates_private_storage_without_writing_prefix",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_default_state_is_under_user_home_when_no_override_is_set",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_state_inside_prefix_is_refused_without_creating_it",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_later_events_authenticate_manifest_and_check_both_entrypoints"
+      ]
+    },
+    {
+      "id": "report-cost-repeated-replay-encoding",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "cost (snapshot history replay)",
+      "summary": "Snapshot replay serializes full events, receipts and current rows again after their event components have already passed canonical validation.",
+      "fixed_in": "0.75.0",
+      "expected": "Replay reuses validated canonical segments for event hashing and receipt comparison and decodes projection-equal current rows without another encoding, removing two encodes per event and one per current row while preserving snapshots, histories, corruption errors and bounded UTF-8 buffers.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_replay_encoding.ReplayEncodingTests.test_large_repeated_replay_encodes_each_component_and_change_once",
+        "test_research_replay_encoding.ReplayEncodingTests.test_snapshots_histories_and_fingerprint_equal_released_0736",
+        "test_research_replay_encoding.ReplayEncodingTests.test_all_scalar_results_and_escaped_identifiers_keep_their_receipts",
+        "test_research_replay_encoding.ReplayEncodingTests.test_corruption_keeps_the_released_error_and_diagnostic_precedence",
+        "test_research_replay_encoding.ReplayEncodingTests.test_digest_keeps_utf8_scratch_bounded"
+      ]
+    },
+    {
+      "id": "v19-constructive-strategy-continuation",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "strategy eligibility",
+      "summary": "A constructive strategy invalidated its entry condition by making its required first mode change.",
+      "fixed_in": "0.75.0",
+      "expected": "A versioned entry basis binds the exact claim; an active constructive strategy may continue through replan and observed reassessment after its own mode move. New construction entries and changed claims remain ineligible, a stale plan blocks the next move until replanning, and the strategy ends with fail; an entry signal on a move does not end it.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_entry_construction_replan_reassessment_and_continuation",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_new_entry_already_in_construction_is_ineligible",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_changed_claim_cannot_continue",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_fail_ends_the_continuation",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_an_entry_signal_on_a_move_does_not_end_the_continuation",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_continuation_requires_the_current_reviewed_plan",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_legacy_active_entry_is_recovered_from_its_exact_native_reservation",
+        "tests.test_constructive_continuation.ConstructiveContinuationTests.test_active_entry_metadata_is_reauthenticated_against_the_reservation"
       ]
     }
   ]

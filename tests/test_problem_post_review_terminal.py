@@ -134,6 +134,76 @@ class PostedReviewTests(ResultPartsCase):
                 with self.subTest(check=check, payload=payload):
                     self.assert_post_refusal(staged.case, payload, check=check)
 
+    def prepare_unbound_staged(self):
+        staged = self.make_case(frontier.FrontierTests)
+        controller = staged.create_controller()
+        planned = staged.command('review-assignment', dict(controller_assignment_id=controller['id']))
+        controller = dict(controller, subject=None)
+        staged.case.put('review_assignment', controller['id'], controller)
+        return staged, controller, planned
+
+    def test_posted_unbound_controller_refuses_frontier_child_call_and_correction(self):
+        staged, controller, planned = self.prepare_unbound_staged()
+        record_external_post(staged.case)
+        child = {key: controller[key] for key in
+                 ('role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id')}
+        child.update(id='closed-child', context=dict(controller_assignment_id=controller['id'],
+            task_id=controller['staged_review']['task_ids'][0]))
+        for payload in (child, dict(controller_assignment_id=controller['id'])):
+            for check in (False, True):
+                with self.subTest(payload=payload, check=check):
+                    before = staged.case.store.snapshot()
+                    with self.assertRaises(ResearchError) as caught:
+                        if check:
+                            check_mutation(staged.case.store, protocol.record_assignment, payload,
+                                expected_revision=staged.case.store.revision, request_id='closed-child-check',
+                                bounded_payload=payload)
+                        else:
+                            staged.case.mutate(protocol.record_assignment, payload)
+                    self.assertEqual(caught.exception.code, 'problem_already_posted')
+                    self.assertEqual(staged.case.store.snapshot(), before)
+        for operation, payload in (
+                (cli.OPERATIONS['review-run'], planned['next'][0]['payload']),
+                (correction.invoke_correction, dict(id='closed-correction', assignment_id=controller['id'], route_id='route'))):
+            with self.subTest(operation=operation.__name__), \
+                    patch.object(transport, 'send_request', side_effect=AssertionError('No unbound post call')):
+                before = staged.case.store.snapshot()
+                with self.assertRaises(ResearchError) as caught:
+                    staged.case.mutate(operation, payload)
+                self.assertEqual(caught.exception.code, 'problem_already_posted')
+                self.assertEqual(staged.case.store.snapshot(), before)
+
+    def test_unbound_post_races_refuse_reservation_and_launch(self):
+        for phase in ('reservation', 'launch'):
+            with self.subTest(phase=phase):
+                staged, controller, planned = self.prepare_unbound_staged()
+                original = staged.case.store.mutate_scoped if phase == 'reservation' else review_worker._claim_launch
+                posted = []
+
+                def reserve(operation, *args, **kwargs):
+                    if operation == 'review.task_reserve' and not posted:
+                        posted.append(record_external_post(staged.case))
+                    return original(operation, *args, **kwargs)
+
+                def claim(store, reservation_id):
+                    posted.append(record_external_post(staged.case))
+                    return original(store, reservation_id)
+
+                target, name, replacement = ((staged.case.store, 'mutate_scoped', reserve) if phase == 'reservation'
+                                             else (review_worker, '_claim_launch', claim))
+                with patch.object(target, name, side_effect=replacement), \
+                        patch.object(review_worker.subprocess, 'Popen', side_effect=AssertionError('No closed launch')):
+                    with self.assertRaises(ResearchError) as caught:
+                        staged.command('review-run', planned['next'][0]['payload'])
+                self.assertEqual(caught.exception.code, 'problem_already_posted')
+                records = staged.case.read_records()
+                if phase == 'reservation':
+                    self.assertFalse(records.get('review_reservation'))
+                    self.assertFalse(records.get('review_resource_ledger'))
+                else:
+                    reservation = next(iter(records['review_reservation'].values()))
+                    self.assertIsNone(reservation['launch'])
+
     def test_child_of_unposted_controller_uses_frozen_subject_despite_posted_selection(self):
         staged = self.make_case(frontier.FrontierTests)
         controller = staged.create_controller()
@@ -367,7 +437,7 @@ class PostedReviewTests(ResultPartsCase):
         self.case.put('problem_statement', changed['id'], changed)
         self.case.put('problem_selection', 'current', dict(statement_id=changed['id']))
         second = self.assign('second-head')
-        self.assertEqual(review_continuation.plan_next(self.case.read_records(), self.case.artifacts, second['id'])['state'], 'done')
+        self.assertEqual(review_continuation.plan_next(self.case.read_records(), self.case.artifacts, second['id'])['state'], 'run')
 
     def test_post_between_preparation_and_assignment_admission_invalidates_tracked_read(self):
         original = self.case.store.mutate_scoped
@@ -549,13 +619,15 @@ class PostedReviewTests(ResultPartsCase):
     def test_excluded_roles_and_null_subjects_do_not_inherit_current_statement(self):
         record_external_post(self.case)
         records = self.case.read_records()
-        for role in ('slate', 'native_math', 'readiness', 'verification', 'manuscript', 'standalone'):
+        for role in ('readiness', 'verification', 'manuscript', 'standalone'):
             assignment = dict(role=role, subject=dict(kind='problem', statement_id='statement-1'))
             self.assertIsNone(problem_delivery.find_review_post(records, assignment))
             problem_delivery.require_unposted_review(records, assignment)
-        for subject in (None, dict(kind='problem', statement_id=None), dict(kind='study', statement_id='statement-1')):
-            assignment = dict(role='bar', subject=subject)
-            self.assertIsNone(problem_delivery.find_review_post(records, assignment))
+        for subject in (None, dict(kind='problem', statement_id=None)):
+            assignment = dict(id='unbound', role='bar', subject=subject, context={}, recorded_revision=1)
+            self.assertEqual(problem_delivery.find_review_post(records, assignment)['id'], 'external-post')
+        assignment = dict(role='bar', subject=dict(kind='study', statement_id='statement-1'))
+        self.assertIsNone(problem_delivery.find_review_post(records, assignment))
         study = dict(records, workspace={'study': dict(orchestration='ai_science')})
         self.assertIsNone(problem_delivery.find_review_post(study,
             dict(role='result', subject=dict(kind='problem', statement_id='statement-1'))))

@@ -15,6 +15,7 @@ from .evidence import digest
 from .operations import describe_received_value, fields, text
 from .reading import current_readings, validate_read_evidence
 from .source_links import captured_source, validate_link
+from .source_candidates import find_source_candidates
 
 PAGE_SIZE = 10
 PROTOCOL = 'exactory-independent-review-sources-v2'
@@ -393,10 +394,16 @@ def _fulltext_source(records, artifacts, work, capture):
     return source
 
 
+QUALIFICATION_DELIVERY_PENDING_NOTE = (
+    'The required evidence of this unavailability is binary, and this text-only route cannot deliver it. '
+    'The request stays pending, with no reading or scientific-support credit.')
+
+
 def _qualified_unavailability(records, artifacts, work, request, result, captures):
     """Settle retrieval with current evidence, without waiving reading or source obligations."""
     from .identities import normalize_identifier
     from .reading import qualify_availability, registries_addressing
+    from .review_transport import is_binary_evidence, text_only_enabled
     if request['depth'] == 'fulltext' and any(c.get('availability') == 'available' for c in work.get('fulltexts', [])):
         return result
     for value in sorted(records.get('availability', {}).values(), key=lambda value: value['id']):
@@ -413,6 +420,11 @@ def _qualified_unavailability(records, artifacts, work, request, result, capture
             continue
         # Failed terminal responses are evidence of retrieval failure, not captured reading sources.
         sources = [records['source'][source_id] for source_id in value['source_ids']]
+        if text_only_enabled() and any(
+                is_binary_evidence(artifacts.read(source['response']), source['response']['media_type'])
+                for source in sources):
+            result['reason'] = QUALIFICATION_DELIVERY_PENDING_NOTE
+            continue
         result['evidence'] = []
         provenance = []
 
@@ -471,6 +483,17 @@ def _source(records, artifacts, request, original_rows):
     current_digest = _capture_digest(work, records) if work is not None else None
     result['native_source_delta'] = {'inventory_capture_digest': prior_digest, 'current_capture_digest': current_digest,
                                      'changed': prior_digest != current_digest}
+    if request['depth'] == 'abstract':
+        candidates = find_source_candidates(records, artifacts, request['version_id'])
+        if candidates['candidates'] or candidates['ambiguities']:
+            result.update(abstract_candidates=candidates['candidates'], identity_ambiguities=candidates['ambiguities'])
+            result['candidate_source_deltas'] = [
+                {'version_id': candidate['version_id'],
+                 'inventory_capture_digest': original_rows.get(candidate['version_id'], {}).get('source_capture_digest'),
+                 'current_capture_digest': _capture_digest(records['work'][candidate['version_id']], records),
+                 'changed': original_rows.get(candidate['version_id'], {}).get('source_capture_digest') !=
+                    _capture_digest(records['work'][candidate['version_id']], records)}
+                for candidate in candidates['candidates']]
     if work is None:
         return dict(result, reason='The exact requested version is not held in the current native source records.')
     if request['depth'] == 'abstract':

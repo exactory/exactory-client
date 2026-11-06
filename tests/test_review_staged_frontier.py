@@ -16,13 +16,13 @@ from test_review_staged_fixtures import epoch, profile
 WORKER = '''
 import sys
 from pathlib import Path
+from unittest import TestCase
 sys.path[:0] = %r
 from research_harness import review_worker, review_transport, review_codex_transport, review_excerpts
-from codex_route_fixtures import build_codex_response
+from codex_route_fixtures import build_codex_response, install_codex_runtime
 from test_review_staged_frontier import build_output
-review_codex_transport.runtime = lambda: {'adapter':'codex_cli_v1','fixture':'reviewer-excerpt-test'}
-review_codex_transport.NATIVE_DECLARATIONS = ()
-review_codex_transport.NATIVE_DECLARATION_SETS = {()}
+fixture = TestCase()
+install_codex_runtime(fixture)
 def send(route, request, credential):
     root = Path(sys.argv[1])
     body = review_excerpts.read_sent_packet(request)['staged_review']

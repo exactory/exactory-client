@@ -706,7 +706,7 @@ def _build_series(records, artifacts, inputs):
                 verified = review_parts.verify_series(records, artifacts, identifier)
                 parts_progress = describe_parts_turn(
                     assignment, state, verified,
-                    is_posted=find_review_post(records, assignment) is not None,
+                    is_posted=find_review_post(records, assignment, artifacts) is not None,
                     ended_without_output=has_ended_without_output(records, identifier))
             turns.append({
                 "turn": numbers[identifier], "assignment_id": identifier, "parent_assignment_id": parent, "link": link,
@@ -963,7 +963,8 @@ _UNPLACED_KINDS = (
     "cohort_partition_member", "cohort_sample", "cohort_sample_selection", "cohort_seen", "collection",
     "collection_page", "configuration", "constitution", "fulltext_requirement", "literature_operation",
     "literature_scope", "literature_search", "loop_closure", "loop_closure_selection", "native_import_identity",
-    "problem_citation_metadata", "reading", "reading_batch", "reference_occurrence", "reference_resolution",
+    "problem_citation_metadata", "citation_locator", "reading", "reading_batch", "reference_occurrence",
+    "reference_resolution",
     "screening", "screening_checkpoint",
     "screening_checkpoint_selection", "search_binding", "search_selection", "source", "source_bundle",
     "source_deferral", "source_deferral_selection", "source_import", "source_resumption", "synthesis",

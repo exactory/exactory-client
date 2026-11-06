@@ -240,7 +240,9 @@ def _rebuild_invocation(records, artifacts, invocation, *, kind):
                 records, 'read_snapshot') else records
             packet = correction.prepare_packet(historical, artifacts, assignment['id'])
             prompt, history = correction.PROMPT, []
-    candidates = transport.list_built_requests(route, prompt, packet, history)
+    from .review_request_restoration import list_pinned_requests
+    candidates = list_pinned_requests(route, prompt, packet, history,
+                                      assignment.get('request_policy') if kind == 'review_invocation' else None)
     if kind == 'review_invocation' and assignment.get('staged_review'):
         from .review_staged_protocol import build_assigned_request
         candidates = (build_assigned_request(artifacts, route, assignment, packet),)

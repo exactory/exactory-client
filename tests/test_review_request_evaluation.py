@@ -9,11 +9,12 @@ from unittest.mock import patch
 from literature_fixtures import LiteratureCase
 from problem_parts_fixtures import ResultPartsCase
 from research_harness import review_protocol as protocol, review_transport as transport
-from research_harness import cli
+from research_harness import cli, review_request_evaluation as request_evaluation
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation, _weigh_value
 from research_harness.evidence import digest
 from research_harness.review_bodies import write_history
+from review_request_builder_fixtures import use_emulated_request_builders
 
 
 class RequestReuseTests(ResultPartsCase):
@@ -33,7 +34,7 @@ class RequestReuseTests(ResultPartsCase):
 
     def test_build_authenticate_build_authenticate_derives_once(self):
         evaluation = Evaluation(self.records, self.case.artifacts)
-        with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+        with patch.object(request_evaluation, '_build_request', wraps=request_evaluation._build_request) as derive:
             self.exercise(evaluation)
         self.assertEqual(derive.call_count, 1)
 
@@ -59,7 +60,7 @@ class RequestReuseTests(ResultPartsCase):
                     self.assertEqual(self.exercise(evaluation), expected)
 
     def test_independent_evaluations_derive_identical_inputs_twice(self):
-        with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+        with patch.object(request_evaluation, '_build_request', wraps=request_evaluation._build_request) as derive:
             first = self.exercise(Evaluation(self.records, self.case.artifacts))
             self.assertEqual(derive.call_count, 1)
             second = self.exercise(Evaluation(self.records, self.case.artifacts))
@@ -68,7 +69,7 @@ class RequestReuseTests(ResultPartsCase):
 
     def test_request_survives_streaming_more_than_the_total_budget(self):
         evaluation = Evaluation(self.records, self.case.artifacts, retention_budget_bytes=64000)
-        with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+        with patch.object(request_evaluation, '_build_request', wraps=request_evaluation._build_request) as derive:
             expected = self.exercise(evaluation)
             for index in range(6):
                 evaluation.read(self.case.artifacts.put(bytes([index]) * 40000, 'text/plain'))
@@ -91,7 +92,7 @@ class RequestReuseTests(ResultPartsCase):
             pairs.append((assignment, attempt))
         self.records['review_assignment'] = {assignment['id']: assignment for assignment, _ in pairs}
         self.records['review_attempt'] = {attempt['id']: attempt for _, attempt in pairs}
-        with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+        with patch.object(request_evaluation, '_build_request', wraps=request_evaluation._build_request) as derive:
             for _ in range(2):
                 for assignment, attempt in pairs:
                     self.exercise(evaluation, assignment, attempt)
@@ -215,6 +216,7 @@ class RequestReuseTests(ResultPartsCase):
 class RequestIteratorTests(LiteratureCase):
     def setUp(self):
         super().setUp()
+        use_emulated_request_builders(self)
         self.route = dict(adapter=transport.ADAPTER, endpoint='https://example.org/v1/responses', model='fixture',
                           configuration=dict(max_output_tokens=1000, timeout_seconds=5), runtime={'version': 1})
         self.packet = {'evidence': [], 'value': 'original'}
@@ -296,7 +298,7 @@ class RequestIteratorTests(LiteratureCase):
         supplied_list = json.loads(expected_list['input'][-1]['content'][len(transport.PACKET_LABEL):])
         self.assertEqual(supplied_tuple['evidence'][0]['content'], body['content'])
         self.assertEqual(supplied_list['evidence'][0]['content'], '')
-        with patch.object(transport, 'request_body', wraps=transport.request_body) as derive:
+        with patch.object(request_evaluation, '_build_request', wraps=request_evaluation._build_request) as derive:
             self.assertEqual(self.derive(route=ROUTE, packet=packet), expected_tuple)
             for _ in range(2):
                 self.assertEqual(self.derive(route=ROUTE, packet=packet, order=order), expected_list)
@@ -332,7 +334,10 @@ class RequestIteratorTests(LiteratureCase):
             traces = []
             for use_memo in (False, True):
                 evaluation = Evaluation({}, self.artifacts)
-                with patch.object(transport, 'request_body', side_effect=outcomes) as derive:
+                with patch.object(transport, 'request_body', side_effect=outcomes) as derive, \
+                        patch.object(request_evaluation, '_build_request',
+                                     side_effect=lambda route, prompt, packet, history, order:
+                                     transport.request_body(route, prompt, packet, history, order)):
                     built = (iter_built_requests(evaluation, local, 'prompt', self.packet, []) if use_memo
                              else transport.list_built_requests(local, 'prompt', self.packet, []))
                     values, refusal = [], None

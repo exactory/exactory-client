@@ -124,6 +124,18 @@ def export_workspace(store):
     return {"revision": snapshot["revision"], "projection_only": True}
 
 
+def matches_direct_deposit_files(artifacts, bundle):
+    """Whether the selected manuscript still has its pinned file bytes, independent of review readiness."""
+    from .publication import _matches_file
+    if bundle is None:
+        return False
+    try:
+        return all(_matches_file(artifacts, item['path'], item['artifact'])
+                   for item in bundle['files'].values() if item is not None)
+    except ResearchError:
+        return False
+
+
 def record_direct_deposit(store, state, *, expected_revision, request_id):
     """Record a deposit made outside the managed publication path as the workspace's deposit.
 
@@ -131,7 +143,18 @@ def record_direct_deposit(store, state, *, expected_revision, request_id):
     grants no publication credit: the gates read receipts bound to a reviewed bundle."""
     def prepare(records, value):
         fields(value, ("environment", "deposition_id", "draft_url"), ("doi", "concept_doi", "record_url"))
+        from .publication import find_selected_bundle
+        workspace = records.get("workspace", {})
+        prior = workspace.get("deposit", {})
+        if all(prior.get(key) == value[key] for key in ("environment", "deposition_id")):
+            context = workspace.get("direct_deposit_context", {})
+        else:
+            bundle = find_selected_bundle(records)
+            is_matching = matches_direct_deposit_files(store.build_artifact_store(), bundle)
+            context = {"bundle_digest": bundle["digest"] if is_matching else None}
+        context = dict(context, request_id=request_id)
         return [immutable_record(records, "direct_deposit", request_id, value),
+                ("workspace", "direct_deposit_context", context),
                 ("workspace", "deposit", value)], value
     result = prepared_mutation(store, "workspace.direct_deposit", state, prepare,
                                expected_revision=expected_revision, request_id=request_id)

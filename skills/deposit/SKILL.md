@@ -45,7 +45,15 @@ plugin is enabled.
   deposit, the command writes `.exactory/deposit.json`, says that this file is
   the only local copy, and exits nonzero after it prints the record. A nonzero
   exit that follows a printed DOI means the record exists on Zenodo: report that
-  DOI and do not deposit again.
+  DOI and do not deposit again. While the store holds a deposit of the direct
+  path as the workspace's current deposit, `exactory-research status` reports
+  it as `external_deposit`, apart from the stage. The report holds its DOI,
+  record URL and environment, with `managed_credit: false`. The gates do not
+  change. At the `evaluate` stage, when that deposit is a production deposit
+  with a DOI and the publication gate still owes a manuscript review, that
+  review is `next`, as `managed_wait` with `workflow: "manuscript-review"`. A
+  published production deposit of the selected bundle with unchanged files
+  (`current_bundle`) is not recommended again.
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.

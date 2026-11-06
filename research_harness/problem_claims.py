@@ -236,7 +236,7 @@ def record_posted(store, payload, *, expected_revision, request_id):
     from .problem_delivery import prepare_posted
     artifacts = store.build_artifact_store()
     return prepared_mutation(store, "problem.posted", payload,
-        lambda records, value: prepare_posted(records, artifacts, value),
+        lambda records, value: prepare_posted(records, artifacts, value, expected_revision + 1),
         expected_revision=expected_revision, request_id=request_id)
 
 

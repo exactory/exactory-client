@@ -36,7 +36,7 @@ class _GuardReviewStarts:
             from .review_task_execution import _TransactionRecords
             records = _TransactionRecords(transaction)
             assignment = protocol._get(records, 'review_assignment', self._assignment_id)
-            require_unposted_review(records, assignment)
+            require_unposted_review(records, assignment, self._store.build_artifact_store())
             return apply(transaction, revision)
         return self._store.mutate_scoped(operation, payload, commit, **identity)
 
@@ -1120,7 +1120,7 @@ def prepare_child(records, artifacts, value, revision):
         if value[key] != controller[key]:
             raise ResearchError('review_task_dependency_changed', 'A child retains the frozen controller identities')
     from .problem_delivery import require_unposted_review
-    require_unposted_review(records, controller)
+    require_unposted_review(records, controller, artifacts)
     epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
     planned = records.get('review_task', {}).get(value['context']['task_id'])
     changes = []
@@ -1285,7 +1285,7 @@ def invoke_task(store, payload, *, expected_revision, request_id):
     binding = assignment['staged_review']
     from .problem_delivery import require_unposted_review
     if binding['kind'] != 'task':
-        require_unposted_review(records, assignment)
+        require_unposted_review(records, assignment, store.build_artifact_store())
         raise ResearchError('review_task_pending', 'Assign and run a child of this staged controller')
     state = records.get('review_task_execution', {}).get(binding['task_id'])
     reservation = records.get('review_reservation', {}).get(state['reservation_id']) if state else None
@@ -1297,7 +1297,7 @@ def invoke_task(store, payload, *, expected_revision, request_id):
                          or reservation['launch'] is None and previous_capture is None
                          or retained and retained.get('attempt_id') != payload['id'])
     if requires_unposted:
-        require_unposted_review(records, assignment)
+        require_unposted_review(records, assignment, store.build_artifact_store())
     route = protocol._get(records, 'review_route', assignment['route_id'])
     controller_id = binding['controller_assignment_id']
     from .review_context_repair import validate_repair_binding
@@ -1332,7 +1332,7 @@ def invoke_task(store, payload, *, expected_revision, request_id):
     def prepare_dispatch(current_records, value):
         current = protocol._get(current_records, 'review_assignment', value['assignment_id'])
         if requires_unposted:
-            require_unposted_review(current_records, current)
+            require_unposted_review(current_records, current, store.build_artifact_store())
         if digest(current) != digest(assignment):
             raise ResearchError('review_task_dependency_changed', 'The task assignment changed before dispatch')
         validate_repair_binding(current_records, store.build_artifact_store(),
@@ -1472,7 +1472,7 @@ def wait_for_capture(store, route, reservation, request_id):
         from .problem_delivery import require_unposted_review
         epoch = protocol._get(snapshot['records'], 'review_epoch', reservation['epoch_id'])
         controller = protocol._get(snapshot['records'], 'review_assignment', epoch['controller_assignment_id'])
-        require_unposted_review(snapshot['records'], controller)
+        require_unposted_review(snapshot['records'], controller, store.build_artifact_store())
         process = review_worker.launch_worker(_GuardReviewStarts(store, controller['id']), reservation['id'])
     deadline = time.monotonic() + route['configuration']['timeout_seconds'] + 15
     while True:
@@ -1581,7 +1581,8 @@ def authenticate_observation(records, artifacts, assignment, attempt, *, require
                 and derive_output(dict(observation, output=protocol._read_json(artifacts, observation['output'])),
                                   response) == protocol._read_json(artifacts, observation['output'])
                 and (not require_verified_context or observation['status'] == 'completed'
-                     and protocol.verify_route_context(artifacts, route, request, response)))
+                     and protocol.verify_route_context(artifacts, route, request, response,
+                                                       required=observation.get('codex_invocation') is not None)))
     except (ResearchError, KeyError, TypeError, ValueError):
         return False
 
@@ -2038,7 +2039,7 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
         if binding.get('kind') != 'controller':
             raise ResearchError('invalid_review_context', 'Plan through the frozen staged controller')
         from .problem_delivery import require_unposted_review
-        require_unposted_review(records, controller)
+        require_unposted_review(records, controller, artifacts)
         epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
         head = protocol._get(records, 'review_slot_head', epoch['slot_id'])
         if head['epoch_id'] != epoch['id'] or not matches_currency(records, artifacts, epoch):

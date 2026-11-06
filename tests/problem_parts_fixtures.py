@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from codex_route_fixtures import invoke_codex, limit_codex_input, record_codex_route
+from review_request_builder_fixtures import use_emulated_request_builders
 from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness import review_transport as transport
 from research_harness.evidence import digest
@@ -28,6 +29,7 @@ def note_units(packet):
 
 class ResultPartsCase(unittest.TestCase):
     def setUp(self):
+        use_emulated_request_builders(self)
         if not getattr(self, 'use_parts_v2', False):
             from research_harness import review_parts, review_problem_parts
             # These fixtures exercise the frozen 0.69.x entry implementation.
