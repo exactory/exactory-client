@@ -8,6 +8,14 @@ import weakref
 from . import review_transport as transport
 
 
+class _UntrackedMutation(Exception):
+    """A pinned operation needs the ordinary JSON builder's mutable containers."""
+
+
+def _reject_mutation(*args, **kwargs):
+    raise _UntrackedMutation
+
+
 def _supports_value(value):
     active, pending = set(), [(value, False)]
     while pending:
@@ -87,6 +95,8 @@ class _SizedObject(dict):
 
     __slots__ = ('_parent', '_lengths', '__weakref__')
 
+    popitem = clear = __ior__ = _reject_mutation
+
     def __init__(self):
         super().__init__()
         self._parent = None
@@ -143,6 +153,9 @@ class _SizedArray(list):
 
     __slots__ = ('_parent', '_lengths', '__weakref__')
 
+    insert = extend = pop = remove = clear = _reject_mutation
+    __delitem__ = __iadd__ = __imul__ = sort = reverse = _reject_mutation
+
     def __init__(self):
         super().__init__()
         self._parent = None
@@ -152,6 +165,8 @@ class _SizedArray(list):
         return _copy_value(self)
 
     def __setitem__(self, index, value):
+        if isinstance(index, slice):
+            raise _UntrackedMutation
         old = self[index]
         copied = _copy_value(value)
         changes = [measure_json(copied, escaped=escaped) - measure_json(old, escaped=escaped)
@@ -234,32 +249,35 @@ def try_build_request(route, prompt, packet, history, order):
             or any(type(message) is not dict or type(message.get('content')) is not str
                    or not _supports_value(message) for message in history)):
         return None
-    transport.validate_route(route)
-    supplied = _copy_value(packet)
-    from .problem_openness_sources import apply_delivery, protected_evidence
-    apply_delivery(supplied)
-    for evidence in supplied.get('evidence', []):
-        if isinstance(evidence, dict) and evidence.get('encoding') == 'base64':
-            if 'artifact' not in evidence:
-                return None
-            evidence.pop('content')
-            evidence.update(encoding='omitted', delivery='bytes-omitted-on-text-route', note=transport.OMITTED_BYTES_NOTE)
-    fit = transport._Fit(supplied, _copy_value(transport._compact_history(supplied, history)), order)
-    limit = transport.local_input_limit(route)
-    length = _measure_input(supplied, fit.messages)
-    for step in order:
-        if length <= limit:
-            break
-        if step == 'source_capacity':
-            from .review_source_capacity import fit as fit_sources
-            accepted = fit_sources(supplied, lambda packet: _MeasuredInput(packet, fit.messages),
-                                   lambda trial: trial, limit, protected_evidence(supplied))
-            if accepted is not None:
-                supplied = accepted.packet
-                break
-            continue
-        for _ in transport._REDUCTIONS[step](fit):
-            length = _measure_input(supplied, fit.messages)
+    try:
+        transport.validate_route(route)
+        supplied = _copy_value(packet)
+        from .problem_openness_sources import apply_delivery, protected_evidence
+        apply_delivery(supplied)
+        for evidence in supplied.get('evidence', []):
+            if isinstance(evidence, dict) and evidence.get('encoding') == 'base64':
+                if 'artifact' not in evidence:
+                    return None
+                evidence.pop('content')
+                evidence.update(encoding='omitted', delivery='bytes-omitted-on-text-route', note=transport.OMITTED_BYTES_NOTE)
+        fit = transport._Fit(supplied, _copy_value(transport._compact_history(supplied, history)), order)
+        limit = transport.local_input_limit(route)
+        length = _measure_input(supplied, fit.messages)
+        for step in order:
             if length <= limit:
                 break
-    return transport._build_local_request(route, prompt, supplied, _copy_value(fit.messages, measured=False))
+            if step == 'source_capacity':
+                from .review_source_capacity import fit as fit_sources
+                accepted = fit_sources(supplied, lambda packet: _MeasuredInput(packet, fit.messages),
+                                       lambda trial: trial, limit, protected_evidence(supplied))
+                if accepted is not None:
+                    supplied = accepted.packet
+                    break
+                continue
+            for _ in transport._REDUCTIONS[step](fit):
+                length = _measure_input(supplied, fit.messages)
+                if length <= limit:
+                    break
+        return transport._build_local_request(route, prompt, supplied, _copy_value(fit.messages, measured=False))
+    except _UntrackedMutation:
+        return None

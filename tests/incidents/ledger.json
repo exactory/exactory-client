@@ -3441,7 +3441,7 @@
       "record": "20261105155433-open-items-after-0-73-6",
       "class": "cost (report readers on large stores)",
       "summary": "Recorded ordinary text requests were fully materialized after every pinned reduction and source-capacity trial; superseded route-probe authentication added report cost. Predicate reuse through fresh verification namespaces increased verified work instead of saving it.",
-      "fixed_in": "0.74.0",
+      "fixed_in": "0.75.0",
       "expected": "Reconstruct supported recorded text requests with exact nested JSON character lengths and one final materialization per fit-order candidate. Preserve all five fit orders, request bytes, whole-source selection, first observed binding, refusal order and complete reports. Keep provenance and refusal classification on the caller's verified evaluation without additional predicate caches or verification namespaces; authenticate the last metadata-matching probe. No evaluation counter increases against the native path. Exhaustive record-check reconstruction and protected module bytes stay unchanged.",
       "test_kind": "real_shape",
       "tests": [
@@ -3465,7 +3465,10 @@
         "test_review_request_fit.ExactFitTests.test_long_history_does_not_remeasure_unchanged_packet_scalars",
         "test_review_request_fit.RecordedFitTests.test_failed_cheap_provenance_predicates_do_not_read_history",
         "test_review_request_fit.RefusalDependencyTests.test_evicted_locator_bytes_are_reverified_before_reusing_a_refusal",
-        "test_review_request_fit.RefusalDependencyTests.test_dependency_tracing_keeps_the_callers_active_ancestry_guards"
+        "test_review_request_fit.RefusalDependencyTests.test_dependency_tracing_keeps_the_callers_active_ancestry_guards",
+        "test_review_request_fit.ExactFitTests.test_untracked_reduction_mutations_fall_back_to_the_pinned_builder",
+        "test_review_request_fit.ExactFitTests.test_untracked_source_capacity_mutation_falls_back_to_the_pinned_builder",
+        "test_review_request_parity.ReviewRequestParityTests.test_recorded_earlier_fit"
       ]
     },
     {

@@ -155,6 +155,60 @@ class ExactFitTests(LiteratureCase):
         with self.assertRaises(KeyError):
             requests.request_for_order(Evaluation({}, self.artifacts), ROUTE, 'JSON', packet, [], transport.FIT_ORDER)
 
+    def test_untracked_reduction_mutations_fall_back_to_the_pinned_builder(self):
+        from research_harness import review_request_fit as fitting
+        mutations = [
+            ('insert', lambda packet: packet['items'].insert(0, 'inserted λ"\\\n')),
+            ('extend', lambda packet: packet['items'].extend([4, 5])),
+            ('pop', lambda packet: packet['items'].pop()),
+            ('remove', lambda packet: packet['items'].remove(1)),
+            ('clear_list', lambda packet: packet['items'].clear()),
+            ('delete', lambda packet: packet['items'].__delitem__(0)),
+            ('slice', lambda packet: packet['items'].__setitem__(slice(1, 2), ['replacement'])),
+            ('iadd', lambda packet: packet['items'].__iadd__([4])),
+            ('imul', lambda packet: packet['items'].__imul__(2)),
+            ('sort', lambda packet: packet['items'].sort()),
+            ('reverse', lambda packet: packet['items'].reverse()),
+            ('popitem', lambda packet: packet['object'].popitem()),
+            ('clear_dict', lambda packet: packet['object'].clear()),
+            ('ior', lambda packet: packet['object'].__ior__({'added': 'λ"\\\n'})),
+        ]
+        for name, mutate in mutations:
+            packet = {'evidence': [], 'items': [3, 1, 2], 'object': {'a': 1, 'b': 2}}
+            original = copy.deepcopy(packet)
+
+            def reduce(fit):
+                mutate(fit.supplied)
+                yield
+
+            with self.subTest(mutation=name), patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 1), \
+                    patch.dict(transport._REDUCTIONS, history_bodies=reduce):
+                expected = build_pinned(ROUTE, 'JSON', packet, [], transport.FIT_ORDER)
+                self.assertIsNone(fitting.try_build_request(ROUTE, 'JSON', packet, [], transport.FIT_ORDER))
+                with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
+                    actual = requests._build_request(ROUTE, 'JSON', packet, [], transport.FIT_ORDER)
+                build.assert_called_once_with(ROUTE, 'JSON', packet, [])
+                self.assertEqual(json.dumps(actual, ensure_ascii=False), json.dumps(expected, ensure_ascii=False))
+                self.assertEqual(packet, original)
+
+    def test_untracked_source_capacity_mutation_falls_back_to_the_pinned_builder(self):
+        from research_harness import review_request_fit as fitting, review_source_capacity as capacity
+        original_fit = capacity.fit
+        packet = source_packet()
+
+        def fit_sources(supplied, *args, **kwargs):
+            supplied['evidence'].insert(0, entry('Additional complete source λ"\\\n', 'text/plain'))
+            return original_fit(supplied, *args, **kwargs)
+
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 80000), \
+                patch.object(capacity, 'fit', side_effect=fit_sources):
+            expected = build_pinned(ROUTE, 'JSON', packet, [], transport.FIT_ORDER)
+            self.assertIsNone(fitting.try_build_request(ROUTE, 'JSON', packet, [], transport.FIT_ORDER))
+            with patch.object(transport, 'request_body', wraps=transport.request_body) as build:
+                actual = requests._build_request(ROUTE, 'JSON', packet, [], transport.FIT_ORDER)
+            build.assert_called_once_with(ROUTE, 'JSON', packet, [])
+            self.assertEqual(json.dumps(actual, ensure_ascii=False), json.dumps(expected, ensure_ascii=False))
+
     def test_deep_native_json_keeps_the_pinned_request_and_character_length(self):
         packet = {'leaf': 'λ"\\\n'}
         for _ in range(450):
