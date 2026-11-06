@@ -30,6 +30,14 @@ def require_policy(route, packet, policy):
         raise ResearchError('review_request_policy_mismatch', 'Use the recorded supported request policy')
 
 
+def list_pinned_requests(route, prompt, packet, history, policy):
+    """The requests of the pinned iterator, each restored under the assignment's recorded policy."""
+    candidates = transport.list_built_requests(route, prompt, packet, history)
+    if policy is None:
+        return candidates
+    return [restore_request(route, packet, request, policy) for request in candidates]
+
+
 def _find_restorable(packet, supplied):
     """The omitted current entries whose one exact complete original text the packet holds, in packet order."""
     from .problem_openness_sources import apply_delivery

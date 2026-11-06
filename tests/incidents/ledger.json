@@ -1496,7 +1496,7 @@
       "class": "route-limit (over-reduction)",
       "summary": "A refresh could withhold more evidence bodies than necessary.",
       "fixed_in": "0.75.0",
-      "expected": "A prospective assignment records a restoration policy that gives back exact current text bodies in packet order only when the fully encoded route request fits; historical requests and retry bytes remain unchanged and withheld content earns no delivery credit.",
+      "expected": "A prospective assignment records a restoration policy that gives back exact current text bodies in packet order only when the fully encoded route request fits; historical requests and retry bytes remain unchanged and withheld content earns no delivery credit. record-check and the record fingerprint rebuild a restored request under its recorded policy.",
       "test_kind": "real_shape",
       "tests": [
         "test_review_request_restoration.RequestRestorationTests.test_refresh_restores_a_body_when_later_history_reduction_makes_room",
@@ -1511,7 +1511,8 @@
         "test_review_request_restoration.ProspectiveAssignmentTests.test_new_assignment_records_the_policy_without_changing_prompt_or_packet",
         "test_review_request_restoration.RequestRestorationTests.test_corrupt_or_conflicting_originals_cannot_gain_restoration_credit",
         "test_review_request_restoration.RequestRestorationTests.test_policy_metadata_cannot_silently_fall_back_on_another_representation",
-        "test_review_request_restoration.RequestRestorationTests.test_local_measurement_emulation_does_not_select_a_policy_for_other_routes"
+        "test_review_request_restoration.RequestRestorationTests.test_local_measurement_emulation_does_not_select_a_policy_for_other_routes",
+        "test_review_request_restoration.RequestRestorationTests.test_record_check_rebuilds_a_restored_request_under_its_recorded_policy"
       ]
     },
     {

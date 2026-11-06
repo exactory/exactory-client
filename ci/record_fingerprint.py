@@ -66,9 +66,15 @@ def fingerprint_snapshot(workspace):
                     if assignment.get('staged_review'):
                         from research_harness.review_staged_protocol import build_assigned_request
                         candidates = (build_assigned_request(artifacts, route, assignment, packet),)
-                    else:
+                    elif assignment.get('request_policy') is None:
                         candidates = transport.list_built_requests(
                             route, assignment['prompt']['text'], packet, protocol.read_history(artifacts, assignment))
+                    else:
+                        # Only a 0.75.0 or later harness records a request policy, so only such a tree imports it.
+                        from research_harness.review_request_restoration import list_pinned_requests
+                        candidates = list_pinned_requests(
+                            route, assignment['prompt']['text'], packet, protocol.read_history(artifacts, assignment),
+                            assignment['request_policy'])
                     for request in candidates:
                         rebuilt = json.dumps(request, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()
                         if raw == rebuilt:

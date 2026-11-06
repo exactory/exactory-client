@@ -81,6 +81,26 @@ class RequestRestorationTests(unittest.TestCase):
             second['input'][-1]['content'] = 'caller mutation'
             self.assertEqual(self.build(), first)
 
+    def test_record_check_rebuilds_a_restored_request_under_its_recorded_policy(self):
+        from research_harness.errors import ResearchError
+        from research_harness.evidence import digest
+        from research_harness.record_check import rebuild_invocation
+        with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 12000):
+            request = self.build()
+            self.assertNotIn(request, transport.list_built_requests(ROUTE, 'Review the JSON.', self.packet))
+            invocation = {'id': 'invocation-refresh', 'assignment_id': 'refresh', 'route_id': 'route',
+                          'request': protocol._put_json(self.artifacts, request)}
+            rebuilt = rebuild_invocation(self.records, self.artifacts, invocation)
+            self.assertEqual(rebuilt['request_digest'], digest(request))
+            self.assignment['request_policy'] = 'exactory-review-request-restoration-v0'
+            with self.assertRaises(ResearchError) as caught:
+                rebuild_invocation(self.records, self.artifacts, invocation)
+            self.assertEqual(caught.exception.code, 'review_request_policy_mismatch')
+            self.assignment.pop('request_policy')
+            with self.assertRaises(ResearchError) as caught:
+                rebuild_invocation(self.records, self.artifacts, invocation)
+            self.assertEqual(caught.exception.code, 'record_request_changed')
+
     def test_required_current_sources_survive_and_omitted_content_gets_no_credit(self):
         required = entry('Required source. ' * 300, 'text/plain')
         for body in self.packet['evidence'] + [required]:
