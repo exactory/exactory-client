@@ -12,7 +12,7 @@ of its files are the record the harness and the hooks write themselves:
 The hook first runs `math_search.guard`. In a managed search tree (a workspace
 whose parent holds `.search/tree.json`), that check denies a write to anything
 the search controller owns, the payload of another tool that names the tree,
-and any operation whose check fails with an error. The hook then denies a Write
+and unsupported managed operations. The hook then denies a Write
 or an Edit to any of the eight files. It also denies a Bash command that writes,
 that is, one that holds a word that begins with `>`, or `tee`, `cp`, `mv`,
 `rm`, `truncate` or `dd`, or `sed` with `-i`, when one of its words, with a
@@ -21,16 +21,39 @@ payload's working directory, to one of the eight files. The check reads words,
 not write targets: it denies a writing command that only reads one of the
 files, and it misses a file named without a `/`, a write after a `cd`, a
 redirection whose word does not begin with `>` (such as `2>`, `&>` or
-`x>file`), `>|file` without a space, and `dd of=`. A command that does not
-write is untouched. An allowed call is silent; an unexpected check failure
-produces an explicit denial.
+`x>file`), `>|file` without a space, and `dd of=`. The eight-file check leaves
+alone a command without those write markers. The managed-tree guard before it
+can still deny such a command. A definite finding keeps its denial, and an
+allowed call is silent.
+
+When the hook cannot check a call, it decides by the call alone. This happens
+when one of its own checks raises an error, when the payload is not valid
+JSON, and when the payload does not normalize. A call passes silently when
+every item of it (a Codex batch carries several) is a read-only tool (`Read`,
+`Glob`, `Grep`, `WebSearch`, `WebFetch`, `ToolSearch`) or a shell command that
+`math_search.is_read_only` accepts: only the bare command names in
+`math_search.READ_ONLY_FALLBACK_COMMANDS`, that is `cat`, `ls`, `grep`,
+`head`, `tail`, `wc`, `echo` and `du`, joined at most by `;`, `&&`, `||` or
+`|`. That check reads characters, not shell syntax. It rejects a newline or
+carriage return, `$`, a backtick, an assignment, a redirection, a token that
+contains a parenthesis or a brace, and an argument that contains `*`, `?` or
+`[`, also inside quotes, so `grep 'a[0-9]' FILE` is rejected. `rg`, `printf`
+and `pwd` are not accepted: `rg` can start another program, `printf` can
+assign a variable, and in POSIX mode bash's `pwd -P` assigns `PWD`. Every
+other call is denied with the diagnostic followed by
+`math_search.CANNOT_CHECK_GUIDANCE_MSG`, which names what still passes, tells
+the agent to report the denial, and names the controls that only the user
+has. A payload that is not valid JSON or does not normalize leaves nothing to
+decide by and is denied. An empty batch is denied on this path too. When the
+guard can check, an empty batch passes as before.
 The discovery helpers in `math_search.py` treat an overlong path as absent:
 a path too long to stat names no existing file. The shell-word and tool-target
 `ENAMETOOLONG` catches remain as defensive boundaries around path resolution;
-they re-raise every other `OSError` so the explicit check-failure denial still applies. The checks
-read the file status through `math_search.is_regular_file` and its siblings,
-because from Python 3.14 on pathlib's `is_file()` and `exists()` return
-False on every `OSError`, which would turn a failed check into an allow.
+they re-raise every other `OSError`, which reaches the decision above. The
+checks read the file status through `math_search.is_regular_file` and its
+siblings, because from Python 3.14 on pathlib's `is_file()` and `exists()`
+return False on every `OSError`, which would turn a failed check into an
+allow.
 
 After the controller check and before the check of the eight files, the hook
 denies a Write, an Edit or a NotebookEdit (its path is `notebook_path`) into
@@ -54,7 +77,8 @@ import re
 import shlex
 import sys
 from pathlib import Path
-from math_search import ControllerReadError, guard, is_directory, is_regular_file, normalize, workspace_for
+from math_search import (CANNOT_CHECK_GUIDANCE_MSG, ControllerReadError, guard, is_directory,
+                         is_read_only, is_regular_file, normalize, workspace_for)
 
 # Each pair holds a compiled pattern of a path within the workspace and the
 # instruction that the denial of a write to that path gives: the harness
@@ -89,6 +113,18 @@ def _deny(reason: str) -> None:
             "permissionDecisionReason": reason,
         }
     }))
+    sys.exit(0)
+
+
+def _handle_cannot_check(payload, reason: str) -> None:
+    """Keep every read in a batch available, or deny with the original reason and guidance."""
+    try:
+        items = payload.get("_math_guard_batch", [payload]) if payload is not None else []
+        read_only = bool(items) and all(is_read_only(item) for item in items)
+    except Exception:
+        read_only = False
+    if not read_only:
+        _deny(reason + " " + CANNOT_CHECK_GUIDANCE_MSG)
     sys.exit(0)
 
 
@@ -171,56 +207,58 @@ def _find_shell_write_target(command: str, cwd: Path) -> tuple[str, str] | None:
 
 
 def main() -> None:
-    payload = normalize(json.load(sys.stdin))
+    payload = None
     try:
-        reason = guard(payload)
-    except ControllerReadError as error:
-        _deny("[math-solver] " + str(error))
-    except (OSError, ValueError, KeyError, TypeError) as error:
-        _deny("[math-solver] Recovery required before this managed operation: " + str(error))
-    if reason is not None:
-        _deny("[math-solver] " + reason)
-    for item in payload.get("_math_guard_batch", [payload]):
-        tool_name = item.get("tool_name")
-        tool_input = item.get("tool_input") or {}
-        cwd = Path(item.get("cwd") or ".").resolve()
-        if tool_name in _PATH_FIELD_BY_TOOL:
-            try:
-                target = _resolve(tool_input.get(_PATH_FIELD_BY_TOOL[tool_name], ""), cwd)
-                folder = _find_output_folder(target)
-            except OSError as error:
-                if error.errno != errno.ENAMETOOLONG:
-                    raise
-                continue
-            if folder is not None:
+        payload = normalize(json.load(sys.stdin))
+        try:
+            reason = guard(payload)
+        except ControllerReadError as error:
+            _handle_cannot_check(payload, "[math-solver] " + str(error))
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            _handle_cannot_check(payload, "[math-solver] Recovery required before this managed operation: " + str(error))
+        if reason is not None:
+            _deny("[math-solver] " + reason)
+        for item in payload.get("_math_guard_batch", [payload]):
+            tool_name = item.get("tool_name")
+            tool_input = item.get("tool_input") or {}
+            cwd = Path(item.get("cwd") or ".").resolve()
+            if tool_name in _PATH_FIELD_BY_TOOL:
+                try:
+                    target = _resolve(tool_input.get(_PATH_FIELD_BY_TOOL[tool_name], ""), cwd)
+                    folder = _find_output_folder(target)
+                except OSError as error:
+                    if error.errno != errno.ENAMETOOLONG:
+                        raise
+                    continue
+                if folder is not None:
+                    _deny(
+                        f"[exactory] {target.relative_to(folder.parent).as_posix()} is in {folder.name}/, which the harness"
+                        f" generates from its records. Write your own files to work/ instead."
+                    )
+            if tool_name in ("Write", "Edit"):
+                try:
+                    owner = _find_owner(target)
+                except OSError as error:
+                    if error.errno != errno.ENAMETOOLONG:
+                        raise
+                    continue
+            elif tool_name == "Bash":
+                owner = _find_shell_write_target(tool_input.get("command", ""), cwd)
+            else:
+                owner = None
+            if owner is not None:
+                relative, instruction = owner
                 _deny(
-                    f"[exactory] {target.relative_to(folder.parent).as_posix()} is in {folder.name}/, which the harness"
-                    f" generates from its records. Write your own files to work/ instead."
+                    f"[math-solver] {relative} is written by the harness only, which validates"
+                    f" what it puts there. Run the command instead of editing the file:\n  {instruction}"
                 )
-        if tool_name in ("Write", "Edit"):
-            try:
-                owner = _find_owner(target)
-            except OSError as error:
-                if error.errno != errno.ENAMETOOLONG:
-                    raise
-                continue
-        elif tool_name == "Bash":
-            owner = _find_shell_write_target(tool_input.get("command", ""), cwd)
-        else:
-            owner = None
-        if owner is not None:
-            relative, instruction = owner
-            _deny(
-                f"[math-solver] {relative} is written by the harness only, which validates"
-                f" what it puts there. Run the command instead of editing the file:\n  {instruction}"
-            )
+    except Exception as error:
+        _handle_cannot_check(
+            payload,
+            "[exactory] The plugin's file guard could not check this tool call and stopped it. Report this error"
+            " to the user, because the plugin needs a fix or an update: " + str(error),
+        )
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except SystemExit:
-        raise
-    except Exception as error:
-        _deny("[exactory] The plugin's file guard could not check this tool call and stopped it. Report this error"
-              " to the user, because the plugin needs a fix or an update: " + str(error))
+    main()

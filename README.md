@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.78.0](docs/releases/0.78.0.md) keeps a session working when the file guard cannot check a tool call. Six read-only tools and eight plain shell commands pass, and every other call is denied with a reason that names the error, tells the agent to report it, and names the controls that only the user has. A definite write to a file that the harness owns is denied as before.
+
 Version [0.77.0](docs/releases/0.77.0.md) keeps every candidate of a math-conjecturer exploration in its record once the record's first review is requested. A review objection binds the candidates of its own record only, so a reviewed candidate no longer moves to another record without its objections. The full fix, which carries the objections across records, is planned.
 
 Version [0.76.0](docs/releases/0.76.0.md) makes the files that the harness owns read-only on disk. The native commands and hooks publish each such file atomically and without write bits. A direct write by an agent, such as a shell redirection into the journal of an attack, then fails with a permission error. The files that agents write by design stay writable, and records from earlier releases keep working.

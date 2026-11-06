@@ -90,7 +90,8 @@ class MathHookReplayTests(unittest.TestCase):
                 self.write_record(writer)
                 before = self.tree.read_bytes()
                 messages = [self.read_denial(host, tool) for tool in ("Write", "Edit", "Delete")]
-                messages.append(self.read_denial(host, "exec_command", {"cmd": "ls notes.md"}))
+                self.assertIsNone(self.invoke_hook("guard_attack_files.py", host, hook_event_name="PreToolUse",
+                                                   tool_name="exec_command", tool_input={"cmd": "ls notes.md"}))
                 messages.append(self.read_stop_context(host))
                 for message in messages:
                     with self.subTest(host=host, version=version, message=message):
