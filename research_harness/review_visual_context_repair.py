@@ -8,6 +8,7 @@ from .evidence import digest
 
 MARKER = 'visual_context_repair'
 PROTOCOL = 'exactory-visual-context-repair-v1'
+ANCESTRY_PROTOCOL = 'exactory-visual-context-repair-v2'
 
 
 def _require(condition, message):
@@ -17,9 +18,11 @@ def _require(condition, message):
 
 def validate_profile(value):
     from .review_exact_text_cost_v1 import profile
-    _require(isinstance(value, dict) and set(value) == {
-        'protocol', 'attempt_id', 'request', 'output', 'history_digest', 'inherited_omissions', 'encoding'}
-        and value['protocol'] == PROTOCOL and value['encoding'] == profile(),
+    fields = {'protocol', 'attempt_id', 'request', 'output', 'history_digest', 'inherited_omissions', 'encoding'}
+    if isinstance(value, dict) and value.get('protocol') == ANCESTRY_PROTOCOL:
+        fields.add('ancestry')
+    _require(isinstance(value, dict) and set(value) == fields
+        and value['protocol'] in (PROTOCOL, ANCESTRY_PROTOCOL) and value['encoding'] == profile(),
         'Use the exact native visual repair and unchanged versioned emitter implementation')
 
 
@@ -51,9 +54,42 @@ def _origin_records(records, revision):
     return result
 
 
-def _science(records, artifacts, prior, attempt, history):
+def _science(records, artifacts, prior, attempt, history, *, ancestry=None):
     from . import review_context_repair as context, review_protocol as protocol, review_transport as transport
     chain = context._exposure_lineage(records, prior)
+    if ancestry is not None:
+        result = []
+        outputs = {}
+        inherited = []
+        for ancestor in chain:
+            native, _, _ = protocol._selected_attempt(records, artifacts, ancestor['id'])
+            _require(native is not None and native['recorded_revision'] <= attempt['recorded_revision']
+                and protocol.authenticate_provenance(records, artifacts, ancestor, native),
+                'Preserve each exact scientific ancestor with its native invocation provenance')
+            observed = _history(artifacts, native)
+            _require(len(observed) >= 2 and observed[-2].get('role') == 'user'
+                and isinstance(observed[-2].get('content'), str)
+                and observed[-2]['content'].startswith(transport.PACKET_LABEL),
+                'A scientific ancestor must retain its exact observed native packet')
+            packet = json.loads(observed[-2]['content'][len(transport.PACKET_LABEL):])
+            output = json.loads(artifacts.read(native['output']))
+            ancestry.append(dict(assignment_id=ancestor['id'], assignment_digest=digest(ancestor),
+                attempt_id=native['id'], attempt_digest=digest(native), request=native['request'],
+                output=native['output'], history_digest=digest(observed), packet_digest=digest(packet)))
+            # The ancestry authenticates the complete native packet above. Its
+            # inherited turns have their own rows rather than another embedded
+            # copy under this assignment's scientific frame.
+            inherited.append((set(outputs), packet.pop('scientific_history', [])))
+            outputs[ancestor['id']] = output
+            result.append(dict(assignment_id=ancestor['id'], packet=packet, observed_output=output,
+                               independence='no_longer_qualified'))
+        for identifiers, turns in inherited:
+            _require(isinstance(turns, list) and all(isinstance(turn, dict)
+                and isinstance(turn.get('assignment_id'), str)
+                and turn.get('assignment_id') in identifiers
+                and turn.get('observed_output') == outputs[turn['assignment_id']] for turn in turns),
+                'Inherited scientific outputs must match their exact authenticated ancestor observations')
+        return result
     _require(len(history) == 2 * len(chain), 'Preserve every exact observed native history turn in order')
     result = []
     for index, ancestor in enumerate(chain):
@@ -95,7 +131,7 @@ def _omissions(history, manifest):
     return eligible
 
 
-def prepare(records, artifacts, value, repair, packet):
+def prepare(records, artifacts, value, repair, packet, *, version=ANCESTRY_PROTOCOL):
     from . import review_protocol as protocol, review_source_complete as complete
     from .review_exact_text_cost_v1 import profile
     eligible(records, artifacts, value, repair)
@@ -111,10 +147,14 @@ def prepare(records, artifacts, value, repair, packet):
     # dictionaries, whose metadata must not silently reattach omitted artifacts.
     packet['evidence'] = protocol._evidence(artifacts, packet)
     packet['evidence'] = [copy.deepcopy(omissions.get(entry['artifact']['sha256'], entry)) for entry in packet['evidence']]
-    packet['scientific_history'] = _science(records, artifacts, prior, attempt, history)
-    packet[MARKER] = {'protocol': PROTOCOL, 'attempt_id': attempt['id'], 'request': attempt['request'],
+    ancestry = [] if version == ANCESTRY_PROTOCOL else None
+    _require(version in (PROTOCOL, ANCESTRY_PROTOCOL), 'Use a supported visual repair ancestry version')
+    packet['scientific_history'] = _science(records, artifacts, prior, attempt, history, ancestry=ancestry)
+    packet[MARKER] = {'protocol': version, 'attempt_id': attempt['id'], 'request': attempt['request'],
         'output': attempt['output'], 'history_digest': digest(history),
         'inherited_omissions': sorted(omissions), 'encoding': profile()}
+    if ancestry is not None:
+        packet[MARKER]['ancestry'] = ancestry
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
 
@@ -145,8 +185,11 @@ def validate(records, artifacts, assignment, packet):
         and protocol.authenticate_provenance(records, artifacts, prior, attempt),
         'Bind the exact instrumented predecessor request and unchanged observed output')
     history = _history(artifacts, attempt)
+    ancestry = [] if binding['protocol'] == ANCESTRY_PROTOCOL else None
+    science = _science(origin.records, origin, prior, attempt, history, ancestry=ancestry)
     _require(binding['history_digest'] == digest(history)
-        and packet.get('scientific_history') == _science(origin.records, origin, prior, attempt, history),
+        and packet.get('scientific_history') == science
+        and (ancestry is None or binding['ancestry'] == ancestry),
         'Retain the complete exact observed scientific history')
     omissions = _omissions(history, packet[complete.MARKER])
     _require(binding['inherited_omissions'] == sorted(omissions), 'Only exact already omitted historical bodies may stay omitted')

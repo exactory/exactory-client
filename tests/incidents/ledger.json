@@ -1492,13 +1492,27 @@
     },
     {
       "id": "20261021193215-refresh-overwithholding",
-      "record": "20261021193215",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "route-limit (over-reduction)",
       "summary": "A refresh could withhold more evidence bodies than necessary.",
-      "fixed_in": "open",
-      "expected": "The give-back reduction remains deferred; the request can still omit otherwise fitting bodies and the incident stays open without delivery credit for them.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.75.0",
+      "expected": "A prospective assignment records a restoration policy that gives back exact current text bodies in packet order only when the fully encoded route request fits; historical requests and retry bytes remain unchanged and withheld content earns no delivery credit.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_request_restoration.RequestRestorationTests.test_refresh_restores_a_body_when_later_history_reduction_makes_room",
+        "test_review_request_restoration.RequestRestorationTests.test_unversioned_assignment_rebuilds_old_request_bytes_for_every_order",
+        "test_review_request_restoration.RequestRestorationTests.test_retry_retains_the_exact_restored_request_and_independent_copies",
+        "test_review_request_restoration.RequestRestorationTests.test_required_current_sources_survive_and_omitted_content_gets_no_credit",
+        "test_review_request_restoration.RequestRestorationTests.test_builder_substitutions_remain_effective_under_the_new_policy",
+        "test_review_request_restoration.RequestRestorationTests.test_each_text_route_uses_its_fully_encoded_restoration_boundary",
+        "test_review_request_restoration.RequestRestorationTests.test_cache_keeps_historical_and_prospective_policies_separate",
+        "test_review_request_restoration.RequestRestorationTests.test_capacity_deferrals_and_html_substitutions_cannot_be_restored_as_body_omissions",
+        "test_review_request_restoration.RequestRestorationTests.test_transport_wrapper_still_observes_the_pinned_fallback",
+        "test_review_request_restoration.ProspectiveAssignmentTests.test_new_assignment_records_the_policy_without_changing_prompt_or_packet",
+        "test_review_request_restoration.RequestRestorationTests.test_corrupt_or_conflicting_originals_cannot_gain_restoration_credit",
+        "test_review_request_restoration.RequestRestorationTests.test_policy_metadata_cannot_silently_fall_back_on_another_representation",
+        "test_review_request_restoration.RequestRestorationTests.test_local_measurement_emulation_does_not_select_a_policy_for_other_routes"
+      ]
     },
     {
       "id": "20261021193215-retry-fit-order-change",
@@ -1620,14 +1634,22 @@
     },
     {
       "id": "20261021163114-visual-repair-history-size",
-      "record": "20261021163114",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "growth",
       "summary": "Nested visual review history prevented a context repair from fitting.",
-      "fixed_in": "open",
-      "expected": "An eligible fresh visual repair preserves exact scientific history and original provenance; unsupported nested-history shapes still refuse and the remaining limit stays open.",
-      "test_kind": "same_path",
+      "fixed_in": "0.75.0",
+      "expected": "Versioned visual ancestry authenticates every native predecessor and delivers scientific history once per assignment through repeated fresh repairs, retaining negative findings, source requests and fixed slots; v1 requests still reconstruct and overflow refuses before dispatch.",
+      "test_kind": "real_shape",
       "tests": [
-        "test_visual_context_repair.VisualContextRepairTests.test_public_repair_keeps_actual_history_and_records_a_new_independent_final"
+        "test_visual_context_repair.VisualContextRepairTests.test_public_repair_keeps_actual_history_and_records_a_new_independent_final",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_repair_source_continuation_second_contamination_and_fresh_repair",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_ancestry_authenticates_each_native_assignment_attempt_and_output",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_duplicate_or_conflicting_ancestry_and_science_are_refused",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_second_repair_retains_required_sources_and_exact_slot",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_v1_request_bytes_and_native_authentication_survive_a_v2_successor",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_second_repair_overflow_is_refused_before_native_dispatch",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_conflicting_inherited_outputs_in_an_authenticated_predecessor_are_refused",
+        "test_review_visual_context_repair_v2.NestedVisualContextRepairTests.test_identical_inherited_outputs_collapse_to_one_authenticated_assignment"
       ]
     },
     {
@@ -1681,14 +1703,35 @@
     },
     {
       "id": "20261021163114-unchecked-model-effort",
-      "record": "20261021163114",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "identity",
       "summary": "The adapter reported the requested model without checking the actual native turn settings.",
-      "fixed_in": "open",
-      "expected": "Output correction validates the retained rollout's model and effort, but ordinary adapter-wide verification remains incomplete; the broader incident stays open.",
-      "test_kind": "same_path",
+      "fixed_in": "0.75.0",
+      "expected": "New plain and framed Codex invocations retain the native rollout and authenticate exactly one turn_context with the assigned model and adapter-required high effort; invalid or missing evidence cannot approve, while visual and legacy authentication and correction bindings remain intact.",
+      "test_kind": "real_shape",
       "tests": [
-        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta"
+        "test_review_output_correction_visual.VisualCorrectionTests.test_original_visual_delivery_and_negative_science_survive_observed_text_delta",
+        "test_review_codex_invocation.CodexInvocationTests.test_wrong_native_model_is_rejected_for_plain_and_framed",
+        "test_review_codex_invocation.CodexInvocationTests.test_wrong_adapter_required_effort_is_rejected_for_plain_and_framed",
+        "test_review_codex_invocation.CodexInvocationTests.test_missing_or_duplicate_native_turn_context_is_rejected",
+        "test_review_codex_invocation.CodexInvocationTests.test_matching_settings_retain_native_context_and_sender_bytes",
+        "test_review_codex_invocation.CodexInvocationTests.test_legacy_authentication_does_not_invent_settings_evidence",
+        "test_review_codex_invocation.CodexInvocationTests.test_retained_rollout_and_correction_digest_cannot_be_substituted",
+        "test_review_codex_invocation.CodexInvocationTests.test_rebound_rollout_digest_still_checks_input_and_output",
+        "test_review_codex_invocation.CodexInvocationTests.test_request_route_and_response_model_remain_exact",
+        "test_review_codex_invocation.CodexInvocationTests.test_capture_reads_the_persistent_rollout_after_unchanged_sender_returns",
+        "test_review_codex_invocation.CodexInvocationTests.test_failed_native_capture_is_retained_without_invented_context",
+        "test_review_codex_invocation.CodexInvocationTests.test_visual_and_non_codex_observations_stay_unchanged",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_public_calls_pin_capture_and_matching_settings_become_ready",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_public_invocations_retain_wrong_settings_without_scientific_credit",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_public_probe_refuses_wrong_native_model_and_effort",
+        "test_review_codex_invocation.CodexInvocationTests.test_metadata_binding_accepts_only_legacy_or_the_exact_protocol",
+        "test_review_codex_invocation.CodexInvocationTests.test_malformed_native_record_shapes_are_rejected_without_reader_exceptions",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_public_protocol_rejects_unsupported_assignment_attempt_and_probe_bindings",
+        "test_review_codex_invocation.CodexInvocationTests.test_disabled_exec_notice_keeps_raw_capture_and_authenticates_exact_normalization",
+        "test_review_codex_invocation.CodexInvocationTests.test_capture_uses_the_exact_adapter_rollout_reader_and_clean_environment",
+        "test_review_codex_invocation.CodexInvocationProtocolTests.test_shared_codex_fixture_retains_native_settings_for_plain_and_framed_calls",
+        "test_research_complete_source_continuation.NativeCompleteSourceTests.test_native_probe_and_source_attempt_require_retained_model_and_effort_capture"
       ]
     },
     {

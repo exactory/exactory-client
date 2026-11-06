@@ -1606,7 +1606,7 @@ def build_assignment_request(records, artifacts, assignment):
                 if attempt['status'] == 'completed' and attempt.get('request')]
     from .review_request_evaluation import iter_built_requests
     built = iter_built_requests(evaluation, route, assignment['prompt']['text'], packet,
-                                read_history(evaluation, assignment))
+                                read_history(evaluation, assignment), policy=assignment.get('request_policy'))
     current = next(built)
     if not recorded or current in recorded:
         return copy.deepcopy(current)
@@ -1995,12 +1995,13 @@ def read_route_runtime(artifacts, route):
     return transport.runtime(route)
 
 
-def verify_route_context(artifacts, route, request, response):
+def verify_route_context(artifacts, route, request, response, *, required=False):
     if route['adapter'] in transport.LOCAL_ADAPTERS:
         from .evaluation import Evaluation
         store = artifacts.store if isinstance(artifacts, Evaluation) else artifacts
         store.require_local_read('route_context:' + route['adapter'])
-    return transport.context_verified(route, request, response)
+    from .review_codex_invocation import verify_context
+    return verify_context(route, request, response, required=required)
 
 
 _RUNTIME_RETRY_SECONDS = (1, 2, 4, 8, 16)
@@ -2104,9 +2105,10 @@ def read_codex_diagnostic(response):
 
 def _observed(artifacts, route, request, credential):
     from .review_codex_notices import record_disabled_exec_notices
+    from . import review_codex_invocation as invocation_capture
     try:
         _require_route_runtime(route)
-        observed = retry_runtime_check(transport.observe, route, request, credential)
+        observed = retry_runtime_check(invocation_capture.observe, route, request, credential)
     except ResearchError as error:
         if error.code not in ('review_runtime_missing', 'review_route_runtime_stale'):
             raise
@@ -2114,6 +2116,8 @@ def _observed(artifacts, route, request, credential):
                         response=None, output=None, status='failed',
                         error=dict(kind='ResearchError', code=error.code),
                         usage=dict(input_tokens=None, output_tokens=None, cost_usd=None, wall_seconds=None))
+    if invocation_capture.supports_route(route):
+        observed[invocation_capture.KEY] = invocation_capture.PROTOCOL
     if (observed['status'] == 'failed'
             and (observed.get('error') or {}).get('kind') == 'JSONDecodeError'):
         recovered = recover_answer(observed['response'])
@@ -2253,6 +2257,9 @@ def probe_route(store, payload, *, expected_revision, request_id, credential=Non
                                                 if route['adapter'] == transport.ADAPTER else
                                                 'The actual executed thread input and tool events are inspected against the route controls.')},
             recorded_revision=expected_revision + 1)
+        from . import review_codex_invocation as invocation_capture
+        if invocation_capture.supports_route(route):
+            record[invocation_capture.KEY] = invocation_capture.PROTOCOL
         return [immutable_record(records, 'review_probe_invocation', value['id'], record)], record
     def finish(records, value, invocation, observation, revision):
         result = dict(invocation, **observation)
@@ -2270,6 +2277,7 @@ def route_state(records, artifacts, route_id):
 
 
 def _route_state(records, artifacts, route_id):
+    from .review_codex_invocation import has_supported_binding
     route = records.get('review_route', {}).get(route_id)
     status, proof = 'unverified', None
     if route:
@@ -2292,10 +2300,12 @@ def _route_state(records, artifacts, route_id):
                 complete_sources = set(controls) == set(transport.EXCLUDED_SOURCES)
                 positives = all(output.get(key) == positive[key] for key in ('allowed_control', 'evidence_control'))
                 bounded = request.get('tools') == [] and request.get('store') is False and 'previous_response_id' not in request
-                if (saved['status'] == 'completed' and saved['request_digest'] == digest(request) and no_excluded
+                if (has_supported_binding(saved) and saved['status'] == 'completed'
+                        and saved['request_digest'] == digest(request) and no_excluded
                         and complete_sources and positives and bounded and output.get('excluded_controls') == []
                         and derive_output(dict(saved, output=output), _read_json(artifacts, saved['response'])) == output
-                        and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']))):
+                        and verify_route_context(artifacts, route, request, _read_json(artifacts, saved['response']),
+                                                 required=saved.get('codex_invocation') is not None)):
                     status, proof = 'verified_for_route', saved['id']
             except (ResearchError, ValueError, TypeError, KeyError):
                 continue
@@ -3128,6 +3138,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                       history=history, session_id=session_id, history_assignment_id=history_assignment_id,
                       reassessment_required=reassessment_required,
                       recorded_revision=expected_revision + 1)
+        from .review_request_restoration import select_policy
+        request_policy = select_policy(route, packet)
+        if request_policy is not None:
+            record['request_policy'] = request_policy
+        from . import review_codex_invocation as invocation_capture
+        if invocation_capture.supports_route(route):
+            record[invocation_capture.KEY] = invocation_capture.PROTOCOL
         if review_parts.find_kind(packet) is not None:
             record[review_parts.KEY] = {key: packet[review_parts.KEY][key] for key in
                 ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest')}
@@ -3281,6 +3298,9 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
                           prompt_hash=assignment['prompt_hash'], invocation_mode='explicit-bar-continuation' if read_history(artifacts, assignment) else 'fresh-explicit-input',
                           session_id=assignment['session_id'],
                           recorded_revision=expected_revision + 1)
+        from . import review_codex_invocation as invocation_capture
+        if invocation_capture.supports_route(route):
+            invocation[invocation_capture.KEY] = invocation_capture.PROTOCOL
         return [immutable_record(records, 'review_invocation', value['id'], invocation)], invocation
     def finish(records, value, invocation, observation, revision):
         result = dict(observation, **value, origin='instrumented', invocation_id=invocation['id'],
@@ -3309,6 +3329,7 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
     """Authenticate the provenance of one exact observation: its runtime, route, request, packet, prompt and output."""
     from .evaluation import Evaluation
     from .review_request_evaluation import iter_built_requests
+    from .review_codex_invocation import has_supported_binding
     artifacts = Evaluation.of(records, artifacts)
     try:
         route = records['review_route'][assignment['route_id']]
@@ -3323,11 +3344,13 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
                 return False
         output = _read_json(artifacts, attempt['output'])
         response = _read_json(artifacts, attempt['response'])
-        return (attempt.get('origin') == 'instrumented' and request is not None
+        return (has_supported_binding(assignment, attempt)
+                and attempt.get('origin') == 'instrumented' and request is not None
                 and attempt.get('runtime') == route['runtime']
                 and attempt.get('route_digest') == digest(route)
                 and any(request == built for built in iter_built_requests(
-                    artifacts, route, assignment['prompt']['text'], packet, read_history(artifacts, assignment)))
+                    artifacts, route, assignment['prompt']['text'], packet, read_history(artifacts, assignment),
+                    policy=assignment.get('request_policy')))
                 and attempt.get('packet_digest') == assignment['packet_digest']
                 and attempt.get('prompt_hash') == assignment['prompt_hash']
                 and derive_output(dict(attempt, output=output), response) == output)
@@ -3338,6 +3361,9 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
 def authenticate_attempt(records, artifacts, assignment, attempt):
     """Authenticate one exact observation independently of effective attempt selection: its provenance and the
     verified context of its route."""
+    from .review_codex_invocation import has_supported_binding
+    if not has_supported_binding(assignment, attempt):
+        return False
     if assignment.get('staged_review'):
         from .review_staged_protocol import authenticate_observation
         return authenticate_observation(records, artifacts, assignment, attempt)
@@ -3347,7 +3373,9 @@ def authenticate_attempt(records, artifacts, assignment, attempt):
         request = _read_json(artifacts, attempt['request']) if attempt.get('request') else None
         response = _read_json(artifacts, attempt['response'])
         return (authenticate_provenance(records, artifacts, assignment, attempt)
-                and (verify_route_context(artifacts, route, request, response)
+                and (verify_route_context(artifacts, route, request, response,
+                     required=assignment.get('codex_invocation') is not None
+                     or attempt.get('codex_invocation') is not None)
                      or route['adapter'] == 'claude_cli_v1' and verify_legacy_context(route, request, response)))
     except (ResearchError, ValueError, TypeError, KeyError):
         return False

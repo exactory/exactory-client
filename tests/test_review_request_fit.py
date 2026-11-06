@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 from problem_parts_fixtures import ResultPartsCase
-from codex_route_fixtures import build_codex_response
+from codex_route_fixtures import capture_codex_response
 from research_harness import cli, review_protocol as protocol, review_transport as transport
 from research_harness import review_request_evaluation as requests
 from research_harness.evaluation import Evaluation
@@ -249,7 +249,7 @@ class RecordedFitTests(ResultPartsCase):
             request = build_pinned(route, assignment['prompt']['text'], packet, history, transport.EARLIER_FIT_ORDERS[-1])
             self.case.put('review_assignment', assignment['id'], assignment)
             for turn, output in enumerate((refused, refused, accepted, accepted)):
-                response = build_codex_response(route, request, output)
+                response = capture_codex_response(route, request, output)
                 attempt = dict(original_attempt, id=assignment['id'] + '-attempt-' + str(turn),
                     assignment_id=assignment['id'], packet_digest=packet['digest'],
                     request=protocol._put_json(self.case.artifacts, request), request_digest=digest(request),

@@ -22,12 +22,12 @@ from research_harness.errors import ResearchError
 _WORKER_SCRIPT = '''
 import sys
 from pathlib import Path
+from unittest import TestCase
 sys.path[:0] = %r
 from research_harness import review_worker, review_protocol, review_transport, review_codex_transport, review_excerpts
-from codex_route_fixtures import build_codex_response
-review_codex_transport.runtime = lambda: {'adapter':'codex_cli_v1','fixture':'reviewer-excerpt-test'}
-review_codex_transport.NATIVE_DECLARATIONS = ()
-review_codex_transport.NATIVE_DECLARATION_SETS = {()}
+from codex_route_fixtures import bind_codex_response, build_codex_response, install_codex_runtime
+fixture = TestCase()
+install_codex_runtime(fixture)
 def send(route, request, credential):
     with (Path(sys.argv[1]) / 'calls').open('a') as stream: stream.write('call\\n')
     packet = review_excerpts.read_sent_packet(request)['staged_review']

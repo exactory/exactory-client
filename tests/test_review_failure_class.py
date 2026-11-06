@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from problem_parts_fixtures import ResultPartsCase
 from review_parts_fixtures import PartsResultCase
-from codex_route_fixtures import build_codex_response
+from codex_route_fixtures import bind_codex_response, build_codex_response
 from research_harness import review_parts as parts
 from research_harness.artifacts import ArtifactStore
 from research_harness.errors import ResearchError
@@ -534,7 +534,7 @@ class OutputReplacementTests(PartsResultCase):
             response = build_codex_response(route, request, {})
             response['output'][0]['content'][0]['text'] = '{'
             response['usage']['output_tokens'] = route['configuration']['max_output_tokens']
-            return response
+            return bind_codex_response(route, request, response)
 
         with patch.object(protocol.transport, 'send_request', side_effect=overflow):
             protocol.invoke_assignment(self.case.store, dict(id='overflow', assignment_id=assignment['id']),

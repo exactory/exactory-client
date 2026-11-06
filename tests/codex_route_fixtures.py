@@ -1,34 +1,58 @@
 """A codex_cli_v1 review route whose observed input the tests build with the adapter's own rollout inspection."""
 
+import copy
 import json
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from research_harness import review_codex_transport as codex, review_protocol as protocol
+from research_harness import review_codex_framed_transport as framed
+from research_harness import review_codex_invocation as invocation
 from research_harness import review_transport as transport
 from research_harness.evidence import digest
 
 
 def install_codex_runtime(case):
-    for target, value in (('runtime', lambda: {'adapter': 'codex_cli_v1', 'fixture': 'reviewer-excerpt-test'}),
-                          ('NATIVE_DECLARATIONS', ()), ('NATIVE_DECLARATION_SETS', {()})):
-        patcher = patch.object(codex, target, value)
-        patcher.start()
-        case.addCleanup(patcher.stop)
+    for adapter in (codex, framed):
+        runtime = patch.object(adapter, 'runtime', return_value={
+            'adapter': adapter.ADAPTER, 'fixture': 'reviewer-excerpt-test'})
+        rollout = patch.object(adapter, '_rollout', return_value=[])
+        for patcher in (runtime, rollout,
+                        patch.object(adapter, 'NATIVE_DECLARATIONS', ()),
+                        patch.object(adapter, 'NATIVE_DECLARATION_SETS', {()})):
+            patcher.start()
+            case.addCleanup(patcher.stop)
 
 
 def build_codex_response(route, request, output):
-    response = {'id': 'provider-response', 'model': 'fixture-model', 'status': 'completed',
+    response = {'id': 'provider-response', 'model': route['model'], 'status': 'completed',
                 'output': [{'type': 'message', 'role': 'assistant',
                             'content': [{'type': 'output_text', 'text': json.dumps(output)}]}],
                 'usage': {'input_tokens': 37, 'output_tokens': 12}}
+    return bind_codex_response(route, request, response)
+
+
+def bind_codex_response(route, request, response):
+    """Build the native rollout of this sender response for capture to reread."""
+    adapter = codex if route['adapter'] == codex.ADAPTER else framed
     events = [{'type': 'session_meta', 'payload': {'id': response['id'], 'source': 'exec',
                'base_instructions': {'text': request['instructions']}}},
+              {'type': 'turn_context', 'payload': {'model': route['model'],
+               'effort': 'high', 'cwd': '/fixture'}},
               {'type': 'response_item', 'payload': {'type': 'message', 'role': 'user',
-               'content': [{'type': 'input_text', 'text': codex.packet_text(request)}]}}]
-    evidence = codex.inspect_rollout(events, request, response['id'], '/fixture', [])
-    evidence.update(inspected=True, route_digest=digest(route), runtime=codex.runtime(), event_digest=digest(events))
+               'content': [{'type': 'input_text', 'text': adapter.packet_text(request)}]}}]
+    events.extend({'type': 'response_item', 'payload': copy.deepcopy(output)} for output in response['output'])
+    evidence = adapter.inspect_rollout(events, request, response['id'], '/fixture', [])
+    evidence.update(inspected=True, route_digest=digest(route), runtime=adapter.runtime(), event_digest=digest(events))
     response['context_evidence'] = evidence
+    if isinstance(adapter._rollout, Mock):
+        adapter._rollout.return_value = events
     return response
+
+
+def capture_codex_response(route, request, output):
+    """Retain native capture when a fixture seeds an attempt without dispatch."""
+    response = build_codex_response(route, request, output)
+    return invocation.capture_observation(route, request, {'response': response})['response']
 
 
 def record_codex_route(case, identifier='route', *, output_tokens=1000, timeout_seconds=5):

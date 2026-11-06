@@ -8,7 +8,7 @@ from contextlib import redirect_stdout
 import unittest
 from unittest.mock import patch
 
-from codex_route_fixtures import build_codex_response
+from codex_route_fixtures import bind_codex_response, build_codex_response
 from research_harness import cli, report_views, review_parts as parts, review_transport as transport
 from research_harness import review_protocol as protocol
 from research_harness.artifacts import describe_artifact
@@ -315,7 +315,7 @@ class BudgetFloorReplacementTests(PartsResultCase):
             else:
                 response['output'][0]['content'][0]['text'] = '{'
             response['usage']['output_tokens'] = failed_tokens
-            return response
+            return bind_codex_response(route, request, response)
 
         for index in range(10):
             packet = self.packet(assignment)

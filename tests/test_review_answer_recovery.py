@@ -354,7 +354,7 @@ class RecoveryStagedTests(unittest.TestCase):
             '    return build_codex_response(', '    response = build_codex_response(').replace(
             'review_transport.send_request = send',
             "    response['output'][0]['content'][0]['text'] += '}'\n"
-            '    return response\nreview_transport.send_request = send')
+            '    return bind_codex_response(route, request, response)\nreview_transport.send_request = send')
         payload = dict(id='staged-recovered', assignment_id=child['id'])
         revision = case.case.store.revision
         mutate = operations.prepared_task_mutation
@@ -417,7 +417,7 @@ class RecoveryStagedTests(unittest.TestCase):
 
 class RecoveryPartTests(unittest.TestCase):
     def test_two_recovered_part_refusals_are_recorded_automatically(self):
-        from codex_route_fixtures import build_codex_response
+        from codex_route_fixtures import bind_codex_response, build_codex_response
         case = staged_fixtures.ResultPartsCase()
         self.addCleanup(case.doCleanups)
         case.setUp()
@@ -429,7 +429,7 @@ class RecoveryPartTests(unittest.TestCase):
         def provider(route, request, credential):
             response = build_codex_response(route, request, output)
             response['output'][0]['content'][0]['text'] += '}'
-            return response
+            return bind_codex_response(route, request, response)
 
         with patch.object(transport, 'send_request', side_effect=provider) as send:
             for identifier in ('part-refusal-one', 'part-refusal-two'):
