@@ -31,9 +31,9 @@ CHECK_STATUSES = ("passed", "failed", "unresolved")
 OPENING_PURPOSES = literature.SEARCH_PURPOSES + literature.DEVELOPMENT_PURPOSES
 _ERROR = "invalid_round"
 CLAIM_REVISION_MISMATCH_NOTE = (
-    'A new or changed `revised` marker must hold, in `revised.previous`, the exact text of its claim in the '
-    "round's opening bundle. Only a claim with unchanged text can keep the `revised` marker that the opening "
-    'bundle already carries for it.')
+    "This check covers only the claims that the round's opening bundle holds. A claim whose text and `revised` "
+    'marker both equal the opening values keeps the marker. Otherwise `revised.previous` must hold the exact text '
+    'of the claim in the opening bundle.')
 
 
 def _text(value, name):
