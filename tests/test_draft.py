@@ -694,7 +694,7 @@ class TestDeposit(_DepositTestCase):
         )
         self.assertTrue(description.endswith("responsible for its content.</p>"))
 
-    def test_the_record_the_hook_writes_is_the_record_this_command_reads(self) -> None:
+    def test_the_readonly_record_the_hook_writes_is_the_record_deposit_reads(self) -> None:
         """Run the real hook on a paper source, then deposit. The hook and this
         command name the same file and the same key from two files, so a rename
         on one side alone lands here instead of in a Zenodo record."""
@@ -709,6 +709,8 @@ class TestDeposit(_DepositTestCase):
             }),
             text=True, capture_output=True, check=True,
         )
+        from test_native_writers import assert_rejects_direct_writes
+        assert_rejects_direct_writes(self, self.workspace_dir / ".exactory/authorship.json")
         self._deposit(["--creator", "Shiroshita, Ryosuke"])
         metadata = self._read_sent_metadata()
         self.assertIn(_WRITTEN_BY_EXACTORY_SENTENCE, metadata["description"])
@@ -1332,6 +1334,7 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         self.assertEqual(self.fake_api.requests, [])
 
     def test_a_draft_state_without_a_title_is_refused_before_any_request(self) -> None:
+        (self.workspace_dir / ".exactory" / "draft.json").chmod(0o600)
         (self.workspace_dir / ".exactory" / "draft.json").write_text(
             json.dumps({"version": 1, "category": "cs.MA"}) + "\n", encoding="utf-8"
         )
@@ -1344,6 +1347,7 @@ class TestDirectDeposit(_PlainWorkspaceDepositTestCase):
         # same refusal a state without a title lands on.
         for state_text in ("null", "7"):
             with self.subTest(state=state_text):
+                (self.workspace_dir / ".exactory" / "draft.json").chmod(0o600)
                 (self.workspace_dir / ".exactory" / "draft.json").write_text(
                     state_text + "\n", encoding="utf-8"
                 )

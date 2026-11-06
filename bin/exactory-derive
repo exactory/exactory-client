@@ -24,6 +24,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from research_harness.native_writes import write_atomic
+
 # The release version has one definition: the plugin manifest. Deriving the
 # User-Agent from it at boot keeps the two from drifting apart.
 _PLUGIN_VERSION = json.loads(
@@ -281,8 +284,7 @@ def _run_check(args: argparse.Namespace) -> None:
     }
     workspace_report_path = Path(_DERIVATION_REPORT_PATH)
     if workspace_report_path.parent.is_dir():
-        workspace_report_path.write_text(json.dumps(report, indent=2) + "\n",
-                                         encoding="utf-8")
+        write_atomic(workspace_report_path, (json.dumps(report, indent=2) + "\n").encode("utf-8"))
     print(json.dumps(report, indent=2))
     raise SystemExit(1 if counts["invalid"] else 0)
 

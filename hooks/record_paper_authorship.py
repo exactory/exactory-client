@@ -28,6 +28,9 @@ import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from research_harness.native_writes import write_atomic
+
 _PAPER_WRITING_TOOL_NAME = "Write"
 _PAPER_SOURCE_SUFFIX = ".tex"
 _DRAFT_DIR_NAME = "draft"
@@ -72,12 +75,13 @@ def main() -> None:
 
     state_path = workspace / _AUTHORSHIP_STATE_PATH
     if _is_already_recorded(state_path):
+        if state_path.stat().st_mode & 0o222:
+            write_atomic(state_path, state_path.read_bytes())
         sys.exit(0)
     # The record is one fixed constant, so the copies of this hook that run in
-    # parallel after a batch of tool calls all write the same bytes. A reader
-    # that catches the file mid-write reads invalid JSON, which the deposit
-    # answers with the disclosure that claims no authorship.
-    state_path.write_text(_AUTHORSHIP_RECORD_JSON_TEXT, encoding="utf-8")
+    # parallel after a batch of tool calls all publish the same complete bytes
+    # atomically and read-only. Readers see the previous record or the new one.
+    write_atomic(state_path, _AUTHORSHIP_RECORD_JSON_TEXT.encode("utf-8"))
     sys.exit(0)
 
 

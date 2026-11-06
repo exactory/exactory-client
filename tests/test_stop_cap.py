@@ -72,6 +72,7 @@ class TestStopCap(unittest.TestCase):
         for host in ("claude", "codex"):
             for marker in (None, ""):
                 with self.subTest(host=host, marker=marker):
+                    counter.unlink(missing_ok=True)
                     counter.write_bytes(b"0001\r\n")
                     result = self.run_stop(host, "continue_autopilot.py", False, self.review, marker)
                     self.assertEqual(result["decision"], "block")

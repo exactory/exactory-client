@@ -17,6 +17,154 @@ from research_harness.record_check import check_record, copy_snapshot
 PLUGIN = Path(__file__).resolve().parents[1]
 
 
+def assert_rejects_direct_writes(test, path):
+    before = path.read_bytes()
+    test.assertEqual(path.stat().st_mode & 0o222, 0)
+    for operator in (">", ">>"):
+        result = subprocess.run(
+            ["/bin/sh", "-c", 'echo changed ' + operator + ' "$1"', "sh", str(path)],
+            capture_output=True, text=True,
+        )
+        test.assertNotEqual(result.returncode, 0, result)
+        test.assertIn("Permission denied", result.stderr)
+    with test.assertRaises(PermissionError):
+        with open(path, "a") as stream:
+            stream.write("changed")
+    test.assertEqual(path.read_bytes(), before)
+
+
+class ReportAndHookNativeWritersTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        (self.root / ".exactory").mkdir()
+        (self.root / "draft").mkdir()
+        (self.root / ".exactory/draft.json").write_text("{}")
+
+    def run_command(self, relative, *args, payload=None, environment=None):
+        result = subprocess.run(
+            [sys.executable, "-I", "-B", str(PLUGIN / relative), *args],
+            input=json.dumps(payload) if payload is not None else None,
+            cwd=self.root, capture_output=True, text=True,
+            env={**os.environ, **(environment or {})},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stderr, "")
+        return result.stdout
+
+    def test_lookup_republishes_legacy_reports_and_cache_readonly_and_gate_accepts(self):
+        bibliography = self.root / "draft/references.bib"
+        bibliography.write_text(
+            "@article{sample, title={Synthetic citation}, author={Example, Alice}, "
+            "year={2026}, doi={10.1234/synthetic}}\n"
+        )
+        (self.root / "draft/paper.tex").write_text(
+            "\\documentclass{article}\n\\begin{document}\\cite{sample}\\end{document}\n"
+        )
+        report = self.root / ".exactory/citation-check.json"
+        cache = self.root / ".exactory/citation-cache.json"
+        cache.write_text(json.dumps({"version": 2, "records": {"doi:10.1234/synthetic": {
+            "source": "crossref", "title": "Synthetic citation", "titles": ["Synthetic citation"],
+            "authors": ["Alice Example"], "year": 2026, "doi": "10.1234/synthetic",
+        }}}))
+        # A writable report and cache from an earlier release remain readable.
+        report.write_text("{}")
+        for _ in range(2):
+            output = self.run_command("bin/exactory-check", "lookup")
+            self.assertTrue(json.loads(report.read_text())["ok"], output)
+            for path in (report, cache):
+                assert_rejects_direct_writes(self, path)
+            self.assertIn("Citation gate: pass", self.run_command("bin/exactory-check", "gate"))
+        with bibliography.open("a") as stream:
+            stream.write("% still author writable\n")
+
+    def test_derivation_report_rewrites_legacy_and_readonly_files(self):
+        steps = self.root / "steps.json"
+        report = self.root / ".exactory/derivation-check.json"
+        report.write_text("{}")
+        for value in (2, 3):
+            steps.write_text(json.dumps([{
+                "label": "constant " + str(value), "from": str(value), "to": str(value), "vars": {},
+            }]))
+            output = self.run_command("bin/exactory-derive", "check", "--steps-file", str(steps))
+            self.assertEqual(json.loads(report.read_text()), json.loads(output))
+            self.assertEqual(json.loads(output)["steps"][0]["label"], "constant " + str(value))
+            assert_rejects_direct_writes(self, report)
+
+    def test_authorship_hooks_republish_legacy_evidence_readonly(self):
+        record = self.root / ".exactory/authorship.json"
+        for host in ("direct", "codex"):
+            with self.subTest(host=host):
+                record.unlink(missing_ok=True)
+                record.write_text('{"written_by_exactory": false}')
+                payload = {"cwd": str(self.root), "hook_event_name": "PostToolUse",
+                           "tool_name": "Write", "tool_input": {"file_path": "draft/paper.tex"}}
+                command = ("hooks/record_paper_authorship.py",)
+                if host == "codex":
+                    command = ("codex/hook.py", "record_paper_authorship.py")
+                self.assertEqual(self.run_command(*command, payload=payload), "")
+                self.assertEqual(json.loads(record.read_text()), {"written_by_exactory": True})
+                assert_rejects_direct_writes(self, record)
+                self.assertEqual(self.run_command(*command, payload=payload), "")
+                # A person can replace the record to turn the claim off again.
+                record.unlink()
+                record.write_text('{"written_by_exactory": false}')
+                record.chmod(0o400)
+                self.run_command(*command, payload=payload)
+                assert_rejects_direct_writes(self, record)
+
+    def test_authorship_hooks_harden_true_legacy_records_without_changing_bytes(self):
+        record = self.root / ".exactory/authorship.json"
+        original = b'{"written_by_exactory": true, "note": "kept"}\r\n'
+        payload = {"cwd": str(self.root), "hook_event_name": "PostToolUse",
+                   "tool_name": "Write", "tool_input": {"file_path": "draft/paper.tex"}}
+        for command in (("hooks/record_paper_authorship.py",),
+                        ("codex/hook.py", "record_paper_authorship.py")):
+            with self.subTest(command=command):
+                record.unlink(missing_ok=True)
+                record.write_bytes(original)
+                self.assertEqual(self.run_command(*command, payload=payload), "")
+                self.assertEqual(record.read_bytes(), original)
+                assert_rejects_direct_writes(self, record)
+                inode = record.stat().st_ino
+                self.assertEqual(self.run_command(*command, payload=payload), "")
+                self.assertEqual(record.stat().st_ino, inode)
+
+    def test_autopilot_hooks_count_pause_resume_and_reset_readonly_legacy_counters(self):
+        counter = self.root / ".exactory/autopilot_count"
+        state_path = self.root / ".exactory/study.json"
+        state = {"slug": "sample", "stage": "experiment", "status": "running",
+                 "autopilot": True, "waiting": None}
+        for host in ("direct", "codex"):
+            with self.subTest(host=host):
+                counter.unlink(missing_ok=True)
+                counter.write_text("0001\r\n")
+                state_path.write_text(json.dumps(state))
+                payload = {"cwd": str(self.root), "hook_event_name": "Stop", "stop_hook_active": False}
+                command = ("hooks/continue_autopilot.py",)
+                if host == "codex":
+                    command = ("codex/hook.py", "continue_autopilot.py")
+                environment = {"EXACTORY_AUTOPILOT_MAX": "2", "EXACTORY_ASSIGNED_SESSION": ""}
+                result = json.loads(self.run_command(*command, payload=payload, environment=environment))
+                self.assertIn("advance 2/2", result["reason"])
+                self.assertEqual(counter.read_text(), "2")
+                assert_rejects_direct_writes(self, counter)
+                payload["stop_hook_active"] = True
+                result = json.loads(self.run_command(*command, payload=payload, environment=environment))
+                self.assertIn("safety cap", result["reason"])
+                self.assertEqual(counter.read_text(), "-1")
+                assert_rejects_direct_writes(self, counter)
+                self.assertEqual(self.run_command(*command, payload=payload, environment=environment), "")
+                payload["stop_hook_active"] = False
+                self.run_command(*command, payload=payload, environment=environment)
+                self.assertEqual(counter.read_text(), "1")
+                state_path.write_text(json.dumps(dict(state, waiting="approval")))
+                self.assertEqual(self.run_command(*command, payload=payload, environment=environment), "")
+                self.assertEqual(counter.read_text(), "0")
+                assert_rejects_direct_writes(self, counter)
+
+
 class ResearchNativeWritersTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()

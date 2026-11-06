@@ -21,6 +21,7 @@ from integration_fixtures import build_unconfirmed_write_msg
 from research_harness.errors import ResearchError
 from research_harness.exactory_api import UUID_RE, read_api_base_url
 from research_harness.integration import export_workspace, record_direct_deposit
+from research_harness.native_writes import write_atomic
 from research_harness.remote import begin_intent
 from research_harness.same_origin import (RefusedRedirectError, SameOriginRedirectHandler, get_origin,
                                           open_url_within_origin)
@@ -1005,7 +1006,7 @@ class TestDirectDepositForAProblem(_PendingAttachmentTests, _PlainWorkspaceDepos
         outside the run, which the workspace lock does not stop."""
         journal_path = self.workspace_dir / ".exactory" / "problem-deposit.json"
         self._answer_with(_InterleavingZenodoApi(b"%PDF-1.4 fake paper", "POST", url_suffix,
-                                                 lambda: journal_path.write_text(json.dumps(journal), encoding="utf-8")))
+                                                 lambda: write_atomic(journal_path, json.dumps(journal).encode("utf-8"))))
 
     def test_the_next_run_deposits_normally_once_the_attachment_is_done(self) -> None:
         self.exactory.failing_links = 1
@@ -1109,7 +1110,7 @@ class TestRemovedProblemLinks(_PlainWorkspaceDepositTestCase):
         self.addCleanup(patcher.stop)
 
     def _record_journal(self, journal: dict) -> None:
-        (self.workspace_dir / _JOURNAL_PATH_TEXT).write_text(json.dumps(journal), encoding="utf-8")
+        write_atomic(self.workspace_dir / _JOURNAL_PATH_TEXT, json.dumps(journal).encode("utf-8"))
 
     def _assert_removed(self, output: str, doi: str, *, is_retry: bool) -> None:
         self.assertIn(f"A moderator removed the link of record {doi} from problem {_PROBLEM_ID}.", output)
@@ -1504,7 +1505,7 @@ class TestProblemDepositJournalStates(_PlainWorkspaceDepositTestCase):
         self.exactory = _install_exactory(self)
 
     def _record_journal(self, journal: dict) -> None:
-        (self.workspace_dir / ".exactory" / "problem-deposit.json").write_text(json.dumps(journal), encoding="utf-8")
+        write_atomic(self.workspace_dir / ".exactory" / "problem-deposit.json", json.dumps(journal).encode("utf-8"))
 
     def _answer_with(self, fake_api) -> None:
         self.fake_api = fake_api

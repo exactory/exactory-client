@@ -18,7 +18,14 @@
         "test_native_writers.ResearchNativeWritersTests.test_concurrent_activity_appends_keep_every_entry_under_the_directory_lock",
         "test_native_writers.ResearchNativeWritersTests.test_process_exit_before_rename_leaves_previous_cli_view_intact",
         "test_native_writers.ResearchNativeWritersTests.test_old_writable_record_passes_record_check_without_source_changes",
-        "test_native_writers.ResearchNativeWritersTests.test_record_check_makes_its_copy_writable_and_native_render_republishes_readonly"
+        "test_native_writers.ResearchNativeWritersTests.test_record_check_makes_its_copy_writable_and_native_render_republishes_readonly",
+        "test_native_writers.ReportAndHookNativeWritersTests.test_lookup_republishes_legacy_reports_and_cache_readonly_and_gate_accepts",
+        "test_native_writers.ReportAndHookNativeWritersTests.test_derivation_report_rewrites_legacy_and_readonly_files",
+        "test_native_writers.ReportAndHookNativeWritersTests.test_authorship_hooks_republish_legacy_evidence_readonly",
+        "test_native_writers.ReportAndHookNativeWritersTests.test_authorship_hooks_harden_true_legacy_records_without_changing_bytes",
+        "test_native_writers.ReportAndHookNativeWritersTests.test_autopilot_hooks_count_pause_resume_and_reset_readonly_legacy_counters",
+        "test_hook_runtime_lifetime.HookRuntimeLifetimeTests.test_bundled_authorship_and_autopilot_hooks_publish_readonly",
+        "test_draft.TestDeposit.test_the_readonly_record_the_hook_writes_is_the_record_deposit_reads"
       ]
     },
     {

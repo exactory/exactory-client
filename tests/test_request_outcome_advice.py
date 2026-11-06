@@ -19,6 +19,7 @@ import urllib.error
 import urllib.request
 
 from research_harness.integration import record_direct_deposit
+from research_harness.native_writes import write_atomic
 from research_harness.storage import Store
 from test_draft import _FakeZenodoApi, _load_bin_module
 
@@ -128,7 +129,7 @@ class _OfflineTestCase(unittest.TestCase):
 
     def write_prior(self, **changes):
         state = dict(environment="sandbox", deposition_id=4242, draft_url=_DRAFT_URL, **changes)
-        Path(".exactory/deposit.json").write_text(json.dumps(state), encoding="utf-8")
+        write_atomic(Path(".exactory/deposit.json"), json.dumps(state).encode("utf-8"))
         return state
 
 
