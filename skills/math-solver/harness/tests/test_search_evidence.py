@@ -64,6 +64,41 @@ class EvidenceTests(SearchCLIWorkspace, unittest.TestCase):
         self.assertEqual(state["proof_status"], "open")
         self.assertEqual(state["totals"]["used_moves"], 0)
 
+    def test_checkpoint_with_raw_proof_digest_requires_manifest_without_mutation(self):
+        self.initialize()
+        spec = self.external_checkpoint()
+        spec['checkpoint']['evidence_digests'] = [spec['inputs'][0]['digest']]
+        authority = self.root / '.search'
+        before = {p.relative_to(authority).as_posix(): p.read_bytes()
+                  for p in authority.rglob('*') if p.is_file()}
+        result = self.search('checkpoint', spec, revision=1, success=False)
+        self.assertEqual(result['error']['code'], 'evidence_manifest_required')
+        self.assertEqual({p.relative_to(authority).as_posix(): p.read_bytes()
+                          for p in authority.rglob('*') if p.is_file()}, before)
+
+    def test_manifest_diagnostic_preserves_absent_corrupt_and_valid_blobs(self):
+        from search_controller.evidence import audit_manifest
+        from search_controller.errors import SearchError
+        from search_controller.service import Controller
+        spec = self.setup_external()
+        controller = Controller(self.root)
+        state = controller.status()
+        manifest_digest = spec['checkpoint']['evidence_digests'][0]
+        self.assertEqual(audit_manifest(self.root, state, manifest_digest, controller.store),
+                         ('analytical', 'reviewed'))
+        missing = hashlib.sha256(b'An absent manifest').hexdigest()
+        with self.assertRaises(SearchError) as error:
+            audit_manifest(self.root, state, missing, controller.store)
+        self.assertEqual(error.exception.code, 'corrupt_blob')
+        path = self.root / '.search/blobs' / (manifest_digest + '.json')
+        original = path.read_bytes()
+        # A valid artifact of the same digest must not conceal an actually corrupt manifest.
+        self.assertEqual(controller.store.put_artifact(original), manifest_digest)
+        path.write_bytes(b'corrupt manifest')
+        with self.assertRaises(SearchError) as error:
+            audit_manifest(self.root, state, manifest_digest, controller.store)
+        self.assertEqual(error.exception.code, 'corrupt_blob')
+
     def assert_corrupt_renewal_refused(self, acceptance_dependency=False):
         self.admit()
         evidence = self.external_checkpoint()

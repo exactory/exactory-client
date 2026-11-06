@@ -11,6 +11,11 @@ from .errors import SearchError
 from .storage import safe_path, _strict_json
 
 
+EVIDENCE_MANIFEST_REQUIRED_NOTE = (
+    'PLACEHOLDER: This digest names a valid artifact; supply a structured evidence manifest digest binding '
+    'the claim and listing the proof artifacts.')
+
+
 class _AuditContext:
     """Bind successful manifest validations to one audit's inputs and lifetime."""
 
@@ -423,7 +428,19 @@ def audit_manifest(root, state, digest, content, claim_digest=None, verify=True,
             s.require(bound_claim == claim_digest, "Evidence binds a different claim", "claim_mismatch")
         s.require(len(visiting) + depth <= 256, "Evidence dependency cycle or excessive depth", "dependency_cycle")
         return result
-    manifest = content.get_blob(digest)
+    try:
+        manifest = content.get_blob(digest)
+    except SearchError as error:
+        if error.code != 'corrupt_blob' or not isinstance(error.__cause__, FileNotFoundError):
+            raise
+        try:
+            content.get_artifact(digest)
+        except SearchError as artifact_error:
+            if artifact_error.code == 'corrupt_artifact' and isinstance(artifact_error.__cause__, FileNotFoundError):
+                raise error
+            raise
+        raise SearchError('evidence_manifest_required', EVIDENCE_MANIFEST_REQUIRED_NOTE,
+                          {'artifact_digest': digest}) from error
     s.closed(manifest, "schema_version kind claim_digest conclusion artifacts dependencies external_dependencies verification")
     s.integer(manifest["schema_version"], 1, 1)
     s.choice(manifest["kind"], {"analytical", "certificate", "lean"})

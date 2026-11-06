@@ -26,6 +26,9 @@ REPAIR = {"context_repair": {"assignment_id": "assignment-prior"}}
 
 def render_case(case, **common):
     options = dict(case["options"], **common)
+    if case["role"] == "verification":
+        # These frozen fixtures predate the version 7 verification contract.
+        options.setdefault("version", 6)
     if "repair_prompt" in options:
         options["repair_prompt"] = SUFFIXES[options["repair_prompt"]]
     if "adjudicator_prompt" in options:

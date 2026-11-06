@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 import threading
+import unittest
 from unittest import mock
 
 from literature_fixtures import FIELDS
@@ -13,6 +14,43 @@ from research_harness.literature import foundation_report
 from reviewer_fixtures import verdict_assignment
 from test_research_publication import measure_nesting
 from test_research_synthesis import SynthesisCase
+
+
+class VerificationPromptContractTests(unittest.TestCase):
+    def test_current_base_prompt_states_the_executable_prediction_contract(self):
+        from research_harness.review_protocol import canonical_prompt
+        prompt = canonical_prompt('verification')
+        with self.subTest(template='new-verification-version'):
+            self.assertEqual(prompt['template_id'], 'exactory-verification-review-v2/verification')
+        for fact in ('verdict.stance', 'sound or not_sound', 'integers from 1 to 100',
+                     'best <= percentile <= worst', 'paper.sampling_context',
+                     'sampling_context.prediction.percentile', 'contains',
+                     'sampling_context.prediction.band', 'widen_required',
+                     'at least one', 'beyond', 'null', 'no verdict binds', 'placements'):
+            with self.subTest(fact=fact):
+                self.assertIn(fact, prompt['text'])
+
+    def test_historical_base_and_parts_prompt_envelopes_retain_bytes_and_authentication(self):
+        from research_harness import review_parts, review_protocol as protocol
+        hashes = {1: 'e73f95aeac7dbc415fd592e4ee5d27c8ff36061d8ca7e730803c883b865da1ce',
+                  2: '5c89e363652d6ae0b67df7afa98b00170f8227ee49f1e59b707c661a2df9d65f',
+                  3: '2b8317ca2076f70900cbc8d03948a1897531d3a0c45f5629da76402011adf620'}
+        for version in range(1, 7):
+            for common, expected in hashes.items():
+                with self.subTest(version=version, common=common):
+                    prompt = protocol.canonical_prompt('verification', version=version, common_version=common)
+                    self.assertEqual(prompt['template_id'], 'exactory-independent-review-v1/verification')
+                    self.assertEqual(prompt['template_hash'], expected)
+                    self.assertEqual(prompt['rendered_prompt_hash'], expected)
+                    self.assertTrue(protocol._prompt_matches({'role': 'verification', 'prompt': prompt, 'context': {}}))
+        for kind, expected in (('read', '1923fb7f33d315caf541825cd16cc43f6b1338ce591017db19986112778f3609'),
+                               ('final', 'db306da9d48c91bcabd2b8e3dafb36e30a491f480ff2fd132e3410c14681db63')):
+            binding = {'adapter': 'study_verification', 'kind': kind, 'protocol': review_parts.PROTOCOL}
+            prompt = protocol.canonical_prompt('verification', version=6, review_parts=binding)
+            self.assertEqual(prompt['template_hash'], expected)
+            self.assertEqual(prompt['rendered_prompt_hash'], expected)
+            self.assertTrue(protocol._prompt_matches({'role': 'verification', 'prompt': prompt, 'context': {},
+                                                     review_parts.KEY: binding}))
 
 
 class ResearchVerificationTests(SynthesisCase):
@@ -383,6 +421,17 @@ class SampledVerificationCase(SynthesisCase):
 class SampledVerificationTests(SampledVerificationCase):
     works = (2, 3, 4, 5)
     positions = ("above", "above", "above", "below")
+
+    def test_example_following_current_base_prompt_binds(self):
+        from research_harness import review_protocol as protocol
+        bound = self.bind(25, {'best': 1, 'worst': 60})
+        records = self.store.snapshot()['records']
+        assignment = records['review_assignment'][bound['assessment']['assignment_id']]
+        self.assertNotIn('review_parts', assignment['prompt']['parameters'])
+        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('verification'))
+        self.assertEqual(assignment['prompt']['template_id'], 'exactory-verification-review-v2/verification')
+        self.assertEqual(bound['sample_prediction']['percentile'], 25)
+        self.assertEqual(bound['sample_prediction']['band'], {'best': 3, 'worst': 47})
 
     def test_verifier_receives_the_actual_sample_statistic_without_prior_verdicts(self):
         from research_harness import sampling

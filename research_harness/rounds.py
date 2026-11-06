@@ -30,6 +30,9 @@ VERDICTS = ("approved", "not_approved", "unresolved")
 CHECK_STATUSES = ("passed", "failed", "unresolved")
 OPENING_PURPOSES = literature.SEARCH_PURPOSES + literature.DEVELOPMENT_PURPOSES
 _ERROR = "invalid_round"
+CLAIM_REVISION_MISMATCH_NOTE = (
+    'PLACEHOLDER: A new or changed revised marker must use the exact claim text from the immediately opening '
+    'bundle in revised.previous; an unchanged claim may retain the identical historical marker of its opening bundle.')
 
 
 def _text(value, name):
@@ -106,6 +109,12 @@ def _canonical_adapter(store, payload, name, *, expected_revision, request_id):
         _text(value['id'], 'Round adapter ID')
         _text(value['reason'], 'Round adapter reason')
         state = require_decision(records, artifacts, 'round', decision_id=value['research_decision_id'])
+        if name == 'decide':
+            continuity = find_claim_revision_obligations(
+                records, artifacts, latest_admission(records), publication.find_selected_bundle(records))
+            if continuity:
+                item = continuity[0]
+                raise ResearchError(item['code'], item['explanation'], {'claim_ids': item['claim_ids']})
         decision = state['decision']
         continuing = decision['payload']['action'] in ('investigate', 'pivot')
         if name == 'admit' and not continuing:
@@ -184,12 +193,14 @@ def _canonical_state(records, artifacts):
         current_bundle = None
     progress = (derive_progress(records, evaluation, historical, current_bundle)
                 if historical is not None and 'resource_limits' in historical else None)
+    continuity = find_claim_revision_obligations(records, evaluation, historical, current_bundle)
+    obligations = obligations + continuity
     active = (historical is not None and historical_assessment is None) or any(
         cycle.get('status') in ('planned', 'executed', 'active') for cycle in records.get('cycle', {}).values())
     assessed = (historical_assessment is not None and current_bundle is not None
                 and historical_assessment['bundle_digest'] == current_bundle['digest'])
-    return {'ready': state['ready'], 'obligations': obligations, 'decision_obligations': obligations,
-            'progress_obligations': [], 'round': current_number(records), 'active': active,
+    return {'ready': not obligations, 'obligations': obligations, 'decision_obligations': obligations,
+            'progress_obligations': continuity, 'round': current_number(records), 'active': active,
             'assessed': assessed or (decision is not None and decision['payload']['phase'] != 'prospective'),
             'decision': None if decision is None else 'continue' if continuing else 'stop',
             'decision_id': None if decision is None else decision['id'],
@@ -483,6 +494,10 @@ def record_round(store, payload, *, expected_revision, request_id):
             assessment = assessment_for(records, latest["id"])
             if assessment is None or assessment["bundle_digest"] != bundle["digest"]:
                 raise ResearchError("round_assessment_missing", "Assess the current round against its goal on this bundle before deciding")
+            continuity = find_claim_revision_obligations(records, context.artifacts, latest, bundle)
+            if continuity:
+                item = continuity[0]
+                raise ResearchError(item['code'], item['explanation'], {'claim_ids': item['claim_ids']})
             unkept = _unkept_claim_ids(derive_progress(records, context.artifacts, latest, bundle))
             if unkept:
                 raise ResearchError("round_claims_dropped", "Keep, revise or supersede every claim of the round's opening bundle", {"claim_ids": unkept})
@@ -674,6 +689,29 @@ def derive_progress(records, evaluation, admission, bundle):
             "unproductive": not (new and len(fresh) == len(literature.DEVELOPMENT_PURPOSES) and exemplar and cycles)}
 
 
+def find_claim_revision_obligations(records, artifacts, admission, bundle):
+    """Check new boundaries against the opening text without changing stored progress derivations."""
+    if admission is None or bundle is None or 'bundle_id' not in admission['opening']:
+        return []
+    opening = records['publication_bundle'][admission['opening']['bundle_id']]
+    evaluation = Evaluation.of(records, artifacts)
+    opening_claims = {claim['id']: claim for claim in
+                      strict_json(evaluation.read(opening['files']['claims']['artifact']))}
+    claims = strict_json(evaluation.read(bundle['files']['claims']['artifact']))
+    mismatches = []
+    for claim in claims:
+        original = opening_claims.get(claim['id'])
+        if original is None or 'revised' not in claim:
+            continue
+        if claim['claim'] == original['claim'] and claim['revised'] == original.get('revised'):
+            continue
+        if claim['revised']['previous'] != original['claim']:
+            mismatches.append(claim['id'])
+    if mismatches:
+        return [obligation('round_claim_revision_mismatch', CLAIM_REVISION_MISMATCH_NOTE, claim_ids=sorted(mismatches))]
+    return []
+
+
 def _validate_judgments(values, expected, name, evidence):
     """Every item of the goal (`expected` ids) judged exactly once with a status, an explanation and evidence."""
     seen = []
@@ -829,6 +867,7 @@ def round_state(records, artifacts):
                 decision_obligations.append(obligation("round_assessment_missing", "Assess the current round against its goal on this bundle before deciding.",
                                                        round_id=latest["id"]))
             progress_obligations = _continuity_obligations(progress)
+        progress_obligations.extend(find_claim_revision_obligations(records, evaluation, latest, bundle))
     decision = None
     if bundle is not None and not decision_obligations and not progress_obligations:
         decision, pending = _decision_obligations(records, bundle, number)

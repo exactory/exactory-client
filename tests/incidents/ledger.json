@@ -206,13 +206,21 @@
     },
     {
       "id": "v7-authorized-deposit-stage",
-      "record": "v7",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "dead-end",
       "summary": "A user-authorized deposit could not move the study into the deposit stage.",
-      "fixed_in": "open",
-      "expected": "The stage transition still needs an implemented authorized-deposit path; readiness_required remains an open dead end for this shape.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "Confirmed external publication is reported separately from managed progress; evaluate names the manuscript-review wait without granting gate credit or recommending the same confirmed deposit again. Later bundles and unconfirmed or sandbox deposits retain their distinctions.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_confirmed_deposit_names_manuscript_review_wait_without_gate_credit",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_sandbox_and_open_deposits_do_not_claim_production_publication",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_lost_or_missing_confirmation_does_not_claim_publication",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_later_bundle_keeps_external_outcome_without_current_bundle_credit",
+        "test_research_direct_deposit_reporting.ScopedDirectDepositReportingTests.test_confirmed_scoped_deposit_stops_recommending_the_same_deposit",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_changed_measured_files_do_not_bind_or_match_the_external_deposit",
+        "test_research_direct_deposit_reporting.DirectDepositReportingTests.test_historical_acceptances_without_assignments_name_the_manuscript_wait"
+      ]
     },
     {
       "id": "v8-citation-metadata-and-coverage",
@@ -241,23 +249,37 @@
     },
     {
       "id": "v7-unbound-previous-claim",
-      "record": "v7",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "gate (gap)",
       "summary": "The round gate did not bind revised.previous to the opening claim text.",
-      "fixed_in": "open",
-      "expected": "The missing previous-claim binding remains open; passing the current gate does not establish that this continuity check occurred.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "New closing decisions and current round gates bind new or changed revised markers to the immediately opening bundle exact claim text, including scoped markers; unchanged claims retain identical inherited markers and historical progress derivations keep their original interpretation.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_round_claim_continuity.RoundClaimContinuityTests.test_invented_previous_refuses_closing_decision_and_current_gate",
+        "test_research_round_claim_continuity.RoundClaimContinuityTests.test_revision_markers_bind_the_immediate_opening_bundle_across_rounds",
+        "test_research_scoped_claim_markers.ScopedClaimMarkerTests.test_current_round_continuity_checks_scoped_revision_history",
+        "test_research_scoped_claim_markers.ScopedClaimMarkerTests.test_unchanged_opening_claim_retains_its_earlier_revision_marker"
+      ]
     },
     {
       "id": "v7-bomless-unicode-delivery",
-      "record": "v7",
+      "record": "20261105155433-open-items-after-0-73-6",
       "class": "uncommon-input",
       "summary": "A BOM-free UTF-16 or UTF-32 body beginning with a non-ASCII character escaped text decoding.",
-      "fixed_in": "open",
-      "expected": "The encoding gap remains open; raw-byte privacy checking alone does not establish exact decoded scientific delivery.",
-      "test_kind": "none",
-      "tests": []
+      "fixed_in": "0.74.0",
+      "expected": "Private text is matched in its original bytes and BOM-free UTF-16LE, UTF-16BE, UTF-32LE and UTF-32BE forms, including non-ASCII prefixes and encodings shorter than UTF-8; exact delivered bytes, JSON interpretation and binary privacy remain unchanged.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_sniffed_text_delivery.SniffedTextDeliveryTests.test_bomless_non_ascii_private_text_is_refused_in_all_byte_orders",
+        "test_research_sniffed_text_delivery.SniffedTextDeliveryTests.test_clean_unicode_and_large_inputs_keep_bytes_and_json_interpretation",
+        "test_research_sniffed_text_delivery.SniffedTextDeliveryTests.test_binary_private_artifact_keeps_literal_byte_protection",
+        "test_research_sniffed_text_delivery.SniffedTextDeliveryTests.test_text_in_another_unicode_encoding_is_checked_as_text",
+        "test_research_private_byte_length.PrivateByteLengthTests.test_eligible_candidate_still_checks_every_private_pattern",
+        "test_research_private_byte_length.PrivateByteLengthTests.test_text_candidate_checks_original_and_unicode_private_patterns",
+        "test_streamed_exports.ScientificEvaluationRetentionTests.test_initial_private_and_terminal_reads_do_not_fill_the_supplied_evaluation",
+        "test_streamed_exports.ScientificEvaluationRetentionTests.test_unicode_private_patterns_preserve_nonretaining_evaluation"
+      ]
     },
     {
       "id": "v10-mapped-publication-dates",
@@ -3980,6 +4002,52 @@
         "test_bundle_index.BundleIndexTests.test_supplement_ids_preserve_main_captures_and_graph",
         "test_bundle_index.BundleIndexTests.test_targeted_readings_match_the_released_outputs_in_historical_views",
         "test_bundle_index.BundleIndexTests.test_historical_index_does_not_select_a_later_bundle_of_the_same_original"
+      ]
+    },
+    {
+      "id": "doi-only-qualification-delivery-filter",
+      "parent": "20261103024324-abstract-source-request-unresolvable-for-doi-only-works-doi-only-abstract-request",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "sources (delivery)",
+      "summary": "Qualified unavailability settled a source request using binary evidence that a text-only route could not deliver.",
+      "fixed_in": "0.74.0",
+      "expected": "Required qualification evidence must be deliverable before settlement; binary evidence stays pending on text-only routes, while capable routes and JSON qualifications retain settlement without scientific credit.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_bar_sources.BarSourceTests.test_binary_qualification_stays_pending_on_text_only_route",
+        "test_research_bar_sources.BarSourceTests.test_binary_qualification_settles_on_capable_route",
+        "test_research_bar_sources.BarSourceTests.test_json_qualification_settles_on_text_only_route"
+      ]
+    },
+    {
+      "id": "v19-evidence-manifest-diagnostic",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "diagnostic (evidence)",
+      "summary": "A valid raw proof artifact digest supplied at the manifest boundary was reported as a corrupt manifest.",
+      "fixed_in": "0.74.0",
+      "expected": "A valid artifact where a manifest is required gives evidence_manifest_required without mutation; genuinely missing or corrupt blobs retain their errors and valid manifests retain their audits.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_search_evidence.EvidenceTests.test_checkpoint_with_raw_proof_digest_requires_manifest_without_mutation",
+        "tests.test_search_evidence.EvidenceTests.test_manifest_diagnostic_preserves_absent_corrupt_and_valid_blobs"
+      ]
+    },
+    {
+      "id": "0720-base-verification-prompt-contract",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "reviewer prompt (contract)",
+      "summary": "The base verification prompt omitted executable stance, prediction-band and sampled-binding rules.",
+      "fixed_in": "0.74.0",
+      "expected": "New verification prompts name the executable stance, ordered integer prediction band, sample estimate, containing and widened bands, and refusal of an unplaced sample; recorded base and parts prompts retain their exact template ids, hashes and authentication.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_verification.VerificationPromptContractTests.test_current_base_prompt_states_the_executable_prediction_contract",
+        "test_research_verification.VerificationPromptContractTests.test_historical_base_and_parts_prompt_envelopes_retain_bytes_and_authentication",
+        "test_research_verification.SampledVerificationTests.test_example_following_current_base_prompt_binds",
+        "test_research_verification.UnplacedSampleVerificationTests.test_a_sample_that_places_no_member_binds_no_verdict",
+        "test_research_verification.WidenedSampleVerificationTests.test_an_unplaced_heavy_sample_needs_a_band_wider_than_the_computed_one",
+        "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0663_still_verifies",
+        "test_review_prompt_common_version.CommonPromptVersionTests.test_every_prompt_recorded_by_0715_still_verifies"
       ]
     }
   ]
