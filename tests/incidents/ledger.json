@@ -3788,6 +3788,42 @@
         "test_problem_post_review_terminal.PostedReviewTests.test_staged_status_preserves_tasks_and_incomplete_recovery_evidence",
         "test_problem_post_review_terminal.PostedReviewTests.test_incomplete_staged_outcome_keeps_recovery_work_and_scientific_flags"
       ]
+    },
+    {
+      "id": "measurement-usage-limit-global-stop",
+      "record": "20261105155433-open-items-after-0-73-6",
+      "class": "resource-limits",
+      "summary": "Paired measurements continued into later modes and cases after a provider usage limit and lost admissions on restart.",
+      "fixed_in": "0.74.0",
+      "expected": "The first retained Claude or Codex usage limit, including probes, stops the durable campaign; interrupted admissions remain charged and dispatch is capped. Live series use authenticated disposable prefixes, require a ready candidate record-check and never write their source copies. A staged worker launch is refused, because its calls bypass the counted sender; credentials are never copied into the output.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_measurement_tools.CampaignStopTests.test_claude_limit_shapes_stop_and_restart_refuses_dispatch",
+        "test_review_measurement_tools.CampaignStopTests.test_codex_empty_limit_rollout_stops_including_probe",
+        "test_review_measurement_tools.CampaignStopTests.test_cap_is_durable_and_checked_before_sender",
+        "test_review_measurement_tools.CampaignStopTests.test_interrupted_admission_stays_charged_after_restart",
+        "test_review_measurement_tools.CampaignStopTests.test_sender_receives_identical_inputs_and_response_is_unchanged",
+        "test_review_measurement_tools.CampaignStopTests.test_usage_limit_prevents_later_modes_repeats_and_cases",
+        "test_review_measurement_tools.CampaignStopTests.test_cli_stops_scheduling_after_a_probe_usage_limit",
+        "test_review_measurement_tools.CampaignStopTests.test_cli_restart_reads_stop_before_writing_campaign_outputs",
+        "test_review_measurement_tools.CampaignStopTests.test_hard_interruption_blocks_restart_even_below_the_cap",
+        "test_review_measurement_tools.CampaignStopTests.test_interruption_during_classification_cannot_reopen_campaign",
+        "test_review_measurement_live.HistoricalFixtureTests.test_prefix_preserves_exact_events_receipts_and_artifacts_without_source_writes",
+        "test_review_measurement_live.HistoricalFixtureTests.test_source_overlap_is_refused_before_writing",
+        "test_review_measurement_live.HistoricalFixtureTests.test_source_or_output_symlink_cannot_escape_into_source",
+        "test_review_measurement_live.HistoricalFixtureTests.test_invalid_revision_and_corrupt_history_are_refused",
+        "test_review_measurement_live.HistoricalFixtureTests.test_fixture_symlink_replacement_cannot_overwrite_source_database",
+        "test_review_measurement_live.HistoricalFixtureTests.test_output_symlink_replacement_cannot_write_metadata_into_source",
+        "test_review_measurement_live.LiveSeriesTests.test_ready_fixture_runs_actual_series_and_preserves_sender_inputs",
+        "test_review_measurement_live.LiveSeriesTests.test_record_check_must_be_ready_before_dispatch",
+        "test_review_measurement_live.LiveSeriesTests.test_cap_prevents_second_turn_dispatch_without_changing_route",
+        "test_review_measurement_live.LiveSeriesTests.test_usage_limit_stops_driver_before_wait_and_next_case",
+        "test_review_measurement_live.LiveSeriesTests.test_source_output_is_refused_without_dispatch",
+        "test_review_measurement_live.LiveSeriesTests.test_temporary_files_stay_under_output_and_credentials_are_never_copied",
+        "test_review_measurement_live.LiveCasePreparationTests.test_focused_case_recreates_retained_payload_with_fixed_route",
+        "test_review_measurement_live.LiveCasePreparationTests.test_openness_case_reexports_exact_spec_for_a_fresh_v5_chain",
+        "test_review_measurement_live.LiveSeriesTests.test_staged_worker_launch_is_refused_inside_the_campaign"
+      ]
     }
   ]
 }
