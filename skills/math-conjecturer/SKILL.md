@@ -208,26 +208,28 @@ record:
 
 - A connection to another area does not by itself call for another record; the primary subject
   class of the statement decides.
-- Restart only before the first review request. When the initial searches and source readings
-  show that the exploration belongs to another class, and no bar or slate review has been
-  requested or assigned in the original record and no review work is outstanding, open a new
-  record in that class. Make no subsequent review request or assignment in the original record.
-  The original record then holds no reviewer objection, but it can hold scientific evidence (a
-  counterexample, a settling source, a failed argument, an unresolved source gap): name the
-  successor's workspace in your notes of the original record, and record again in the successor
-  every search and source reading that its evidence needs, the adverse ones included.
-- Once a bar or slate review has been requested or assigned, every candidate of the exploration
-  stays in the record and is compared on its slate, whatever its class; this record's reviews
-  concern it. A candidate of the record's class follows the ordinary path. A candidate of
-  another class that the comparison favours and that meets the selection requirement of step 9
-  of "Candidates and the slate" is `selected`; it is not formulated in this record, because a
-  statement is bound to the record's class (`problem_area_mismatch`), and the comparison states
-  that its pursuit in a record of its class waits for a release of this skill in which the
-  handoff to another record carries the review objections that concern a candidate. Open no
-  record for it before then, and open no sibling record on the same field question or seed to
-  take it up. `deferred` stays reserved for a genuine evidence gap, named as the evidence that
-  raises it. While the current slate selects only candidates of another class, `next` reports
-  `problem_statement_missing`, and the record stays there under this rule.
+- When the initial searches and source readings show that the exploration belongs to another
+  class, and no bar or slate review has been requested or assigned in the original record and no
+  review work is outstanding, open a new record in that class. Make no subsequent review request
+  or assignment in the original record. The original record then holds no reviewer objection,
+  but it can hold scientific evidence: a counterexample, a settling source, a failed argument, an
+  unresolved source gap. Name the successor's workspace in your notes of the original record. In
+  the successor, record again every search and source reading that its evidence needs, the
+  adverse ones included.
+- Once a bar or slate review has been requested or assigned, keep every candidate of the
+  exploration in this record. Compare every candidate on its slate, whatever its class. This
+  record's reviews concern every candidate. For a candidate of the record's class, follow the
+  ordinary path. When the comparison favours a candidate of another class and the candidate
+  meets the selection requirement of step 9 of "Candidates and the slate", select it. Do not
+  formulate it in this record: a statement is bound to the record's class
+  (`problem_area_mismatch`). In `comparison`, state that its pursuit in a record of its class
+  waits for a release of this skill in which the handoff to another record carries the review
+  objections that concern a candidate. Until that release, open no record for it, including a
+  sibling record on the same field question or seed. Use `deferred` only for a genuine evidence
+  gap. While no statement exists, the post gate lists `problem_statement_missing`. While a
+  current statement formulates a candidate that the latest slate does not select, it lists
+  `problem_candidate_unselected`. `next` reports the leading obligation, and the wait holds
+  whatever code `next` reports.
 
 ### An exploration from a thought experiment
 
@@ -295,11 +297,11 @@ The rule of "Exploration" that one record holds the exploration applies with the
 
 - Open the record with `area` set to the subject class of the leading interpretation: the
   interpretation you initially expect to investigate most closely.
-- When the initial searches and source readings show that the leading interpretation belongs to
-  another class, restart under that rule, and record the evidence again in the successor under
-  the steps, the principle and the openness requirements of this subsection.
-- Unless you restart, the interpretations of every class, their expectations and their tests
-  stay in this record, and the candidates derived from them follow that rule.
+- When that rule permits a restart because the leading interpretation belongs to another class,
+  apply the steps, the principle and the openness requirements of this subsection in the
+  successor.
+- Unless you restart, keep the interpretations of every class, their expectations and their
+  tests in this record. Their derived candidates follow that rule.
 
 ## Candidates and the slate
 
@@ -358,9 +360,9 @@ significance.
     cite it; the harness refreshes it in the same session and slot, and the refreshed review
     gives a finding on every objection its earlier review stated.
 
-Take each selected candidate of the record's class through the following steps in turn, and post
-each one that meets the bar; a selected candidate of another class waits as the rule of
-"Exploration" states. Several problems from one exploration is the normal case, not an exception.
+For each selected candidate of the record's class, take the following steps in turn. Post each
+one that meets the bar. For a selected candidate of another class, follow the rule of
+"Exploration". Several problems from one exploration is the normal case, not an exception.
 
 ## Formulation
 
@@ -387,10 +389,8 @@ each one that meets the bar; a selected candidate of another class waits as the 
 4. Record a changed statement or changed criteria under a new statement id. After a change,
    reassess the openness finding, the attempt, the value arguments and the reviews that the
    change affects, and reuse the work that still applies.
-5. A statement of another subject class is refused in this record (`problem_area_mismatch`).
-   Open a new problem record for that class only before the first review request of this
-   record, under the rule of "Exploration"; by this step the slate's bars have been requested,
-   so the candidate stays in this record as that rule states.
+5. By this step the slate's bars have been requested. For a candidate of another class, follow
+   the rule of "Exploration" that keeps it in this record.
 
 ## The attempt
 
