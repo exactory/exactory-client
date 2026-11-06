@@ -74,8 +74,14 @@ each folder lists every file with the kind, id, revision and status of its
 record. Read the outputs there, and never copy them elsewhere.
 
 The harness writes both folders after each command that records something, and
-it owns them: the guard hook refuses `Write`, `Edit` and `NotebookEdit` into
-them, and every render rewrites the files it owns. Keep your own files, payload
+it owns them: it publishes their files read-only, like its projections in
+`.exactory/` (`study.json`, `decisions.jsonl`, `draft.json`, `deposit.json` and
+`output-views.json`), the guard hook refuses `Write`, `Edit` and `NotebookEdit`
+into them, and every render rewrites the files it owns. A shell redirection or a
+Python `open` for writing into one of these files fails with a permission error,
+and the commands still update them. When a direct write to a harness-owned file
+fails with a permission error, use the native command that owns the file. Never
+change the mode of a harness-owned file. Keep your own files, payload
 files, notes and scripts, in `work/`. `learnings/` stays the loop's ledger, and
 the other agent folders (`context/`, `idea/`, `evidence/`, `cohort/notes/`,
 `experiment/code/`, `draft/`) stay work areas. The one exception is
