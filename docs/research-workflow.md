@@ -105,8 +105,8 @@ copy them.
 
 The harness owns both folders. It publishes their files read-only, the guard
 hook refuses `Write`, `Edit` and `NotebookEdit` into them, and each render
-rewrites the files it owns and lists a file that it did not write under
-`unowned`. The agent keeps its own files,
+brings the files it owns up to date and lists a file that it did not write
+under `unowned`. The agent keeps its own files,
 payload files, notes and scripts, in `work/`. The work areas that records pin
 (`draft/`, `experiment/code/`, `research/probes/`, `research/runs/`, the study's
 agent folders, the controller root and the node workspaces) and the storage

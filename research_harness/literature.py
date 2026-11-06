@@ -879,8 +879,9 @@ def depth_is_exact_fulltext(requirements, work):
 
 
 def export_foundation(store, profile):
-    """Publish read-only inventory/coverage projections into intermediate/literature/exports/ of the workspace root
-    and return their paths from that root; they stay non-authoritative, so never read them as state."""
+    """Publish the two read-only exports, inventory and coverage, under intermediate/literature/exports/ of the
+    workspace root. Return their paths from that root and the report digest. Never read them as authoritative
+    state."""
     report = foundation_report(store, profile)
     inventory = ["# Literature inventory", "", "Profile: " + profile, "", "| Exact version | Tier | Required depth | Saved sources |", "| --- | --- | --- | --- |"]
     for item in report["inventory"]:

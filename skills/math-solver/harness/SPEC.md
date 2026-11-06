@@ -139,16 +139,18 @@ commands still update them. This stops accidental direct writes only: the
 same user can still change the mode, unlink or replace a file through its
 writable directory, and full protection needs host-enforced read-only
 access with a separately authorized writer, which this plugin does not
-establish. The plugin's hooks still refuse an edit to these files from any
-other tool. The files the agent writes by design (`problem.json`,
+establish. The attack-file guard stays: it refuses a `Write` or an `Edit` of
+these files and a shell command that writes to one of them in a form its
+parser recognizes, and the read-only mode covers the direct writes that the
+guard does not see. The files the agent writes by design (`problem.json`,
 `novelty.md`, `preconditions.json`, `ranking.json`, the `study/` files,
 `units/INVENTORY.md` and the unit files) stay writable. A reader never
 requires the read-only mode: a record written before 0.76.0 with writable
 files reads and plans as before, and the next native write of such a file
 publishes it again read-only, also when its bytes are unchanged. When a
-direct write to a harness-owned file fails with a permission error, use
-the native command that owns the file. Never change the mode of a
-harness-owned file.
+direct write to a file that a command owns fails with a permission error,
+use that command. When the file belongs to a hook (`activity.jsonl`), leave
+its updates to the hook. Never change the mode of a harness-owned file.
 
 A native child record has the same format whether historical or managed:
 its `parent.json` is `{"parent": "<slug>", "opened_after_move": n}`,

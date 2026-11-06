@@ -2734,16 +2734,22 @@ validation. `build(isolated_document, content_sink)` returns
 bytes in memory and supplies `put/get_blob` and `put/get_artifact`; it does not
 reacquire the writer lock. After pure validation succeeds, the same locked writer
 persists staged content and atomically replaces the event document. Every file
-that the store, the renders and the native commands publish (the files under
-`.search/`, the pointer file, the generated Markdown, the output views and the
-native record files of a node) is published atomically and read-only, mode
+that the store and the renders publish (the event document, the content stores,
+`.search/writer-runtime.json`, the effect acknowledgements, the run records and
+captured streams under `.search/runs/`, the pointer file, the generated Markdown
+and the output views) and every node record file that a native command owns
+(`openings.json`, `journal.jsonl`, `tasks.json`, `parent.json`, `result.json`,
+`check-unit.json`, `FINISHED.json`) is published atomically and read-only, mode
 `0400`: a temporary file in the same directory receives the complete bytes and
 the final mode, is synced and renamed over the target, and the directory is
-synced. A lock file and a SQLite database keep their handling. A direct write to
-such a file fails with a permission error, while the commands still update it.
-A reader never requires the mode: a record written before 0.76.0 with writable
-files replays and plans as before, and the next native write publishes such a
-file again read-only, also when its bytes are unchanged. Callback
+synced. The agent-owned files that native commands also write (`problem.json`,
+`novelty.md`, `preconditions.json`) stay writable, the input and build copies
+under `.search/runs/` keep their recorded modes, and a lock file and a SQLite
+database keep their handling. A direct write to a read-only file fails with a
+permission error, while the commands still update it. A reader never requires
+the mode: a record written before 0.76.0 with writable files replays and plans
+as before, and the next native write publishes such a file again read-only,
+also when its bytes are unchanged. Callback
 mutation cannot change authoritative input or the candidate persisted by storage.
 
 The outer event remains exactly `{sequence,request_id,kind,payload}`, with kind
