@@ -4,10 +4,11 @@ historical ones, and intermediate/ every other output of the process.
 This module is the only owner of their placement rules. PLACEMENT_BY_KIND names the view group of every record kind
 that the harness writes, or none, and each group in VIEW_GROUPS builds its files from the current records. The status of
 a record (current, superseded, historical or not_selected) follows the harness's own rules and decides its folder.
-A render computes the whole view model from the records, writes only the files whose bytes differ from the marker's
-digests and removes the owned files that the model no longer produces. Each command renders once, at its boundary,
-after its last commit and outside every lock (render_workspace_views); export --kind outputs renders on request
-(render_all).
+A render computes the whole view model from the records, writes the files whose bytes differ from the marker's
+digests, publishes a writable existing file with the same bytes again so that it ends read-only, and removes the owned
+files that the model no longer produces. Every file it publishes is read-only (write_projection, mode 0400); the
+read-only mode is not a condition for reading a view. Each command renders once, at its boundary, after its last
+commit and outside every lock (render_workspace_views); export --kind outputs renders on request (render_all).
 """
 
 from contextlib import contextmanager

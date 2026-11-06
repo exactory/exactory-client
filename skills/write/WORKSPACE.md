@@ -28,6 +28,8 @@ below are what the ai-science loop (LOOP.md) refers to.
 │   ├── research.sqlite3        authoritative research and operation history
 │   ├── citation-check.json     exactory-check lookup report (version 2)
 │   ├── citation-cache.json     positive-only verification cache
+│   ├── derivation-check.json   exactory-derive check report
+│   ├── authorship.json         written_by_exactory record of the paper hook
 │   └── output-views.json       marker of the last render of final/ and intermediate/
 ├── draft/                      LaTeX sources; references.bib lives here
 ├── evidence/claims.json        claim -> source ledger
@@ -41,16 +43,18 @@ below are what the ai-science loop (LOOP.md) refers to.
 ```
 
 `.exactory/draft.json` projects the managed draft fields, including its common
-research Store reference. The CLI writes it. Read `exactory-research status --summary`
-and `next --summary` for authoritative obligations rather than editing the projection.
+research Store reference. The CLI writes it read-only. Read
+`exactory-research status --summary` and `next --summary` for authoritative
+obligations rather than editing the projection.
 The draft record in the store is the authority. In a managed study at stage
 `write`, `status` lists `draft_marker_missing` while the file is missing, is not
 a regular file, or holds JSON that differs from the record (compared as parsed
 JSON, not as bytes), and also while a file, a link or another entry exists at
 that path with no draft record. The ai-science skill's STUDY.md names the step
 for each state. The harness generates `final/` and `intermediate/` from its
-records after each command and owns them: the guard hook refuses `Write`, `Edit`
-and `NotebookEdit` there, so keep your own files in `work/`. STUDY.md states
+records after each command and owns them: it publishes their files read-only,
+and the guard hook refuses `Write`, `Edit` and `NotebookEdit` there, so keep
+your own files in `work/`. STUDY.md states
 the layout of both folders and the advisory `output_views_stale`, whose action
 is `exactory-research export --kind outputs`.
 

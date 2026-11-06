@@ -2294,7 +2294,7 @@ ordinary shell activity recorded. A session with no entry among the last 200
 loses that entry, and its ordinary calls are not recorded until its next harness
 command. An exclusive lock on the attack directory itself covers each read,
 append and rewrite of the log, so no lock file is added to the attack, and the
-rewrite replaces the file atomically.
+rewrite replaces the file atomically and leaves it read-only.
 The recorder splits a command with the guard's lexer settings and attributes a
 compound command to each workspace once. Quoted or escaped separators do not make
 a harness call. Only the direct command that the host reports is seen, not programs
@@ -2733,7 +2733,17 @@ validation. `build(isolated_document, content_sink)` returns
 `{command,target,spec_digest,operations,effects}`. The sink stages immutable
 bytes in memory and supplies `put/get_blob` and `put/get_artifact`; it does not
 reacquire the writer lock. After pure validation succeeds, the same locked writer
-persists staged content and atomically replaces the event document. Callback
+persists staged content and atomically replaces the event document. Every file
+that the store, the renders and the native commands publish (the files under
+`.search/`, the pointer file, the generated Markdown, the output views and the
+native record files of a node) is published atomically and read-only, mode
+`0400`: a temporary file in the same directory receives the complete bytes and
+the final mode, is synced and renamed over the target, and the directory is
+synced. A lock file and a SQLite database keep their handling. A direct write to
+such a file fails with a permission error, while the commands still update it.
+A reader never requires the mode: a record written before 0.76.0 with writable
+files replays and plans as before, and the next native write publishes such a
+file again read-only, also when its bytes are unchanged. Callback
 mutation cannot change authoritative input or the candidate persisted by storage.
 
 The outer event remains exactly `{sequence,request_id,kind,payload}`, with kind
@@ -2785,8 +2795,10 @@ installed plugin version and when the controller root has the reserved name
 below; only the render of `init`, when the document holds that one event and a
 `SEARCH_TREE.md` is already in place, keeps that handwritten file. When the
 marker is current, the JSON views stay as they are; otherwise the render
-builds the whole model from the replayed state, writes only the files whose
-bytes differ, and removes the owned files that the model no longer produces.
+builds the whole model from the replayed state, writes the files whose bytes
+differ, publishes a writable existing view with the same bytes again so that
+it ends read-only, and removes the owned files that the model no longer
+produces. The read-only mode is not a condition for reading a view.
 An artifact of at most 1 MiB is copied; a larger,
 missing or corrupt one is listed by digest with its reason. A failed render never
 changes the command's result: it prints one stderr line, `Output views were not

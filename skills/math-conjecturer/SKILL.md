@@ -116,9 +116,10 @@ not admitted and invalidated results in `intermediate/math/attack/`. `index.json
 in each folder lists every file with the kind, id, revision and status of its
 record. Read the outputs there, and never copy them elsewhere.
 
-The harness owns both folders: the guard hook refuses `Write`, `Edit` and
-`NotebookEdit` into them, and every render rewrites the files it owns. Keep your
-own files, payload files, notes and scripts, in `work/`. The one exception is
+The harness owns both folders: it publishes their files read-only, the guard
+hook refuses `Write`, `Edit` and `NotebookEdit` into them, and every render
+rewrites the files it owns. Keep your own files, payload files, notes and
+scripts, in `work/`. The one exception is
 `intermediate/legacy/`: a session that owns a record from before 0.68.0 moves
 the copies that its tools wrote, for example `reviews/outputs/`, to
 `intermediate/legacy/<original path>/` once, and the index lists them as
