@@ -205,9 +205,9 @@ When the evidence does not support any candidate, end the exploration without a 
 slate with an empty selection and a nonempty `reason`, and keep the negative findings in the
 record. A clean no is a result of the exploration, not a failure of it.
 
-One record holds the exploration, and no reviewed work moves between records. A bar or slate
-objection binds the candidates of its own record only, and no release carries it into another
-record:
+One record holds the exploration. A bar or slate objection binds the candidates of its own record,
+and it reaches another record only through `exactory-research problem-objections-carry` ("Carry a
+reviewed candidate to another record", below):
 
 - A connection to another area does not by itself call for another record; the primary subject
   class of the statement decides.
@@ -225,14 +225,59 @@ record:
   ordinary path. When the comparison favours a candidate of another class and the candidate
   meets the selection requirement of step 9 of "Candidates and the slate", select it. Do not
   formulate it in this record: a statement is bound to the record's class
-  (`problem_area_mismatch`). In `comparison`, state that its pursuit in a record of its class
-  waits for a release of this skill in which the handoff to another record carries the review
-  objections that concern a candidate. Until that release, open no record for it, including a
-  sibling record on the same field question or seed. Use `deferred` only for a genuine evidence
-  gap. While no statement exists, the post gate lists `problem_statement_missing`. While a
-  current statement formulates a candidate that the latest slate does not select, it lists
-  `problem_candidate_unselected`. `next` reports the leading obligation, and the wait holds
-  whatever code `next` reports.
+  (`problem_area_mismatch`). Take it up in a record of its class with the carry below. Use
+  `deferred` only for a genuine evidence gap.
+- Open a sibling record on the same field question or seed only with the carry below, from each
+  other record of the exploration. When that record holds no review yet, the carry is empty and
+  records the link. The sibling then needs a new carry when that record records a review.
+
+### Carry a reviewed candidate to another record
+
+The carry takes the bar and slate objections of one record, the source, into another record, the
+destination. The destination takes up one of the source's candidates: a new record in the
+candidate's class, or a sibling record. The command is `exactory-research
+problem-objections-carry`. The CLI reference states its records, its checks and every code
+([Carried objections](../../docs/research-cli.md#carried-objections)).
+
+1. In the source, finish and record every bar and slate review that was requested or assigned.
+   While one is outstanding, the carry refuses with `problem_objections_refresh_required`.
+2. Open the destination as in step 1 of this section. Name each record's workspace in the notes
+   of the other. Record the candidate again in the destination. Record again every search and
+   source reading that its evidence needs, the adverse ones included. A `source.reference`,
+   `observation` or `notes` text that names the source is a description: it carries nothing.
+3. In the destination, before its first slate review, run `exactory-research
+   problem-objections-carry --file carry.json` with the destination's current
+   `--expected-revision` and a distinct `--request-id`. The payload is
+   `{id, source_workspace, source_revision}`: a new carry id, the absolute path of the source
+   workspace, and the source's current revision (`exactory-research status` in the source). The
+   command reads the source itself. It imports every material objection of the source's bar and
+   slate reviews, each with its evidence. It also imports the later versions that the source's
+   result reviews gave on them, and the objections that the source itself carried. The source's
+   resolutions and adjudications of them travel as context. The payload names no candidate and
+   no objection: the command imports the complete set.
+4. In the destination, obtain the two blind bars as usual. They receive no carried objection.
+   When the import is nonempty, obtain a focused slate review before you record the slate
+   (`problem_slate_review_unverified` otherwise). Its packet carries each imported objection
+   under the id `<id>@origin:<source identity>` with its evidence, and the review gives a finding
+   on each. Then record the slate. A slate recorded before the carry is stale
+   (`problem_slate_stale`).
+5. Both result reviews receive each imported objection and give a finding on each, whatever
+   candidates it named in the source. An imported objection clears as a native one does. Both
+   current result reviews resolve its delivered version with evidence, or a focused adjudication
+   finds it `not_upheld` or `not_binding` (steps 6 and 8 of "Reviews and the decision", with the
+   qualified id in `context.objection_id` and the two bar review ids in `context.review_ids`).
+   The source's resolution, the selection, a deferral, a `continuing` or `contested` finding and
+   a favourable finding of one reviewer clear nothing.
+6. The destination stays linked to the source. The harness opens the source before each slate or
+   result assignment, at `problem-decision` with `post`, at `gate post` and at `problem-posted`.
+   It compares the source's current bar and slate reviews with the imported cut. When the source
+   recorded a new review, a new version of an objection or a carry of its own, the harness
+   refuses with `problem_objections_refresh_required`. Then record a new carry with a new id.
+   Obtain the focused slate review again and record a new slate. Obtain both result reviews
+   again. When the source workspace cannot be opened, the harness refuses with
+   `problem_objection_source_unavailable`. Then restore the workspace. When it moved, record a
+   new carry that names its new path.
+7. Before you post, apply the rule for a record with a carry in "Compose and post a problem".
 
 ### An exploration from a thought experiment
 
@@ -304,7 +349,9 @@ The rule of "Exploration" that one record holds the exploration applies with the
   apply the steps, the principle and the openness requirements of this subsection in the
   successor.
 - Unless you restart, keep the interpretations of every class, their expectations and their
-  tests in this record. Their derived candidates follow that rule.
+  tests in this record. Record their derived candidates here and compare them on this record's
+  slate. A selected derived candidate of another class moves to a record of its class through
+  "Carry a reviewed candidate to another record".
 
 ## Candidates and the slate
 
@@ -346,7 +393,9 @@ significance.
    bars and uses the template `exactory-problem-review-v5/slate`. Run it with `review-run` and
    record it with `value-review`. A slate review's objection names the candidates it concerns;
    such an objection follows the candidate into the result reviews and the post gate of this
-   record until it is resolved with evidence or found not upheld.
+   record until it is resolved with evidence or found not upheld. When the candidate moves to
+   another record, the carry takes the objection with it ("Carry a reviewed candidate to another
+   record" in "Exploration").
 8. Record the selection with `exactory-research problem-slate`. Give every current candidate
    exactly one disposition: `selected`, `deferred` with the evidence that raises it, or
    `rejected` with the reason. A candidate of the excluded kind is `rejected` with the
@@ -364,8 +413,9 @@ significance.
     gives a finding on every objection its earlier review stated.
 
 For each selected candidate of the record's class, take the following steps in turn. Post each
-one that meets the bar. For a selected candidate of another class, follow the rule of
-"Exploration". Several problems from one exploration is the normal case, not an exception.
+one that meets the bar. For a selected candidate of another class, follow "Carry a reviewed
+candidate to another record" in "Exploration". Several problems from one exploration is the
+normal case, not an exception.
 
 ## Formulation
 
@@ -392,8 +442,10 @@ one that meets the bar. For a selected candidate of another class, follow the ru
 4. Record a changed statement or changed criteria under a new statement id. After a change,
    reassess the openness finding, the attempt, the value arguments and the reviews that the
    change affects, and reuse the work that still applies.
-5. By this step the slate's bars have been requested. For a candidate of another class, follow
-   the rule of "Exploration" that keeps it in this record.
+5. By this step the slate's bars have been requested, so a candidate of another class does not
+   restart the exploration. Take it up in a new record of its class with "Carry a reviewed
+   candidate to another record" in "Exploration". Run the carry there before its first slate
+   review. Formulate the candidate there after the bars, the focused slate review and the slate.
 
 ## The attempt
 
@@ -1026,15 +1078,16 @@ instead of one request. The
    leaves the objection open (`assessment_incomplete`); do the recovery work that `next` names.
 7. For a rubric grade, treat only a ready `not_upheld` adjudication on the current evidence digest
    as a resolution of that one item.
-8. Resolve every material objection of both bars, of the applicable slate reviews and of both
-   result reviews with evidence, or with a ready focused adjudication on the current evidence
-   that finds it `not_upheld` or `not_binding`. `not_binding` means that the objection's claim
+8. Resolve every material objection of both bars, of the applicable slate reviews, of a carry
+   and of both result reviews with evidence, or with a ready focused adjudication on the current
+   evidence that finds it `not_upheld` or `not_binding`. `not_binding` means that the objection's claim
    holds, but each affected part of the statement, the resolution criteria and the value
    paragraphs either does not depend on the contested premise or states that dependence
    explicitly. Name an
    objection in `context.objection_id` by the identity that its packets deliver: two blind
    reviewers who chose one id for different claims hold distinct identities, the later one
-   `<id>@<review id>` with its `stated_id`. When a
+   `<id>@<review id>` with its `stated_id`, and an imported objection is
+   `<id>@origin:<source identity>`. When a
    slate objection or the bars change after the result reviews, the same reviewers can be
    reassigned (the harness permits the refresh when the review's currency changed and refuses a
    repeat otherwise).
@@ -1062,6 +1115,13 @@ Keep an exported `formal-statement.txt` when the record includes one. Run the
 citation and duplicate checks below on those exported files unchanged. A change
 to any part after export requires a new statement record and starts the post gate
 again.
+
+In a record that holds a carry ("Carry a reviewed candidate to another record" in
+"Exploration"), run `exactory-research gate post` again immediately before
+`exactory post-problem`. The gate reads the linked source records at that moment
+only. A review that a source records after that moment is not seen before the
+post, and `problem-posted` then refuses with `problem_objections_refresh_required`
+among its obligations.
 
 For a problem without a research record, compose and post the parts as follows.
 
@@ -1180,6 +1240,8 @@ Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
   the reviews establish the claim.
 - Do not reuse a review, a finding or an attempt of another statement for this one; the harness
   refuses it, and the refusal is right.
+- Do not take a reviewed candidate up in another record without the carry; a `source.reference`
+  that names the source record carries nothing ("Carry a reviewed candidate to another record").
 - Do not repeat an exhausted task of a staged review or assign another reviewer while a slot is
   incomplete; do the research or recovery work that `next` names.
 - Do not edit an exported part before posting; a changed part needs a new statement record and
