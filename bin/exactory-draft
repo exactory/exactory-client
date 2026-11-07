@@ -125,6 +125,12 @@ _AUTOMATIC_PASS_DISCLOSURE_TEMPLATE = (
     "reviews. {confirmation} An entry named unknown could not be read. This entry supplies no review approval "
     "or permission to publish, and does not show whether the missing reviews were completed later."
 )
+_PUBLIC_ACTION_DISCLOSURE_TEMPLATE = (
+    "The workspace has a user-instruction entry {id} for the exact public write {public_action}. "
+    "The agent recorded that the user instructed this write. {confirmation} "
+    "This entry does not pass a research gate or show who the user was, whether the instruction was used, "
+    "or whether the write completed."
+)
 
 # One keyword, sent only with the disclosure that names exactory.ai as the
 # writer, because it rests on the same evidence. The keyword answers "did
@@ -509,7 +515,7 @@ def _has_exactory_authorship_evidence(pdf_path: Path) -> bool:
 
 def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
                             has_exactory_authorship_evidence: bool, problem_target: dict | None = None,
-                            passed_gates=(), automatic_passes=()) -> dict:
+                            passed_gates=(), automatic_passes=(), public_action_overrides=()) -> dict:
     # Zenodo renders the description as HTML. The abstract paragraphs come
     # first, the disclosure closes the description as its own paragraph.
     paragraph_texts = [" ".join(block.split()) for block in abstract_text.split("\n\n")]
@@ -525,6 +531,10 @@ def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
                         if entry["recorded"] else
                         "Only a local report was available; a committed continuation could not be confirmed.")
         paragraph_texts.append(_AUTOMATIC_PASS_DISCLOSURE_TEMPLATE.format(**entry, confirmation=confirmation))
+    for entry in public_action_overrides:
+        confirmation = ("The instruction is in the stored record." if entry["recorded"] else
+                        "Only a local fallback entry was available; recording in the store could not be confirmed.")
+        paragraph_texts.append(_PUBLIC_ACTION_DISCLOSURE_TEMPLATE.format(**entry, confirmation=confirmation))
     metadata = {
         "upload_type": "publication",
         "publication_type": "preprint",

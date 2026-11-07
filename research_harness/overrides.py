@@ -18,6 +18,11 @@ _INSTRUCTION_LIMIT_BYTES = 64 * 1024
 _UNRECORDED_OVERRIDES_PATH = ".exactory/unrecorded-overrides.jsonl"
 
 
+def _valid_public_action(action):
+    return (isinstance(action, str) and action.startswith(("POST /", "PUT /", "PATCH /", "DELETE /"))
+            and "\n" not in action and "\r" not in action)
+
+
 def validate_override_payload(value):
     """Validate the instruction's scope independently of store availability."""
     from .cli import GATES
@@ -28,11 +33,8 @@ def validate_override_payload(value):
             text(value[key], "Gate override " + key, code=code)
     if value["gate"] not in GATES:
         raise ResearchError("gate_override_gate", "Give gate as a name that exactory-research gate accepts")
-    if "public_action" in value:
-        action = value["public_action"]
-        if (not isinstance(action, str) or not action.startswith(("POST /", "PUT /", "PATCH /", "DELETE /"))
-                or "\n" in action or "\r" in action):
-            raise ResearchError("gate_override_invalid", "Need public_action as an exact METHOD /path for this write.")
+    if "public_action" in value and not _valid_public_action(value["public_action"]):
+        raise ResearchError("gate_override_invalid", "Need public_action as an exact METHOD /path for this write.")
     if "transition" in value:
         transition = value["transition"]
         fields(transition, ("from", "to"), code=code)
@@ -166,7 +168,8 @@ def read_unrecorded_overrides(root):
             row = None
         if (not isinstance(row, dict) or not isinstance(row.get("id"), str)
                 or not isinstance(row.get("gate"), str) or not isinstance(row.get("instruction"), dict)
-                or not isinstance(row["instruction"].get("text"), str)):
+                or not isinstance(row["instruction"].get("text"), str)
+                or ("public_action" in row and not _valid_public_action(row["public_action"]))):
             row = build_unreadable_override(line_number)
         rows.append(row)
     return rows
@@ -232,13 +235,13 @@ def list_passed_gates(store):
             records = store.snapshot()["records"]
         except ResearchError:
             pass
-    gates = {row["gate"] for row in records.get("gate_override", {}).values()}
-    gates.update(row["gate"] for row in read_unrecorded_overrides(root) or [])
+    gates = {row["gate"] for row in records.get("gate_override", {}).values() if "public_action" not in row}
+    gates.update(row["gate"] for row in read_unrecorded_overrides(root) or [] if "public_action" not in row)
     return sorted(gates)
 
 
 def describe_deposit_overrides(store):
-    """Keep automatic entries out of the disclosure that attributes user instructions."""
+    """Disclose user gate instructions, exact public writes and automatic entries separately."""
     records = {}
     root = store.root if store is not None else find_workspace(required=False) or Path.cwd()
     if store is not None:
@@ -247,10 +250,20 @@ def describe_deposit_overrides(store):
         except ResearchError:
             pass
     rows = records.get("gate_override", {})
-    gates = {row["gate"] for row in rows.values() if row.get("authority") != "harness"}
-    gates.update(row["gate"] for row in read_unrecorded_overrides(root) or [])
+    unrecorded = read_unrecorded_overrides(root) or []
+    gates = {row["gate"] for row in rows.values()
+             if row.get("authority") != "harness" and "public_action" not in row}
+    gates.update(row["gate"] for row in unrecorded if "public_action" not in row)
     automatic = [dict(gate=row["gate"], stop_code=row["stop_code"], stop_id=row["stop_id"], recorded=True)
                  for row in rows.values() if row.get("authority") == "harness"]
     automatic.extend(dict(gate=row["gate"], stop_code=row["stop_code"], stop_id=row["stop_id"], recorded=False)
                      for row in read_unrecorded_automatic_overrides(root, rows))
-    return dict(passed_gates=sorted(gates), automatic_passes=sorted(automatic, key=lambda row: (row["gate"], row["stop_id"])))
+    result = dict(passed_gates=sorted(gates),
+                  automatic_passes=sorted(automatic, key=lambda row: (row["gate"], row["stop_id"])))
+    actions = [dict(id=row["id"], public_action=row["public_action"], recorded=True)
+               for row in rows.values() if row.get("authority") != "harness" and "public_action" in row]
+    actions.extend(dict(id=row["id"], public_action=row["public_action"], recorded=False)
+                   for row in unrecorded if "public_action" in row)
+    if actions:
+        result["public_action_overrides"] = sorted(actions, key=lambda row: (row["public_action"], row["id"]))
+    return result

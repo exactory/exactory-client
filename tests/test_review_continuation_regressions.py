@@ -132,15 +132,31 @@ class ContinuationRegressionTests(unittest.TestCase):
         case.exhaust_later_role('result')
         output = io.StringIO()
         before = case.store.snapshot()
+        plan = self.assert_exhausted_slot_stops(case, 'result-first')
         with patch('research_harness.review_transport.send_request',
                    side_effect=AssertionError('An exhausted slot must not call a reviewer')), \
                 redirect_stdout(output), self.assertRaises(SystemExit) as exited:
             cli.main(['review-series', '--workspace', str(case.root), '--assignment', 'result-first'],
                      render_views=lambda workspace: None)
         self.assertEqual(exited.exception.code, 3)
-        self.assertEqual(json.loads(output.getvalue().splitlines()[-1]),
-                         self.assert_exhausted_slot_stops(case, 'result-first'))
-        self.assertEqual(case.store.snapshot(), before)
+        after = case.store.snapshot()
+        stops = after['records']['review_series_stop']
+        self.assertEqual(len(stops), 1)
+        stop = next(iter(stops.values()))
+        self.assertEqual(stop['plan'], plan)
+        self.assertIsNone(stop['retry'])
+        self.assertEqual(after['revision'], before['revision'] + 1)
+        expected_records = dict(before['records'], review_series_stop=stops)
+        expected_records['literature_operation'] = dict(before['records']['literature_operation'])
+        expected_records['literature_operation'][stop['request_id']] = dict(
+            operation='review.series_stop', runtime=case.store.describe_runtime())
+        self.assertEqual(after['records'], expected_records)
+        self.assertEqual([json.loads(line) for line in output.getvalue().splitlines()],
+                         [dict(plan, stop_id=stop['id'], revision_after_stop=after['revision'],
+                               stop_class='decision')])
+        receipt = case.store.committed_request(stop['request_id'])
+        self.assertEqual(receipt['operation'], 'review.series_stop')
+        self.assertEqual(receipt['payload'], {'stop': stop})
 
     def test_two_reassessment_mismatches_hand_off_eligible_correction(self):
         from research_harness import review_output_correction

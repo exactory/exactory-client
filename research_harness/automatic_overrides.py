@@ -32,7 +32,7 @@ def _scope(records, artifacts, assignment_id):
     return dict(gate=gate, transition={"from": source, "to": destination}, target_digest=target)
 
 
-def record_series_stop(store, plan, *, repeated=False):
+def record_series_stop(store, plan):
     """Retain a terminal observation at the driver's current store revision."""
     snapshot = store.snapshot()
     identifier = "series-stop:" + digest([snapshot["revision"], plan])
@@ -40,8 +40,6 @@ def record_series_stop(store, plan, *, repeated=False):
     code = plan["code"]
     retry = None
     if code == "review_series_no_progress":
-        if not repeated:
-            raise ResearchError("gate_override_retry_pending", "Need a repeated action at unchanged progress.")
         retry = dict(policy="one_execution_per_progress_position", executions=1, exhausted=True,
                      **{key: plan["details"][key] for key in
                         ("action_state", "action_digest", "progress_digest", "successful_request_id")})
@@ -79,11 +77,12 @@ def _trusted_stop(store, records, identifier):
         _refuse("stop_class", "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",
                 stop_code=stop["code"], stop_class=classification)
     retry = stop.get("retry") or {}
-    if (retry.get("policy") != "one_execution_per_progress_position" or retry.get("executions") != 1
-            or retry.get("exhausted") is not True):
-        _refuse("retry_pending", "Need the recorded retry schedule to end.")
     from .review_series import _identify_action
-    if (retry.get("action_state") not in ("run", "resume", "continue", "replace", "plan", "record")
+    # The writer records only an ended no-progress schedule. A different retry
+    # shape cannot ask the caller to keep waiting; it is invalid stop evidence.
+    if (retry.get("policy") != "one_execution_per_progress_position" or retry.get("executions") != 1
+            or retry.get("exhausted") is not True
+            or retry.get("action_state") not in ("run", "resume", "continue", "replace", "plan", "record")
             or retry.get("action_digest") != _identify_action(dict(stop["plan"], state=retry["action_state"]))
             or retry.get("progress_digest") != digest(stop["plan"]["progress"])
             or not isinstance(retry.get("successful_request_id"), str)
