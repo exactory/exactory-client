@@ -6,6 +6,7 @@ from pathlib import Path
 
 from . import schema as s
 from .admission import reference
+from .dispositions import objective_ended, require_objective_open, validate_instruction
 from .errors import SearchError
 from .evidence import import_inputs, proposal_inputs, audit_admission, audit_state, audit_checkpoint, audit_local_delivery
 from .model import apply_event, initial_state, replay
@@ -15,10 +16,10 @@ from .storage import Store, canonical_bytes, safe_path, _strict_json
 
 
 def require_checkable_command(name):
-    if name not in {"pause", "side-interval", "retreat", "interpret", "render"}:
+    if name not in {"pause", "side-interval", "retreat", "interpret", "render", "set-aside", "end-objective"}:
         from .errors import SearchError
         raise SearchError("check_unsupported", "Check mode cannot prepare this command. Only pause, side-interval, "
-                          "retreat, interpret and render accept --check")
+                          "retreat, interpret, render, set-aside and end-objective accept --check")
 
 
 class Controller:
@@ -94,7 +95,7 @@ class Controller:
             self._validate_routing_identity(state, spec)
             if spec.get("session_id") is not None:
                 from .discovery import validate_session
-                if not validate_session(state, spec["session_id"], spec.get("focus_request_id")):
+                if objective_ended(state) is None and not validate_session(state, spec["session_id"], spec.get("focus_request_id")):
                     return {"kind": "handoff", "reason": "Explicit matching session focus is required; run search focus"}
             from .output_views import find_stale_views
             # Stale views are reported under their own key: they never gate work or replace the next scientific action.
@@ -113,7 +114,11 @@ class Controller:
             return action
         s.integer(expected_revision)
         s.text(request_id)
-        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "side-interval", "amend-computation", "amend-foundation", "interpret"}:
+        if name in {"propose", "review", "admit", "adopt"}:
+            # A recorded request can return before _build; terminal work commands refuse retries too.
+            state = replay(self.store.read())
+            require_objective_open(state)
+        if name not in {"admit", "accept", "retreat", "checkpoint", "begin", "run", "side-interval", "set-aside", "amend-computation", "amend-foundation", "interpret"}:
             s.require(target is None, "This command has no positional target")
         elif name != "checkpoint":
             s.text(target)
@@ -216,7 +221,7 @@ class Controller:
             from .strategy_refresh_io import effective_next_action
             action = effective_next_action(self, state)
             response["decision"] = ({"kind": "continue", "action": action}
-                if prior["kind"] == "continue" and action["kind"] not in {"paused", "resolved", "handoff", "blocked", "execution_pending"}
+                if prior["kind"] == "continue" and action["kind"] not in {"paused", "resolved", "ended", "handoff", "blocked", "execution_pending"}
                 else prior if built and event["sequence"] == state["revision"] else {"kind": "allow_stop"})
             if not validate_session(state, spec.get("session_id"), (hook_session or {}).get("focus_request_id")):
                 response["decision"] = {"kind": "allow_stop"}
@@ -233,7 +238,9 @@ class Controller:
 
     def _build(self, name, spec, target, identity, document, content, routing=None, hook_session=None, operation_locks=None):
         state = replay(document)
-        s.require(not state["service"]["native_intents"] or name in {"reconcile", "pause", "focus", "hook-stop", "audit", "render"},
+        if name in {"begin", "run", "complete", "resume", "pause", "replan", "side-interval", "propose", "review", "admit", "adopt"}:
+            require_objective_open(state)
+        s.require(not state["service"]["native_intents"] or name in {"reconcile", "pause", "focus", "hook-stop", "audit", "render", "end-objective"},
                   "Reconcile the original native intent before another controller mutation", "recovery_required")
         if name != "render":
             s.require(all(safe_path(self.store.root, "effect-" + s.digest(effect) + ".json").exists()
@@ -409,6 +416,11 @@ class Controller:
             if effect is not None:
                 effects.append(effect)
             emit("proposal_admitted", {"proposal_id": target})
+        elif name in {"set-aside", "end-objective"}:
+            # Validate before adding the positional checkpoint so an extra field cannot replace it.
+            validate_instruction(state, spec)
+            emit("result_set_aside" if name == "set-aside" else "objective_ended",
+                 dict(spec, checkpoint_id=target) if name == "set-aside" else spec)
         elif name == "side-interval":
             s.closed(spec, "max_moves message_id instruction provenance")
             s.text(spec["instruction"])
@@ -416,14 +428,15 @@ class Controller:
         elif name in {"pause", "resume", "focus", "hook-stop"}:
             s.require("action" not in spec, "Control action is selected by the command")
             if name == "hook-stop":
-                s.require(not state["service"]["native_intents"],
+                ended = objective_ended(state) is not None
+                s.require(ended or not state["service"]["native_intents"],
                           "Reconcile the original native operation before automatic continuation", "recovery_required")
                 from .discovery import validate_session
                 validation = hook_session or {}
                 self._validate_routing_identity(state, validation)
-                s.require(validate_session(state, spec.get("session_id"), validation.get("focus_request_id")),
+                s.require(ended or validate_session(state, spec.get("session_id"), validation.get("focus_request_id")),
                           "Explicit matching session focus is required; run search focus", "focus_required")
-                if not state["service"]["legacy_intents"] and not state["control"]["pending_moves"]:
+                if not ended and not state["service"]["legacy_intents"] and not state["control"]["pending_moves"]:
                     from .integration import observe_nodes
                     prospective = copy.deepcopy(state)
                     operations.extend(observe_nodes(self, prospective,
@@ -545,12 +558,14 @@ class Controller:
             from .research import needs_review_workspace
             if needs_review_workspace(state):
                 emit("review_workspace_recorded", {"workspace": "."})
-        if name in {"checkpoint", "accept"}:
+        if name in {"checkpoint", "accept", "set-aside"}:
             from .model import EVENT_HANDLERS
             from .integration import observe_nodes
             prospective = copy.deepcopy(state)
             for operation in operations:
                 EVENT_HANDLERS[operation["kind"]](prospective, operation["payload"])
+            if name == "set-aside":
+                checkpoint = prospective["checkpoints"][target]
             if checkpoint["origin"]["kind"] == "journal_move":
                 operations.extend(observe_nodes(self, prospective, [checkpoint["origin"]["node_id"]], content))
         paths = {"SEARCH_TREE.md"} | {n["attack_slug"] + "/LINEAGE.md" for n in state["nodes"].values()}

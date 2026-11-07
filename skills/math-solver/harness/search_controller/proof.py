@@ -9,6 +9,7 @@ from datetime import date
 
 from . import schema as s
 from .admission import allocate, reference, progress_identity
+from .dispositions import require_objective_open
 
 
 def record_checkpoint(state, payload):
@@ -308,6 +309,10 @@ def accept_result(state, payload):
     state["acceptances"][identity] = dict(copy.deepcopy(value), id=identity, status="accepted",
                                          route_content_digests=bindings, progress_key=progress_key,
                                          progress_eligible=progress_eligible)
+    for disposition in state["control"].get("dispositions", []):
+        if (disposition["kind"] == "result_set_aside" and disposition["checkpoint_id"] == cp["id"]
+                and "ended_by_acceptance_id" not in disposition):
+            disposition["ended_by_acceptance_id"] = identity
     from .strategy_refresh import note_evidence
     note_evidence(state, "acceptance:" + identity)
     refresh_obligations(state)
@@ -462,7 +467,7 @@ def invalidate_evidence(state, payload):
     closure = state["control"]["closure"]
     if state["proof_status"] in {"proved", "disproved"} and closure is not None and invalid & set(closure["subject"]["acceptance_ids"]):
         state["proof_status"] = "invalidated"
-        if state["execution_status"] != "paused":
+        if state["execution_status"] not in {"paused", "ended"}:
             state["execution_status"] = "needs_replan"
 
 
@@ -503,6 +508,7 @@ def find_closure_blocking_nodes(state):
 
 
 def complete_objective(state, payload):
+    require_objective_open(state)
     s.closed(payload, "closure digest")
     closure = payload["closure"]
     s.closed(closure, "subject review audit" +

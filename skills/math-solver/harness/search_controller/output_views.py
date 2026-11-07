@@ -69,6 +69,7 @@ STATE_GROUPS = {
     "control.side_interval": None, "control.state_error": None, "control.stop_count": None,
     "control.stop_decision": None, "control.stop_deliveries": None, "control.strategy_refresh": "reassessments",
     "control.summary_issued": None,
+    "control.dispositions": "objective",
     "service.effects": None, "service.imports": "imports", "service.import_versions": "imports",
     "service.adoption_allowances": "imports", "service.journal_receipts": None, "service.moves": None,
     "service.legacy_intents": None, "service.native_intents": None, "service.native_receipts": "nodes",
@@ -91,6 +92,7 @@ OPERATION_GROUPS = {
     "journal_intended": None, "native_intended": None, "move_reserved": None, "control_recorded": None,
     "discovery_recorded": None, "probe_origins_recorded": None, "review_workspace_recorded": None,
     "strategy_policy_enabled": None, "service_operation": None,
+    "result_set_aside": "objective", "objective_ended": "objective",
 }
 
 
@@ -177,6 +179,8 @@ def build_objective(views):
     state = views.state
     value = {key: state[key] for key in ("objective_id", "contract", "contract_digest", "proof_status",
                                          "execution_status", "publication_status", "obligations", "routes")}
+    if state["control"].get("dispositions"):
+        value["dispositions"] = state["control"]["dispositions"]
     views.add_record("current", "objective.json", value, "objective", state["objective_id"])
 
 

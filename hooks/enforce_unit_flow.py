@@ -70,7 +70,9 @@ def main() -> None:
         _deny(
             f"[math-solver] units/INVENTORY.md is missing, so no cash-out rule has started"
             f" and units/{number}/ cannot be written yet. Run:\n  exactory-math stall {slug}\n"
-            "It refuses while the attack is open; in that case continue the attack at stage 5."
+            "It refuses while no cash-out rule holds. In a managed objective, run exactory-math search next --json "
+            "and follow its action; when it returns ended, deliver any due attempt, report what stands and what "
+            "stays open, and stop. An attack without a controller continues at stage 5."
         )
     if path.name in _DRAFT_FILES and not _is_checked_as_it_stands(workspace / "units" / number):
         _deny(

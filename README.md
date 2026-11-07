@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.80.0](docs/releases/0.80.0.md) lets the math-solver controller record the user's instruction that sets one result aside or ends an objective. `search set-aside` takes one unaccepted result out of the mandatory acceptance step without accepting it, and `search end-objective` ends the objective without a closure. `search resume` and `search side-interval` accept the same reported form, so a paused objective comes back on the user's instruction. The record keeps the user's words, labelled as reported by the agent; the proof status and the obligations do not change, and the problem review sees the record. Without an instruction nothing passes.
+
 Version [0.79.0](docs/releases/0.79.0.md) adds recorded overrides on the user's instruction for the stage moves of a study and for the export of a problem post. `exactory-research gate-override` pins the user's own words and records what the gate still owes; no gate reads the record, no review or decision is created in place of a skipped step, and a deposit names the recorded gates in its public description. The math-solver controller is not included, and without an instruction nothing passes a gate.
 
 Version [0.78.0](docs/releases/0.78.0.md) keeps a session working when the file guard cannot check a tool call. Six read-only tools and eight plain shell commands pass, and every other call is denied with a reason that names the error, tells the agent to report it, and names the controls that only the user has. A definite write to a file that the harness owns is denied as before.

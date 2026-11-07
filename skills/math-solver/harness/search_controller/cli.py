@@ -58,10 +58,10 @@ def install_parser(commands, strategies_default):
     nested = search.add_subparsers(dest="search_command", required=True, parser_class=SearchParser)
     readonly = {"status", "guard-status", "next", "strategy-context", "review-packet"}
     specs = {"init", "adopt", "propose", "review", "begin", "run", "checkpoint", "accept",
-             "retreat", "replan", "focus", "pause", "resume", "side-interval", "hook-stop", "complete", "amend-computation", "amend-foundation", "interpret", "reassess", "review-packet", "refresh"}
-    targets = {"admit", "begin", "run", "accept", "retreat", "side-interval", "amend-computation", "amend-foundation", "interpret"}
+             "retreat", "replan", "focus", "pause", "resume", "side-interval", "set-aside", "end-objective", "hook-stop", "complete", "amend-computation", "amend-foundation", "interpret", "reassess", "review-packet", "refresh"}
+    targets = {"admit", "begin", "run", "accept", "retreat", "side-interval", "set-aside", "amend-computation", "amend-foundation", "interpret"}
     for name in ["init", "adopt", "propose", "review", "admit", "begin", "run", "reconcile",
-                 "checkpoint", "accept", "refresh", "retreat", "replan", "focus", "pause", "resume", "side-interval",
+                 "checkpoint", "accept", "refresh", "retreat", "replan", "focus", "pause", "resume", "side-interval", "set-aside", "end-objective",
                  "audit", "status", "guard-status", "next", "hook-stop", "render", "complete", "amend-computation", "amend-foundation", "interpret", "strategy-context", "reassess", "review-packet", "deliver-closure", "deliver-attempt"]:
         parser = nested.add_parser(name)
         if name in {"init", "focus", "resume"}:
@@ -90,7 +90,7 @@ def install_parser(commands, strategies_default):
         parser.add_argument("--json", action="store_true")
         if name not in {"status", "guard-status", "next", "strategy-context"}:
             parser.add_argument("--check", action="store_true",
-                                help="pause, side-interval, retreat, interpret and render: build and validate the "
+                                help="pause, side-interval, retreat, interpret, render, set-aside and end-objective: build and validate the "
                                      "event as the write does, write nothing, and print the check diagnostic or the "
                                      "original response of a recorded request. Every other command: refused with "
                                      "check_unsupported before the store is opened")

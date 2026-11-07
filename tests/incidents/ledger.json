@@ -4519,6 +4519,56 @@
         "test_gate_override.NormalProblemExportTests.test_normal_problem_export_preserves_every_file_byte",
         "test_gate_override.ProblemOverrideTests.test_damaged_local_log_is_visible_in_problem_reports_summaries_and_deposit_disclosure"
       ]
+    },
+    {
+      "id": "override-math-result-set-aside",
+      "record": "20261106085323-override-of-harness-stops",
+      "class": "control (user instruction)",
+      "summary": "A result whose reviews cannot finish makes acceptance the mandatory next task indefinitely.",
+      "expected": "A recorded user instruction sets aside one checkpoint for scheduling without accepting it or closing its obligation; provenance distinguishes an agent report from host/operator authentication, and later normal acceptance remains possible.",
+      "fixed_in": "0.80.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_search_dispositions.DispositionTests.test_set_aside_releases_acceptance_and_preserves_all_proof_credit",
+        "tests.test_search_dispositions.DispositionTests.test_accepting_a_set_aside_checkpoint_later_keeps_normal_acceptance",
+        "tests.test_search_dispositions.DispositionTests.test_invalidation_does_not_reactivate_a_consumed_set_aside",
+        "tests.test_search_dispositions.DispositionTests.test_set_aside_immediately_uses_the_current_verification_match",
+        "tests.test_search_dispositions.DispositionTests.test_setting_aside_one_checkpoint_does_not_hide_another",
+        "tests.test_search_dispositions.DispositionTests.test_model_provenance_and_missing_instruction_are_refused_for_both_actions",
+        "tests.test_search_dispositions.DispositionTests.test_reported_provenance_is_retained_without_claiming_authentication",
+        "tests.test_search_dispositions.DispositionTests.test_instruction_limit_accepts_exactly_64_kib_of_utf8_for_both_actions",
+        "tests.test_search_dispositions.DispositionTests.test_instruction_one_utf8_byte_over_the_limit_is_refused_for_both_actions",
+        "tests.test_search_dispositions.DispositionTests.test_set_aside_allows_reassessment_and_replanning",
+        "tests.test_search_dispositions.DispositionTests.test_instruction_identity_cannot_be_reused_across_controls",
+        "tests.test_search_dispositions.HistoricalDispositionTests.test_existing_release_fixture_and_summary_remain_byte_identical"
+      ]
+    },
+    {
+      "id": "override-math-objective-end",
+      "record": "20261106085323-override-of-harness-stops",
+      "class": "control (user instruction)",
+      "summary": "An objective cannot end on instruction without proof closure or repeated continuation prompts.",
+      "expected": "A recorded user instruction ends execution without changing proof status or creating closure, including while native reconciliation is pending; attempts retain reported or authenticated provenance and both hosts allow stopping.",
+      "fixed_in": "0.80.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_search_dispositions.DispositionTests.test_end_objective_delivers_attempt_without_closure_and_hooks_allow_stop",
+        "tests.test_search_dispositions.LaunchDispositionTests.test_end_before_launch_prevents_a_reserved_run_starting",
+        "tests.test_search_dispositions.LaunchDispositionTests.test_end_after_launch_record_prevents_token_release",
+        "tests.test_search_dispositions.DispositionTests.test_ended_objective_refuses_new_native_research_mutations",
+        "tests.test_search_dispositions.DispositionTests.test_end_with_a_pending_native_intent_preserves_reconciliation",
+        "tests.test_search_dispositions.DispositionTests.test_end_with_a_pending_move_delivers_attempt_without_closure",
+        "tests.test_search_dispositions.DispositionTests.test_accept_after_end_keeps_execution_ended_and_refuses_completion",
+        "tests.test_search_dispositions.HistoricalDispositionTests.test_reported_provenance_authorizes_resume_and_side_interval_without_a_size_bound",
+        "tests.test_search_dispositions.HistoricalDispositionTests.test_focus_still_refuses_reported_provenance",
+        "tests.test_search_dispositions.DispositionTests.test_reported_resume_recovers_a_replan_pause_without_a_new_size_bound",
+        "tests.test_search_dispositions.DispositionTests.test_new_work_commands_refuse_after_end_including_receipt_retries",
+        "tests.test_search_dispositions.DispositionTests.test_ended_objective_is_silent_for_unfocused_sessions_on_both_hosts",
+        "tests.test_search_dispositions.DispositionTests.test_end_instruction_cannot_be_reused_to_set_aside_a_result",
+        "tests.test_search_dispositions.DispositionTests.test_resume_identity_is_also_unavailable_to_new_controls",
+        "tests.test_search_dispositions.DispositionTests.test_public_cli_checks_and_records_both_commands",
+        "test_math_attempt_dispositions.AttemptDispositionConsumerTests.test_common_store_accepts_dispositions_and_problem_reviewer_sees_them"
+      ]
     }
   ]
 }

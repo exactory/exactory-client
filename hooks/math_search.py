@@ -473,6 +473,8 @@ def lifecycle(payload, stop=False):
                     "turn_id": payload.get("turn_id"), "stop_hook_active": payload.get("stop_hook_active")}
         result = controller_call(root, "hook-stop" if stop else "next", spec, session, focus, identity)
         if not stop:
+            if result.get("kind") == "ended":
+                return None
             return context(event, "Resume /exactory:math-solver at stage 0 from controller next: " + json.dumps(result))
         decision = result["decision"]
         if decision["kind"] == "continue":
