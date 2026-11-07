@@ -584,19 +584,19 @@ def _prepare_review_mutation(store, operation, payload, prepare, *, scoped=False
                     record['recorded_revision'] = revision
             if isinstance(result, dict) and 'recorded_revision' in result:
                 result['recorded_revision'] = revision
-            if operation == 'review.assignment':
-                commit_changes[:] = changes
+            commit_changes[:] = changes
             return changes, result
-        if operation == 'review.assignment':
-            previous_validation = kwargs.get('validate_commit')
-            def validate_commit(transaction, result, revision):
-                if previous_validation is not None:
-                    previous_validation(transaction, result, revision)
+        previous_validation = kwargs.get('validate_commit')
+        def validate_commit(transaction, result, revision):
+            if previous_validation is not None:
+                previous_validation(transaction, result, revision)
+            if any(kind in ('review_assignment', 'review_adjudication', 'value_review',
+                            'problem_objection_carry', 'problem_carried_evidence') for kind, _, _ in commit_changes):
                 carries = transaction.records('problem_objection_carry')
                 if carries:
                     from .problem_objection_provenance import validate_native_changes
                     validate_native_changes(carries, commit_changes)
-            kwargs['validate_commit'] = validate_commit
+        kwargs['validate_commit'] = validate_commit
         return prepared_task_mutation(store, operation, payload, prepare_scoped, finalize=finalize, **kwargs)
     return prepared_mutation(store, operation, payload, prepare_scoped, **kwargs)
 

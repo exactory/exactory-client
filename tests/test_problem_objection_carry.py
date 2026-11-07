@@ -185,13 +185,20 @@ class ProblemObjectionCarryTests(unittest.TestCase):
         self.assertIn("problem_slate_stale", {row["code"] for row in assess_slate(destination.store.snapshot()["records"], destination.artifacts)})
 
     def test_two_evidenced_destination_resolutions_clear_but_one_does_not(self):
-        source, destination = self.source(), self.fixture("math.PR")
-        legacy_handoff_or_carry_adapter(destination, source)
-        destination.assess("slate", "first")
-        destination.record_slate(review_ids=["review-slate-first"])
-        destination.assess("result", "first", status="resolved")
-        destination.assess("result", "second", status="contested")
-        destination.assert_blocked_delivery()
+        for second_status in ('contested', 'resolved'):
+            with self.subTest(second_status=second_status):
+                source, destination = self.source(), self.fixture("math.PR")
+                legacy_handoff_or_carry_adapter(destination, source)
+                destination.assess("slate", "first")
+                destination.record_slate(review_ids=["review-slate-first"])
+                destination.assess("result", "first", status="resolved")
+                reviews = decisions.assess_problem_reviews(destination.store.snapshot()['records'], destination.artifacts)
+                self.assertIn('research_objection_unresolved', {row['code'] for row in reviews['obligations']})
+                destination.assess("result", "second", status=second_status)
+                if second_status == 'resolved':
+                    destination.assert_delivered()
+                else:
+                    destination.assert_blocked_delivery()
 
     def test_unrecorded_source_final_refuses_import_without_mutating_destination(self):
         from research_harness.problem_objection_carry import carry_objections
@@ -201,6 +208,47 @@ class ProblemObjectionCarryTests(unittest.TestCase):
         destination.assert_error("problem_objections_refresh_required", lambda: destination.mutate(carry_objections,
             {"id": "pending", "source_workspace": str(source.root), "source_revision": source.store.revision}))
         self.assertEqual(destination.store.revision, before)
+
+    def test_source_result_pending_and_unrecorded_final_block_ready_destination(self):
+        from research_harness.problem_objection_carry import carry_objections, require_fresh_sources
+        for observed in (False, True):
+            with self.subTest(observed=observed):
+                source, destination = self.source(), self.fixture("math.PR")
+                legacy_handoff_or_carry_adapter(destination, source)
+                self.imported_pair(destination)
+                destination.record_post_decision('ready-before-source-work')
+                records = destination.store.snapshot()['records']
+                self.assertTrue(gate_state(records, destination.artifacts, 'post')['ready'])
+                assignment = source.assign('result', 'first')
+                output = source.build_review_output('result')
+                output['value']['objection_findings'] = [dict(id='settled-C', status='continuing',
+                    reason='The supplied evidence adds a continuing refinement.', evidence=[source.supporting])]
+                if observed:
+                    with patch('research_harness.review_transport.send_request', return_value=source.build_provider_response(output)):
+                        source.mutate(protocol.invoke_assignment, dict(id='attempt-result-first',
+                            assignment_id=assignment['id']), credential='test-only')
+                    self.assertTrue(protocol.assignment_state(source.store.snapshot()['records'], source.artifacts, assignment['id'])['ready'])
+                with self.subTest(boundary='gate'):
+                    codes = {row['code'] for row in gate_state(records, destination.artifacts, 'post')['obligations']}
+                    self.assertIn('problem_objections_refresh_required', codes)
+                for boundary, action in (
+                    ('decision', lambda: destination.record_post_decision('decision-after-source-work')),
+                    ('review', lambda: destination.assign('result', 'third')),
+                    ('carry', lambda: legacy_handoff_or_carry_adapter(destination, source, 'pending'))):
+                    with self.subTest(boundary=boundary):
+                        destination.assert_error('problem_objections_refresh_required', action)
+                if not observed:
+                    continue
+                source.mutate(decisions.record_value_review, dict(output, id='review-result-first',
+                    dossier_id=None, assignment_id=assignment['id']))
+                destination.assert_error('problem_objections_refresh_required', lambda: require_fresh_sources(
+                    destination.store.snapshot()['records'], destination.artifacts))
+                legacy_handoff_or_carry_adapter(destination, source, 'recorded-refinement')
+                destination.assess('slate', 'first', identifier='slate-refreshed')
+                destination.record_slate('slate-refreshed', review_ids=['review-slate-refreshed'])
+                for reviewer in ('first', 'second'):
+                    destination.assess('result', reviewer, identifier='result-refreshed-' + reviewer, status='resolved')
+                destination.assert_delivered()
 
     def imported_pair(self, destination, *, status="resolved"):
         destination.assess("slate", "first")
@@ -335,6 +383,18 @@ class ProblemObjectionCarryTests(unittest.TestCase):
         alias.symlink_to(destination.root, target_is_directory=True)
         destination.assert_error('problem_objection_self_import', lambda: destination.mutate(carry_objections, dict(payload, source_workspace=str(alias))))
         destination.assert_error('stale_revision', lambda: carry_objections(destination.store, payload, expected_revision=0, request_id='stale'))
+        committed = carry_objections(destination.store, payload, expected_revision=destination.store.revision,
+                                     request_id='successful-carry')
+        destination.put('local_note', 'after-carry', dict(text='Advance the destination after the committed request.'))
+        revision = destination.store.revision
+        source.root.rename(source.root.with_name('unavailable-for-replay'))
+        from research_harness.storage import Store
+        restarted = Store(destination.root)
+        replayed = carry_objections(restarted, payload, expected_revision=0, request_id='successful-carry')
+        self.assertEqual(replayed, committed)
+        self.assertEqual(restarted.revision, revision)
+        destination.assert_error('request_id_conflict', lambda: carry_objections(restarted,
+            dict(payload, source_revision=0), expected_revision=0, request_id='successful-carry'))
 
     def test_old_and_new_assignment_replay_after_later_import_restart_and_source_loss(self):
         from research_harness.storage import Store
@@ -587,6 +647,127 @@ class ProblemObjectionCarryTests(unittest.TestCase):
                     source.put('value_review', review['id'], review)
                 destination.assert_error('problem_objection_provenance_invalid', lambda: destination.mutate(carry_objections,
                     dict(id='invalid', source_workspace=str(source.root), source_revision=source.store.revision)))
+
+    def test_freshness_compares_material_without_rebuilding_evidence(self):
+        from research_harness.problem_objection_carry import require_fresh_sources
+        from research_harness import problem_objection_provenance as proof
+        source, destination = self.source(), self.fixture('math.PR')
+        legacy_handoff_or_carry_adapter(destination, source)
+        records = destination.store.snapshot()['records']
+        with patch.object(proof, 'evidence_record', side_effect=AssertionError('Freshness rebuilt evidence')):
+            require_fresh_sources(records, destination.artifacts)
+            source.put('local_note', 'unrelated', dict(text='No objection, assignment or source link changed.'))
+            require_fresh_sources(records, destination.artifacts)
+            assignment = source.assign('result', 'first')
+            with patch.object(protocol, 'source_delivery_packet', side_effect=AssertionError('Freshness reconstructed a delivered request')):
+                destination.assert_error('problem_objections_refresh_required',
+                    lambda: require_fresh_sources(records, destination.artifacts))
+            output = source.build_review_output('result')
+            output['value']['objection_findings'] = [dict(id='settled-C', status='continuing',
+                reason='The new bound continues the objection.', evidence=[source.supporting])]
+            self.observe_assignment(source, assignment, output)
+            destination.assert_error('problem_objections_refresh_required',
+                lambda: require_fresh_sources(records, destination.artifacts))
+
+    def test_staged_frontier_return_reserves_deterministic_child_assignment(self):
+        from research_harness import problem_claims as real_claims, review_staged_protocol
+        from research_harness.artifacts import ArtifactStore
+        from research_harness.storage import Store
+        from research_harness.record_check import copy_snapshot
+        from problem_parts_fixtures import ResultPartsCase
+        import sys
+        sibling = self.fixture('math.PR')
+        fixture = ResultPartsCase()
+        fixture.staged_entry = True
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        sys.modules['research_harness.problem_claims'].require_problem = real_claims.require_problem
+        home = fixture.case
+        fixture.oversized()
+        controller = fixture.assign_staged('controller')
+        branch = copy.copy(home)
+        branch.root = home.root.with_name('staged-origin-branch')
+        copy_snapshot(home.root, branch.root)
+        branch.store, branch.artifacts = Store(branch.root), ArtifactStore(branch.root)
+        branch.mutate(review_staged_protocol.plan_frontier, dict(controller_assignment_id=controller['id']))
+        children = [row for row in branch.store.snapshot()['records']['review_assignment'].values()
+                    if row.get('staged_review', {}).get('kind') == 'task']
+        self.assertEqual(len(children), 1)
+        child = children[0]
+        legacy_handoff_or_carry_adapter(sibling, branch)
+        legacy_handoff_or_carry_adapter(home, sibling, 'returned-staged-origin')
+        records = home.store.snapshot()['records']
+        inventory = records['problem_objection_carry']['returned-staged-origin']['origin_records']
+        self.assertTrue(any(row['kind'] == 'review_assignment' and row['id'] == child['id']
+                            and row['digest'] == digest(child) for row in inventory))
+        self.assertNotIn(child['id'], records['review_assignment'])
+        revision = home.store.revision
+        with self.assertRaises(ResearchError) as caught:
+            home.mutate(review_staged_protocol.plan_frontier, dict(controller_assignment_id=controller['id']))
+        self.assertEqual(caught.exception.code, 'problem_objection_origin_conflict')
+        self.assertEqual(home.store.revision, revision)
+        self.assertNotIn(child['id'], home.store.snapshot()['records']['review_assignment'])
+
+    def test_first_insertion_canonical_mapping_is_rederived_from_observed_output(self):
+        from research_harness.problem_objection_carry import carry_objections
+        # Alter the first insertion and its event/receipt consistently. This is
+        # store-write access, not a later immutable-record replacement.
+        source, destination = self.source(), self.fixture('math.PR')
+        self.rewrite_first_review_mapping(source, 'review-slate-first', {'settled-C': 'agent-authored-canonical-id'})
+        before = destination.store.revision
+        destination.assert_error('problem_objection_provenance_invalid', lambda: destination.mutate(carry_objections,
+            dict(id='forged-first-insertion', source_workspace=str(source.root), source_revision=source.store.revision)))
+        self.assertEqual(destination.store.revision, before)
+
+    def test_native_collision_mapping_authenticates_but_missing_mapping_is_refused(self):
+        from research_harness.problem_objection_carry import carry_objections
+        source, destination = self.fixture(bars=False), self.fixture('math.PR')
+        for reviewer, claim in (('first', 'The first comparator settles C.'), ('second', 'A different comparator settles C.')):
+            output = source.build_review_output('bar')
+            output['objections'] = [dict(id='shared-id', claim=claim, reason='The supplied field standard applies.',
+                evidence=[source.supporting], resolution_condition='Establish a different domain.')]
+            source.observe('bar', reviewer, output)
+        imported = legacy_handoff_or_carry_adapter(destination, source)['result']
+        self.assertEqual({row['origin_id'] for row in imported['members']},
+                         {'shared-id', 'shared-id@review-bar-second'})
+        destination = self.fixture('math.NT')
+        self.rewrite_first_review_mapping(source, 'review-bar-second', {})
+        destination.assert_error('problem_objection_provenance_invalid', lambda: destination.mutate(carry_objections,
+            dict(id='missing-native-mapping', source_workspace=str(source.root), source_revision=source.store.revision)))
+
+    def rewrite_first_review_mapping(self, case, identifier, identities):
+        from research_harness.storage import _canonical
+        with case.store._connection(writable=True) as connection:
+            connection.execute('DROP TRIGGER events_no_update')
+            connection.execute('DROP TRIGGER receipts_no_update')
+            for row in connection.execute('SELECT * FROM events ORDER BY revision').fetchall():
+                changes = json.loads(row['changes'])
+                changed = False
+                for change in changes:
+                    if change['kind'] == 'value_review' and change['key'] == identifier:
+                        change['value']['objection_identities'] = identities
+                        record = change['value']
+                        changed = True
+                if not changed:
+                    continue
+                result = json.loads(row['result'])
+                if isinstance(result, dict) and result.get('id') == identifier:
+                    result['objection_identities'] = identities
+                event = dict(revision=row['revision'], request_id=row['request_id'], operation=row['operation'],
+                    payload=json.loads(row['payload']), changes=changes, result=result)
+                connection.execute('UPDATE events SET changes=?, result=?, digest=? WHERE revision=?',
+                    (_canonical(changes), _canonical(result), digest(event), row['revision']))
+                receipt = dict(request_id=row['request_id'], revision=row['revision'], result=result)
+                connection.execute('UPDATE receipts SET response=?, digest=? WHERE request_id=?',
+                    (_canonical(receipt), digest(receipt), row['request_id']))
+                connection.execute('UPDATE records SET value=?, digest=? WHERE kind=? AND key=?',
+                    (_canonical(record), digest(record), 'value_review', identifier))
+            from research_harness.storage import _SCHEMA
+            for name in ('events_no_update', 'receipts_no_update'):
+                connection.execute(_SCHEMA[('trigger', name)])
+            connection.commit()
+        # Reopen and authenticate the real database before carry admission.
+        self.assertIn(identifier, case.store.snapshot()['records']['value_review'])
 
     def test_local_id_collision_preserves_exact_foreign_projection_with_local_citation(self):
         from research_harness.problem_objection_carry import carry_objections
@@ -1087,4 +1268,3 @@ def build_output(body, root):
         invoke_codex(case, assignment['id'], output)
         case.mutate(decisions.record_value_review, dict(output, id='legacy-final', dossier_id=None, assignment_id=assignment['id']))
         self.assert_portable_result_proof(case)
-
