@@ -2060,15 +2060,15 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
     guards = ExitStack()
     def prepare(records, value):
         artifacts = Evaluation.of(records, store.build_artifact_store())
-        if records.get('problem_objection_carry'):
-            from .problem_objection_carry import require_fresh_sources
-            require_fresh_sources(records, artifacts, guards=guards)
         controller = protocol._get(records, 'review_assignment', value['controller_assignment_id'])
         binding = controller.get('staged_review', {})
         if binding.get('kind') != 'controller':
             raise ResearchError('invalid_review_context', 'Plan through the frozen staged controller')
         from .problem_delivery import require_unposted_review
         require_unposted_review(records, controller, artifacts)
+        if records.get('problem_objection_carry'):
+            from .problem_objection_carry import require_fresh_sources
+            require_fresh_sources(records, artifacts, guards=guards)
         epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
         head = protocol._get(records, 'review_slot_head', epoch['slot_id'])
         if head['epoch_id'] != epoch['id'] or not matches_currency(records, artifacts, epoch):

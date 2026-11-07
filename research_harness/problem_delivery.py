@@ -497,7 +497,7 @@ def describe_problem_work(records, pending):
     return result
 
 
-def assess_post(records, artifacts, *, source_guards=None):
+def assess_post(records, artifacts, *, source_guards=None, check_source_freshness=True):
     artifacts = Evaluation.of(records, artifacts)
     require_problem(records)
     from .research_decisions import assess_problem_reviews
@@ -507,7 +507,7 @@ def assess_post(records, artifacts, *, source_guards=None):
     # evidence is already reported with the more useful minimum obligations.
     reviews = assess_problem_reviews(records, artifacts, check_evidence=not minimum)
     pending = list(minimum)
-    if records.get('problem_objection_carry'):
+    if check_source_freshness and records.get('problem_objection_carry'):
         from .problem_objection_carry import require_fresh_sources
         try:
             require_fresh_sources(records, artifacts, guards=source_guards)
@@ -749,7 +749,11 @@ def prepare_posted(records, artifacts, value, recorded_revision=None, *, source_
     if earlier is not None:
         raise ResearchError("problem_already_posted", "This exact statement already has a recorded post", {"post_id": earlier["id"]})
     from .gates import require_ready
-    require_ready(assess_post(records, artifacts, source_guards=source_guards), "post")
+    # Record the already sent, approved projection. Live source changes are
+    # prospective findings, reported by the existing posted-terminal after_post
+    # view; they cannot erase the external delivery from the local record.
+    require_ready(assess_post(records, artifacts, source_guards=source_guards,
+                              check_source_freshness=False), "post")
     files, manifest = build_projection(records, artifacts)
     directory = Path(value["export_directory"])
     if not directory.is_absolute():

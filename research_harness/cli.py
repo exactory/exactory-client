@@ -614,6 +614,10 @@ def status_report(store, *, counters=False):
                         literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                         candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
                         next=upcoming, review=review, advisories=advisories)
+            if records.get('problem_objection_carry'):
+                result['problem_objection_carries'] = [
+                    {key: carry[key] for key in ('id', 'source_workspace', 'source_origin', 'source_revision')}
+                    for _, carry in sorted(records['problem_objection_carry'].items())]
             if counters:
                 result['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
                                             retention=evaluation.retention_report())

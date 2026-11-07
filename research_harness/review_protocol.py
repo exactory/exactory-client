@@ -2857,9 +2857,6 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         from .strategy import find_orchestration
         problem = find_orchestration(records) == 'problem_creation'
         if problem:
-            if value['role'] in ('slate', 'result'):
-                from .problem_objection_carry import require_fresh_sources
-                require_fresh_sources(records, artifacts, guards=carry_guards)
             authors = {normalized_text(author) for author in records['workspace']['problem']['authors']}
             if normalized_text(value['reviewer_id']) in authors:
                 raise ResearchError('review_not_independent', 'A problem author cannot provide an independent assessment')
@@ -2867,9 +2864,28 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 raise ResearchError('problem_author_unknown', 'The assignment author must be one of the immutable problem authors')
             if value['role'] in bar_sources.ROLES + ('adjudicator',):
                 value = dict(value, subject=build_problem_subject(records, value['role']))
+            from .problem_delivery import require_unposted_review
             if 'controller_assignment_id' not in value['context']:
-                from .problem_delivery import require_unposted_review
                 require_unposted_review(records, value, artifacts, check_unbound=False)
+                if records.get('problem_objection_carry') and value.get('subject', {}).get('statement_id') is None:
+                    # A slate binds its explicit predecessor's publication
+                    # chain even though its own subject has no statement ID.
+                    context = value['context']
+                    repair, upgrade = context.get('context_repair'), context.get('staged_upgrade')
+                    predecessor_id = ((repair.get('assignment_id') if isinstance(repair, dict) else None)
+                                      or context.get('prior_assignment_id')
+                                      or (upgrade.get('assignment_id') if isinstance(upgrade, dict) else None))
+                    predecessor = (records.get('review_assignment', {}).get(predecessor_id)
+                                   if isinstance(predecessor_id, str) else None)
+                    if predecessor is not None:
+                        require_unposted_review(records, predecessor, artifacts)
+            elif records.get('problem_objection_carry'):
+                controller = records.get('review_assignment', {}).get(value['context']['controller_assignment_id'])
+                if controller is not None:
+                    require_unposted_review(records, controller, artifacts)
+            if value['role'] in ('slate', 'result'):
+                from .problem_objection_carry import require_fresh_sources
+                require_fresh_sources(records, artifacts, guards=carry_guards)
         if normalized_text(value['reviewer_id']) == normalized_text(value['author_id']):
             raise ResearchError('review_not_independent', 'The author cannot provide an independent assessment')
         route = _get(records, 'review_route', value['route_id'])

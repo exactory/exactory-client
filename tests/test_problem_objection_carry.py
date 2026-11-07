@@ -184,6 +184,64 @@ class ProblemObjectionCarryTests(unittest.TestCase):
         destination.assert_error("problem_slate_review_unverified", lambda: destination.record_slate("bypass"))
         self.assertIn("problem_slate_stale", {row["code"] for row in assess_slate(destination.store.snapshot()["records"], destination.artifacts)})
 
+    def test_empty_slate_reviews_after_carry_name_the_import_set(self):
+        from research_harness.problem_objection_carry import import_set_digest
+        source, destination = self.source(), self.fixture('math.PR')
+        legacy_handoff_or_carry_adapter(destination, source)
+        before = destination.store.revision
+        with self.assertRaises(ResearchError) as caught:
+            destination.record_slate('missing-focused-review', review_ids=[])
+        self.assertEqual(caught.exception.code, 'problem_slate_review_unverified')
+        self.assertEqual(caught.exception.details, dict(import_set_digest=import_set_digest(destination.store.snapshot()['records'])))
+        self.assertEqual(destination.store.revision, before)
+
+    def test_carry_stale_slate_states_why_it_is_stale(self):
+        from research_harness.problem_candidates import assess_slate
+        source, destination = self.source(), self.fixture('math.PR')
+        destination.record_slate()
+        legacy_handoff_or_carry_adapter(destination, source)
+        [row] = assess_slate(destination.store.snapshot()['records'], destination.artifacts)
+        self.assertEqual(row['code'], 'problem_slate_stale')
+        self.assertEqual(row['slate_id'], 'slate-1')
+        self.assertEqual(row.get('reason'), 'problem_objection_carry_changed')
+        self.assertNotIn('missing', row)
+        self.assertNotIn('extra', row)
+
+    def test_reachable_carry_check_leaves_proof_artifacts_and_store_unchanged(self):
+        from test_research_check_mode import CheckCommandMixin
+        for sealed in (False, True):
+            with self.subTest(sealed=sealed):
+                source, destination = self.source(), self.fixture('math.PR')
+                if sealed:
+                    reference = source.artifacts.put_sealed(b'Unobserved retained completion.', 'text/plain')
+                    source.put('fixture_completion', 'held', dict(artifact=reference))
+                destination.invoke_arguments = lambda arguments: CheckCommandMixin.invoke_arguments(destination, arguments)
+                payload = dict(id='checked-carry', source_workspace=str(source.root), source_revision=source.store.revision)
+                revision = destination.store.revision
+                before = CheckCommandMixin.read_workspace(destination)
+                checked = CheckCommandMixin.invoke_command(destination, 'problem-objections-carry', payload)
+                self.assertEqual(CheckCommandMixin.read_workspace(destination), before)
+                self.assertEqual(destination.store.revision, revision)
+                CheckCommandMixin.assert_accepted_check(destination, checked, revision)
+                written = CheckCommandMixin.invoke_command(destination, 'problem-objections-carry', payload, check=False)
+                self.assertEqual(written[0], 0, written[2])
+                carry = json.loads(written[1])['result']
+                self.assertTrue(carry['proof']['artifacts'])
+                self.assertTrue(destination.artifacts.read(carry['proof']['database']))
+                self.assertEqual(destination.store.revision, revision + 1)
+
+    def test_status_lists_carry_origins_and_workspaces_only_when_present(self):
+        from research_harness.cli import status_report
+        source, destination = self.source(), self.fixture('math.PR')
+        self.assertNotIn('problem_objection_carries', status_report(destination.store))
+        first = legacy_handoff_or_carry_adapter(destination, source, 'z-first')['result']
+        second = legacy_handoff_or_carry_adapter(destination, source, 'a-duplicate')['result']
+        expected = [{key: row[key] for key in ('id', 'source_workspace', 'source_origin', 'source_revision')}
+                    for row in (second, first)]
+        self.assertEqual(status_report(destination.store).get('problem_objection_carries'), expected)
+        source.root.rename(source.root.with_name('unavailable-source-with-retained-origin'))
+        self.assertEqual(status_report(destination.store).get('problem_objection_carries'), expected)
+
     def test_two_evidenced_destination_resolutions_clear_but_one_does_not(self):
         for second_status in ('contested', 'resolved'):
             with self.subTest(second_status=second_status):
