@@ -7,6 +7,7 @@ import sys
 
 from .errors import SearchError
 from .storage import _strict_json
+from research_harness.stop_classes import classify_stop
 
 
 class SearchParser(argparse.ArgumentParser):
@@ -16,7 +17,8 @@ class SearchParser(argparse.ArgumentParser):
 
 def print_error(error):
     print(json.dumps({"error": {"code": error.code, "message": error.message,
-                                "details": error.details}}, ensure_ascii=False), file=sys.stderr)
+                                "details": error.details, "stop_class": classify_stop(error.code)}},
+                     ensure_ascii=False), file=sys.stderr)
 
 
 def run_search(args):

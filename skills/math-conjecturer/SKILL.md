@@ -905,8 +905,11 @@ instead of one request. The
      `details`; the harness cannot continue the chain. A refused action of the chain ends the
      command this way with the refusal's code (for example `review_input_too_large` or a
      `review_parts_*` code); when the refusal recorded an output refusal, or its code is
-     `review_invocation_pending`, the command plans again instead. Read `code` and
-     `details`. When the
+     `review_invocation_pending`, the command plans again instead. Read `code`, `details` and
+     `stop_class`. In a problem record no stop passes automatically: the stop binds no study
+     stage, and `gate-auto-pass` refuses it with `gate_override_internal_only`, so report a
+     `harness_defect` stop like a decision stop, and run a `waiting` stop again on its schedule
+     ([The class of a stop](../../docs/research-workflow.md#the-class-of-a-stop)). When the
      [CLI reference](../../docs/research-cli.md#review-chains-and-review-series) names a step
      for that code, take it. Otherwise report the stop with its code and details in your summary
      and continue the work that does not depend on this chain.

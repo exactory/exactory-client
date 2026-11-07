@@ -2175,7 +2175,11 @@ parser while retaining global `--attack-root` and `--strategies` placement.
 Public mutations require `--expected-revision N --request-id ID`. Specs are read
 with `--spec FILE`. `--json` and human-readable output contain the same JSON
 decision; human output is indented. Errors are JSON on stderr:
-`{"error":{"code":Text,"message":Text,"details":JSON|null}}`, with exit 1.
+`{"error":{"code":Text,"message":Text,"details":JSON|null,"stop_class":Text}}`,
+with exit 1. `stop_class` is `waiting`, `harness_defect` or `decision`,
+derived from `code` by the shared policy of the research harness
+([The class of a stop](../../docs/research-workflow.md#the-class-of-a-stop));
+the controller records no stop and passes none on its own.
 Unknown commands, unknown fields, unsafe paths, stale revisions and conflicting
 request IDs fail without committing a prefix. There is no arbitrary-event command.
 `begin` reserves a legal native entry, `run` executes a bounded admitted workload,

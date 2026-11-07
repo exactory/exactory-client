@@ -38,6 +38,7 @@ from .probe import record_probe_intent, record_probe, summarize_probes
 from .record_check import DEFAULT_TIME_BUDGET_SECONDS
 from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata, problem_evidence
 from . import overrides
+from .automatic_overrides import record_automatic_override
 
 
 OPERATIONS = {
@@ -56,6 +57,7 @@ OPERATIONS = {
     "problem-posted": problem_claims.record_posted,
     "problem-post-external": problem_claims.record_post_external,
     "gate-override": overrides.record_override,
+    "gate-auto-pass": record_automatic_override,
     "problem-post-time": problem_claims.record_post_time,
     "init": principles.initialize_research,
     "adopt": adopt_workspace,
@@ -260,7 +262,8 @@ def parse_managed_scope_arguments(args):
     return {"managed_only": strict, "scope_contract_id": contract, "scope_target_digest": target}
 
 
-def select_managed_path(check, start=None, *, managed_only=False, scope_contract_id=None, scope_target_digest=None):
+def select_managed_path(check, start=None, *, managed_only=False, scope_contract_id=None, scope_target_digest=None,
+                        public_gate=None):
     """Return (store, check(store), store_open_error) for the workspace around `start`.
 
     `check` runs every check the managed path performs before its first remote
@@ -288,6 +291,9 @@ def select_managed_path(check, start=None, *, managed_only=False, scope_contract
             return None, None, None
         note_managed_record_skipped(error)
         return None, None, error
+    if public_gate is not None:
+        from .automatic_overrides import require_public_write_instruction
+        require_public_write_instruction(store, public_gate)
     try:
         if scope_contract_id is not None:
             from .publication_scope import validate_expected_scope
@@ -316,6 +322,13 @@ def build_parser():
                                "reconciliations, a result PDF page count (pdfinfo) and a second commit refuse with "
                                "check_unsupported.")
         add_identity(item, required=command != "import-response")
+        if command == "gate-auto-pass":
+            item.description = ('Record an automatic internal continuation from {"stop_id":"RECORDED_STOP"}. '
+                                'The harness checks the class, ended retries and all remaining gate items. '
+                                'Public writes require the user\'s instruction.')
+        if command == "gate-override":
+            item.description = ('Record the pinned user instruction. Optional public_action is the exact '
+                                '"METHOD /path" for another public write after an automatic pass.')
         if command == "import-response":
             item.add_argument("--preview", action="store_true",
                               help="Report new DOI-family conflicts without writing the import.")
@@ -764,6 +777,8 @@ def run(args):
         from .record_check import check_record
         return check_record(Path(args.workspace), keep_clone=args.keep_clone, time_budget=args.time_budget)
     if args.command == "example":
+        if args.operation == "gate-auto-pass":
+            return {"stop_id": "SERIES_STOP_ID"}
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
     if getattr(args, "check", False) and args.command in (
@@ -791,7 +806,10 @@ def run(args):
                            if args.command == "review-assignment" else payload)
         if getattr(args, "check", False):
             operation, replay = OPERATIONS.get(args.command), None
-            if args.command in ACQUISITION:
+            if args.command == "gate-auto-pass":
+                def operation(store, value, **identity):
+                    return record_automatic_override(store, value, _diagnostic=True, **identity)
+            elif args.command in ACQUISITION:
                 def replay_acquisition(store, value, **identity):
                     return acquisition_command(store, args.command, value, identity)
                 replay = replay_acquisition

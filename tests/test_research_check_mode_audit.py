@@ -382,6 +382,7 @@ REFUSED_OUTCOMES = {
     "cycle": "objective_mismatch",
     "defer-source": "artifact_missing",
     "gate-override": "gate_override_transition",
+    "gate-auto-pass": "gate_override_stop_missing",
     "intent": "intent_instruction_missing",
     "loop-close": "policy_inapplicable",
     "manuscript": "readiness_required",
@@ -488,6 +489,7 @@ class CommandTableCheckTests(CheckCommandMixin, DevelopmentCase, ProblemCase):
 
     def test_check_preserves_every_command_workspace(self):
         examples = json.loads((PLUGIN / "docs/research-cli-examples.json").read_text(encoding="utf-8"))
+        examples["gate-auto-pass"] = {"stop_id": "missing-series-stop"}
         authored_path = self.root / "authored.txt"
         authored_path.write_bytes(b"Authored check audit bytes.\n")
         for command, payload in (

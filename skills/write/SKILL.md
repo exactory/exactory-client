@@ -9,7 +9,7 @@ Read the [research constitution](../../RESEARCH_CONSTITUTION.md) and the
 [scientific contribution decisions](../../docs/research-decisions.md). Begin or resume with
 `exactory-research status --summary`, `next --summary`, and the current whole `gate readiness`.
 In a study with a selected source-limited contract (`select-publication-scope`), `gate manuscript-readiness` takes the place of `gate readiness` here; `gate readiness` still reports the complete objective.
-When the user's instruction covers the refused gate, record the override and continue drafting as [Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes. The readiness and decision requirements below govern managed approval; an override supplies no approval credit, and `manuscript` keeps refusing.
+When the user's instruction covers the refused gate, record the override and continue drafting as [Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes; after an automatic pass of the readiness gate, which moves the study to `write` on its own ([The automatic pass](../../docs/research-workflow.md#the-automatic-pass)), continue drafting the same way. The readiness and decision requirements below govern managed approval; neither an override nor an automatic pass supplies approval credit, and `manuscript` keeps refusing.
 Writing requires an assessed research candidate, combined independent support and
 consequence findings, and a current canonical action permitting the manuscript.
 Check `research-decision-assess --boundary write`. Existing manuscript files, an execution

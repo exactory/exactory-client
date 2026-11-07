@@ -50,7 +50,9 @@ toward them rigorous: each follows from established evidence.
 
 Advance with the actual `exactory-lab state set` transitions and current gates.
 A move that a gate refuses is reported, and passed only on the user's instruction, as
-[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes.
+[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes; the one
+exception is the automatic pass of a stop that the harness classifies as its own defect, which
+that section bounds.
 When entering unfinished work after a completed stage, include `--status pending`.
 A stage name or historical receipt does not establish readiness.
 
@@ -168,7 +170,10 @@ handoff with a command. A refused action of the
 chain ends the command this way with the refusal's code (for example a
 `review_parts_*` code); when the refusal recorded an output refusal, or its
 code is `review_invocation_pending`, the command plans again instead.
-Read `code` and `details`. When the CLI reference names a step for that code,
+Read `code`, `details` and `stop_class`. When `stop_class` is
+`harness_defect`, request the automatic pass with the `stop_id` of the last
+line, as [The automatic pass](../../docs/research-workflow.md#the-automatic-pass)
+describes. When the CLI reference names a step for that code,
 take it. Otherwise report the stop with its code and details in your summary
 and continue the work that does not depend on this chain. Exit status 4 with
 the plan and its `not_before` on the last line: a wait of more than 30
