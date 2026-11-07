@@ -1,0 +1,95 @@
+{
+  "source_commit": "a04617f",
+  "payload": {
+    "id": "old-user-override",
+    "gate": "readiness",
+    "instruction": "context/old-instruction.txt",
+    "reason": "User instruction."
+  },
+  "receipt": {
+    "revision": 1,
+    "request_id": "released-user-override",
+    "result": {
+      "authority": "user",
+      "evidence": "reported_by_agent",
+      "gate": "readiness",
+      "id": "old-user-override",
+      "instruction": {
+        "artifact": {
+          "media_type": "text/plain; charset=utf-8",
+          "path": "research/sources/objects/bd981dfb4f713aa939f0b2fb33ae1a7bef412abebda772bb44cc20f6962ade19",
+          "sha256": "bd981dfb4f713aa939f0b2fb33ae1a7bef412abebda772bb44cc20f6962ade19",
+          "size": 26
+        },
+        "path": "context/old-instruction.txt",
+        "text": "Continue to local writing."
+      },
+      "obligations": [
+        {
+          "code": "migration_required",
+          "explanation": "Initialize or explicitly adopt the current research contract."
+        }
+      ],
+      "reason": "User instruction.",
+      "recorded_revision": 1
+    }
+  },
+  "event": [
+    "research.gate_override",
+    "{\"gate\":\"readiness\",\"id\":\"old-user-override\",\"instruction\":\"context/old-instruction.txt\",\"reason\":\"User instruction.\"}",
+    "[{\"key\":\"old-user-override\",\"kind\":\"gate_override\",\"value\":{\"authority\":\"user\",\"evidence\":\"reported_by_agent\",\"gate\":\"readiness\",\"id\":\"old-user-override\",\"instruction\":{\"artifact\":{\"media_type\":\"text/plain; charset=utf-8\",\"path\":\"research/sources/objects/bd981dfb4f713aa939f0b2fb33ae1a7bef412abebda772bb44cc20f6962ade19\",\"sha256\":\"bd981dfb4f713aa939f0b2fb33ae1a7bef412abebda772bb44cc20f6962ade19\",\"size\":26},\"path\":\"context/old-instruction.txt\",\"text\":\"Continue to local writing.\"},\"obligations\":[{\"code\":\"migration_required\",\"explanation\":\"Initialize or explicitly adopt the current research contract.\"}],\"reason\":\"User instruction.\",\"recorded_revision\":1}},{\"key\":\"released-user-override\",\"kind\":\"literature_operation\",\"value\":{\"operation\":\"research.gate_override\",\"runtime\":{\"constitution\":{\"sha256\":\"fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92\",\"version\":\"7\"},\"dirty\":null,\"executable\":\"/private/var/folders/pw/m9sdxp0522n2ff6scy30rjx80000gn/T/exactory-080-reader-cs_1t32l/bin/exactory-research\",\"package_digest\":\"2e8599005ea0bd72b8386da8864bc8d91af377d4a1830cf09e3fbf17bd96e64f\",\"plugin_version\":\"0.80.0\",\"schema_version\":1,\"source_commit\":null}}}]",
+    "{\"authority\":\"user\",\"evidence\":\"reported_by_agent\",\"gate\":\"readiness\",\"id\":\"old-user-override\",\"instruction\":{\"artifact\":{\"media_type\":\"text/plain; charset=utf-8\",\"path\":\"research/sources/objects/bd981dfb4f713aa939f0b2fb33ae1a7bef412abebda772bb44cc20f6962ade19\",\"sha256\":\"bd981dfb4f713aa939f0b2fb33ae1a7bef412abebda772bb44cc20f6962ade19\",\"size\":26},\"path\":\"context/old-instruction.txt\",\"text\":\"Continue to local writing.\"},\"obligations\":[{\"code\":\"migration_required\",\"explanation\":\"Initialize or explicitly adopt the current research contract.\"}],\"reason\":\"User instruction.\",\"recorded_revision\":1}"
+  ],
+  "metadata": [
+    {
+      "upload_type": "publication",
+      "publication_type": "preprint",
+      "title": "Finite result",
+      "creators": [
+        {
+          "name": "Author"
+        }
+      ],
+      "description": "<p>Finite abstract.</p><p>This preprint was prepared with AI assistance and deposited through exactory.ai (https://www.exactory.ai). The human author, Author, is responsible for its content.</p>"
+    },
+    {
+      "upload_type": "publication",
+      "publication_type": "preprint",
+      "title": "Finite result",
+      "creators": [
+        {
+          "name": "Author"
+        }
+      ],
+      "description": "<p>Finite abstract.</p><p>This preprint was prepared with AI assistance and deposited through exactory.ai (https://www.exactory.ai). The human author, Author, is responsible for its content.</p><p>This paper was deposited from a workspace of a research harness that checks each step of the work before the next one. Some of these checks require independent reviews. The record of that workspace holds entries for these checks: publication. A readable entry says that the user of the session instructed the work to go on without waiting for that check. The agent that ran the work recorded the entry. An entry named unknown could not be read. The record does not show who that user was, whether the entry was used, or whether the check was completed later.</p>"
+    },
+    {
+      "upload_type": "publication",
+      "publication_type": "preprint",
+      "title": "Finite result",
+      "creators": [
+        {
+          "name": "Author"
+        }
+      ],
+      "description": "<p>Finite abstract.</p><p>This preprint was written by exactory.ai (https://www.exactory.ai), an AI research system. The human author, Author, is responsible for its content.</p>",
+      "keywords": [
+        "Written by exactory.ai"
+      ]
+    },
+    {
+      "upload_type": "publication",
+      "publication_type": "preprint",
+      "title": "Finite result",
+      "creators": [
+        {
+          "name": "Author"
+        }
+      ],
+      "description": "<p>Finite abstract.</p><p>This preprint was written by exactory.ai (https://www.exactory.ai), an AI research system. The human author, Author, is responsible for its content.</p><p>This paper was deposited from a workspace of a research harness that checks each step of the work before the next one. Some of these checks require independent reviews. The record of that workspace holds entries for these checks: publication. A readable entry says that the user of the session instructed the work to go on without waiting for that check. The agent that ran the work recorded the entry. An entry named unknown could not be read. The record does not show who that user was, whether the entry was used, or whether the check was completed later.</p>",
+      "keywords": [
+        "Written by exactory.ai"
+      ]
+    }
+  ]
+}

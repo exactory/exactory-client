@@ -73,7 +73,14 @@ def remote_step(store, identifier, name, request, perform, *, expected_revision=
             lambda r: dict(r, pending={"name": name, "request": request}, status="in_flight"),
             expected_revision=expected_revision)
     # Exceptions and process death intentionally leave the claimed operation.
-    response = perform()
+    try:
+        response = perform()
+    except ResearchError as error:
+        if error.code == "gate_override_public_write":
+            # The local transport guard refuses before sending anything. Keep
+            # that fact rather than forcing remote reconciliation of no write.
+            discard_step(store, identifier, name, {"kind": "local_authority_refusal", "code": error.code})
+        raise
     return resolve_step(store, identifier, name, response, {"kind": "direct_response"})
 
 
@@ -101,8 +108,9 @@ def discard_step(store, identifier, name, observation):
 
     A discard invents no response. The caller establishes that the step reaches
     the same remote state when it is sent again: checked remote reads hold no
-    trace of the request, or the service documents the request as an action that
-    has no effect when it is repeated. The intent keeps that observation."""
+    trace of the request, the service documents the request as an action that
+    has no effect when it is repeated, or the local authority guard refused
+    before sending the request. The intent keeps that observation."""
     def transform(record):
         _read_pending_step(record, name)
         return dict(record, pending=None, status="confirmed" if record["responses"] else "prepared",

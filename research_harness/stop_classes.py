@@ -6,8 +6,8 @@ unknown causes and exhausted budgets must never enter the defect allowlist.
 
 
 WAITING_CODES = frozenset((
-    "store_busy", "rate_limited", "review_provider_unavailable",
-    "review_capacity_wait", "review_invocation_pending", "provider_state_capacity", "lock_timeout",
+    "rate_limited", "review_capacity_wait", "review_invocation_pending", "provider_state_capacity",
+    "execution_live", "remote_operation_owned", "verification_ingest_pending",
 ))
 HARNESS_DEFECT_CODES = frozenset(("review_series_no_progress",))
 
