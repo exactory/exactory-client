@@ -59,7 +59,12 @@ plugin is enabled.
   public description that names the recorded gates, and an archive that
   `package` builds from the pinned bundle after the override holds the override
   records and their instruction files, which become public when the archive is
-  attached with `--sources` and the deposit is published.
+  attached with `--sources` and the deposit is published. After an automatic
+  pass in the workspace, the command sends the deposit only when the user's
+  instruction is recorded for the gate `publication`; otherwise it refuses with
+  `gate_override_public_write` before any request to Zenodo
+  ([Public writes after an automatic pass](../../docs/research-workflow.md#public-writes-after-an-automatic-pass)).
+  The description then also carries one paragraph per automatic pass.
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.
