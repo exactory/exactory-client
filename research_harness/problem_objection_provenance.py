@@ -26,7 +26,7 @@ def source_identity(connection, records):
     from .problem_claims import require_problem
     marker = require_problem(records)
     initialization, immutable = None, {}
-    for row in connection.execute('SELECT digest, changes FROM events ORDER BY revision'):
+    for row in connection.execute('SELECT revision, digest, changes FROM events ORDER BY revision'):
         for change in json.loads(row['changes']):
             kind, key = change['kind'], change['key']
             if kind in IMMUTABLE_KINDS:
@@ -34,6 +34,8 @@ def source_identity(connection, records):
                 original = immutable.setdefault(identity, change['value'])
                 if original != change['value'] or records.get(kind, {}).get(key) != original:
                     raise ResearchError('problem_objection_provenance_invalid', 'An immutable review or carry record changed', dict(record_kind=kind, id=key))
+                if kind in ('value_review', 'problem_objection_carry') and original.get('recorded_revision') != row['revision']:
+                    raise ResearchError('problem_objection_provenance_invalid', 'The immutable record has a false creation revision', dict(record_kind=kind, id=key))
             if change['kind'] == 'workspace' and change['key'] == 'problem':
                 if change['value'] != marker:
                     raise ResearchError('problem_objection_provenance_invalid', 'The problem initialization marker changed')
@@ -190,7 +192,16 @@ def open_proof(artifacts, proof):
 
 def authenticate_reviews(records, artifacts, reviews):
     from . import research_decisions as decisions, review_protocol as protocol
-    for review in reviews:
+    if not reviews:
+        return
+    # Native identity assignment depends on prior reviews and imports, including
+    # reviews that do not themselves contribute an exported material version.
+    # Authenticate those predecessors before using their claims or mappings.
+    through = max(review['recorded_revision'] for review in reviews)
+    earlier = {}
+    for review in sorted(records.get('value_review', {}).values(), key=lambda row: (row['recorded_revision'], row['id'])):
+        if review['recorded_revision'] > through:
+            continue
         assignment = records.get('review_assignment', {}).get(review['assignment_id'])
         if assignment is None:
             raise ResearchError('problem_objection_provenance_invalid', 'The producing assignment is missing')
@@ -210,6 +221,18 @@ def authenticate_reviews(records, artifacts, reviews):
                 raise ResearchError('problem_objection_provenance_invalid', 'The effective review binding changed')
         protocol.validate_assignment_inventories(records, artifacts, assignment['id'])
         decisions.validate_review_contract(records, artifacts, assignment, output)
+        prior = dict(records, value_review=dict(sorted(earlier.items())),
+                     problem_objection_carry={key: carry for key, carry in records.get('problem_objection_carry', {}).items()
+                                             if carry['recorded_revision'] < review['recorded_revision']})
+        try:
+            identities = decisions._assign_objection_identities(prior, artifacts, review['payload'], True)
+        except ResearchError as error:
+            raise ResearchError('problem_objection_provenance_invalid', 'The observed review cannot produce its canonical identities',
+                                dict(review_id=review['id'], cause=error.code)) from error
+        if review.get('objection_identities', {}) != identities:
+            raise ResearchError('problem_objection_provenance_invalid', 'The canonical identities differ from the observed output and native identity rules',
+                                dict(review_id=review['id']))
+        earlier[review['id']] = review
 
 
 def authenticate_assignment(records, artifacts, assignment, state):
@@ -387,7 +410,7 @@ def verify_carries(records, artifacts, *, seen=None, expected_origin=None):
             with open_proof(artifacts, carry['proof']) as (foreign, local):
                 verify_carries(foreign, local, seen=seen, expected_origin=carry['proof']['origin'])
                 members, wrappers = export_material(foreign, local, carry['source_origin'], authenticate=True)
-                seen[key] = (members, wrappers, relevant_cut(foreign, members), linked_sources(foreign),
+                seen[key] = (members, wrappers, relevant_cut(foreign, members, local), linked_sources(foreign),
                              origin_inventory(foreign, carry['source_origin']))
         members, wrappers, cut, foreign_links, inventory = seen[key]
         if (members != carry['members'] or cut != carry['source_cut']

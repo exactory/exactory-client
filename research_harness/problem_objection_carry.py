@@ -70,18 +70,36 @@ def _relevant_reviews(records):
             if review.get('subject', {}).get('kind') == 'problem' and review['payload']['stage'] in ('bar', 'slate')]
 
 
-def pending_reviews(records):
+def pending_reviews(records, artifacts):
     """Relevant work includes an observed final which has not yet been recorded."""
-    from .research_decisions import select_problem_slot_assignments
-    from .review_protocol import build_problem_subject
-    recorded = {review['assignment_id'] for review in _relevant_reviews(records)}
+    from .research_decisions import select_problem_slot_assignments, list_stated_objections
+    from .review_protocol import build_problem_subject, _read_json
+    from . import review_parts
+    from .review_supplied_evidence import list_delivered_objections
+    recorded = {review['assignment_id'] for review in records.get('value_review', {}).values()}
     heads = [row for stage in ('bar', 'slate') for row in select_problem_slot_assignments(
         records, stage, build_problem_subject(records, stage)).values()]
+    identifiers = {row['id'] for row in seed_versions(records)}
+    identifiers.update(row['id'] for review in _relevant_reviews(records) for row in list_stated_objections(review))
+    subjects = {digest(row['subject']): row['subject'] for row in records.get('review_assignment', {}).values()
+                if row['role'] == 'result' and row.get('subject', {}).get('kind') == 'problem'}
+    for subject in subjects.values():
+        for row in select_problem_slot_assignments(records, 'result', subject).values():
+            if row['id'] in recorded or not identifiers:
+                continue
+            # Pending work is bound by its frozen scientific packet, including
+            # part/controller inventories. Do not reconstruct sent requests or
+            # selected task graphs just to discover their objection identities.
+            packet = _read_json(artifacts, row['packet'])
+            if review_parts.KEY in packet:
+                packet = review_parts.read_logical_packet(artifacts, packet[review_parts.KEY])
+            if identifiers.intersection(item['id'] for item in list_delivered_objections(packet)):
+                heads.append(row)
     return sorted(row['id'] for row in heads if row['id'] not in recorded)
 
 
-def export_material(records, artifacts, origin, *, authenticate=False):
-    """Every bar/slate identity and all retained refinements, without author filters."""
+def _material_versions(records):
+    """Fold material identities without reading or reconstructing delivered evidence."""
     from . import research_decisions as decisions
     reviews = _relevant_reviews(records)
     seeds = seed_versions(records)
@@ -91,8 +109,6 @@ def export_material(records, artifacts, origin, *, authenticate=False):
                if review.get('subject', {}).get('kind') == 'problem' and review['payload']['stage'] == 'result'
                and any(row['id'] in identifiers for row in review['payload']['value']['objection_findings']
                        + decisions.list_stated_objections(review))]
-    if authenticate:
-        proof.authenticate_reviews(records, artifacts, reviews + results)
     folded = []
     for review in reviews + results:
         if review in results:
@@ -103,6 +119,30 @@ def export_material(records, artifacts, origin, *, authenticate=False):
             review = dict(review, payload=payload)
         folded.append(review)
     versions, _ = decisions._fold_objection_versions(folded, set(), seeds=seeds)
+    return reviews, results, identifiers, seeds, versions
+
+
+def material_inventory(records, origin):
+    """Only the keys and producing origins used by the freshness comparison."""
+    _, _, _, seeds, versions = _material_versions(records)
+    members = {row['key']: dict(key=row['key'], producer_origin=row['producer_origin'])
+               for row in retained_members(records)}
+    inherited = {row['id']: (row['origin'], row['origin_id']) for row in seeds}
+    for identifier, rows in versions.items():
+        objection_origin, origin_id = inherited.get(identifier, (origin, identifier))
+        for version in rows:
+            if 'carried_member' not in version:
+                key = member_key(objection_origin, origin_id, origin, version['review_id'], version['material_version'])
+                members[key] = dict(key=key, producer_origin=origin)
+    return sorted(members.values(), key=lambda row: row['key'])
+
+
+def export_material(records, artifacts, origin, *, authenticate=False):
+    """Every bar/slate identity and all retained refinements, without author filters."""
+    from . import research_decisions as decisions
+    reviews, results, identifiers, seeds, versions = _material_versions(records)
+    if authenticate:
+        proof.authenticate_reviews(records, artifacts, reviews + results)
     members = {row['key']: row for row in retained_members(records)}
     wrappers = {row['evidence_id']: records['problem_carried_evidence'][row['evidence_id']] for row in members.values()}
     for carry in records.get('problem_objection_carry', {}).values():
@@ -143,9 +183,9 @@ def export_material(records, artifacts, origin, *, authenticate=False):
     return sorted(members.values(), key=lambda member: member['key']), dict(sorted(wrappers.items()))
 
 
-def relevant_cut(records, members):
+def relevant_cut(records, members, artifacts):
     return dict(reviews=sorted([dict(id=row['id'], digest=digest(row)) for row in _relevant_reviews(records)], key=lambda row: row['id']),
-                pending=pending_reviews(records), members=sorted(row['key'] for row in members),
+                pending=pending_reviews(records, artifacts), members=sorted(row['key'] for row in members),
                 dependencies=[dict(origin=origin, workspace=link['workspace']) for origin, link in sorted(linked_sources(records).items())])
 
 
@@ -229,9 +269,9 @@ def require_fresh_sources(records, artifacts, *, guards=None):
             if cut is None:
                 raise ResearchError('problem_objection_source_unavailable', 'The linked source has a different record identity', dict(source_workspace=link['workspace']))
             foreign = cut['snapshot']['records']
-            members, _ = export_material(foreign, cut['store'].build_artifact_store(), origin)
-            if not _compare_cut(relevant_cut(foreign, members), link['cut'], members, destination, link['observer_origin']):
-                raise ResearchError('problem_objections_refresh_required', 'Finish source bar/slate work, carry its complete current set, then reassess the destination',
+            members = material_inventory(foreign, origin)
+            if not _compare_cut(relevant_cut(foreign, members, cut['store'].build_artifact_store()), link['cut'], members, destination, link['observer_origin']):
+                raise ResearchError('problem_objections_refresh_required', 'Finish and record source reviews, carry its complete current set, then reassess the destination',
                                     dict(source_workspace=link['workspace'], source_revision=cut['snapshot']['revision']))
 
 
@@ -268,20 +308,20 @@ def carry_objections(store, payload, *, expected_revision, request_id):
             foreign = snapshot['records']
             proof.verify_carries(foreign, source['store'].build_artifact_store(), expected_origin=source['origin'])
             members, wrappers = export_material(foreign, source['store'].build_artifact_store(), source['origin'], authenticate=True)
-            cut = relevant_cut(foreign, members)
+            cut = relevant_cut(foreign, members, source['store'].build_artifact_store())
             if cut['pending']:
-                raise ResearchError('problem_objections_refresh_required', 'Finish and record every source bar/slate review before carrying', dict(assignment_ids=cut['pending']))
+                raise ResearchError('problem_objections_refresh_required', 'Finish and record every relevant source review before carrying', dict(assignment_ids=cut['pending']))
             links = {}
             for origin, guarded in sources.items():
                 current = guarded['snapshot']['records']
-                material, _ = export_material(current, guarded['store'].build_artifact_store(), origin)
-                links[origin] = dict(origin=origin, workspace=str(guarded['store'].root), cut=relevant_cut(current, material))
+                material = material_inventory(current, origin)
+                links[origin] = dict(origin=origin, workspace=str(guarded['store'].root), cut=relevant_cut(current, material, guarded['store'].build_artifact_store()))
             for origin, link in linked_sources(foreign).items():
                 if origin == destination:
                     continue
                 actual = links[origin]['cut']
                 guarded = sources[origin]
-                material, _ = export_material(guarded['snapshot']['records'], guarded['store'].build_artifact_store(), origin)
+                material = material_inventory(guarded['snapshot']['records'], origin)
                 if not _compare_cut(actual, link['cut'], material, destination, link['observer_origin']):
                     raise ResearchError('problem_objections_refresh_required', 'Refresh the source record from its linked source first', dict(source_workspace=link['workspace']))
             bundle = proof.capture_proof(source['connection'], foreign, source['store'].build_artifact_store(), artifacts, snapshot['revision'])
