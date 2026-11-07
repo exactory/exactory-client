@@ -107,19 +107,29 @@ of the agent changes it:
 
 | Class | Codes | What to do |
 | --- | --- | --- |
-| `waiting` | `store_busy`, `rate_limited`, `review_provider_unavailable`, `review_capacity_wait`, `review_invocation_pending`, `provider_state_capacity`, `lock_timeout` | A condition outside the harness that clears by itself. Resume on the stop's schedule: at the `not_before` of a `wait`, through the step that `review_invocation_pending` names, or after the other writer's work for `store_busy` and `lock_timeout`. When the stop came from `review-series`, run it again after that. One stop has no further schedule in this release: `review_provider_unavailable` after the seventh provider failure of the turn position ([the provider schedule](research-cli.md#review-chains-and-review-series)). `review-series` on the unchanged chain stops again with the same code. It stays a `waiting` stop: report it as [Report the stop](#report-the-stop) says, and do not invent a retry schedule. |
+| `waiting` | `rate_limited`, `review_capacity_wait`, `review_invocation_pending`, `provider_state_capacity`, `execution_live`, `remote_operation_owned`, `verification_ingest_pending`, `store_busy`, `lock_timeout`, `review_provider_unavailable` | A condition outside the harness that clears by itself; waiting grants no approval and no automatic pass. What ends the wait: for `rate_limited`, the next eligible time of the provider group; for `review_capacity_wait` and `provider_state_capacity`, the `not_before` of the `wait`; for `review_invocation_pending`, the step that it names; for `execution_live`, the end of the run that holds the execution; for `remote_operation_owned`, the end of the other run's work on the submission, the verdict or the deposit; for `verification_ingest_pending`, the server showing the task of the recorded submission, which `exactory reconcile INTENT_ID` reads without a second POST; for `store_busy`, the end of the other thread's work in the store; for `lock_timeout`, the release of the controller's render or writer lock by its holder; for `review_provider_unavailable`, the provider schedule, a `wait` of 1, 2, 4, 8, 16 and 30 minutes after the first six failures of the turn position ([the provider schedule](research-cli.md#review-chains-and-review-series)). Then continue; when the stop came from `review-series`, run it again. The seventh provider failure ends in a terminal stop with no further schedule: `review-series` on the unchanged chain stops again with the same code, the stop stays `waiting`, and it needs the user as [Report the stop](#report-the-stop) says. Do not invent a retry schedule. |
 | `harness_defect` | `review_series_no_progress` | Only the harness can cause it, and its retry schedule has ended. When the last line carries `stop_id`, request [The automatic pass](#the-automatic-pass) with it. |
 | `decision` | Every other code | The evidence, a judgment or a limit says no, the record owes something, or the cause is unknown. Follow [Report the stop](#report-the-stop); only the user's instruction passes it. |
 
 A code that is on neither list is a decision stop, so a new code is a decision
-stop until the lists change. `review-series` prints the class as `stop_class`
+stop until the lists change. Two decision codes name a cause that resembles a
+wait and is none: `lock_io_error`, a lock error of the math-solver controller
+other than contention (`EACCES` or `EAGAIN`), whose message states the error
+and whose details carry `path`, `errno` and `reason`; and
+`store_reentrant_access`, the same thread entering the research store again
+while it holds the store, which the caller repairs with the active snapshot
+guard or the transaction methods. Another thread's hold stays `store_busy`,
+and another holder of the controller lock stays `lock_timeout`. `review-series`
+prints the class as `stop_class`
 on every `stop` and `wait` line that has a `code`. When a run of
 `review-series` ends in a `stop`, its last line also carries `stop_id`, the id
 of the record `review_series_stop/<id>` that the driver wrote for that stop,
 with `revision_after_stop`, or `stop_record_error` with the error when the
 stop could not be recorded
 ([Review chains and `review-series`](research-cli.md#review-chains-and-review-series)).
-`stop_record_error` means that the stop was not recorded. The stop keeps its
+`stop_record_error` means that the stop was not recorded, after the one
+further attempt that the driver makes when another writer committed first
+(`stale_revision`). The stop keeps its
 `code` and its `stop_class`. A `waiting` stop with `stop_record_error` resumes
 on its schedule as above. A `harness_defect` stop with `stop_record_error` has
 no `stop_id`, so `gate-auto-pass` cannot pass it: report the stop with the
@@ -134,7 +144,8 @@ passes nothing by itself.
 A stop needs the user in four cases:
 
 - A decision stop.
-- A `waiting` stop whose schedule has ended
+- A `waiting` stop whose schedule has ended: the terminal
+  `review_provider_unavailable` after the seventh provider failure
   ([The class of a stop](#the-class-of-a-stop)).
 - A harness-defect stop without `stop_id`.
 - A harness-defect stop that `gate-auto-pass` refuses, once no permitted
@@ -221,8 +232,9 @@ The payload (`exactory-research example gate-override`) has `id`, `gate`,
   `verification`; in a problem record it is `post`. For a write of `exactory`
   with no named gate (the refusal's `gate` is null), the field is still
   required: give `publication` together with the write's `public_action`, and
-  no `transition`. On such a record the gate name covers no write by itself.
-  The deposit disclosure still names it among the checks.
+  no `transition`. On such a record the gate name covers no write by itself,
+  and the deposit disclosure does not count it as a passed check: it names the
+  write apart ([What the user's words become](#what-the-users-words-become)).
 - `instruction`: the path of the instruction file, relative to the workspace
   root and under `context/`.
 - `reason`: your statement of the stop and of why the run goes on, in one or
@@ -295,9 +307,8 @@ refusal:
    `stop_class`).
 3. The retry schedule. The record states that the driver executed the action
    once at that progress position and then met the same action at the same
-   position (`gate_override_retry_pending` when the schedule has not ended;
-   `gate_override_stop_untrusted` when the recorded action, progress or
-   successful dispatch does not check).
+   position (`gate_override_stop_untrusted` when the recorded retry evidence,
+   action, progress or successful dispatch does not check).
 4. The hop. The stop binds the one move that the pass supports
    (`gate_override_internal_only` otherwise): a stopped `result` review of a
    study at `experiment` moves it to `write`, through the gate `readiness`, or
@@ -382,9 +393,8 @@ The refusal codes and the next action:
 | --- | --- | --- |
 | `gate_override_invalid` | The payload has another field, or `stop_id` is not text. | Send `{"stop_id": ...}` only. |
 | `gate_override_stop_missing` | No `review_series_stop` record has this id. | Use the `stop_id` of the last line of `review-series`. Without one, report the stop. |
-| `gate_override_stop_untrusted` | The record is not the one that the driver wrote: its receipt, its recorded action, its progress or its successful dispatch does not check. | Check the record (`record-check`) and report the stop. Only the user's instruction passes it. |
+| `gate_override_stop_untrusted` | The record is not the one that the driver wrote: its receipt, its retry evidence, its recorded action, its progress or its successful dispatch does not check. | Check the record (`record-check`) and report the stop. Only the user's instruction passes it. |
 | `gate_override_stop_class` | The stop is a `waiting` or a `decision` stop; `stop_code` and `stop_class` are in the details. | Follow its schedule, or report it. |
-| `gate_override_retry_pending` | The retry schedule has not ended. | Let the harness finish its schedule: run `review-series` again. |
 | `gate_override_internal_only` | The stop binds no supported hop: a `manuscript` review at `evaluate` (`scope: null`), an older stop with a `publication` scope, another stage, another role, or no study. | Report the stop. A public write needs the user's instruction. |
 | `gate_override_stop_stale` | The stage, the review target or the chain's next action changed since the stop. | Read `status`, then continue or reconcile the current review. A new stop of the current chain replaces the stale one. |
 | `gate_override_other_obligations` | The gate owes something besides the prevented review, for example a decision; the details list the `obligations`. Or a retained readiness review of the target rejects it or has a failed check; the details name the `review_id`. | Resolve them through the ordinary workflow, or report the stop. A missing decision is not a missing review. |
@@ -658,7 +668,8 @@ passes them.
   `exactory-draft deposit --sources` and the deposit is published.
 - A deposit made while the store or the local log holds an override on the
   user's instruction adds one paragraph to the record's description on Zenodo,
-  after the authorship disclosure. It names the gates of those overrides only.
+  after the authorship disclosure. It names the gates of those overrides only,
+  and an override with a `public_action` is not counted among them.
   It says what the record shows and what it does not: "This paper
   was deposited from a workspace of a research harness that checks each step
   of the work before the next one. Some of these checks require independent
@@ -684,6 +695,20 @@ passes them.
   advanced the study to its next internal stage." for a recorded pass, and
   "Only a local report was available; a committed continuation could not be
   confirmed." for a pending report whose pass the store does not hold.
+- A deposit made while the store or the local log holds a user override with
+  a `public_action` adds one paragraph per such override, after the paragraphs
+  above (the deposit reads them apart, as `public_action_overrides` with `id`,
+  `public_action` and `recorded`): "The workspace has a user-instruction entry
+  <id> for the exact public write <public_action>. The agent recorded that the
+  user instructed this write. <confirmation> This entry does not pass a
+  research gate or show who the user was, whether the instruction was used, or
+  whether the write completed." The confirmation sentence is "The instruction
+  is in the stored record." for a recorded override, and "Only a local
+  fallback entry was available; recording in the store could not be
+  confirmed." for an entry of the local log. The paragraph quotes no
+  instruction text. A local entry whose `public_action` is not an exact
+  `METHOD /path` is read as an unreadable entry and named `unknown` among the
+  checks.
 - In the math-solver controller, `search status --json` and
   `final/math/attack/objective.json` list each disposition with the user's
   words and its provenance. The attempt summary of `search deliver-attempt`

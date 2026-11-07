@@ -65,7 +65,9 @@ plugin is enabled.
   for each Zenodo write by its `METHOD` and URL path; otherwise it refuses with
   `gate_override_public_write` before any write request to Zenodo
   ([Public writes after an automatic pass](../../docs/research-workflow.md#public-writes-after-an-automatic-pass)).
-  The description then also carries one paragraph per automatic pass.
+  The description then also carries one paragraph per automatic pass, and one
+  per user override with a `public_action`, which names the exact write and
+  counts no gate as passed.
 - The Zenodo tokens are exported by the user, never pasted into chat. Sandbox
   uses `ZENODO_SANDBOX_TOKEN`, production uses `ZENODO_TOKEN`. Run
   `exactory-lab keys` to read which one is set.

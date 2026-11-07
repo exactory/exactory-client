@@ -533,13 +533,16 @@ and the `action_state`, `action_digest`, `progress_digest` and
 `successful_request_id` of the details; null for every other code, which has
 no retry schedule), its `request_id`, its `recorded_revision` and `scope`
 (the gate and the stage move that an automatic pass of this stop would make,
-or null). The last line then carries `stop_id` and `revision_after_stop`, the
-revision at which the record was committed (the line's other revision fields
-are unchanged), or `stop_record_error` when the record could not be written:
-a refusal of the store as `{code, message, details}`, or
-`{code: "stop_record_error", message}` for any other error. The stop's
-`code`, `details`, `stop_class` and the exit status are the same in both
-cases. An intermediate `stop` that the driver plans
+or null). When another writer committed between the driver's snapshot and the
+record's commit (`stale_revision`), the driver writes the record once more
+from a fresh snapshot, with a new stop identity and recorded revision; a
+second `stale_revision` or any other error ends the attempt. The last line
+then carries `stop_id` and `revision_after_stop`, the revision at which the
+record was committed (the line's other revision fields are unchanged), or
+`stop_record_error` when the record could not be written: a refusal of the
+store as `{code, message, details}`, or `{code: "stop_record_error", message}`
+for any other error. The stop's `code`, `details`, `stop_class` and the exit
+status are the same in both cases. An intermediate `stop` that the driver plans
 again writes no record. At a `handoff`, the agent performs the
 step that the handoff names; the paragraph after the handoffs states when
 `review-series` runs again. At a `stop` the

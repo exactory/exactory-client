@@ -2976,7 +2976,8 @@ mutating path of `Controller.command`, after `deliver-attempt` and
 `deliver-closure`, and at the end of every managed native `attack.py` command.
 Read-only commands, check mode and the internal Stop call render nothing. The
 render holds the render lock `.search/output-views.lock` (`lock_timeout` after
-30 seconds) and selects the event document under it: the state that the
+30 seconds; a lock error other than contention is `lock_io_error`, with the
+error in the message) and selects the event document under it: the state that the
 command replayed is reused only while that document is still the current one
 and is replayed again otherwise, so an older render never overwrites a newer
 one. A pending initialization effect fails the render (`recovery_required`)
