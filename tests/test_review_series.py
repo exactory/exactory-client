@@ -69,6 +69,64 @@ class SeriesTests(unittest.TestCase):
         self.assertEqual(code, 3)
         self.assertEqual(steps[-1]['code'], 'review_series_no_progress')
 
+    def race_stop_recording(self, failures):
+        original = self.case.store.mutate
+        attempts = []
+        def mutate(operation, payload, apply, **identity):
+            if operation == 'review.series_stop':
+                attempts.append(dict(identity))
+                if len(attempts) <= failures:
+                    # A real commit lands after the recorder's snapshot and
+                    # before its CAS. The original call then really goes stale.
+                    original('fixture.concurrent', {}, lambda tx: tx.put('concurrent', str(len(attempts)), {}),
+                             expected_revision=self.case.store.revision,
+                             request_id='concurrent-' + str(len(attempts)))
+            return original(operation, payload, apply, **identity)
+        def no_progress(store, payload, **identity):
+            return store.mutate('fixture.no_progress', {}, lambda tx: {}, **identity)
+        with patch.object(self.case.store, 'mutate', side_effect=mutate), patch.dict(
+                cli.OPERATIONS, {'review-run': no_progress}):
+            code, rows = self.drive()
+        self.assertEqual(code, 3)
+        self.assertEqual(rows[-1]['code'], 'review_series_no_progress')
+        self.assertEqual(rows[-1]['stop_class'], 'harness_defect')
+        return attempts, rows[-1]
+
+    def test_stale_stop_recording_retries_once_from_a_fresh_snapshot(self):
+        attempts, terminal = self.race_stop_recording(1)
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(attempts[1]['expected_revision'], attempts[0]['expected_revision'] + 1)
+        self.assertNotEqual(attempts[0]['request_id'], attempts[1]['request_id'])
+        self.assertNotIn('stop_record_error', terminal)
+        stops = self.case.read_records()['review_series_stop']
+        self.assertEqual(list(stops), [terminal['stop_id']])
+        self.assertEqual(terminal['revision_after_stop'], self.case.store.revision)
+        self.assertEqual(stops[terminal['stop_id']]['recorded_revision'], self.case.store.revision)
+
+    def test_second_stale_stop_recording_keeps_the_original_terminal_stop(self):
+        attempts, terminal = self.race_stop_recording(2)
+        self.assertEqual(len(attempts), 2)
+        self.assertNotIn('stop_id', terminal)
+        self.assertNotIn('revision_after_stop', terminal)
+        self.assertEqual(terminal['stop_record_error']['code'], 'stale_revision')
+        self.assertNotIn('review_series_stop', self.case.read_records())
+
+    def test_other_stop_recording_errors_are_not_retried(self):
+        from research_harness.review_series import run_series
+        plan = dict(state='stop', code='review_series_no_progress', head_id='bar-first', progress={}, details={})
+        for failure in (ResearchError('store_busy', 'Another writer owns the store'), OSError('disk failed')):
+            rows = []
+            with self.subTest(error=type(failure).__name__), patch(
+                    'research_harness.review_series.plan_next', return_value=plan), patch(
+                    'research_harness.automatic_overrides.record_series_stop', side_effect=failure) as record:
+                self.assertEqual(run_series(self.case.store, 'bar-first', emit=rows.append), 3)
+            self.assertEqual(record.call_count, 1)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]['code'], plan['code'])
+            self.assertEqual(rows[0]['stop_class'], 'harness_defect')
+            self.assertIn('stop_record_error', rows[0])
+            self.assertNotIn('stop_id', rows[0])
+
     def test_cli_emits_one_json_line_per_step_and_uses_terminal_exit(self):
         output = io.StringIO()
         with patch('research_harness.review_transport.send_request',

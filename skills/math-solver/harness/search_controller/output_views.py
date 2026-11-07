@@ -575,7 +575,11 @@ def hold_render_lock(store):
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             return descriptor
         except OSError as error:
-            if error.errno not in (errno.EACCES, errno.EAGAIN) or time.monotonic() >= deadline:
+            if error.errno not in (errno.EACCES, errno.EAGAIN):
+                os.close(descriptor)
+                raise SearchError("lock_io_error", "The output views lock could not be acquired: " + str(error),
+                                  {"path": str(path), "errno": error.errno, "reason": str(error)}) from error
+            if time.monotonic() >= deadline:
                 os.close(descriptor)
                 raise SearchError("lock_timeout", "The output views lock is held by another render") from error
             time.sleep(0.05)

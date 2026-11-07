@@ -79,16 +79,17 @@ class StopClassificationTests(unittest.TestCase):
         for code in ("review_input_too_large", "review_format_unsupported", "review_output_over_cap",
                      "review_failure_unknown", "review_transport_failure", "review_timeout",
                      "review_budget_exhausted", "resource_budget_exhausted", "new_unrecognized_code",
-                     "store_busy", "lock_timeout", "review_provider_unavailable"):
+                     "store_reentrant_access", "lock_io_error"):
             with self.subTest(code=code):
                 self.assertEqual(policy.classify_stop(code), "decision")
         self.assertEqual(policy.classify_stop("review_series_no_progress"), "harness_defect")
         for code in ("rate_limited", "review_capacity_wait", "review_invocation_pending", "provider_state_capacity",
-                     "execution_live", "remote_operation_owned", "verification_ingest_pending"):
+                     "execution_live", "remote_operation_owned", "verification_ingest_pending",
+                     "store_busy", "lock_timeout", "review_provider_unavailable"):
             with self.subTest(code=code):
                 self.assertEqual(policy.classify_stop(code), "waiting")
 
-    def test_authentication_failure_keeps_attempt_classification_but_is_a_decision_stop(self):
+    def test_authentication_failure_keeps_attempt_classification_and_bounded_wait(self):
         from test_review_failure_class import FailureClassTests
         fixture = FailureClassTests()
         fixture.setUp()
@@ -98,19 +99,82 @@ class StopClassificationTests(unittest.TestCase):
         plan = fixture.plan()
         self.assertEqual(plan["state"], "wait")
         self.assertEqual(plan["code"], "review_provider_unavailable")
-        self.assertEqual(self.policy().classify_stop(plan["code"]), "decision")
+        self.assertEqual(self.policy().classify_stop(plan["code"]), "waiting")
 
-    def test_reentrant_store_busy_is_a_decision_stop(self):
+    def test_authentication_series_follows_backoff_and_stops_on_seventh_failure(self):
+        from datetime import datetime, timedelta, timezone
+        fixture = continuation_fixtures.ContinuationTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        now = [datetime(2026, 11, 7, 8, tzinfo=timezone.utc)]
+        delays = []
+
+        class Clock(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return now[0]
+
+        def advance(seconds):
+            delays.append(seconds)
+            self.assertLessEqual(len(delays), 6, "Authentication failures waited forever")
+            now[0] += timedelta(seconds=seconds)
+
+        response = fixture.case.build_provider_response({})
+        response["status"] = "incomplete"
+        response["output"][0]["content"][0]["text"] = (
+            'API Error: 401 {"error":{"type":"authentication_error","message":"invalid x-api-key"}}')
+        steps = []
+        with patch("research_harness.review_protocol.datetime", Clock), \
+                patch("research_harness.review_failure_class.datetime", Clock), \
+                patch("research_harness.review_series.datetime", Clock), \
+                patch("research_harness.review_series.time.sleep", side_effect=advance), \
+                patch("research_harness.review_transport.send_request", return_value=response):
+            result = run_series(fixture.case.store, fixture.assignment["id"], emit=steps.append)
+        self.assertEqual(result, 3, steps)
+        self.assertEqual(delays, [60, 120, 240, 480, 960, 1800])
+        waits = [step for step in steps if step["state"] == "wait"]
+        self.assertEqual(len(waits), 6)
+        self.assertTrue(all(step["stop_class"] == "waiting" for step in waits))
+        self.assertEqual((steps[-1]["state"], steps[-1]["code"]),
+                         ("stop", "review_provider_unavailable"))
+        attempts = fixture.case.read_records()["review_attempt"]
+        self.assertEqual(len(attempts), 7)
+
+    def test_reentrant_store_access_is_a_prompt_decision_stop(self):
+        import time
         with tempfile.TemporaryDirectory() as directory:
             store = Store(Path(directory), create=True)
             descriptor = os.open(store.root / ".exactory", os.O_RDONLY)
             self.addCleanup(os.close, descriptor)
-            with patch("research_harness.storage._BUSY_TIMEOUT_SECONDS", 0.001), store._locked(descriptor):
+            with patch("research_harness.storage._BUSY_TIMEOUT_SECONDS", 0.2), store._locked(descriptor):
+                started = time.monotonic()
                 with self.assertRaises(ResearchError) as caught:
                     with store._locked(descriptor):
                         self.fail("Reentrancy acquired the same store")
-            self.assertEqual(caught.exception.code, "store_busy")
+            self.assertLess(time.monotonic() - started, 0.1)
+            self.assertEqual(caught.exception.code, "store_reentrant_access")
             self.assertEqual(self.policy().classify_stop(caught.exception.code), "decision")
+
+    def test_other_thread_store_contention_remains_a_waiting_stop(self):
+        import threading
+        with tempfile.TemporaryDirectory() as directory:
+            store = Store(Path(directory), create=True)
+            errors = []
+
+            def read():
+                try:
+                    store.snapshot()
+                except ResearchError as error:
+                    errors.append(error)
+
+            with patch("research_harness.storage._BUSY_TIMEOUT_SECONDS", 0.01), store.guarded_snapshot():
+                contender = threading.Thread(target=read)
+                contender.start()
+                contender.join(2)
+                self.assertFalse(contender.is_alive())
+            self.assertEqual([error.code for error in errors], ["store_busy"])
+            self.assertEqual(self.policy().classify_stop(errors[0].code), "waiting")
+            self.assertEqual(store.snapshot(), {"revision": 0, "records": {}})
 
     def test_live_execution_and_remote_owners_are_waiting_stops(self):
         from research_harness.execution import _owner
@@ -248,6 +312,20 @@ class RecordedSeriesStopTests(unittest.TestCase):
             head_id="bar-first", progress={}, details={}))
         self.assertIsNone(row["retry"])
 
+    def test_driver_stop_evidence_needs_no_caller_retry_assertion(self):
+        from research_harness.automatic_overrides import record_series_stop
+        terminal = self.stop_series()
+        original = self.case.read_records()["review_series_stop"][terminal["stop_id"]]
+        # The driver's plan already carries the executed action and repeated
+        # progress position. A second boolean cannot supply further evidence.
+        try:
+            row = record_series_stop(self.case.store, original["plan"])
+        except ResearchError as error:
+            self.fail("The recorded driver evidence was refused: " + str(error.as_dict()))
+        self.assertEqual(row["retry"], original["retry"])
+        self.assertEqual(row["code"], "review_series_no_progress")
+        self.assertEqual(self.case.store.committed_request(row["request_id"])["response"]["result"], row)
+
     def test_auto_command_accepts_only_a_recorded_stop_identity(self):
         self.assertIn("gate-auto-pass", cli.OPERATIONS)
         terminal = self.stop_series()
@@ -279,7 +357,7 @@ class RecordedSeriesStopTests(unittest.TestCase):
                 expected_revision=self.case.store.revision, request_id="resume-auto")
         self.assertEqual(caught.exception.code, "gate_override_internal_only")
 
-    def test_pending_retry_schedule_cannot_supply_an_automatic_pass(self):
+    def test_impossible_pending_retry_record_is_untrusted_not_a_retry_schedule(self):
         terminal = self.stop_series()
         original = self.case.read_records()["review_series_stop"][terminal["stop_id"]]
         pending = dict(original, id="pending-stop", request_id="pending-stop",
@@ -293,7 +371,7 @@ class RecordedSeriesStopTests(unittest.TestCase):
         with self.assertRaises(ResearchError) as caught:
             cli.OPERATIONS["gate-auto-pass"](self.case.store, {"stop_id": pending["id"]},
                 expected_revision=self.case.store.revision, request_id="pending-auto")
-        self.assertEqual(caught.exception.code, "gate_override_retry_pending")
+        self.assertEqual(caught.exception.code, "gate_override_stop_untrusted")
 
 
 class PublicWriteCompatibilityTests(unittest.TestCase):
@@ -1058,6 +1136,57 @@ cli.main(['status', '--workspace', sys.argv[1]], render_views=lambda store: None
         self.assertEqual(result.returncode, 1)
         self.assertIn("KeyError: 'instruction'", result.stderr)
         self.assertEqual(self.store.snapshot(), before)
+
+    def test_record_check_preserves_readiness_and_obligations_with_automatic_records(self):
+        import subprocess
+        import sys
+        self.auto(self.stop())
+        annotated = self.store.snapshot()
+        self.assertIn("review_series_stop", annotated["records"])
+        self.assertEqual(next(iter(annotated["records"]["gate_override"].values()))["authority"], "harness")
+        plain_root = self.root.parent / "without-automatic-records"
+        shutil.copytree(self.root, plain_root)
+        (plain_root / ".exactory/research.sqlite3").unlink()
+        shutil.rmtree(plain_root / ".exactory/automatic-passes")
+        plain = Store(plain_root, create=True)
+        with sqlite3.connect(self.root / ".exactory/research.sqlite3") as connection:
+            events = list(connection.execute(
+                "SELECT request_id, operation, payload, changes, result FROM events ORDER BY revision"))
+        for request, operation, payload, changes, result in events:
+            changes = [row for row in json.loads(changes)
+                       if row["kind"] not in ("review_series_stop", "gate_override")]
+            def apply(tx, changes=changes, result=json.loads(result)):
+                for row in changes:
+                    tx.put(row["kind"], row["key"], row["value"])
+                return result
+            plain.mutate(operation, json.loads(payload), apply,
+                         expected_revision=plain.revision, request_id=request)
+        plain_records = plain.snapshot()["records"]
+        self.assertNotIn("review_series_stop", plain_records)
+        self.assertNotIn("gate_override", plain_records)
+        for kind, rows in annotated["records"].items():
+            if kind not in ("review_series_stop", "gate_override"):
+                self.assertEqual(plain_records[kind], rows, kind)
+        qualification, semantics = [], []
+        for label, source in (("annotated", self.root), ("plain", plain_root)):
+            with self.subTest(store=label):
+                clone = self.root.parent / ("record-check-" + label)
+                source_before = Store(source).snapshot()
+                result = subprocess.run([sys.executable, str(ROOT / "bin/exactory-research"), "record-check",
+                    "--workspace", str(source), "--keep-clone", str(clone), "--time-budget", "120"],
+                    cwd=ROOT, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"),
+                    capture_output=True, text=True, timeout=180)
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                report = json.loads(result.stdout)
+                self.assertTrue(report["ready"], report)
+                qualification.append([(row["step"], row["status"]) for row in report["steps"]])
+                status = cli.status_report(Store(clone))
+                semantics.append(dict(ready=status["ready"], obligations=status["obligations"]))
+                self.assertEqual(Store(source).snapshot(), source_before)
+        self.assertEqual(qualification[0], qualification[1])
+        self.assertEqual(semantics[0], semantics[1])
+        self.assertFalse(semantics[0]["ready"])
+        self.assertIn("independent_review_missing", {row["code"] for row in semantics[0]["obligations"]})
 
     def test_rejecting_review_keeps_gate_stopped(self):
         stop = self.stop()

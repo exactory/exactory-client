@@ -28,6 +28,18 @@ DISCLOSURE = ("This paper was deposited from a workspace of a research harness t
               "without waiting for that check. The agent that ran the work recorded the entry. An entry named unknown could "
               "not be read. The record does not show who that user was, whether the entry was used, or whether the check "
               "was completed later.")
+ACTION_DISCLOSURE = (
+    "The workspace has a user-instruction entry {id} for the exact public write {public_action}. "
+    "The agent recorded that the user instructed this write. {confirmation} "
+    "This entry does not pass a research gate or show who the user was, whether the instruction was used, "
+    "or whether the write completed.")
+AUTOMATIC_DISCLOSURE = (
+    "This paper was deposited from a workspace of a research harness that checks each step of the work before "
+    "the next one. Some checks require independent reviews. The workspace has an automatic-continuation entry "
+    "for the check {gate}, with stop identifier {stop_id} and code {stop_code}. A readable entry says that the "
+    "harness classified the stop as a defect of its own and proposed advancing the work without the missing "
+    "reviews. {confirmation} An entry named unknown could not be read. This entry supplies no review approval "
+    "or permission to publish, and does not show whether the missing reviews were completed later.")
 
 
 class OverrideCommandMixin(CheckCommandMixin):
@@ -620,3 +632,166 @@ class OverrideDepositMetadataTests(ProblemCase):
             name = package["records"]["gate_override"]["package-override"]
             self.assertEqual(json.loads(archive.read(name)), record)
             self.assertIn(INSTRUCTION.encode(), [archive.read(name) for name in archive.namelist()])
+
+
+class ActionOverrideDisclosureTests(OverrideCommandMixin, ProblemCase):
+    def setUp(self):
+        super().setUp()
+        self.write_instruction()
+        self.instruction = 'PRIVATE-CONTEXT-8492: Publish only this <record> & keep "missing reviews" visible.\n'
+        (self.root / "context/instruction.txt").write_text(self.instruction)
+
+    def record_action(self, identifier="public-write", action="POST /deposit/depositions/42/actions/publish"):
+        return self.mutate(overrides.record_override,
+            self.build_override(identifier, public_action=action))["result"]
+
+    def append_action(self, identifier="local-write", action="PUT /deposit/depositions/42"):
+        overrides.append_unrecorded_override(self.root, self.build_override(identifier, gate="publication",
+            public_action=action), expected_revision=self.store.revision, request_id=identifier)
+
+    def metadata(self, store, written=False):
+        from test_draft import _draft
+        return _draft._build_deposit_metadata("Finite result", ["Author"], "Finite abstract.", written,
+            **overrides.describe_deposit_overrides(store))
+
+    def action_paragraph(self, identifier, action, recorded):
+        confirmation = ("The instruction is in the stored record." if recorded else
+            "Only a local fallback entry was available; recording in the store could not be confirmed.")
+        return "<p>" + html.escape(ACTION_DISCLOSURE.format(id=identifier, public_action=action,
+            confirmation=confirmation)) + "</p>"
+
+    def released_metadata(self, index=0):
+        fixture = json.loads((PLUGIN / "tests/fixtures/phase_b_override_a04617f.json").read_text())
+        return fixture["metadata"][index]
+
+    def test_recorded_public_write_passes_no_gate_and_discloses_action_without_private_words(self):
+        action = "POST /deposit/depositions/42/actions/publish"
+        self.record_action(action=action)
+        self.assertEqual(overrides.list_passed_gates(self.store), [])
+        disclosure = overrides.describe_deposit_overrides(self.store)
+        self.assertEqual(disclosure["passed_gates"], [])
+        actual = self.metadata(self.store)
+        self.assertNotIn("PRIVATE-CONTEXT-8492", json.dumps(actual))
+        self.assertIn(html.escape(action), actual["description"])
+        self.assertEqual(disclosure["public_action_overrides"], [dict(id="public-write", public_action=action,
+            recorded=True)])
+        expected = self.released_metadata()
+        expected["description"] += self.action_paragraph("public-write", action, True)
+        self.assertEqual(actual, expected)
+
+    def test_local_public_write_passes_no_gate_with_missing_or_unreadable_store(self):
+        action = "PUT /deposit/depositions/42"
+        self.append_action(action=action)
+        expected = self.released_metadata()
+        expected["description"] += self.action_paragraph("local-write", action, False)
+        original = Path.cwd()
+        try:
+            os.chdir(self.root)
+            for store, unreadable in ((self.store, False), (self.store, True), (None, False)):
+                with self.subTest(store=store is not None, unreadable=unreadable):
+                    snapshot = mock.patch.object(Store, "snapshot", side_effect=ResearchError("storage_io", "Cannot read"))
+                    if unreadable:
+                        snapshot.start()
+                    try:
+                        self.assertEqual(overrides.list_passed_gates(store), [])
+                        disclosure = overrides.describe_deposit_overrides(store)
+                        self.assertEqual(disclosure["passed_gates"], [])
+                        actual = self.metadata(store)
+                        self.assertNotIn("PRIVATE-CONTEXT-8492", json.dumps(actual))
+                        self.assertIn(html.escape(action), actual["description"])
+                        self.assertEqual(disclosure["public_action_overrides"], [dict(id="local-write",
+                            public_action=action, recorded=False)])
+                        self.assertEqual(actual, expected)
+                    finally:
+                        if unreadable:
+                            snapshot.stop()
+        finally:
+            os.chdir(original)
+
+    def test_malformed_local_actions_use_unknown_fallback_without_losing_valid_or_legacy_rows(self):
+        path = self.root / ".exactory/unrecorded-overrides.jsonl"
+        first = dict(id="first", gate="publication", public_action="POST /deposit/depositions/42/actions/publish",
+            instruction=dict(text=self.instruction))
+        last = dict(id="last", gate="readiness", public_action="PUT /deposit/depositions/42",
+            instruction=dict(text=self.instruction))
+        legacy = dict(id="legacy", gate="legacy-unregistered-gate", instruction=dict(text=""), extra="retain this")
+        for invalid in (None, {}, [], 7, True, "", "GET /records/42", "POST relative", "POST /write\nnext", "PUT /write\rnext"):
+            with self.subTest(public_action=invalid):
+                bad = dict(first, id="bad", public_action=invalid)
+                contents = "\n".join(json.dumps(row) for row in (first, bad, legacy, last)) + "\n"
+                path.write_text(contents)
+                try:
+                    metadata = self.metadata(self.store)
+                except TypeError as error:
+                    self.fail("A malformed local action crashed deposit metadata: " + str(error))
+                rows = overrides.read_unrecorded_overrides(self.root)
+                self.assertEqual((rows[0], rows[2], rows[3]), (first, legacy, last))
+                self.assertEqual(rows[1]["id"], "unreadable-line-2")
+                self.assertEqual(rows[1]["gate"], "unknown")
+                self.assertNotIn("public_action", rows[1])
+                self.assertIn("could not be read", rows[1]["instruction"]["text"])
+                self.assertEqual(overrides.list_passed_gates(self.store), ["legacy-unregistered-gate", "unknown"])
+                self.assertEqual(overrides.describe_deposit_overrides(self.store)["public_action_overrides"], [
+                    dict(id="first", public_action=first["public_action"], recorded=False),
+                    dict(id="last", public_action=last["public_action"], recorded=False)])
+                expected = self.released_metadata()
+                expected["description"] += "<p>" + DISCLOSURE.format(gates="legacy-unregistered-gate, unknown") + "</p>"
+                expected["description"] += self.action_paragraph("first", first["public_action"], False)
+                expected["description"] += self.action_paragraph("last", last["public_action"], False)
+                self.assertEqual(metadata, expected)
+                self.assertEqual(path.read_text(), contents)
+
+    def test_mixed_entries_keep_gate_and_automatic_disclosures_separate_from_public_writes(self):
+        self.mutate(overrides.record_override, self.build_override("gate-entry", gate="publication"))
+        overrides.append_unrecorded_override(self.root, self.build_override("local-gate", gate="cohort"),
+            expected_revision=self.store.revision, request_id="local-gate")
+        action = "POST /deposit/depositions/42/actions/publish"
+        local_action = "PUT /deposit/depositions/42"
+        self.record_action(action=action)
+        self.append_action(action=local_action)
+        self.put("gate_override", "automatic", dict(id="automatic", authority="harness", gate="execution",
+            stop_id="series-stop:<recorded>", stop_code="review_series_no_progress"))
+        reports = self.root / ".exactory/automatic-passes"
+        reports.mkdir()
+        (reports / "local.json").write_text(json.dumps(dict(override_id="local-automatic", gate="readiness",
+            stop_id="series-stop:<local>", stop_code="review_series_no_progress")))
+        disclosure = overrides.describe_deposit_overrides(self.store)
+        self.assertEqual(disclosure["passed_gates"], ["cohort", "publication"])
+        self.assertEqual(overrides.list_passed_gates(self.store), ["cohort", "execution", "publication"])
+        self.assertEqual(disclosure["automatic_passes"], [
+            dict(gate="execution", stop_id="series-stop:<recorded>", stop_code="review_series_no_progress", recorded=True),
+            dict(gate="readiness", stop_id="series-stop:<local>", stop_code="review_series_no_progress", recorded=False)])
+        expected = self.released_metadata()
+        expected["description"] += "<p>" + DISCLOSURE.format(gates="cohort, publication") + "</p>"
+        for gate, stop_id, confirmation in (
+                ("execution", "series-stop:<recorded>", "The stored record confirms that the harness advanced the study to its next internal stage."),
+                ("readiness", "series-stop:<local>", "Only a local report was available; a committed continuation could not be confirmed.")):
+            expected["description"] += "<p>" + html.escape(AUTOMATIC_DISCLOSURE.format(gate=gate,
+                stop_id=stop_id, stop_code="review_series_no_progress", confirmation=confirmation)) + "</p>"
+        expected["description"] += self.action_paragraph("public-write", action, True)
+        expected["description"] += self.action_paragraph("local-write", local_action, False)
+        actual = self.metadata(self.store)
+        self.assertNotIn("PRIVATE-CONTEXT-8492", json.dumps(actual))
+        self.assertEqual(actual, expected)
+
+    def test_no_public_write_entries_preserve_released_metadata_bytes_with_gates_and_automatic_passes(self):
+        for authored in (False, True):
+            for gate in (False, True):
+                for automatic in (False, True):
+                    with self.subTest(authored=authored, gate=gate, automatic=automatic):
+                        records = {}
+                        if gate:
+                            records["gate"] = dict(id="gate", gate="publication", authority="user")
+                        if automatic:
+                            records["automatic"] = dict(id="automatic", gate="readiness", authority="harness",
+                                stop_id="series-stop:baseline", stop_code="review_series_no_progress")
+                        with mock.patch.object(Store, "snapshot", return_value={"records": {"gate_override": records}}):
+                            disclosure = overrides.describe_deposit_overrides(self.store)
+                            self.assertEqual(set(disclosure), {"passed_gates", "automatic_passes"})
+                            actual = self.metadata(self.store, authored)
+                        expected = self.released_metadata(2 * int(authored) + int(gate))
+                        if automatic:
+                            expected["description"] += "<p>" + AUTOMATIC_DISCLOSURE.format(gate="readiness",
+                                stop_id="series-stop:baseline", stop_code="review_series_no_progress",
+                                confirmation="The stored record confirms that the harness advanced the study to its next internal stage.") + "</p>"
+                        self.assertEqual(json.dumps(actual).encode(), json.dumps(expected).encode())

@@ -1080,11 +1080,17 @@ class Store:
         with _LOCK_REGISTRY_GUARD:
             mutex = _WORKSPACE_LOCKS.get(identity)
             if mutex is None:
-                mutex = threading.Lock()
+                mutex = threading.RLock()
                 _WORKSPACE_LOCKS[identity] = mutex
+        # The existing per-directory mutex carries its own thread ownership.
+        # Refuse reentry before acquiring it so nested SQLite access cannot
+        # release the outer connection's POSIX locks or wait for itself.
+        if mutex._is_owned():
+            raise ResearchError("store_reentrant_access", "Research store access cannot reenter the same workspace; "
+                                "use Transaction methods inside callbacks or the active snapshot guard")
         if not mutex.acquire(timeout=_BUSY_TIMEOUT_SECONDS):
             raise ResearchError("store_busy", "Research store is active in this process; "
-                                "retry after it finishes and use Transaction methods inside callbacks")
+                                "retry after it finishes")
         try:
             yield
         finally:

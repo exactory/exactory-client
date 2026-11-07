@@ -78,7 +78,7 @@ class SnapshotGuardTests(unittest.TestCase):
             with self.store.guarded_snapshot() as guard:
                 with self.assertRaises(ResearchError) as caught:
                     self.store.snapshot()
-                self.assertEqual(caught.exception.code, "store_busy")
+                self.assertEqual(caught.exception.code, "store_reentrant_access")
                 self.assertEqual(guard.snapshot(), {"revision": 0, "records": {}})
                 raise RuntimeError("consumer interrupted")
         self.assertEqual(self.writer()["revision"], 1)
