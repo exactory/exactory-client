@@ -25,9 +25,6 @@ def _scope(records, artifacts, assignment_id):
         target = packet.get("support_contract", {}).get("candidate_digest")
         gate = "manuscript-readiness" if has_publication_scope(records) else "readiness"
         destination = "write"
-    elif source == "evaluate" and assignment.get("role") == "manuscript":
-        target = assignment.get("context", {}).get("bundle", {}).get("digest")
-        gate, destination = "publication", "deposit"
     else:
         return None
     if not isinstance(target, str):
@@ -41,7 +38,7 @@ def record_series_stop(store, plan, *, repeated=False):
     identifier = "series-stop:" + digest([snapshot["revision"], plan])
     request_id = identifier
     code = plan["code"]
-    retry = dict(policy="terminal_plan", exhausted=True)
+    retry = None
     if code == "review_series_no_progress":
         if not repeated:
             raise ResearchError("gate_override_retry_pending", "Need a repeated action at unchanged progress.")
@@ -81,7 +78,7 @@ def _trusted_stop(store, records, identifier):
     if classification != "harness_defect":
         _refuse("stop_class", "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",
                 stop_code=stop["code"], stop_class=classification)
-    retry = stop.get("retry", {})
+    retry = stop.get("retry") or {}
     if (retry.get("policy") != "one_execution_per_progress_position" or retry.get("executions") != 1
             or retry.get("exhausted") is not True):
         _refuse("retry_pending", "Need the recorded retry schedule to end.")
@@ -110,47 +107,36 @@ def _check_limits(records):
     # binding rather than letting the caller assert that one has been met.
     intent = current_intent(records)
     if intent and intent["payload"]["publication"].get("quality_condition") is not None:
-        _refuse("quality_condition", "Need the explicit user quality condition satisfied through the ordinary gates.")
+        _refuse("quality_condition", "The current intent contains an explicit quality condition, so automatic continuation is unavailable. "
+                "Continue through the ordinary gates, or record a user instruction that expressly covers this stop.")
 
 
 def _check_reviews(store, records, artifacts, stop):
     from .gates import gate_state
     from .review_continuation import plan_next
     scope = stop.get("scope")
-    if scope is None:
+    if (scope is None or scope.get("gate") not in ("readiness", "manuscript-readiness")
+            or scope.get("transition") != {"from": "experiment", "to": "write"}):
         _refuse("internal_only", "Need a review stop for the next internal study step; public writes need the user's instruction.")
     gate = scope["gate"]
-    if any(row.get("authority") == "harness" and row["gate"] == gate
+    if any(row.get("authority") == "harness" and row.get("transition") == scope["transition"]
            for row in records.get("gate_override", {}).values()):
-        _refuse("user_required", "Need the user's instruction for a second automatic pass of this gate.")
+        _refuse("user_required", "An automatic pass of this gate is already recorded. To continue on the user's instruction, "
+                "record a user override with `exactory-research gate-override`.")
     if _scope(records, artifacts, stop["assignment_id"]) != scope:
         _refuse("stop_stale", "Need a recorded stop for the current stage and exact review target.")
     _check_limits(records)
     report = gate_state(records, artifacts, gate)
-    missing = {"readiness": "independent_review_missing", "manuscript-readiness": "scoped_review_missing",
-               "publication": "manuscript_reviews_required"}[gate]
-    if not report["obligations"] or any(row["code"] != missing for row in report["obligations"]):
+    missing = {"readiness": "independent_review_missing", "manuscript-readiness": "scoped_review_missing"}[gate]
+    if not report["obligations"]:
+        _refuse("gate_ready", "The gate is ready; use the ordinary stage transition. No automatic pass is needed.")
+    if any(row["code"] != missing for row in report["obligations"]):
         _refuse("other_obligations", "Need every remaining gate item satisfied except the reviews prevented by the defect.",
                 obligations=report["obligations"])
-    if gate == "publication":
-        from .operations import normalized_text
-        from .rounds import round_state
-        reviews = report["reviews"]
-        if any(row["core"]["decision"] != "accept" for row in reviews):
-            _refuse("other_obligations", "Need the rejecting reviews resolved through the ordinary gate.")
-        target = report["bundle"]["digest"] if report["bundle"] else None
-        needed = 2 - len(reviews)
-        accepted = {normalized_text(row["assessor"]["id"]) for row in reviews}
-        round_report = round_state(records, artifacts)
-        if not round_report["ready"]:
-            _refuse("other_obligations", "Need the other transition gates satisfied.", obligations=round_report["obligations"])
-    else:
-        target = report.get("candidate_digest") if gate == "manuscript-readiness" else (report.get("candidate") or {}).get("digest")
-        needed, accepted = 1, set()
+    target = report.get("candidate_digest") if gate == "manuscript-readiness" else (report.get("candidate") or {}).get("digest")
+    needed, accepted = 1, set()
     if target != scope["target_digest"]:
         _refuse("stop_stale", "Need a stop for this exact current review target.")
-    if needed <= 0:
-        _refuse("other_obligations", "Need a genuinely missing review; existing scientific findings require the ordinary gate.")
     for kind in ("readiness_review", "scoped_readiness_review"):
         for row in records.get(kind, {}).values():
             review = row["payload"]
@@ -262,17 +248,22 @@ def _covers_public_write(rows, gate, public_action):
         gate is not None and row["gate"] == gate) for row in rows)
 
 
-def require_public_write_instruction(store, gate, *, public_action=None):
+def require_public_write_instruction(store, gate, *, public_action=None, precheck=False):
     """An automatic continuation never supplies authority for a remote write."""
     if not (store.root / ".exactory/automatic-passes").exists():
         return
     from .overrides import read_unrecorded_overrides
     records = store.snapshot()["records"]
     rows = list(records.get("gate_override", {}).values())
-    if _covers_public_write(rows, gate, public_action):
-        return
-    if _covers_public_write(read_unrecorded_overrides(store.root) or [], gate, public_action):
-        return
+    for entries in (rows, read_unrecorded_overrides(store.root) or []):
+        if _covers_public_write(entries, gate, public_action):
+            return
+        # A managed path has not chosen its concrete requests yet (a deposit
+        # can resume several different steps). Admit scoped instructions here;
+        # every transport still checks its exact action before sending a write.
+        if precheck and public_action is None and any(row.get("authority") == "user"
+                            and row.get("public_action") is not None for row in entries):
+            return
     _refuse("public_write", "Need the user's instruction recorded for this public write.", gate=gate,
             public_action=public_action, next="exactory-research gate-override")
 
@@ -280,8 +271,18 @@ def require_public_write_instruction(store, gate, *, public_action=None):
 def check_public_write(gate, *, public_action=None):
     """Check the current workspace before any public transport sends a write."""
     from .storage import Store
+    from pathlib import Path
     from .workspace import find_workspace
+    start = Path.cwd()
+    # A damaged workspace can retain only its pending/committed pass reports.
+    # Discover those independently of the ordinary workspace contract.
     root = find_workspace(required=False)
+    for directory in (start, *start.parents):
+        if (directory / ".exactory/automatic-passes").exists():
+            root = directory
+            break
+        if directory == root:
+            break
     # Automatic passes write reports before commit, so no report directory means no pass.
     if root is not None and (root / ".exactory/automatic-passes").exists():
         try:
