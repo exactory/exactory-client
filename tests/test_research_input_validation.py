@@ -56,6 +56,7 @@ class ResearchPayloadValidationTests(PayloadCommandMixin, unittest.TestCase):
         principles.initialize_research(self.store, {"profile": "research", "target": None,
             "preparation_policy": "exhaustive-v1"}, expected_revision=0, request_id="initialize")
         self.examples = json.loads((PLUGIN / "docs/research-cli-examples.json").read_text())
+        self.examples["gate-auto-pass"] = {"stop_id": "missing-series-stop"}
         self.commands = (*cli.OPERATIONS, *cli.ACQUISITION)
         for target in ("socket.socket.connect", "socket.getaddrinfo"):
             patcher = mock.patch(target, side_effect=AssertionError("Unexpected network access"))

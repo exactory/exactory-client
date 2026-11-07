@@ -43,7 +43,23 @@ def run_series(store, assignment_id, *, emit=_emit_json):
     """Run until a recorded final, an external boundary, or a typed refusal."""
     from .cli import OPERATIONS
 
-    executed = set()
+    output = emit
+
+    def emit(row, *, terminal=False):
+        if terminal and row.get('state') == 'stop' and row.get('code') and row.get('head_id'):
+            from .automatic_overrides import record_series_stop
+            try:
+                stop = record_series_stop(store, row, repeated=row['code'] == 'review_series_no_progress')
+                row = dict(row, stop_id=stop['id'])
+            except ResearchError as error:
+                # A stop that could not be recorded is never an automatic basis.
+                row = dict(row, stop_record_error=error.as_dict())
+        if row.get('state') in ('stop', 'wait') and row.get('code'):
+            from .stop_classes import classify_stop
+            row = dict(row, stop_class=classify_stop(row['code']))
+        output(row)
+
+    executed = {}
     refusals = 0
     ready_step = None
     last_plan = dict(state='stop', chain=None, head_id=assignment_id, progress=None)
@@ -58,7 +74,7 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             refusals += 1
             row = dict(last_plan, error=error.as_dict())
             if error.code not in REPLAN_CODES or refusals >= MAX_CONSECUTIVE_REFUSALS:
-                emit(_describe_stop(row, error.code, error.details or {}))
+                emit(_describe_stop(row, error.code, error.details or {}), terminal=True)
                 return 3
             emit(row)
             continue
@@ -66,12 +82,12 @@ def run_series(store, assignment_id, *, emit=_emit_json):
         waiting = plan['state'] == 'wait'
         if plan['state'] == 'stop' and plan.get('code') in REPLAN_CODES:
             refusals += 1
-            emit(plan)
+            emit(plan, terminal=refusals >= MAX_CONSECUTIVE_REFUSALS)
             if refusals >= MAX_CONSECUTIVE_REFUSALS:
                 return 3
             continue
         if plan['state'] in ('done', 'handoff', 'stop'):
-            emit(plan)
+            emit(plan, terminal=plan['state'] == 'stop')
             return 0 if plan['state'] == 'done' else 3
         if plan['state'] == 'wait':
             not_before = datetime.fromisoformat(plan['not_before'].replace('Z', '+00:00'))
@@ -91,7 +107,7 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                     raise
                 refusals += 1
                 if refusals >= MAX_CONSECUTIVE_REFUSALS:
-                    emit(_describe_stop(plan, error.code, error.details or {}))
+                    emit(_describe_stop(plan, error.code, error.details or {}), terminal=True)
                     return 3
                 continue
             if (fresh_plan['state'] != 'wait' or fresh_plan['head_id'] != plan['head_id']
@@ -105,7 +121,9 @@ def run_series(store, assignment_id, *, emit=_emit_json):
         action = _identify_action(plan)
         position = (action, digest(plan['progress']))
         if not waiting and position in executed:
-            emit(_describe_stop(plan, 'review_series_no_progress', dict(command=plan['command'])))
+            emit(_describe_stop(plan, 'review_series_no_progress', dict(command=plan['command'],
+                action_state=plan['state'], action_digest=action, progress_digest=position[1],
+                successful_request_id=executed[position])), terminal=True)
             return 3
         request_id = plan.get('request_id') or 'review-series:' + uuid.uuid4().hex
         try:
@@ -130,7 +148,7 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             if error.code in REPLAN_CODES:
                 refusals += 1
                 if refusals >= MAX_CONSECUTIVE_REFUSALS:
-                    emit(_describe_stop(row, error.code, error.details or {}))
+                    emit(_describe_stop(row, error.code, error.details or {}), terminal=True)
                     return 3
                 emit(row)
                 continue
@@ -142,7 +160,7 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 refusals += 1
                 row['read_error'] = read_error.as_dict()
                 if read_error.code not in REPLAN_CODES or refusals >= MAX_CONSECUTIVE_REFUSALS:
-                    emit(_describe_stop(row, read_error.code, read_error.details or {}))
+                    emit(_describe_stop(row, read_error.code, read_error.details or {}), terminal=True)
                     return 3
                 emit(row)
                 continue
@@ -152,11 +170,11 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 emit(row)
                 refusals = 0
                 continue
-            emit(_describe_stop(row, error.code, error.details or {}))
+            emit(_describe_stop(row, error.code, error.details or {}), terminal=True)
             return 3
         # Waiting reconciliations can be successful polls of a still-live
         # owner. Only executable continuation states spend a progress position.
         if not waiting:
-            executed.add(position)
+            executed[position] = request_id
         refusals = 0
         emit(dict(plan, request_id=request_id, revision=snapshot['revision']))

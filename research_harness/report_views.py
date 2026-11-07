@@ -191,11 +191,17 @@ def summarize_overrides(report):
         rows = report[key]
         examples = []
         for row in rows[:3]:
-            instruction = row["instruction"]
+            instruction = row.get("instruction")
             if isinstance(instruction, dict):
                 instruction = instruction["text"]
-            strings = dict(id=row["id"], gate=row["gate"], stop_code=row.get("stop_code"), instruction=instruction)
-            limits = dict(id=64, gate=48, stop_code=48, instruction=120)
+            strings = dict(id=row["id"], gate=row["gate"], stop_code=row.get("stop_code"))
+            if row.get("authority") == "harness":
+                strings.update(stop_id=row["stop_id"], authority="harness")
+            else:
+                strings["instruction"] = instruction
+            if "public_action" in row:
+                strings["public_action"] = row["public_action"]
+            limits = dict(id=64, gate=48, stop_code=48, instruction=120, stop_id=96, authority=16, public_action=120)
             example = {name: _short(value, limits[name]) for name, value in strings.items()}
             example["truncated_fields"] = [name for name, value in strings.items()
                                             if isinstance(value, str) and len(value) > limits[name]]

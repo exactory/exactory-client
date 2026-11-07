@@ -22,12 +22,17 @@ def validate_override_payload(value):
     """Validate the instruction's scope independently of store availability."""
     from .cli import GATES
     code = "gate_override_invalid"
-    fields(value, ("id", "gate", "instruction", "reason"), ("stop_code", "transition"), code=code)
+    fields(value, ("id", "gate", "instruction", "reason"), ("stop_code", "transition", "public_action"), code=code)
     for key in ("id", "gate", "instruction", "reason", "stop_code"):
         if key in value:
             text(value[key], "Gate override " + key, code=code)
     if value["gate"] not in GATES:
         raise ResearchError("gate_override_gate", "Give gate as a name that exactory-research gate accepts")
+    if "public_action" in value:
+        action = value["public_action"]
+        if (not isinstance(action, str) or not action.startswith(("POST /", "PUT /", "PATCH /", "DELETE /"))
+                or "\n" in action or "\r" in action):
+            raise ResearchError("gate_override_invalid", "Need public_action as an exact METHOD /path for this write.")
     if "transition" in value:
         transition = value["transition"]
         fields(transition, ("from", "to"), code=code)
@@ -173,12 +178,46 @@ def describe_overrides(records, root):
     rows = records.get("gate_override", {}).values()
     if rows:
         result["overrides"] = [dict(id=row["id"], gate=row["gate"], transition=row.get("transition"),
-                                    stop_code=row.get("stop_code"), instruction=row["instruction"]["text"],
+                                    stop_code=row.get("stop_code"),
+                                    **(dict(authority="harness", stop_id=row["stop_id"], cited_stops=row["cited_stops"],
+                                            report_path=row["report_path"]) if row.get("authority") == "harness" else
+                                       dict(instruction=row["instruction"]["text"])),
+                                    **({"public_action": row["public_action"]} if "public_action" in row else {}),
                                     obligations=[item["code"] for item in row["obligations"]])
                                for row in sorted(rows, key=lambda row: (row["recorded_revision"], row["id"]))]
     unrecorded = read_unrecorded_overrides(root)
+    automatic = read_unrecorded_automatic_overrides(root, records.get("gate_override", {}))
+    if automatic:
+        unrecorded = (unrecorded or []) + automatic
     if unrecorded is not None:
         result["unrecorded_overrides"] = unrecorded
+    return result
+
+
+def read_unrecorded_automatic_overrides(root, recorded):
+    """Show pending local reports without importing or applying their proposals."""
+    directory = root / ".exactory/automatic-passes"
+    if not directory.exists():
+        return []
+    try:
+        names = sorted(path.name for path in directory.iterdir() if path.suffix == ".json")
+    except OSError:
+        names = ["unreadable.json"]
+    result = []
+    for name in names:
+        path = ".exactory/automatic-passes/" + name
+        try:
+            row = strict_json(read_file(root, path))
+            if (not isinstance(row, dict) or not all(isinstance(row.get(key), str) for key in
+                    ("override_id", "gate", "stop_id", "stop_code"))):
+                raise ValueError()
+        except (OSError, ResearchError, ValueError):
+            row = dict(override_id="unreadable-" + name, gate="unknown", stop_id="unknown", stop_code="unknown",
+                       cited_stops=[])
+        if row["override_id"] not in recorded:
+            result.append(dict(id=row["override_id"], authority="harness", gate=row["gate"], stop_id=row["stop_id"],
+                               stop_code=row["stop_code"], cited_stops=row.get("cited_stops", []), report_path=path,
+                               recorded=False))
     return result
 
 
@@ -196,3 +235,22 @@ def list_passed_gates(store):
     gates = {row["gate"] for row in records.get("gate_override", {}).values()}
     gates.update(row["gate"] for row in read_unrecorded_overrides(root) or [])
     return sorted(gates)
+
+
+def describe_deposit_overrides(store):
+    """Keep automatic entries out of the disclosure that attributes user instructions."""
+    records = {}
+    root = store.root if store is not None else find_workspace(required=False) or Path.cwd()
+    if store is not None:
+        try:
+            records = store.snapshot()["records"]
+        except ResearchError:
+            pass
+    rows = records.get("gate_override", {})
+    gates = {row["gate"] for row in rows.values() if row.get("authority") != "harness"}
+    gates.update(row["gate"] for row in read_unrecorded_overrides(root) or [])
+    automatic = [dict(gate=row["gate"], stop_code=row["stop_code"], stop_id=row["stop_id"], recorded=True)
+                 for row in rows.values() if row.get("authority") == "harness"]
+    automatic.extend(dict(gate=row["gate"], stop_code=row["stop_code"], stop_id=row["stop_id"], recorded=False)
+                     for row in read_unrecorded_automatic_overrides(root, rows))
+    return dict(passed_gates=sorted(gates), automatic_passes=sorted(automatic, key=lambda row: (row["gate"], row["stop_id"])))

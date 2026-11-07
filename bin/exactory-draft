@@ -240,6 +240,9 @@ def _open_url(request: urllib.request.Request) -> dict:
     so the token stays with its origin, and every redirect of a request that is not a read, so no
     other answer passes for the answer to a write. Tests replace this function; nothing else touches
     the network."""
+    if request.get_method() not in ("GET", "HEAD", "OPTIONS"):
+        from research_harness.automatic_overrides import check_public_write
+        check_public_write("publication")
     with open_url_within_origin(request, timeout=_TIMEOUT_SECONDS) as response:
         body = response.read().decode("utf-8", "replace")
         return json.loads(body) if body else {}
@@ -498,7 +501,7 @@ def _has_exactory_authorship_evidence(pdf_path: Path) -> bool:
 
 def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
                             has_exactory_authorship_evidence: bool, problem_target: dict | None = None,
-                            passed_gates=()) -> dict:
+                            passed_gates=(), automatic_passes=()) -> dict:
     # Zenodo renders the description as HTML. The abstract paragraphs come
     # first, the disclosure closes the description as its own paragraph.
     paragraph_texts = [" ".join(block.split()) for block in abstract_text.split("\n\n")]
@@ -509,6 +512,10 @@ def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
     paragraph_texts.append(disclosure_template.format(author=creators[0]))
     if passed_gates:
         paragraph_texts.append(_PASSED_GATES_DISCLOSURE_TEMPLATE.format(gates=", ".join(passed_gates)))
+    for entry in automatic_passes:
+        paragraph_texts.append("Automatic continuation entry: gate=" + entry["gate"] + "; defect=" + entry["stop_code"]
+                               + "; stop=" + entry["stop_id"] + "; store-confirmed=" + str(entry["recorded"]).lower()
+                               + ". Review approval is separate.")
     metadata = {
         "upload_type": "publication",
         "publication_type": "preprint",
@@ -637,13 +644,13 @@ def _run_deposit(args: argparse.Namespace) -> None:
     # preflight still precedes every new remote write, including the new-version action. It runs
     # once whether the direct path opens a version or continues a version draft that it read back.
     def prepare_deposit():
-        from research_harness.overrides import list_passed_gates
+        from research_harness.overrides import describe_deposit_overrides
         problem_target = _resolve_problem_target(args.math_problem_id) if args.math_problem_id is not None else None
         if args.production:
             report_citation_gate(Path.cwd(), _CHECK_COMMAND_PATH)
         metadata = _build_deposit_metadata(state["title"], args.creator, abstract_text,
                                            has_exactory_authorship_evidence, problem_target,
-                                           passed_gates=list_passed_gates(store))
+                                           **describe_deposit_overrides(store))
         return metadata, problem_target
 
     # A study whose publication and round gates are ready records the receipt;
@@ -657,7 +664,7 @@ def _run_deposit(args: argparse.Namespace) -> None:
     else:
         store, deposit_report, store_open_error = select_managed_path(lambda workspace_store: validate_deposit(
             workspace_store, pdf_path, abstract_path, sources_path,
-            new_version=args.new_version, environment=environment), **strict)
+            new_version=args.new_version, environment=environment), public_gate="publication", **strict)
     if deposit_report is not None:
         metadata, problem_target = prepare_deposit()
         _deposit_managed(store, deposit_report, args, base_url, environment, metadata, sources_path, token,

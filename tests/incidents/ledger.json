@@ -2,6 +2,25 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "override-automatic-harness-defect",
+      "record": "20261106085323-override-of-harness-stops",
+      "class": "controller continuation (harness defect)",
+      "summary": "A repeated review-series action at unchanged recorded progress has no durable automatic continuation basis.",
+      "fixed_in": "open",
+      "expected": "The harness records its exhausted no-progress stop. An automatic pass cites only that identity, advances one internal study stage when only the prevented reviews are missing, retains all scientific findings, and writes a local report. Other obligations, rejecting reviews, waiting and decision codes, budgets, explicit user conditions, public writes and a second pass keep their authority requirements. The positive integration fixture models store shapes; it is not a measured production incident.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_automatic_gate_override.RecordedSeriesStopTests.test_unchanged_repeat_records_the_harness_stop_and_ended_schedule",
+        "test_automatic_gate_override.AutomaticStudyPassTests.test_recorded_defect_advances_only_the_internal_stage_and_preserves_claims",
+        "test_automatic_gate_override.AutomaticStudyPassTests.test_rejecting_review_keeps_gate_stopped",
+        "test_automatic_gate_override.AutomaticStudyPassTests.test_public_write_stays_stopped_until_user_instruction_covers_it",
+        "test_automatic_gate_override.AutomaticStudyPassTests.test_second_automatic_pass_of_same_gate_needs_user_even_after_return",
+        "test_automatic_gate_override.AutomaticStudyPassTests.test_unknown_waiting_and_material_stops_never_pass",
+        "test_automatic_gate_override.StopClassificationTests.test_disjoint_lists_name_existing_plugin_codes",
+        "test_automatic_gate_override.AutomaticStudyPassTests.test_old_user_override_receipt_and_record_read_unchanged"
+      ]
+    },
+    {
       "id": "override-guard-cannot-check",
       "record": "20261106085323-override-of-harness-stops",
       "class": "hook (failed file check)",

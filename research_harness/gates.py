@@ -116,7 +116,7 @@ def validate_transition(records, artifacts, previous, proposed):
     managed = uses_claim_dependencies(records)
     if source not in STAGES or target not in STAGES:
         raise ResearchError("invalid_stage", "Unsupported study stage")
-    if any(row.get("transition") == {"from": source, "to": target}
+    if any(row.get("authority") != "harness" and row.get("transition") == {"from": source, "to": target}
            for row in records.get("gate_override", {}).values()):
         return
     if (target != source and (source, target) not in BACKWARD
