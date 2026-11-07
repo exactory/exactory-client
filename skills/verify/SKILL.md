@@ -296,8 +296,13 @@ with a `stop`: a typed limit or refusal with its `code` and `details`; the
 harness cannot continue the chain. A refused action of the chain ends the
 command this way with the refusal's code (for example a `review_parts_*`
 code); when the refusal recorded an output refusal, or its code is
-`review_invocation_pending`, the command plans again instead. Read `code`
-and `details`. When the CLI reference names a step for that code, take it.
+`review_invocation_pending`, the command plans again instead. Read `code`,
+`details` and `stop_class`. A verification review binds no study stage, so no
+stop of it passes automatically (`gate-auto-pass` refuses it with
+`gate_override_internal_only`): report a `harness_defect` stop like a decision
+stop, and run a `waiting` stop again on its schedule
+([The class of a stop](../../docs/research-workflow.md#the-class-of-a-stop)).
+When the CLI reference names a step for that code, take it.
 Otherwise report the stop with its code and details in your summary and
 continue the work that does not depend on this chain. Exit status 4 with the
 plan and its `not_before` on the last line: a wait of more than 30 minutes;
@@ -329,7 +334,11 @@ judgment. On the user's instruction, record the override and send the verdict
 through the direct path, as
 [Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)
 describes; the verdict then carries no managed receipt, and the record keeps
-the instruction and what stays owed.
+the instruction and what stays owed. After an automatic pass in the workspace,
+`exactory verify` sends the verdict only when that instruction is recorded for
+the gate `verification`; otherwise it refuses with `gate_override_public_write`
+and sends nothing
+([Public writes after an automatic pass](../../docs/research-workflow.md#public-writes-after-an-automatic-pass)).
 
 Then send the verdict body, not the `{verdict, checks}` wrapper:
 

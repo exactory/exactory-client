@@ -15,6 +15,10 @@ prints one line, `Managed record skipped (<code>): <message>`, and sends the req
 anyway. A directory with no workspace, or a workspace with no store, sends it with
 no line. A recorded override of a gate is named in that line
 ([Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)).
+After an automatic pass in the workspace, the command sends the request only when
+the user's instruction is recorded for the gate `submitted`; otherwise it refuses
+with `gate_override_public_write` and sends nothing
+([Public writes after an automatic pass](../../docs/research-workflow.md#public-writes-after-an-automatic-pass)).
 Inside a draft workspace it first runs the offline citation check; a failing check
 prints one `Citation report:` line, which is information for the user, and the
 submit continues.

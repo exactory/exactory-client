@@ -190,6 +190,7 @@
     "stop_code": "readiness_required",
     "transition": {"from": "experiment", "to": "write"}
   },
+  "gate-auto-pass": {"stop_id": "SERIES_STOP_ID"},
   "problem-post-time": {
     "post_id": "external-post-1",
     "posted_at": "2026-11-04T14:49:22.236Z",
