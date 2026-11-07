@@ -175,6 +175,27 @@ class RecordedSeriesStopTests(unittest.TestCase):
 
 
 class PublicWriteCompatibilityTests(unittest.TestCase):
+    def test_public_write_without_automatic_passes_does_not_snapshot_store(self):
+        from research_harness.automatic_overrides import check_public_write
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            Store(root, create=True)
+            self.assertTrue((root / ".exactory/research.sqlite3").is_file())
+            self.assertFalse((root / ".exactory/automatic-passes").exists())
+            with patch("research_harness.workspace.find_workspace", return_value=root), patch.object(
+                    Store, "snapshot", side_effect=AssertionError("Public write read the full store")):
+                self.assertIsNone(check_public_write("publication"))
+
+    def test_public_write_instruction_without_automatic_passes_does_not_snapshot_store(self):
+        from research_harness.automatic_overrides import require_public_write_instruction
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = Store(root, create=True)
+            self.assertTrue((root / ".exactory/research.sqlite3").is_file())
+            self.assertFalse((root / ".exactory/automatic-passes").exists())
+            with patch.object(Store, "snapshot", side_effect=AssertionError("Public write read the full store")):
+                self.assertIsNone(require_public_write_instruction(store, "publication"))
+
     def test_legacy_unreadable_store_keeps_direct_path_but_local_automatic_report_blocks_it(self):
         from research_harness.automatic_overrides import check_public_write
         with tempfile.TemporaryDirectory() as directory:

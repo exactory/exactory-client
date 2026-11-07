@@ -264,12 +264,11 @@ def _covers_public_write(rows, gate, public_action):
 
 def require_public_write_instruction(store, gate, *, public_action=None):
     """An automatic continuation never supplies authority for a remote write."""
+    if not (store.root / ".exactory/automatic-passes").exists():
+        return
     from .overrides import read_unrecorded_overrides
     records = store.snapshot()["records"]
     rows = list(records.get("gate_override", {}).values())
-    if (not any(row.get("authority") == "harness" for row in rows)
-            and not (store.root / ".exactory/automatic-passes").exists()):
-        return
     if _covers_public_write(rows, gate, public_action):
         return
     if _covers_public_write(read_unrecorded_overrides(store.root) or [], gate, public_action):
@@ -283,8 +282,8 @@ def check_public_write(gate, *, public_action=None):
     from .storage import Store
     from .workspace import find_workspace
     root = find_workspace(required=False)
-    if root is not None and ((root / ".exactory/research.sqlite3").is_file()
-                             or (root / ".exactory/automatic-passes").exists()):
+    # Automatic passes write reports before commit, so no report directory means no pass.
+    if root is not None and (root / ".exactory/automatic-passes").exists():
         try:
             store = Store(root)
             store.snapshot()
