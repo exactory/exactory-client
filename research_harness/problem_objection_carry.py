@@ -214,6 +214,25 @@ def _offline(artifacts):
     return getattr(artifacts, 'problem_objection_offline', False)
 
 
+def _source_path(workspace):
+    path = Path(workspace)
+    try:
+        return path.resolve()
+    except (OSError, RuntimeError) as error:
+        from .artifacts import _filesystem_error
+        cause = _filesystem_error(error).code if isinstance(error, OSError) else 'unsafe_path'
+        raise ResearchError('problem_objection_source_unavailable', 'Open the linked problem source before proceeding',
+                            dict(source_workspace=str(path.absolute()), cause=cause)) from error
+
+
+def _require_linked_source(sources, origin, link):
+    source = sources.get(origin)
+    if source is None:
+        raise ResearchError('problem_objection_source_unavailable', 'The linked source has a different record identity',
+                            dict(source_workspace=link['workspace']))
+    return source
+
+
 @contextmanager
 def source_guards(records, artifacts, *, extra=()):
     """Hold only foreign guards; the destination's normal mutation performs CAS."""
@@ -229,7 +248,7 @@ def source_guards(records, artifacts, *, extra=()):
             link = pending.pop(0)
             if link.get('origin') in cuts:
                 continue
-            path = Path(link['workspace']).resolve()
+            path = _source_path(link['workspace'])
             if path == Path(artifacts.root).resolve() or (destination is not None and link.get('origin') == destination):
                 continue
             if path in paths:
@@ -265,9 +284,7 @@ def require_fresh_sources(records, artifacts, *, guards=None):
         for origin, link in expected.items():
             if origin == destination:
                 continue
-            cut = sources.get(origin)
-            if cut is None:
-                raise ResearchError('problem_objection_source_unavailable', 'The linked source has a different record identity', dict(source_workspace=link['workspace']))
+            cut = _require_linked_source(sources, origin, link)
             foreign = cut['snapshot']['records']
             members = material_inventory(foreign, origin)
             if not _compare_cut(relevant_cut(foreign, members, cut['store'].build_artifact_store()), link['cut'], members, destination, link['observer_origin']):
@@ -287,12 +304,15 @@ def carry_objections(store, payload, *, expected_revision, request_id):
             path = Path(value['source_workspace'])
             if not path.is_absolute() or type(value['source_revision']) is not int or value['source_revision'] < 0:
                 raise ResearchError('invalid_input', 'Name an absolute source workspace and nonnegative integer revision')
-            path = path.resolve()
+            path = _source_path(path)
             if path == store.root.resolve():
                 raise ResearchError('problem_objection_self_import', 'A problem cannot carry from itself or an alias')
             # This short destination read is released before acquiring foreign guards.
             with Store(store.root)._connection() as connection:
-                revision = connection.execute('SELECT revision FROM metadata WHERE id = 1').fetchone()[0]
+                metadata = connection.execute('SELECT revision FROM metadata WHERE id = 1').fetchone()
+                if metadata is None:
+                    raise ResearchError('corrupt_state', 'Research metadata must contain exactly one row')
+                revision = metadata[0]
                 if revision != expected_revision:
                     raise ResearchError('stale_revision', 'Read the current destination revision before carrying',
                                         dict(expected_revision=expected_revision, revision=revision))
@@ -315,14 +335,12 @@ def carry_objections(store, payload, *, expected_revision, request_id):
             for origin, guarded in sources.items():
                 current = guarded['snapshot']['records']
                 material = material_inventory(current, origin)
-                links[origin] = dict(origin=origin, workspace=str(guarded['store'].root), cut=relevant_cut(current, material, guarded['store'].build_artifact_store()))
+                links[origin] = dict(members=material, cut=relevant_cut(current, material, guarded['store'].build_artifact_store()))
             for origin, link in linked_sources(foreign).items():
                 if origin == destination:
                     continue
-                actual = links[origin]['cut']
-                guarded = sources[origin]
-                material = material_inventory(guarded['snapshot']['records'], origin)
-                if not _compare_cut(actual, link['cut'], material, destination, link['observer_origin']):
+                actual = _require_linked_source(links, origin, link)
+                if not _compare_cut(actual['cut'], link['cut'], actual['members'], destination, link['observer_origin']):
                     raise ResearchError('problem_objections_refresh_required', 'Refresh the source record from its linked source first', dict(source_workspace=link['workspace']))
             bundle = proof.capture_proof(source['connection'], foreign, source['store'].build_artifact_store(), artifacts, snapshot['revision'])
             with proof.open_proof(artifacts, bundle) as (portable, local):

@@ -533,6 +533,117 @@ class ProblemObjectionCarryTests(unittest.TestCase):
         codes = {row['code'] for row in gate_state(destination.store.snapshot()['records'], destination.artifacts, 'post')['obligations']}
         self.assertIn('problem_objections_refresh_required', codes)
 
+    def assert_source_refusal_without_destination_mutation(self, destination, source, code, details, *, source_revision=None):
+        from research_harness.output_views import render_all
+        from test_research_check_mode import CheckCommandMixin
+        destination.invoke_arguments = lambda arguments: CheckCommandMixin.invoke_arguments(destination, arguments)
+        render_all(destination.store)
+        before = destination.store.snapshot()
+        before_files = CheckCommandMixin.read_workspace(destination)
+        for check in (False, True):
+            with self.subTest(check=check):
+                try:
+                    response = CheckCommandMixin.invoke_command(destination, 'problem-objections-carry',
+                        dict(id='unavailable-source', source_workspace=str(source.root),
+                             source_revision=source.store.revision if source_revision is None else source_revision),
+                        check=check, request='unavailable-source-request')
+                finally:
+                    self.assertEqual(destination.store.snapshot(), before)
+                    self.assertEqual(CheckCommandMixin.read_workspace(destination), before_files)
+                self.assertEqual(response[0], 1, response[1:])
+                error = json.loads(response[2])['error']
+                self.assertEqual(error['code'], code)
+                self.assertEqual(error['details'], details)
+
+    def test_replaced_transitive_source_refuses_with_live_freshness_details(self):
+        from research_harness.problem_objection_carry import require_fresh_sources
+        from research_harness.record_check import copy_snapshot
+        for replacement_kind in ('new-origin', 'destination-origin', 'guarded-source-origin'):
+            with self.subTest(replacement_kind=replacement_kind):
+                upstream, source, destination = self.source(), self.fixture('math.PR'), self.fixture('math.NT')
+                carry = legacy_handoff_or_carry_adapter(source, upstream)['result']
+                upstream.root.rename(upstream.root.with_name('original-upstream'))
+                if replacement_kind == 'new-origin':
+                    replacement = self.fixture('math.LO')
+                    copy_snapshot(replacement.root, upstream.root)
+                else:
+                    copy_snapshot(destination.root if replacement_kind == 'destination-origin' else source.root, upstream.root)
+                with self.assertRaises(ResearchError) as caught:
+                    require_fresh_sources(source.store.snapshot()['records'], source.artifacts)
+                details = dict(source_workspace=carry['source_workspace'])
+                self.assertEqual(caught.exception.code, 'problem_objection_source_unavailable')
+                self.assertEqual(caught.exception.details, details)
+                self.assert_source_refusal_without_destination_mutation(destination, source,
+                    'problem_objection_source_unavailable', details)
+
+    def test_missing_or_damaged_transitive_source_has_typed_open_failure(self):
+        import sqlite3
+        from research_harness.problem_objection_carry import require_fresh_sources
+        for damage, cause in (('moved', 'store_missing'), ('database-header', 'corrupt_state'),
+                              ('missing-revision', 'corrupt_state'), ('symlink-loop', 'unsafe_path')):
+            with self.subTest(damage=damage):
+                upstream, source, destination = self.source(), self.fixture('math.PR'), self.fixture('math.NT')
+                carry = legacy_handoff_or_carry_adapter(source, upstream)['result']
+                if damage in ('moved', 'symlink-loop'):
+                    upstream.root.rename(upstream.root.with_name('original-upstream'))
+                    if damage == 'symlink-loop':
+                        upstream.root.symlink_to(upstream.root, target_is_directory=True)
+                elif damage == 'database-header':
+                    (upstream.root / '.exactory/research.sqlite3').write_bytes(b'Not a SQLite store.')
+                else:
+                    with sqlite3.connect(upstream.root / '.exactory/research.sqlite3') as connection:
+                        connection.execute('DELETE FROM metadata')
+                details = dict(source_workspace=carry['source_workspace'], cause=cause)
+                self.assert_source_refusal_without_destination_mutation(destination, source,
+                    'problem_objection_source_unavailable', details)
+                with self.assertRaises(ResearchError) as caught:
+                    require_fresh_sources(source.store.snapshot()['records'], source.artifacts)
+                self.assertEqual(caught.exception.code, 'problem_objection_source_unavailable')
+                self.assertEqual(caught.exception.details, details)
+
+    def test_direct_source_symlink_loop_has_typed_open_failure(self):
+        source, destination = self.source(), self.fixture('math.PR')
+        revision = source.store.revision
+        source.root.rename(source.root.with_name('original-source'))
+        source.root.symlink_to(source.root, target_is_directory=True)
+        self.assert_source_refusal_without_destination_mutation(destination, source,
+            'problem_objection_source_unavailable', dict(source_workspace=str(source.root), cause='unsafe_path'),
+            source_revision=revision)
+
+    def test_direct_source_revision_mismatch_has_typed_details(self):
+        source, destination = self.source(), self.fixture('math.PR')
+        self.assert_source_refusal_without_destination_mutation(destination, source,
+            'problem_objection_source_revision_mismatch',
+            dict(source_revision=source.store.revision, expected_source_revision=0), source_revision=0)
+
+    def test_destination_revision_disappearing_after_open_has_typed_refusal(self):
+        import sqlite3
+        from research_harness import problem_objection_carry as carry
+        from research_harness.storage import Store
+        source, destination = self.source(), self.fixture('math.PR')
+        revision = destination.store.revision
+        database = destination.root / '.exactory/research.sqlite3'
+        def committed_rows():
+            with sqlite3.connect(database) as connection:
+                return {table: connection.execute('SELECT * FROM ' + table + ' ORDER BY 1, 2').fetchall()
+                        for table in ('records', 'events', 'receipts')}
+        before = committed_rows()
+        def opened_store(path):
+            store = Store(path)
+            if store.root == destination.store.root:
+                # A real SQLite change in the gap after constructor validation
+                # and before the short destination revision read, not a fake row.
+                with sqlite3.connect(database) as connection:
+                    connection.execute('DELETE FROM metadata')
+            return store
+        with patch.object(carry, 'Store', side_effect=opened_store):
+            with self.assertRaises(ResearchError) as caught:
+                carry.carry_objections(destination.store, dict(id='damaged-destination',
+                    source_workspace=str(source.root), source_revision=source.store.revision),
+                    expected_revision=revision, request_id='damaged-destination-request')
+        self.assertEqual(caught.exception.code, 'corrupt_state')
+        self.assertEqual(committed_rows(), before)
+
     def test_source_continuation_and_context_repair_deliver_imports(self):
         source, destination = self.source(), self.fixture('math.PR')
         legacy_handoff_or_carry_adapter(destination, source)
