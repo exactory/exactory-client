@@ -258,13 +258,14 @@ problem-objections-carry`. The CLI reference states its records, its checks and 
    slate reviews, each with its evidence. It also imports the later versions that the source's
    result reviews gave on them, and the objections that the source itself carried. The source's
    resolutions and adjudications of them travel as context. The payload names no candidate and
-   no objection: the command imports the complete set.
+   no objection: the command imports the complete set. `exactory-research status` then lists the
+   carry under `problem_objection_carries`, with its source workspace, origin and revision.
 4. In the destination, obtain the two blind bars as usual. They receive no carried objection.
    When the import is nonempty, obtain a focused slate review before you record the slate
    (`problem_slate_review_unverified` otherwise). Its packet carries each imported objection
    under the id `<id>@origin:<source identity>` with its evidence, and the review gives a finding
    on each. Then record the slate. A slate recorded before the carry is stale
-   (`problem_slate_stale`).
+   (`problem_slate_stale` with the reason `problem_objection_carry_changed`).
 5. Both result reviews receive each imported objection and give a finding on each, whatever
    candidates it named in the source. An imported objection clears as a native one does. Both
    current result reviews resolve its delivered version with evidence, or a focused adjudication
@@ -273,9 +274,10 @@ problem-objections-carry`. The CLI reference states its records, its checks and 
    The source's resolution, the selection, a deferral, a `continuing` or `contested` finding and
    a favourable finding of one reviewer clear nothing.
 6. The destination stays linked to the source. The harness opens the source before each slate or
-   result assignment, at `problem-decision` with `post`, at `gate post` and at `problem-posted`.
-   It compares the source's current bar and slate reviews, its outstanding review work and its
-   objection versions with the imported cut. The harness refuses with
+   result assignment, at `problem-decision` with `post` and at `gate post`. `problem-posted`
+   opens no source (see "Compose and post a problem"). The harness compares the source's current
+   bar and slate reviews, its outstanding review work and its objection versions with the
+   imported cut. It refuses with
    `problem_objections_refresh_required` when the source recorded a new review, a new version of
    an objection or a carry of its own. It refuses with the same code when the source has review
    work on a carried objection that is not recorded. For unrecorded work, finish and record it
@@ -1126,9 +1128,17 @@ again.
 In a record that holds a carry ("Carry a reviewed candidate to another record" in
 "Exploration"), run `exactory-research gate post` again immediately before
 `exactory post-problem`. The gate reads the linked source records at that moment
-only. A review that a source records after that moment is not seen before the
-post, and `problem-posted` then refuses with `problem_objections_refresh_required`
-among its obligations.
+only. When a source records a review or disappears between that gate and
+`problem-posted`, record the post with `problem-posted` as usual. It opens no
+source and records the post that the gate approved. Then read `status`. It shows
+the posted terminal, with `problem_already_posted` as the only main obligation,
+and lists `problem_objections_refresh_required` or
+`problem_objection_source_unavailable` under `after_post` with the source's
+details. The harness schedules no review work on the posted statement and
+changes no post. Report the owed refresh and the source's change in your
+summary. Read the source's new review. When it settles or weakens the posted
+problem, say so to the user, who decides what to do in the Mathematics section
+(the `math-section` skill).
 
 For a problem without a research record, compose and post the parts as follows.
 
