@@ -336,8 +336,9 @@ through the direct path, as
 describes; the verdict then carries no managed receipt, and the record keeps
 the instruction and what stays owed. After an automatic pass in the workspace,
 `exactory verify` sends the verdict only when that instruction is recorded for
-the gate `verification`; otherwise it refuses with `gate_override_public_write`
-and sends no verdict
+the gate `verification` or for the exact action
+`POST /api/v1/verifications/<id>/verdicts`; otherwise it refuses with
+`gate_override_public_write` and sends no verdict
 ([Public writes after an automatic pass](../../docs/research-workflow.md#public-writes-after-an-automatic-pass)).
 
 Then send the verdict body, not the `{verdict, checks}` wrapper:
