@@ -212,13 +212,15 @@ reviewed candidate to another record", below):
 - A connection to another area does not by itself call for another record; the primary subject
   class of the statement decides.
 - When the initial searches and source readings show that the exploration belongs to another
-  class, and no bar or slate review has been requested or assigned in the original record and no
-  review work is outstanding, open a new record in that class. Make no subsequent review request
-  or assignment in the original record. The original record then holds no reviewer objection,
-  but it can hold scientific evidence: a counterexample, a settling source, a failed argument, an
-  unresolved source gap. Name the successor's workspace in your notes of the original record. In
-  the successor, record again every search and source reading that its evidence needs, the
-  adverse ones included.
+  class, open a new record in that class, under three conditions. The original record holds no
+  carry. No bar or slate review has been requested or assigned in it. No review work is
+  outstanding. Make no subsequent review request or assignment in the original record. The
+  original record then holds no reviewer objection, but it can hold scientific evidence: a
+  counterexample, a settling source, a failed argument, an unresolved source gap. Name the
+  successor's workspace in your notes of the original record. In the successor, record again
+  every search and source reading that its evidence needs, the adverse ones included. When the
+  original record holds a carry, use the carry below instead, also before it requests its own
+  reviews.
 - Once a bar or slate review has been requested or assigned, keep every candidate of the
   exploration in this record. Compare every candidate on its slate, whatever its class. This
   record's reviews concern every candidate. For a candidate of the record's class, follow the
@@ -227,30 +229,36 @@ reviewed candidate to another record", below):
   formulate it in this record: a statement is bound to the record's class
   (`problem_area_mismatch`). Take it up in a record of its class with the carry below. Use
   `deferred` only for a genuine evidence gap.
-- Open a sibling record on the same field question or seed only with the carry below, from each
-  other record of the exploration. When that record holds no review yet, the carry is empty and
-  records the link. The sibling then needs a new carry when that record records a review.
+- A sibling record on the same field question or seed needs the carry below in both directions.
+  Carry from each continuing record of the exploration into the sibling, and from the sibling
+  into each continuing record. A carry links its destination only. Record the return carries before
+  the sibling requests its first review, and before either record continues reviewing or
+  posting. When a record holds no review yet, its carry is empty and records the live link. A
+  record then needs a new carry when its linked record records a review.
 
 ### Carry a reviewed candidate to another record
 
-The carry takes the bar and slate objections of one record, the source, into another record, the
-destination. The destination takes up one of the source's candidates: a new record in the
-candidate's class, or a sibling record. The command is `exactory-research
-problem-objections-carry`. The CLI reference states its records, its checks and every code
-([Carried objections](../../docs/research-cli.md#carried-objections)).
+The source is the record whose reviews exist. The destination is the record that takes up its
+candidate: a new record in the candidate's class, or a sibling record. Run `exactory-research
+problem-objections-carry` in the destination to retain the source's complete objection set and
+its live link. See [Carried objections](../../docs/research-cli.md#carried-objections) for the
+payload, the records and the refusals.
 
-1. In the source, finish and record every bar and slate review that was requested or assigned.
-   Do the same for every result review of the source whose packet delivers one of their
-   objections. A result review that ran but has no recorded `value-review` counts as
-   outstanding. While one is outstanding, the carry refuses with
-   `problem_objections_refresh_required` and names the assignments. For such a review of an
-   older statement of the source, see that code's row in the CLI reference.
-2. Open the destination as in step 1 of this section. Name each record's workspace in the notes
-   of the other. Record the candidate again in the destination. Record again every search and
-   source reading that its evidence needs, the adverse ones included. A `source.reference`,
+1. In the source, complete and record the current bar and slate review of every slot. Do the
+   same for every current result review whose frozen packet delivers a bar, slate or imported
+   objection, on an older statement too. Follow each chain to its final assessment and record
+   it with `value-review`. A superseded assignment and an intermediate turn need no record of
+   their own.
+   While a current head is unrecorded, the carry refuses with
+   `problem_objections_refresh_required` and names the assignments. For a pending review of an
+   earlier statement, see that code's row in the CLI reference.
+2. For a new destination, open it with steps 1 to 3 of this section. An existing destination
+   keeps its initialization and its valid bars. Name each record's workspace in the notes of the
+   other. Record the candidate again in the destination. Record again every search and source
+   reading that its evidence needs, the adverse ones included. A `source.reference`,
    `observation` or `notes` text that names the source is a description: it carries nothing.
-3. In the destination, before its first slate review, run `exactory-research
-   problem-objections-carry --file carry.json` with the destination's current
+3. In the destination, before the slate review that assesses this imported set, run
+   `exactory-research problem-objections-carry --file carry.json` with the destination's current
    `--expected-revision` and a distinct `--request-id`. The payload is
    `{id, source_workspace, source_revision}`: a new carry id, the absolute path of the source
    workspace, and the source's current revision (`exactory-research status` in the source). The
@@ -262,7 +270,9 @@ problem-objections-carry`. The CLI reference states its records, its checks and 
    carry under `problem_objection_carries`, with its source workspace, origin and revision.
 4. In the destination, obtain the two blind bars as usual. They receive no carried objection.
    When the import is nonempty, obtain a focused slate review before you record the slate
-   (`problem_slate_review_unverified` otherwise). Its packet carries each imported objection
+   (`problem_slate_review_unverified` otherwise). In a destination that already holds a slate
+   review, assign it again to the same reviewer, and the harness refreshes it. Its packet
+   carries each imported objection
    under the id `<id>@origin:<source identity>` with its evidence, and the review gives a finding
    on each. Then record the slate. A slate recorded before the carry is stale
    (`problem_slate_stale` with the reason `problem_objection_carry_changed`).
@@ -281,8 +291,11 @@ problem-objections-carry`. The CLI reference states its records, its checks and 
    `problem_objections_refresh_required` when the source recorded a new review, a new version of
    an objection or a carry of its own. It refuses with the same code when the source has review
    work on a carried objection that is not recorded. For unrecorded work, finish and record it
-   in the source first. When the code stays, record a new carry with a new id. Obtain the
-   focused slate review again and record a new slate. Obtain both result reviews again. When the
+   in the source first. When the code stays, refresh the source's own links first, then record a
+   new carry with a new id. When the imported set changed, obtain the focused slate review again,
+   record a new slate, and obtain again the result reviews whose currency changed. A review
+   whose currency did not change stays valid, and the harness refuses to assign it again
+   (`review_resampling_forbidden`). Then follow the gate's remaining obligations. When the
    source workspace cannot be opened, the harness refuses with
    `problem_objection_source_unavailable`. Then restore the workspace. When it moved, record a
    new carry that names its new path.
@@ -395,9 +408,11 @@ significance.
 6. Compare the candidates by their mathematical payoff, their neighbours, the tests that would
    distinguish them, their failure signals and their resource demand. Write that comparison; it
    goes into the slate.
-7. When the comparison leaves you uncertain between candidates, or a candidate's standing rests
-   on a judgment you cannot make yourself, obtain a focused slate review before you record the
-   slate. Assign it with `review-assignment`, role `slate` and `dossier_id: null`, to one of the
+7. When a carry imported at least one objection, obtain a focused slate review of the current
+   imported set before you record the slate; the harness requires it. Otherwise the review is
+   optional: obtain it when the comparison leaves you uncertain between candidates, or a
+   candidate's standing rests on a judgment you cannot make yourself. Assign it with
+   `review-assignment`, role `slate` and `dossier_id: null`, to one of the
    two bar reviewers; the harness builds the packet from the current candidates and the two
    bars and uses the template `exactory-problem-review-v5/slate`. Run it with `review-run` and
    record it with `value-review`. A slate review's objection names the candidates it concerns;
@@ -1127,10 +1142,12 @@ again.
 
 In a record that holds a carry ("Carry a reviewed candidate to another record" in
 "Exploration"), run `exactory-research gate post` again immediately before
-`exactory post-problem`. The gate reads the linked source records at that moment
-only. When a source records a review or disappears between that gate and
-`problem-posted`, record the post with `problem-posted` as usual. It opens no
-source and records the post that the gate approved. Then read `status`. It shows
+`exactory post-problem`, and send the post only when it reports ready. The gate,
+the export, `problem-decision` and the review assignments read the linked source
+records at their own moment. `problem-posted` does not. When a source records a
+review or disappears after the external post succeeded, record the post with
+`problem-posted` as usual, with the returned id and the unchanged approved
+export. Then read `status`. It shows
 the posted terminal, with `problem_already_posted` as the only main obligation,
 and lists `problem_objections_refresh_required` or
 `problem_objection_source_unavailable` under `after_post` with the source's

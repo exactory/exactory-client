@@ -3576,8 +3576,10 @@ imported objections, a slate recorded before the carry gives `problem_slate_stal
 with `slate_id` and the `reason` `problem_objection_carry_changed`. So does a
 slate recorded before a later carry changed the
 imported set. The obligation ends when a new slate, cited to a focused slate
-review of the current set, is recorded. A
-stale slate counts as no slate for the milestone and for `problem_no_post`. A statement recorded
+review of the current set, is recorded. A slate whose candidate set is stale
+counts as no slate for the milestone and for `problem_no_post`. A slate that is
+stale by the carry digest alone blocks readiness, but it still counts as the
+slate for those two computations. A statement recorded
 in a 0.53.0 store before candidates existed carries no `candidate_id`; formulate
 it again under a new statement id with `candidate_id`, because re-selecting it
 unchanged gives `record_conflict`.
@@ -4660,7 +4662,8 @@ version that a carry imported, from every carry, and each native version of the
 same identity. A later carry that adds a member changes the version, so a
 resolution or an
 adjudication of the earlier version disposes of nothing later. A carry that adds
-no member changes nothing. Both result reviews must resolve the delivered version
+no member keeps the objection's material version, but it can update the source
+links and the freshness cut. Both result reviews must resolve the delivered version
 with evidence, or a focused adjudication must find it `not_upheld` or
 `not_binding`, as for a native objection. The source's resolutions and
 adjudications of it are delivered as context records with `purpose`
@@ -4869,7 +4872,7 @@ example the population of the cohort tool. The post decision is
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. When fewer than two result slots are occupied, `problem_review_pair_required` reports that the independent pair is missing, also when the occupied slot has pending work. It does not name a slot, and it carries `review_ids` (the current recorded reviews, possibly empty). |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. An imported objection (`<id>@origin:<source identity>`) is resolved in this record the same way; its source's resolution does not count. |
-| `problem_objections_refresh_required` | A linked source record changed since its carry, or has unfinished relevant review work (`source_workspace`, `source_revision`): it recorded a bar or slate review, a new version of an objection or a carry of its own; or a bar, slate or result assignment whose packet delivers a carried identity has no recorded `value-review`, a completed but unrecorded review included. Finish and record that work in the source. When the code stays, record a new carry with a new id, then obtain the focused slate review, a new slate and both result reviews again ([Carried objections](#carried-objections)). When the pending review belongs to an earlier statement of the source and cannot be recorded while a newer statement is selected, run `problem-statement` in the source with the exact payload of the earlier statement (the same id and fields), which selects it again; record the review; then run `problem-statement` with the exact payload of the newer statement. |
+| `problem_objections_refresh_required` | A linked source record changed since its carry, or has unfinished relevant review work (`source_workspace`, `source_revision`): it recorded a bar or slate review, a new version of an objection or a carry of its own; or a current bar or slate slot head, or a current result head whose frozen packet delivers a bar, slate or imported objection identity, has no recorded `value-review`, a completed but unrecorded final included. A result head of an older statement counts too. Complete each such chain to its final assessment and record it; a superseded assignment and an intermediate turn need no record. When the code stays, refresh the source's own links first and record a new carry with a new id. Then refresh the destination reviews whose currency changed: a changed nonempty imported set needs a focused slate review and a new slate, a review whose currency did not change stays valid, and the gate lists what remains ([Carried objections](#carried-objections)). When the pending review belongs to an earlier statement whose candidate is still current, run `problem-statement` in the source with the exact payload of that statement under a new request id, which selects it again; record the review; then select the newer statement the same way. Complete relevant reviews before you supersede their candidate: when that candidate is already superseded, `problem-statement` refuses with `problem_candidate_missing`, and no command of this release records the review. Preserve the records and report it. |
 | `problem_objection_source_unavailable` | A linked source workspace cannot be opened, or holds another record (`source_workspace`, `cause`). Restore it, or record a new carry that names the moved workspace. Under `after_post` of a posted record, this row and `problem_objections_refresh_required` are an owed refresh of a post that stands, and no review work follows ([Carried objections](#carried-objections)). |
 | `review_evidence_undelivered` | The named recorded review cites content that the request of its authenticated attempt did not deliver (`review_id`, `undelivered_references`); since 0.71.0 the audit reads that request, so an older review can carry this obligation for content that only a saved packet of its lineage held. Assign the same reviewer and role again with an empty context to refresh it. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
@@ -4888,7 +4891,8 @@ example the population of the cohort tool. The post decision is
 | `problem_already_posted` | Retain the existing confirmed post; the same statement cannot be posted twice. When the store holds a `problem_post` for the current statement, `next` is this code alone, and `status` lists the problem's other findings under `after_post` (below). Since 0.73.6 the same code refuses new review work on the posted statement. Since 0.75.0 a post closes review work per chain: `plan_next` gives `done` for a closed chain, and the chains of other statements continue ([Problem creation](#problem-creation)). In a record with a carry, a linked source that changed or disappeared after the post is listed under `after_post` as `problem_objections_refresh_required` or `problem_objection_source_unavailable` ([Carried objections](#carried-objections)). |
 
 `status` and `next` compute milestones from records: `exploration` before
-any slate or while the latest slate is stale, `slate` with a current slate and no
+any slate or while the latest slate is stale by its candidate set (a slate stale
+by the carry digest alone keeps its milestone), `slate` with a current slate and no
 statement or with a current slate that selects no candidate, `formulation` when
 the current slate selects a candidate and a statement is selected, `attempt` when
 `assess_attempt` returns no obligations,
@@ -5176,8 +5180,9 @@ ordinary `--file`, `--expected-revision`, `--request-id` and `--check` flags.
 named explicitly. Nothing is inferred from a candidate's `source.reference`, from
 `observation` or from `notes`, and a record without a carry behaves as before.
 With `--check` and a reachable source, the command validates the complete carry
-and its proof and stages the proof bytes in memory, sealed ones included. It
-writes no artifact, record, receipt, event or view, and it reserves no request
+and its proof. It stages the retained bytes in memory, sealed ones included, and
+verifies the proof copies in disposable temporary storage. It publishes no
+destination artifact, record, receipt, event or view, and it reserves no request
 id. To record the carry, run the command without `--check`, with the current
 revision. Full `status` and unsummarized `next` of a record with a carry list
 `problem_objection_carries`. Each row is one carry, sorted by id, with `id`,
@@ -5188,13 +5193,13 @@ A record without a carry gains no field, and `--summary` has no listing.
 What the command does. It opens the source store under a read guard. It
 authenticates every bar and slate review of the source against its observed
 assignment and output. It authenticates in the same way every result review of
-the source that gives a finding on their objections. It exports the complete
-material set. The set holds every objection that a bar or slate review of the
-source stated. It holds every later version that a result review of the source
-gave on such an objection as a `continuing` or `contested` finding. It also holds
-every objection that the source itself carried. The command copies the source's
-SQLite snapshot and the artifacts that the source's events name into this
-record's artifact store as the `proof`. It writes one immutable
+the source that gives a finding on their objections. It exports every bar and
+slate objection of the source, its later versions (the `continuing` or
+`contested` findings of source result reviews), and the objections that the
+source itself carried. The command copies the source's SQLite snapshot into this
+record's artifact store as the `proof`. It adds the managed artifacts that it
+finds through the source's history and nested JSON. The portable replay then
+verifies the evidence that the carry requires. It writes one immutable
 `problem_carried_evidence` record per member and per context entry. The record
 holds the exact evidence projection that the stating reviewer received, with its
 artifacts and bounded excerpts. Then it appends `problem_objection_carry/<id>`
@@ -5206,8 +5211,10 @@ context records (`purpose` `source_resolution` or `source_adjudication`) and cle
 nothing here. An objection that a source result review states first, outside the
 bar and slate identities, is not imported. The source is not written. An import
 with no member records the link to the source alone. A carry of the same id and
-an unchanged source records nothing new. The same id after a source change is
-`record_conflict`, and a changed cut needs a new id. Carried proof and evidence
+an unchanged source adds no carry record. Under a new request id it still commits
+its operation and advances the revision. Only the replay of the original request
+returns its receipt without a write or a source check. The same id after a source
+change is `record_conflict`, and a changed cut needs a new id. Carried proof and evidence
 records appear in no `final/` or `intermediate/` view. Reviewers receive them
 through packets.
 
@@ -5218,19 +5225,19 @@ Refusals of the command:
 | `invalid_input` | A field is missing or extra, `source_workspace` is not an absolute path, or `source_revision` is not a nonnegative integer. Send exactly the three fields. |
 | `problem_objection_self_import` | The source path is this workspace, or the source has this record's initialization identity (a copy or a snapshot of it). Name another record. |
 | `stale_revision` | `--expected-revision` is not the destination's current revision (`revision`). Read it and retry. |
-| `problem_objection_source_unavailable` | The source workspace cannot be opened or is not a problem record (`cause` holds the underlying code), or a workspace that this record or the source links to holds another record identity. Restore the workspace; for a moved source, name its new path in a new carry. |
+| `problem_objection_source_unavailable` | The source workspace, or a workspace that this record or the source links to, cannot be opened or is not a problem record (`source_workspace`, with `cause` for the underlying code), or it holds another record identity than the link (`source_workspace` alone). Restore the original workspace and its initialization identity; for a moved source, name its new path in a new carry. When `cause` is `store_recovery_required`, run `exactory-research recover` in that source. |
 | `problem_objection_sources_exceeded` | This record, the source and their transitive links name more than 32 distinct source workspaces (`limit`). Stop and report it; omit no source. |
 | `store_busy` | A linked store is in use. Retry after the active operation ends. |
 | `problem_objection_source_revision_mismatch` | `source_revision` differs from the source's current revision (`source_revision`, `expected_source_revision`). Read it and retry with a new request. |
-| `problem_objection_provenance_invalid` | An immutable review, assignment, adjudication or carry record of the source changed, or its `recorded_revision` differs from the revision of the event that created it; a review does not match its observed assignment or output; a review's stored `objection_identities` differ from the identities that its observed output and the native identity rules give (also on first insertion, and also when the stored map is empty); an objection cites evidence that its reviewer never received; a proof artifact is missing or changed; or the portable proof does not reproduce the exported set. The check covers every review of the source recorded up to the latest exported one, because the identities depend on the earlier reviews. Restore the original records and artifacts; author text cannot replace them. |
+| `problem_objection_provenance_invalid` | An immutable review, assignment, adjudication or carry record of the source changed; a review or carry record has a `recorded_revision` other than the revision of the event that created it; a review does not match its observed assignment or output; a review's stored `objection_identities` differ from the identities that its observed output and the native identity rules give (also on first insertion, and also when the stored map is empty); an objection cites evidence that its reviewer never received; a proof descriptor changed; or the portable proof does not reproduce the exported set. The check covers every review of the source recorded up to the latest exported one, because the identities depend on the earlier reviews. Restore the original records and artifacts; author text cannot replace them. |
+| `artifact_missing`, `artifact_corrupt` | A source artifact, or a retained proof artifact, is missing or has other bytes. Restore the exact bytes that the descriptor names. |
 | `problem_objections_refresh_required` | The source has a bar or slate assignment whose review is not recorded, or a result assignment whose frozen packet delivers one of the carried identities and whose review is not recorded, a completed but unrecorded one included (`assignment_ids`); or a record that the source links to changed since the source's own carry (`source_workspace`). Finish and record that work, refresh the source's own links, then carry again. A result assignment whose packet delivers no carried identity creates no such obligation. For the same code at a later check, and for pending work on an older statement of the source, see the obligation table above. |
 | `problem_objection_origin_conflict` | One origin, record kind and id hold two different immutable byte sets across the carries (`member`, or `origin`, `record_kind`, `id`). Investigate the conflicting records; do not rename an imported objection. |
-| `research_objection_identity_conflict` | An imported identity equals a native objection id with a different claim (`objection_id`). |
+| `research_objection_identity_conflict` | An imported identity equals a native objection id with a different claim (`objection_id`): the objection diverged in the two records. Preserve both claims and the inherited ids, and rewrite neither record. The carry into this record stays refused while the claims differ; report the conflict. |
 
 Existing refusals keep their meaning: `orchestration_conflict` outside a problem
 record, and `request_id_conflict` for a request id reused with another payload.
-The `artifact_missing` and artifact integrity codes can occur while the source is
-captured. Then restore the exact bytes that the descriptor names. A carry can
+A carry can
 bring back this record's own earlier records (a return to the origin, or a copy
 of this record). After it, a later native `review-assignment`, `value-review`,
 `review-adjudication` or staged task plan (`review-assignment
@@ -5249,8 +5256,11 @@ fields:
   returns to the record that stated it.
 - `origin` and `origin_id`: the record that stated the objection, and its id there.
 - `original_objection`: the verbatim source objection.
-- `material_members`: one entry per retained version, each with its producing
-  `origin`, `review_id` and `version`.
+- `material_members`: one entry per retained version. `producer_origin` and
+  `review_id` name the record and the review that produced it, and `version`
+  holds the version. An entry also keeps `origin`, `origin_id` and
+  `source_material_version`: the identity of the objection and the version id in
+  its source.
 - `history` and `material_version`: the versions, and the digest of the member
   keys.
 - `evidence`: citations of the `problem_carried_evidence` records, with the usual
@@ -5297,8 +5307,8 @@ imported (its bar and slate review ids and digests, its outstanding relevant
 review work, the retained member keys with their producing origins, and its own
 links). The harness opens every linked workspace under a bounded read guard
 before a slate or result assignment, before a staged frontier plan, at
-`problem-decision` with `post` and in `gate post`. It reads
-the whole snapshot, validates the source's history and identity, and compares
+`problem-decision` with `post`, in `export --kind problem` and in `gate post`. It
+reads the whole snapshot, validates the source's history and identity, and compares
 the current cut of each with the recorded one. It rebuilds no evidence and no
 sent request; the evidence and the proof are built by the carry alone. A changed
 timestamp or revision alone does not count. A changed cut is
@@ -5310,7 +5320,8 @@ atomic with the source, so run `gate post` immediately before `exactory
 post-problem`. `problem-posted` opens no source. It records a post whose export
 the gate approved when it was sent, also when a source changed or disappeared
 after the gate, and it still requires the exact approved export and the current
-local readiness. The post is an ordinary `problem_post` with `gate` `passed`.
+local readiness. The post is an ordinary `problem_post`, which `status` shows
+with `gate: "passed"`.
 After it, `status` and `next` show the posted terminal: `problem_already_posted`
 is the only main obligation, and the freshness failure is a row under
 `after_post`, with its code, its reason and the source details, and without a
@@ -5333,10 +5344,11 @@ shows that:
 
 It does not establish who or what produced an output, or when an event happened.
 It does not establish that the initialization was honest, that the history is
-complete, or that an objection is true. A party that can write the source store
-and its artifacts can build a consistent fabricated history. A party that can
-write the store but not the artifacts cannot change an observed output or its
-identities.
+complete, or that an objection is true. The identity check rejects a stored
+mapping that disagrees with the retained outputs and the recorded earlier
+reviews. It does not authenticate the order or the completeness of that history
+on its own. A party that can write the source store and its artifacts can build
+a consistent fabricated history.
 
 Evidence routes. Carried evidence can include rendered PDF pages. A destination
 route that cannot receive image evidence marks those bytes omitted, and a
