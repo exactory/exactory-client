@@ -593,6 +593,9 @@ def record_value_review(store, payload, *, expected_revision, request_id):
             record["objection_identities"] = identities
         if assignment.get("output_correction_id") is not None:
             record["output_correction_id"] = assignment["output_correction_id"]
+        if records.get('problem_objection_carry'):
+            from .problem_objection_provenance import validate_native_changes
+            validate_native_changes(records['problem_objection_carry'], [('value_review', value['id'], record)])
         changes.append(immutable_record(records, "value_review", value["id"], record))
         if saved_assignment.get('staged_review') is not None:
             from .review_staged import transition_outcome
@@ -1046,6 +1049,11 @@ def _assign_objection_identities(records, artifacts, value, problem):
         for stated, held in zip(saved['payload']['objections'], list_stated_objections(saved)):
             earlier.setdefault((stated['id'], stated['claim']), held['id'])
             claims.setdefault(held['id'], held['claim'])
+    if records.get('problem_objection_carry'):
+        from .problem_objection_carry import seed_versions
+        for held in seed_versions(records):
+            claims.setdefault(held['id'], held.get('claim'))
+            earlier.setdefault((held['id'], held.get('claim')), held['id'])
     delivered = None
     identities, assigned = {}, set()
     for objection in value['objections']:
@@ -1117,7 +1125,7 @@ def _collect_superseded_review_ids(records, artifacts):
     return superseded
 
 
-def _fold_objection_versions(reviews, superseded):
+def _fold_objection_versions(reviews, superseded, *, seeds=()):
     """Fold the reviews' stated objections and continuing or contested findings, in recorded order, into the versions
     of each objection id, and name the versions that a review not superseded holds.
 
@@ -1127,6 +1135,10 @@ def _fold_objection_versions(reviews, superseded):
     objection that no review states is a version without a claim. A review holds the versions it states and the
     versions its findings continue, unless a later review of its lineage superseded it."""
     versions, latest, current, held = {}, {}, {}, set()
+    for seed in seeds:
+        versions.setdefault(seed['id'], []).append(seed)
+        latest[seed['id']] = current[seed['id']] = seed
+        held.add(seed['material_version'])
     for review in sorted(reviews, key=lambda row: (row['recorded_revision'], row['id'])):
         holds = review['id'] not in superseded
         stated = set()
@@ -1173,9 +1185,20 @@ def collect_problem_post_objections(records, artifacts, reviews, *, subject=None
     for assignment in roots:
         sources.update((review['id'], review) for review in collect_problem_review_history(records, assignment))
     sources.update((review['id'], review) for review in collect_bound_slate_reviews(records, artifacts))
-    versions, held = _fold_objection_versions(sources.values(), _collect_superseded_review_ids(records, artifacts))
+    seeds = ()
+    if records.get('problem_objection_carry'):
+        from .problem_objection_carry import seed_versions
+        seeds = seed_versions(records)
+    versions, held = _fold_objection_versions(sources.values(), _collect_superseded_review_ids(records, artifacts), seeds=seeds)
+    imported = set()
+    if seeds:
+        from .problem_objection_carry import merge_versions
+        imported = merge_versions(records, artifacts, versions)
     selected = []
     for identifier, rows in sorted(versions.items()):
+        if identifier in imported:
+            selected.extend(rows)
+            continue
         # A slate version binds the statement only through the candidates it names.
         projected = (project_slate_objection(records, row) if 'candidate_ids' in row else row for row in rows)
         bound = [row for row in projected if row is not None]

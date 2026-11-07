@@ -71,6 +71,8 @@ def raise_tree_error(error):
 class OfflineArtifacts(ArtifactStore):
     """Permit clone artifacts and audited local reads, refusing external effects."""
 
+    problem_objection_offline = True
+
     def __init__(self, root, local_reads, *, step=None):
         super().__init__(root)
         self.local_reads = local_reads
@@ -165,7 +167,9 @@ def check_snapshot(clone):
 
 def check_integrity(store):
     """Verify artifacts of every historical event, including superseded records."""
-    store.snapshot()
+    records = store.snapshot()['records']
+    if not records.get('problem_objection_carry'):
+        records = None
     artifacts = store.build_artifact_store()
     artifact_prefixes = (_OBJECT_DIRECTORY + '/', _SEALED_DIRECTORY + '/')
     verified = set()
@@ -186,7 +190,13 @@ def check_integrity(store):
                     else:
                         artifacts.read(reference)
                     verified.add(identity)
-    return {'artifacts': len(verified), 'workspace_descriptors': len(workspace_descriptors)}
+    result = {'artifacts': len(verified), 'workspace_descriptors': len(workspace_descriptors)}
+    if records is not None:
+        from .problem_objection_provenance import verify_carries, source_identity
+        with store._connection() as connection:
+            origin = source_identity(connection, records)
+        result['problem_objection_carries'] = verify_carries(records, artifacts, expected_origin=origin)
+    return result
 
 
 @contextmanager

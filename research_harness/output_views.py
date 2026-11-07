@@ -969,6 +969,9 @@ _UNPLACED_KINDS = (
     "collection_page", "configuration", "constitution", "fulltext_requirement", "literature_operation",
     "literature_scope", "literature_search", "loop_closure", "loop_closure_selection", "native_import_identity",
     "problem_citation_metadata", "citation_locator", "reading", "reading_batch", "reference_occurrence",
+    # Carried proof/evidence is retained in the authority store and delivered
+    # through reviewer packets, like the native evidence records above.
+    "problem_objection_carry", "problem_carried_evidence",
     "reference_resolution",
     "screening", "screening_checkpoint",
     "screening_checkpoint_selection", "search_binding", "search_selection", "source", "source_bundle",

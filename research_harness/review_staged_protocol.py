@@ -6,6 +6,7 @@ this module never dispatches an ordinary assignment.
 """
 
 import copy
+from contextlib import ExitStack
 
 from .artifacts import _StagedArtifacts
 from . import review_protocol as protocol
@@ -366,13 +367,20 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
         apply_composition_plan(epoch, task, body, composition_plan, terminal_observations or observations, tasks)
     packet = dict(protocol=staged.PROTOCOL, subject=epoch['subject'], role=epoch['role'], staged_review=body,
                   evidence=[])
-    if task['objection_entries']:
-        ids = {row['objection_id'] for row in task['objection_entries']}
+    frame = epoch['manifest']['frame']
+    marker = frame.get('problem_objection_carry') if isinstance(frame, dict) else None
+    carried_final = (marker is not None and epoch['role'] == 'result' and task['type'] == 'final'
+                     and (composition_plan or {}).get('role') != 'incomplete')
+    if task['objection_entries'] or carried_final:
+        ids = ({row['id'] for row in epoch['material_objections']} if carried_final else
+               {row['objection_id'] for row in task['objection_entries']})
         packet['material_objections'] = [copy.deepcopy(row) for row in epoch['material_objections'] if row['id'] in ids]
         from .review_objection_evidence import resolved_objection_entries
         for objection in packet['material_objections']:
             for name in ('version_evidence', 'version_source_mappings'):
                 objection[name] = resolved_objection_entries(epoch, objection, name)
+    if marker is not None and (packet.get('material_objections') or task['type'] == 'final'):
+        packet['problem_objection_carry'] = copy.deepcopy(marker)
     if repair is not None:
         packet['context_repair'] = copy.deepcopy(repair)
     packet['digest'] = digest(packet)
@@ -1067,6 +1075,11 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
                             source_packet=protocol._read_json(artifacts, controller['packet']))
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
+    if 'problem_objection_carry' in packet and epoch['role'] in ('slate', 'result'):
+        prompt = protocol.canonical_prompt(epoch['role'], orchestration='problem_creation', staged_task=task,
+            repair=repair is not None, claim_range=claim_range,
+            composed=composition_plan is not None and task['type'] == 'final',
+            problem_objection_carry=packet['problem_objection_carry'])
     request = build_request(artifacts, route, prompt, packet)
     measurement = staged.joint_fit([measure_task_payload(task, packet)], read_input_limit(route),
         config['max_output_tokens'], profile, claim_count=len(task['claim_ids']))
@@ -1147,6 +1160,8 @@ def prepare_child(records, artifacts, value, revision):
     epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
     if records.get('review_slot_head', {}).get(epoch['slot_id'], {}).get('epoch_id') != epoch['id']:
         raise ResearchError('review_epoch_stale', 'Assign the current slot epoch')
+    if records.get('problem_objection_carry') and not matches_currency(records, artifacts, epoch):
+        raise ResearchError('review_epoch_stale', 'Reassess the current carried objection set in a new epoch')
     record = dict(value, subject=controller['subject'], slot_id=controller['slot_id'],
         staged_review=dict(protocol=binding['protocol'], kind='task', controller_assignment_id=controller['id'],
                            epoch_id=epoch['id'], task_id=planned['id']), staged_task=planned['task'],
@@ -1265,6 +1280,10 @@ def matches_currency(records, artifacts, epoch):
     packet = protocol._read_json(artifacts, controller['packet'])
     if protocol.build_problem_subject(records, epoch['role']) != epoch['subject']:
         return False
+    if epoch['role'] == 'result' and records.get('problem_objection_carry'):
+        from .problem_objection_carry import has_imported_objections
+        if has_imported_objections(records):
+            return packet.get('problem_review_currency') == protocol.compute_problem_review_currency(records, artifacts)
     if packet.get('problem_evidence_digest') is not None:
         from .problem_claims import compute_problem_evidence_digest
         return packet['problem_evidence_digest'] == compute_problem_evidence_digest(records, artifacts)
@@ -1842,7 +1861,9 @@ def matches_prompt(assignment, common_version):
                 and assignment['prompt'] == protocol.canonical_prompt(assignment['role'],
                     orchestration='problem_creation', staged_task=task, common_version=common_version,
                     repair=parameters.get('context_repair', False),
-                    composed=parameters.get('composed', False), claim_range=parameters.get('claim_range', False)))
+                    composed=parameters.get('composed', False), claim_range=parameters.get('claim_range', False),
+                    **({'problem_objection_carry': parameters['problem_objection_carry']}
+                       if 'problem_objection_carry' in parameters else {})))
     except (ResearchError, KeyError, TypeError):
         return False
 
@@ -1869,6 +1890,10 @@ def build_profiles(records, artifacts, route, epoch=None):
         prompt = protocol.canonical_prompt('result' if epoch is None else epoch['role'],
             orchestration='problem_creation', staged_task=dict(type=kind, scope='joint_original',
                 claim_ids=[], occurrence_ids=[], group_ids=[]))
+        frame = {} if epoch is None else epoch.get('manifest', {}).get('frame')
+        if isinstance(frame, dict) and frame.get('problem_objection_carry') is not None:
+            from .problem_objection_carry import PROMPT
+            prompt = dict(prompt, text=prompt['text'] + PROMPT)
         profiles[kind] = dict(context_characters=len(prompt['text']), envelope_characters=4000,
             output_base_tokens=128, output_tokens_per_claim=100, output_tokens_per_character=0.5 if kind == 'frame' else 0.01,
             seconds_per_character=0.0001, seconds_per_claim=0.1, duration_base_seconds=1,
@@ -2032,8 +2057,12 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
     from .evaluation import Evaluation
     from . import review_staged as staged
     fields(payload, ('controller_assignment_id',))
+    guards = ExitStack()
     def prepare(records, value):
         artifacts = Evaluation.of(records, store.build_artifact_store())
+        if records.get('problem_objection_carry'):
+            from .problem_objection_carry import require_fresh_sources
+            require_fresh_sources(records, artifacts, guards=guards)
         controller = protocol._get(records, 'review_assignment', value['controller_assignment_id'])
         binding = controller.get('staged_review', {})
         if binding.get('kind') != 'controller':
@@ -2209,8 +2238,11 @@ def plan_frontier(store, payload, *, expected_revision, request_id):
             changes.extend(child_changes)
         return changes, dict(controller_assignment_id=controller['id'], task_ids=[task['id']], next=[dict(kind='command',
             command='review-run', payload=dict(assignment_id=controller['id'], epoch_id=epoch['id'], task_id=task['id']))])
-    return protocol._prepare_review_mutation(store, 'review.frontier', payload, prepare, scoped=True,
-                                             expected_revision=expected_revision, request_id=request_id)
+    try:
+        return protocol._prepare_review_mutation(store, 'review.frontier', payload, prepare, scoped=True,
+                                                 expected_revision=expected_revision, request_id=request_id)
+    finally:
+        guards.close()
 
 
 
