@@ -12,7 +12,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 
-from .artifacts import ArtifactStore, is_sealed_artifact, _regular_file, _OBJECT_DIRECTORY, _SEALED_DIRECTORY, _verify_content
+from .artifacts import ArtifactStore, is_sealed_artifact, _OBJECT_DIRECTORY, _SEALED_DIRECTORY, _verify_content
 from .errors import ResearchError
 from .evidence import digest
 from .storage import Store
@@ -116,10 +116,8 @@ def _read_retained(artifacts, reference):
         return artifacts.read(reference)
     artifacts.verify_sealed(reference)
     # Retaining sealed bytes in a proof does not unseal them for a reviewer.
-    with artifacts._workspace.directory(_SEALED_DIRECTORY) as directory:
-        import os
-        with os.fdopen(_regular_file(directory, reference['sha256']), 'rb') as stream:
-            return _verify_content(stream.read(), reference)
+    with artifacts._open_source(reference, sealed=True) as stream:
+        return _verify_content(stream.read(), reference)
 
 
 def capture_proof(connection, records, source_artifacts, destination_artifacts, revision):

@@ -305,10 +305,10 @@ class ArtifactStore:
             raise _filesystem_error(error) from error
 
     @contextmanager
-    def _open_source(self, ref):
-        validate_reference(ref)
+    def _open_source(self, ref, *, sealed=False):
+        validate_reference(ref, sealed=sealed)
         try:
-            with self._workspace.directory(_OBJECT_DIRECTORY) as directory:
+            with self._workspace.directory(_SEALED_DIRECTORY if sealed else _OBJECT_DIRECTORY) as directory:
                 source = os.fdopen(_regular_file(directory, ref["sha256"]), "rb")
         except FileNotFoundError as error:
             raise ResearchError("artifact_missing", "Artifact has not been stored", {"path": ref["path"]}) from error
@@ -415,13 +415,13 @@ class _StagedArtifacts(ArtifactStore):
         return sorted(self._observed)
 
     @contextmanager
-    def _open_source(self, ref):
-        validate_reference(ref)
+    def _open_source(self, ref, *, sealed=False):
+        validate_reference(ref, sealed=sealed)
         if ref["path"] in self._staged:
             with io.BytesIO(self._staged[ref["path"]]) as source:
                 yield source
         else:
-            with super()._open_source(ref) as source:
+            with super()._open_source(ref, sealed=sealed) as source:
                 yield source
 
     def _record_verified(self, reference):
