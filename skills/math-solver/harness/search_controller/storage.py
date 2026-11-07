@@ -258,7 +258,7 @@ class Store:
         identity. A recorded request returns its event, as in a write. The check
         acquires the writer lock only when the lock file exists and creates none.
         The controller allows this path for pause, side-interval, retreat,
-        interpret and render only.
+        interpret, render, set-aside and end-objective only.
         """
         if not isinstance(identity, dict) or set(identity) != {"command", "target", "spec_digest"}:
             raise SearchError("invalid_input", "Operation identity is malformed")

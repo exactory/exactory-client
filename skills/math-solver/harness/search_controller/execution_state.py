@@ -4,11 +4,13 @@ import copy
 
 from . import schema as s
 from .admission import reference, remaining_allowance, require_current_account, qualifying_progress
+from .dispositions import require_objective_open
 from .scheduler import next_action
 from .problem_records import validate_journal_problem, validate_journal_line
 
 
 def account_for_work(state, node_id, resource, units=1):
+    require_objective_open(state)
     node = reference(state["nodes"], node_id, "execution node")
     s.require(node["proposal_id"] is not None and node["status"] in {"admitted", "active", "waiting", "result_ready"},
               "Execution requires a nonterminal admitted node", "admission_required")
@@ -179,6 +181,7 @@ def reserve_run(state, payload):
 
 
 def launch_run(state, payload):
+    require_objective_open(state)
     s.closed(payload, "run_id token identity")
     run = reference(state["runs"], payload["run_id"], "run")
     s.require(run["status"] == "reserved" and payload["token"] == run["token"], "Launch identity differs")
@@ -249,6 +252,8 @@ EVENT_HANDLERS.update(run_reserved=reserve_run, run_launched=launch_run, run_fin
 def native_intended(state, payload):
     s.closed(payload, "id node_id command args_digest pre_digest output_paths ownership_digest" +
              (" strategy" if "strategy" in payload else ""))
+    if payload["command"] in ("plan", "rank", "fail"):
+        require_objective_open(state)
     s.require(not state["service"]["native_intents"] and not state["service"]["legacy_intents"]
               and not state["control"]["pending_moves"] and not any(run["status"] != "terminal" for run in state["runs"].values()),
               "Another native mutation or execution requires recovery", "recovery_required")

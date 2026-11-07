@@ -421,8 +421,10 @@ and it is honest about its outcome.
    recorded reason: the attempt is a screen and a source of footholds, not a second research
    programme.
 6. Follow the objective's own rules for studies, novelty, admission, review and cash-out.
-7. When the objective closes or cashes out, deliver the attempt. `empty.json` holds `{}`, and
-   N is the native controller revision:
+7. When the objective closes or cashes out, deliver the attempt. An objective that ended on the
+   user's instruction (`search next` returns `ended`) is delivered the same way; its summary
+   carries `dispositions` with the user's words, and the reviewers see them in the attempt
+   evidence. `empty.json` holds `{}`, and N is the native controller revision:
 
    ```sh
    exactory-math --attack-root attack search deliver-attempt --file empty.json \

@@ -53,7 +53,7 @@ READ_ONLY_COMMANDS = {
                                 ("search", "status"), ("search", "guard-status"),
                                 ("search", "next"), ("search", "strategy-context")}),
 }
-MATH_STORE_COMMANDS = frozenset({"pause", "side-interval", "retreat", "interpret", "render"})
+MATH_STORE_COMMANDS = frozenset({"pause", "side-interval", "retreat", "interpret", "render", "set-aside", "end-objective"})
 
 
 @contextmanager
@@ -256,9 +256,10 @@ class ParserCheckTests(CheckCommandMixin, unittest.TestCase):
             written = self.invoke_program("exactory-math", arguments)
             self.assertEqual(checked.returncode, 1, checked.stderr)
             self.assertEqual(json.loads(checked.stderr), json.loads(written.stderr))
-            for command in ("side-interval", "retreat", "interpret"):
+            for command in ("side-interval", "retreat", "interpret", "set-aside", "end-objective"):
                 with self.subTest(command=command):
-                    arguments = ["--attack-root", str(attack_root), "search", command, "unknown-node",
+                    target = [] if command == "end-objective" else ["unknown-node"]
+                    arguments = ["--attack-root", str(attack_root), "search", command, *target,
                                  "--spec", str(spec_path), "--expected-revision",
                                  str(controller.status()["revision"]), "--request-id", "refused-" + command]
                     before = self.read_workspace()

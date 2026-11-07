@@ -11,6 +11,7 @@ from . import schema as s
 from .errors import SearchError
 from .storage import safe_path, _strict_json
 from .admission import reference
+from .dispositions import is_set_aside, require_objective_open
 from .evidence import audit_admission, proposal_inputs
 from .execution_state import account_for_work
 from .problem_records import audit_journal_append, load_problem_before, pin_problem, validate_problem
@@ -58,6 +59,8 @@ def guard_legacy(controller, command, slug, details):
         return None
     s.require(controller.store.tree_path.exists(), "Initialize the controller and admit this attack before research", "admission_required")
     state = controller.status()
+    if command in {"plan", "rank", "verify", "fail"}:
+        require_objective_open(state)
     s.require(not state["service"]["native_intents"], "A native operation requires reconciliation of its original intent", "recovery_required")
     s.require(not state["service"]["pending_effect_ids"], "Recover pending filesystem initialization before legacy work", "recovery_required")
     node = next((n for n in state["nodes"].values() if n["attack_slug"] == slug), None)
@@ -521,7 +524,7 @@ def observe_result(controller, state, node, moves, content):
     if any(value["status"] == "accepted" and value["checkpoint_id"] in matching for value in state["acceptances"].values()):
         return None
     if matching:
-        return "acceptance"
+        return "acceptance" if any(not is_set_aside(state, identity) for identity in matching) else None
     if run is not None and run["status"] == "terminal" and run.get("legacy_result") is not None:
         verdict = json.loads(content.get_artifact(run["legacy_result"]["digest"]))
         return "snapshot" if run["termination"] == "exit" and verdict["status"] == "pass" else "verification"

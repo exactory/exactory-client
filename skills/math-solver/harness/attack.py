@@ -1635,7 +1635,7 @@ def main(argv=None):
         args = build_parser().parse_args(argv)
         if getattr(args, "check", False) and args.command != "search":
             raise SearchError("check_unsupported", "Check mode cannot prepare this command. Only search pause, "
-                              "side-interval, retreat, interpret and render accept --check")
+                              "side-interval, retreat, interpret, render, set-aside and end-objective accept --check")
         from search_controller.integration import before_legacy, after_legacy, task_write_guard
         with task_write_guard(args):
             context = before_legacy(args)

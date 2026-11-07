@@ -5,6 +5,7 @@ import copy
 from . import schema as s
 from .admission import reference, remaining_allowance, require_current_account
 from .deferrals import validate_deferrals
+from .dispositions import objective_ended, require_objective_open, validate_control_provenance
 from .errors import SearchError
 from .proof import acceptance_closure, obligation_support, root_support
 
@@ -119,6 +120,9 @@ def _side_interval_allocated(state, node):
 def next_action(state):
     """Return one closed tagged action; never mutate state or spend resources."""
     control = state["control"]
+    ended = objective_ended(state)
+    if ended is not None:
+        return {"kind": "ended", "instruction": ended["instruction"]}
     if state["execution_status"] == "paused":
         return {"kind": "paused", "reason": control["pause_reason"] or "Execution is paused"}
     if control["state_error"] is not None:
@@ -209,6 +213,8 @@ def record_control(state, payload):
     action = payload.get("action")
     control = state["control"]
     s.choice(action, {"pause", "resume", "focus", "hook_stop", "side_interval"})
+    if action in {"pause", "resume", "side_interval"}:
+        require_objective_open(state)
     if action == "pause":
         s.closed(payload, "action reason")
         s.text(payload["reason"])
@@ -219,7 +225,7 @@ def record_control(state, payload):
         s.require(payload["objective_id"] == state["objective_id"], "Resume refers to another objective")
         for key in ["message_id", "session_id", "instruction"]:
             s.text(payload[key])
-        s.validate_provenance(payload["provenance"])
+        validate_control_provenance(payload["provenance"])
         resume_id = s.digest({key: payload[key] for key in ["objective_id", "message_id", "session_id"]})
         s.require(resume_id not in control["resume_ids"], "Resume instruction was already consumed")
         control["resume_ids"].append(resume_id)
@@ -239,8 +245,10 @@ def record_control(state, payload):
         s.require(node["category"] == "standalone", "Side interval requires standalone admission")
         s.integer(payload["max_moves"], 1, 24)
         s.text(payload["message_id"])
-        s.validate_provenance(payload["provenance"])
+        validate_control_provenance(payload["provenance"])
         s.require(payload["message_id"] not in control["side_instruction_ids"], "Side allocation instruction already consumed")
+        s.require(not any(row["message_id"] == payload["message_id"] for row in control.get("dispositions", [])),
+                  "Side allocation instruction already consumed")
         account = require_current_account(state, node["account_id"])
         s.require(payload["max_moves"] <= remaining_allowance(account)["moves"], "Side interval exceeds remaining allowance")
         control["side_instruction_ids"].append(payload["message_id"])
@@ -259,10 +267,10 @@ def record_control(state, payload):
         if delivery is not None and delivery in control["stop_deliveries"]:
             prior = control["stop_deliveries"][delivery]
             control["stop_decision"] = ({"kind": "continue", "action": upcoming}
-                                        if prior["kind"] == "continue" and upcoming["kind"] not in {"paused", "resolved", "handoff", "blocked", "execution_pending"}
+                                        if prior["kind"] == "continue" and upcoming["kind"] not in {"paused", "resolved", "ended", "handoff", "blocked", "execution_pending"}
                                         else {"kind": "allow_stop"})
             return
-        if upcoming["kind"] in {"paused", "resolved", "handoff", "blocked", "execution_pending"}:
+        if upcoming["kind"] in {"paused", "resolved", "ended", "handoff", "blocked", "execution_pending"}:
             decision = {"kind": "allow_stop"}
         else:
             control["stop_count"] += 1
@@ -279,6 +287,7 @@ def record_control(state, payload):
 
 
 def record_replan(state, payload):
+    require_objective_open(state)
     s.closed(payload, "route_orders progress_acceptance_ids reason" +
              (" obligation_orders" if "obligation_orders" in payload else "") +
              (" deferred_node_ids" if "deferred_node_ids" in payload else ""))
@@ -371,7 +380,7 @@ def record_node_facts(state, payload):
         active = state["control"]["active_node_id"]
         s.require(active is None or active == node["id"] or state["nodes"][active]["status"] != "active", "Only one node may be active")
         state["control"]["active_node_id"] = node["id"]
-        if state["execution_status"] not in {"paused", "resolved"}:
+        if state["execution_status"] not in {"paused", "resolved", "ended"}:
             state["execution_status"] = "running"
 
 
@@ -417,7 +426,7 @@ def retreat_node(state, payload):
     note_evidence(state, "retreat:" + str(len(state["control"]["retreats"])))
     state["control"]["retreat_node_id"] = node["id"]
     state["control"]["active_node_id"] = None
-    if state["execution_status"] != "paused":
+    if state["execution_status"] not in {"paused", "ended"}:
         state["execution_status"] = "needs_replan"
 
 

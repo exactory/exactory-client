@@ -55,6 +55,8 @@ def build_attempt_summary(controller, state):
                                            for node in state["nodes"].values() if node["admission"] is not None), default=0),
                    "historical_usage": state["totals"]["historical_usage"]},
     }
+    if state["control"].get("dispositions"):
+        summary["dispositions"] = state["control"]["dispositions"]
     return copy.deepcopy(summary)
 
 

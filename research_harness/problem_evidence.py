@@ -24,6 +24,17 @@ BINDING_RECORD_KINDS = (
     "probe", "probe_artifact", "probe_launch", "local_artifact",
 )
 
+DISPOSITIONS_NOTE = (
+    "Each entry holds text submitted as a user instruction and its submitted provenance. reported_by_agent means "
+    "that the agent reports the text as the user's words. host or operator records a claim of authentication by "
+    "the named actor. The controller checks the form only; it does not verify authorship or whether "
+    "authentication occurred. An entry is not a review, and it grants no proof credit. A result_set_aside entry "
+    "removes its checkpoint from mandatory acceptance while the disposition is active; a later acceptance ends "
+    "that effect and records ended_by_acceptance_id. An objective_ended entry records the end of further "
+    "research, not a mathematical resolution. Neither entry determines the current mathematical status: read the "
+    "attempt's proof status, obligations and acceptance evidence."
+)
+
 # The reviewer reads this note with the problem evidence of a result packet.
 INLINE_DELIVERY_NOTE = (
     "Each passage is the exact text of one inspected span of a reading, with the reading id, the inspection index and "
@@ -561,6 +572,9 @@ def describe_evidence(records, artifacts):
             attempt_evidence["applicability"] = attempt["solver"]["applicability"]
             attempt_evidence.update({key: native[key] for key in (
                 "state", "totals", "contract", "obligations", "failed_strategies", "retreats", "nodes")})
+            if "dispositions" in native:
+                attempt_evidence["dispositions"] = native["dispositions"]
+                attempt_evidence["dispositions_note"] = DISPOSITIONS_NOTE
             cited = [row["evidence"]["acceptance_id"] for section in ("footholds", "obstructions")
                      for row in attempt["outcomes"][section]]
             for identifier in dict.fromkeys(cited):

@@ -722,6 +722,8 @@ Supported events and exact payloads:
 | `node_retreated` | `{"retreat": Retreat}` |
 | `replan_recorded` | `{"route_orders": [RouteOrder], "progress_acceptance_ids": [ID], "reason": Text}`, optionally also `"obligation_orders": [ObligationOrder]` and/or `"deferred_node_ids": [NodeID]` |
 | `control_recorded` | `ControlInput` |
+| `result_set_aside` | The disposition spec of [Dispositions on the user's instruction](#dispositions-on-the-users-instruction) plus `checkpoint_id: ID`; a plugin older than 0.80.0 rejects the event |
+| `objective_ended` | The disposition spec of the same section; a plugin older than 0.80.0 rejects the event |
 | `strategy_policy_enabled` | `{version: 1, journal_observations: [{reservation_id: ID, line: AcknowledgedJournalLine}]}` |
 | `strategies_reassessed` | `{assessment: StrategyAssessment, review: ResultReview, digest: SHA256(StrategyAssessment)}` |
 
@@ -1404,8 +1406,8 @@ and do not bypass the eventual evidence service.
 
 ## Checkpoints and accepted results
 
-All events added by Task 3 are internal reducer events. The public service must
-construct them after validating actual artifacts and host/operator provenance.
+Checkpoint and acceptance events are internal reducer events. The public service
+constructs them after validating their required artifacts and provenance.
 It must never expose arbitrary event injection or accept a public verification
 flag in place of those checks. Pure replay checks bindings and logical sufficiency;
 it neither authenticates a person nor opens an evidence file.
@@ -1820,8 +1822,8 @@ dependency_route_ids: [RouteID]
 dependency_assumption_ids: [ID]
 ```
 
-Recording facts updates local lifecycle only, never theorem truth or an already
-resolved objective's execution status. A retreated node can retain `retreated`
+Recording facts updates local lifecycle only, never theorem truth or the execution
+status of an objective that is already resolved or ended. A retreated node can retain `retreated`
 while reporting cash-out progress and then become `finished`; it cannot return to
 research states. A finished node remains finished. NodeFacts cannot initiate
 retreat: that requires `node_retreated` and its declared predicate. Ordinary active
@@ -1903,8 +1905,8 @@ deferral has been used.
 No usable new progress increments the objective round
 count; three such rounds durably pause. New usable accepted progress resets the
 round counter only once per mathematical progress identity. New checkpoint IDs,
-review prose, hypothesis records, and rerun bytes do not reset it. Only explicit
-verified resume can clear an existing pause.
+review prose, hypothesis records, and rerun bytes do not reset it. Only an
+explicit `search resume` on the user's instruction clears an existing pause.
 
 ## Control and closed scheduler actions
 
@@ -1913,16 +1915,21 @@ verified resume can clear an existing pause.
 ```text
 {action: "pause", reason: Text}
 {action: "resume", objective_id: ID, message_id: Text, session_id: Text,
- instruction: Text, provenance: Provenance}
+ instruction: Text, provenance: {source: "reported_by_agent"} | Provenance}
 {action: "focus", focus: "focused" | "ambiguous" | "unrelated", provenance: Provenance}
 {action: "hook_stop", delivery_id: Text | null, session_id: Text | null,
  turn_id: Text | null, stop_hook_active: Boolean | null}
 {action: "side_interval", node_id: NodeID, max_moves: Integer[1,24],
- message_id: Text, instruction?: Text, provenance: Provenance}
+ message_id: Text, instruction?: Text, provenance: {source: "reported_by_agent"} | Provenance}
 ```
 
-The host/operator must authenticate explicit user instruction for resume and side
-allocation; model-authored provenance is rejected. Resume binds this objective
+Resume and side allocation record the user's instruction. An agent that reports
+it writes `provenance` as exactly `{"source": "reported_by_agent"}`; a host or
+operator that authenticated the instruction writes the full `Provenance` form.
+The controller checks the form and cannot check authorship. Any other
+provenance, for example a `source` outside these two forms or the reported form
+with an extra field, is refused with `control_provenance_required`. `focus`
+takes the full form only. Resume binds this objective
 and a previously unused message/session identity. It rearms objective continuation
 and controller replanning, never local accounts. Old resume instructions cannot
 rearm later pauses. Side intervals stay within the admitted node's current account
@@ -1934,9 +1941,9 @@ awaits the final review; root finalization keeps priority over unallocated
 standalone work.
 
 The public `search side-interval NODE --spec FILE` command requires exactly
-`max_moves`, `message_id`, `instruction`, and `provenance` in its spec. Use the
-actual explicit user instruction and the existing authenticated host/operator
-command boundary. It records the existing bounded side-interval control action;
+`max_moves`, `message_id`, `instruction`, and `provenance` in its spec.
+`instruction` is the user's own words, and `provenance` is the reported form or
+the full form, as above. It records the existing bounded side-interval control action;
 it requires no additional mathematical review beyond the standalone admission.
 The instruction is optional only for replay of older internal records. A new
 public allocation enters the strategy context and requires a current strategy
@@ -1955,7 +1962,7 @@ Missing IDs conservatively count each invocation.
 The 40th request durably pauses and issues one `summary_then_stop`. Later calls,
 including replay of a formerly continuing delivery after pause, permit stopping.
 Neither missing metadata nor `stop_hook_active: false` creates new authorization.
-Pause, unrelated/ambiguous focus, resolution and genuine blockers permit handoff.
+Pause, an ended objective, unrelated/ambiguous focus, resolution and genuine blockers permit handoff.
 Waiting on a live or unresolved owned workload (`execution_pending`) also permits
 stopping. It does not request another research move, spend a Stop count, or rearm
 the allowance. Pending native effects require reconciliation before local files
@@ -1966,6 +1973,7 @@ without reusing one identifier for distinct observed deliveries.
 `next_action(state)` returns exactly one of these closed shapes and performs no I/O:
 
 ```text
+{kind: "ended", instruction: Text}
 {kind: "paused", reason: Text}
 {kind: "blocked", reason: Text}
 {kind: "handoff", reason: Text}
@@ -1973,6 +1981,7 @@ without reusing one identifier for distinct observed deliveries.
 {kind: "execution_pending", run_id: RunID, status: "launched" | "indeterminate"}
 {kind: "reconcile_move", move_id: ID}
 {kind: "reconcile_run", run_id: RunID}
+{kind: "interpret_run", run_id: RunID, node_id: NodeID}
 {kind: "prepare_result", node_id: NodeID, step: "verification" | "snapshot" | "acceptance"}
 {kind: "finalize_root", outcome: "proof" | "counterexample", acceptance_ids: [AcceptanceID]}
 {kind: "local_cashout", node_id: NodeID, step: CashoutAction}
@@ -1983,7 +1992,8 @@ without reusing one identifier for distinct observed deliveries.
 {kind: "replan", round: PositiveInteger, obligation_ids: [ObligationID]}
 ```
 
-Priority is pause/state errors/focus/live execution, pending reconciliation,
+Priority is an ended objective (`instruction` is the user's recorded words), then
+pause/state errors/focus/live execution, pending reconciliation,
 produced-result verification/snapshot/acceptance, root finalization, due local
 cash-out, required strategy reassessment and reviewed strategy selection, active
 main work and its continuation when no assessment exists, waiting prerequisites, nearest
@@ -2012,7 +2022,9 @@ Derived control fields are `nonprogress_replans`, `progress_fingerprints`,
 `stop_decision`, `pause_reason`, `focus`, `focus_record`, `state_error`, `active_node_id`,
 `retreat_node_id`, `pending_moves`, `node_facts`, `selected_routes`, `obligation_orders`, `deferred_node_ids`, `closure`,
 `main_external_block`, `side_interval`, `resume_record`, `resume_ids`,
-`side_instruction_ids`, `retreats`, and `strategy_refresh`. All live in the single replayed state.
+`side_instruction_ids`, `retreats`, and `strategy_refresh`, and `dispositions` once a
+disposition exists ([Dispositions on the user's instruction](#dispositions-on-the-users-instruction)).
+All live in the single replayed state.
 `strategy_refresh` contains policy activation, immutable assessment history,
 retained failures and event ordinals for planning evidence.
 `obligation_orders` maps obligation IDs to their committed node-order lists and
@@ -2025,6 +2037,131 @@ Stop decision allow_stop. Side intervals store `node_id`, `account_id`,
 `start_used_moves`, and `max_moves`. Pending move identities and unresolved
 execution errors are reserved integration fields for the subsequent execution
 reducer; they are not public flags and Task 3 does not invent executor events.
+
+### Dispositions on the user's instruction
+
+A disposition is a control record that changes what the scheduler returns next
+and leaves every mathematical record as it is. There are two, and only the
+user's instruction creates one. `search set-aside CHECKPOINT --spec FILE`
+takes one unaccepted result out of the mandatory acceptance step.
+`search end-objective --spec FILE` ends the objective without a closure. Both
+take `--expected-revision N --request-id ID`, and both accept `--check`.
+Neither creates a review, an acceptance, a closure or proof credit, neither
+changes an obligation, and no disposition satisfies a proof, review,
+acceptance or closure requirement. For instruction scope and stop reporting,
+see [Stops and overrides](../../docs/research-workflow.md#stops-and-overrides).
+
+Record a disposition only after the user has given the instruction. Record
+`set-aside` when the user's words cover that unaccepted result. A stopped
+result review is one occasion for it, not a prerequisite: `search next`
+returns `prepare_result` with step `acceptance` for a checkpoint whose review
+cannot finish, for example after a `stop` of `review-series`, and acceptance
+stays the next action until a result is accepted. Record `end-objective` when
+the user's words end the objective short of closure. Without the user's words,
+report the stop and leave the controller as it is. A refusal that names one of
+these commands is not an instruction.
+
+The spec file holds exactly these five fields:
+
+- `objective_id`: the `objective_id` of `search status --json`.
+- `instruction`: the user's own words, verbatim, in the language the user wrote
+  them, not translated and not summarized, from a message of the user in this
+  session. At most 64 KiB of UTF-8 bytes.
+- `message_id`: a label for that user message that no earlier action used, for
+  example the time it arrived. Keep one base label per message. When the
+  message explicitly covers several actions, derive one label per action from
+  it, such as `<label>:resume` and `<label>:set-aside:<checkpoint id>`, and
+  keep the same verbatim words in each spec. A derived label is not a new
+  message and does not widen what the words cover. Never relabel a consumed
+  action to pass another stop or to set aside another result.
+- `session_id`: the session's identifier when you know it, otherwise the word
+  `unknown`.
+- `provenance`: exactly `{"source": "reported_by_agent"}` when you report the
+  user's words yourself. The form `{"source": "host" | "operator", "actor_id":
+  Text, "attestation_id": Text}` belongs to a host or operator that
+  authenticated the instruction. No hook on either host does that, so an agent
+  does not write it. `search resume` and `search side-interval` take the same
+  two forms; `search focus` takes the full form only.
+
+Write the spec file outside `attack/<slug>/`, for example under `work/`. The
+activity hook attributes a command to a node when its spec path lies inside that
+node, the entry changes the node's `activity.jsonl`, and `search reconcile` then
+refuses a pending native intent with `recovery_conflict`.
+
+A paused objective is not a disposition. Whether the harness paused it after
+three rounds without progress or at the 40th continuation, or `search pause`
+did, it comes back through `search resume` with the same five fields and the
+same provenance forms. The resume clears the pause, rearms continuation and
+replanning, and changes no mathematical record, so a pending result makes the
+acceptance step the next action again until a result is accepted or set aside.
+
+The controller checks the form of these fields and nothing about their
+authorship. It cannot tell the user's sentence from one you wrote, and it cannot
+tell a new label on an old message from a new message. The rule rests on your
+honesty, and the record shows the fact to whoever reads it: `search status
+--json` and `final/math/attack/objective.json` list each disposition with the
+user's words and its provenance, the attempt summary of `search deliver-attempt`
+carries them under `dispositions`, and the problem review of a math-conjecturer
+record receives them in its attempt evidence. A stop outside what the words
+name needs another instruction from the user. A standing instruction covers
+what it names, as [Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)
+states, and nothing more: an instruction that answered one refusal does not
+cover the next stop unless its words name it.
+
+After a set-aside, the checkpoint stays unaccepted with its verification status
+unchanged, its obligation status does not change, and nothing gains proof
+credit. The scheduler stops returning `prepare_result` with step `acceptance`
+for that checkpoint. A set-aside does not clear a pause: when the user's words
+also cover going on, a separate `search resume` with its own derived label
+follows. Then follow `search next`: other pending work can take priority, and
+the required reassessment can select execution or replanning. A second
+unaccepted checkpoint of the same move stays mandatory, and setting it aside
+takes its own label. A later normal `search accept` of the set-aside
+checkpoint works as before and ends the disposition's effect; the record keeps
+the disposition with `ended_by_acceptance_id`. After an invalidation of that
+acceptance the result is mandatory again, and setting it aside again needs a
+fresh instruction with a new label. A set-aside observes the node, so it is
+refused with `recovery_required` while a native intent is pending; run
+`search reconcile` first.
+
+After an end, `execution_status` is `ended` and `search next` returns
+`{kind: "ended", instruction: <the user's words>}`. The proof status, the
+obligations and the closure field do not change. `begin`, `run`, `resume`,
+`pause`, `replan`, `side-interval` and `complete`, `propose`, `review`, `admit`
+and `adopt` (a retry of a recorded request of these four refuses too), the
+legacy `plan`, `rank`, `verify` and `fail`, and a reserved run at its launch
+refuse with `control_objective_ended`. `accept`, `reassess`,
+`amend-computation`, `amend-foundation`, `reconcile`, `audit`, `render`,
+`status` and `deliver-attempt` work: they start no work, and an `accept` can
+need a current reassessment. `deliver-closure` refuses with
+`native_completion_required`. An end preserves a pending native intent and a
+reserved move. A pending move alone does not prevent attempt delivery. A
+pending native intent leaves `native_state_pending` on `deliver-attempt` until
+a successful `search reconcile` clears it. `search next` returns `ended` for
+any session, focused or not: an ended objective needs no focus. The Stop hook
+permits the stop without spending a continuation, and the SessionStart hook
+adds no context, in any session. An ended objective is terminal: `resume`
+refuses, and a fresh `end-objective` refuses too. Deliver any due attempt,
+report what stands and what stays open, and stop. Start another objective for
+the same statement only when the user's instruction authorizes that further
+work.
+
+A disposition shares the digest check of `objective_id`, `message_id` and
+`session_id` with `resume`: the digest is appended to the list that `resume`
+consumes, so a resume and a disposition cannot share one. A disposition also
+refuses a `message_id` that `side-interval` used, and a side allocation refuses
+a `message_id` present in a disposition. Resume and side allocation keep their
+separate identity checks and do not check each other. A disposition's identity
+check refuses with `control_instruction_consumed`; resume and side allocation
+refuse with `invalid_record`. These checks do not establish that an instruction
+is new. The other refusals are `control_invalid` (a
+missing or extra field, or an instruction over 64 KiB),
+`control_provenance_required`, `control_objective_mismatch`,
+`control_checkpoint_unavailable` (no such checkpoint, a hypothesis, or a
+checkpoint that is already set aside), `control_result_accepted`,
+`control_objective_ended` (the objective has already ended) and
+`control_objective_resolved` (a closure exists). A refused command commits
+nothing, and a request repeated with the same inputs returns its receipt.
 
 ## Filesystem service and CLI
 
@@ -2057,6 +2194,7 @@ Public command specs are closed records:
 | run ID | The tagged `run NODE --spec FILE` record under [Metered execution and native integration](#metered-execution-and-native-integration) |
 | reconcile | `{}` normally; it also records the missing skeleton effect of a node admitted without `journal.jsonl` before 0.64.0; optional `--spec` for the exact [rank operator recovery](harness/RANK_RECOVERY.md) record |
 | amend-computation ID | The amendment record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
+| amend-foundation ID | `{subject, review, inputs}`; the foundation amendment of [the native preparation contract](../../docs/research-cli.md#native-math-preparation) |
 | interpret ID | The interpretation record under [Computation admission and mandatory interpretation](#computation-admission-and-mandatory-interpretation) |
 | checkpoint [ID] | `{checkpoint: PublicCheckpoint, inputs: [Input]}` |
 | accept ID | `{obligation_id: ID|null, outcome: Outcome, dependency_ids: [ID], route_bindings: [RouteBinding], review: ResultReview, inputs: [Input]}`, optionally `claims_openness: Boolean` |
@@ -2069,7 +2207,9 @@ Public command specs are closed records:
 | replan | The documented `replan_recorded` payload |
 | reassess | The reviewed record under [Mandatory strategy reassessment](#mandatory-strategy-reassessment) |
 | focus | `{focus: "focused"|"ambiguous"|"unrelated", provenance: Provenance, session_id: Text}` |
-| side-interval ID | `{max_moves: Integer[1,24], message_id: Text, instruction: Text, provenance: Provenance}` |
+| side-interval ID | `{max_moves: Integer[1,24], message_id: Text, instruction: Text, provenance: {source: "reported_by_agent"} \| Provenance}` |
+| set-aside ID | `{objective_id: ID, message_id: Text, session_id: Text, instruction: Text, provenance: {source: "reported_by_agent"} \| Provenance}`; the positional ID is the checkpoint ([Dispositions on the user's instruction](#dispositions-on-the-users-instruction)) |
+| end-objective | The same five fields, with no positional target |
 | pause, resume, hook-stop | The respective `ControlInput` without `action` |
 | audit, render, status, guard-status, next, strategy-context | `{}`; no spec file |
 
@@ -2112,15 +2252,15 @@ commits nothing. Its receipt is the ordinary mutation receipt. A replay with
 the same request ID returns the original response without observing again, a
 changed spec under the same request ID fails with `request_id_conflict`, and a
 stale revision with `revision_conflict`. `--check` is refused with
-`check_unsupported`, as for every command outside the five below. Use it with
+`check_unsupported`, as for every command outside the seven below. Use it with
 the `node_ids` of a `recovery_required` error: after a failed producer
 observation, and after a Stop that found more than 255 changed nodes.
 
 Every command except `status`, `guard-status`, `next` and `strategy-context` also
 has the `--check` flag. On those four it is an argument error (`invalid_command`).
-Only `pause`, `side-interval`, `retreat`, `interpret` and `render` accept
-`--check` and run the check, with the same spec, `--expected-revision` and
-`--request-id` as the write. The
+Only `pause`, `side-interval`, `retreat`, `interpret`, `render`, `set-aside`
+and `end-objective` accept `--check` and run the check, with the same spec,
+`--expected-revision` and `--request-id` as the write. The
 controller reads the event document and builds the event with the same builder,
 reducer and document validation as the write. It compares each staged content
 object with the bytes at its digest path and prints `{"check": "accepted",
@@ -2254,7 +2394,11 @@ optional `--session-id`, `--focus-request-id`, `--objective-id`, and
 `--contract-digest` validation inputs, also accepted by `status`. It does not
 refresh facts, repair pointers, or resume execution. Pause therefore survives
 status-only questions, retrospective requests, compaction, and session resume
-without transcript interpretation. Hooks never infer user authorization.
+without transcript interpretation. Hooks never infer user authorization. When
+`next` returns `ended`, which it does for any session because an ended
+objective needs no focus, SessionStart adds no context and Stop permits the
+stop without spending a continuation: the objective ended on the user's
+instruction, and no request for work is issued.
 
 Stop makes one bounded `search hook-stop --internal` call. Only this internal CLI
 route may omit the expected revision; it reads the revision with `guard-status`
@@ -2304,8 +2448,10 @@ recorder never blocks a tool and the PreToolUse guard does not depend on it.
 entry, and that session's count. A log without such an entry keeps the unfiltered
 view, and anonymous harness entries select nothing.
 The 40th continuation requests one summary; later
-Stop calls permit stopping until explicit operator resume, even with absent or
-false `stop_hook_active` and after an admitted alternative or replan.
+Stop calls permit stopping until an explicit `search resume`, even with absent or
+false `stop_hook_active` and after an admitted alternative or replan. An ended
+objective permits stopping at once and spends no continuation, in a focused
+session and in any other.
 
 Reported direct `Bash` and `exec_command` (`command` or `cmd`, with `workdir`)
 operations and the documented `export PATH=...:$PATH` bootstrap are normalized.
@@ -2490,6 +2636,12 @@ from controller records; it copies no local file contents:
   totals: {moves, runs, elapsed_seconds, workers, timeout_seconds, historical_usage}
 }
 ```
+
+When the controller holds a disposition ([Dispositions on the user's
+instruction](#dispositions-on-the-users-instruction)), the summary also has
+`dispositions: [as recorded]`, each entry with its `kind`, the user's words and
+its provenance. Without one the key is absent, so a summary from before 0.80.0
+keeps its bytes and its digest.
 
 The record is `native_attempt/<digest(summary)>`, containing `summary` plus
 `provenance: {source: "operator", actor_id: "search-controller",

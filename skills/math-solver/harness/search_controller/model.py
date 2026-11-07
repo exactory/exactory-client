@@ -13,18 +13,20 @@ from .research import EVENT_HANDLERS as RESEARCH_HANDLERS
 from .discovery import record as record_discovery
 from .strategy_refresh import EVENT_HANDLERS as STRATEGY_HANDLERS
 from .provenance import EVENT_HANDLERS as PROVENANCE_HANDLERS
+from .dispositions import EVENT_HANDLERS as DISPOSITION_HANDLERS
 
 
 EVENT_HANDLERS = dict(ADMISSION_HANDLERS, **PROOF_HANDLERS, **SCHEDULER_HANDLERS, **ADOPTION_HANDLERS, **EXECUTION_HANDLERS, **COMPUTATION_HANDLERS, **RESEARCH_HANDLERS)
 EVENT_HANDLERS["discovery_recorded"] = record_discovery
 EVENT_HANDLERS.update(STRATEGY_HANDLERS)
 EVENT_HANDLERS.update(PROVENANCE_HANDLERS)
+EVENT_HANDLERS.update(DISPOSITION_HANDLERS)
 
 
 def service_operation(state, payload):
     """Replay only typed facts emitted by the filesystem service boundary."""
     s.closed(payload, "command target spec_digest operations effects")
-    s.require(not state["service"]["native_intents"] or payload["command"] in {"reconcile", "pause", "focus", "hook-stop", "audit", "render"},
+    s.require(not state["service"]["native_intents"] or payload["command"] in {"reconcile", "pause", "focus", "hook-stop", "audit", "render", "end-objective"},
               "Native intent requires reconciliation", "recovery_required")
     allowed = {
         "init": {"discovery_recorded", "strategy_policy_enabled"}, "render": set(), "propose": {"proposal_recorded", "review_workspace_recorded"},
@@ -37,6 +39,7 @@ def service_operation(state, payload):
         "focus": {"control_recorded", "discovery_recorded"}, "pause": {"control_recorded"},
         "resume": {"control_recorded", "discovery_recorded"}, "hook-stop": {"control_recorded", "node_facts_recorded"},
         "side-interval": {"control_recorded", "strategy_policy_enabled"},
+        "set-aside": {"result_set_aside", "node_facts_recorded"}, "end-objective": {"objective_ended"},
         "begin": {"strategy_policy_enabled", "move_reserved"},
         "reassess": {"strategy_policy_enabled", "strategies_reassessed"},
         "amend-computation": {"computation_amended"}, "amend-foundation": {"foundation_amended"}, "interpret": {"run_interpreted"},

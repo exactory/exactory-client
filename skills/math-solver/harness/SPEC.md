@@ -102,6 +102,119 @@ Both attempt and closure delivery freshly audit acceptance evidence, including
 on repeats and after competing common writes; `audit_failed` details retain the
 failures map keyed by acceptance id.
 
+## User dispositions (0.80.0)
+
+The CLI adds `search set-aside CHECKPOINT --spec FILE` and
+`search end-objective --spec FILE`. Both require revision and request identity,
+support `--check`, and take exactly:
+
+```text
+{objective_id: ID, message_id: Text, session_id: Text, instruction: Text,
+ provenance: {source: "reported_by_agent"}
+           | {source: "host" | "operator", actor_id: Text, attestation_id: Text}}
+```
+
+`objective_id`, `message_id`, `session_id` and `instruction` are nonempty text,
+and the instruction is at most 64 KiB of UTF-8 bytes. `message_id` labels the
+user message that gave the instruction, and one
+label backs one disposition. A session whose host does not capture user
+instructions reports the user's actual words with exactly
+`{source: "reported_by_agent"}`, without actor or attestation fields. This
+records an agent's report and claims no authentication. A host or operator that
+authenticated the instruction can supply the existing full provenance form,
+checked by `schema.validate_provenance`. The controller checks only the form;
+it cannot check authorship or that authentication occurred. The same provenance
+form check also applies to `resume` and `side_interval`; neither receives a new
+instruction size bound, so earlier records remain replayable. A provenance in
+neither form refuses `resume` and `side_interval` with
+`control_provenance_required`, where earlier releases refused with
+`invalid_record`. Focus and reviewer
+validation keep `schema.validate_provenance`. The digest of
+`objective_id`, `message_id` and `session_id` is appended to
+`control.resume_ids`, which `resume` also consumes, so an identity used by any
+of resume, set-aside and end-objective refuses the other two
+(`control_instruction_consumed`; `resume` refuses it with `invalid_record`). A
+`message_id` in `control.side_instruction_ids` refuses, and a disposition's
+`message_id` refuses a later side allocation. A request repeated with the same
+inputs returns its receipt.
+Resume and side allocation retain their separate historical identity checks;
+no new check between those two actions is added.
+
+Two new inner event kinds are registered in `model.EVENT_HANDLERS` and its
+service-command allowlist, and in `output_views.OPERATION_GROUPS`:
+
+| Command | Kind | Closed event payload |
+| --- | --- | --- |
+| `set-aside CHECKPOINT` | `result_set_aside` | Spec plus `checkpoint_id` |
+| `end-objective` | `objective_ended` | Spec |
+
+They append the payload plus `kind` to optional `control.dispositions`. Older
+events and initial state acquire no new fields. Storage retains its event
+envelope and validates through the model reducer. Earlier readers refuse these
+kinds; writer-runtime diagnostics already identify the writing runtime. Unlike
+rank recovery, these are new kinds, not extensions of an existing acknowledgment.
+The journal-transition compatibility rule applies: all readers/writers must
+support the kinds before a session writes them.
+
+A set-aside command also records the existing native observations, as checkpoint
+and acceptance commands do, so immediate scheduling uses the same exact latest-run
+matching as a subsequent refresh.
+A set-aside result retains its checkpoint and its verification status; it
+grants no proof or obligation credit. The exact checkpoint stops requiring
+acceptance, including after native observation refresh. Another unaccepted
+checkpoint remains mandatory. Later normal acceptance adds
+`ended_by_acceptance_id` to the disposition's replayed projection and permanently
+ends its scheduling effect, including after invalidation. The instruction remains
+in history; another set-aside after invalidation needs a fresh instruction.
+No review or acceptance is synthesized.
+
+An ended objective has `execution_status: "ended"` and next action
+`{kind: "ended", instruction: Text}`. Its proof status, obligations and closure
+are unchanged. `propose`, `review`, `admit` and `adopt` (a retry of a recorded
+request of these four included), `begin`, `run`, `resume`, `pause`, `replan`, `side-interval` and
+`complete`, the legacy `plan`, `rank`, `verify` and `fail`, a reserved run at its
+launch audit and at the release of its workload token, and a `control_recorded`
+event with action `pause`, `resume` or `side_interval` refuse with
+`control_objective_ended`. A fresh `end-objective` request also refuses with
+`control_objective_ended`, and an exact replay returns its receipt. Every
+other command keeps its ordinary checks:
+`reconcile`, `audit`, `render`, `status`, `next`, `refresh`, `accept`,
+`checkpoint`, `retreat`, `focus`, `interpret`, the amendments,
+`reassess` and `deliver-attempt` keep their own
+rules, and a move reserved before the end can still be journalled. An ended
+objective is terminal: `resume` refuses, and more work on the same statement
+starts a new objective.
+`end-objective` may record while a native intent or a move is pending;
+`set-aside` still requires native-intent reconciliation because it observes the
+node. Ending preserves the pending intent and its state error. `next` returns
+`ended`, but `deliver-attempt` keeps refusing with `native_state_pending` until
+`search reconcile` clears that intent. A pending move alone does not prevent
+attempt delivery. Ending an already resolved objective
+refuses with `control_objective_resolved`. Closure delivery still requires actual
+completion and refuses with `native_completion_required`. An ended objective
+needs no focus: `next` returns `ended` for any session, `status`, `next` and
+`strategy-context` return no handoff for an unfocused session, and `hook-stop`
+needs neither a matching focus nor the reconciliation of a pending native
+intent. Stop accounting permits stopping without consuming continuation, and
+SessionStart emits no request for work.
+
+Status and the objective output view show each full disposition with the user's
+words and unchanged provenance, including the reported form. Attempt summaries
+add `dispositions` only when present and carry the same provenance. The common-store
+attempt and the problem review's attempt projection retain it; records without
+dispositions retain their exact summary bytes and digest. No native-attempt
+consumer closes the summary's top-level fields, so this release accepts the key.
+The problem-review projection adds `dispositions_note` only beside an existing
+`dispositions` key to explain that these control records confer no proof credit.
+
+New control refusals are `control_invalid`, `control_provenance_required`,
+`control_objective_mismatch`, `control_instruction_consumed`,
+`control_checkpoint_unavailable`, `control_result_accepted`,
+`control_objective_ended` and `control_objective_resolved`. The messages for
+the spec fields, the provenance and a consumed identity state the requirement
+on the condition that the user gave the instruction and otherwise say to report
+the stop; no message asks the agent to supply an instruction.
+
 ## Workspace
 
 `attack/<slug>/` holds:

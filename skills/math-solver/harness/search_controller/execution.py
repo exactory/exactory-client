@@ -19,6 +19,7 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from search_controller import schema as s
+from search_controller.dispositions import require_objective_open
 from search_controller.errors import SearchError
 from search_controller.evidence import freeze_execution_inputs, installed_lean, capture_toolchain, audit_toolchain, file_digest
 from search_controller.execution_state import account_for_work
@@ -343,6 +344,7 @@ def launch(controller, run):
         identity = read_record(directory / "ready.json")
         s.require(identity["pid"] == process.pid and identity["token"] == run["token"], "Unexpected launcher identity", "recovery_conflict")
         def audit_launch(state, content, *, common_guard=None):
+            require_objective_open(state)
             from .integration import audit_work
             from .research import effective_foundation
             node = state["nodes"][run["node_id"]]
