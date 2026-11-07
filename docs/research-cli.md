@@ -4867,7 +4867,7 @@ example the population of the cohort tool. The post decision is
 | `problem_bar_pending`, `review_bar_mismatch` | Obtain both current field/area bars. |
 | `problem_review_pair_required`, `problem_evidence_unassessed`, `problem_assurance_pending` | Obtain the independent observed pair with delivered current evidence and all five assurances passed. When fewer than two result slots are occupied, `problem_review_pair_required` reports that the independent pair is missing, also when the occupied slot has pending work. It does not name a slot, and it carries `review_ids` (the current recorded reviews, possibly empty). |
 | `research_objection_unresolved` | Resolve the named material objection with evidence or a focused independent adjudication. An imported objection (`<id>@origin:<source identity>`) is resolved in this record the same way; its source's resolution does not count. |
-| `problem_objections_refresh_required` | A linked source record changed since its carry: it recorded a bar or slate review, a new version of an objection or a carry of its own, or its bar or slate work is outstanding (`source_workspace`, `source_revision`). Finish and record that work in the source, record a new carry with a new id, then obtain the focused slate review, a new slate and both result reviews again ([Carried objections](#carried-objections)). |
+| `problem_objections_refresh_required` | A linked source record changed since its carry, or has unfinished relevant review work (`source_workspace`, `source_revision`): it recorded a bar or slate review, a new version of an objection or a carry of its own; or a bar, slate or result assignment whose packet delivers a carried identity has no recorded `value-review`, a completed but unrecorded review included. Finish and record that work in the source. When the code stays, record a new carry with a new id, then obtain the focused slate review, a new slate and both result reviews again ([Carried objections](#carried-objections)). When the pending review belongs to an earlier statement of the source and cannot be recorded while a newer statement is selected, run `problem-statement` in the source with the exact payload of the earlier statement (the same id and fields), which selects it again; record the review; then run `problem-statement` with the exact payload of the newer statement. |
 | `problem_objection_source_unavailable` | A linked source workspace cannot be opened, or holds another record (`source_workspace`, `cause`). Restore it, or record a new carry that names the moved workspace. |
 | `review_evidence_undelivered` | The named recorded review cites content that the request of its authenticated attempt did not deliver (`review_id`, `undelivered_references`); since 0.71.0 the audit reads that request, so an older review can carry this obligation for content that only a saved packet of its lineage held. Assign the same reviewer and role again with an empty context to refresh it. |
 | `problem_decision_missing`, `problem_decision_stale` | Record a `post` decision covering the current evidence digest. |
@@ -5211,8 +5211,8 @@ Refusals of the command:
 | `problem_objection_sources_exceeded` | This record, the source and their transitive links name more than 32 distinct source workspaces (`limit`). Stop and report it; omit no source. |
 | `store_busy` | A linked store is in use. Retry after the active operation ends. |
 | `problem_objection_source_revision_mismatch` | `source_revision` differs from the source's current revision (`source_revision`, `expected_source_revision`). Read it and retry with a new request. |
-| `problem_objection_provenance_invalid` | An immutable review, assignment, adjudication or carry record of the source changed, a review does not match its observed assignment or output, an objection cites evidence that its reviewer never received, a proof artifact is missing or changed, or the portable proof does not reproduce the exported set. Restore the original records and artifacts; author text cannot replace them. |
-| `problem_objections_refresh_required` | The source has a bar or slate assignment whose review is not recorded (`assignment_ids`), or a record that the source links to changed since the source's own carry (`source_workspace`). Finish and record that work, refresh the source's own links, then carry again. For the same code at a later check, see the obligation table above. |
+| `problem_objection_provenance_invalid` | An immutable review, assignment, adjudication or carry record of the source changed, or its `recorded_revision` differs from the revision of the event that created it; a review does not match its observed assignment or output; a review's stored `objection_identities` differ from the identities that its observed output and the native identity rules give (also on first insertion, and also when the stored map is empty); an objection cites evidence that its reviewer never received; a proof artifact is missing or changed; or the portable proof does not reproduce the exported set. The check covers every review of the source recorded up to the latest exported one, because the identities depend on the earlier reviews. Restore the original records and artifacts; author text cannot replace them. |
+| `problem_objections_refresh_required` | The source has a bar or slate assignment whose review is not recorded, or a result assignment whose frozen packet delivers one of the carried identities and whose review is not recorded, a completed but unrecorded one included (`assignment_ids`); or a record that the source links to changed since the source's own carry (`source_workspace`). Finish and record that work, refresh the source's own links, then carry again. A result assignment whose packet delivers no carried identity creates no such obligation. For the same code at a later check, and for pending work on an older statement of the source, see the obligation table above. |
 | `problem_objection_origin_conflict` | One origin, record kind and id hold two different immutable byte sets across the carries (`member`, or `origin`, `record_kind`, `id`). Investigate the conflicting records; do not rename an imported objection. |
 | `research_objection_identity_conflict` | An imported identity equals a native objection id with a different claim (`objection_id`). |
 
@@ -5221,10 +5221,12 @@ record, and `request_id_conflict` for a request id reused with another payload.
 The `artifact_missing` and artifact integrity codes can occur while the source is
 captured. Then restore the exact bytes that the descriptor names. A carry can
 bring back this record's own earlier records (a return to the origin, or a copy
-of this record). After it, a later native `review-assignment`, `value-review` or
-`review-adjudication` cannot reuse an id of that inventory with other bytes
-(`problem_objection_origin_conflict`). Choose a fresh id. Imported objection ids
-stay unchanged.
+of this record). After it, a later native `review-assignment`, `value-review`,
+`review-adjudication` or staged task plan (`review-assignment
+{controller_assignment_id}`, whose child ids are deterministic) cannot reuse an
+id of that inventory with other bytes (`problem_objection_origin_conflict`).
+Choose a fresh id, or a fresh controller for new staged work. Imported objection
+ids stay unchanged.
 
 Delivery. When a carry holds at least one member, every slate and result packet
 of the destination carries `problem_objection_carry: {protocol:
@@ -5279,12 +5281,15 @@ harness refreshes it as after a candidate change.
 
 Freshness. Each carry records `sources`: the source and every record that the
 source itself links to, each with its `origin`, `workspace` and the `cut`
-imported (its bar and slate review ids and digests, its outstanding review work,
-the retained member keys and its own links). The harness opens every linked
-workspace under a bounded read guard before a slate or result assignment, before
-a staged frontier plan, at `problem-decision` with `post`, in `gate post` and in
-`problem-posted`. It compares the current cut of each with the recorded one.
-A changed timestamp or revision alone does not count. A changed cut is
+imported (its bar and slate review ids and digests, its outstanding relevant
+review work, the retained member keys with their producing origins, and its own
+links). The harness opens every linked workspace under a bounded read guard
+before a slate or result assignment, before a staged frontier plan, at
+`problem-decision` with `post`, in `gate post` and in `problem-posted`. It reads
+the whole snapshot, validates the source's history and identity, and compares
+the current cut of each with the recorded one. It rebuilds no evidence and no
+sent request; the evidence and the proof are built by the carry alone. A changed
+timestamp or revision alone does not count. A changed cut is
 `problem_objections_refresh_required` (`source_workspace`, `source_revision`),
 and an unopenable or replaced workspace is `problem_objection_source_unavailable`.
 `gate post` lists both as obligations, and the mutations refuse. The check is
@@ -5293,6 +5298,23 @@ atomic with the source, so run `gate post` immediately before `exactory
 post-problem`. `record-check` verifies every carry from its retained proof
 (`problem_objection_carries` in the `integrity` result) and opens no source
 workspace, so it establishes no current freshness.
+
+What the proof establishes. The retained proof is a check of local hashes. It
+shows that:
+
+- the source's event and receipt history is consistent, and each immutable
+  record kept its first bytes and its creation revision.
+- each exported review matches its observed request, output and evidence.
+- the stored objection identities equal the ones that the observed outputs and
+  the native identity rules give.
+- the exported projection is the one that the destination holds.
+
+It does not establish who or what produced an output, or when an event happened.
+It does not establish that the initialization was honest, that the history is
+complete, or that an objection is true. A party that can write the source store
+and its artifacts can build a consistent fabricated history. A party that can
+write the store but not the artifacts cannot change an observed output or its
+identities.
 
 Evidence routes. Carried evidence can include rendered PDF pages. A destination
 route that cannot receive image evidence marks those bytes omitted, and a

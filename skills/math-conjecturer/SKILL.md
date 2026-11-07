@@ -240,7 +240,11 @@ problem-objections-carry`. The CLI reference states its records, its checks and 
 ([Carried objections](../../docs/research-cli.md#carried-objections)).
 
 1. In the source, finish and record every bar and slate review that was requested or assigned.
-   While one is outstanding, the carry refuses with `problem_objections_refresh_required`.
+   Do the same for every result review of the source whose packet delivers one of their
+   objections. A result review that ran but has no recorded `value-review` counts as
+   outstanding. While one is outstanding, the carry refuses with
+   `problem_objections_refresh_required` and names the assignments. For such a review of an
+   older statement of the source, see that code's row in the CLI reference.
 2. Open the destination as in step 1 of this section. Name each record's workspace in the notes
    of the other. Record the candidate again in the destination. Record again every search and
    source reading that its evidence needs, the adverse ones included. A `source.reference`,
@@ -270,11 +274,14 @@ problem-objections-carry`. The CLI reference states its records, its checks and 
    a favourable finding of one reviewer clear nothing.
 6. The destination stays linked to the source. The harness opens the source before each slate or
    result assignment, at `problem-decision` with `post`, at `gate post` and at `problem-posted`.
-   It compares the source's current bar and slate reviews with the imported cut. When the source
-   recorded a new review, a new version of an objection or a carry of its own, the harness
-   refuses with `problem_objections_refresh_required`. Then record a new carry with a new id.
-   Obtain the focused slate review again and record a new slate. Obtain both result reviews
-   again. When the source workspace cannot be opened, the harness refuses with
+   It compares the source's current bar and slate reviews, its outstanding review work and its
+   objection versions with the imported cut. The harness refuses with
+   `problem_objections_refresh_required` when the source recorded a new review, a new version of
+   an objection or a carry of its own. It refuses with the same code when the source has review
+   work on a carried objection that is not recorded. For unrecorded work, finish and record it
+   in the source first. When the code stays, record a new carry with a new id. Obtain the
+   focused slate review again and record a new slate. Obtain both result reviews again. When the
+   source workspace cannot be opened, the harness refuses with
    `problem_objection_source_unavailable`. Then restore the workspace. When it moved, record a
    new carry that names its new path.
 7. Before you post, apply the rule for a record with a carry in "Compose and post a problem".
