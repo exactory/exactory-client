@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.81.1](docs/releases/0.81.1.md) corrects the automatic pass of 0.81.0 after its reviews: one automatic hop, from `experiment` to `write`, and one pass per hop; a ready gate needs no pass; an instruction recorded for an exact public write covers that write on every path; a failure to record a stop never changes the stop; real waits stay `waiting`; and the deposit description explains an automatic entry to a reader of the paper.
+
 Version [0.81.0](docs/releases/0.81.0.md) gives every stop a class, `waiting`, `harness_defect` or `decision`, derived from its code, and lets the harness pass a stop that it records as its own defect. `review-series` records its final stop, and `exactory-research gate-auto-pass` takes only that stop's identity, checks the stop and the study, and moves the study from `experiment` to `write` without creating any review or decision. A second automatic pass of the same gate, and every public write after an automatic pass, need the user's recorded instruction.
 
 Version [0.80.0](docs/releases/0.80.0.md) lets the math-solver controller record the user's instruction that sets one result aside or ends an objective. `search set-aside` takes one unaccepted result out of the mandatory acceptance step without accepting it, and `search end-objective` ends the objective without a closure. `search resume` and `search side-interval` accept the same reported form, so a paused objective comes back on the user's instruction. The record keeps the user's words, labelled as reported by the agent; the proof status and the obligations do not change, and the problem review sees the record. Without an instruction nothing passes.
