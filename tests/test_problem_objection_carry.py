@@ -2,8 +2,12 @@
 
 import importlib.util
 import copy
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import json
 from pathlib import Path
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -91,6 +95,30 @@ def legacy_handoff_or_carry_adapter(destination, source, identifier="carry-001")
 
 
 class ProblemObjectionCarryTests(unittest.TestCase):
+    @contextmanager
+    def source_guard_in_other_thread(self, store):
+        entered, release = threading.Event(), threading.Event()
+
+        def hold():
+            try:
+                with store.guarded_snapshot():
+                    entered.set()
+                    release.wait()
+            finally:
+                entered.set()  # Surface an entry failure through the future too.
+
+        with ThreadPoolExecutor(max_workers=1) as writer:
+            held = writer.submit(hold)
+            try:
+                self.assertTrue(entered.wait(5), 'Source guard did not enter')
+                if held.done():
+                    held.result()
+                    self.fail('Source guard exited before the destination mutation')
+                yield
+            finally:
+                release.set()
+                held.result(timeout=5)
+
     def fixture(self, area="math.CO", source=None, bars=True, settling=False):
         case = CarryFixture()
         case.area = area
@@ -524,14 +552,31 @@ class ProblemObjectionCarryTests(unittest.TestCase):
         # Reciprocal imports add neither native reviews nor material versions.
         require_fresh_sources(sibling.store.snapshot()['records'], sibling.artifacts)
         legacy_handoff_or_carry_adapter(destination, sibling)
-        with source.store.guarded_snapshot():
+        with self.source_guard_in_other_thread(source.store):
+            started = time.monotonic()
             destination.assert_error('store_busy', lambda: destination.assign('slate', 'first'))
+            self.assertLess(time.monotonic() - started, 6)
         # The bounded failure releases every other guard.
         require_fresh_sources(destination.store.snapshot()['records'], destination.artifacts)
         source.assess('slate', 'first', identifier='late-slate')
         destination.assert_error('problem_objections_refresh_required', lambda: destination.assign('slate', 'first'))
         codes = {row['code'] for row in gate_state(destination.store.snapshot()['records'], destination.artifacts, 'post')['obligations']}
         self.assertIn('problem_objections_refresh_required', codes)
+
+    def test_source_reentry_remains_a_wrapped_decision(self):
+        from research_harness.problem_objection_carry import carry_objections
+        from research_harness.stop_classes import classify_stop
+        source, destination = self.fixture(bars=False), self.fixture('math.PR', bars=False)
+        payload = dict(id='reentry', source_workspace=str(source.root), source_revision=source.store.revision)
+        before = destination.store.snapshot()
+        with source.store.guarded_snapshot():
+            with self.assertRaises(ResearchError) as caught:
+                destination.mutate(carry_objections, payload)
+        self.assertEqual(caught.exception.code, 'problem_objection_source_unavailable')
+        self.assertEqual(caught.exception.details, dict(source_workspace=str(source.root.resolve()), cause='store_reentrant_access'))
+        self.assertEqual(classify_stop(caught.exception.code), 'decision')
+        self.assertEqual(destination.store.snapshot(), before)
+        self.assertEqual(source.store.revision, payload['source_revision'])
 
     def assert_source_refusal_without_destination_mutation(self, destination, source, code, details, *, source_revision=None):
         from research_harness.output_views import render_all
