@@ -6,7 +6,7 @@
       "record": "20261106085323-override-of-harness-stops",
       "class": "controller continuation (harness defect)",
       "summary": "A repeated review-series action at unchanged recorded progress has no durable automatic continuation basis.",
-      "fixed_in": "open",
+      "fixed_in": "0.81.1",
       "expected": "The harness records its exhausted no-progress stop. An automatic pass cites only that identity, advances one internal study stage when only the prevented reviews are missing, retains all scientific findings, and writes a local report. Other obligations, rejecting reviews, waiting and decision codes, budgets, explicit user conditions, public writes and a second pass keep their authority requirements. The positive integration fixture models store shapes; it is not a measured production incident.",
       "test_kind": "real_shape",
       "tests": [
@@ -4500,7 +4500,7 @@
       "record": "20261105171520-objections-lost-on-area-handoff",
       "class": "gate (cross-record objection carry)",
       "summary": "A candidate moved to a record of another subject class, or taken up in a sibling record, loses the bar and slate objections of its source record.",
-      "fixed_in": "open",
+      "fixed_in": "0.82.0",
       "expected": "Explicit carry preserves every source bar and slate material objection, authenticated provenance and locally available evidence. Destination slate and result reviews find on every delivered identity and complete material-version set. Unresolved objections block posting with research_objection_unresolved. Changed linked-source material requires refresh. Historical assignments and unaffected records retain their fingerprints and record-check results.",
       "test_kind": "real_shape",
       "tests": [
