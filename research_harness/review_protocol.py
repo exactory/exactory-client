@@ -18,6 +18,7 @@ import stat
 import time
 import uuid
 from collections import ChainMap
+from contextlib import ExitStack
 
 from .artifacts import ArtifactStore, describe_artifact, validate_reference
 from .errors import ResearchError
@@ -566,10 +567,15 @@ def _prepare_review_mutation(store, operation, payload, prepare, *, scoped=False
             if assignment is not None:
                 records = _read_context_records(records, assignment)
         with runtime_scope(records, store.build_artifact_store()):
-            return prepare(records, value)
+            changes, result = prepare(records, value)
+            if not scoped and records.get('problem_objection_carry'):
+                from .problem_objection_provenance import validate_native_changes
+                validate_native_changes(records['problem_objection_carry'], changes)
+            return changes, result
     if scoped:
         if 'expected_revision' in kwargs and kwargs['expected_revision'] is None:
             raise ResearchError('invalid_input', 'Expected revision must be a nonnegative integer')
+        commit_changes = []
         def finalize(changes, result, revision):
             for kind, _, record in changes:
                 if kind in ('review_assignment', 'review_invocation', 'review_probe_invocation',
@@ -578,7 +584,19 @@ def _prepare_review_mutation(store, operation, payload, prepare, *, scoped=False
                     record['recorded_revision'] = revision
             if isinstance(result, dict) and 'recorded_revision' in result:
                 result['recorded_revision'] = revision
+            commit_changes[:] = changes
             return changes, result
+        previous_validation = kwargs.get('validate_commit')
+        def validate_commit(transaction, result, revision):
+            if previous_validation is not None:
+                previous_validation(transaction, result, revision)
+            if any(kind in ('review_assignment', 'review_adjudication', 'value_review',
+                            'problem_objection_carry', 'problem_carried_evidence') for kind, _, _ in commit_changes):
+                carries = transaction.records('problem_objection_carry')
+                if carries:
+                    from .problem_objection_provenance import validate_native_changes
+                    validate_native_changes(carries, commit_changes)
+        kwargs['validate_commit'] = validate_commit
         return prepared_task_mutation(store, operation, payload, prepare_scoped, finalize=finalize, **kwargs)
     return prepared_mutation(store, operation, payload, prepare_scoped, **kwargs)
 
@@ -819,7 +837,8 @@ def find_common_prompt_version(prompt):
 def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestration=None, repair_prompt=None,
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
                      reading_protocol=None, common_version=None, evidence_parts=None, part_suffix=None,
-                     staged_task=None, composed=False, claim_range=False, review_parts=None):
+                     staged_task=None, composed=False, claim_range=False, review_parts=None,
+                     problem_objection_carry=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
     with; a later version uses the current suffix; repair_prompt names a suffix explicitly. excerpts adds the excerpt
     rules of a bar, slate or result session to the current template under its unchanged id; an earlier version only
@@ -829,6 +848,19 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
+    if problem_objection_carry is not None:
+        from .problem_objection_carry import PROMPT, PROTOCOL as CARRY_PROTOCOL
+        fields(problem_objection_carry, ('protocol', 'import_set_digest'))
+        if problem_objection_carry['protocol'] != CARRY_PROTOCOL or role not in ('slate', 'result'):
+            raise ResearchError('invalid_review_context', 'Carried objection prompts belong to slate and result assignments')
+        base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
+            repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
+            reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
+            common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
+            staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts)
+        return _build_prompt(base['template_id'] + '/objection-carry-v1', base['text'] + PROMPT,
+            dict(base['parameters'], problem_objection_carry=problem_objection_carry),
+            COMMON_VERSION if common_version is None else common_version)
     if version is None:
         version = 7 if role == 'verification' else 6
     if review_parts is not None:
@@ -1051,10 +1083,18 @@ def collect_result_objections(records, artifacts, subject, evidence_digest, bars
     and the slate reviews, each as its latest version that concerns the statement; a current peer result stays hidden."""
     from .research_decisions import collect_problem_post_objections
     previous = []
+    imported_digest, imported_ids = None, set()
+    if records.get('problem_objection_carry'):
+        from .problem_objection_carry import has_imported_objections, import_set_digest, seed_versions
+        if has_imported_objections(records):
+            imported_digest = import_set_digest(records)
+            imported_ids = {row['id'] for row in seed_versions(records)}
     for review in records.get('value_review', {}).values():
-        if review['payload']['stage'] == 'result' and review.get('subject') == subject:
+        inherited = imported_ids and imported_ids.intersection(row['id'] for row in review['payload']['value']['objection_findings'])
+        if review['payload']['stage'] == 'result' and (review.get('subject') == subject or inherited):
             supplied = _read_json(artifacts, _get(records, 'review_assignment', review['assignment_id'])['packet'])
-            if supplied.get('problem_evidence_digest') != evidence_digest:
+            if (supplied.get('problem_evidence_digest') != evidence_digest or review.get('subject') != subject
+                    or imported_digest is not None and supplied.get('problem_objection_carry', {}).get('import_set_digest') != imported_digest):
                 previous.append(review)
     return collect_problem_post_objections(records, artifacts, bars + previous)
 
@@ -1382,6 +1422,9 @@ def describe_version_evidence(records, artifacts, version):
     references as templates, and the descriptors of its artifacts that those packets supplied. A reference that
     cannot be delivered (a record no observed packet carried at that digest, or an artifact those packets did not
     supply) is an entry {kind: undelivered, identity, reference}."""
+    if 'material_members' in version:
+        from .problem_objection_carry import describe_imported_evidence
+        return describe_imported_evidence(records, artifacts, version)
     from .research_decisions import list_stated_objections
     review = _get(records, 'value_review', version['review_id'])
     payload = _read_adjudication_review(records, artifacts, review)
@@ -1792,6 +1835,9 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             if 'source_delivery' in context:
                 from .review_source_complete import prepare
                 prepare(records, artifacts, prior, state, packet)
+            if problem:
+                from .problem_objection_carry import deliver_imports
+                deliver_imports(records, artifacts, packet)
             packet['evidence'] = _evidence(artifacts, packet, records=records)
             packet['digest'] = digest(packet)
             return packet
@@ -1960,6 +2006,9 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
             add_focused_adjudication(records, artifacts, packet, dossier_id, reviewer_id, context)
     if role in ('slate', 'result') and not problem:
         add_direction_evidence(records, artifacts, packet, dossier_id)
+    if problem:
+        from .problem_objection_carry import deliver_imports
+        deliver_imports(records, artifacts, packet)
     packet['evidence'] = _evidence(artifacts, packet, transitive=projected, records=records)
     if problem and role == 'adjudicator':
         review_adjudicator_sources.validate(artifacts, packet)
@@ -2407,7 +2456,7 @@ def has_problem_result_rubric(assignment):
                  or assignment['prompt']['template_id'] in tuple(
                 protocol + '/result' + suffix
                 for protocol in (_PROBLEM_PROTOCOL, _PROBLEM_RESULT_PROTOCOL_V3, _PROBLEM_RESULT_PROTOCOL_V4, PROBLEM_RESULT_PROTOCOL)
-                for suffix in ('', '/context-repair'))))
+                for suffix in ('', '/context-repair', '/objection-carry-v1', '/context-repair/objection-carry-v1'))))
 
 
 def _matches_current_problem_adjudicator_prompt(prompt):
@@ -2436,6 +2485,20 @@ def _matches_current_problem_adjudicator_prompt(prompt):
 
 
 def _prompt_matches(assignment):
+    from .problem_objection_carry import PROMPT_PARAMETER, PROMPT, PROTOCOL as CARRY_PROTOCOL
+    carried = assignment['prompt'].get('parameters', {}).get(PROMPT_PARAMETER)
+    if carried is not None:
+        envelope = assignment['prompt']
+        if (assignment['role'] not in ('slate', 'result') or carried.get('protocol') != CARRY_PROTOCOL
+                or not envelope['text'].endswith(PROMPT) or not envelope['template_id'].endswith('/objection-carry-v1')):
+            return False
+        parameters = dict(envelope['parameters'])
+        parameters.pop(PROMPT_PARAMETER)
+        base = _build_prompt(envelope['template_id'].removesuffix('/objection-carry-v1'),
+            envelope['text'][:-len(PROMPT)], parameters, find_common_prompt_version(envelope))
+        return (_build_prompt(envelope['template_id'], base['text'] + PROMPT,
+                             dict(parameters, **{PROMPT_PARAMETER: carried}), find_common_prompt_version(envelope)) == envelope
+                and _prompt_matches(dict(assignment, prompt=base)))
     common_version = find_common_prompt_version(assignment['prompt'])
     if common_version is None:
         return False
@@ -2579,6 +2642,9 @@ def _repair_packet(records, artifacts, value, repair):
         packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
     elif value['role'] in ('slate', 'result') and not problem:
         add_direction_evidence(records, artifacts, packet, value['dossier_id'])
+    if problem:
+        from .problem_objection_carry import deliver_imports
+        deliver_imports(records, artifacts, packet)
     packet['evidence'] = _evidence(artifacts, packet, records=records)
     packet['digest'] = digest(packet)
     return packet
@@ -2677,7 +2743,9 @@ def _is_problem_refresh(records, artifacts, prior, previous):
                 or previous.get('problem_review_currency') != compute_problem_review_currency(records, artifacts))
     if prior['role'] == 'slate':
         from .problem_candidates import compute_candidate_set_digest
+        from .problem_objection_carry import import_set_digest, has_imported_objections
         return (previous['candidate_set_digest'] != compute_candidate_set_digest(records)
+                or (has_imported_objections(records) and previous.get('problem_objection_carry', {}).get('import_set_digest') != import_set_digest(records))
                 or set(previous['bar_ids']) != set(find_current_problem_bar_ids(records, artifacts)))
     return is_previous_prompt(prior)
 
@@ -2780,6 +2848,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         return plan_frontier(store, payload, expected_revision=expected_revision, request_id=request_id)
     from .evaluation import Evaluation
     store_artifacts = store.build_artifact_store()
+    carry_guards = ExitStack()
     def prepare(records, value):
         artifacts = Evaluation.of(records, store_artifacts)
         fields(value, ('id', 'route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id', 'context'), ('scheduler',))
@@ -2795,9 +2864,28 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 raise ResearchError('problem_author_unknown', 'The assignment author must be one of the immutable problem authors')
             if value['role'] in bar_sources.ROLES + ('adjudicator',):
                 value = dict(value, subject=build_problem_subject(records, value['role']))
+            from .problem_delivery import require_unposted_review
             if 'controller_assignment_id' not in value['context']:
-                from .problem_delivery import require_unposted_review
                 require_unposted_review(records, value, artifacts, check_unbound=False)
+                if records.get('problem_objection_carry') and value.get('subject', {}).get('statement_id') is None:
+                    # A slate binds its explicit predecessor's publication
+                    # chain even though its own subject has no statement ID.
+                    context = value['context']
+                    repair, upgrade = context.get('context_repair'), context.get('staged_upgrade')
+                    predecessor_id = ((repair.get('assignment_id') if isinstance(repair, dict) else None)
+                                      or context.get('prior_assignment_id')
+                                      or (upgrade.get('assignment_id') if isinstance(upgrade, dict) else None))
+                    predecessor = (records.get('review_assignment', {}).get(predecessor_id)
+                                   if isinstance(predecessor_id, str) else None)
+                    if predecessor is not None:
+                        require_unposted_review(records, predecessor, artifacts)
+            elif records.get('problem_objection_carry'):
+                controller = records.get('review_assignment', {}).get(value['context']['controller_assignment_id'])
+                if controller is not None:
+                    require_unposted_review(records, controller, artifacts)
+            if value['role'] in ('slate', 'result'):
+                from .problem_objection_carry import require_fresh_sources
+                require_fresh_sources(records, artifacts, guards=carry_guards)
         if normalized_text(value['reviewer_id']) == normalized_text(value['author_id']):
             raise ResearchError('review_not_independent', 'The author cannot provide an independent assessment')
         route = _get(records, 'review_route', value['route_id'])
@@ -3050,6 +3138,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             reading_protocol=openness_reading.find_protocol(packet))
         if staged_repair and value['role'] == 'adjudicator':
             base_prompt_parameters['repair'] = True
+        if 'problem_objection_carry' in packet and value['role'] in ('slate', 'result'):
+            base_prompt_parameters['problem_objection_carry'] = packet['problem_objection_carry']
         prompt = canonical_prompt(value['role'], **base_prompt_parameters)
         history = []
         session_id = value['id']
@@ -3129,7 +3219,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             prompt = review_parts.build_turn_prompt(value['role'], base_prompt_parameters, packet[review_parts.KEY])
         if review_problem_parts.find_stage(packet) is not None:
             prompt = canonical_prompt(value['role'], orchestration='problem_creation', excerpts=True,
-                                      evidence_parts=review_problem_parts.find_stage(packet))
+                                      evidence_parts=review_problem_parts.find_stage(packet),
+                                      **({'problem_objection_carry': packet['problem_objection_carry']}
+                                         if 'problem_objection_carry' in packet else {}))
             if 'prompt_hash' in packet.get('problem_refresh', {}):
                 packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
                 packet.pop('digest')
@@ -3174,7 +3266,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 record, next=[describe_planning_command(record['id'])])
         return changes + [immutable_record(records, 'review_assignment', value['id'], record)], (
             dict(record, diagnostics=diagnostics) if diagnostics else record)
-    result = _prepare_review_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id, scoped=True)
+    try:
+        result = _prepare_review_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id, scoped=True)
+    finally:
+        carry_guards.close()
     if 'scheduler' in payload:
         from .review_task_execution import record_capacity
         capacity = record_capacity(store, payload['scheduler'], request_id=request_id + ':capacity')

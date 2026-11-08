@@ -497,7 +497,7 @@ def describe_problem_work(records, pending):
     return result
 
 
-def assess_post(records, artifacts):
+def assess_post(records, artifacts, *, source_guards=None, check_source_freshness=True):
     artifacts = Evaluation.of(records, artifacts)
     require_problem(records)
     from .research_decisions import assess_problem_reviews
@@ -507,6 +507,12 @@ def assess_post(records, artifacts):
     # evidence is already reported with the more useful minimum obligations.
     reviews = assess_problem_reviews(records, artifacts, check_evidence=not minimum)
     pending = list(minimum)
+    if check_source_freshness and records.get('problem_objection_carry'):
+        from .problem_objection_carry import require_fresh_sources
+        try:
+            require_fresh_sources(records, artifacts, guards=source_guards)
+        except ResearchError as error:
+            pending.append(obligation(error.code, error.message, **(error.details or {})))
     pending.extend(reviews["obligations"])
     outcomes = collect_review_outcomes(records, artifacts)
     pending.extend(assess_source_requests(records, artifacts, outcomes=outcomes))
@@ -576,7 +582,7 @@ def assess_post(records, artifacts):
             "decision_id": None if decision is None else decision["id"]}, **slots, **posted_state)
 
 
-def prepare_decision(records, artifacts, value, revision):
+def prepare_decision(records, artifacts, value, revision, *, source_guards=None):
     artifacts = Evaluation.of(records, artifacts)
     require_problem(records)
     fields(value, ("id", "action", "review_ids", "bar_review_ids", "reason"))
@@ -588,6 +594,9 @@ def prepare_decision(records, artifacts, value, revision):
     strings(value["bar_review_ids"], "Problem bar review IDs")
     evidence_digest = None
     if value["action"] == "post":
+        if records.get('problem_objection_carry'):
+            from .problem_objection_carry import require_fresh_sources
+            require_fresh_sources(records, artifacts, guards=source_guards)
         pending = assess_minimum(records, artifacts)
         if pending:
             raise ResearchError("problem_minimum_unmet", "Complete the current statement, openness and value evidence first", {"obligations": pending})
@@ -729,7 +738,7 @@ def write_problem_export(store, files, manifest, destination):
     return result
 
 
-def prepare_posted(records, artifacts, value, recorded_revision=None):
+def prepare_posted(records, artifacts, value, recorded_revision=None, *, source_guards=None):
     artifacts = Evaluation.of(records, artifacts)
     require_problem(records)
     fields(value, ("problem_id", "export_directory"))
@@ -740,7 +749,11 @@ def prepare_posted(records, artifacts, value, recorded_revision=None):
     if earlier is not None:
         raise ResearchError("problem_already_posted", "This exact statement already has a recorded post", {"post_id": earlier["id"]})
     from .gates import require_ready
-    require_ready(assess_post(records, artifacts), "post")
+    # Record the already sent, approved projection. Live source changes are
+    # prospective findings, reported by the existing posted-terminal after_post
+    # view; they cannot erase the external delivery from the local record.
+    require_ready(assess_post(records, artifacts, source_guards=source_guards,
+                              check_source_freshness=False), "post")
     files, manifest = build_projection(records, artifacts)
     directory = Path(value["export_directory"])
     if not directory.is_absolute():

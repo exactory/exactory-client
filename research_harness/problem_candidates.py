@@ -170,6 +170,10 @@ def _is_current_review(records, artifacts, review, bar_review_ids, candidate_ids
         return False
     findings = review["payload"]["value"]
     packet = json.loads(artifacts.read(records["review_assignment"][review["assignment_id"]]["packet"]))
+    if records.get('problem_objection_carry'):
+        from .problem_objection_carry import import_set_digest, has_imported_objections
+        if has_imported_objections(records) and packet.get('problem_objection_carry', {}).get('import_set_digest') != import_set_digest(records):
+            return False
     return (set(findings["bar_ids"]) == set(bar_review_ids) and set(findings["rubric_potential"]) == set(candidate_ids)
             and packet.get("candidate_set_digest") == compute_candidate_set_digest(records)
             and not _independence(records, artifacts, [review]))
@@ -180,6 +184,11 @@ def _verify_reviews(records, artifacts, review_ids, bar_review_ids, candidate_id
     strings(review_ids, "Slate review IDs")
     if len(review_ids) > 2:
         raise ResearchError("invalid_input", "Cite at most two observed slate reviews")
+    if records.get('problem_objection_carry'):
+        from .problem_objection_carry import has_imported_objections, import_set_digest
+        if has_imported_objections(records) and not review_ids:
+            raise ResearchError('problem_slate_review_unverified', 'A nonempty carry requires a current focused destination slate review',
+                                dict(import_set_digest=import_set_digest(records)))
     reviewers, slots = set(), set()
     for identifier in review_ids:
         review = records.get("value_review", {}).get(identifier)
@@ -234,6 +243,9 @@ def record_slate(store, payload, *, expected_revision, request_id):
         _verify_bars(records, artifacts, value["bar_review_ids"])
         _verify_reviews(records, artifacts, value["review_ids"], value["bar_review_ids"], sorted(candidates))
         record = dict(value, candidate_ids=sorted(candidates), recorded_revision=expected_revision + 1)
+        if records.get('problem_objection_carry'):
+            from .problem_objection_carry import import_set_digest
+            record['problem_objection_carry_digest'] = import_set_digest(records)
         return [immutable_record(records, "problem_slate", value["id"], record)], record
 
     return prepared_mutation(store, "problem.slate", payload, prepare,
@@ -245,6 +257,11 @@ def assess_slate(records, artifacts):
     if slate is None:
         return [obligation("problem_slate_missing", "Compare the current candidates and record the selection decision.")]
     current = sorted(find_current_candidates(records))
+    if records.get('problem_objection_carry'):
+        from .problem_objection_carry import import_set_digest, has_imported_objections
+        if has_imported_objections(records) and slate.get('problem_objection_carry_digest') != import_set_digest(records):
+            return [obligation('problem_slate_stale', 'Assess the complete carried objection set in a focused slate review and record a current slate.',
+                               slate_id=slate['id'], reason='problem_objection_carry_changed')]
     if slate["candidate_ids"] != current:
         return [obligation("problem_slate_stale", "Record a new slate that disposes of every current candidate.",
                            slate_id=slate["id"], missing=sorted(set(current) - set(slate["candidate_ids"])),

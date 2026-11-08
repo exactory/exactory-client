@@ -30,6 +30,11 @@
     "comparison": "The first candidate removes the obstacle that the survey names; the second lacks documented activity; the third repeats a settled case.",
     "reason": "The selected candidate meets both bars at potential level 2 and has the strongest documented payoff."
   },
+  "problem-objections-carry": {
+    "id": "carry-source-1",
+    "source_workspace": "/absolute/source-problem",
+    "source_revision": 123
+  },
   "problem-statement": {
     "id": "statement-1",
     "title": "An extremal sequence bound",

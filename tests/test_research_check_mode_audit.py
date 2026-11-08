@@ -395,6 +395,7 @@ REFUSED_OUTCOMES = {
     "problem-decision": "problem_minimum_unmet",
     "problem-formal-check": "problem_formal_check_unbound",
     "problem-openness": "review_context_unverified",
+    "problem-objections-carry": "problem_objection_source_unavailable",
     "problem-posted": "readiness_required",
     "problem-post-external": "problem_statement_mismatch",
     "problem-post-time": "problem_post_missing",

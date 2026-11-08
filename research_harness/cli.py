@@ -39,12 +39,14 @@ from .record_check import DEFAULT_TIME_BUDGET_SECONDS
 from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata, problem_evidence
 from . import overrides
 from .automatic_overrides import record_automatic_override
+from .problem_objection_carry import carry_objections
 
 
 OPERATIONS = {
     "problem-init": problem_claims.initialize_problem,
     "problem-candidate": problem_candidates.record_candidate,
     "problem-slate": problem_candidates.record_slate,
+    "problem-objections-carry": carry_objections,
     "problem-statement": problem_claims.record_statement,
     "problem-attempt": problem_attempt.record_attempt,
     "problem-openness": problem_claims.record_openness,
@@ -313,7 +315,8 @@ def build_parser():
     commands = parser.add_subparsers(dest="command", required=True)
     for command in (*OPERATIONS, *ACQUISITION):
         item = commands.add_parser(command, allow_abbrev=False,
-            help="Submit the exact " + command + " JSON payload.",
+            help=("Carry every source bar/slate objection and its authenticated evidence." if command == "problem-objections-carry"
+                  else "Submit the exact " + command + " JSON payload."),
             description="Use --file with the typed JSON shape in docs/research-cli.md. Saved assertions and downloads are not successful readings.")
         item.add_argument("--workspace", default=".")
         item.add_argument("--file", required=True, help="UTF-8 JSON input, without duplicate keys or nonfinite numbers.")
@@ -611,6 +614,10 @@ def status_report(store, *, counters=False):
                         literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                         candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
                         next=upcoming, review=review, advisories=advisories)
+            if records.get('problem_objection_carry'):
+                result['problem_objection_carries'] = [
+                    {key: carry[key] for key in ('id', 'source_workspace', 'source_origin', 'source_revision')}
+                    for _, carry in sorted(records['problem_objection_carry'].items())]
             if counters:
                 result['evaluation'] = dict(evaluation.counters, elapsed_seconds=round(time.monotonic() - started, 3),
                                             retention=evaluation.retention_report())

@@ -111,8 +111,10 @@ def list_targets(packet):
 
 
 def compute_series_key(packet):
-    return dict(evidence=packet.get('problem_evidence_digest'),
-                bars=digest(packet.get('bars', [])))
+    key = dict(evidence=packet.get('problem_evidence_digest'), bars=digest(packet.get('bars', [])))
+    if 'problem_objection_carry' in packet:
+        key['problem_objection_carry'] = packet['problem_objection_carry']['import_set_digest']
+    return key
 
 
 def validate_final(records, artifacts, assignment, output, *, attempt=None):
