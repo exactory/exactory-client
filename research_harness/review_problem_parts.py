@@ -323,7 +323,8 @@ def plan_objection_body_part(records, artifacts, packet, units, observations, se
     """A part turn that carries the largest prefix of the final's undelivered objection-evidence bodies that fits, so
     that the final can count them as delivered earlier; None when not even one body fits."""
     from .review_protocol import canonical_prompt
-    prompt = canonical_prompt('result', orchestration='problem_creation', excerpts=True, evidence_parts='part')
+    prompt = canonical_prompt('result', orchestration='problem_creation', excerpts=True, evidence_parts='part',
+        **({'problem_objection_carry': packet['problem_objection_carry']} if 'problem_objection_carry' in packet else {}))
     for count in range(len(pending), 0, -1):
         bodies = pending[:count]
         planned = _project(records, artifacts, dict(packet, objection_bodies=bodies), units, [], observations, [],
@@ -539,7 +540,8 @@ def _prepare_legacy_packet(records, artifacts, value, route, packet, prompt, his
     previous = _read_packet(artifacts, records['review_assignment'][prior_id]) if prior_id else {}
     refreshed = any(review['assignment_id'] == prior_id for review in records.get('value_review', {}).values())
     continuing = (find_stage(previous) is not None and not refreshed
-                  and previous.get('problem_evidence_digest') == packet.get('problem_evidence_digest'))
+                  and previous.get('problem_evidence_digest') == packet.get('problem_evidence_digest')
+                  and previous.get('problem_objection_carry') == packet.get('problem_objection_carry'))
     if (value['role'] != 'result' or packet.get('subject', {}).get('kind') != 'problem'
             or 'context_repair' in packet or value['context'].get('source_delivery')
             or transport.local_input_limit(route) is None or 'problem_evidence' not in packet
@@ -562,7 +564,8 @@ def _prepare_legacy_packet(records, artifacts, value, route, packet, prompt, his
     remaining = ([unit for unit in remaining if _unit_key(unit) in carried_keys]
                  + [unit for unit in remaining if _unit_key(unit) not in carried_keys])
     stage, turn = ('part' if remaining else 'final'), len(observations) + 1
-    stage_prompt = canonical_prompt('result', orchestration='problem_creation', excerpts=True, evidence_parts=stage)
+    stage_prompt = canonical_prompt('result', orchestration='problem_creation', excerpts=True, evidence_parts=stage,
+        **({'problem_objection_carry': packet['problem_objection_carry']} if 'problem_objection_carry' in packet else {}))
     def candidate(count, attached=None):
         return _project(records, artifacts, packet, units, remaining[:count], observations, remaining,
                         series_id, stage, turn, attached)

@@ -830,8 +830,11 @@ The slate cites bars that state the calibration of levels 2 and 3. A bar recorde
 on the version 1 template returns `problem_bar_calibration_required`; assigning
 the bar again to the same reviewer refreshes it on the current bar template in
 the same session and slot. A focused slate review by
-a bar reviewer is optional and is bound to the exact candidate set and the current
-bars; after a candidate is added or superseded, or a bar is refreshed, assigning
+a bar reviewer is required after a carry that imported at least one objection
+(`problem_slate_review_unverified` otherwise), and optional otherwise, when the
+comparison needs an independent judgment. It is bound to the exact candidate set,
+the current bars and the imported set. After a candidate is added or superseded,
+a bar is refreshed or a carry changes the imported set, assigning
 the slate again to the same reviewer refreshes the review in its session, with the
 earlier findings in the history. A slate objection names the candidates it
 concerns, or none for the slate as a whole. It binds the result reviews and the

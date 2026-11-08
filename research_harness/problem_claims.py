@@ -5,6 +5,7 @@ proof. Requested formal support is bound to a delivered native completion.
 """
 
 from datetime import datetime, timezone
+from contextlib import ExitStack
 
 from .artifacts import ArtifactStore, validate_reference
 from .errors import ResearchError
@@ -227,17 +228,19 @@ def record_openness(store, payload, *, expected_revision, request_id):
 def record_decision(store, payload, *, expected_revision, request_id):
     from .problem_delivery import prepare_decision
     artifacts = store.build_artifact_store()
-    return prepared_mutation(store, "problem.decision", payload,
-        lambda records, value: prepare_decision(records, artifacts, value, expected_revision + 1),
-        expected_revision=expected_revision, request_id=request_id)
+    with ExitStack() as guards:
+        return prepared_mutation(store, "problem.decision", payload,
+            lambda records, value: prepare_decision(records, artifacts, value, expected_revision + 1, source_guards=guards),
+            expected_revision=expected_revision, request_id=request_id)
 
 
 def record_posted(store, payload, *, expected_revision, request_id):
     from .problem_delivery import prepare_posted
     artifacts = store.build_artifact_store()
-    return prepared_mutation(store, "problem.posted", payload,
-        lambda records, value: prepare_posted(records, artifacts, value, expected_revision + 1),
-        expected_revision=expected_revision, request_id=request_id)
+    with ExitStack() as guards:
+        return prepared_mutation(store, "problem.posted", payload,
+            lambda records, value: prepare_posted(records, artifacts, value, expected_revision + 1, source_guards=guards),
+            expected_revision=expected_revision, request_id=request_id)
 
 
 def record_post_external(store, payload, *, expected_revision, request_id):

@@ -1823,6 +1823,8 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         base_prompt_parameters = dict(orchestration=parameters.get('orchestration'),
             repair=bool(parameters.get('context_repair')), excerpts='reviewer_excerpts' in parameters,
             common_version=parameters.get('common_prompt_version'))
+        if 'problem_objection_carry' in parameters:
+            base_prompt_parameters['problem_objection_carry'] = parameters['problem_objection_carry']
     if value['role'] in ('bar', 'slate', 'result'):
         if review_excerpts.KEY not in packet:
             packet = dict(packet, **{review_excerpts.KEY:
