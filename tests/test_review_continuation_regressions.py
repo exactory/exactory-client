@@ -132,15 +132,26 @@ class ContinuationRegressionTests(unittest.TestCase):
         case.exhaust_later_role('result')
         output = io.StringIO()
         before = case.store.snapshot()
+        plan = self.assert_exhausted_slot_stops(case, 'result-first')
         with patch('research_harness.review_transport.send_request',
                    side_effect=AssertionError('An exhausted slot must not call a reviewer')), \
                 redirect_stdout(output), self.assertRaises(SystemExit) as exited:
             cli.main(['review-series', '--workspace', str(case.root), '--assignment', 'result-first'],
                      render_views=lambda workspace: None)
         self.assertEqual(exited.exception.code, 3)
+        after = case.store.snapshot()
+        recorded_stop, = after['records']['review_series_stop'].values()
         self.assertEqual(json.loads(output.getvalue().splitlines()[-1]),
-                         self.assert_exhausted_slot_stops(case, 'result-first'))
-        self.assertEqual(case.store.snapshot(), before)
+                         dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
+                              revision_after_stop=after['revision']))
+        self.assertEqual(recorded_stop['plan'], plan)
+        self.assertEqual(recorded_stop['recorded_revision'], after['revision'])
+        operations = dict(before['records']['literature_operation'])
+        operations[recorded_stop['request_id']] = dict(operation='review.series_stop',
+                                                      runtime=case.store.describe_runtime())
+        self.assertEqual(after, dict(before, revision=before['revision'] + 1,
+            records=dict(before['records'], review_series_stop={recorded_stop['id']: recorded_stop},
+                         literature_operation=operations)))
 
     def test_two_reassessment_mismatches_hand_off_eligible_correction(self):
         from research_harness import review_output_correction
