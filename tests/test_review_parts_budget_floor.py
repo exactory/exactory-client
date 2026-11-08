@@ -273,6 +273,7 @@ class BudgetFloorReplacementTests(PartsResultCase):
     def test_series_ends_with_the_floor_budget_stop_without_another_call(self):
         assignment, details = self.assert_floor_failure_stops()
         before = self.case.store.snapshot()
+        plan = plan_next(before['records'], self.case.artifacts, assignment['id'])
         output = io.StringIO()
         with patch.object(protocol.transport, 'send_request',
                           side_effect=AssertionError('A floor failure must not call a reviewer')), \
@@ -285,7 +286,18 @@ class BudgetFloorReplacementTests(PartsResultCase):
         self.assertNotIn('command', stop)
         for key, value in details.items():
             self.assertEqual(stop['details'][key], value, key)
-        self.assertEqual(self.case.store.snapshot(), before)
+        after = self.case.store.snapshot()
+        recorded_stop, = after['records']['review_series_stop'].values()
+        self.assertEqual(stop, dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
+                                   revision_after_stop=after['revision']))
+        self.assertEqual(recorded_stop['plan'], plan)
+        self.assertEqual(recorded_stop['recorded_revision'], after['revision'])
+        operations = dict(before['records']['literature_operation'])
+        operations[recorded_stop['request_id']] = dict(operation='review.series_stop',
+                                                      runtime=self.case.store.describe_runtime())
+        self.assertEqual(after, dict(before, revision=before['revision'] + 1,
+            records=dict(before['records'], review_series_stop={recorded_stop['id']: recorded_stop},
+                         literature_operation=operations)))
 
     def test_over_cap_failure_at_the_floor_stops_before_recording_a_replacement(self):
         self.assert_floor_failure_stops()

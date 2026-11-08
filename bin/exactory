@@ -471,7 +471,8 @@ def _run_submit(args: argparse.Namespace) -> None:
     # The submission keeps no local copy of the request, so a store that does not
     # open changes nothing here.
     store, submission_checks, _ = select_managed_path(
-        lambda workspace_store: check_submission_preconditions(workspace_store, body), public_gate="submitted", **strict)
+        lambda workspace_store: check_submission_preconditions(workspace_store, body), public_gate="submitted",
+        public_action="POST /api/v1/verifications", **strict)
     if submission_checks is not None:
         payload = submit_managed(store, body, _send_request, scope_contract_id=strict["scope_contract_id"],
                                  scope_target_digest=strict["scope_target_digest"], **command_identity(store, args))
@@ -568,7 +569,8 @@ def _run_verify(args: argparse.Namespace) -> None:
     # The verdict keeps no local copy of itself, so a store that does not open
     # changes nothing here.
     store, verdict_report, _ = select_managed_path(
-        lambda workspace_store: check_verdict_preconditions(workspace_store, task, body), public_gate="verification")
+        lambda workspace_store: check_verdict_preconditions(workspace_store, task, body), public_gate="verification",
+        public_action="POST /api/v1/verifications/" + urllib.parse.quote(task["verificationId"], safe="") + "/verdicts")
     if verdict_report is not None:
         payload = send_verdict(store, task, body, _send_request, **command_identity(store, args))
     else:

@@ -117,6 +117,20 @@ _PASSED_GATES_DISCLOSURE_TEMPLATE = (
     "not be read. The record does not show who that user was, whether the entry was used, or whether the check "
     "was completed later."
 )
+_AUTOMATIC_PASS_DISCLOSURE_TEMPLATE = (
+    "This paper was deposited from a workspace of a research harness that checks each step of the work before "
+    "the next one. Some checks require independent reviews. The workspace has an automatic-continuation entry "
+    "for the check {gate}, with stop identifier {stop_id} and code {stop_code}. A readable entry says that the "
+    "harness classified the stop as a defect of its own and proposed advancing the work without the missing "
+    "reviews. {confirmation} An entry named unknown could not be read. This entry supplies no review approval "
+    "or permission to publish, and does not show whether the missing reviews were completed later."
+)
+_PUBLIC_ACTION_DISCLOSURE_TEMPLATE = (
+    "The workspace has a user-instruction entry {id} for the exact public write {public_action}. "
+    "The agent recorded that the user instructed this write. {confirmation} "
+    "This entry does not pass a research gate or show who the user was, whether the instruction was used, "
+    "or whether the write completed."
+)
 
 # One keyword, sent only with the disclosure that names exactory.ai as the
 # writer, because it rests on the same evidence. The keyword answers "did
@@ -242,7 +256,7 @@ def _open_url(request: urllib.request.Request) -> dict:
     the network."""
     if request.get_method() not in ("GET", "HEAD", "OPTIONS"):
         from research_harness.automatic_overrides import check_public_write
-        check_public_write("publication")
+        check_public_write("publication", public_action=request.get_method() + " " + urllib.parse.urlsplit(request.full_url).path)
     with open_url_within_origin(request, timeout=_TIMEOUT_SECONDS) as response:
         body = response.read().decode("utf-8", "replace")
         return json.loads(body) if body else {}
@@ -501,7 +515,7 @@ def _has_exactory_authorship_evidence(pdf_path: Path) -> bool:
 
 def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
                             has_exactory_authorship_evidence: bool, problem_target: dict | None = None,
-                            passed_gates=(), automatic_passes=()) -> dict:
+                            passed_gates=(), automatic_passes=(), public_action_overrides=()) -> dict:
     # Zenodo renders the description as HTML. The abstract paragraphs come
     # first, the disclosure closes the description as its own paragraph.
     paragraph_texts = [" ".join(block.split()) for block in abstract_text.split("\n\n")]
@@ -513,9 +527,14 @@ def _build_deposit_metadata(title: str, creators: list[str], abstract_text: str,
     if passed_gates:
         paragraph_texts.append(_PASSED_GATES_DISCLOSURE_TEMPLATE.format(gates=", ".join(passed_gates)))
     for entry in automatic_passes:
-        paragraph_texts.append("Automatic continuation entry: gate=" + entry["gate"] + "; defect=" + entry["stop_code"]
-                               + "; stop=" + entry["stop_id"] + "; store-confirmed=" + str(entry["recorded"]).lower()
-                               + ". Review approval is separate.")
+        confirmation = ("The stored record confirms that the harness advanced the study to its next internal stage."
+                        if entry["recorded"] else
+                        "Only a local report was available; a committed continuation could not be confirmed.")
+        paragraph_texts.append(_AUTOMATIC_PASS_DISCLOSURE_TEMPLATE.format(**entry, confirmation=confirmation))
+    for entry in public_action_overrides:
+        confirmation = ("The instruction is in the stored record." if entry["recorded"] else
+                        "Only a local fallback entry was available; recording in the store could not be confirmed.")
+        paragraph_texts.append(_PUBLIC_ACTION_DISCLOSURE_TEMPLATE.format(**entry, confirmation=confirmation))
     metadata = {
         "upload_type": "publication",
         "publication_type": "preprint",

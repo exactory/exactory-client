@@ -264,8 +264,10 @@ exists and governs completing literature and entering investigation planning;
 `gate execution` governs admission to experiment. `gate preparation` remains
 an advisory preparation report there. Native mathematical research can use an
 optional common foundation; verification retains its required preparation.
-A refused gate is passed only on the user's instruction, as
-[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes.
+A refused gate is passed as
+[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes:
+on the user's instruction, or by the automatic pass of a stop that the harness
+classifies as its own defect, which that section bounds.
 
 When relevant sources or claim scope change, revisit affected evidence and its
 gate. Unrelated reading, synthesis or constitution changes leave a claim current.

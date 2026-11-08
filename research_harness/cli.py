@@ -263,7 +263,7 @@ def parse_managed_scope_arguments(args):
 
 
 def select_managed_path(check, start=None, *, managed_only=False, scope_contract_id=None, scope_target_digest=None,
-                        public_gate=None):
+                        public_gate=None, public_action=None):
     """Return (store, check(store), store_open_error) for the workspace around `start`.
 
     `check` runs every check the managed path performs before its first remote
@@ -293,7 +293,7 @@ def select_managed_path(check, start=None, *, managed_only=False, scope_contract
         return None, None, error
     if public_gate is not None:
         from .automatic_overrides import require_public_write_instruction
-        require_public_write_instruction(store, public_gate)
+        require_public_write_instruction(store, public_gate, public_action=public_action, precheck=True)
     try:
         if scope_contract_id is not None:
             from .publication_scope import validate_expected_scope
@@ -777,8 +777,6 @@ def run(args):
         from .record_check import check_record
         return check_record(Path(args.workspace), keep_clone=args.keep_clone, time_budget=args.time_budget)
     if args.command == "example":
-        if args.operation == "gate-auto-pass":
-            return {"stop_id": "SERIES_STOP_ID"}
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
     if getattr(args, "check", False) and args.command in (

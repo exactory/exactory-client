@@ -908,8 +908,8 @@ instead of one request. The
      `review_invocation_pending`, the command plans again instead. Read `code`, `details` and
      `stop_class`. In a problem record no stop passes automatically: the stop binds no study
      stage, and `gate-auto-pass` refuses it with `gate_override_internal_only`, so report a
-     `harness_defect` stop like a decision stop, and run a `waiting` stop again on its schedule
-     ([The class of a stop](../../docs/research-workflow.md#the-class-of-a-stop)). When the
+     `harness_defect` stop like a decision stop, and resume a `waiting` stop on its schedule as
+     [The class of a stop](../../docs/research-workflow.md#the-class-of-a-stop) states. When the
      [CLI reference](../../docs/research-cli.md#review-chains-and-review-series) names a step
      for that code, take it. Otherwise report the stop with its code and details in your summary
      and continue the work that does not depend on this chain.

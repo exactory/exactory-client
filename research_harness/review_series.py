@@ -49,11 +49,22 @@ def run_series(store, assignment_id, *, emit=_emit_json):
         if terminal and row.get('state') == 'stop' and row.get('code') and row.get('head_id'):
             from .automatic_overrides import record_series_stop
             try:
-                stop = record_series_stop(store, row, repeated=row['code'] == 'review_series_no_progress')
-                row = dict(row, stop_id=stop['id'])
-            except ResearchError as error:
+                for attempt in range(2):
+                    try:
+                        # Each call takes a fresh snapshot and derives its own
+                        # stop identity, scope and expected revision.
+                        stop = record_series_stop(store, row)
+                    except ResearchError as error:
+                        if attempt == 0 and error.code == 'stale_revision':
+                            continue
+                        raise
+                    break
+                row = dict(row, stop_id=stop['id'], revision_after_stop=stop['recorded_revision'])
+            except Exception as error:
                 # A stop that could not be recorded is never an automatic basis.
-                row = dict(row, stop_record_error=error.as_dict())
+                recording_error = (error.as_dict() if isinstance(error, ResearchError) else
+                                   dict(code='stop_record_error', message=str(error)))
+                row = dict(row, stop_record_error=recording_error)
         if row.get('state') in ('stop', 'wait') and row.get('code'):
             from .stop_classes import classify_stop
             row = dict(row, stop_class=classify_stop(row['code']))

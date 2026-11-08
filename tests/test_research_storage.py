@@ -582,7 +582,7 @@ class ResearchStorageTests(unittest.TestCase):
             for action in (store.snapshot, lambda: Store(self.workspace, create=True),
                            lambda: self.add(store, request="nested")):
                 started = time.monotonic()
-                self.assert_error("store_busy", action)
+                self.assert_error("store_reentrant_access", action)
                 self.assertLess(time.monotonic() - started, 3)
             return tx.get("work", "paper")
 
@@ -616,7 +616,7 @@ finally:
                 self.workspace.rename(alias)
             try:
                 started = time.monotonic()
-                self.assert_error("store_busy", lambda: Store(alias))
+                self.assert_error("store_reentrant_access", lambda: Store(alias))
                 self.assertLess(time.monotonic() - started, 3)
                 result = subprocess.run(
                     [sys.executable, "-c", probe, str(alias / ".exactory" / "research.sqlite3")],
@@ -640,7 +640,7 @@ finally:
         replacement = Store(self.workspace, create=True)
 
         def apply(tx):
-            self.assert_error("store_busy", previous.snapshot)
+            self.assert_error("store_reentrant_access", previous.snapshot)
             tx.put("work", "replacement", {"title": "Current directory"})
             return None
 

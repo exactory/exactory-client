@@ -521,7 +521,9 @@ class Store:
                         break
                     except OSError as error:
                         if error.errno not in (errno.EACCES, errno.EAGAIN):
-                            raise
+                            raise SearchError("lock_io_error", "writer lock acquisition failed: " + str(error),
+                                              {"path": str(lock_path), "errno": error.errno,
+                                               "reason": str(error)}) from error
                         if time.monotonic() >= deadline:
                             raise SearchError(
                                 "lock_timeout", "writer lock acquisition timed out"

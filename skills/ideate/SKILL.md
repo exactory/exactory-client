@@ -175,8 +175,10 @@ After recording the ideation decision, enter
 `exactory-lab state set --stage experiment --status pending` only with a current
 admitted cycle. The experiment skill launches that admission and assesses its
 actual evidence before any research readiness review or writing transition.
-A move that the gate refuses is passed only on the user's instruction
-([Stops and overrides](../../docs/research-workflow.md#stops-and-overrides)).
+A move that the gate refuses is passed as
+[Stops and overrides](../../docs/research-workflow.md#stops-and-overrides) describes:
+on the user's instruction, or by the automatic pass of a stop that the harness
+classifies as its own defect, which that section bounds.
 
 Report the selected hypothesis, expected contribution, concrete test, resource
 limits, and uncertainty. Continue with the best supported choice unless the user
