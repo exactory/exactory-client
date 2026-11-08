@@ -171,9 +171,11 @@ chain ends the command this way with the refusal's code (for example a
 `review_parts_*` code); when the refusal recorded an output refusal, or its
 code is `review_invocation_pending`, the command plans again instead.
 Read `code`, `details` and `stop_class`. When `stop_class` is
-`harness_defect`, request the automatic pass with the `stop_id` of the last
-line, as [The automatic pass](../../docs/research-workflow.md#the-automatic-pass)
-describes. When the CLI reference names a step for that code,
+`harness_defect` and the last line carries `stop_id`, request the automatic
+pass with that `stop_id`, as [The automatic pass](../../docs/research-workflow.md#the-automatic-pass)
+describes. A last line with `stop_record_error` carries no `stop_id`. The stop
+keeps its class, and [The class of a stop](../../docs/research-workflow.md#the-class-of-a-stop)
+names its next action. When the CLI reference names a step for that code,
 take it. Otherwise report the stop with its code and details in your summary
 and continue the work that does not depend on this chain. Exit status 4 with
 the plan and its `not_before` on the last line: a wait of more than 30

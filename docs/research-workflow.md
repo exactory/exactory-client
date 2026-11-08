@@ -107,28 +107,57 @@ of the agent changes it:
 
 | Class | Codes | What to do |
 | --- | --- | --- |
-| `waiting` | `store_busy`, `rate_limited`, `review_provider_unavailable`, `review_capacity_wait`, `review_invocation_pending`, `provider_state_capacity`, `lock_timeout` | A condition outside the harness that clears by itself. Follow the stop's schedule: the `not_before` of a `wait`, the step that `review_invocation_pending` names, or the end of the other writer's work for `store_busy` and `lock_timeout`. Then continue; when the stop came from `review-series`, run it again. |
-| `harness_defect` | `review_series_no_progress` | Only the harness can cause it, and its retry schedule has ended. Request [The automatic pass](#the-automatic-pass) with the `stop_id` of the stop. |
+| `waiting` | `rate_limited`, `review_capacity_wait`, `review_invocation_pending`, `provider_state_capacity`, `execution_live`, `remote_operation_owned`, `verification_ingest_pending`, `store_busy`, `lock_timeout`, `review_provider_unavailable` | A condition outside the harness that clears by itself; waiting grants no approval and no automatic pass. What ends the wait: for `rate_limited`, the next eligible time of the provider group; for `review_capacity_wait` and `provider_state_capacity`, the `not_before` of the `wait`; for `review_invocation_pending`, the step that it names; for `execution_live`, the end of the run that holds the execution; for `remote_operation_owned`, the end of the other run's work on the submission, the verdict or the deposit; for `verification_ingest_pending`, the server showing the task of the recorded submission, which `exactory reconcile INTENT_ID` reads without a second POST; for `store_busy`, the end of the other thread's work in the store; for `lock_timeout`, the release of the controller's render or writer lock by its holder; for `review_provider_unavailable`, the provider schedule, a `wait` of 1, 2, 4, 8, 16 and 30 minutes after the first six failures of the turn position ([the provider schedule](research-cli.md#review-chains-and-review-series)). Then continue; when the stop came from `review-series`, run it again. The seventh provider failure ends in a terminal stop with no further schedule: `review-series` on the unchanged chain stops again with the same code, the stop stays `waiting`, and it needs the user as [Report the stop](#report-the-stop) says. Do not invent a retry schedule. |
+| `harness_defect` | `review_series_no_progress` | Only the harness can cause it, and its retry schedule has ended. When the last line carries `stop_id`, request [The automatic pass](#the-automatic-pass) with it. |
 | `decision` | Every other code | The evidence, a judgment or a limit says no, the record owes something, or the cause is unknown. Follow [Report the stop](#report-the-stop); only the user's instruction passes it. |
 
 A code that is on neither list is a decision stop, so a new code is a decision
-stop until the lists change. `review-series` prints the class as `stop_class`
+stop until the lists change. Two decision codes name a cause that resembles a
+wait and is none: `lock_io_error`, a lock error of the math-solver controller
+other than contention (`EACCES` or `EAGAIN`), whose message states the error
+and whose details carry `path`, `errno` and `reason`; and
+`store_reentrant_access`, the same thread entering the research store again
+while it holds the store, which the caller repairs with the active snapshot
+guard or the transaction methods. Another thread's hold stays `store_busy`,
+and another holder of the controller lock stays `lock_timeout`. `review-series`
+prints the class as `stop_class`
 on every `stop` and `wait` line that has a `code`. When a run of
 `review-series` ends in a `stop`, its last line also carries `stop_id`, the id
 of the record `review_series_stop/<id>` that the driver wrote for that stop,
-or `stop_record_error` with the error when the stop could not be recorded
+with `revision_after_stop`, or `stop_record_error` with the error when the
+stop could not be recorded
 ([Review chains and `review-series`](research-cli.md#review-chains-and-review-series)).
-A stop with `stop_record_error` has no `stop_id` and cannot be passed
-automatically: report it as a decision stop. The error output of
+`stop_record_error` means that the stop was not recorded, after the one
+further attempt that the driver makes when another writer committed first
+(`stale_revision`). The stop keeps its
+`code` and its `stop_class`. A `waiting` stop with `stop_record_error` resumes
+on its schedule as above. A `harness_defect` stop with `stop_record_error` has
+no `stop_id`, so `gate-auto-pass` cannot pass it: report the stop with the
+recording error ([Report the stop](#report-the-stop)). Only the user's
+instruction passes it. The error output of
 `exactory-math search` carries `stop_class` as well, derived from its `code` by
 the same function. The class names the next action; it creates no record and
 passes nothing by itself.
 
 ### Report the stop
 
-At a stop that needs the user, a decision stop or a harness-defect stop that
-`gate-auto-pass` refuses, first finish the independent work: the work that
-does not depend on the stopped step and that the remaining budget covers. Then
+A stop needs the user in four cases:
+
+- A decision stop.
+- A `waiting` stop whose schedule has ended: the terminal
+  `review_provider_unavailable` after the seventh provider failure
+  ([The class of a stop](#the-class-of-a-stop)).
+- A harness-defect stop without `stop_id`.
+- A harness-defect stop that `gate-auto-pass` refuses, once no permitted
+  continuation remains. First take the next action of the refusal
+  ([the refusal table](#the-automatic-pass)). When that action is a step of
+  the ordinary workflow, for example for `gate_override_stop_stale`,
+  `gate_override_reviews_uncovered` or `gate_override_report`, the refusal is
+  that step and not a stop that needs the user.
+
+Park only when no permitted continuation remains. At a stop that needs the
+user, first finish the independent work: the work that does not depend on the
+stopped step and that the remaining budget covers. Then
 write one report with four parts: the stop (the command, its code and its
 details); what passing it skips (the reviews or checks that the gate still
 lacks); what stays owed (the obligations, which the override records and
@@ -200,7 +229,12 @@ The payload (`exactory-research example gate-override`) has `id`, `gate`,
   `cohort` for leaving `cohort` outside managed research. Entering `deposit`
   also needs the `round` gate; when two gates govern one move, record one
   override per gate, with the transition on one of them. For a verdict it is
-  `verification`; in a problem record it is `post`.
+  `verification`; in a problem record it is `post`. For a write of `exactory`
+  with no named gate (the refusal's `gate` is null), the field is still
+  required: give `publication` together with the write's `public_action`, and
+  no `transition`. On such a record the gate name covers no write by itself,
+  and the deposit disclosure does not count it as a passed check: it names the
+  write apart ([What the user's words become](#what-the-users-words-become)).
 - `instruction`: the path of the instruction file, relative to the workspace
   root and under `context/`.
 - `reason`: your statement of the stop and of why the run goes on, in one or
@@ -211,13 +245,15 @@ The payload (`exactory-research example gate-override`) has `id`, `gate`,
   next `exactory-lab state set --stage`, or the current stage for
   `--status done` without a stage change. `from` must be the current stage,
   and `to` must not be an earlier stage.
-- `public_action`: the exact `METHOD /path` of one public write, for example
-  `POST /api/v1/reports`, when the user's instruction covers a write of
-  `exactory` after an automatic pass that no named public gate covers
+- `public_action`: the exact `METHOD /path` of one public write of `exactory`
+  or of Zenodo, for example `POST /api/v1/reports` or
+  `POST /api/deposit/depositions`, when the user's instruction covers that one
+  write after an automatic pass
   ([Public writes after an automatic pass](#public-writes-after-an-automatic-pass)).
-  The transports read the field only after an automatic pass. Omit it for the
-  deposit, the submission, the verdict and the problem post, which the gates
-  `publication`, `submitted`, `verification` and `post` cover.
+  The transports read the field only after an automatic pass. An override with
+  the gate `publication`, `submitted`, `verification` or `post` and no
+  `public_action` covers every write of that gate; one with `public_action`
+  covers that one write only.
 
 The record keeps the instruction's path, its text and its stored artifact, and
 the gate's current obligations as `{code, explanation}`; when the gate report
@@ -259,7 +295,8 @@ exactory-research gate-auto-pass --file work/auto-pass.json --check --expected-r
 exactory-research gate-auto-pass --file work/auto-pass.json --expected-revision REVISION --request-id auto-pass-readiness-1
 ```
 
-The command checks all of the following and refuses with the first failure:
+The pass requires all of the following conditions, each with the code of its
+refusal:
 
 1. The stop. `stop_id` names a `review_series_stop` record that
    `review-series` wrote (`gate_override_stop_missing` otherwise), unchanged
@@ -270,18 +307,20 @@ The command checks all of the following and refuses with the first failure:
    `stop_class`).
 3. The retry schedule. The record states that the driver executed the action
    once at that progress position and then met the same action at the same
-   position (`gate_override_retry_pending` when the schedule has not ended;
-   `gate_override_stop_untrusted` when the recorded action, progress or
-   successful dispatch does not check).
-4. The hop. The stop binds one of the two moves that the pass supports
+   position (`gate_override_stop_untrusted` when the recorded retry evidence,
+   action, progress or successful dispatch does not check).
+4. The hop. The stop binds the one move that the pass supports
    (`gate_override_internal_only` otherwise): a stopped `result` review of a
    study at `experiment` moves it to `write`, through the gate `readiness`, or
-   `manuscript-readiness` under a source-limited contract; a stopped
-   `manuscript` review of a study at `evaluate` moves it to `deposit`, through
-   the gate `publication`. A problem record and a math-solver objective have no
-   study stage, so none of their stops binds a hop.
-5. One pass per gate. No earlier automatic pass of the same gate is recorded
-   (`gate_override_user_required` otherwise).
+   `manuscript-readiness` under a source-limited contract. A stop of a
+   `manuscript` review at `evaluate` records `scope: null`, and a stop that an
+   earlier release recorded with a `publication` scope is refused as well: the
+   managed publication decision needs a complete measurement, which the
+   missing manuscript review prevents, so no study can meet both conditions.
+   A problem record and a math-solver objective have no study stage, so none
+   of their stops binds a hop.
+5. One pass per hop. No earlier automatic pass of the same transition is
+   recorded, under either gate name (`gate_override_user_required` otherwise).
 6. Currency. The study is at the stage of the stop, the review target (the
    candidate digest or the bundle digest) is the one that the stop recorded,
    and the chain's next action is the one that the stop recorded
@@ -293,17 +332,15 @@ The command checks all of the following and refuses with the first failure:
    `quality_condition` (`gate_override_quality_condition` otherwise).
 9. The other items of the gate. The gate's report lists only the missing
    review that the defect prevented: `independent_review_missing` for
-   `readiness`, `scoped_review_missing` for `manuscript-readiness`,
-   `manuscript_reviews_required` for `publication`. No retained readiness
-   review of the target rejects it or has a failed check, no manuscript review
-   rejects, and for `publication` the `round` gate is ready
-   (`gate_override_other_obligations` otherwise, with the obligations in the
-   details).
-10. Coverage. A qualifying stop exists for every missing review, from distinct
-    reviewers: one for `readiness` and `manuscript-readiness`, and for
-    `publication` two minus the accepted manuscript reviews
-    (`gate_override_reviews_uncovered` otherwise). The record names them as
-    `cited_stops`.
+   `readiness`, `scoped_review_missing` for `manuscript-readiness`
+   (`gate_override_gate_ready` when the report lists nothing, because the gate
+   is ready; `gate_override_other_obligations` otherwise, with the
+   obligations in the details). No retained readiness review of the target
+   rejects it or has a failed check (`gate_override_other_obligations` with
+   the `review_id` otherwise).
+10. Coverage. At least one qualifying stop exists for the missing review
+    (`gate_override_reviews_uncovered` otherwise). The record names the
+    qualifying stops, one per reviewer, as `cited_stops`.
 
 Then the command writes the local report
 `.exactory/automatic-passes/<digest>.json` as a pending proposal
@@ -312,11 +349,14 @@ Then the command writes the local report
 `evidence: "recorded_stop"`, `stop_id`, `stop_code`, `cited_stops`,
 `transition`, `target_digest`, the gate's `obligations` as
 `{code, explanation}`, `report_path` and `report_artifact`, and it sets the
-study to the destination stage with `status: in_progress` and no waiting
-marker. A move into `write` also records the draft workspace when no draft
-record exists and the metadata permits it, as `exactory-lab state set` does.
-After the commit the command replaces the report (`recorded: true`) and renders
-the views. The same request replays its receipt and restores the report.
+study to `write` with `status: in_progress` and no waiting marker. The move
+also records the draft workspace when no draft record exists and the metadata
+permits it, as `exactory-lab state set` does. After the commit the command
+replaces the report (`recorded: true`) and renders the views. The same request
+replays its receipt and restores the report. A store that holds an automatic
+`gate_override` needs plugin 0.81.0 or later: the released 0.80.0 opens such a
+store and takes a snapshot, but its `exactory-research status` fails with
+`KeyError: 'instruction'`.
 
 `gate_override_report` before the commit means that the local report could not
 be written; nothing moved. Repair the path and run the same request again.
@@ -326,18 +366,24 @@ request again. A store refusal after the pending report was written, for
 example `stale_revision` or `storage_io`, leaves the pending file, named as
 `report_path` in the details, and moves nothing; `status` and `next` list it
 under `unrecorded_overrides` with `authority: "harness"` and
-`recorded: false`. Run the same request again when the store takes writes.
+`recorded: false`. Keep the payload and the request id. After
+`stale_revision`, read the current revision from `status`. Then run the check
+and the command again with that revision and the same request id: the request
+was not committed, and the store refuses the old revision again. After
+`storage_io`, run the same request again when the store takes writes. Only a
+committed request is replayed with its original revision.
 
 What the pass does not do: every gate keeps refusing and keeps reporting what
 is unmet; no review, score, acceptance or decision record is created; the
 record of the pass permits no `exactory-lab state set` move, because it made
 its move when it was recorded; and no public write is sent. After the move to
 `write`, draft in `draft/` as [Go on through the direct paths](#go-on-through-the-direct-paths)
-describes, and `manuscript` keeps refusing. After the move to `deposit`,
-prepare the PDF; the deposit itself needs the user's recorded instruction
+describes, and `manuscript` keeps refusing. A later deposit needs the user's
+recorded instruction
 ([Public writes after an automatic pass](#public-writes-after-an-automatic-pass)).
-A second automatic pass of the same gate, also after a return to that stage,
-is refused with `gate_override_user_required`: finish the independent work,
+A second automatic pass of the same hop, under either gate name and also after
+a return to `experiment`, is refused with `gate_override_user_required`: finish
+the independent work,
 report the stop, and pass it only on the user's instruction through
 `gate-override`.
 
@@ -347,16 +393,16 @@ The refusal codes and the next action:
 | --- | --- | --- |
 | `gate_override_invalid` | The payload has another field, or `stop_id` is not text. | Send `{"stop_id": ...}` only. |
 | `gate_override_stop_missing` | No `review_series_stop` record has this id. | Use the `stop_id` of the last line of `review-series`. Without one, report the stop. |
-| `gate_override_stop_untrusted` | The record is not the one that the driver wrote: its receipt, its recorded action, its progress or its successful dispatch does not check. | Check the record (`record-check`) and report the stop. Only the user's instruction passes it. |
+| `gate_override_stop_untrusted` | The record is not the one that the driver wrote: its receipt, its retry evidence, its recorded action, its progress or its successful dispatch does not check. | Check the record (`record-check`) and report the stop. Only the user's instruction passes it. |
 | `gate_override_stop_class` | The stop is a `waiting` or a `decision` stop; `stop_code` and `stop_class` are in the details. | Follow its schedule, or report it. |
-| `gate_override_retry_pending` | The retry schedule has not ended. | Let the harness finish its schedule: run `review-series` again. |
-| `gate_override_internal_only` | The stop binds no supported hop: another stage, another role, or no study. | Report the stop. A public write needs the user's instruction. |
+| `gate_override_internal_only` | The stop binds no supported hop: a `manuscript` review at `evaluate` (`scope: null`), an older stop with a `publication` scope, another stage, another role, or no study. | Report the stop. A public write needs the user's instruction. |
 | `gate_override_stop_stale` | The stage, the review target or the chain's next action changed since the stop. | Read `status`, then continue or reconcile the current review. A new stop of the current chain replaces the stale one. |
-| `gate_override_other_obligations` | The gate owes something besides the prevented review: a decision, a rejecting review, the round gate. The details list the obligations. | Resolve them through the ordinary workflow, or report the stop. A missing decision is not a missing review. |
+| `gate_override_other_obligations` | The gate owes something besides the prevented review, for example a decision; the details list the `obligations`. Or a retained readiness review of the target rejects it or has a failed check; the details name the `review_id`. | Resolve them through the ordinary workflow, or report the stop. A missing decision is not a missing review. |
+| `gate_override_gate_ready` | The gate lists no obligation: it is ready. | Make the ordinary move with `exactory-lab state set`. No pass is needed. |
 | `gate_override_reviews_uncovered` | A missing review has no qualifying stop of its own. | Run `review-series` on that review. One stopped reviewer waives no other. |
-| `gate_override_user_required` | An automatic pass of this gate is already recorded. | Report the stop. The user's instruction passes it through `gate-override`. |
+| `gate_override_user_required` | An automatic pass of this hop is already recorded, under this gate name or the other one. | Report the stop. The user's instruction passes it through `gate-override`. |
 | `gate_override_budget_exhausted` | A budget is spent. | Report the stop. A recorded budget for further work, or the user's instruction, is needed; the pass adds no calls, units or executions. |
-| `gate_override_quality_condition` | The current intent states a quality condition of the user. | Keep it binding: obtain the reviews through the ordinary workflow, or report the stop. |
+| `gate_override_quality_condition` | The current intent states a quality condition of the user. The pass does not test whether the condition is met. | Keep it binding: obtain the reviews through the ordinary workflow, or report the stop. A met condition enables no automatic pass; the user's instruction that covers this stop passes it through `gate-override`. |
 | `gate_override_report` | The local report could not be written. Before the commit, nothing moved; with `override_id` in the details, the pass is recorded. | Repair the path and run the same request again. |
 
 ### Public writes after an automatic pass
@@ -364,10 +410,16 @@ The refusal codes and the next action:
 Once the store holds an override with `authority: "harness"`, or the directory
 `.exactory/automatic-passes/` exists in the workspace, every write that
 `exactory` or `exactory-draft` sends from that workspace needs the user's
-recorded instruction. The transports check it before any request goes out:
+recorded instruction. The transports find the directory themselves, from the
+current directory upward to the nearest workspace root: a workspace that kept
+only `.exactory/automatic-passes/`, without a store or draft files, is checked
+too, and a separate workspace nested inside such a workspace is not bound by
+the parent's directory. The transports check the instruction before the write
+goes out:
 
-- `exactory` checks every request whose method is not GET or HEAD, except the
-  sign-in requests `POST /api/v1/email-codes` and `POST /api/v1/api-keys`.
+- `exactory` checks every request whose method is not GET or HEAD, except a
+  request to `/api/v1/email-codes` or `/api/v1/api-keys`, which the sign-in
+  commands send with POST.
   Three writes have a named gate: `POST /api/v1/verifications`
   (`exactory submit`) has `submitted`, `POST /api/v1/verifications/<id>/verdicts`
   (`exactory verify`) has `verification`, and `POST /api/v1/math-problems`
@@ -375,24 +427,50 @@ recorded instruction. The transports check it before any request goes out:
   Grand Challenge, a proof, a link, has no named gate and is covered only by an
   override whose `public_action` is its exact `METHOD /path`.
 - `exactory-draft` checks every request to Zenodo whose method is not GET,
-  HEAD or OPTIONS: the deposit, its files and its publication, `reconcile` and
-  `attach-problem`. The gate `publication` covers them; `public_action` does
-  not.
+  HEAD or OPTIONS: the record creation, each file upload, the metadata update,
+  a new version, the publish, and the Zenodo writes of `reconcile`, each by its
+  `METHOD` and URL path without the origin, for example
+  `POST /api/deposit/depositions`. An override of the gate `publication`
+  covers them all; an override with `public_action` covers the one write that
+  it names, so a deposit under such overrides needs one per write. Attaching
+  a published record to a problem (`deposit
+  --math-problem` after the publish, and `attach-problem`) sends no Zenodo
+  request: it runs `exactory link-problem-paper`, a write of `exactory` with
+  no named gate, `POST /api/v1/math-problems/<problem id>/papers`. When the
+  user's instruction covers the deposit and the attachment, record both: one
+  override with `gate` `publication`, and one with that exact `public_action`.
 
 An override covers a write when it has `authority: "user"`, recorded with
 `gate-override` or as an entry of `.exactory/unrecorded-overrides.jsonl`, and
 either names the write's gate without a `public_action`, or carries the
 write's exact `public_action`. An override with `public_action` covers that
-one action only, so record the four named writes with their gate and without
-`public_action`; the managed path of `submit`, `verify` and `deposit` reads
-only the gate. An override of `publication` covers no report, challenge,
-proof, vote or post. Otherwise the command refuses with
-`gate_override_public_write` before any request is sent; the details carry
-`gate`, `public_action` (the exact action of the refused write) and
-`next: "exactory-research gate-override"`. Then follow
+one action only and none of the other writes of its gate. `submit` and
+`verify` check their exact action on the managed path too, so either form
+covers them. The managed path of `deposit` admits an override of the gate
+`publication` or any override with a `public_action`, and each Zenodo write
+then checks its own exact action. An override of `publication` covers no
+report, challenge, proof, vote or post. Otherwise the command refuses with
+`gate_override_public_write` before the write is sent. A read before the
+write, for example the task fetch of `exactory verify`, still happens. The
+details carry `gate` and `public_action`, and either can be null. A write with
+no named gate has `gate` null. The managed path of `deposit` passes no
+`public_action`, because its concrete writes are not chosen yet. The details
+carry `next: "exactory-research gate-override"`, except the refusal of an
+unreadable store (below), whose recovery is the same command. On a managed
+path that saved an intent, a refusal after the intent claimed a step leaves no
+pending remote step: the intent keeps an observation of kind
+`local_authority_refusal` with the code and no response, and the same command
+resumes the intent once the instruction is recorded. Then follow
 [Report the stop](#report-the-stop) and, with the user's words,
-[Record the override](#record-the-override) with that gate or that
-`public_action`. When pinned words of the user already cover the write, record
+[Record the override](#record-the-override) with that gate, or, when `gate` is
+null in the details, with `gate` `publication` and that exact `public_action`:
+
+```json
+{"id": "public-report-1", "gate": "publication", "public_action": "POST /api/v1/reports",
+ "instruction": "context/instruction.txt", "reason": "The user's instruction covers this report."}
+```
+
+When pinned words of the user already cover the write, record
 their scope and continue; do not ask again. When the store cannot be read and
 `.exactory/automatic-passes/` exists, only an entry of the local log covers
 the write. Before any automatic pass, the publication commands run as before.
@@ -567,10 +645,18 @@ passes them.
   pass the store does not hold, with `authority: "harness"`, `recorded: false`
   and its `report_path` (`gate`, `stop_id` and `stop_code` read `unknown` when
   the file cannot be read). The `--summary` views show at most three of each,
-  the text cut at 120 characters, `stop_id` at 96 and at most six codes, and
-  count the omitted ones.
-- `final/overrides/<id>.json` holds each recorded override in full, rendered
-  after each recording command and by `export --kind outputs`.
+  fewer when the view's byte bound needs it, and count the omitted ones. An
+  entry keeps `id`, `gate`, `stop_code`, `transition`, the instruction text or
+  `stop_id` with `authority`, `public_action` and at most six obligation
+  codes. The text is cut at 120 characters and `stop_id` at 96, and
+  `truncated_fields` names the cut fields. The summaries omit `cited_stops`,
+  `report_path` and `recorded`: read them in the full `status` or `next`.
+- `final/overrides/<file>.json` holds each recorded override in full, rendered
+  after each recording command and by `export --kind outputs`. The file is
+  named by the id when the id is a portable file name. An automatic id holds
+  `:`, so its file is `id-<the first 32 hexadecimal digits of the SHA-256 of
+  the id>.json`, and `final/index.json` maps each file to its id
+  ([Final and intermediate outputs](research-cli.md#final-and-intermediate-outputs)).
 - The `Managed record skipped` line of the publication commands names the ids.
 - An archive that `exactory-draft package` builds after the override holds
   the override records under `managed-record/gate_override/` and their
@@ -582,7 +668,8 @@ passes them.
   `exactory-draft deposit --sources` and the deposit is published.
 - A deposit made while the store or the local log holds an override on the
   user's instruction adds one paragraph to the record's description on Zenodo,
-  after the authorship disclosure. It names the gates of those overrides only.
+  after the authorship disclosure. It names the gates of those overrides only,
+  and an override with a `public_action` is not counted among them.
   It says what the record shows and what it does not: "This paper
   was deposited from a workspace of a research harness that checks each step
   of the work before the next one. Some of these checks require independent
@@ -595,10 +682,33 @@ passes them.
   is named `unknown` among the checks.
 - A deposit made while the store holds an automatic pass, or while
   `.exactory/automatic-passes/` holds a pending report, adds one more paragraph
-  per entry: "Automatic continuation entry: gate=<gate>; defect=<stop code>;
-  stop=<stop id>; store-confirmed=<true or false>. Review approval is
-  separate." `store-confirmed` is `false` for a pending report whose pass the
-  store does not hold.
+  per entry, after the paragraph above: "This paper was deposited from a
+  workspace of a research harness that checks each step of the work before
+  the next one. Some checks require independent reviews. The workspace has an
+  automatic-continuation entry for the check <gate>, with stop identifier
+  <stop id> and code <stop code>. A readable entry says that the harness
+  classified the stop as a defect of its own and proposed advancing the work
+  without the missing reviews. <confirmation> An entry named unknown could not
+  be read. This entry supplies no review approval or permission to publish,
+  and does not show whether the missing reviews were completed later." The
+  confirmation sentence is "The stored record confirms that the harness
+  advanced the study to its next internal stage." for a recorded pass, and
+  "Only a local report was available; a committed continuation could not be
+  confirmed." for a pending report whose pass the store does not hold.
+- A deposit made while the store or the local log holds a user override with
+  a `public_action` adds one paragraph per such override, after the paragraphs
+  above (the deposit reads them apart, as `public_action_overrides` with `id`,
+  `public_action` and `recorded`): "The workspace has a user-instruction entry
+  <id> for the exact public write <public_action>. The agent recorded that the
+  user instructed this write. <confirmation> This entry does not pass a
+  research gate or show who the user was, whether the instruction was used, or
+  whether the write completed." The confirmation sentence is "The instruction
+  is in the stored record." for a recorded override, and "Only a local
+  fallback entry was available; recording in the store could not be
+  confirmed." for an entry of the local log. The paragraph quotes no
+  instruction text. A local entry whose `public_action` is not an exact
+  `METHOD /path` is read as an unreadable entry and named `unknown` among the
+  checks.
 - In the math-solver controller, `search status --json` and
   `final/math/attack/objective.json` list each disposition with the user's
   words and its provenance. The attempt summary of `search deliver-attempt`
