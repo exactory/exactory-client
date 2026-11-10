@@ -49,6 +49,10 @@ def record_candidate(store, payload, *, expected_revision, request_id):
         strategy.choice(source["kind"], SOURCE_KINDS, "Candidate source kind", "invalid_input")
         text(source["reference"], "Candidate source reference")
         strategy.evidence(records, artifacts, source["evidence"], required=False)
+        if source["kind"] == "phenomenon" and not any(
+                reference.get("kind") == "record" and reference["record_kind"] == "forming_call"
+                for reference in source["evidence"]):
+            raise ResearchError("problem_candidate_forming_missing", "A phenomenon candidate must cite at least one forming call")
         strings(value["neighbours"], "Candidate neighbours")
         problem_rubric.validate_grades(value["potential"], potential=True)
         if not isinstance(value["notes"], str):

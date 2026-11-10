@@ -824,6 +824,21 @@ def _build_candidates(records, artifacts, inputs):
     return files
 
 
+def _build_forming(records, artifacts, inputs):
+    """Forming calls and all outcomes, with earlier outcomes linked to their successors."""
+    successors = {row["previous"]: key for key, row in records.get("form_outcome", {}).items()
+                  if row["previous"] is not None}
+    files = {}
+    for kind, folder in (("forming_call", "forming"), ("form_outcome", "form-outcomes")):
+        for key, record in records.get(kind, {}).items():
+            entry = _describe(kind, key, record)
+            if kind == "form_outcome" and key in successors:
+                entry["superseded_by"] = successors[key]
+            files["intermediate/problem/" + folder + "/" + _format_file_name(key) + ".json"] = ViewFile(
+                _encode_record(record, entry), entry)
+    return files
+
+
 _PROBE_KINDS = ("probe_intent", "probe_launch", "probe", "probe_recovery")
 
 
@@ -952,6 +967,7 @@ VIEW_GROUPS = (
     ViewGroup("review_routes", ("review_route", "review_probe_invocation", "review_route_probe"), (), _build_routes),
     ViewGroup("review_usage", ("review_budget",), CHARGE_KINDS + ("review_observation",), _build_review_usage),
     ViewGroup("problem_candidates", ("problem_candidate",), (), _build_candidates),
+    ViewGroup("problem_forming", ("forming_call", "form_outcome"), (), _build_forming),
     ViewGroup("lab_probes", _PROBE_KINDS + ("probe_artifact", "probe_artifact_pin", "local_artifact"), (),
               _build_probes),
     ViewGroup("lab_runs", _RUN_KINDS + ("execution",), (), _build_runs),

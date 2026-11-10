@@ -319,6 +319,8 @@ def status_summary(report):
                    "grand_challenge": _summarize_grand_challenge(report.get("grand_challenge"))})
     if report.get("orchestration") == "problem_creation":
         result.update(candidates=report["candidates"], slate_id=_short(report["slate_id"], 64))
+        if "forming" in report:
+            result["forming"] = report["forming"]
     slots = report.get("slot_outcomes") or report.get("review", {}).get("slot_outcomes")
     if slots:
         result["review_slots"] = dict(occupied=slots["occupied"],

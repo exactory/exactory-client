@@ -37,6 +37,7 @@ from .review_budget import record_budget
 from .probe import record_probe_intent, record_probe, summarize_probes
 from .record_check import DEFAULT_TIME_BUDGET_SECONDS
 from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata, problem_evidence
+from . import problem_forming
 from . import overrides
 from .automatic_overrides import record_automatic_override
 from .problem_objection_carry import carry_objections
@@ -45,6 +46,8 @@ from .problem_objection_carry import carry_objections
 OPERATIONS = {
     "problem-init": problem_claims.initialize_problem,
     "problem-candidate": problem_candidates.record_candidate,
+    "forming": problem_forming.record_forming,
+    "form-outcome": problem_forming.record_form_outcome,
     "problem-slate": problem_candidates.record_slate,
     "problem-objections-carry": carry_objections,
     "problem-statement": problem_claims.record_statement,
@@ -614,6 +617,8 @@ def status_report(store, *, counters=False):
                         literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                         candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
                         next=upcoming, review=review, advisories=advisories)
+            if records.get("forming_call"):
+                result["forming"] = problem_forming.count_forming(records)
             if records.get('problem_objection_carry'):
                 result['problem_objection_carries'] = [
                     {key: carry[key] for key in ('id', 'source_workspace', 'source_origin', 'source_revision')}
