@@ -23,7 +23,10 @@ checks, votes, status declarations, deposits of write-ups and rule-violation rep
 An exploration starts from a field question, from a phenomenon that appears in several places,
 or from a simple thought experiment, and the record states which. When the record forms a
 statement itself, instead of finding it in a source, the Ideate tool records how: each tentative
-statement with its alternatives and its planned checks, and how each ended ("Exploration").
+statement with its alternatives and its planned checks, and how each ended ("Exploration"). The
+value record of every problem holds the accounts of its statement: the conjectured answer with
+the evidence for or against it, the nearest alternatives with what the statement asserts beyond
+each, and the relations of the statement, each fact entered once ("Value and the rubric").
 
 Work like a researcher, not like a form filler. A candidate question earns its place by what the
 field would gain from an answer, shown with sources read in full, computations whose scope is
@@ -174,9 +177,13 @@ its value case, not from its surface form; an added value argument changes neith
 nor the exclusion. A question that no refutation concerns is not affected.
 
 The statement that replaces a refuted one is such a question only when it meets three
-conditions. Apply them before you form a statement in place of a refuted one and before you
-select one as a candidate. Each is necessary and none is sufficient: the purpose, read as
-above, still decides.
+conditions. Each is necessary and none is sufficient: the purpose, read as above, still decides.
+The conditions are part of the reading of rubric item A7. When the accounts of a statement hold
+a replacement part ("The accounts", in "Value and the rubric"), each result reviewer receives
+them in the replacement paragraph of its prompt (`exactory-problem-replacement-v1`), and an
+adjudicator of A7 receives them with the definition of A7. The reviewers judge the statement by
+them. Form and select a statement posed in place of a refuted one so that it meets them, and
+record its replacement part.
 
 1. The statement speaks about every object of the refuted statement, the counterexamples among
    them, and says something of substance about them.
@@ -256,8 +263,8 @@ tool call:
   exploration; they are how a candidate is tested before it costs a selection.
 - A bounded math-solver objective of its own proves or refutes a tentative statement, a
   stronger form of it, or a relation between two statements. Its accepted results are evidence
-  that the outcome of a form or a value paragraph cites ("The attempt", "Objectives beside the
-  attempt").
+  that the outcome of a form or an entry of the accounts cites ("The attempt", "Objectives
+  beside the attempt").
 
 The Ideate tool has two commands in a problem record, `exactory-research forming` and
 `exactory-research form-outcome`. Use them whenever the record forms a statement itself instead
@@ -306,7 +313,7 @@ payloads and every refusal.
   (`problem_form_evidence_missing`). `refuted` can rest on a probe that exhibits the
   counterexample, stated in the item's `counterexample` (`problem_form_counterexample_missing`
   otherwise), because a reader can check a counterexample; the outcome then records
-  `refutation_basis: "exploratory_computation"`. A value paragraph cannot cite a probe, so a
+  `refutation_basis: "exploratory_computation"`. A probe supports no fact of the accounts, so a
   refutation that the value case needs later rests on admissible evidence: an accepted result of
   a bounded solver objective on the form, or a full reading of a work that proves it.
 
@@ -599,7 +606,10 @@ formed it.
    are its origin: list each probe that a forming call used in `probes`, with the role `origin`
    for a form that was chosen with its result in view and `observation` otherwise. A probe
    recorded after a form is no origin of it (`problem_form_origin_late`), and no probe result
-   earns credit as a test.
+   earns credit as a test. A run earns that credit for the statement of the record, and only
+   when its plan declared the test before the execution ("A run as a test of the statement").
+   A run exists for the current statement only, so a form is tested in this sense once it is
+   the statement of the record.
 6. The attacks. Attack each form that you expect to pose, and its stronger forms, before
    anything is posed. Look for counterexamples with probes. With bounded solver objectives of
    their own ("The attempt", "Objectives beside the attempt"), try to prove that a stronger form
@@ -616,8 +626,12 @@ formed it.
    corrected form. Record the other corrections that you compared as forms with the purpose
    `alternative`, and give the earlier form an outcome with the disposition `superseded` that
    names the corrected form. A correction of a form that the record held as its expected
-   statement and that was refuted is a statement posed in place of a refuted one: apply the
-   three conditions of "Exploration" before you form it.
+   statement and that was refuted is a statement posed in place of a refuted one: form it so
+   that it meets the three conditions of "Exploration", and enter the replacement part in the
+   accounts of its value record ("The accounts"). When a run made a planned check of the
+   earlier form, give the `execution_id` of that run in its `correction_checks` entry; a run
+   stays a test of the corrected statement only through that entry ("A run as a test of the
+   statement").
 8. The derived candidates. Candidates derive from every outcome. A form that stands after its
    attacks is a candidate question. A refuted form is material for questions about what the
    refutation reveals, under the absolute principle. A form that was proved, or that known
@@ -698,7 +712,14 @@ significance.
    the current candidates before you record the slate (`problem_slate_review_required`
    otherwise). A candidate formed in this record is one of kind `phenomenon`, or one whose
    `source.evidence` cites a forming call or a form outcome; a reviewer judges such a statement
-   before a formulation, an attempt and an openness finding are spent on it. Otherwise the
+   before a formulation, an attempt and an openness finding are spent on it. The prompt of
+   that slate review carries the slate paragraph (`exactory-problem-slate-forming-v1`). It asks
+   the reviewer which form of gain the candidate expects, what the statement would gather and
+   on which separate grounds, how the statement would stand to the conjunction of what it
+   gathers, whether a nearer alternative already gives what the candidate names, and which
+   part of its strength would be neither supported nor used. The reviewer reads the
+   `source.reference` and the `observation`; the packet names the forming records and does not
+   deliver their content, so write both for that reader. Otherwise the
    review is optional: obtain it when the comparison leaves you uncertain between candidates,
    or a candidate's standing rests on a judgment you cannot make yourself. Assign it with
    `review-assignment`, role `slate` and `dossier_id: null`, to one of the
@@ -745,17 +766,36 @@ normal case, not an exception.
 
    Keep the whole text, with the line and the details, in `statement`. The reviews, the openness
    finding, the attempt and a formal statement concern all of it.
+
+   Among equivalent forms of the statement, pose the one that allows a reader more derivations
+   and more checks. Simplicity stays a preference.
 2. Declare in `neighbours` every neighbouring formulation that openness and value must cover:
    strengthenings, relaxations, model versions, siblings and the next parameter. A neighbour
-   you do not declare is a neighbour the openness finding does not check.
+   you do not declare is a neighbour the openness finding does not check. The declared
+   neighbours are the nearest alternatives that you know at the formulation: the accounts give
+   each of them a role ("The accounts").
 3. Where it is useful and feasible, add a `formal_statement` (`{language, text}`). When you
    supply one, make sure that it expresses the intended mathematics: its correspondence to the
    statement is assessed under A1, and a passing native check of a weaker formal claim does not
    establish it.
-4. Record a changed statement or changed criteria under a new statement id. After a change,
+4. Record a changed statement, changed criteria or changed neighbours under a new statement id,
+   and name in `revises_statement_id` the statement record that the new one revises
+   (`problem_statement_missing` when the store holds no statement with that id). The harness
+   reads these references to list the runs on the earlier texts of the statement beside the
+   runs on the current text. The text of a statement is its `statement` and its
+   `resolution_criteria`. A revision that keeps both character for character, such as a change
+   of the declared neighbours, keeps the standing of every check. A revision that changes
+   either is a correction: a run on the earlier text is then the origin of the corrected text,
+   except under the lineage rule of "A run as a test of the statement". After a change,
    reassess the openness finding, the attempt, the value arguments and the reviews that the
    change affects, and reuse the work that still applies.
-5. By this step the slate's bars have been requested, so a candidate of another class does not
+5. When an alternative is named after the formulation, by a reviewer's objection, by a reply or
+   by your own work, the statement record stays as it is. Record the alternative as a form
+   with `forming` (purpose `alternative`), search for its status, and enter it in the accounts
+   of a new value record with its `form_id` and the `search_ids` of those searches. Its status
+   then rests on those searches, which the result reviewers receive, and the openness finding
+   does not cover it. Declare it as a neighbour when the text next changes.
+6. By this step the slate's bars have been requested, so a candidate of another class does not
    restart the exploration. Take it up in a new record of its class with "Carry a reviewed
    candidate to another record" in "Exploration". Run the carry there before its first slate
    review. Formulate the candidate there after the bars, the focused slate review and the slate.
@@ -841,7 +881,7 @@ form, one stronger form or one relation.
    objective.
 3. Cite an accepted `proof`, `reduction`, `obstruction` or `counterexample` of the objective
    as `{kind: "result", native_attempt_digest, acceptance_id, purpose, extension_reason}`, in
-   the evidence of a form outcome or of a value paragraph. `native_attempt_digest` names the
+   the evidence of a form outcome or of an entry of the accounts. `native_attempt_digest` names the
    latest delivered snapshot of the objective: an earlier snapshot is refused with
    `problem_result_superseded`, which names the latest one, and an objective that was not
    delivered into this store with `problem_result_unbound`. `acceptance_id` names an accepted
@@ -851,8 +891,11 @@ form, one stronger form or one relation.
 4. Such a result supports exactly its conclusion, within the claim of its objective. It is no
    attempt on the exact statement: record no `problem-attempt` for it, and a proof or a
    counterexample of that objective does not resolve the current statement. When the solver
-   delivers a later snapshot of the objective, the gate lists `problem_result_superseded` for
-   a value record that cites the earlier one, until a new value record cites the latest.
+   delivers a later snapshot of the objective, a value record that cites the earlier one is
+   stale: the gate lists one obligation, `problem_value_stale`, which names the later snapshot
+   among its `changes`, until a new value record cites the latest ("Reviews and the
+   decision", step 5). For a value record without accounts, which an earlier release
+   recorded, the gate lists `problem_result_superseded` instead.
 
 The attempt on the exact statement keeps the steps above, and a relation of the statement can
 still be proved as an obligation inside it.
@@ -1101,12 +1144,19 @@ still be proved as an obligation inside it.
 ## Value and the rubric
 
 The value case says why a resolution matters and where the question stands, with every material
-premise bound to evidence. The rubric is how the harness grades its own case before the reviewers
-grade it; the codes and grades stay in the assessment record, out of the public text.
+premise bound to evidence. Its accounts say what the record established about the statement:
+what each answer would settle, what speaks for the answer that the record expects, and why this
+statement was posed and not one of its nearest alternatives. The rubric is how the harness
+grades its own case before the reviewers grade it; the codes and grades stay in the assessment
+record, out of the public text.
 
-1. Write the motivation and the current state as ordered paragraphs `{text, evidence}` and record
-   them with `exactory-research problem-value`.
-2. Give every paragraph nonempty evidence of these kinds:
+1. Record the value case with `exactory-research problem-value`:
+   `{id, statement_id, accounts, motivation, current_state}`. `accounts` holds the accounts of
+   the statement ("The accounts", below). `motivation` and `current_state` are ordered
+   paragraphs `{text, evidence}`. Every new value record holds accounts
+   (`problem_accounts_required` otherwise). A value record of an earlier release has none and
+   stays valid as it is.
+2. Give the entries of the accounts evidence of these kinds:
    - `reading`: a full reading of this store.
    - `computation`: an admitted, reconciled and assessed computation. Run it through `cycle`,
      `admit`, `bind-run`, `exactory-lab run`, `reconcile-run` and `assess`, with the current
@@ -1121,14 +1171,28 @@ grade it; the codes and grades stay in the assessment record, out of the public 
      `obstruction` or `counterexample` of any solver objective delivered into this record, as
      `{kind: "result", native_attempt_digest, acceptance_id, purpose, extension_reason}` ("The
      attempt", "Objectives beside the attempt"). For the second shape the result reviewers
-     receive the claim of the objective beside the accepted claim.
-3. Do not cite a probe output as value evidence; a probe explores, it does not support.
+     receive the claim of the objective beside the accepted claim, and they compare both with
+     the relation that the entry states.
+3. A paragraph of the motivation or of the current state cites the entries of the accounts that
+   carry what it says, each as `{kind: "account", id}`. The harness derives the delivered
+   evidence of the paragraph from those entries. A paragraph whose cited entries are all
+   expected relations is refused (`problem_value_expected_only`). A paragraph cites a full
+   reading directly, as `{kind: "reading", version_id, reading_id}`, only for a fact about the
+   field that no part of the accounts holds, such as the activity of a line: set
+   `field_fact: true` in that paragraph (`problem_value_account_required` otherwise). Do not
+   cite a probe as evidence of a fact; a probe explores, it does not support.
 4. Support every material factual premise with one of these kinds of evidence, within its
    demonstrated scope. Name the premises and the inferential steps of every conceptual argument;
    a reader must be able to see where the argument could fail.
 5. Explain the mathematics and its evidential limits in the motivation and the current state:
    the ground and the criterion that carry the primary account, the strongest objection and its
    answer, what the attempt proved, left unresolved or demonstrated, and the accessibility.
+   These paragraphs are the public text, and they explain in prose what the accounts hold: the
+   short consequences that the record proved, the checks that a reader can make with what each
+   can show, the stronger forms that are known to fail, and the conjectured answer with its
+   grounds, kept apart from the question. State only what a cited entry carries. Do not use the
+   name "conjecture of the abc kind", and do not compare the statement with a named conjecture
+   as a claim about its standing. The accounts stay in the record.
 6. Record the self-assessment with `exactory-research problem-assessment`: `grades` for every
    rubric item, and for each item in `items` an evidence reference and a note. Use one of three
    evidence shapes: a held artifact descriptor `{path, sha256, size, media_type}`,
@@ -1138,6 +1202,237 @@ grade it; the codes and grades stay in the assessment record, out of the public 
 7. Name in `primary` the ground (`B1` or `B2`) and the criterion (`V1` to `V8`) that carry the
    primary account.
 8. When the statement changes, record a new assessment.
+
+### The accounts
+
+The accounts are a part of the value record, beside the motivation and the current state. They
+keep the conjectured answer apart from the question. The
+[CLI reference](../../docs/research-cli.md#the-accounts-of-a-value-record) gives every field
+and every refusal, and `exactory-research example problem-value` prints a payload.
+
+Enter each fact once, in the part where it belongs, with its `scope` and its `date`. The date
+is the day on which the fact became available: `unknown`, `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or a
+timestamp with a timezone. The harness derives the date when every evidence reference of the
+entry carries one (the year of a read work, the day of an accepted result). Enter it otherwise
+(`problem_account_date_missing`). Every entry has an `id` of its own
+(`problem_account_id_conflict`). Where a fact bears on a second part, the second entry cites
+the first by its id in `evidence_ids` and does not repeat the evidence
+(`problem_account_reference_missing` for an unknown id, `problem_account_reference_cycle` for
+references that lead back to their entry). `evidence` holds references of the kinds of step 2.
+A probe supports no fact of the accounts. Only a check that is an observation, an origin or a
+planned check can cite one, as `{kind: "probe", id}`.
+
+Every problem holds the first tier:
+
+- `answer`, the conjectured answer: `{id, status, text, evidence_ids}`. The status is `none`,
+  `forecast` or `conjectured`. Conjecture an answer only when a fact speaks for it against a
+  named alternative: a `conjectured` answer names at least one `answer_evidence` entry with the
+  direction `for` (`problem_answer_evidence_missing`). Where nothing speaks for an answer,
+  record `none` with a null `text`, or `forecast`, an answer stated without grounds. The
+  problem is then posed as a question whose worth is what each answer would settle.
+- `answer_evidence`, the evidence for or against the answer: entries
+  `{id, kind, direction, alternative_id, fact, scope, evidence, evidence_ids}` with the
+  optional `date` and `check_id`. `kind` is an open value `{kind, description}`. The described
+  kinds are a theorem in a neighbouring setting, a theorem on a subclass, a derivation from or
+  an equivalence with a statement that stands on independent grounds, `passed_test`, and a
+  doubted consequence. `direction` is `for` or `against`. `alternative_id` names the nearest
+  alternative that the fact tells against (`problem_answer_alternative_missing`).
+- `boundaries`, the evidence that locates boundaries: each fact that shows a relaxation or a
+  hypothesis to be necessary, for example a stronger form that you wrote to test a hypothesis
+  and refuted. Entries `{id, fact, scope, evidence, evidence_ids, argument}`. `argument` is the
+  argument that ties the fact to the statement posed, or null. The entry needs admissible
+  evidence (`problem_boundary_evidence_missing`).
+- `explanatory_use`, the evidence of explanatory use: each fact that shows what the statement
+  organizes, for example a known theorem that it yields by a new derivation. Entries
+  `{id, fact, scope, evidence, evidence_ids, answer_argument}`. `answer_argument` is the
+  argument of the fact for the answer, or null (`problem_explanatory_evidence_missing` without
+  evidence).
+- `alternatives`, the nearest alternatives: one entry `{id, neighbour, form_id, role}` for
+  every declared neighbour, with `neighbour` set to its exact text
+  (`problem_neighbour_role_missing`), and one for every alternative that was named after the
+  formulation, with its `form_id` and the `search_ids` that give its status
+  (`problem_alternative_missing`, `problem_account_search_missing`). The role is `stronger`,
+  `weaker`, `same_assertion` (the same assertion with another constant or exponent),
+  `other_assertion` (another assertion about the same objects) or `no_alternative`, for a
+  declared neighbour that could not be posed in place of the statement, with the `reason`. A
+  `stronger` or a `weaker` alternative names in `relation_id` the relation between it and the
+  statement (`problem_alternative_relation_missing`). A `stronger` alternative gives the
+  `reason` why it was not posed: the outcome of the attack on it, or the means that were
+  lacking. A `weaker` alternative gives the `surplus`,
+  `{description, status, evidence_ids, relation_ids}`: what the statement asserts beyond it,
+  and whether that surplus is `supported`, `used`, `supported_and_used` or `neither`.
+  `supported` cites an `answer_evidence` entry with the direction `for` whose alternative is
+  this same alternative (`problem_surplus_support_missing`). `used` cites a relation whose
+  consequence is credited to the statement (`problem_surplus_use_missing`).
+- `strength`, the parts of the strength: exactly four entries
+  `{id, head, description, alternative_ids, no_alternative_reason}`, one for each head:
+  `range_of_instances`, `constants`, `exponents` and `exactness`
+  (`problem_strength_incomplete`). Each names the alternatives that relax that part, or the
+  reason that none exists.
+- `relations`, what is at stake: each relation of the statement to a named statement or body
+  of facts. Entries `{id, relation, target, alternative_id, standing, scope, evidence,
+  evidence_ids, earlier_statement, consequence}` with the optional `date`. `relation` is
+  `implies`, `follows_from`, `equivalent_to`, `incompatible_with`, `strengthens`, `generalizes`
+  or `presents_anew`. `standing` is `established` or `expected`. An established relation cites
+  a full reading, an admitted computation or an accepted result that shows it for the current
+  text (`problem_relation_evidence_missing`). `earlier_statement` is `true` when the target is
+  an earlier statement of the same content. `consequence` is null, or, for a consequence of the
+  statement, `{assertion, instances_or_translation, credited_to, weaker_derivations}`: the
+  assertion of the statement that the derivation uses, the family of instances or the proved
+  translation, and the alternative that the consequence is credited to. Credit a consequence
+  to the weakest named alternative that gives it: `credited_to` is the id of that alternative,
+  or `statement`. A consequence credited to the statement has one `weaker_derivations` entry
+  `{id, alternative_id, status, reason, evidence_ids}` for each alternative with the role
+  `weaker`, with the status `derived`, `not_derived` or `not_attempted`
+  (`problem_consequence_comparison_missing`).
+- `refuted_conjectures`: each refuted conjecture that the question concerns,
+  `{id, statement, identified_by, sources, evidence_ids}`. `identified_by` is `author`,
+  `search` or `reviewer`. `sources` cites the evidence that identifies the conjecture, in the
+  evidence shapes of step 6, and it can be empty only for `author`. `evidence_ids` cites the
+  entries that hold the refuting evidence. Give an empty list when the question concerns no
+  refuted conjecture.
+
+The second tier is required when the record claims a gain or enters a passed test
+(`problem_accounts_tier_two_missing`). It holds `checks`, `gain` and a nonempty
+`search_coverage`. A record of the first tier can also hold `checks`, for its observations
+and for the checks that a reader can make. The parts of the second tier:
+
+- `checks`: each check that the record made or that a reader can make. Entries
+  `{id, target, contradiction, no_contradiction_reason, result, standing, passed,
+  alternative_id, evidence, evidence_ids, independence}` with the optional `date` and
+  `lineage`. `target` is `{kind, description}` with the kind `instance`, `family`,
+  `consequence` or `asymptotic_regime`. Give the outcome that would contradict the statement
+  in `contradiction`, or the reason that no outcome can in `no_contradiction_reason`, and set
+  the other to null. `standing` is `planned`, `observation`, `origin` or `test` ("A run as a
+  test of the statement", below). `passed` is `true` only for a passed test.
+- `gain`: null when the record claims no gain. A claim is `{id, form, claim, relation_ids,
+  separate_grounds, conjunction, establishing_ids, new_object_justification}`. `form` is
+  `common_structure`, `explanatory_relation` or `proved_advantage`. `relation_ids` names the
+  relations that the statement gathers: each is established, and at least one is a
+  consequence credited to the statement (`problem_gain_relations_invalid`). `separate_grounds`
+  holds entries `{id, relation_id, evidence_ids}`, which cite, for a gathered relation, the
+  works that state or study the gathered statement for reasons of its own. `conjunction` is
+  `{status, description, evidence_ids}`: how the statement stands to the conjunction of what
+  it gathers. The status is `proved_equivalent`, `proved_stronger` (in the respect that the
+  description states) or `not_known`, and a proved status cites its evidence
+  (`problem_gain_conjunction_evidence_missing`). `establishing_ids` names the entries whose
+  admissible evidence establishes the gain in its form (`problem_gain_evidence_missing`).
+  `new_object_justification` is null when the objects of the statement are the standard ones
+  of an area. Otherwise it justifies the new definition on grounds other than what the
+  statement gathers.
+- `search_coverage`: entries `{id, purpose, search_ids, unreached}`. The purposes are the
+  searches for earlier statements of the same content (`earlier_statements`), for alternatives
+  (`alternatives`) and for a work that presents one gathered statement as a case of another
+  (`gathered_as_case`). `unreached` says what those searches could not reach, such as lectures
+  and letters.
+
+A gain claim and a passed test need a history. The candidate of the statement cites, in its
+`source.evidence`, a forming call or a form outcome whose form was recorded before the evidence
+of the gain or the plan of the test (`problem_accounts_history_missing`). A statement whose
+candidate cites no forming record can therefore claim no gain and enter no passed test. Record
+the forming work with the Ideate tool when it happens, before the evidence.
+
+The replacement part, `replacement`, is required in two cases (`problem_replacement_missing`).
+The first is a form in the correction chain of the statement that the record held as its
+expected statement (purpose `expected_statement`) and that an outcome records as refuted. The
+second is each entry of `refuted_conjectures`. A replacement entry is
+`{id, refuted_id, form_id, evidence_ids, account}`. It names exactly one refuted statement, by
+`refuted_id` (an entry of `refuted_conjectures`) or by `form_id` (the refuted form), and sets
+the other to null. `evidence_ids` cites entries whose admissible evidence shows the refutation
+(`problem_replacement_evidence_missing`). A refutation that rests on a probe needs a bounded
+solver objective on the refuted form first. `account` says in words how the statement stands
+to the refuted one, against the three conditions of "Exploration". A stronger form that you
+wrote as an alternative, to test whether a hypothesis is necessary, and refuted, enters
+`boundaries` and needs no replacement entry. The purpose of a form, recorded when it was
+formed, says which of the two it is.
+
+The harness adds three things that you do not enter, and the reviewers receive them beside the
+accounts. The first is the list of every run whose plan names the current text of the
+statement, and of every run on an earlier text of its lineage, with the assessed status of
+each failure signal: `observed`, `not_observed` or `unresolved`. Beside each run that the
+accounts enter as a test, it lists the probes and runs that the record held before the plan
+was frozen, with their questions. The second is the history: the forms from which the
+statement descends, with the reason for each correction and the latest outcome of each. The
+third is the counts for that lineage and for the whole exploration: forming calls, forms,
+recorded comparisons, probes and runs. An agreement found among many tries is weighed against
+their number, so the harness copies the counts and you do not state them.
+
+Some entries are shortfalls, and you record them as they are: a surplus that is `neither`
+supported nor used, a derivation that was `not_attempted`, and an `expected` relation. The
+harness accepts them, and the reviewers grade them.
+
+### A run as a test of the statement
+
+A check compares the statement with a fact. For a given text of the statement, its result has
+one of three standings. It is a test when the check could have contradicted the text and was
+fixed before its outcome was known. It is the origin when the text was chosen with the result
+in view. It is an observation otherwise. A probe result is an observation or an origin. Only a
+run can be a test, and only when its plan declared the test before the execution:
+
+1. Search for the outcome in print before the plan: one bounded `search` whose `question` is
+   the quantity that the run computes. Record it, with its coverage.
+2. Record the plan with `cycle`, with the current statement as its objective and a
+   `test_declaration`: `{alternative, excluded_outcome, prior_knowledge, search_id}`. The
+   declaration is frozen with the plan.
+   - `alternative` is an alternative that the record holds before the plan:
+     `{kind: "neighbour", text}` with the exact text of a declared neighbour of the current
+     statement, or `{kind: "form", record_kind: "forming_call", id, form_id}` for a form of a
+     recorded forming call (`problem_test_alternative_missing`).
+   - `excluded_outcome` is the outcome that this alternative excludes. The outcome that would
+     contradict the statement stands among the `failure_signals` of the plan.
+   - `prior_knowledge` is the account of what you knew about the outcome when you froze the
+     plan: one entry `{source: {kind, description}, known}` for each source. Enter these five
+     sources, also when an entry says that nothing was known: `record_computations` (the
+     earlier probes and runs of this record), `inherited_computations` (the computations of
+     the records that this record took material from), `external_computations` (another
+     workspace or a model lane, named with its place), `literature_and_tables`, and
+     `planning_model_recall` (what you, the model that plans the run, recall about the
+     quantity). The kind is an open value, so name a further source in your own words.
+   - `search_id` names the search of step 1 (`problem_test_search_missing` when the store does
+     not hold it before the plan).
+
+   A plan without a declaration is an ordinary plan, and its run is an observation.
+3. Admit, bind, run, reconcile and assess the run as step 2 of "Value and the rubric" states,
+   and give every failure signal of the plan a status in the assessment.
+4. Enter the check in `checks` with the standing `test`: its `contradiction`, its `result`,
+   the `alternative_id` of the alternatives entry that the plan named, the computation in
+   `evidence`, and `independence: {status: "outcome_not_known", reason, prior_knowledge}`.
+   `independence.prior_knowledge` holds one finding
+   `{source_index, status: "outcome_not_known", reason}` for each source of the plan's
+   account, counted from 0. Set `passed` to `true` only when the assessment gives
+   `not_observed` for every failure signal of the plan. A passed test can then stand in
+   `answer_evidence` with the kind `passed_test`: its `check_id` names the check, and both
+   entries name the same alternative.
+
+The harness refuses a check entered as a test (`problem_test_run_invalid`) in these cases: the
+plan carries no declaration that was frozen before the execution; the plan names another text
+than the current statement; the alternative differs from the one that the plan named; a source
+of the plan's account has no finding; an earlier probe or run of the record asked the question
+of the plan word for word; no assessment covers the run; a failure signal of a test marked
+passed is `observed` or `unresolved`. It refuses a test whose candidate cites no form that was
+recorded before the plan with `problem_accounts_history_missing`. When the outcome was known,
+or you cannot establish that it was unknown, enter the check with the standing `observation`. The reviewers judge what the
+harness cannot check: whether an earlier computation covers the tested quantity under another
+question, and what the search found. One thing stays unestablished for every test: that the
+outcome was unknown to the model that planned the run. The reviewers' text says so, and a
+reviewer who knows the outcome from a source or a table says so.
+
+A test tells against the alternative that its plan named, and against no other. When the
+computed outcome contradicts an alternative that was named later, record that alternative as
+refuted by the computation, with `form-outcome`; this needs no standing as a test. A failed
+test stays with its text: the harness lists every run on the current text and on the earlier
+texts of its lineage, whatever the accounts enter.
+
+After a correction, a run on the earlier text is the origin of the corrected text. It stays a
+test of the corrected text only under the lineage rule. The correction form has the exact text
+of the current statement, its `previous` form has the exact text of the earlier statement, and
+the candidate of the statement cites it. The form gives a ground with evidence for the
+correction. Its `correction_checks` entry for the planned check that the run made has
+`was_made: true`, `keeps_prediction: true`, `chosen_with_outcome: false` and the
+`execution_id` of the run. The check entry of the accounts then names
+`lineage: {form_id, check_id}`. The reviewers receive that forming call with the dates of the
+run and of the correction, and they judge the statement that the correction was not chosen
+with the outcome.
 
 ### The rubric
 
@@ -1202,18 +1497,102 @@ judgments. It states the scope of every computational finding. It asserts no com
 before it is observed and no human difficulty or completion time. It keeps the conjectured answer
 apart from the question, with its grounds. It does not call an unresolved attempt an obstruction.
 
+The rubric reads with the accounts as follows. The reading changes no item, level or threshold.
+Where it is stricter than a sentence above, the reading governs. Each result reviewer receives
+it in the accounts paragraph of its prompt (`exactory-problem-accounts-v1`) whenever the value
+record holds accounts, and an adjudicator of A3, priority, calibration or significance receives
+it with the definition of that item. Grade your self-assessment by it.
+
+- Relations. A relation counts as established when a proof in the record, a full reading or an
+  admitted computation within its stated scope shows it for the present text of the statement.
+  Every other relation is expected and supports no premise. The reviewers compare the claim of
+  each cited result with the relation for the present text, so a relation that was proved for
+  an earlier form does not stand for the corrected one.
+- A3. The record says which relation holds between the statement and each earlier statement
+  (an equivalence, a strengthening, a generalization, or a new presentation of existing
+  results), shows it, and names every earlier statement that its searches found. A gain over
+  the list of what the statement gathers is judged whenever the record claims one, and
+  whenever the relations hold two or more established consequences with separate grounds of
+  which at least one is credited to the statement. It is established in one of three forms. A
+  common structure: two or more gathered statements with separate grounds are each derived
+  from one and the same assertion of the statement, by applying it to a family of its instances
+  or through a proved translation; and the record says how the statement stands to the
+  conjunction of what it gathers. Where it is proved stronger in a stated respect, that respect
+  is supported or used as priority requires. Where it is equivalent to the conjunction, or the
+  relation is not known, the record names what the one statement adds and establishes it, for
+  example a construction or a method of proof shown on proved cases of two gathered
+  statements. A statement from which each gathered statement follows through a clause of its
+  own, however the statement is written, gathers them as a list. An explanatory relation: the
+  statement determines facts of one body of knowledge from facts of another, shown on cases in
+  which both were known independently, each with its source and date, and not chosen or
+  adjusted with the outcome in view. Another proved advantage: the record names it and proves
+  it; for reductions under which a named line of proofs reaches results that it does not reach
+  without the statement, more than one is proved. In each form the objects of the statement
+  are the standard ones of an area, or the record justifies the new definition on grounds
+  other than what the statement gathers. A gathered statement counts whichever alternative it
+  is credited to, and the gain is the statement's own when at least one is credited to the
+  statement. A claimed gain that is not established fails A3 until it is shown or withdrawn. A
+  gain that the accounts establish and the record does not claim is a material objection.
+- Significance. The levels grade what each answer to the question would settle. A consequence
+  is credited to the weakest named alternative that gives it, and a consequence credited to a
+  weaker alternative does not by itself raise a level of the statement posed. Evidence for the
+  conjectured answer adds nothing to a level. The rubric does not grade the truth of a
+  conjectured answer: the evidence for an answer decides which statement is posed and whether
+  an answer is conjectured.
+- Priority. The record names the nearest alternatives (a stronger form, a weaker form, the
+  same assertion with another constant or exponent, another assertion about the same objects)
+  and lists the parts of the statement's strength (its range of instances, its constants, its
+  exponents, its exactness), each with the alternative that relaxes it or the reason that none
+  exists. The objection that a neighbour is the better question is answered for a weaker
+  alternative when what the statement asserts beyond it is supported, by evidence for the
+  conjectured answer that tells against that same alternative, or used, by a consequence that
+  is credited to the statement and wanted on grounds independent of it. A surplus that is
+  neither leaves priority below level 2. For a consequence credited to the statement the
+  record says, for each weaker alternative, whether a derivation from that alternative was
+  attempted and how it ended. The record says of each stronger alternative why it was not
+  posed. A reviewer who knows a nearer alternative or an earlier statement names it as a
+  material objection.
+- Accessibility. A theorem that is the statement in a neighbouring setting is evidence for the
+  conjectured answer and is no foothold. A theorem on a subclass of the statement's own
+  instances is a proved case, and it is a foothold when it provides a meaningful entry or
+  partial progress, as class `E-F` requires.
+- Calibration. Each fact is entered once, in one account, with its scope and its date. A
+  stronger form proved false locates a boundary, and a recovered theorem shows explanatory use;
+  each speaks for the conjectured answer only through a stated argument. A check is a test of
+  the statement when its plan, fixed before its execution, named the statement in its present
+  text, the outcome that would contradict it, and an alternative that the record held at that
+  time together with the outcome that this alternative excludes; and when the account of what
+  was known before, with the search for the outcome in print, shows no earlier knowledge of
+  the outcome. That the outcome was unknown to the model that planned the check is not
+  established, and a reviewer who knows the outcome from a source or a table says so. Every
+  other computed agreement is an observation or the origin of the statement. Where nothing
+  speaks for an answer, the record conjectures none or states one as a forecast. The public
+  text states only what a cited entry of the accounts carries, and it uses neither the name
+  "conjecture of the abc kind" nor a comparison with a named conjecture as a claim about the
+  statement's standing.
+- A7, for a statement posed in place of a refuted one. Item A7 is unchanged, and its test of
+  purpose decides. Such a statement meets the three necessary conditions of "Exploration", of
+  which none is sufficient. The reviewers receive them in the replacement paragraph
+  (`exactory-problem-replacement-v1`) when the accounts hold a replacement part.
+
 The thresholds for posting are: every admission item `pass`, `max(B1, B2) >= 2`, at least 3 for
 `E-A` or `E-N`, priority at least 2, and attempt and calibration `pass`. The self-assessment and
 both result reviews must meet them, after any adjudication.
 
 A candidate is revised when the shortfall is one that evidence can repair: an admission item that
 a reading, a computation or a formal statement can settle, significance at level 1, or priority at
-level 1. A candidate is refused when it is of the excluded kind, an arbitrary parameter variant, a
+level 1. A candidate is also revised when a part of what the statement asserts beyond a weaker
+alternative is neither supported by evidence for the conjectured answer nor used by a wanted
+consequence: pose the weaker alternative that the evidence supports, or obtain the support.
+A candidate is refused when it is of the excluded kind, an arbitrary parameter variant, a
 conjecture resting on a numerical pattern alone, a question whose only support is the solver's
 exhaustion, a programme without definite resolution conditions, a bare restatement of a known
 question, or a claim about a question whose decisive literature or mathematics the harness cannot
 assess. Evidence cannot repair a question of the excluded kind, and no grade outweighs its
-refusal.
+refusal. A numerical pattern, in this list, is an agreement over a checked range that suggested
+the statement, or that its named nearest alternatives allow as well. A passed test, in the sense
+of "A run as a test of the statement", is experimental support within its scope and is no
+pattern.
 
 Among admissible candidates, class `E-F` is preferred, then the higher significance level, then
 the higher priority level. A reasoned departure for significance is permitted and recorded. The
@@ -1232,7 +1611,8 @@ carry credits nothing, and the same request bounds what the review may cite
 the check for the bound searches, so a text route may withhold the bodies of their captured
 responses at its input limit. For a review delivered in fresh parts (step 3), the check reads the read
 turns of the series, and for a review performed in stages the accepted tasks of the epoch,
-instead of one request. The
+instead of one request. For a value record with accounts, the check also requires the current
+accounts with the parts that the harness derives, and the records that their entries cite. The
 [CLI reference](../../docs/research-cli.md#problem-creation) states the exact rule.
 
 1. Keep the two bars of the slate for the result reviews and the decision.
@@ -1254,8 +1634,21 @@ instead of one request. The
    the statement, the openness finding with its bound search records, the value evidence, the
    assessment with its references resolved, the attempt and the cited results, the citations,
    the readings with their inline passages, the computations, the formal checks, and every
-   applicable objection. Run the assignment with `review-run` and record the observed review
-   with `value-review`. When the result packet does not fit one input of the route, or its fitted
+   applicable objection. With a value record that holds accounts, the value evidence carries
+   the accounts whole, and beside them what the harness derives: every run on the current text
+   and on the earlier texts of its lineage with the assessed status of each failure signal, the
+   earlier probes and runs beside each run entered as a test, the history of the forms with
+   their outcomes, and the counts for the lineage and for the whole exploration. The packet
+   also delivers, as records, what the entries cite: the plan of each run with its test
+   declaration, the cited searches, the forming calls and their outcomes; and it gives the
+   claim of the objective beside each cited result. The result prompt then carries the accounts
+   paragraph (`exactory-problem-accounts-v1`), which gives the reviewer the reading of "The
+   rubric" and the questions on the gain, and, when the accounts hold a replacement part, the
+   replacement paragraph (`exactory-problem-replacement-v1`) with the three conditions of
+   "Exploration". The response shape of a result review is unchanged: the assurance
+   `problem_value` covers the accounts, and the grades and evidence texts of A3, significance,
+   priority, accessibility, calibration and A7 carry the reviewer's judgments. Run the
+   assignment with `review-run` and record the observed review with `value-review`. When the result packet does not fit one input of the route, or its fitted
    request would withhold an evidence body, the harness delivers the review as a series of
    fresh-input turns (`exactory-review-parts-v2`): read turns that card the evidence, combine and
    check turns when needed, possibly more than one of each, followed by final turns, each a new
@@ -1402,14 +1795,25 @@ instead of one request. The
    source gap to the user.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
    repaired with evidence changes the evidence digest, and the result reviews are refreshed for
-   the same reviewers.
+   the same reviewers. A value record with accounts becomes stale when the record gains a later
+   run on the current text, a later outcome of a form in the history of the statement, or a
+   later delivered snapshot of an objective that an entry cites. The gate then lists one
+   obligation, `problem_value_stale`, whose `changes` name each such record. Record a new
+   value record whose accounts take each change into account and cite the latest snapshot. The
+   new record changes the evidence digest, so the result reviews are refreshed in the same
+   way. A missing alternative or a missing earlier statement that a reviewer names is repaired
+   with one forming call and one new value record ("Formulation", step 5).
 6. Assign an adjudication with `review-assignment`, role `adjudicator` and `dossier_id: null`,
    to a fresh independent assessor; the harness uses the template
    `exactory-problem-review-v2/adjudicator`. For a rubric grade, set `context.objection_id` to
    `rubric:<review_id>:<item>`, where the item is `A1` to `A7`, `significance`, `priority`,
    `attempt` or `calibration`, and name both original result review ids in
    `context.review_ids`. An adjudication of A7 decides only whether the question is of the
-   excluded kind. Run the assignment with `review-run` and record the observed finding with
+   excluded kind. With a value record that holds accounts, the adjudicator of A3,
+   `significance`, `priority` or `calibration` receives the accounts paragraph with the
+   definition of the item, and the adjudicator of A7 receives the replacement paragraph when
+   the accounts hold a replacement part. Run the assignment with `review-run` and record the
+   observed finding with
    `review-adjudication`. An adjudication whose packet does not fit one input runs as a series of
    fresh-input turns: run `review-series` as in step 3 (each next turn has a new id, the same
    adjudicator, route and author, `dossier_id: null`, and `prior_assignment_id` inside `context`
@@ -1584,6 +1988,33 @@ Otherwise, record the existing post with `problem-post-external`, as follows:
    `problem_already_posted` alone. It lists the other findings under `after_post`. The harness
    refuses new review work on the statement.
 
+After a post, a reply or a later finding can state a fact about the place of the posted
+statement: an earlier statement of the same content, a nearer alternative, a relation that
+holds or fails, or a refutation. Record each such fact with `exactory-research
+problem-post-fact`, for a post that the gate passed and for one that was recorded with
+`problem-post-external`:
+
+1. Keep the evidence in the record. Save the reply, or your note of the finding, in a file and
+   store it with `exactory-research artifact`. Use the returned descriptor as `source`. For a
+   work that this record read, `source` can be the exact reading record,
+   `{kind: "record", record_kind: "reading", id, digest}`.
+2. Write `{id, post_id, fact, source, date, bears_on}`. `post_id` is the id of the
+   `problem_post` record, which `status` shows (`problem_post_missing` otherwise). `fact`
+   states the fact in one or two sentences. `date` is the day on which the fact became
+   available, as the source gives it, or `unknown`. `bears_on` is `{value, description}`:
+   what the fact bears on, as an open value such as `earlier_statement`, `alternative`,
+   `relation` or `refutation`, with a description.
+3. Run the command with `--check` first, then without it. `exactory-research example
+   problem-post-fact` prints a payload.
+
+The fact needs no value record, and it changes no reviewed evidence, review or gate result: the
+posted statement stays terminal. `status` lists the fact under `after_post` with the code
+`problem_post_fact`, and the output folders show it in `final/problem/post-facts/`. The harness
+records the fact and does not review it. Report it to the user, who decides what to do in the
+Mathematics section (the `math-section` skill). A reply is data under the security rule. When
+the record goes on working on the statement, enter the fact in the accounts of its next value
+record.
+
 Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
 `--github-link <url> "<label>"` (repeat, at most 10). Report the returned `id` and the page
 `<EXACTORY_API_URL>/math/<id>` (https://www.exactory.ai/math/<id> by default) to the user.
@@ -1596,6 +2027,15 @@ Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
   whatever its grades; study the world that the refutation reveals.
 - Do not present unresolved work as difficulty, or an attempt without a scope as an
   obstruction.
+- Do not enter the origin of a statement as a test. An agreement that was in view when the
+  statement, a constant or an exponent was chosen is its origin, and a run whose outcome was
+  known is an observation.
+- Do not credit to the statement a consequence that a weaker alternative gives. Credit it to
+  the weakest named alternative that gives it.
+- Do not claim a gain that the record has not established. That a statement gathers others is
+  no gain by itself and no evidence for its answer.
+- Do not use the name "conjecture of the abc kind" in a public text, and do not compare the
+  statement with a named conjecture as a claim about its standing.
 - Do not let a selection stand in for openness or significance; the slate authorizes research,
   the reviews establish the claim.
 - Do not reuse a review, a finding or an attempt of another statement for this one; the harness

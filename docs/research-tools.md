@@ -28,7 +28,7 @@ with actual evidence before recording a call.
 | Expand | Exact roots, references or citing works, number of levels and reading depth at each level; request, byte and reading allowance. | `roots`, `expand`, `acquire`, `import-response`, `search`, and the reading commands. | `literature_scope` selects exact roots and collections. Captured bibliography occurrences and provider responses preserve the source network and identity conflicts. `expand` acquires an unresolved identifier. The caller repeats expansion for the stated levels and records citing-work captures through search. Direction and levels are caller instructions, not additional `expand` flags. |
 | Ideate | Question, candidate count, credible alternatives, evidence, distinguishing tests, failure signals and resource demand. In a problem record: the question of the call with its places, the move, the inputs, and the amounts of forms, nearest alternatives, expected relations and compared pairs. | In a study: `intent`, `strategy`, `research-lead`, `work-item`. In a problem record: `forming`, `form-outcome`. | `research_intent`, `strategy_dossier`, `research_lead` and `research_work_item` retain proposed questions, comparisons, provenance, dispositions, actual execution status and dependencies. Candidate count is the caller's requested depth. Committing a direction uses the orchestration's decision gate. `forming_call` retains the question, the move, the inputs, the amounts as the performer reports them, every form that the call produced, the probes that it used, the stopping reason, the performer and the measured usage. `form_outcome` retains how one form, one expected relation or one planned check ended, with its evidence. See [Forming calls and outcomes](#forming-calls-and-outcomes). |
 | Probe | Exact question, Python program, pinned inputs, timeout and experiment allowance; for a run of a program that a plan will admit, the future cycle id, the program's stable path and the outputs read. | `exactory-lab probe`, `probe-intent`, `probe`. | `probe_intent` pins the program and inputs and reserves time; `probe_launch` retains the frozen local launch; the `probe` outcome retains outputs, streams, exit status, elapsed time and observation with exploratory provenance. A disclosed run adds `program_run` to the intent and the outcome; without a read output its files and streams are sealed unread. See the two-phase contract below. |
-| Run | Current admitted prospective plan, pinned program and inputs, exact runtime, outputs, validation and resource reservation. | `cycle`, `admit`, `bind-run`, `exactory-lab run`, `reconcile-run`, `assess`, `checkpoint`. | `cycle_plan`, `execution_admission`, binding and execution observations, `cycle_assessment` and checkpoints preserve authority, original outcomes, sealed outputs, actual usage, validity, scope, failures and next questions. Acceptance of a result uses the orchestration's gate. |
+| Run | Current admitted prospective plan, pinned program and inputs, exact runtime, outputs, validation and resource reservation. In a problem record, optionally the test declaration of the plan: the alternative with the outcome that it excludes, the account of prior knowledge and the search for the outcome in print. | `cycle`, `admit`, `bind-run`, `exactory-lab run`, `reconcile-run`, `assess`, `checkpoint`. | `cycle_plan`, `execution_admission`, binding and execution observations, `cycle_assessment` and checkpoints preserve authority, original outcomes, sealed outputs, actual usage, validity, scope, failures and next questions. Acceptance of a result uses the orchestration's gate. A plan with a test declaration keeps the declaration, frozen before the execution. See [Run](#run). |
 | Synthesis notes | Exact supporting sources, field and applicability, claim scope, rationale, innovation cases and context; reading and analysis allowance. Innovation calls state candidate and case counts. | `standards`, `rationale`, `innovation`, `context`. | Selected immutable `synthesis` sections bind their own evidence and assessments. Innovation retains the effective candidate and case amounts. Notes inform claims; the direction gate checks the standards it needs. |
 | Challenges ahead | Ultimate and nearer goals, advance criteria, exact full-read evidence and reason for a changed direction; source and analysis allowance. | `grand-challenge`. | `grand_challenge` and its current selection retain goals, criteria and evidence for the study. This study record is distinct from a challenge posted on exactory. It belongs to ai-science's direction minimum. |
 | Depth plan | Default amounts and a reason for each change, within authorized resource budgets; for a verification, also the stopping criterion of the deeper reading. | `depth`. | Immutable `depth_plan` with `{id, profile, values, reason, revision}` and `stopping_criterion` (required for verification), and `depth_plan_selection` selecting the current plan of each profile. The plan stays outside configuration and claim dependency digests. |
@@ -245,6 +245,104 @@ outcomes in `intermediate/problem/form-outcomes/`. The CLI reference gives the
 [payloads and refusals](research-cli.md#forming-records), and the
 [math-conjecturer skill](../skills/math-conjecturer/SKILL.md#exploration) says
 when to use the commands.
+
+## Run
+
+A run is the admitted execution of a plan that was frozen before it. `cycle`
+records the plan, `admit` and `bind-run` admit and bind the program,
+`exactory-lab run` executes it, `reconcile-run` records an interrupted outcome,
+and `assess` assesses the result against the failure signals of the plan. The
+CLI reference gives the [payloads](research-cli.md#operation-fields). A run
+supports its stated inputs and nothing beyond, and it is never a proof.
+
+In a problem record the objective of a plan is the current statement, and
+`cycle` is refused while no statement is recorded. A plan of a problem record
+can carry one optional part, the test declaration (`test_declaration`), when
+its run is meant as a test of the statement. A plan without the part keeps the
+bytes, the digest and the meaning that it had before 0.84.0, in a problem
+record and in a study. Outside a problem record, a plan with the part is
+refused with `orchestration_conflict`.
+
+A check compares a statement with a fact. For a given text of the statement,
+its result has one of three standings. It is a test when the check could have
+contradicted the text and was fixed before its outcome was known. It is the
+origin when the text was chosen with the result in view. It is an observation
+otherwise. A probe result is an observation or the origin of a form, and it
+keeps its exploratory provenance. Only a run can be a test.
+
+The declaration is frozen with the plan, before the execution. It holds:
+
+- `alternative`: an alternative to the statement that the record holds before
+  the plan. It is a form of a recorded forming call, `{kind: "form",
+  record_kind: "forming_call", id, form_id}`, or a declared neighbour of the
+  current statement, `{kind: "neighbour", text}`, with its exact text
+  (`problem_test_alternative_missing` otherwise).
+- `excluded_outcome`: the outcome that this alternative excludes. The outcome
+  that would contradict the statement stands among the failure signals that
+  every plan holds.
+- `prior_knowledge`: the account of what the performer knew about the outcome
+  when the plan was frozen, a list of `{source: {kind, description}, known}`.
+  The source kind is an open value. The described kinds are
+  `record_computations` (the earlier probes and runs of the record),
+  `inherited_computations` (the computations of the records that this record
+  took material from), `external_computations` (another workspace or a model
+  lane, named with its place), `literature_and_tables`, and
+  `planning_model_recall` (what the model that plans the run recalls about the
+  quantity). The harness records the account as the performer gives it. This
+  account is a field of the declaration. The `prior_knowledge` of the plan,
+  which names the disclosed probe runs of its program ([Probe](#probe)), is
+  another field.
+- `search_id`: the search for the outcome in print. It is one bounded search
+  whose question is the quantity that the run computes, and the store holds it
+  before the plan (`problem_test_search_missing` otherwise).
+
+Which runs are tests. The declaration grants no credit by itself. A run is a
+test of a text of the statement when the accounts of a value record enter it
+as a check with the standing `test`, and these conditions hold
+(`problem_test_run_invalid` otherwise):
+
+- The plan carried the declaration, and it was recorded before the run was
+  admitted.
+- The plan names a statement record with the statement digest of that text. The
+  digest covers the statement and the resolution criteria. After a correction
+  of the text, a run on the earlier text is the origin of the corrected text.
+  It stays a test only when the forming call of the correction states, for
+  that run, that the corrected text keeps the tested prediction and that the
+  correction was not chosen with the outcome, and gives a ground with evidence.
+- The check names the alternative that the plan named. A test tells against
+  that alternative and against no other.
+- The check gives, for each source of the declaration's account, the finding
+  that the outcome was not known.
+- No earlier run and no earlier probe of the record has the question of the
+  plan, character for character.
+- An assessment covers the run. For a passed test it gives `not_observed` for
+  every failure signal of the plan.
+- The candidate of the statement cites a form that was recorded before the
+  plan (`problem_accounts_history_missing` otherwise).
+
+The standing of a test is qualified by these checks, as openness is qualified
+by its searches. The harness compares earlier questions character for
+character, and it does not read what the search found. It does not establish
+that the outcome was unknown to the model that planned the run. The result
+reviewers therefore receive the plan with its declaration, the search, and
+beside each test the probes and runs that the record held before the plan,
+with their questions. They judge whether the outcome was known, and a reviewer
+who knows the outcome from a source or a table says so. A run whose
+independence cannot be established is an observation.
+
+For the current text of a statement, the harness lists every run whose plan
+names a statement record with that statement digest, with the assessed status
+of each failure signal: `observed`, `not_observed` or `unresolved`. It also
+lists the runs on the earlier texts of the lineage, which the
+`revises_statement_id` references of the statement records give. The author
+does not enter this list, so a failed test stays with its text. A later run on
+the current text makes a value record with accounts stale
+(`problem_value_stale`).
+
+The CLI reference gives the [fields of the declaration](research-cli.md#the-test-declaration-of-a-plan)
+and the [rule of a check entered as a test](research-cli.md#the-accounts-of-a-value-record),
+and the [math-conjecturer skill](../skills/math-conjecturer/SKILL.md#a-run-as-a-test-of-the-statement)
+gives the steps.
 
 ## Depth plan
 

@@ -30,7 +30,7 @@ class ProblemResultTests(ProblemCase):
             identifier = outcome + obligation_id
             item = self.bind_result(build_acceptance(outcome=outcome, obligation_id=obligation_id), "attempt-" + identifier)
             saved = self.mutate(self.load_problem_module().record_value, self.build_value([item], "value-" + identifier))["result"]
-            self.assertEqual(saved["motivation"][0]["evidence"], [item])
+            self.assertEqual(saved["accounts"]["explanatory_use"][0]["evidence"], [item])
 
     def test_result_evidence_refused_for_an_invalidated_or_hypothesis_acceptance(self):
         for status, outcome in (("invalidated", "reduction"), ("hypothesis", "reduction"),

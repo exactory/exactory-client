@@ -1277,8 +1277,13 @@ class ProblemObjectionCarryDeliveryTests(unittest.TestCase):
         bundle['units'].append(dict(id='page', kind='figure', required=True, link=link))
         source.mutate(literature.import_bundle, bundle)
         source.mutate(reading.record_reading, source.full_note(bundle, note_id='page-reading'))
-        source.mutate(source.load_problem_module().record_value, source.build_value([source.item,
-            dict(kind='reading', version_id=version, reading_id='page-reading')], identifier='page-value'))
+        page_evidence = [source.item, dict(kind='reading', version_id=version, reading_id='page-reading')]
+        page_value = source.build_value(page_evidence, identifier='page-value')
+        page_value.pop('accounts')
+        for section in ('motivation', 'current_state'):
+            page_value[section][0]['evidence'] = page_evidence
+        # This fixture exercises a historical v2-to-v3 prompt transition.
+        source.put('problem_value', page_value['id'], dict(page_value, recorded_revision=source.store.revision + 1))
         def output(requests=(), evidence=None):
             value = source.build_review_output('result')
             value['value']['objection_findings'] = [dict(id=identifier, status='continuing',

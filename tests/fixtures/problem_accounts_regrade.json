@@ -1,0 +1,245 @@
+{
+  "source": "regrade/sidorenko-after-counterexample.md",
+  "note": "Real account text tests schema capacity. The reading locator is replaced by a synthetic full-reading fixture; this is no replay or scientific validation of the real record. Relation standings remain expected where the fixture supplies no actual proof.",
+  "accounts": {
+    "answer": {
+      "id": "answer",
+      "status": "none",
+      "text": null,
+      "evidence_ids": []
+    },
+    "answer_evidence": [],
+    "boundaries": [
+      {
+        "id": "bnd-1",
+        "fact": "A manuscript of 2026-09-23 reports a bipartite graph H_0 with 35 vertices and 66 edges that violates Sidorenko's inequality in some host. H_0 contains many 4-cycles.",
+        "scope": "one pattern. The manuscript is not refereed, and the record did not check its key estimate (Lemma 3.1).",
+        "argument": "If the report is correct, the inequality fails for some bipartite graph, so a hypothesis on the pattern is necessary. bnd-2 ties the hypothesis 'no 4-cycle' to the report.",
+        "date": "unknown",
+        "evidence": [
+          {
+            "kind": "reading",
+            "version_id": "schema-work",
+            "reading_id": "schema-reading"
+          }
+        ],
+        "evidence_ids": []
+      },
+      {
+        "id": "bnd-2",
+        "fact": "The leading-order mechanism of the reported construction gives no deficit on any pattern of girth at least six: its sign model is identically 1 without 4-cycles and takes the values 0 and 2 on every pattern with a 4-cycle.",
+        "scope": "The kernels of the reported construction, as the field size tends to infinity, conditional on an analogue of the manuscript's rank-layer limit, which the manuscript proves for its own pattern only. Nothing about a fixed field size or about other constructions.",
+        "argument": "It marks where one construction stops working. adjudication-girth-threshold: it 'does not, by itself, favour the statement over Problem 1.5'.",
+        "date": "unknown",
+        "evidence": [
+          {
+            "kind": "reading",
+            "version_id": "schema-work",
+            "reading_id": "schema-reading"
+          }
+        ],
+        "evidence_ids": []
+      }
+    ],
+    "explanatory_use": [],
+    "alternatives": [
+      {
+        "id": "alt-1",
+        "neighbour": "Problem 1.5 of Conlon, Kim, Lee and Lee: is the 1-subdivision of every graph Sidorenko?",
+        "form_id": null,
+        "role": "weaker",
+        "relation_id": "comparison-alt-1",
+        "surplus": {
+          "description": "The patterns of girth at least six outside C_2, in which every bipartition has vertices of degree at least three on both sides, such as the Heawood graph and the incidence graphs of linear triple systems.",
+          "status": "neither",
+          "evidence_ids": [],
+          "relation_ids": []
+        }
+      },
+      {
+        "id": "alt-2",
+        "neighbour": "Is there an integer g such that every bipartite graph of girth at least g is Sidorenko?",
+        "form_id": null,
+        "role": "weaker",
+        "relation_id": "comparison-alt-2",
+        "surplus": {
+          "description": "The threshold six.",
+          "status": "neither",
+          "evidence_ids": [],
+          "relation_ids": []
+        }
+      },
+      {
+        "id": "alt-3",
+        "neighbour": "Single patterns: the 1-subdivision of H_0; the Heawood graph",
+        "form_id": null,
+        "role": "weaker",
+        "relation_id": "comparison-alt-3",
+        "surplus": {
+          "description": "The patterns outside this subclass.",
+          "status": "neither",
+          "evidence_ids": [],
+          "relation_ids": []
+        }
+      },
+      {
+        "id": "alt-4",
+        "neighbour": "Subclasses: incidence graphs of linear k-uniform hypergraphs; biregular graphs of girth at least six",
+        "form_id": null,
+        "role": "weaker",
+        "relation_id": "comparison-alt-4",
+        "surplus": {
+          "description": "The patterns outside this subclass.",
+          "status": "neither",
+          "evidence_ids": [],
+          "relation_ids": []
+        }
+      },
+      {
+        "id": "alt-5",
+        "neighbour": "Is every bipartite graph of girth at least six with a cycle forcing?",
+        "form_id": null,
+        "role": "other_assertion"
+      },
+      {
+        "id": "alt-6",
+        "neighbour": "Conjecture 4.1 of Im, Li and Liu: subdivisions of Sidorenko graphs are Sidorenko",
+        "form_id": null,
+        "role": "other_assertion"
+      },
+      {
+        "id": "alt-7",
+        "neighbour": "Sidorenko's conjecture: the inequality for every bipartite graph",
+        "form_id": null,
+        "role": "stronger",
+        "relation_id": "comparison-alt-7",
+        "reason": "The reported counterexample. none by the record; the record did not check the report"
+      }
+    ],
+    "strength": [
+      {
+        "id": "strength-range_of_instances",
+        "head": "range_of_instances",
+        "description": "Every finite bipartite graph without a 4-cycle and with an edge, and every graphon.",
+        "alternative_ids": [
+          "alt-1",
+          "alt-4",
+          "alt-3"
+        ],
+        "no_alternative_reason": null
+      },
+      {
+        "id": "strength-constants",
+        "head": "constants",
+        "description": "The girth threshold six.",
+        "alternative_ids": [
+          "alt-2"
+        ],
+        "no_alternative_reason": null
+      },
+      {
+        "id": "strength-exponents",
+        "head": "exponents",
+        "description": "none",
+        "alternative_ids": [],
+        "no_alternative_reason": "The exponent e(H) is that of Sidorenko's inequality."
+      },
+      {
+        "id": "strength-exactness",
+        "head": "exactness",
+        "description": "The exact inequality for every graphon.",
+        "alternative_ids": [],
+        "no_alternative_reason": "No weaker form of the inequality is named."
+      }
+    ],
+    "relations": [
+      {
+        "id": "comparison-alt-1",
+        "relation": "implies",
+        "target": "Problem 1.5 of Conlon, Kim, Lee and Lee: is the 1-subdivision of every graph Sidorenko?",
+        "alternative_id": "alt-1",
+        "standing": "expected",
+        "scope": "The finite family.",
+        "date": "unknown",
+        "evidence": [],
+        "evidence_ids": [],
+        "earlier_statement": false,
+        "consequence": null
+      },
+      {
+        "id": "comparison-alt-2",
+        "relation": "implies",
+        "target": "Is there an integer g such that every bipartite graph of girth at least g is Sidorenko?",
+        "alternative_id": "alt-2",
+        "standing": "expected",
+        "scope": "The finite family.",
+        "date": "unknown",
+        "evidence": [],
+        "evidence_ids": [],
+        "earlier_statement": false,
+        "consequence": null
+      },
+      {
+        "id": "comparison-alt-3",
+        "relation": "implies",
+        "target": "Single patterns: the 1-subdivision of H_0; the Heawood graph",
+        "alternative_id": "alt-3",
+        "standing": "expected",
+        "scope": "The finite family.",
+        "date": "unknown",
+        "evidence": [],
+        "evidence_ids": [],
+        "earlier_statement": false,
+        "consequence": null
+      },
+      {
+        "id": "comparison-alt-4",
+        "relation": "implies",
+        "target": "Subclasses: incidence graphs of linear k-uniform hypergraphs; biregular graphs of girth at least six",
+        "alternative_id": "alt-4",
+        "standing": "expected",
+        "scope": "The finite family.",
+        "date": "unknown",
+        "evidence": [],
+        "evidence_ids": [],
+        "earlier_statement": false,
+        "consequence": null
+      },
+      {
+        "id": "comparison-alt-7",
+        "relation": "follows_from",
+        "target": "Sidorenko's conjecture: the inequality for every bipartite graph",
+        "alternative_id": "alt-7",
+        "standing": "expected",
+        "scope": "The finite family.",
+        "date": "unknown",
+        "evidence": [],
+        "evidence_ids": [],
+        "earlier_statement": false,
+        "consequence": null
+      }
+    ],
+    "refuted_conjectures": [
+      {
+        "id": "refuted-sidorenko",
+        "statement": "Sidorenko's conjecture for every bipartite graph.",
+        "identified_by": "author",
+        "sources": [],
+        "evidence_ids": [
+          "bnd-1"
+        ]
+      }
+    ],
+    "replacement": [
+      {
+        "id": "replacement",
+        "refuted_id": "refuted-sidorenko",
+        "form_id": null,
+        "evidence_ids": [
+          "bnd-1"
+        ],
+        "account": "The proposed question concerns the structure of the reported failure, with the stated limitation that its scope is the absence of 4-cycles."
+      }
+    ]
+  }
+}

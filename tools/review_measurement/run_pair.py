@@ -283,6 +283,7 @@ def replace_model(case, workspace, final_output=None):
 
 def build_workspace(case, root, configuration, dry_run):
     from research_harness.evidence import digest
+    from research_harness.problem_accounts import STRENGTH_HEADS
     workspace = Workspace(root)
     workspace.execute('problem-init', dict(slug=case['id'], area='math.CO',
                                          field='Synthetic measurement examples', authors=['fixture-author']))
@@ -309,11 +310,19 @@ def build_workspace(case, root, configuration, dry_run):
         id='statement', title='Local implication: ' + case['family'], area='math.CO',
         statement=case['statement'], resolution_criteria='Establish the local implication or give a counterexample.',
         neighbours=[], formal_statement=None))
-    workspace.execute('problem-value', dict(id='value', statement_id='statement',
+    accounts = dict(answer=dict(id='answer', status='none', text=None, evidence_ids=[]),
+        answer_evidence=[], boundaries=[], alternatives=[], relations=[], refuted_conjectures=[],
+        explanatory_use=[dict(id='local-arguments', fact='The supplied synthetic local arguments are available for assessment.',
+            scope='The local implications in these two notes only.', date='unknown', evidence=readings, evidence_ids=[], answer_argument=None)],
+        strength=[dict(id='strength-' + head, head=head, description='The local implication under ' + head + '.',
+            alternative_ids=[], no_alternative_reason='No relaxation is claimed by this calibration fixture.')
+            for head in STRENGTH_HEADS])
+    value_evidence = [dict(kind='account', id='local-arguments')]
+    workspace.execute('problem-value', dict(id='value', statement_id='statement', accounts=accounts,
         motivation=[dict(text=('Check the local argument and its exact scope; '
                                'this is not a claim of research significance.'),
-                         evidence=readings)],
-        current_state=[dict(text='The supplied elementary examples do not establish openness.', evidence=readings)]))
+                         evidence=value_evidence)],
+        current_state=[dict(text='The supplied elementary examples do not establish openness.', evidence=value_evidence)]))
     workspace.execute('problem-attempt', dict(
         id='attempt', statement_id='statement', kind='literature', solver=None,
         literature=dict(readings=[{key: row[key] for key in ('version_id', 'reading_id')}
@@ -664,6 +673,10 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(result['model_calls'], 0)
         self.assertIs(review_transport.local_input_limit, original)
         final_packet = result['parts']['turns'][-1]['packet']
+        value = final_packet['problem_evidence']['value']
+        self.assertEqual(value['accounts']['explanatory_use'][0]['id'], 'local-arguments')
+        self.assertEqual(value['derived_accounts']['checks'], dict(current=[], earlier=[]))
+        self.assertTrue(all(turn['packet']['problem_evidence']['value'] == value for turn in result['parts']['turns']))
         cards = final_packet['review_parts_state']['cards']
         self.assertTrue(any(card['statements'] for card in cards))
         self.assertTrue(all(statement.get('at') for card in cards for statement in card['statements']))

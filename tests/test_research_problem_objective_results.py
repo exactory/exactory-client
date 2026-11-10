@@ -48,8 +48,8 @@ class ProblemObjectiveResultTests(ProblemCase):
                 self.assertEqual(problem_evidence.validate_result(records, item), native["acceptances"][0])
                 value = self.build_value([item], "value-" + outcome)
                 saved = self.mutate(self.load_problem_module().record_value, value)["result"]
-                self.assertEqual(saved["motivation"][0]["evidence"], [item])
-                self.assertEqual(saved["current_state"][0]["evidence"], [item])
+                self.assertEqual(saved["accounts"]["explanatory_use"][0]["evidence"], [item])
+                self.assertEqual(saved["accounts"]["explanatory_use"][0]["evidence"], [item])
 
     def test_result_validator_needs_no_current_statement(self):
         item = self.deliver_result()

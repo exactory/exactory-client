@@ -802,7 +802,7 @@ operations of the Mathematics section.
 
 | Claim | Minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, bound value evidence, rubric self-assessment and citations | Two observed bars followed by two observed result reviews that grade every rubric item, A7 included | Current selected statement, attempt, accepted results, assessment and decisive evidence bound by `problem_evidence_digest`. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, bound value evidence with the accounts of the statement, rubric self-assessment and citations | Two observed bars followed by two observed result reviews that grade every rubric item, A7 included | Current selected statement, attempt, accepted results, assessment and decisive evidence bound by `problem_evidence_digest`. |
 
 | Milestone | Condition computed from records |
 | --- | --- |
@@ -811,7 +811,7 @@ operations of the Mathematics section.
 | `formulation` | The current slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
 | `attempt` | `problem-attempt` records a current, proportionate unresolved solver or critically assessed literature attempt; `assess_attempt` returns no obligations. |
 | `openness` | The attempt passes and an observed native openness review records a current `supported_open` finding with the shared search and full-reading minimum. |
-| `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both result reviews, grading every rubric item including A7, cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
+| `value` | Value evidence validates, with the accounts of the statement current, and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both result reviews, grading every rubric item including A7, cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
 
 An exploration starts from a field question, from a phenomenon that appears in
@@ -946,17 +946,46 @@ Tools remain available in any order before posting: set budgets and depth,
 search the field and neighbouring formulations, read sources, preserve access
 gaps and deferrals, request sources, run probes and record forming calls and
 their outcomes. They require no intent, target, dossier, synthesis section or
-direction decision. When a paragraph
+direction decision. When an entry of the accounts
 cites a computation, use the shared cycle, admission, binding, execution,
 reconciliation and assessment route with the current problem statement as its
 objective. The statement and adopted constitution are its readiness
 requirements. That route provides empirical support only; it accepts no
 mathematical proof or formal check. Probe origin remains visible and is refused
-as cited value evidence.
+as cited value evidence. A plan of a problem record can carry a test
+declaration, frozen with the plan before the execution: the alternative that
+the test tells against, with the outcome that it excludes, the account of what
+was known about the outcome, and the search for the outcome in print. Only a
+run whose plan carried the declaration can be entered in the accounts as a test
+of the statement ([Run](research-tools.md#run)). A plan without the declaration
+keeps its bytes and its meaning.
 
-Record motivation and current-state paragraphs with `problem-value`. Every
-paragraph names full readings, admitted, reconciled and assessed computations,
-or a result reference. `{kind: "result", attempt_id, acceptance_id}` cites an
+Record the value case with `problem-value`: the accounts of the statement, and
+the motivation and current-state paragraphs. The accounts keep the conjectured
+answer apart from the question and enter each fact once, with its scope and its
+date. Every new value record holds them (`problem_accounts_required`
+otherwise), in two tiers. The first tier holds for every problem: the
+conjectured answer (none, a forecast, or conjectured with evidence for it); the
+evidence for or against the answer, each fact against a named alternative; the
+evidence that locates boundaries; the evidence of explanatory use; the nearest
+alternatives with their roles, and for a weaker one what the statement asserts
+beyond it and whether that surplus is supported or used; the parts of the
+strength; the relations of the statement, established or expected, with each
+consequence credited to the weakest named alternative that gives it; and the
+refuted conjectures that the question concerns. The second tier is required
+when the record claims a gain or enters a passed test: the checks with what
+each can show, the gain, and the search coverage. The replacement part is
+required when the statement is posed in place of a refuted one. Each paragraph
+cites entries of the accounts, and a paragraph that rests only on expected
+relations is refused (`problem_value_expected_only`). A paragraph cites a full
+reading directly only for a fact about the field (`field_fact`). A value record
+that an earlier release recorded has no accounts and keeps its contract.
+[The accounts of a value record](research-cli.md#the-accounts-of-a-value-record)
+gives every part and refusal.
+
+The entries of the accounts rest on full readings, admitted, reconciled and
+assessed computations, or a result reference.
+`{kind: "result", attempt_id, acceptance_id}` cites an
 accepted `proof`, `reduction` or `obstruction` from the current solver attempt,
 otherwise `problem_value_result_missing` identifies the invalid citation.
 `{kind: "result", native_attempt_digest, acceptance_id, purpose,
@@ -969,7 +998,12 @@ objective that is not delivered here), an accepted acceptance of it
 (`problem_result_missing`), the purpose of the objective, and the reason when a
 delivered total exceeds a normal limit (`problem_result_extension_unexplained`).
 Such a result supports exactly its conclusion and is no attempt on the
-statement. The evidence
+statement. A value record with accounts is stale when the record gains a later
+run on the current text, a later outcome of a form in the history of the
+statement, or a later delivered snapshot of a cited objective: the gate lists
+one obligation, `problem_value_stale`, until a new value record takes the
+changes into account. For a value record without accounts, a later snapshot of
+a cited objective is listed as `problem_result_superseded`. The evidence
 binding and reviewer packet carry `attempt` and `results`; the latter includes
 the acceptance's checkpoint claim, outcome and standard for each cited result,
 and for a result of a delivered objective also the claim of that objective, its
@@ -984,6 +1018,14 @@ another statement, both the digest binding and the reviewer projection carry
 `attempt: null` and no result of that attempt, so `results` holds the cited
 results of delivered objectives alone; the gate retains the stale-attempt
 obligation.
+With a value record that holds accounts, the value part of the packet carries
+the accounts whole and, beside them, what the harness derives from the records:
+every run on the current text and on the earlier texts of its lineage with the
+assessed status of each failure signal, the earlier probes and runs beside each
+run entered as a test, the history of the forms with their outcomes, and the
+counts for the lineage and for the whole exploration. The packet also delivers
+the records that the entries cite: the plan of each run with its test
+declaration, the cited searches, and the forming calls with their outcomes.
 Both result reviewers must receive these fields (`problem_evidence_unassessed`).
 An unavailable source stays unread. A requested formal check records the exact
 native claim, proof policy and required deliverables before verification. After
@@ -1024,7 +1066,16 @@ receive the exact claim, the complete openness finding with the searches its
 minimum binds and their captured sources, value evidence, rubric assessment, citations and
 delivered source/computation/check content. They assess precision, openness,
 value, citations and stopping, plus every rubric item through `value.rubric`
-and `value.rubric_evidence`. A below-threshold result grade blocks posting
+and `value.rubric_evidence`. When the value record holds accounts, the result
+prompt carries the accounts paragraph (`exactory-problem-accounts-v1`): the
+reading of the rubric with the accounts, which governs where it is stricter
+than an anchor, the questions on the gain, and what stays unestablished about a
+test. When the accounts hold a replacement part, the prompt also carries the
+replacement paragraph (`exactory-problem-replacement-v1`), with the three
+necessary conditions of a statement posed in place of a refuted one. A slate
+review of a candidate formed in the record carries the slate paragraph
+(`exactory-problem-slate-forming-v1`). The response shapes are unchanged, and
+no rubric item, level or threshold changes. A below-threshold result grade blocks posting
 until repaired or resolved by a ready focused `not_upheld` adjudication of
 `rubric:<review_id>:<item>` for the same subject and current evidence digest,
 whose packet carried the original calibrations, that is the bars the adjudicated
@@ -1069,6 +1120,14 @@ comparison rebuilds the projection from the records and ignores entries whose
 names start with a dot. A part changed after
 export requires a new statement and starts the gate again. A repeated post of
 the same statement is refused.
+
+After a post, a reply or a later finding can state a fact about the place of
+the posted statement. `problem-post-fact` records it: the post that it
+concerns, the fact, its source (a stored artifact or a reading record), its
+date, and what it bears on. The record needs no value record and changes no
+reviewed evidence. The posted statement stays terminal, and `status` lists the
+fact under `after_post`. The harness does not review the fact. The agent
+reports it to the user, who decides what to do in the Mathematics section.
 
 ## Initiate and resume
 

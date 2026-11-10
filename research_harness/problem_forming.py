@@ -39,8 +39,9 @@ def validate_count(value, name):
 
 def validate_description(value):
     fields(value, ("kind", "description"))
-    text(value["kind"], "Move kind")
-    text(value["description"], "Move description")
+    text(value["kind"], "The kind of an open value: the move of a forming call, or the kind of an answer_evidence entry,")
+    text(value["description"], "The description of an open value: the move of a forming call, or the kind of an "
+                               "answer_evidence entry,")
 
 
 def validate_grounds(records, artifacts, values, *, required=False):
@@ -68,7 +69,7 @@ def validate_checks(values):
     strings(identifiers, "Check IDs")
 
 
-def validate_correction(form, earlier_forms):
+def validate_correction(records, form, earlier_forms):
     checks = strategy.items(form["correction_checks"], "Correction checks", code="invalid_input")
     previous = form["previous"]
     if previous is None:
@@ -82,8 +83,11 @@ def validate_correction(form, earlier_forms):
     earlier = find_form(earlier_forms, previous["form_id"])
     identifiers = []
     for check in checks:
-        fields(check, ("check_id", "was_made", "keeps_prediction", "chosen_with_outcome"))
+        fields(check, ("check_id", "was_made", "keeps_prediction", "chosen_with_outcome"), ("execution_id",))
         text(check["check_id"], "Earlier check ID")
+        if "execution_id" in check:
+            text(check["execution_id"], "Correction execution ID")
+            strategy.get_record(records, "execution", check["execution_id"], code="invalid_input")
         identifiers.append(check["check_id"])
         for key in ("was_made", "keeps_prediction", "chosen_with_outcome"):
             if type(check[key]) is not bool:
@@ -129,7 +133,7 @@ def validate_form(records, artifacts, form, forms, earlier_forms):
             find_form(forms, identifier)
     strings(relation_ids, "Expected relation IDs")
     validate_checks(form["planned_checks"])
-    validate_correction(form, earlier_forms)
+    validate_correction(records, form, earlier_forms)
 
 
 def validate_performer(artifacts, performer):

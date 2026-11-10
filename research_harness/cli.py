@@ -41,6 +41,7 @@ from . import problem_forming
 from . import overrides
 from .automatic_overrides import record_automatic_override
 from .problem_objection_carry import carry_objections
+from .problem_post_facts import record_post_fact
 
 
 OPERATIONS = {
@@ -61,6 +62,7 @@ OPERATIONS = {
     "problem-decision": problem_claims.record_decision,
     "problem-posted": problem_claims.record_posted,
     "problem-post-external": problem_claims.record_post_external,
+    "problem-post-fact": record_post_fact,
     "gate-override": overrides.record_override,
     "gate-auto-pass": record_automatic_override,
     "problem-post-time": problem_claims.record_post_time,

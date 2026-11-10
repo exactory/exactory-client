@@ -32,7 +32,7 @@ class ProblemComputationTests(ProblemToolsCase):
         self.assertTrue({"objective_incomplete", "remaining_obligations"} <=
             {row["code"] for row in assessment["obligations"]})
         saved = self.mutate(self.load_problem_module().record_value, self.build_value([self.build_computation_evidence(observed)]))["result"]
-        self.assertEqual(saved["motivation"][0]["evidence"], [self.build_computation_evidence(observed)])
+        self.assertEqual(saved["accounts"]["explanatory_use"][0]["evidence"], [self.build_computation_evidence(observed)])
 
     def test_value_refuses_a_reconciled_execution_without_its_assessment(self):
         _, observed = self.run_problem()
@@ -58,7 +58,7 @@ class ProblemComputationTests(ProblemToolsCase):
         self.assert_error("problem_value_computation_missing", lambda: self.mutate(self.load_problem_module().record_value,
             self.build_value([self.build_computation_evidence(observed)])))
 
-    def test_value_keeps_its_immutable_assessment_when_a_later_assessment_is_recorded(self):
+    def test_value_keeps_its_cited_assessment_and_delivers_the_latest_check_assessment(self):
         plan, observed = self.run_problem()
         first = self.assess_support(plan, observed)
         self.mutate(self.load_problem_module().record_value, self.build_value([self.build_computation_evidence(observed)]))
@@ -68,9 +68,29 @@ class ProblemComputationTests(ProblemToolsCase):
         changed["assumptions"] = []
         self.mutate(development.assess_cycle, changed)
         after = self.load_problem_module().compute_problem_evidence_digest(self.store.snapshot()["records"], self.artifacts)
-        self.assertEqual(before, after)
+        self.assertNotEqual(before, after)
         supplied = self.load_problem_module().describe_problem_evidence(self.store.snapshot()["records"], self.artifacts)
         self.assertEqual(supplied["computations"][0]["assessment"]["id"], first["id"])
+        self.assertEqual(supplied["value"]["derived_accounts"]["checks"]["current"][0]["assessment_id"], changed["id"])
+
+    def test_stored_value_without_accounts_keeps_its_assessment_digest_and_projection(self):
+        plan, observed = self.run_problem()
+        self.assess_support(plan, observed)
+        reference = self.build_computation_evidence(observed)
+        paragraph = {"text": "The bounded calculation is validated.", "evidence": [reference]}
+        self.put("problem_value", "stored-value", {"id": "stored-value", "statement_id": "statement-1",
+            "motivation": [paragraph], "current_state": [paragraph], "recorded_revision": self.store.revision + 1})
+        claims = self.load_problem_module()
+        records = self.store.snapshot()["records"]
+        before = (claims.compute_problem_evidence_digest(records, self.artifacts),
+                  claims.describe_problem_evidence(records, self.artifacts))
+        changed = self.assessment(plan, observed, identifier="later-assessment", development=False)
+        changed["scope"].update(id="a-different-result-scope", assumptions=[])
+        changed["assumptions"] = []
+        self.mutate(development.assess_cycle, changed)
+        records = self.store.snapshot()["records"]
+        self.assertEqual((claims.compute_problem_evidence_digest(records, self.artifacts),
+                          claims.describe_problem_evidence(records, self.artifacts)), before)
 
     def test_an_unresolved_validity_check_for_the_cited_output_blocks_support(self):
         plan, observed = self.run_problem()

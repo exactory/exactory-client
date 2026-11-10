@@ -1,0 +1,98 @@
+{
+  "producer": "exactory 0.82.0 (645a791)",
+  "source_fixture": "problem_result_0820.json",
+  "minimum": [
+    {
+      "code": "problem_slate_missing",
+      "explanation": "Compare the current candidates and record the selection decision."
+    },
+    {
+      "code": "problem_openness_missing",
+      "explanation": "Obtain an observed openness finding for the selected statement."
+    },
+    {
+      "code": "problem_assessment_missing",
+      "explanation": "Record the rubric self-assessment with an evidence reference for every item.",
+      "statement_id": "statement-1"
+    }
+  ],
+  "post": {
+    "ready": false,
+    "obligations": [
+      {
+        "code": "problem_slate_missing",
+        "explanation": "Compare the current candidates and record the selection decision."
+      },
+      {
+        "code": "problem_openness_missing",
+        "explanation": "Obtain an observed openness finding for the selected statement."
+      },
+      {
+        "code": "problem_assessment_missing",
+        "explanation": "Record the rubric self-assessment with an evidence reference for every item.",
+        "statement_id": "statement-1"
+      },
+      {
+        "code": "problem_bar_pending",
+        "explanation": "A major scientific decision requires two distinct independent assessments",
+        "review_ids": []
+      },
+      {
+        "code": "problem_review_pair_required",
+        "explanation": "A major scientific decision requires two distinct independent assessments",
+        "review_ids": []
+      },
+      {
+        "code": "problem_decision_missing",
+        "explanation": "Record a post decision after both observed result reviews."
+      }
+    ],
+    "counts": {
+      "obligations": 6
+    },
+    "digest": "e764994499e97614db4efa4afc3fbe4db4d8a365d0c76728671fdae015f533fc",
+    "orchestration": "problem_creation",
+    "milestone": "exploration",
+    "problem_evidence_digest": "901d60749ae95562fa96991444b527bac9ea49055e86fae49bf7a3fb62af38da",
+    "statement_id": "statement-1",
+    "decision_id": null
+  },
+  "views": {
+    "final/problem/statements/statement-1.json": {
+      "content": "{\n  \"area\": \"math.CO\",\n  \"candidate_id\": null,\n  \"formal_statement\": null,\n  \"id\": \"statement-1\",\n  \"neighbours\": [],\n  \"recorded_revision\": 2,\n  \"resolution_criteria\": \"Prove the bound for all $n$ or exhibit a counterexample.\",\n  \"statement\": \"For every $n$, does $B(n)\\\\leq n^2$ hold?\",\n  \"title\": \"A finite bound problem\"\n}\n",
+      "entry": {
+        "kind": "problem_statement",
+        "id": "statement-1",
+        "recorded_revision": 2,
+        "status": "current"
+      }
+    },
+    "final/problem/attempts/attempt-1.json": {
+      "content": "{\n  \"id\": \"attempt-1\",\n  \"kind\": \"solver\",\n  \"literature\": null,\n  \"outcomes\": {\n    \"footholds\": [],\n    \"obstructions\": [],\n    \"resolved\": false,\n    \"unresolved\": [\n      {\n        \"description\": \"The general bound remains unresolved.\"\n      }\n    ]\n  },\n  \"proportion\": {\n    \"extension_reason\": null\n  },\n  \"recorded_revision\": 5,\n  \"solver\": {\n    \"applicability\": \"The quantifiers cover every n, with no added assumptions and named scope matching the statement and resolution criteria.\",\n    \"native_attempt_digest\": \"1878fa0ce1c9cc490a0a52b2feaa338af14d9431513478809e10bf895e5204a7\"\n  },\n  \"statement_id\": \"statement-1\"\n}\n",
+      "entry": {
+        "kind": "problem_attempt",
+        "id": "attempt-1",
+        "recorded_revision": 5,
+        "status": "current"
+      }
+    },
+    "final/problem/values/value-1.json": {
+      "content": "{\n  \"current_state\": [\n    {\n      \"evidence\": [\n        {\n          \"acceptance_id\": \"acceptance-1\",\n          \"attempt_id\": \"attempt-1\",\n          \"kind\": \"result\"\n        }\n      ],\n      \"text\": \"Only bounded examples have been established.\"\n    }\n  ],\n  \"id\": \"value-1\",\n  \"motivation\": [\n    {\n      \"evidence\": [\n        {\n          \"acceptance_id\": \"acceptance-1\",\n          \"attempt_id\": \"attempt-1\",\n          \"kind\": \"result\"\n        }\n      ],\n      \"text\": \"The bound would connect the finite constructions.\"\n    }\n  ],\n  \"recorded_revision\": 6,\n  \"statement_id\": \"statement-1\"\n}\n",
+      "entry": {
+        "kind": "problem_value",
+        "id": "value-1",
+        "recorded_revision": 6,
+        "status": "current"
+      }
+    },
+    "final/math/deliveries/attempts/1878fa0ce1c9cc490a0a52b2feaa338af14d9431513478809e10bf895e5204a7.json": {
+      "content": "{\n  \"acceptances\": [\n    {\n      \"checkpoint_id\": \"checkpoint-1\",\n      \"claims_openness\": false,\n      \"classification\": \"analytical\",\n      \"evidence_digests\": [\n        \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n      ],\n      \"id\": \"acceptance-1\",\n      \"obligation_id\": \"obligation-000002\",\n      \"outcome\": \"reduction\",\n      \"standard\": \"reviewed\",\n      \"status\": \"accepted\"\n    }\n  ],\n  \"attack_root\": \"/native/attack\",\n  \"checkpoints\": [\n    {\n      \"claim\": {\n        \"assumption_ids\": [],\n        \"proof_policy\": \"reviewed\",\n        \"quantifiers\": \"For every n\",\n        \"scope\": {\n          \"kind\": \"named\",\n          \"name\": \"all admissible sequences\"\n        },\n        \"statement\": \"The bound reduces to the balanced case.\"\n      },\n      \"id\": \"checkpoint-1\",\n      \"kind\": \"reduction\",\n      \"origin_kind\": \"local\",\n      \"verification_status\": \"accepted\"\n    }\n  ],\n  \"contract\": {\n    \"assumption_ids\": [],\n    \"original_claim\": {\n      \"assumption_ids\": [],\n      \"proof_policy\": \"reviewed\",\n      \"quantifiers\": \"For every n\",\n      \"scope\": {\n        \"kind\": \"named\",\n        \"name\": \"all admissible sequences\"\n      },\n      \"statement\": \"For every $n$, does $B(n)\\\\leq n^2$ hold?\"\n    },\n    \"proof_policy\": \"reviewed\",\n    \"requested_outcome\": \"decision\",\n    \"required_deliverables\": [],\n    \"resource_policy\": {\n      \"max_total_moves\": null,\n      \"max_total_runs\": null,\n      \"max_workers\": 1\n    },\n    \"root_attack_slug\": \"attack\",\n    \"root_obligation\": \"obligation-000001\",\n    \"schema_version\": 1\n  },\n  \"failed_strategies\": [],\n  \"nodes\": [],\n  \"objective_id\": \"objective-000001\",\n  \"obligations\": [\n    {\n      \"claim\": {\n        \"assumption_ids\": [],\n        \"proof_policy\": \"reviewed\",\n        \"quantifiers\": \"For every n\",\n        \"scope\": {\n          \"kind\": \"named\",\n          \"name\": \"all admissible sequences\"\n        },\n        \"statement\": \"For every $n$, does $B(n)\\\\leq n^2$ hold?\"\n      },\n      \"id\": \"obligation-000001\",\n      \"status\": \"open\"\n    }\n  ],\n  \"provenance\": {\n    \"actor_id\": \"search-controller\",\n    \"attestation_id\": \"filesystem-audit:deliver-attempt\",\n    \"source\": \"operator\"\n  },\n  \"recorded_revision\": 3,\n  \"retreats\": [],\n  \"schema_version\": 1,\n  \"state\": {\n    \"closure_digest\": null,\n    \"execution_status\": \"active\",\n    \"openness\": null,\n    \"proof_status\": \"open\"\n  },\n  \"totals\": {\n    \"elapsed_seconds\": null,\n    \"historical_usage\": \"known\",\n    \"moves\": 24,\n    \"runs\": 24,\n    \"timeout_seconds\": 300,\n    \"workers\": 1\n  }\n}\n",
+      "entry": {
+        "kind": "native_attempt",
+        "id": "1878fa0ce1c9cc490a0a52b2feaa338af14d9431513478809e10bf895e5204a7",
+        "recorded_revision": 3,
+        "status": "current"
+      }
+    }
+  }
+}

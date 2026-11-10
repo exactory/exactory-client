@@ -28,12 +28,12 @@ class ProblemValueReadingTests(ProblemCase):
         self.assertTrue(coverage["complete"])
         self.assertEqual(set(coverage["readings"]), {"read-full", "read-second-body"})
         saved = self.mutate(self.load_problem_module().record_value, self.build_value([self.first, second]))["result"]
-        self.assertEqual(saved["motivation"][0]["evidence"], [self.first, second])
+        self.assertEqual(saved["accounts"]["explanatory_use"][0]["evidence"], [self.first, second])
 
     def test_named_reading_stays_exact_while_current_work_coverage_is_complete(self):
         self.capture_second_original()
         saved = self.mutate(self.load_problem_module().record_value, self.build_value([self.first]))["result"]
-        self.assertEqual(saved["motivation"][0]["evidence"], [self.first])
+        self.assertEqual(saved["accounts"]["explanatory_use"][0]["evidence"], [self.first])
 
     def test_an_unread_second_original_retains_the_common_full_reading_gap(self):
         self.capture_second_original(read=False)
