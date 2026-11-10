@@ -9,6 +9,7 @@ from research_harness import cli, problem_attempt, problem_evidence, research_de
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.record_check import check_record
+from problem_accounts_fixtures import build_account_value
 from test_research_problem_attempt import build_acceptance, build_attempt, build_native_attempt, put_native_attempt
 from test_research_problem_delivery import ProblemDeliveryCase
 from test_research_problem_claims import ProblemCase
@@ -25,8 +26,9 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
         return [self.observe("result", reviewer, identifier=prefix + "-" + reviewer)["id"]
                 for reviewer in ("first", "second")]
 
-    def prepare_cited_result(self, *, legacy=False, outcome=False, cite_value=True):
+    def prepare_cited_result(self, *, legacy=False, outcome=False, cite_value=True, stored=False):
         self.prepare_ready(solver=True)
+        self.stored = stored
         self.native = (build_native_attempt(self.selected["statement"], [build_acceptance()], {})
                        if legacy else build_objective_native())
         identifier = put_native_attempt(self, self.native)
@@ -36,15 +38,22 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
         else:
             self.reference = build_objective_result(identifier)
         if cite_value:
-            self.mutate(self.load_problem_module().record_value, self.build_value([self.reference], "cited-value"))
+            value = build_account_value([self.reference], "cited-value")
+            if stored:
+                value.pop("accounts")
+                for section in ("motivation", "current_state"):
+                    value[section][0]["evidence"] = [self.reference]
+                self.put("problem_value", value["id"], dict(value, recorded_revision=self.store.revision + 1))
+            else:
+                self.mutate(self.load_problem_module().record_value, value)
         if outcome:
             self.mutate(cli.OPERATIONS["forming"], build_forming())
             self.outcome = build_outcome(evidence=[{
                 "kind": "reduction", "description": "The accepted reduction locates the remaining case.",
                 "standing": "admissible", "date": "unknown", "reference": self.reference, "counterexample": None}])
             self.mutate(cli.OPERATIONS["form-outcome"], self.outcome)
-        reviews = (self.refresh_reviews("cited") if cite_value else
-                   ["review-result-first", "review-result-second"])
+        # Forming records also change the exploration counts delivered with accounts.
+        reviews = self.refresh_reviews("cited")
         self.mutate(self.load_problem_module().record_decision, {
             "id": "cited-decision", "action": "post", "review_ids": reviews,
             "bar_review_ids": ["review-bar-first", "review-bar-second"], "reason": "The observed pair covers the value."})
@@ -55,11 +64,19 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
         later["totals"]["moves"] -= 1
         self.latest = put_native_attempt(self, later)
 
-    def assert_superseded(self, obligations):
-        pending = [row for row in obligations if row["code"] == "problem_result_superseded"]
+    def assert_later_delivery(self, obligations):
+        pending = [row for row in obligations if row["code"] in ("problem_result_superseded", "problem_value_stale")]
         self.assertEqual(len(pending), 1, obligations)
-        self.assertEqual(pending[0]["native_attempt_digest"], self.reference["native_attempt_digest"])
-        self.assertEqual(pending[0]["latest_native_attempt_digest"], self.latest)
+        if self.stored:
+            self.assertEqual(pending[0]["code"], "problem_result_superseded")
+            self.assertEqual(pending[0]["native_attempt_digest"], self.reference["native_attempt_digest"])
+            self.assertEqual(pending[0]["latest_native_attempt_digest"], self.latest)
+        else:
+            self.assertEqual(pending[0]["code"], "problem_value_stale")
+            self.assertEqual(pending[0]["value_id"], "cited-value")
+            self.assertEqual(pending[0]["changes"], [{"kind": "native_attempt", "id": self.latest,
+                "reason": "later_snapshot_of_cited_objective",
+                "previous_native_attempt_digest": self.reference["native_attempt_digest"]}])
 
     def check_reports(self, *, legacy=False):
         before = self.store.snapshot()
@@ -70,12 +87,14 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
                 if legacy:
                     self.assertIn("problem_attempt_stale", {row["code"] for row in report["obligations"]})
                 else:
-                    self.assert_superseded(report["obligations"])
-        code = "problem_attempt_stale" if legacy else "problem_result_superseded"
+                    self.assert_later_delivery(report["obligations"])
+        code = ("problem_attempt_stale" if legacy else
+                "problem_result_superseded" if self.stored else "problem_value_stale")
         page = self.run_command("obligations", "--code", code)
-        self.assertIn(code, json.dumps(page))
+        self.assertEqual(len(page["obligations"]), 1)
+        self.assertEqual(page["obligations"][0]["code"], code)
         if not legacy:
-            self.assertIn(self.latest, json.dumps(page))
+            self.assert_later_delivery(page["obligations"])
         for command in ("status", "next"):
             self.assertIn(code, json.dumps(self.run_command(command, "--summary")))
         # gate has always returned a structured readiness refusal for unmet obligations.
@@ -86,7 +105,7 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
         refusal = json.loads(error.getvalue())["error"]
         self.assertEqual(refusal["code"], "readiness_required")
         if not legacy:
-            self.assert_superseded(refusal["details"]["obligations"])
+            self.assert_later_delivery(refusal["details"]["obligations"])
         exported = self.run_command("export", "--kind", "outputs")
         self.assertIn("revision", exported)
         self.assertEqual(self.store.snapshot(), before)
@@ -109,8 +128,8 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
             self.assertEqual(binding["results"], [])
             self.assertEqual(evidence["results"], [])
             for report in (binding, evidence, assessed):
-                self.assert_superseded(report["obligations"])
-            self.assert_superseded(coverage)
+                self.assert_later_delivery(report["obligations"])
+            self.assert_later_delivery(coverage)
             self.assertIn("problem_evidence_unassessed", {row["code"] for row in coverage})
         tree = digest_tree(self.root)
         checked = check_record(self.root, isolate=False)
@@ -121,19 +140,18 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
         self.prepare_cited_result()
         self.check_reports()
 
-    def test_value_and_form_outcome_reports_survive_and_recover(self):
-        self.prepare_cited_result(outcome=True)
+    def check_recovery(self):
         self.check_reports()
         before = self.store.snapshot()
         self.assert_error("problem_result_superseded", lambda: self.mutate(
-            self.load_problem_module().record_value, self.build_value([self.reference], "refused-value")))
+            self.load_problem_module().record_value, build_account_value([self.reference], "refused-value")))
         self.assert_error("problem_result_superseded", lambda: self.mutate(
             cli.OPERATIONS["form-outcome"], dict(self.outcome, id="refused-outcome")))
         self.assertEqual(self.store.snapshot(), before)
         latest = build_objective_result(self.latest)
-        self.mutate(self.load_problem_module().record_value, self.build_value([latest], "latest-value"))
+        self.mutate(self.load_problem_module().record_value, build_account_value([latest], "latest-value"))
         pending = self.run_command("status")["obligations"]
-        self.assertNotIn("problem_result_superseded", {row["code"] for row in pending})
+        self.assertFalse({"problem_result_superseded", "problem_value_stale"} & {row["code"] for row in pending})
         self.assertIn("problem_evidence_unassessed", {row["code"] for row in pending})
         reviews = self.refresh_reviews("latest")
         self.mutate(self.load_problem_module().record_decision, {
@@ -142,7 +160,19 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
         self.assertTrue(self.run_command("gate", "post")["ready"])
         records = self.store.snapshot()["records"]
         self.assertEqual(records["form_outcome"]["outcome-1"]["evidence"][0]["reference"], self.reference)
-        self.assertEqual(records["problem_value"]["cited-value"]["motivation"][0]["evidence"], [self.reference])
+        value = records["problem_value"]["cited-value"]
+        self.assertEqual(value, before["records"]["problem_value"]["cited-value"])
+        evidence = (value["motivation"][0]["evidence"] if self.stored else
+                    value["accounts"]["explanatory_use"][0]["evidence"])
+        self.assertEqual(evidence, [self.reference])
+
+    def test_value_and_form_outcome_reports_survive_and_recover(self):
+        self.prepare_cited_result(outcome=True)
+        self.check_recovery()
+
+    def test_stored_value_without_accounts_keeps_a5_reports_and_recovers_with_accounts(self):
+        self.prepare_cited_result(outcome=True, stored=True)
+        self.check_recovery()
 
     def test_historical_form_outcome_does_not_stale_an_unrelated_value(self):
         self.prepare_cited_result(outcome=True, cite_value=False)
@@ -153,12 +183,13 @@ class ProblemResultSupersessionTests(ProblemDeliveryCase):
             arguments = ("post",) if command == "gate" else ()
             self.assertTrue(self.run_command(command, *arguments)["ready"])
         self.assertEqual(self.run_command("obligations", "--code", "problem_result_superseded")["obligations"], [])
+        self.assertEqual(self.run_command("obligations", "--code", "problem_value_stale")["obligations"], [])
         self.run_command("export", "--kind", "outputs")
         self.assertTrue(research_decisions.assess_problem_reviews(records, self.artifacts)["ready"])
         self.assertTrue(check_record(self.root, isolate=False)["ready"])
 
     def test_legacy_result_keeps_its_projection_currency_and_reports_after_redelivery(self):
-        self.prepare_cited_result(legacy=True)
+        self.prepare_cited_result(legacy=True, stored=True)
         self.check_reports(legacy=True)
 
 
@@ -171,7 +202,7 @@ class ProblemResultProjectionTests(ProblemCase):
         other = copy.deepcopy(native)
         other["objective_id"] = "independent-objective"
         current = build_objective_result(put_native_attempt(self, other))
-        self.mutate(self.load_problem_module().record_value, self.build_value([
+        self.mutate(self.load_problem_module().record_value, build_account_value([
             first, dict(first, purpose="An independently worded purpose."), current]))
         previous = None
         for moves in (23, 22):
@@ -182,7 +213,12 @@ class ProblemResultProjectionTests(ProblemCase):
             evidence = problem_evidence.describe_evidence(records, self.artifacts)
             for report in (binding, evidence):
                 self.assertEqual(len(report["obligations"]), 1)
-                self.assertEqual(report["obligations"][0]["latest_native_attempt_digest"], latest)
+                pending = report["obligations"][0]
+                self.assertEqual(pending["code"], "problem_value_stale")
+                self.assertEqual(pending["value_id"], "value-1")
+                self.assertEqual(pending["changes"], [{"kind": "native_attempt", "id": latest,
+                    "reason": "later_snapshot_of_cited_objective",
+                    "previous_native_attempt_digest": first["native_attempt_digest"]}])
                 self.assertEqual(len(report["results"]), 1)
                 self.assertEqual(report["results"][0]["native_attempt_digest"], current["native_attempt_digest"])
             self.assertNotEqual(digest(binding), previous)
@@ -192,7 +228,7 @@ class ProblemResultProjectionTests(ProblemCase):
         self.initialize_problem()
         self.select_statement()
         reference = build_objective_result(put_native_attempt(self, build_objective_native()))
-        self.mutate(self.load_problem_module().record_value, self.build_value([reference]))
+        self.mutate(self.load_problem_module().record_value, build_account_value([reference]))
         records = self.store.snapshot()["records"]
         records.pop("native_attempt_current")
         for project in (problem_evidence.describe_binding, problem_evidence.describe_evidence):

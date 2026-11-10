@@ -418,6 +418,11 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                 options["version"] = 2
             return original_prompt(role, **options)
         self.prepare_reviews(results=False)
+        legacy_value = self.build_value([self.item], identifier="legacy-v2-value")
+        legacy_value.pop("accounts")
+        for section in ("motivation", "current_state"):
+            legacy_value[section][0]["evidence"] = [self.item]
+        self.put("problem_value", legacy_value["id"], dict(legacy_value, recorded_revision=self.store.revision + 1))
         for reviewer in ("first", "second"):
             output = self.build_review_output("result")
             if reviewer == "second":

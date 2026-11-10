@@ -400,6 +400,7 @@ REFUSED_OUTCOMES = {
     "problem-objections-carry": "problem_objection_source_unavailable",
     "problem-posted": "readiness_required",
     "problem-post-external": "problem_statement_mismatch",
+    "problem-post-fact": "problem_post_missing",
     "problem-post-time": "problem_post_missing",
     "problem-slate": "problem_slate_incomplete",
     "publication-scope": "publication_scope_stale",

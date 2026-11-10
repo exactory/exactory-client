@@ -1755,7 +1755,9 @@ def validate_turn_output(records, artifacts, assignment, packet, output, *, atte
 
     logical = read_logical_packet(artifacts, packet[KEY])
     units = enumerate_units(logical, inventory['adapter'], inventory)
-    base_parameters = assignment['prompt']['parameters']['base_prompt']['parameters']
+    from .review_prompt_paragraphs import read_paragraph_parameters
+    base_parameters = dict(assignment['prompt']['parameters']['base_prompt']['parameters'],
+                           **read_paragraph_parameters(assignment['prompt']))
     for combination in delta['combinations']:
         header = dict(packet[KEY], kind='check', check_combinations=[combination['id']])
         card_handles = _find_card_handles(packet[STATE_KEY]['cards'], set(combination['units']))
@@ -1823,8 +1825,8 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         base_prompt_parameters = dict(orchestration=parameters.get('orchestration'),
             repair=bool(parameters.get('context_repair')), excerpts='reviewer_excerpts' in parameters,
             common_version=parameters.get('common_prompt_version'))
-        if 'problem_objection_carry' in parameters:
-            base_prompt_parameters['problem_objection_carry'] = parameters['problem_objection_carry']
+        from .review_prompt_paragraphs import read_paragraph_parameters
+        base_prompt_parameters.update(read_paragraph_parameters(prompt))
     if value['role'] in ('bar', 'slate', 'result'):
         if review_excerpts.KEY not in packet:
             packet = dict(packet, **{review_excerpts.KEY:

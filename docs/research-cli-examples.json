@@ -68,14 +68,106 @@
   "problem-value": {
     "id": "problem-value-1",
     "statement_id": "statement-1",
-    "motivation": [{
-      "text": "A resolution would connect the finite constructions described by the cited source.",
-      "evidence": [{"kind": "reading", "version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}]
-    }],
-    "current_state": [{
-      "text": "The cited source establishes the bounded examples within its stated assumptions.",
-      "evidence": [{"kind": "reading", "version_id": "arxiv:2601.00001v1", "reading_id": "full-reading-1"}]
-    }]
+    "accounts": {
+      "answer": {
+        "id": "answer",
+        "status": "none",
+        "text": null,
+        "evidence_ids": []
+      },
+      "answer_evidence": [],
+      "boundaries": [],
+      "explanatory_use": [
+        {
+          "id": "use",
+          "fact": "The source proves the bound for the finite constructions that it studies.",
+          "scope": "The finite constructions of the source only.",
+          "date": "unknown",
+          "evidence": [
+            {
+              "kind": "reading",
+              "version_id": "arxiv:2601.00001v1",
+              "reading_id": "full-reading-1"
+            }
+          ],
+          "evidence_ids": [],
+          "answer_argument": null
+        }
+      ],
+      "alternatives": [],
+      "strength": [
+        {
+          "id": "strength-range",
+          "head": "range_of_instances",
+          "description": "Every admissible sequence of every length $n$.",
+          "alternative_ids": [],
+          "no_alternative_reason": "The statement declares no neighbour on a smaller range of $n$."
+        },
+        {
+          "id": "strength-constants",
+          "head": "constants",
+          "description": "The constant 1 in front of $n^2$.",
+          "alternative_ids": [],
+          "no_alternative_reason": "The statement declares no neighbour with another constant."
+        },
+        {
+          "id": "strength-exponents",
+          "head": "exponents",
+          "description": "The exponent 2 of $n$.",
+          "alternative_ids": [],
+          "no_alternative_reason": "The statement declares no neighbour with another exponent."
+        },
+        {
+          "id": "strength-exactness",
+          "head": "exactness",
+          "description": "An inequality for every $n$, without an error term.",
+          "alternative_ids": [],
+          "no_alternative_reason": "The statement declares no asymptotic neighbour."
+        }
+      ],
+      "relations": [
+        {
+          "id": "relation-next-family",
+          "relation": "implies",
+          "target": "The same bound for the next family of constructions.",
+          "alternative_id": null,
+          "standing": "expected",
+          "scope": "The next family of constructions.",
+          "date": "unknown",
+          "evidence": [],
+          "evidence_ids": [],
+          "earlier_statement": false,
+          "consequence": null
+        }
+      ],
+      "refuted_conjectures": []
+    },
+    "motivation": [
+      {
+        "text": "The bound would extend the proved finite constructions to every admissible sequence.",
+        "evidence": [
+          {
+            "kind": "account",
+            "id": "use"
+          }
+        ]
+      }
+    ],
+    "current_state": [
+      {
+        "text": "The bound is proved for the finite constructions of the source. The implication for the next family is expected and not established.",
+        "evidence": [
+          {
+            "kind": "account",
+            "id": "use"
+          },
+          {
+            "kind": "account",
+            "id": "relation-next-family"
+          }
+        ]
+      }
+    ]
   },
   "problem-citation-metadata": {
     "id": "citation-metadata-1",
@@ -186,6 +278,22 @@
     "reason": "The problem was posted on exactory.ai without gate post, on the owner's instruction.",
     "evidence": "Owner instruction of 2026-11-04: \"Post this problem on exactory.ai now, without gate post.\"",
     "posted_at": "2026-11-04T14:49:22.236Z"
+  },
+  "problem-post-fact": {
+    "id": "post-fact-1",
+    "post_id": "external-post-1",
+    "fact": "A later reading identifies an earlier statement of the same bound.",
+    "source": {
+      "kind": "record",
+      "record_kind": "reading",
+      "id": "read-full",
+      "digest": "<digest of the stored reading>"
+    },
+    "date": "unknown",
+    "bears_on": {
+      "value": "earlier_statement",
+      "description": "An earlier statement of the same mathematical content."
+    }
   },
   "gate-override": {
     "id": "override-1",

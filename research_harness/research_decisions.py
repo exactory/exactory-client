@@ -911,6 +911,7 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
     from .review_protocol import collect_references
     from . import review_problem_parts
     evaluation = Evaluation.of(records, artifacts)
+    account_keys = ('value', 'account_records') if 'accounts' in (expected.get('value') or {}) else ()
     deliveries = []
     for review in reviews:
         try:
@@ -932,10 +933,13 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
             if assignment.get('staged_review') is not None:
                 graph = delivery['task_graph']
                 frozen = read_assignment_packet(records, evaluation, assignment['id'])
-                if (not graph['completion']['complete'] or frozen.get('problem_evidence_digest') != evidence_digest):
+                frame = graph['epoch']['manifest']['frame'].get('problem_evidence', {})
+                missing = [key for key in account_keys if frame.get(key) != expected[key]]
+                if (not graph['completion']['complete'] or frozen.get('problem_evidence_digest') != evidence_digest or missing):
                     obligations.append(obligation('problem_evidence_unassessed',
                         'Complete the selected task graph against the current problem evidence.',
-                        review_id=review['id'], issues=graph['completion']['issues']))
+                        review_id=review['id'], issues=graph['completion']['issues'],
+                        **({'missing': missing} if account_keys else {})))
                 continue
             from . import review_parts
             if review_parts.KEY in assignment:
@@ -951,6 +955,8 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
                 missing_bodies = [reference['sha256'] for reference in references
                                  if not review_parts.has_series_attachment(evaluation, current, reference)]
                 frame_keys = ('claim', 'openness', 'value', 'assessment', 'attempt', 'results', 'citations')
+                if account_keys:
+                    frame_keys += ('account_records',)
                 if 'delivery' in expected:
                     frame_keys += ('delivery',)
                 missing += [key for key in frame_keys if not any(
@@ -972,6 +978,8 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
             current = [packet for packet in packets if packet.get('problem_evidence_digest') == evidence_digest]
             current_evidence = [packet.get('problem_evidence', {}) for packet in current]
             keys = ('claim', 'openness', 'openness_searches', 'value', 'assessment', 'assessment_evidence', 'attempt', 'results', 'citations', 'readings', 'computations', 'formal_checks')
+            if account_keys:
+                keys += ('account_records',)
             if series_review:
                 keys += ('passages',) + (('delivery',) if 'delivery' in expected else ())
             current_series = [packet for packet in series if packet.get('problem_evidence_digest') == evidence_digest]

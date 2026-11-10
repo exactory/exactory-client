@@ -92,9 +92,21 @@ class ProblemDirectionTests(ProblemDeliveryCase):
             self.put('problem_assessment', saved['id'], saved)
             return {'result': saved}
 
+        def seed_previous_value(store, payload, *, expected_revision, request_id):
+            from research_harness.problem_evidence import collect_value_items
+            evidence = collect_value_items(payload)
+            saved = {key: copy.deepcopy(value) for key, value in payload.items() if key != 'accounts'}
+            for section in ('motivation', 'current_state'):
+                for paragraph in saved[section]:
+                    paragraph['evidence'] = evidence
+            saved['recorded_revision'] = expected_revision + 1
+            self.put('problem_value', saved['id'], saved)
+            return {'result': saved}
+
         with patch.object(protocol, 'canonical_prompt', side_effect=build_previous_prompt), \
                 patch.object(self, 'build_review_output', side_effect=build_previous_output), \
-                patch.object(claims, 'record_assessment', side_effect=seed_previous_assessment):
+                patch.object(claims, 'record_assessment', side_effect=seed_previous_assessment), \
+                patch.object(claims, 'record_value', side_effect=seed_previous_value):
             self.prepare_ready()
             output = self.build_review_output('slate')
             for check in output['value']['assurances']:

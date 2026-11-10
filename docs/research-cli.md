@@ -2271,7 +2271,7 @@ The example for each operation contains all its required keys and shows the comp
 | `innovation` | `id`, `profile`, `scope`, `cases` | Research only. Optional `origin_collection: {id, version}` and `depth`. The depth-plan section gives the current and historical case bounds. Cases separately describe original constraint, conceptual change, validation, adoption, and tested transfer limits. |
 | `context` | `id`, `profile`, `scope`, `current`, `historical`, `beneficiaries`, `capabilities`, `barriers`, `uncertainties`, `speculative_links` | Research only. Basic science does not require an invented immediate application. |
 | `grand-challenge` | `id`, `reason`, `challenges` | Research only (`configuration_missing` without a research configuration, `profile_inapplicable` in a verification workspace). Records the challenges ahead of the ai-science study as part of the direction minimum: each challenge is `{id, horizon: ultimate|near_term, statement, state, criteria: [{id, statement}], evidence}`, at least one is `ultimate`, and criterion ids are unique across the record (`invalid_grand_challenge`). Evidence is a source read in full or an execution result, validated as in `round` (`invalid_development` for a malformed item, `reading_missing` for a source without a full reading). The managed direction minimum owes `grand_challenge_missing` until the first record exists. A user-specified mathematical objective follows its own gates. The latest record is current for the whole study; a new record with a reason replaces it. It is outside the preparation digest, so recording it never makes a pinned bundle stale. `status` reports the current record. |
-| `cycle` | `id`, `author`, `objective`, `scope`, `hypothesis`, `question`, `strategy`, `predecessor`, `inheritance`, `reopening`, `distinguishing_test`, `expected_outcomes`, `failure_signals`, `evidence_requirements`, `literature`, `resource_limits` | The full nested example includes a first cycle. Successors retain checkpoint lineage and account limits. Optional `prior_knowledge`, `{program, program_path, probe_ids, account}`, discloses the runs of the plan's program that probes recorded before the plan (see "Planning a successor"). |
+| `cycle` | `id`, `author`, `objective`, `scope`, `hypothesis`, `question`, `strategy`, `predecessor`, `inheritance`, `reopening`, `distinguishing_test`, `expected_outcomes`, `failure_signals`, `evidence_requirements`, `literature`, `resource_limits` | The full nested example includes a first cycle. Successors retain checkpoint lineage and account limits. Optional `prior_knowledge`, `{program, program_path, probe_ids, account}`, discloses the runs of the plan's program that probes recorded before the plan (see "Planning a successor"). In a problem record, optional `test_declaration`, `{alternative, excluded_outcome, prior_knowledge, search_id}`, declares the run as a test of the current statement before the execution ([The test declaration of a plan](#the-test-declaration-of-a-plan)). The `prior_knowledge` of the declaration is a field of the declaration, and it is another thing than the `prior_knowledge` of the plan. |
 | `admit` | `id`, `cycle_id`, `plan_digest`, `command`, `reserved_units` | Command has `argv`, `program`, `inputs`, `versions`, `seed`, `seed_reason`. This reserves resources; it does not launch. Optional `format_only_of` names the id of a completed, assessed, managed execution of the same plan and declares that the new run changes only the format of its outputs (see "Actual execution"). The program must be the program that the plan's `prior_knowledge` froze (`preplan_program_mismatch`), and a plan without that account cannot admit a program that a disclosed probe ran before the plan was recorded (`preplan_probe_missing`; see "Planning a successor"). |
 | `bind-run` | `admission_id`, `script`, `backend`, `timeout_seconds`, `inputs`, `outputs`, `usage_unit` | Backend is `local` or `colab`; usage is planned `execution` or `wall_seconds`. Inputs map each admitted artifact to a relative path. |
 | `reconcile-run` | `admission_id` | Optional `resolution`, `reason`: `interrupted` for a confirmed dead local owner, or `not_released` for a Colab claim with no durable release. Unknown released remote work remains pending. The result is the run summary, as before, with `execution_id` and `outputs` of the execution that the store records for the admission after the command, or null for both when it records none (see "Actual execution"). The receipt of the request holds the summary alone. Some runs that an earlier release claimed or admitted fail with `invalid_input` (see "Actual execution"). Their metric or seed exceeds the store bounds in a new record or result. |
@@ -3445,7 +3445,7 @@ problem record; the Ideate commands that run there are `forming` and
 
 | Claim | Mechanical minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
-| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, evidence-bound value, rubric self-assessment and projected citations | Two observed bar reviews and two observed result reviews that grade every rubric item, A7 included, and meet the rubric thresholds after focused adjudication | The explicit `problem_evidence_digest` binds the selected claim, attempt, accepted results, assessment and decisive evidence. |
+| Problem: precisely stated, open, worth solving | A slate that selects the statement's candidate, exact statement and criteria, current unresolved attempt, current supported openness, evidence-bound value with the accounts of the statement, rubric self-assessment and projected citations | Two observed bar reviews and two observed result reviews that grade every rubric item, A7 included, and meet the rubric thresholds after focused adjudication | The explicit `problem_evidence_digest` binds the selected claim, attempt, accepted results, assessment and decisive evidence. |
 
 Every mutation below uses `--file FILE --expected-revision REVISION
 --request-id ID`. Read the revision before a new mutation; an interrupted retry
@@ -3465,10 +3465,10 @@ since 0.73.0, and is checked, not refused.
 | `form-outcome` | `{id, form_id, target, standing, disposition, lack_of_means, outcome, evidence, reason}` | `form_outcome/<id>` records how one form, or one expected relation or planned check of a form, ended, with its evidence. It adds `previous` (the id of the latest earlier outcome of the same item, or null), `refutation_basis`, `recorded_revision` and `recorded_at` ([Forming records](#forming-records)). |
 | `problem-slate` | `{id, selected, deferred, rejected, bar_review_ids, review_ids, comparison, reason}` | `problem_slate/<id>` records the selection decision over every current candidate, adding the computed `candidate_ids`, `recorded_revision` and, in a record with a carry, `problem_objection_carry_digest`. The latest slate by recorded revision is current. |
 | `problem-objections-carry` | `{id, source_workspace, source_revision}` | `problem_objection_carry/<id>` imports every material objection of another problem record's bar and slate reviews, with authenticated provenance and local evidence, and links this record to that source ([Carried objections](#carried-objections)). `source_workspace` is the absolute path of the source workspace and `source_revision` its current revision. The payload has no other field (`invalid_input` otherwise). A carry id with another payload is `record_conflict`, and the same request replays its receipt. `--check` with a reachable source validates the whole carry and writes nothing. Full `status` lists the carries under `problem_objection_carries`. |
-| `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty text with TeX mathematics. Write `statement` in the two parts of [math-conjecturer Formulation step 1](../skills/math-conjecturer/SKILL.md#formulation), with the optional `---` line and the details in the same field. Neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); for another subject class, the rule of [math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration) applies. Any other changed field requires a new statement id and moves the selection. |
+| `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` and the optional `revises_statement_id` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty text with TeX mathematics. Write `statement` in the two parts of [math-conjecturer Formulation step 1](../skills/math-conjecturer/SKILL.md#formulation), with the optional `---` line and the details in the same field. Neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); for another subject class, the rule of [math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration) applies. Any other changed field requires a new statement id and moves the selection. `revises_statement_id` is optional: the id of the statement record that this one revises (`problem_statement_missing` when the store holds no statement record with that id). The harness reads these references to list the runs on the earlier texts of a statement beside the runs on its current text ([The accounts of a value record](#the-accounts-of-a-value-record)). The statement digest covers `statement` and `resolution_criteria`, so a revision that changes only the neighbours keeps the digest. A record without the field keeps the bytes of 0.82.0. |
 | `problem-attempt` | `{id, statement_id, kind, solver, literature, outcomes, proportion}` | Appends `problem_attempt/<id>`, adding `recorded_revision`. Binds the current statement to a solver attempt delivered in this store or a critically assessed full-reading literature attempt. The latest record by recorded revision is current; a resolved attempt blocks posting as an open problem. |
 | `problem-openness` | `{assignment_id}` | Records `problem_openness/<id>` from the observed native result review. Every supplied minimum must pass the shared closed-schema validation. `supported_open` advances the claim; `unresolved` records the gap without an evidence audit; `already_solved` redirects to the settling result and blocks posting as open. |
-| `problem-value` | `{id, statement_id, motivation, current_state}` | `problem_value/<id>` contains ordered paragraph arrays, each item `{text, evidence}` with nonempty evidence. |
+| `problem-value` | `{id, statement_id, accounts, motivation, current_state}` | `problem_value/<id>` holds the accounts of the statement and two ordered paragraph arrays. Each paragraph is `{text, evidence}` with the optional `field_fact`, and its nonempty evidence cites entries of the accounts. `accounts` is required (`problem_accounts_required` otherwise). The record adds `recorded_revision` and the dates that the harness derives. [The accounts of a value record](#the-accounts-of-a-value-record) gives the parts, the rules, the derived parts and the refusals. A value record that an earlier release recorded has no accounts and keeps its contract. |
 | `problem-citation-metadata` | `{id, version_id, title, authors, year, evidence}` | Appends `problem_citation_metadata/<id>`, adding `provenance` and `recorded_revision`, for an existing `url:` work with no DOI and no arXiv identity among its id, its aliases and its metadata (`problem_citation_work_ineligible` otherwise) that a valid full reading of this store covers (`problem_value_reading_missing` otherwise). `title` is nonblank text, `authors` is a nonempty ordered array of nonblank names, and `year`, optional, is four ASCII digits; a record without a year is cited without one, with no fallback to the work's year. `evidence` is `{title: span, authors: [span, ...], year: span}`: one span for the title, one span per author in the same order, and a year span exactly when `year` is given. A span is `{kind, source_id, sha256, start, end}`. `kind` is `fulltext`, the extracted text of a `fulltext` capture of this exact version, or `response`, the captured response of a `source` record; `source_id` names that source record; `sha256` is the hash of the retained object, the `text.sha256` of the capture or the `response.sha256` of the source record; `start` and `end` are zero-based UTF-8 byte offsets into that object, end exclusive, with `0 <= start < end <= size`. The selected bytes must equal the UTF-8 encoding of the field value exactly (`problem_citation_span_mismatch` otherwise): no JSON escape is decoded, no whitespace is normalized and no fragments are combined, so a line-wrapped title in a PDF text needs another retained capture that holds the clean title. An offset inside a multibyte character, or an object that is not valid UTF-8, is `invalid_input`. Every object is resolved through the stored records and the artifact store, never through a caller path: an absent source record is `unknown_source`; a source whose response is not a complete capture, or a capture that is not available and extracted, is `source_pending`; a `sha256` that is not the response of that source, a full text that no capture of this version with that source holds, or a retained object that is missing is `problem_citation_evidence_unbound`; retained bytes that fail their integrity check are `artifact_corrupt`. The record keeps the resolved provenance of every span: the source record's identity fields and digest, the response hash and, for a full text, the capture digest with the text and original hashes. The latest record for a version by `(recorded_revision, id)` is selected and revalidated at every projection. A correction is a new id with the complete replacement payload; a changed payload under an existing id is `record_conflict`. The selected record supplies the citation text alone; the locator does not change. |
 | `problem-citation-locator` | `{id, version_id, reading_id, original_sha256, url, source_id}` | Appends `citation_locator/<id>`, adding `reading_digest`, `source_digest` and `recorded_revision`: the HTTPS location of the exact original that an existing reading read. It supplies the locator of a read work that has no DOI, no arXiv id and no bundle HTTPS URL, for example a manuscript PDF in a GitHub repository, after those three in the locator order of `export --kind problem` (below); the citation text does not change. Every field is nonblank text. A payload that fails any of these conditions is refused with `problem_citation_locator_unbound`: `url` is an absolute `https` URL with a host, without a user name, a password, a fragment, whitespace or the port 0; `reading_id` names a reading of `version_id`; the bundle of that reading has `original_sha256`; `source_id` names a `source` record with this exact `url`, status `captured`, a complete response and a verified origin, whose response has the hash `original_sha256`; for a `url:` work, the text after `url:` equals `url`; a full-text capture of the work names this source and this original. The reading itself must still be valid (its own codes). Retained bytes that fail their integrity check are `artifact_corrupt`. The reading, its bundle and the work stay unchanged, and no new reading is needed. The latest record of a reading by `(recorded_revision, id)` is selected and revalidated at every projection; a selected record whose reading or source record changed after it was made is refused with `problem_citation_locator_unbound`. A correction is a new id; a changed payload under an existing id is `record_conflict`. |
 | `problem-assessment` | `{id, statement_id, grades, items, primary}` | `problem_assessment/<id>` binds the rubric self-assessment to the current statement, adding `recorded_revision`. Each item has evidence and a note; `primary` names its significance ground and criterion. |
@@ -3479,6 +3479,7 @@ since 0.73.0, and is checked, not refused.
 | `gate-auto-pass` | `{stop_id}` | Records `gate_override/automatic:<digest>`, the automatic pass of a harness-defect stop that `review-series` recorded, and moves the study from `experiment` to `write` in the same mutation ([The automatic pass](research-workflow.md#the-automatic-pass)). `stop_id` is the id of a `review_series_stop` record, from the last line of `review-series`. The payload has no other field (`gate_override_invalid` otherwise): the command takes no gate, class, reason, scope or transition from the caller. `exactory-research example gate-auto-pass` prints the shape. The conditions of the pass, the code of each refusal and its next action are in [The automatic pass](research-workflow.md#the-automatic-pass); this row states what the command writes. Before the commit it writes `.exactory/automatic-passes/<digest>.json` with `recorded: false` (`gate_override_report` with `report_path` when it cannot; nothing is recorded then). The mutation `research.gate_auto_pass` appends the record with `authority: "harness"`, `evidence: "recorded_stop"`, `gate`, `transition`, `stop_id`, `stop_code`, `cited_stops`, `obligations: [{code, explanation}]`, `target_digest`, `recorded_revision`, `report_path` and `report_artifact`, and sets the study's `stage` to `write`, its `status` to `in_progress` and its `waiting` to null; the move records the draft workspace as `exactory-lab state set` does. After the commit it writes the report with `recorded: true` and renders the views (`gate_override_report` with `override_id` when that fails: the pass is recorded, and the same request restores them). A store refusal after the pending report leaves that file, and the error carries its `report_path`. The same request replays its receipt. A store that holds the record needs plugin 0.81.0 or later ([The automatic pass](research-workflow.md#the-automatic-pass)). No gate reads the record, and the stage check ignores it, so `exactory-lab state set` gains no move from it. No review, score, acceptance, decision, publication receipt or problem post is created. Supports `--check`, which runs every check on the snapshot and writes no report and no record. After the pass, every public write needs the user's recorded instruction ([Public writes after an automatic pass](research-workflow.md#public-writes-after-an-automatic-pass)). |
 | `problem-post-external` | `{id, problem_id, statement_digest, reason, evidence, posted_at}` | Records a post made outside the harness as a `problem_post` with `gate` `bypassed` and no export: `problem_id` is the exactory.ai problem id (a UUID), `statement_digest` the digest of the store's current statement, `reason` a non-empty text, and `evidence` a non-empty text such as the owner's instruction, or an artifact reference, which is verified. `posted_at` is the time of the post on exactory.ai, for example the `createdAt` of the server's response. It must be a timestamp with an explicit timezone (ISO 8601, `Z` accepted), and the record keeps it exactly as given (fractional seconds and offsets keep their text). When that time is known, pass it as `posted_at`. When it is not known, omit `posted_at`. A post recorded without `posted_at` stores `posted_at` null, and `problem-post-time` does not accept it (it has `recorded_at`), so no later command can state its time. The record adds `recorded_at`, the recording time in UTC. The harness does not compare `posted_at` with the local clock, so a time in the future is accepted. For the display of older posts, see the paragraph on a posted problem, below. Refusals: `invalid_input` (the problem id is not a UUID, a field is empty, or `posted_at` is given and is not such a timestamp, `null` and a non-string included), `problem_statement_missing`, `problem_statement_mismatch` (with the current digest) and `problem_already_posted`. The same request replays its result. |
 | `problem-post-time` | `{post_id, posted_at, evidence}` | Records a statement of the time of an older external post: a `problem_post` with `gate` `bypassed` and no `recorded_at`, which 0.73.0 to 0.73.2 recorded. The immutable record `problem_post_time/<post_id>` holds the payload fields, `recorded_at` (UTC) and `recorded_revision`. `post_id` must be a non-empty text, the id of the stored `problem_post`. `posted_at` must be a timestamp with an explicit timezone, as defined for `problem-post-external`, and the record keeps it exactly as given. `evidence` must be a non-empty text or an artifact reference, which is verified (`artifact_missing` and the other artifact errors when its bytes are not stored). The post is found by its id, also when another problem statement is now current, and nothing compares `posted_at` with the stored recording time. One statement is accepted per post. `status` shows the statement with the post (the paragraph on a posted problem, below). The output views export each statement at `problem/post-times`, and the post's own export keeps its bytes. The statement is not part of the problem evidence or its digest, the post gate, or the reconstruction of review requests. Refusals, after the field checks and in this order: `problem_post_missing` (no `problem_post` has that id, details `post_id`), `problem_post_time_inapplicable` (the post has a `gate` other than `bypassed`, or it has `recorded_at`, details `post_id` and `gate`) and `problem_post_time_already_recorded` (a statement exists for that post, details `post_id`). Outside a problem record the command is refused with `orchestration_conflict`, as `problem-post-external` is. It follows the normal `--file`, `--expected-revision`, `--request-id` and `--check` contract. The same request id with the same payload returns its original receipt before any of these checks, and with another payload it fails with `request_id_conflict`. |
+| `problem-post-fact` | `{id, post_id, fact, source, date, bears_on}` | Records `problem_post_fact/<id>`: a fact about the place of a posted statement that arrived after its post, for example in a reply. `post_id` is the id of a stored `problem_post`, which `gate post` and `problem-posted` or `problem-post-external` recorded. The post is found by its id, also when another statement is now current (`problem_post_missing` otherwise). `fact` is nonempty text. `source` is a stored artifact descriptor `{path, sha256, size, media_type}`, which `exactory-research artifact` returns for a stored file, or an exact reading record of this store, `{kind: "record", record_kind: "reading", id, digest}`, at any depth. Another shape is `invalid_input`, missing bytes are `artifact_missing`, an unknown reading is `strategy_reference_missing`, and a digest that differs from the stored reading is `strategy_evidence_stale`. `date` is nonempty text: the day on which the fact became available, as the source gives it, or `unknown`. `bears_on` is `{value, description}`, two nonempty texts: what the fact bears on, as an open value such as `earlier_statement`, `alternative`, `relation` or `refutation`, with a description. The record adds `recorded_revision`. It needs no value record. It is not part of the problem evidence or its digest, of the post gate or of the reconstruction of review requests, so the stored post, the reviews and the gate result keep their bytes. `status` lists the fact under `after_post` with the code `problem_post_fact` and the fact as its `reason`, and the output views show it at `problem/post-facts`. The harness records the fact and does not review it. An id that holds another payload is `record_conflict`, and the same request replays its receipt. Outside a problem record the command is refused with `orchestration_conflict`. Supports `--check`. |
 
 An exploration records its candidates with `problem-candidate` and compares
 them in a slate with `problem-slate`. The slate gives every current candidate
@@ -4323,8 +4324,10 @@ attempt among those establishing a resolution.
 
 Value evidence is `{kind: "reading", version_id, reading_id}` for a full reading,
 `{kind: "computation", execution_id, output_id, formal_check}`, or a result
-reference for an accepted mathematical result. A result reference has one of two
-shapes. `{kind: "result", attempt_id, acceptance_id}` cites the current solver
+reference for an accepted mathematical result. In a value record with accounts
+these references stand in the entries of the accounts, and a paragraph cites
+the entries ([The accounts of a value record](#the-accounts-of-a-value-record)).
+A result reference has one of two shapes. `{kind: "result", attempt_id, acceptance_id}` cites the current solver
 attempt on the current statement: the acceptance has status `accepted` and
 outcome `proof`, `reduction` or `obstruction`; otherwise
 `problem_value_result_missing` names `{attempt_id, acceptance_id}`.
@@ -4358,9 +4361,12 @@ contract claim need not be the current statement. Its result supports exactly
 its accepted conclusion: a root proof or counterexample of the objective does
 not resolve the current statement. The same reference is evidence of a form
 outcome ([Forming records](#forming-records)). When the solver delivers a later
-snapshot of the objective, the gate lists `problem_result_superseded` for a
-value record that cites the earlier one, until a new value record cites the
-latest; delivering the earlier snapshot again makes it current again.
+snapshot of the objective, a value record that cites the earlier one is stale
+until a new value record cites the latest. For a value record with accounts the
+gate lists one obligation, `problem_value_stale`, which names the later
+snapshot among its `changes`. For a value record without accounts, which an
+earlier release recorded, the gate lists `problem_result_superseded`.
+Delivering the earlier snapshot again makes it current again.
 Invalidated acceptances and hypotheses supply no result evidence. Abstract and
 passage readings, availability qualifications and deferrals supply no value
 evidence. A cited computation requires its admission, reconciled output and an
@@ -4483,8 +4489,11 @@ twelve evidence keys `claim`, `openness`, `openness_searches`, `value`,
 `assessment`, `assessment_evidence`, `attempt`, `results`, `citations`,
 `readings`, `computations` and `formal_checks`, at least one of those packets
 must carry the key with its current expected value, including a null or empty
-value; a different packet can satisfy each key. The same request must deliver
-every reading of the evidence and attach the exact bytes of every artifact of
+value; a different packet can satisfy each key. When the current value record
+holds accounts, the expected `value` carries the accounts with
+`derived_accounts`, and `account_records` is a thirteenth key
+([The accounts of a value record](#the-accounts-of-a-value-record)). The same
+request must deliver every reading of the evidence and attach the exact bytes of every artifact of
 the assessment evidence, including the artifact of a `local_artifact` record
 reference, of the computations and of the formal checks. A shortfall returns
 `problem_evidence_unassessed` for that review with the keys that are absent or
@@ -4604,6 +4613,10 @@ carries `review_evidence_undelivered`. The result template
 with the claim, attempt, accepted results, openness, value, assessment, resolved
 `assessment_evidence`, citations, delivered readings/passages,
 admissions/executions/assessments/output validations and bound native closures.
+For a value record with accounts, the value part carries the accounts with
+`derived_accounts`, the packet carries `account_records`, and the prompt carries
+the accounts paragraph, and the replacement paragraph when the accounts hold a
+replacement part ([The accounts of a value record](#the-accounts-of-a-value-record)).
 Each record that a problem packet projects carries the stored record's `id` and
 `digest` (the claim, openness, value, assessment, attempt, readings and formal
 checks), and a projection that carries further records (the attempt's native
@@ -4929,9 +4942,11 @@ example the population of the cohort tool. The post decision is
 | `problem_openness_missing`, `problem_openness_unresolved` | Obtain an observed supported openness finding with the audited minimum. |
 | `problem_already_solved` | Redirect to the named established result or record a new statement. |
 | `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. |
-| `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply ordered value paragraphs with valid full readings or admitted, reconciled, assessed computation support. |
+| `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply a value record with the accounts of the statement and ordered value paragraphs, with valid full readings or admitted, reconciled, assessed computation support. |
+| `problem_value_stale` | The current value record holds accounts, and the record gained a later run on the current text, a later outcome of a form in the history of the statement, or a later delivered snapshot of a cited objective (`value_id`, `changes`). Record a new value record whose accounts take each change into account and cite the latest snapshot. The result reviews are then refreshed ([The accounts of a value record](#the-accounts-of-a-value-record)). |
+| The codes of the accounts, for example `problem_neighbour_role_missing` or `problem_test_run_invalid` | The current value record does not validate against the current records, for example after a revision of the statement changed its neighbours. Record a new value record. The table under [The accounts of a value record](#the-accounts-of-a-value-record) gives the repair for each code. |
 | `problem_value_result_missing` | Cite an accepted proof, reduction or obstruction of the current solver attempt; the obligation names `attempt_id` and `acceptance_id`. |
-| `problem_result_unbound`, `problem_result_superseded`, `problem_result_missing`, `problem_result_extension_unexplained` | A value paragraph cites a result of a delivered objective that does not hold: the objective is not delivered into this store (`native_attempt_digest`), a later snapshot of it was delivered (`latest_native_attempt_digest`), the acceptance is not an accepted proof, reduction, obstruction or counterexample of the snapshot (`acceptance_id`), or a delivered total exceeds a normal limit without a reason (`totals`, `exceeded`). Deliver the objective, or record a new value record that cites the latest snapshot, an accepted acceptance of it and the `extension_reason`. |
+| `problem_result_unbound`, `problem_result_superseded`, `problem_result_missing`, `problem_result_extension_unexplained` | A value paragraph cites a result of a delivered objective that does not hold: the objective is not delivered into this store (`native_attempt_digest`), a later snapshot of it was delivered (`latest_native_attempt_digest`), the acceptance is not an accepted proof, reduction, obstruction or counterexample of the snapshot (`acceptance_id`), or a delivered total exceeds a normal limit without a reason (`totals`, `exceeded`). Deliver the objective, or record a new value record that cites the latest snapshot, an accepted acceptance of it and the `extension_reason`. For a value record with accounts, the gate lists a later snapshot as `problem_value_stale`, and `problem_result_superseded` is the refusal of a new record that cites the earlier snapshot. |
 | `problem_assessment_missing` | Record the rubric self-assessment with evidence for every item. |
 | `problem_assessment_evidence_missing` | Supply item evidence with the exact stored record digest at recording and projection, or at least one matching full source reading at projection; names `item` and the record ids or `link`. Re-record an assessment after a mutable record changes. |
 | `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
@@ -5085,8 +5100,10 @@ research record and runs its delivery section.
 A posted problem. Since 0.73.0, when the store holds a `problem_post` for the
 current statement, `next` is `problem_already_posted` alone, and `status`
 lists the problem's other findings under `after_post`, each with its `code`
-and `reason`, so that nothing is hidden. `next --summary` reports `after_post`
-as a count. `status` shows the stored post under `post`, with `gate` set to
+and `reason`, so that nothing is hidden. Since 0.84.0 `after_post` also lists,
+after those findings and in recording order, each fact that `problem-post-fact`
+recorded for the post, with the code `problem_post_fact`. `next --summary`
+reports `after_post` as a count. `status` shows the stored post under `post`, with `gate` set to
 `passed` when the record has no `gate` (a post recorded before 0.73.0). An
 external post also carries its `reason`. A post recorded by `problem-posted`
 has no `reason`. A problem posted outside the harness, without `gate post`, is
@@ -5499,7 +5516,7 @@ A form of `forms`:
 | `nearest_alternatives` | The ids of the forms that could be posed in place of this one. Each is a form of the record or of the call, and none is the form itself. |
 | `expected_relations` | A list, possibly empty, of `{id, description, form_ids}`: a relation that the performer expects of the form, with an id that is distinct within the form, and the ids of the other forms that it concerns, possibly none. |
 | `planned_checks` | A list, possibly empty, of `{id, description, contradiction, no_contradiction_reason}`, with ids distinct within the form. Exactly one of the last two fields is text and the other is null: the outcome that would contradict the form, or the reason that no outcome can. |
-| `correction_checks` | Empty for a form without `previous`. For a correction, one entry `{check_id, was_made, keeps_prediction, chosen_with_outcome}` for each planned check of the earlier form and for no other check (`problem_form_correction_incomplete`). The three values are booleans: whether the check was made, whether the corrected form keeps its prediction, and whether the correction was chosen with its outcome in view. |
+| `correction_checks` | Empty for a form without `previous`. For a correction, one entry `{check_id, was_made, keeps_prediction, chosen_with_outcome}` for each planned check of the earlier form and for no other check (`problem_form_correction_incomplete`). The three values are booleans: whether the check was made, whether the corrected form keeps its prediction, and whether the correction was chosen with its outcome in view. An entry can also give `execution_id`, the id of the recorded execution that made the check (`invalid_input` when the store holds no such execution). A run stays a test of the corrected statement only through this entry ([The accounts of a value record](#the-accounts-of-a-value-record)). |
 
 The payload of `form-outcome`:
 
@@ -5580,6 +5597,308 @@ in the record without a slate review.
 
 A record that holds no forming record keeps the `status` report, the output
 folders and the digests of 0.82.0.
+
+### The test declaration of a plan
+
+A plan of a problem record can declare its run as a test of the current
+statement. `cycle` takes one optional field, `test_declaration`, and freezes it
+with the plan, before the execution ([Run](research-tools.md#run)). A plan
+without the field keeps the bytes, the digest and the meaning that it had in
+0.82.0, in a problem record and in a study. Outside a problem record, a plan
+with the field is refused with `orchestration_conflict`.
+
+| Field | Content |
+| --- | --- |
+| `alternative` | The alternative that the test tells against. The record holds it before the plan. `{kind: "neighbour", text}` names a declared neighbour of the current statement by its exact text. `{kind: "form", record_kind: "forming_call", id, form_id}` names a form: `id` is a recorded forming call, and `form_id` is a form of that call. An alternative that the record does not hold is `problem_test_alternative_missing`, and another shape is `invalid_development`. |
+| `excluded_outcome` | Nonempty text: the outcome that this alternative excludes. The outcome that would contradict the statement stands among the `failure_signals` of the plan. |
+| `prior_knowledge` | A list, possibly empty, of `{source: {kind, description}, known}`, with three nonempty texts: the account of what the performer knew about the outcome when the plan was frozen, by source. The source kind is an open value. The described kinds are `record_computations`, `inherited_computations`, `external_computations`, `literature_and_tables` and `planning_model_recall` ([Run](research-tools.md#run)). The harness records the account as the payload gives it. |
+| `search_id` | The id of a recorded search: the search for the outcome in print. The store holds the search before the plan is recorded (`problem_test_search_missing` otherwise). |
+
+The declaration grants no credit by itself. A run is a test of a text of the
+statement when the accounts of a value record enter it as a check with the
+standing `test`, and that check meets the rule of a test
+([The accounts of a value record](#the-accounts-of-a-value-record)). The result
+packet delivers the plan with its declaration, and the search, as records.
+
+### The accounts of a value record
+
+The accounts are a part of the value record, beside the motivation and the
+current state. They keep the conjectured answer apart from the question, and
+they enter each fact once: what each answer would settle, what speaks for the
+conjectured answer, and why the statement was posed and not one of its nearest
+alternatives ([math-conjecturer The accounts](../skills/math-conjecturer/SKILL.md#the-accounts)).
+`problem-value` requires `accounts` in every new value record
+(`problem_accounts_required` otherwise). A value record that an earlier release
+recorded has no accounts. It is validated, digested, projected and gated under
+the contract of its release, and it needs no change.
+
+The payload of `problem-value` is `{id, statement_id, accounts, motivation,
+current_state}`. `statement_id` names the current statement
+(`problem_statement_missing` otherwise). `exactory-research example
+problem-value` prints a payload of the first tier.
+
+The accounts have two tiers. Every problem holds the first tier: `answer`,
+`answer_evidence`, `boundaries`, `explanatory_use`, `alternatives`, `strength`,
+`relations` and `refuted_conjectures`. The second tier, `checks`, `gain` and a
+nonempty `search_coverage`, is required when the record claims a gain or enters
+a passed test (`problem_accounts_tier_two_missing`). `replacement` is required
+in its two cases (below). A key outside these twelve is `invalid_input`.
+
+Rules that hold for the entries of every part:
+
+- `id` is nonempty text, distinct within the accounts. The id `statement` is
+  reserved for `credited_to` (`problem_account_id_conflict`).
+- `evidence`, where a part has it, is a list, possibly empty, of references:
+  `{kind: "reading", version_id, reading_id}` for a full reading,
+  `{kind: "computation", execution_id, output_id, formal_check}` for an
+  admitted, reconciled and assessed computation, or a result reference in
+  either shape of the value evidence ([Problem creation](#problem-creation)).
+  Each reference is validated with the codes that it has as value evidence. A
+  probe, `{kind: "probe", id}`, is accepted only in a check whose standing is
+  not `test`. Another entry that rests on a probe, directly or through a cited
+  entry, is refused with the code of its part.
+- `evidence_ids`, where a part has it, is a list, possibly empty, of the ids of
+  other entries. The entry then rests on their evidence as well as on its own.
+  An id that no entry holds is `problem_account_reference_missing`, and
+  references that lead back to their entry are
+  `problem_account_reference_cycle`.
+- `scope`, in `answer_evidence`, `boundaries`, `explanatory_use` and
+  `relations`, is nonempty text: the scope within which the fact holds.
+- `date`, in those four parts and in `checks`, is the day on which the fact
+  became available: `unknown`, `YYYY`, `YYYY-MM`, `YYYY-MM-DD` or a timestamp
+  with a timezone. A reading gives the year of its work, and a result gives the
+  day of its acceptance. When every reference that the entry rests on gives a
+  date, the harness records the latest of them as `date`, also in place of a
+  value that the payload gives. Otherwise the payload gives `date`
+  (`problem_account_date_missing`). A computation reference gives no date.
+
+The first tier:
+
+| Part | Entry | Rules |
+| --- | --- | --- |
+| `answer` | `{id, status, text, evidence_ids}` | The conjectured answer. `status` is `none`, `forecast` (an answer stated without grounds) or `conjectured`. `text` is null for `none` and nonempty text otherwise. A `conjectured` answer names in `evidence_ids` at least one `answer_evidence` entry with the direction `for` (`problem_answer_evidence_missing`). |
+| `answer_evidence` | A list of `{id, kind, direction, alternative_id, fact, scope, evidence, evidence_ids}` with the optional `date` and `check_id` | The evidence for or against the answer. `kind` is an open value `{kind, description}`. The described kinds are a theorem in a neighbouring setting, a theorem on a subclass, a derivation from or an equivalence with a statement on independent grounds, `passed_test`, and a doubted consequence. `direction` is `for` or `against`. `alternative_id` names the `alternatives` entry that the fact tells against, with a role other than `no_alternative` (`problem_answer_alternative_missing`). The entry rests on at least one reference (`problem_answer_evidence_missing`). An entry of the kind `passed_test` names in `check_id` a check with the standing `test` and `passed: true`, and both name the same alternative (`problem_test_run_invalid`). |
+| `boundaries` | A list of `{id, fact, scope, evidence, evidence_ids, argument}` with the optional `date` and `check_id` | The evidence that locates boundaries: each fact that shows a relaxation or a hypothesis to be necessary, among them a refuted stronger alternative that was written to test a hypothesis. `argument` is the argument that ties the fact to the statement posed, or null. The entry rests on at least one reference (`problem_boundary_evidence_missing`). |
+| `explanatory_use` | A list of `{id, fact, scope, evidence, evidence_ids, answer_argument}` with the optional `date` and `check_id` | The evidence of explanatory use: each fact that shows what the statement organizes. `answer_argument` is the argument of the fact for the answer, or null. The entry rests on at least one reference (`problem_explanatory_evidence_missing`). |
+| `alternatives` | A list of `{id, neighbour, form_id, role}` with the optional `relation_id`, `surplus`, `reason` and `search_ids` | The nearest alternatives. Every declared neighbour of the current statement has exactly one entry whose `neighbour` is its exact text (`problem_neighbour_role_missing`); its `form_id` is null or a recorded form. An alternative that was named after the formulation has `neighbour` null, a recorded form in `form_id` (`problem_alternative_missing`) and nonempty `search_ids`, the recorded searches that give its status (`problem_account_search_missing`). `role` is `stronger`, `weaker`, `same_assertion` (the same assertion with another constant or exponent), `other_assertion` (another assertion about the same objects) or `no_alternative`. `stronger` and `weaker` name in `relation_id` a `relations` entry whose `alternative_id` is this entry (`problem_alternative_relation_missing`). `stronger` and `no_alternative` give a nonempty `reason`: why the stronger alternative was not posed, or why the neighbour is no alternative. `weaker` gives `surplus` (below). |
+| `strength` | Exactly four entries `{id, head, description, alternative_ids, no_alternative_reason}` | The parts of the strength, one entry for each head: `range_of_instances`, `constants`, `exponents` and `exactness`. `alternative_ids` names the `alternatives` entries that relax the part, each with a role other than `no_alternative` (`problem_alternative_missing`). An entry that names none gives `no_alternative_reason`, the reason that no alternative relaxes the part; the field is null or text otherwise (`problem_strength_incomplete` for a missing head, a repeated head or a part without either). |
+| `relations` | A list of `{id, relation, target, alternative_id, standing, scope, evidence, evidence_ids, earlier_statement, consequence}` with the optional `date` | What is at stake: each relation of the statement to a named statement or body of facts. `relation` is `implies`, `follows_from`, `equivalent_to`, `incompatible_with`, `strengthens`, `generalizes` or `presents_anew`. `target` names the statement or the body of facts. `alternative_id` is null, or the `alternatives` entry that the relation concerns (`problem_alternative_missing`). `standing` is `established` or `expected`. An established relation rests on at least one reference (`problem_relation_evidence_missing`). `earlier_statement` is a boolean: whether the target is an earlier statement of the same content. `consequence` is null, or the crediting of a consequence (below). |
+| `refuted_conjectures` | A list of `{id, statement, identified_by, sources, evidence_ids}` | Each refuted conjecture that the question concerns, possibly none. `identified_by` is `author`, `search` or `reviewer`. `sources` is a list of evidence references in the shared shapes, which identify the conjecture; it is nonempty unless `identified_by` is `author`. `evidence_ids` names the entries that hold the refuting evidence. Every entry needs a `replacement` entry (`problem_replacement_missing`). |
+
+The `surplus` of a weaker alternative is `{description, status, evidence_ids,
+relation_ids}`: what the statement asserts beyond the alternative, and whether
+that surplus is `supported`, `used`, `supported_and_used` or `neither`. A
+supported surplus names in `evidence_ids` an `answer_evidence` entry with the
+direction `for` whose `alternative_id` is this same alternative
+(`problem_surplus_support_missing`). A used surplus names in `relation_ids` a
+`relations` entry whose consequence is credited to the statement
+(`problem_surplus_use_missing`).
+
+The `consequence` of a relation is `{assertion, instances_or_translation,
+credited_to, weaker_derivations}`. `assertion` is the assertion of the
+statement that the derivation uses. `instances_or_translation` is the family of
+instances or the proved translation. `credited_to` is the alternative that the
+consequence is credited to, which is the weakest named alternative that gives
+it: the id of an `alternatives` entry, or `statement`
+(`problem_alternative_missing` otherwise). `weaker_derivations` is a list of
+`{id, alternative_id, status, reason, evidence_ids}` with the status `derived`,
+`not_derived` or `not_attempted` and a nonempty `reason`. A consequence that is
+credited to the statement has exactly one entry for each alternative with the
+role `weaker` (`problem_consequence_comparison_missing`).
+
+The second tier:
+
+| Part | Entry | Rules |
+| --- | --- | --- |
+| `checks` | A list of `{id, target, contradiction, no_contradiction_reason, result, standing, passed, alternative_id, evidence, evidence_ids, independence}` with the optional `date` and `lineage` | Each check that the record made or that a reader can make. `target` is `{kind, description}` with the kind `instance`, `family`, `consequence` or `asymptotic_regime`. Exactly one of `contradiction` (the outcome that would contradict the statement) and `no_contradiction_reason` (the reason that no outcome can) is text, and the other is null. `result` is text or null. `standing` is `planned`, `observation`, `origin` or `test`. `passed` is a boolean, and it is `true` only for a test. `alternative_id` is null or the id of an entry. `independence` is null, or the independence of a test. A check with the standing `test` meets the rule of a test (below). A record of the first tier can also hold this part. |
+| `gain` | Null, or `{id, form, claim, relation_ids, separate_grounds, conjunction, establishing_ids, new_object_justification}` | Null when the record claims no gain. `form` is `common_structure`, `explanatory_relation` or `proved_advantage`. `claim` states the gain. `relation_ids` is nonempty: the relations that the statement gathers, each established, and at least one a consequence that is credited to the statement (`problem_gain_relations_invalid`). `separate_grounds` is a list of `{id, relation_id, evidence_ids}`: for a gathered relation, the entries whose evidence is the work that states or studies the gathered statement for reasons of its own (`problem_gain_relations_invalid` for a relation that the gain does not gather, `problem_gain_evidence_missing` for an entry without evidence). `conjunction` is `{status, description, evidence_ids}`: how the statement stands to the conjunction of what it gathers, `proved_equivalent`, `proved_stronger` or `not_known`; a proved status rests on evidence (`problem_gain_conjunction_evidence_missing`). `establishing_ids` is nonempty: the entries whose evidence establishes the gain in its form. That evidence is admissible, so it holds no probe (`problem_gain_evidence_missing`). `new_object_justification` is text or null: the justification of a new object where the statement defines one. |
+| `search_coverage` | A list of `{id, purpose, search_ids, unreached}` | `purpose` is `earlier_statements` (earlier statements of the same content), `alternatives`, or `gathered_as_case` (a work that presents one gathered statement as a case of another). `search_ids` is nonempty and names recorded searches (`problem_account_search_missing`). `unreached` is nonempty text: what the searches could not reach, such as lectures and letters. |
+
+A gain claim and a passed test need a history. The candidate that the statement
+formulates cites, in `source.evidence`, a forming call or a form outcome
+([Forming records](#forming-records)). A cited forming call counts with its
+forms of the purpose `expected_statement`, and a cited outcome with its form.
+One of these forms was recorded before the plan of the test, or before the
+evidence that establishes the gain: before the recorded revision of a result, a
+computation or a reading of this store, and before the date of that evidence
+where it gives one (`problem_accounts_history_missing` otherwise).
+
+`replacement` is a list of `{id, refuted_id, form_id, evidence_ids, account}`.
+An entry names exactly one refuted statement and sets the other field to null:
+`refuted_id` is the id of a `refuted_conjectures` entry
+(`problem_account_reference_missing`), and `form_id` is a form that an outcome
+of this record gives the standing `refuted` (`problem_form_missing`).
+`evidence_ids` names entries whose evidence shows the refutation; that evidence
+is admissible, so it holds no probe (`problem_replacement_evidence_missing`).
+`account` is nonempty text: how the statement stands to the refuted one. The
+part is required in two cases (`problem_replacement_missing`, with `form_ids`
+and `conjecture_ids`). The first is a refuted form of the purpose
+`expected_statement` among the forms that the candidate of the statement
+cites and the forms that these change, through `previous`. The second is every
+entry of `refuted_conjectures`. A refuted form of the purpose `alternative`
+enters `boundaries` and needs no replacement entry.
+
+A paragraph of `motivation` or `current_state` is `{text, evidence}` with the
+optional `field_fact`. `evidence` is nonempty. Each reference is
+`{kind: "account", id}`, the id of an entry of the accounts. A paragraph with
+`field_fact: true` can also cite a full reading directly, as `{kind:
+"reading", version_id, reading_id}`, for a fact about the field that no part of
+the accounts holds; another direct reference is
+`problem_value_account_required`. A paragraph whose cited entries are all
+expected relations is refused (`problem_value_expected_only`). The delivered
+evidence of a paragraph is the evidence that its cited entries rest on.
+
+Some entries are shortfalls that the harness records without a refusal: a
+surplus with the status `neither`, a derivation with the status
+`not_attempted` and a relation with the standing `expected`. The reviewers
+grade them.
+
+A check entered as a test. A check with the standing `test` gives
+`contradiction` and `result`, names in `alternative_id` an `alternatives` entry
+with a role other than `no_alternative`, and rests on at least one computation.
+Its `independence` is `{status: "outcome_not_known", reason}` with the optional
+`prior_knowledge`, a list of findings `{source_index, status:
+"outcome_not_known", reason}`: exactly one for each entry of
+`test_declaration.prior_knowledge` of the plan, with `source_index` counted
+from 0. For each computation that the check rests on, the harness checks the
+plan of its run. Each failure below is `problem_test_run_invalid`:
+
+- The plan carries a test declaration, and it was recorded before the run was
+  admitted.
+- The plan names a statement record whose statement digest is that of the
+  current statement. The digest covers `statement` and `resolution_criteria`,
+  so a revision that changes only the neighbours keeps the test. For a plan on
+  an earlier text, the check gives `lineage: {form_id, check_id}`. The form is a
+  form that the candidate cites, its text is the current statement, the text
+  of its `previous` form is the statement that the plan names, it has a ground
+  with evidence, and its `correction_checks` entry for `check_id` has
+  `execution_id` equal to this run, `was_made: true`, `keeps_prediction: true`
+  and `chosen_with_outcome: false`.
+- The alternative of the check is the one that the declaration names: the same
+  neighbour text, or the same form.
+- The search that the declaration names is in the store.
+- No execution and no probe that the record held before the plan has the
+  `question` of the plan, character for character.
+- An assessment that was recorded before the value record covers the run. For
+  `passed: true`, the plan has at least one failure signal, and the assessment
+  gives `not_observed` for each.
+
+The harness compares earlier questions character for character only, and it
+does not read what the search found. It does not establish that the outcome was
+unknown to the model that planned the run. The reviewers judge these points
+([Run](research-tools.md#run)). A run whose outcome was known, or whose
+independence is not established, is entered with the standing `observation`.
+
+What the harness derives. For a value record with accounts, the problem
+evidence carries `derived_accounts` beside the accounts. The harness computes
+it from the records at each projection, and the author does not enter it:
+
+- `checks: {current, earlier}`. `current` lists every execution whose plan
+  names a statement record with the statement digest of the value's statement.
+  `earlier` lists the executions on the other texts of its lineage, which the
+  `revises_statement_id` references give. Each row is `{execution_id, plan_id,
+  statement_id, statement_digest, statement, resolution_criteria, question,
+  assessment_id, failure_signals, test_ids}`. Each failure signal of the plan
+  carries the `status` of the latest assessment: `observed`, `not_observed`,
+  or `unresolved` when no assessment gives one. `test_ids` names the checks of
+  the accounts with the standing `test` that rest on the execution. A row with
+  a test also carries `earlier_computations`: every probe and every execution
+  that the record held before the plan, as `{kind, id, question, revision}`.
+- `history`: the forms from which the statement descends, in recording order.
+  These are the forms that the candidate cites and the forms that these change,
+  through `previous`. Each row is `{form, forming_call_id, outcomes}` with the
+  latest outcome of the form and of each of its items.
+- `counts: {lineage, exploration}`, each `{forming_calls, forms,
+  recorded_comparisons, probes, runs}`: for the forming calls of the history,
+  and for the whole record.
+
+Currency. `derived_accounts` and the records that the accounts cite enter the
+evidence digest. A value record with accounts is stale when the record holds a
+later execution on the current text, a later outcome of a form of the history,
+or a later delivered snapshot of an objective that an entry cites. The gate
+then lists one obligation, `problem_value_stale`, with `value_id` and
+`changes`: each change is `{kind, id, reason}` with the reason
+`later_run_on_current_text` (kind `execution`), `later_outcome_in_history`
+(kind `form_outcome`) or `later_snapshot_of_cited_objective` (kind
+`native_attempt`, with `previous_native_attempt_digest`). Record a new value
+record whose accounts take each change into account and cite the latest
+snapshot. The new record changes the evidence digest, and the result reviews
+are refreshed as after any change of evidence. A value record without accounts
+has no such obligation: a later snapshot of an objective that it cites is
+listed as `problem_result_superseded`.
+
+Delivery. The value part of a result packet carries `accounts` and
+`derived_accounts`, and each paragraph carries `delivered_evidence`. The packet
+also carries `account_records`, a list of `{record, cite}`: the searches that
+`search_coverage` and the alternatives name; the plan of each cited
+computation, and the search that its test declaration names; the record
+sources of `refuted_conjectures`; the forming calls and the outcomes of the
+forms that the alternatives, the replacement entries, a check lineage and the
+history name; for each listed run its plan, its execution and its assessment;
+the earlier computations beside a test; and the source records of the
+delivered searches. In a review delivered in fresh parts, the value part
+travels whole in every frame. The result coverage check requires the request
+of a review to carry `value` and `account_records` with their current values
+(`problem_evidence_unassessed` with the keys under `missing`).
+
+Reviewer paragraphs. A prompt carries an optional paragraph only when its
+packet carries the material. The registry is `PARAGRAPHS` in
+`research_harness/review_prompt_paragraphs.py`, and the order is fixed: the
+carry paragraph, the accounts paragraph, the slate paragraph and the
+replacement paragraph.
+
+| Paragraph | Roles | Present when |
+| --- | --- | --- |
+| `exactory-problem-accounts-v1` | Result, in every turn of a series; adjudicator of `A3`, `priority`, `calibration` or `significance`, with the definition of the item | The delivered value record holds accounts. |
+| `exactory-problem-slate-forming-v1` | Slate | A current candidate has the source kind `phenomenon`, or its `source.evidence` cites a forming call or a form outcome. The slate packet then keeps those references in the candidate's `source.evidence`. |
+| `exactory-problem-replacement-v1` | Result; adjudicator of `A7`, with the definition of the item | The accounts hold a nonempty `replacement`. |
+
+The accounts paragraph gives the reading of the rubric with the accounts, which
+governs where it is stricter than an anchor, the questions on the gain, what
+stays unestablished about a test, and where each judgment goes. The response
+shapes are unchanged: the assurance `problem_value` covers the accounts, and
+the grades and evidence texts of the rubric carry the judgments. A prompt with
+paragraphs has the template id of its base template with one suffix for each
+paragraph, for example `/accounts-v1/replacement-v1`, and its
+`parameters.problem_paragraphs` lists the version ids in order. The frozen
+envelope keeps them, so an assignment rebuilds from its own envelope after a
+later version of a paragraph is registered. An assignment whose packet calls
+for no paragraph keeps the prompt bytes of 0.82.0.
+
+Refusals of `problem-value` for the accounts, beside the codes of the cited
+evidence:
+
+| Code | Cause and next action |
+| --- | --- |
+| `problem_accounts_required` | The payload has no `accounts`. Add the accounts, and cite their entries in the paragraphs. |
+| `invalid_input` | A part or a field is missing or extra, or has another type or value than the tables state. The message names the field. |
+| `problem_account_id_conflict` | Two entries have the same id, or an entry has the id `statement` (`id`). Give each entry an id of its own. |
+| `problem_account_reference_missing` | An entry or a paragraph cites an id that no entry holds (`id`), or `refuted_id` names no `refuted_conjectures` entry. Cite an entry of the accounts, or add it. |
+| `problem_account_reference_cycle` | The references of an entry lead back to the entry (`id`). Remove one reference of the cycle. |
+| `problem_account_date_missing` | The harness cannot derive the date of an entry from its evidence (`id`). Enter `date`, or `unknown`. |
+| `problem_account_search_missing` | A named search is not in the store (`id`). Record the search first. |
+| `problem_answer_evidence_missing` | A conjectured answer names no `answer_evidence` entry with the direction `for`, or an `answer_evidence` entry rests on no admissible reference (`id`). Cite the evidence, or record the answer as `none` or `forecast`. |
+| `problem_answer_alternative_missing` | An `answer_evidence` entry names no nearest alternative (`id`). Set `alternative_id` to an `alternatives` entry with a role other than `no_alternative`. |
+| `problem_boundary_evidence_missing`, `problem_explanatory_evidence_missing` | A `boundaries` or an `explanatory_use` entry rests on no admissible reference (`id`). Cite a full reading, an admitted computation or an accepted result. |
+| `problem_relation_evidence_missing` | An established relation rests on no admissible reference (`id`). Cite the evidence, or record the standing `expected`. |
+| `problem_neighbour_role_missing` | A declared neighbour has no entry, or more than one, or an entry has another role than the five (`neighbour`). Give each declared neighbour exactly one entry. |
+| `problem_alternative_missing` | An entry names an alternative that the record does not hold: an alternative that is neither a declared neighbour nor a recorded form, a `form_id` that names no form, or an `alternative_id`, a `credited_to` or a strength entry that names no `alternatives` entry (`id`). Name a declared neighbour by its exact text, record the form with `forming`, or name an entry of `alternatives`. |
+| `problem_alternative_relation_missing` | A stronger or a weaker alternative names no relation whose `alternative_id` is that alternative (`id`). Add the `relations` entry, and name it in `relation_id`. |
+| `problem_surplus_support_missing` | A surplus with the status `supported` cites no `answer_evidence` entry with the direction `for` against the same alternative (`id`). Cite one, or record another status. |
+| `problem_surplus_use_missing` | A surplus with the status `used` cites no relation whose consequence is credited to the statement (`id`). Cite one, or record another status. |
+| `problem_strength_incomplete` | `strength` does not hold exactly one entry for each of the four heads, or an entry names no relaxing alternative and gives no reason (`id`). |
+| `problem_consequence_comparison_missing` | A consequence that is credited to the statement does not hold exactly one `weaker_derivations` entry for each weaker alternative (`id`). Add the entries; `not_attempted` is a valid status. |
+| `problem_accounts_tier_two_missing` | The accounts claim a gain or enter a passed test, and `checks`, `gain` or a nonempty `search_coverage` is absent. Add the second tier. |
+| `problem_accounts_history_missing` | The candidate of the statement cites no form that was recorded before the evidence of the gain or the plan of the test. Record `gain` as null, and enter the check as an observation. |
+| `problem_test_run_invalid` | A check with the standing `test`, or an `answer_evidence` entry of the kind `passed_test`, does not meet the rule of a test. The message names the failed condition. Enter the check with the standing `observation` or `origin`. |
+| `problem_gain_relations_invalid` | The gain gathers a relation that is not established, gathers no consequence that is credited to the statement, or a `separate_grounds` entry names a relation that the gain does not gather. |
+| `problem_gain_conjunction_evidence_missing` | The relation to the conjunction has a proved status and rests on no evidence. Cite the proof, or record `not_known`. |
+| `problem_gain_evidence_missing` | No admissible evidence establishes the gain, or a `separate_grounds` entry cites an entry without evidence. Cite the evidence, or record `gain` as null. |
+| `problem_replacement_missing` | A refuted expected form in the correction chain of the statement, or a refuted conjecture of the accounts, has no `replacement` entry (`form_ids`, `conjecture_ids`). Add one entry for each. |
+| `problem_replacement_evidence_missing` | A `replacement` entry rests on no admissible evidence of the refutation. Cite a full reading, an admitted computation or an accepted result. |
+| `problem_form_missing` | `form_id` of a `replacement` entry names no form with the standing `refuted`. Record that outcome with `form-outcome` first. |
+| `problem_value_account_required` | A paragraph cites a reference that is no account entry, and it is not a full reading in a paragraph with `field_fact: true`. Enter the fact in its account, and cite the entry. |
+| `problem_value_expected_only` | Every entry that a paragraph cites is an expected relation. Establish a relation, or cite an entry that holds a fact. |
 
 ## Development rounds
 

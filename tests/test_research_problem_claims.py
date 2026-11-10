@@ -52,9 +52,9 @@ class ProblemCase(LiteratureCase):
         self.assertEqual(caught.exception.code, code, caught.exception.as_dict())
 
     def build_value(self, evidence, identifier="value-1"):
-        return {"id": identifier, "statement_id": "statement-1",
-            "motivation": [{"text": "The bound would connect the finite constructions.", "evidence": evidence}],
-            "current_state": [{"text": "Only bounded examples have been established.", "evidence": evidence}]}
+        from problem_accounts_fixtures import build_account_value
+        statement = self.load_problem_module().find_current_statement(self.store.snapshot()["records"])
+        return build_account_value(evidence, identifier, () if statement is None else statement["neighbours"])
 
     def record_full_reading(self):
         version = self.metadata()
@@ -289,7 +289,10 @@ class ProblemFormalBindingTests(ProblemCase):
         changed = copy.deepcopy(self.item)
         changed["formal_check"]["claim"]["statement"] = "A second requested support claim"
         value = self.build_value([self.item], "two-requests")
-        value["current_state"][0]["evidence"] = [changed]
+        extra = copy.deepcopy(value["accounts"]["explanatory_use"][0])
+        extra.update(id="second-use", evidence=[changed])
+        value["accounts"]["explanatory_use"].append(extra)
+        value["current_state"][0]["evidence"] = [{"kind": "account", "id": "second-use"}]
         self.put("problem_value", "two-requests", dict(value, recorded_revision=self.store.revision + 1))
         self.bind(self.build_closure_record())
         from research_harness.problem_evidence import assess_formal_checks
@@ -302,7 +305,10 @@ class ProblemFormalBindingTests(ProblemCase):
         changed = copy.deepcopy(self.item)
         changed["formal_check"]["required_deliverables"].append("second artifact")
         value = self.build_value([self.item], "two-deliverable-requests")
-        value["current_state"][0]["evidence"] = [changed]
+        extra = copy.deepcopy(value["accounts"]["explanatory_use"][0])
+        extra.update(id="second-use", evidence=[changed])
+        value["accounts"]["explanatory_use"].append(extra)
+        value["current_state"][0]["evidence"] = [{"kind": "account", "id": "second-use"}]
         self.put("problem_value", value["id"], dict(value, recorded_revision=self.store.revision + 1))
         native = self.build_closure_record()
         native["contract"]["required_deliverables"].append("second artifact")

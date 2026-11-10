@@ -38,8 +38,12 @@ def _assess_minimum(records, artifacts):
         pending.append(obligation("problem_value_missing", "Bind motivation and current-state paragraphs to this statement's evidence.",
                                   statement_id=None if statement is None else statement["id"]))
     else:
+        from .problem_account_derivations import assess_account_currency
+        currency = assess_account_currency(records, value)
+        pending.extend(currency)
         try:
-            validate_value(records, artifacts, value)
+            if not currency:
+                validate_value(records, artifacts, value)
         except ResearchError as error:
             pending.append(obligation(error.code, error.message, **(error.details or {})))
     pending.extend(assess_formal_checks(records))
@@ -565,6 +569,10 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
         after_post = [dict({key: value for key, value in row.items() if key != "next"},
                            reason=row.get("reason", row["explanation"])) for row in unique
                       if row["code"] != "problem_already_posted"]
+        after_post.extend(dict(row, code="problem_post_fact", explanation=row["fact"], reason=row["fact"])
+                          for row in sorted(records.get("problem_post_fact", {}).values(),
+                                            key=lambda row: (row["recorded_revision"], row["id"]))
+                          if row["post_id"] == posted["id"])
         unique = [row for row in unique if row["code"] == "problem_already_posted"]
         shown_post = dict(posted, gate=posted.get("gate", "passed"))
         if posted.get("gate") == "bypassed" and "recorded_at" not in posted:

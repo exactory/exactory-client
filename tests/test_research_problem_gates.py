@@ -83,7 +83,7 @@ class ProblemGateTests(ProblemDeliveryCase):
                 reference["digest"] = digest(records["problem_statement"]["statement-1"])
         records["problem_assessment"][assessment["id"]] = assessment
         self.update_decision_evidence_digest(records)
-        self.assertEqual(self.collect_gate_codes(records), {"problem_openness_stale"})
+        self.assertEqual(self.collect_gate_codes(records), {"problem_openness_stale", "problem_neighbour_role_missing"})
 
     def test_already_solved_is_an_explicit_settling_work_obligation(self):
         import test_research_problem_openness_minimum as fixtures
@@ -118,9 +118,8 @@ class ProblemGateTests(ProblemDeliveryCase):
 
     def test_missing_computation_has_its_own_gate_code_without_review_noise(self):
         records = self.store.snapshot()["records"]
-        for section in ("motivation", "current_state"):
-            records["problem_value"]["value-1"][section][0]["evidence"] = [
-                {"kind": "computation", "execution_id": "missing-execution", "output_id": "result", "formal_check": None}]
+        records["problem_value"]["value-1"]["accounts"]["explanatory_use"][0]["evidence"] = [
+            {"kind": "computation", "execution_id": "missing-execution", "output_id": "result", "formal_check": None}]
         records["problem_decision"]["decision"]["problem_evidence_digest"] = None
         self.assertEqual(self.collect_gate_codes(records), {"problem_value_computation_missing"})
 

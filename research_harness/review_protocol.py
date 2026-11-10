@@ -37,6 +37,7 @@ from .review_bodies import read_history, write_history
 from . import review_context_repair as context_repair
 from . import review_supplied_evidence as supplied_evidence
 from . import problem_rubric
+from . import review_prompt_paragraphs as prompt_paragraphs
 from .review_refusal import record_refusal_on_error
 from .storage import _canonical, read_filtered_records, select_record_groups
 
@@ -838,7 +839,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
                      reading_protocol=None, common_version=None, evidence_parts=None, part_suffix=None,
                      staged_task=None, composed=False, claim_range=False, review_parts=None,
-                     problem_objection_carry=None):
+                     problem_objection_carry=None, problem_paragraphs=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
     with; a later version uses the current suffix; repair_prompt names a suffix explicitly. excerpts adds the excerpt
     rules of a bar, slate or result session to the current template under its unchanged id; an earlier version only
@@ -848,19 +849,15 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
-    if problem_objection_carry is not None:
-        from .problem_objection_carry import PROMPT, PROTOCOL as CARRY_PROTOCOL
-        fields(problem_objection_carry, ('protocol', 'import_set_digest'))
-        if problem_objection_carry['protocol'] != CARRY_PROTOCOL or role not in ('slate', 'result'):
-            raise ResearchError('invalid_review_context', 'Carried objection prompts belong to slate and result assignments')
+    if problem_objection_carry is not None or problem_paragraphs is not None:
+        if problem_paragraphs and orchestration != 'problem_creation':
+            raise ResearchError('invalid_review_context', prompt_paragraphs.INVALID_CONTEXT)
         base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
             repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
             reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
             common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
             staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts)
-        return _build_prompt(base['template_id'] + '/objection-carry-v1', base['text'] + PROMPT,
-            dict(base['parameters'], problem_objection_carry=problem_objection_carry),
-            COMMON_VERSION if common_version is None else common_version)
+        return prompt_paragraphs.append_prompt_paragraphs(base, role, problem_objection_carry, problem_paragraphs)
     if version is None:
         version = 7 if role == 'verification' else 6
     if review_parts is not None:
@@ -1170,14 +1167,21 @@ def describe_calibration(payload):
 
 def add_problem_candidates(records, packet):
     """Give a slate reviewer every current candidate and bind the review to that exact candidate set."""
-    from .problem_candidates import compute_candidate_set_digest, describe_candidates
+    from .problem_candidates import compute_candidate_set_digest, describe_candidates, find_current_candidates
     packet.update(candidates=describe_candidates(records), candidate_set_digest=compute_candidate_set_digest(records))
+    current = find_current_candidates(records)
+    for candidate in packet['candidates']:
+        forming = [item for item in current[candidate['id']]['source']['evidence']
+                   if item.get('kind') == 'record' and item.get('record_kind') in prompt_paragraphs.FORMING_RECORD_KINDS]
+        if forming:
+            candidate['source']['evidence'] = forming
 
 
 def add_problem_evidence(records, artifacts, packet):
     """Bind a result or source supplement to the exact delivered problem evidence."""
     from .problem_claims import describe_problem_evidence, compute_problem_evidence_digest
     from .direction_sources import build_inline_passages
+    packet.pop(prompt_paragraphs.CONDITIONS, None)
     packet['problem_evidence'] = describe_problem_evidence(records, artifacts)
     readings = [records['reading'][item['id']] for item in packet['problem_evidence']['readings']]
     for passage, data in build_inline_passages(records, artifacts, readings):
@@ -1317,6 +1321,9 @@ def _list_projected_records(packet):
         metadata = unit.get('citation_metadata') if unit.get('key') == 'readings' else None
         if metadata is not None:
             yield 'problem_citation_metadata', metadata['id'], metadata['digest'], metadata
+    for entry in evidence.get('account_records', []):
+        reference = entry['cite']
+        yield reference['record_kind'], reference['id'], reference['digest'], entry['record']
     for entry in evidence.get('assessment_evidence', []):
         if entry.get('kind') == 'record':
             yield entry['record_kind'], entry['id'], entry['digest'], entry
@@ -1492,6 +1499,7 @@ def build_rubric_objection(records, artifacts, saved, context, packet, sources):
                 if anchor is None:
                     raise ResearchError('review_packet_incomplete', 'The rubric item has no recorded definition', {'item': item})
                 packet['rubric_definition'] = {'item': item, 'definition': anchor['definition'], 'threshold': anchor['threshold']}
+                prompt_paragraphs.append_rubric_definition(packet)
     return objections
 
 
@@ -1738,6 +1746,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
         if (role not in _PROBLEM_PROMPTS and role != 'adjudicator') or dossier_id is not None:
             raise ResearchError('invalid_review_context', 'A problem review uses bar, slate or result and its explicit problem subject')
         packet.update(protocol=_PROBLEM_PROTOCOL, subject=build_problem_subject(records, role))
+        if records.get('problem_area'):
+            packet['problem_areas'] = list(records['problem_area'].values())
     projected = False
     if role in bar_sources.ROLES:
         fields(context, (), ('source_links', 'prior_assignment_id') if role == 'bar' else ('prior_assignment_id', 'source_delivery'), code='invalid_review_context')
@@ -1771,6 +1781,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                         and previous.get('problem_evidence_digest') == compute_problem_evidence_digest(records, artifacts)):
                     # A source-request turn continues a session whose earlier packet delivered this exact problem
                     # evidence. The replayed history carries it, so this packet names it instead of repeating it.
+                    prompt_paragraphs.preserve_prompt_conditions(role, previous, packet)
                     packet['problem_evidence'] = {'delivery': 'delivered-in-an-earlier-turn', 'note': transport.REPEATED_EVIDENCE_NOTE}
                     packet['problem_evidence_digest'] = previous['problem_evidence_digest']
                     packet['history_delivery'] = transport.HISTORY_COMPACT_V2
@@ -2451,16 +2462,22 @@ def is_version_2_problem_result(assignment):
 
 def has_problem_result_rubric(assignment):
     """Whether a problem result uses a supported prompt that requires rubric grades."""
-    return (assignment.get('subject', {}).get('kind') == 'problem' and assignment['role'] == 'result'
+    prompt = prompt_paragraphs.strip_prompt_paragraphs(assignment['prompt'], assignment['role'])
+    return (prompt is not None and assignment.get('subject', {}).get('kind') == 'problem'
+            and assignment['role'] == 'result'
             and (assignment.get(review_parts.KEY, {}).get('adapter') in ('problem_result', 'context_repair')
-                 or assignment['prompt']['template_id'] in tuple(
-                protocol + '/result' + suffix
-                for protocol in (_PROBLEM_PROTOCOL, _PROBLEM_RESULT_PROTOCOL_V3, _PROBLEM_RESULT_PROTOCOL_V4, PROBLEM_RESULT_PROTOCOL)
-                for suffix in ('', '/context-repair', '/objection-carry-v1', '/context-repair/objection-carry-v1'))))
+                 or prompt['template_id'] in tuple(
+                     protocol + '/result' + suffix
+                     for protocol in (_PROBLEM_PROTOCOL, _PROBLEM_RESULT_PROTOCOL_V3,
+                                      _PROBLEM_RESULT_PROTOCOL_V4, PROBLEM_RESULT_PROTOCOL)
+                     for suffix in ('', '/context-repair'))))
 
 
 def _matches_current_problem_adjudicator_prompt(prompt):
     """Whether a problem adjudicator prompt has the current body, under the common text that it records."""
+    prompt = prompt_paragraphs.strip_prompt_paragraphs(prompt, 'adjudicator')
+    if prompt is None:
+        return False
     parameters = prompt.get('parameters', {})
     binding = parameters.get(review_parts.KEY)
     if binding is not None:
@@ -2484,21 +2501,15 @@ def _matches_current_problem_adjudicator_prompt(prompt):
                                                                      common_version=common_version)
 
 
-def _prompt_matches(assignment):
-    from .problem_objection_carry import PROMPT_PARAMETER, PROMPT, PROTOCOL as CARRY_PROTOCOL
-    carried = assignment['prompt'].get('parameters', {}).get(PROMPT_PARAMETER)
-    if carried is not None:
-        envelope = assignment['prompt']
-        if (assignment['role'] not in ('slate', 'result') or carried.get('protocol') != CARRY_PROTOCOL
-                or not envelope['text'].endswith(PROMPT) or not envelope['template_id'].endswith('/objection-carry-v1')):
-            return False
-        parameters = dict(envelope['parameters'])
-        parameters.pop(PROMPT_PARAMETER)
-        base = _build_prompt(envelope['template_id'].removesuffix('/objection-carry-v1'),
-            envelope['text'][:-len(PROMPT)], parameters, find_common_prompt_version(envelope))
-        return (_build_prompt(envelope['template_id'], base['text'] + PROMPT,
-                             dict(parameters, **{PROMPT_PARAMETER: carried}), find_common_prompt_version(envelope)) == envelope
-                and _prompt_matches(dict(assignment, prompt=base)))
+def _prompt_matches(assignment, packet=None):
+    envelope = assignment['prompt']
+    base = prompt_paragraphs.strip_prompt_paragraphs(envelope, assignment['role'])
+    if base is None:
+        return False
+    if packet is not None and not prompt_paragraphs.matches_packet_paragraphs(envelope, assignment['role'], packet):
+        return False
+    if base != envelope:
+        return _prompt_matches(dict(assignment, prompt=base))
     common_version = find_common_prompt_version(assignment['prompt'])
     if common_version is None:
         return False
@@ -2645,6 +2656,8 @@ def _repair_packet(records, artifacts, value, repair):
     if problem:
         from .problem_objection_carry import deliver_imports
         deliver_imports(records, artifacts, packet)
+    if value['role'] == 'adjudicator' and 'rubric_definition' in packet:
+        prompt_paragraphs.append_rubric_definition(packet)
     packet['evidence'] = _evidence(artifacts, packet, records=records)
     packet['digest'] = digest(packet)
     return packet
@@ -3016,7 +3029,8 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             ordinary_prompt = canonical_prompt(value['role'],
                 repair=value['role'] != 'adjudicator',
                 orchestration='problem_creation' if problem else None,
-                excerpts=value['role'] in bar_sources.ROLES and review_excerpts.KEY in packet)
+                excerpts=value['role'] in bar_sources.ROLES and review_excerpts.KEY in packet,
+                **prompt_paragraphs.select_prompt_parameters(value['role'], packet))
             if review_parts_repair.requires_parts(records, artifacts, value, route, packet,
                                                   ordinary_prompt, [], slot_identifier):
                 staged_repair = False
@@ -3138,8 +3152,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             reading_protocol=openness_reading.find_protocol(packet))
         if staged_repair and value['role'] == 'adjudicator':
             base_prompt_parameters['repair'] = True
-        if 'problem_objection_carry' in packet and value['role'] in ('slate', 'result'):
-            base_prompt_parameters['problem_objection_carry'] = packet['problem_objection_carry']
+        base_prompt_parameters.update(prompt_paragraphs.select_prompt_parameters(value['role'], packet))
         prompt = canonical_prompt(value['role'], **base_prompt_parameters)
         history = []
         session_id = value['id']
@@ -3220,8 +3233,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if review_problem_parts.find_stage(packet) is not None:
             prompt = canonical_prompt(value['role'], orchestration='problem_creation', excerpts=True,
                                       evidence_parts=review_problem_parts.find_stage(packet),
-                                      **({'problem_objection_carry': packet['problem_objection_carry']}
-                                         if 'problem_objection_carry' in packet else {}))
+                                      **prompt_paragraphs.select_prompt_parameters(value['role'], packet))
             if 'prompt_hash' in packet.get('problem_refresh', {}):
                 packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
                 packet.pop('digest')
@@ -3376,9 +3388,9 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         if digest(route) != assignment['route_digest']:
             raise ResearchError('review_route_changed', 'Reassign after a route change')
         _require_route_runtime(route)
-        if not _prompt_matches(assignment):
-            raise ResearchError('review_prompt_mismatch', 'Invoke the recorded canonical reviewer prompt')
         packet = _read_json(artifacts, assignment['packet'])
+        if not _prompt_matches(assignment, packet=packet):
+            raise ResearchError('review_prompt_mismatch', 'Invoke the recorded canonical reviewer prompt')
         from .review_source_complete import validate
         validate(records, artifacts, assignment, packet)
         validate_assignment_inventories(records, artifacts, assignment['id'])
@@ -3576,8 +3588,16 @@ def _assignment_state(records, artifacts, assignment_id):
         if any(e['source'] != 'prior_assessments' for e in events):
             state['author_history_isolation'] = 'contaminated'
         state['prior_assessment_isolation'] = 'contaminated'
+    packet = None
+    inventory_issue = None
+    try:
+        validate_assignment_inventories(records, artifacts, assignment_id)
+        if assignment.get('subject', {}).get('kind') == 'problem':
+            packet = _read_json(artifacts, assignment['packet'])
+    except (ResearchError, ValueError, TypeError, KeyError) as error:
+        inventory_issue = obligation('review_inventory_mismatch', 'The complete supplied inventory must remain readable and exact.', reason=str(error))
     route = records.get('review_route', {}).get(assignment['route_id'])
-    if route is None or digest(route) != assignment['route_digest'] or not _prompt_matches(assignment):
+    if route is None or digest(route) != assignment['route_digest'] or not _prompt_matches(assignment, packet=packet):
         state['context_status'] = 'unverified' if not events else 'contaminated'
     if state['context_status'] != 'verified_for_route':
         state['obligations'].append(obligation('review_context_' + state['context_status'], 'Independent approval requires this actual tested route and uncontaminated context.', assignment_id=assignment_id))
@@ -3589,10 +3609,8 @@ def _assignment_state(records, artifacts, assignment_id):
         state['obligations'].append(obligation(error.code, str(error)))
         if error.code == 'review_context_repair_stale':
             state['context_status'] = 'contaminated'
-    try:
-        validate_assignment_inventories(records, artifacts, assignment_id)
-    except (ResearchError, ValueError, TypeError, KeyError) as error:
-        state['obligations'].append(obligation('review_inventory_mismatch', 'The complete supplied inventory must remain readable and exact.', reason=str(error)))
+    if inventory_issue is not None:
+        state['obligations'].append(inventory_issue)
     binding, state['refused_attempts'], completed = _selected_attempt(records, artifacts, assignment_id)
     if binding is not None:
         attempt = binding

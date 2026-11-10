@@ -323,8 +323,9 @@ def plan_objection_body_part(records, artifacts, packet, units, observations, se
     """A part turn that carries the largest prefix of the final's undelivered objection-evidence bodies that fits, so
     that the final can count them as delivered earlier; None when not even one body fits."""
     from .review_protocol import canonical_prompt
+    from .review_prompt_paragraphs import select_prompt_parameters
     prompt = canonical_prompt('result', orchestration='problem_creation', excerpts=True, evidence_parts='part',
-        **({'problem_objection_carry': packet['problem_objection_carry']} if 'problem_objection_carry' in packet else {}))
+        **select_prompt_parameters('result', packet))
     for count in range(len(pending), 0, -1):
         bodies = pending[:count]
         planned = _project(records, artifacts, dict(packet, objection_bodies=bodies), units, [], observations, [],
@@ -536,6 +537,7 @@ def preserves_ordinary_packet(artifacts, packet, request):
 def _prepare_legacy_packet(records, artifacts, value, route, packet, prompt, history):
     """Keep complete ordinary requests or deliver eligible result evidence through v1 parts."""
     from .review_protocol import canonical_prompt
+    from .review_prompt_paragraphs import select_prompt_parameters
     prior_id = value['context'].get('prior_assignment_id')
     previous = _read_packet(artifacts, records['review_assignment'][prior_id]) if prior_id else {}
     refreshed = any(review['assignment_id'] == prior_id for review in records.get('value_review', {}).values())
@@ -565,7 +567,7 @@ def _prepare_legacy_packet(records, artifacts, value, route, packet, prompt, his
                  + [unit for unit in remaining if _unit_key(unit) not in carried_keys])
     stage, turn = ('part' if remaining else 'final'), len(observations) + 1
     stage_prompt = canonical_prompt('result', orchestration='problem_creation', excerpts=True, evidence_parts=stage,
-        **({'problem_objection_carry': packet['problem_objection_carry']} if 'problem_objection_carry' in packet else {}))
+        **select_prompt_parameters('result', packet))
     def candidate(count, attached=None):
         return _project(records, artifacts, packet, units, remaining[:count], observations, remaining,
                         series_id, stage, turn, attached)

@@ -80,7 +80,7 @@ def record_statement(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         marker = require_problem(records)
         fields(value, ("id", "title", "area", "statement", "resolution_criteria", "neighbours"),
-               ("formal_statement", "candidate_id"))
+               ("formal_statement", "candidate_id", "revises_statement_id"))
         value = dict(value, formal_statement=value.get("formal_statement"), candidate_id=value.get("candidate_id"))
         for key in ("id", "title", "statement", "resolution_criteria"):
             text(value[key], "Problem " + key)
@@ -89,6 +89,13 @@ def record_statement(store, payload, *, expected_revision, request_id):
             raise ResearchError("problem_area_mismatch", "Use the record's subject class; another area requires a new problem record",
                                 {"statement_id": value["id"], "statement_area": value["area"], "record_area": marker["area"]})
         strings(value["neighbours"], "Neighbouring formulations")
+        if "revises_statement_id" in value:
+            text(value["revises_statement_id"], "revises_statement_id")
+            if value["revises_statement_id"] not in records.get("problem_statement", {}):
+                raise ResearchError("problem_statement_missing",
+                                    "revises_statement_id names no statement record of this store. Name the ID of the "
+                                    "statement record that this one revises, or leave the field out",
+                                    {"statement_id": value["revises_statement_id"]})
         formal = value["formal_statement"]
         if formal is not None:
             fields(formal, ("language", "text"))
@@ -178,14 +185,19 @@ def record_value(store, payload, *, expected_revision, request_id):
 
     def prepare(records, value):
         require_problem(records)
-        fields(value, ("id", "statement_id", "motivation", "current_state"))
+        fields(value, ("id", "statement_id", "motivation", "current_state"), ("accounts",))
+        if "accounts" not in value:
+            raise ResearchError("problem_accounts_required",
+                                "A new value record holds the accounts of the statement. Add accounts to the "
+                                "payload, and cite account entries in the value paragraphs. exactory-research example "
+                                "problem-value prints the shape")
         text(value["id"], "Problem value ID")
         statement = find_current_statement(records)
         if statement is None or value["statement_id"] != statement["id"]:
             raise ResearchError("problem_statement_missing", "Select the exact current problem statement")
         from .problem_evidence import validate_value
-        validate_value(records, artifacts, value)
-        record = dict(value, recorded_revision=expected_revision + 1)
+        validated = validate_value(records, artifacts, value)
+        record = dict(validated, recorded_revision=expected_revision + 1)
         return [immutable_record(records, "problem_value", value["id"], record)], record
 
     return prepared_mutation(store, "problem.value", payload, prepare,

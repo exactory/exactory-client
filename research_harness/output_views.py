@@ -292,6 +292,12 @@ def _find_current_adjudications(records):
         records, records.get("review_assignment", {}).get(records["review_adjudication"][key]["assignment_id"]))}
 
 
+def _find_current_post_fact_ids(records):
+    post = find_post(records, find_current_statement(records))
+    return {key for key, record in records.get("problem_post_fact", {}).items()
+            if post is not None and record["post_id"] == post["id"]}
+
+
 # The record kinds whose records are each one file under <tree>/<id>.json, with the rule that names the current ones;
 # a record that the rule does not name is superseded.
 _RECORD_TREES = {
@@ -322,6 +328,7 @@ _RECORD_TREES = {
         records, "problem_post", [find_post(records, find_current_statement(records))])),
     "problem_post_time": ("problem/post-times", lambda records: _find_keys_of(
         records, "problem_post", [find_post(records, find_current_statement(records))])),
+    "problem_post_fact": ("problem/post-facts", _find_current_post_fact_ids),
     "round_admission": ("study/round-admissions", lambda records: _find_latest_keys(
         records, "round_admission", lambda record: record["number"])),
     "round_decision": ("study/round-decisions", lambda records: _find_latest_keys(

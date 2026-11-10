@@ -32,7 +32,7 @@ from .program_probes import build_program_probe_inventory, validate_prior_knowle
 from .reading import validate_read_evidence
 from .scientific_json import is_json_media_type
 from .source_links import captured_source, original_identity, validate_link
-from .strategy import find_orchestration
+from .strategy import choice, find_orchestration
 from .synthesis import synthesis_state
 from .workspace import strict_json
 
@@ -811,6 +811,55 @@ def _validate_reopening(context, value, account):
                                 {"failure": failed})
 
 
+def _validate_test_declaration(records, value):
+    from .problem_claims import find_current_statement, require_problem
+    require_problem(records)
+    _fields(value, ("alternative", "excluded_outcome", "prior_knowledge", "search_id"))
+    alternative = value["alternative"]
+    _fields(alternative, ("kind",), ("record_kind", "id", "form_id", "text"))
+    choice(alternative["kind"], ("form", "neighbour"), "The kind of test_declaration.alternative", code="invalid_development")
+    if alternative["kind"] == "form":
+        _fields(alternative, ("kind", "record_kind", "id", "form_id"))
+        choice(alternative["record_kind"], ("forming_call",), "The record_kind of a form alternative", code="invalid_development")
+        _text(alternative["id"], "The forming call ID of a form alternative")
+        _text(alternative["form_id"], "The form_id of a form alternative")
+        call = records.get("forming_call", {}).get(alternative["id"])
+        found = call is not None and any(form["id"] == alternative["form_id"] for form in call["forms"])
+    else:
+        _fields(alternative, ("kind", "text"))
+        _text(alternative["text"], "The text of a neighbour alternative")
+        found = alternative["text"] in find_current_statement(records)["neighbours"]
+    if not found:
+        raise ResearchError("problem_test_alternative_missing",
+                            "The alternative of a test exists in the record before the plan. Name a form as "
+                            "{kind: form, record_kind: forming_call, id, form_id}, with a recorded forming call that holds "
+                            "the form, or name a declared neighbour of the current statement as {kind: neighbour, text}, "
+                            "with its exact text. Record a new alternative as a form with forming first")
+    _text(value["excluded_outcome"], "test_declaration.excluded_outcome, the outcome that the alternative excludes,")
+    for entry in _items(value["prior_knowledge"], "test_declaration.prior_knowledge", nonempty=True):
+        _fields(entry, ("source", "known"))
+        _fields(entry["source"], ("kind", "description"))
+        _text(entry["source"]["kind"], "The kind of a prior-knowledge source")
+        _text(entry["source"]["description"], "The description of a prior-knowledge source")
+        _text(entry["known"], "The known field of a prior-knowledge entry, what that source showed about the outcome,")
+    _text(value["search_id"], "test_declaration.search_id")
+    # The prepared mutation reads the snapshot immediately before the plan's
+    # revision. Presence here establishes recording order, without trusting a
+    # caller's captured_at date or adding fields to stored search records.
+    if value["search_id"] not in records.get("literature_search", {}):
+        raise ResearchError("problem_test_search_missing",
+                            "The store holds no search with this ID. Record the search for the outcome in print "
+                            "with search before the plan, with the quantity that the run computes as its question, and "
+                            "name that search in search_id")
+
+
+def compute_plan_statement_digest(records, plan):
+    """Return the digest of the text and criteria named by a stored problem plan, or None for a study."""
+    from .problem_claims import compute_statement_digest
+    statement = records.get("problem_statement", {}).get(plan["payload"]["objective"]["id"])
+    return None if statement is None else compute_statement_digest(statement)
+
+
 def plan_cycle(store, payload, *, expected_revision, request_id):
     """Freeze a claim-specific plan, source comparison, lineage and resource limits."""
     artifacts = store.build_artifact_store()
@@ -818,11 +867,13 @@ def plan_cycle(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         context = _Context(records, artifacts)
         context.require_ready()
+        if "test_declaration" in value:
+            _validate_test_declaration(records, value["test_declaration"])
         from .decision_integration import require_decision
         strategic = require_decision(records, artifacts, "cycle", decision_id=value.get("decision_id"))
         _fields(value, ("id", "author", "objective", "scope", "hypothesis", "question", "strategy", "predecessor", "inheritance",
                         "reopening", "distinguishing_test", "expected_outcomes", "failure_signals", "evidence_requirements", "literature", "resource_limits"),
-                ("decision_id", "candidate_id", "prior_knowledge"))
+                ("decision_id", "candidate_id", "prior_knowledge", "test_declaration"))
         for key in ("id", "author", "hypothesis", "question", "distinguishing_test"):
             _text(value[key], "Plan " + key)
         validate_prior_knowledge(records, artifacts, value)
@@ -1404,7 +1455,8 @@ def _assess(context, value, *, historical=False):
     # A new assessment is refused before it is recorded, so its author sees every
     # unsupported check at once. A stored assessment keeps the obligations.
     if unsupported_check_ids and not historical:
-        raise ResearchError("validity_evidence_missing", "Each passed validity check needs completed evidence of a planned validation "
+        raise ResearchError("validity_evidence_missing",
+                            "Each passed validity check needs completed evidence of a planned validation "
                             "requirement. For each check in check_ids, cite the completed validation output or record the check as unresolved",
                             {"check_ids": unsupported_check_ids})
     if checks and {digest(x["reference"]) for x in own_results} - validated_outputs:

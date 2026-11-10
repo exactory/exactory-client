@@ -13,6 +13,7 @@ from . import review_protocol as protocol
 from . import review_transport as transport
 from .review_answer_recovery import derive_output
 from . import review_excerpts, review_problem_parts
+from . import review_prompt_paragraphs as prompt_paragraphs
 from .errors import ResearchError
 from .evidence import digest
 from .finishing import retry_store_write
@@ -381,6 +382,8 @@ def build_packet(epoch, task, *, observations=(), repair=None, composition_plan=
                 objection[name] = resolved_objection_entries(epoch, objection, name)
     if marker is not None and (packet.get('material_objections') or task['type'] == 'final'):
         packet['problem_objection_carry'] = copy.deepcopy(marker)
+    if isinstance(frame, dict):
+        prompt_paragraphs.preserve_prompt_conditions(epoch['role'], frame, packet)
     if repair is not None:
         packet['context_repair'] = copy.deepcopy(repair)
     packet['digest'] = digest(packet)
@@ -1075,11 +1078,11 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
                             source_packet=protocol._read_json(artifacts, controller['packet']))
     packet.pop('digest', None)
     packet['digest'] = digest(packet)
-    if 'problem_objection_carry' in packet and epoch['role'] in ('slate', 'result'):
+    if prompt_paragraphs.select_prompt_parameters(epoch['role'], packet):
         prompt = protocol.canonical_prompt(epoch['role'], orchestration='problem_creation', staged_task=task,
             repair=repair is not None, claim_range=claim_range,
             composed=composition_plan is not None and task['type'] == 'final',
-            problem_objection_carry=packet['problem_objection_carry'])
+            **prompt_paragraphs.select_prompt_parameters(epoch['role'], packet))
     request = build_request(artifacts, route, prompt, packet)
     measurement = staged.joint_fit([measure_task_payload(task, packet)], read_input_limit(route),
         config['max_output_tokens'], profile, claim_count=len(task['claim_ids']))
@@ -1327,7 +1330,8 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         raise ResearchError('review_context_contaminated', 'Repair the contaminated epoch before dispatch')
     if assignment['route_id'] in protocol.retired_routes(records):
         raise ResearchError('review_route_retired', 'Repair the slot on an eligible route')
-    if not protocol._prompt_matches(assignment) or digest(route) != assignment['route_digest']:
+    packet = protocol._read_json(store.build_artifact_store(), assignment['packet'])
+    if not protocol._prompt_matches(assignment, packet=packet) or digest(route) != assignment['route_digest']:
         raise ResearchError('review_task_dependency_changed', 'The frozen route or staged prompt changed')
     epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
     contexts = derive_current_contexts(records, store.build_artifact_store(), epoch)
@@ -1844,6 +1848,8 @@ def build_assigned_request(artifacts, route, assignment, packet):
         raise ResearchError('review_task_pending', 'Assign a controller child task before dispatch')
     if assignment.get('history') != []:
         raise ResearchError('review_task_dependency_changed', 'Staged task history must stay empty')
+    if not protocol._prompt_matches(assignment, packet=packet):
+        raise ResearchError('review_task_dependency_changed', 'The frozen route or staged prompt changed')
     request = build_request(artifacts, route, assignment['prompt'], packet)
     if digest(request) != assignment['planned_request_digest']:
         raise ResearchError('review_task_dependency_changed', 'The exact planned task request changed')
@@ -1862,8 +1868,7 @@ def matches_prompt(assignment, common_version):
                     orchestration='problem_creation', staged_task=task, common_version=common_version,
                     repair=parameters.get('context_repair', False),
                     composed=parameters.get('composed', False), claim_range=parameters.get('claim_range', False),
-                    **({'problem_objection_carry': parameters['problem_objection_carry']}
-                       if 'problem_objection_carry' in parameters else {})))
+                    **prompt_paragraphs.read_paragraph_parameters(assignment['prompt'])))
     except (ResearchError, KeyError, TypeError):
         return False
 
@@ -1891,9 +1896,10 @@ def build_profiles(records, artifacts, route, epoch=None):
             orchestration='problem_creation', staged_task=dict(type=kind, scope='joint_original',
                 claim_ids=[], occurrence_ids=[], group_ids=[]))
         frame = {} if epoch is None else epoch.get('manifest', {}).get('frame')
-        if isinstance(frame, dict) and frame.get('problem_objection_carry') is not None:
-            from .problem_objection_carry import PROMPT
-            prompt = dict(prompt, text=prompt['text'] + PROMPT)
+        if epoch is not None and isinstance(frame, dict):
+            prompt = prompt_paragraphs.append_prompt_paragraphs(prompt, epoch['role'],
+                frame.get(prompt_paragraphs.CARRY_PARAMETER),
+                prompt_paragraphs.select_prompt_parameters(epoch['role'], frame).get(prompt_paragraphs.PARAMETER))
         profiles[kind] = dict(context_characters=len(prompt['text']), envelope_characters=4000,
             output_base_tokens=128, output_tokens_per_claim=100, output_tokens_per_character=0.5 if kind == 'frame' else 0.01,
             seconds_per_character=0.0001, seconds_per_claim=0.1, duration_base_seconds=1,

@@ -267,11 +267,13 @@ def plan_output_replacement(records, artifacts, assignment):
         value['subject'] = copy.deepcopy(assignment['subject'])
     base = assignment['prompt']['parameters']
     if is_read:
-        parameters = base['base_prompt']['parameters']
+        parameters = dict(base['base_prompt']['parameters'])
     else:
         parameters = dict(repair=bool(base.get('context_repair')),
             orchestration=base.get('orchestration'), excerpts='reviewer_excerpts' in base,
             common_version=protocol.find_common_prompt_version(assignment['prompt']))
+    from .review_prompt_paragraphs import read_paragraph_parameters
+    parameters.update(read_paragraph_parameters(assignment['prompt']))
     prompt = protocol.canonical_prompt(assignment['role'], **parameters)
     slot_id = protocol.context_repair.slot_id(records, assignment)
     history = protocol.read_history(staged, assignment)

@@ -49,12 +49,24 @@ INLINE_DELIVERY_NOTE = (
 def collect_binding_record_kinds(records):
     """Include the unrestricted record kinds cited by the current self-assessment."""
     assessment = find_assessment(records)
-    return set(BINDING_RECORD_KINDS) | {
+    account_kinds = set()
+    value = find_value(records)
+    if value is not None and "accounts" in value:
+        account_kinds.update(("cycle_plan", "forming_call", "form_outcome", "problem_candidate"))
+        account_kinds.update(reference["record_kind"] for entry in value["accounts"]["refuted_conjectures"]
+                             for reference in entry["sources"] if reference.get("kind") == "record")
+    return set(BINDING_RECORD_KINDS) | account_kinds | {
         reference["record_kind"] for item in (assessment or {}).get("items", {}).values()
         for reference in item["evidence"] if reference.get("kind") == "record"}
 
 
 def collect_value_items(value):
+    if value is not None and "accounts" in value:
+        from .problem_accounts import collect_account_evidence
+        evidence = collect_account_evidence(value["accounts"])
+        evidence.extend(item for section in ("motivation", "current_state") for paragraph in value[section]
+                        for item in paragraph["evidence"] if item["kind"] == "reading")
+        return list({digest(item): item for item in evidence}.values())
     return [item for section in ("motivation", "current_state") for paragraph in (value or {}).get(section, [])
             for item in paragraph["evidence"]]
 
@@ -264,8 +276,9 @@ def validate_result(records, item):
 def collect_results(records):
     from .problem_attempt import find_current_attempt
     attempt = find_current_attempt(records)
+    value = find_value(records)
     references = {}
-    for item in collect_value_items(find_value(records)):
+    for item in collect_value_items(value):
         if item["kind"] != "result":
             continue
         if "native_attempt_digest" in item:
@@ -283,12 +296,15 @@ def collect_results(records):
         except ResearchError as error:
             if error.code != "problem_result_superseded":
                 raise
-            # A later delivery removes current support, but the stored citation
-            # remains readable. Bind its repair so earlier reviews become stale.
-            finding = obligation(error.code, error.message, **error.details)
-            pending[digest(finding)] = finding
+            if "accounts" not in value:
+                # Stored values keep the A5 repair; accounts use their currency below.
+                finding = obligation(error.code, error.message, **error.details)
+                pending[digest(finding)] = finding
         else:
             results.append((item, acceptance))
+    if value is not None and "accounts" in value:
+        from .problem_account_derivations import assess_account_currency
+        return results, assess_account_currency(records, value)
     return results, list(pending.values())
 
 
@@ -309,6 +325,15 @@ def describe_result(records, item, acceptance, *, binding=False):
 
 
 def validate_value(records, artifacts, value):
+    if "accounts" in value:
+        from .problem_accounts import collect_entries, validate_accounts, validate_paragraph
+        from .strategy import items
+        accounts = validate_accounts(records, artifacts, value)
+        entries = {entry["id"]: entry for entry in collect_entries(accounts)}
+        for section in ("motivation", "current_state"):
+            for paragraph in items(value[section], "Value paragraphs", nonempty=True, code="invalid_input"):
+                validate_paragraph(records, artifacts, paragraph, entries)
+        return dict(value, accounts=accounts)
     for section in ("motivation", "current_state"):
         paragraphs = value[section]
         if not isinstance(paragraphs, list) or not paragraphs:
@@ -621,6 +646,11 @@ def describe_binding(records, artifacts):
                 for record in [find_reading_locator(records, artifacts, row)] if record is not None]
     if locators:
         binding["citation_locators"] = [{"id": row["id"], "digest": digest(row)} for row in locators]
+    if value is not None and "accounts" in value:
+        from .problem_accounts import describe_account_records
+        from .problem_account_derivations import describe_account_derivations
+        binding["derived_accounts"] = describe_account_derivations(records, value)
+        binding["account_records"] = describe_account_records(records, value["accounts"], binding["derived_accounts"])
     if pending:
         binding["obligations"] = pending
     return binding
@@ -721,6 +751,19 @@ def describe_evidence(records, artifacts):
                                    record_references=[cite_record("native_closure", row["native_closure_digest"],
                                                                   records["native_closure"][row["native_closure_digest"]])])
                               for row in find_formal_checks(records)]}
+    if value is not None and "accounts" in value:
+        from .problem_accounts import collect_entries, collect_entry_evidence, describe_account_records
+        entries = {entry["id"]: entry for entry in collect_entries(value["accounts"])}
+        for section in ("motivation", "current_state"):
+            delivered["value"][section] = [dict(paragraph, delivered_evidence=[
+                item for reference in paragraph["evidence"]
+                for item in (collect_entry_evidence(entries, reference["id"]) if reference["kind"] == "account" else [reference])])
+                for paragraph in value[section]]
+        delivered["value"]["accounts"] = value["accounts"]
+        from .problem_account_derivations import describe_account_derivations
+        derived = describe_account_derivations(records, value)
+        delivered["value"]["derived_accounts"] = derived
+        delivered["account_records"] = describe_account_records(records, value["accounts"], derived)
     if pending:
         delivered["obligations"] = pending
     # Each projected record names how a reviewer cites it, by kind and id.
