@@ -1,0 +1,195 @@
+{
+  "producer": "exactory 0.82.0 (645a791)",
+  "records": {
+    "problem_statement": {
+      "statement-1": {
+        "area": "math.CO",
+        "candidate_id": null,
+        "formal_statement": null,
+        "id": "statement-1",
+        "neighbours": [],
+        "recorded_revision": 2,
+        "resolution_criteria": "Prove the bound for all $n$ or exhibit a counterexample.",
+        "statement": "For every $n$, does $B(n)\\leq n^2$ hold?",
+        "title": "A finite bound problem"
+      }
+    },
+    "problem_selection": {
+      "current": {
+        "statement_id": "statement-1"
+      }
+    },
+    "problem_attempt": {
+      "attempt-1": {
+        "id": "attempt-1",
+        "kind": "solver",
+        "literature": null,
+        "outcomes": {
+          "footholds": [],
+          "obstructions": [],
+          "resolved": false,
+          "unresolved": [
+            {
+              "description": "The general bound remains unresolved."
+            }
+          ]
+        },
+        "proportion": {
+          "extension_reason": null
+        },
+        "recorded_revision": 5,
+        "solver": {
+          "applicability": "The quantifiers cover every n, with no added assumptions and named scope matching the statement and resolution criteria.",
+          "native_attempt_digest": "1878fa0ce1c9cc490a0a52b2feaa338af14d9431513478809e10bf895e5204a7"
+        },
+        "statement_id": "statement-1"
+      }
+    },
+    "problem_value": {
+      "value-1": {
+        "current_state": [
+          {
+            "evidence": [
+              {
+                "acceptance_id": "acceptance-1",
+                "attempt_id": "attempt-1",
+                "kind": "result"
+              }
+            ],
+            "text": "Only bounded examples have been established."
+          }
+        ],
+        "id": "value-1",
+        "motivation": [
+          {
+            "evidence": [
+              {
+                "acceptance_id": "acceptance-1",
+                "attempt_id": "attempt-1",
+                "kind": "result"
+              }
+            ],
+            "text": "The bound would connect the finite constructions."
+          }
+        ],
+        "recorded_revision": 6,
+        "statement_id": "statement-1"
+      }
+    },
+    "native_attempt": {
+      "1878fa0ce1c9cc490a0a52b2feaa338af14d9431513478809e10bf895e5204a7": {
+        "acceptances": [
+          {
+            "checkpoint_id": "checkpoint-1",
+            "claims_openness": false,
+            "classification": "analytical",
+            "evidence_digests": [
+              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ],
+            "id": "acceptance-1",
+            "obligation_id": "obligation-000002",
+            "outcome": "reduction",
+            "standard": "reviewed",
+            "status": "accepted"
+          }
+        ],
+        "attack_root": "/native/attack",
+        "checkpoints": [
+          {
+            "claim": {
+              "assumption_ids": [],
+              "proof_policy": "reviewed",
+              "quantifiers": "For every n",
+              "scope": {
+                "kind": "named",
+                "name": "all admissible sequences"
+              },
+              "statement": "The bound reduces to the balanced case."
+            },
+            "id": "checkpoint-1",
+            "kind": "reduction",
+            "origin_kind": "local",
+            "verification_status": "accepted"
+          }
+        ],
+        "contract": {
+          "assumption_ids": [],
+          "original_claim": {
+            "assumption_ids": [],
+            "proof_policy": "reviewed",
+            "quantifiers": "For every n",
+            "scope": {
+              "kind": "named",
+              "name": "all admissible sequences"
+            },
+            "statement": "For every $n$, does $B(n)\\leq n^2$ hold?"
+          },
+          "proof_policy": "reviewed",
+          "requested_outcome": "decision",
+          "required_deliverables": [],
+          "resource_policy": {
+            "max_total_moves": null,
+            "max_total_runs": null,
+            "max_workers": 1
+          },
+          "root_attack_slug": "attack",
+          "root_obligation": "obligation-000001",
+          "schema_version": 1
+        },
+        "failed_strategies": [],
+        "nodes": [],
+        "objective_id": "objective-000001",
+        "obligations": [
+          {
+            "claim": {
+              "assumption_ids": [],
+              "proof_policy": "reviewed",
+              "quantifiers": "For every n",
+              "scope": {
+                "kind": "named",
+                "name": "all admissible sequences"
+              },
+              "statement": "For every $n$, does $B(n)\\leq n^2$ hold?"
+            },
+            "id": "obligation-000001",
+            "status": "open"
+          }
+        ],
+        "provenance": {
+          "actor_id": "search-controller",
+          "attestation_id": "filesystem-audit:deliver-attempt",
+          "source": "operator"
+        },
+        "recorded_revision": 3,
+        "retreats": [],
+        "schema_version": 1,
+        "state": {
+          "closure_digest": null,
+          "execution_status": "active",
+          "openness": null,
+          "proof_status": "open"
+        },
+        "totals": {
+          "elapsed_seconds": null,
+          "historical_usage": "known",
+          "moves": 24,
+          "runs": 24,
+          "timeout_seconds": 300,
+          "workers": 1
+        }
+      }
+    },
+    "native_attempt_current": {
+      "06e29d2c8c7c49f4665382877a58b02b5e30328dd711513ed065a44516e2f1f8": {
+        "attack_root": "/native/attack",
+        "native_attempt_digest": "1878fa0ce1c9cc490a0a52b2feaa338af14d9431513478809e10bf895e5204a7",
+        "objective_id": "objective-000001",
+        "recorded_revision": 4
+      }
+    }
+  },
+  "binding_bytes": "{\"assessment\":null,\"assessment_evidence\":[],\"attempt\":{\"digest\":\"9d3c06f9a1110c90eab298f8746a3214af0dc1f76783eee034028a2ac6c2e965\",\"id\":\"attempt-1\",\"native_attempt_digest\":\"1878fa0ce1c9cc490a0a52b2feaa338af14d9431513478809e10bf895e5204a7\"},\"citations\":[],\"claim\":{\"area\":\"math.CO\",\"candidate_id\":null,\"formal_statement\":null,\"id\":\"statement-1\",\"neighbours\":[],\"recorded_revision\":2,\"resolution_criteria\":\"Prove the bound for all $n$ or exhibit a counterexample.\",\"statement\":\"For every $n$, does $B(n)\\\\leq n^2$ hold?\",\"title\":\"A finite bound problem\"},\"computations\":[],\"formal_checks\":[],\"openness\":null,\"openness_searches\":[],\"readings\":[],\"results\":[{\"acceptance_id\":\"acceptance-1\",\"attempt_id\":\"attempt-1\",\"digest\":\"16425a68abdf727a1219033d08bbc8717eca4e806bf8f854d238b506caffee65\"}],\"value\":{\"current_state\":[{\"evidence\":[{\"acceptance_id\":\"acceptance-1\",\"attempt_id\":\"attempt-1\",\"kind\":\"result\"}],\"text\":\"Only bounded examples have been established.\"}],\"id\":\"value-1\",\"motivation\":[{\"evidence\":[{\"acceptance_id\":\"acceptance-1\",\"attempt_id\":\"attempt-1\",\"kind\":\"result\"}],\"text\":\"The bound would connect the finite constructions.\"}],\"recorded_revision\":6,\"statement_id\":\"statement-1\"}}",
+  "evidence_bytes": "{\"assessment\":null,\"assessment_evidence\":[],\"attempt\":{\"acceptances\":[],\"applicability\":\"The quantifiers cover every n, with no added assumptions and named scope matching the statement and resolution criteria.\",\"cite\":{\"id\":\"attempt-1\",\"kind\":\"record\",\"record_kind\":\"problem_attempt\"},\"contract\":{\"assumption_ids\":[],\"original_claim\":{\"assumption_ids\":[],\"proof_policy\":\"reviewed\",\"quantifiers\":\"For every n\",\"scope\":{\"kind\":\"named\",\"name\":\"all admissible sequences\"},\"statement\":\"For every $n$, does $B(n)\\\\leq n^2$ hold?\"},\"proof_policy\":\"reviewed\",\"requested_outcome\":\"decision\",\"required_deliverables\":[],\"resource_policy\":{\"max_total_moves\":null,\"max_total_runs\":null,\"max_workers\":1},\"root_attack_slug\":\"attack\",\"root_obligation\":\"obligation-000001\",\"schema_version\":1},\"digest\":\"9d3c06f9a1110c90eab298f8746a3214af0dc1f76783eee034028a2ac6c2e965\",\"failed_strategies\":[],\"id\":\"attempt-1\",\"kind\":\"solver\",\"literature\":null,\"nodes\":[],\"obligations\":[{\"claim\":{\"assumption_ids\":[],\"proof_policy\":\"reviewed\",\"quantifiers\":\"For every n\",\"scope\":{\"kind\":\"named\",\"name\":\"all admissible sequences\"},\"statement\":\"For every $n$, does $B(n)\\\\leq n^2$ hold?\"},\"id\":\"obligation-000001\",\"status\":\"open\"}],\"outcomes\":{\"footholds\":[],\"obstructions\":[],\"resolved\":false,\"unresolved\":[{\"description\":\"The general bound remains unresolved.\"}]},\"proportion\":{\"extension_reason\":null},\"record_references\":[{\"digest\":\"b15f0e8c3e1b8abd24f55e005eda6a7860a054e11d04e2e10a92c1febd512d83\",\"id\":\"1878fa0ce1c9cc490a0a52b2feaa338af14d9431513478809e10bf895e5204a7\",\"kind\":\"record\",\"record_kind\":\"native_attempt\"}],\"retreats\":[],\"state\":{\"closure_digest\":null,\"execution_status\":\"active\",\"openness\":null,\"proof_status\":\"open\"},\"totals\":{\"elapsed_seconds\":null,\"historical_usage\":\"known\",\"moves\":24,\"runs\":24,\"timeout_seconds\":300,\"workers\":1}},\"citations\":[],\"claim\":{\"area\":\"math.CO\",\"cite\":{\"id\":\"statement-1\",\"kind\":\"record\",\"record_kind\":\"problem_statement\"},\"digest\":\"5fd04fbd9a9cd0d3afbeb898c5fb528fca045e449431159fe712676c82b62547\",\"formal_statement\":null,\"id\":\"statement-1\",\"resolution_criteria\":\"Prove the bound for all $n$ or exhibit a counterexample.\",\"statement\":\"For every $n$, does $B(n)\\\\leq n^2$ hold?\",\"statement_digest\":\"4dabe5e029c3aec879913c524d5e70bf161fb47c11d19343d94e67eb462a8c18\",\"statement_id\":\"statement-1\",\"title\":\"A finite bound problem\"},\"computations\":[],\"delivery\":{\"note\":\"Each passage is the exact text of one inspected span of a reading, with the reading id, the inspection index and the offsets of the span in the source text. An inspection that covers the complete text is listed in its reading with whole_text true and is not repeated as a passage. Full texts, including those that a material objection names by reference, are not attached in this turn; request a held full text with source_requests by its version_id. Cite a delivered record by copying its cite object, which names the record by kind and id. A source link is citable only for a full text that a source request delivered to you. This review is verified only when it calls no tool, so a held text is obtained only through a source request.\",\"protocol\":\"inline-passages-v1\"},\"formal_checks\":[],\"openness\":null,\"openness_searches\":[],\"passages\":[],\"readings\":[],\"results\":[{\"acceptance_id\":\"acceptance-1\",\"attempt_id\":\"attempt-1\",\"claim\":{\"assumption_ids\":[],\"proof_policy\":\"reviewed\",\"quantifiers\":\"For every n\",\"scope\":{\"kind\":\"named\",\"name\":\"all admissible sequences\"},\"statement\":\"The bound reduces to the balanced case.\"},\"outcome\":\"reduction\",\"standard\":\"reviewed\"}],\"value\":{\"cite\":{\"id\":\"value-1\",\"kind\":\"record\",\"record_kind\":\"problem_value\"},\"current_state\":[{\"evidence\":[{\"acceptance_id\":\"acceptance-1\",\"attempt_id\":\"attempt-1\",\"kind\":\"result\"}],\"text\":\"Only bounded examples have been established.\"}],\"digest\":\"c7263aa82fec9c4c8451a3418795899ee7a215c84a0377c921e21d6ae2200d06\",\"id\":\"value-1\",\"motivation\":[{\"evidence\":[{\"acceptance_id\":\"acceptance-1\",\"attempt_id\":\"attempt-1\",\"kind\":\"result\"}],\"text\":\"The bound would connect the finite constructions.\"}]}}",
+  "value_digest": "c7263aa82fec9c4c8451a3418795899ee7a215c84a0377c921e21d6ae2200d06",
+  "evidence_digest": "901d60749ae95562fa96991444b527bac9ea49055e86fae49bf7a3fb62af38da"
+}
