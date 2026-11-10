@@ -52,7 +52,10 @@ def record_candidate(store, payload, *, expected_revision, request_id):
         if source["kind"] == "phenomenon" and not any(
                 reference.get("kind") == "record" and reference["record_kind"] == "forming_call"
                 for reference in source["evidence"]):
-            raise ResearchError("problem_candidate_forming_missing", "A phenomenon candidate must cite at least one forming call")
+            raise ResearchError("problem_candidate_forming_missing",
+                                "Cite in source.evidence at least one forming call of this record, as {kind: record, "
+                                "record_kind: forming_call, id, digest}: a candidate of the kind phenomenon derives "
+                                "from recorded forms. Record the call with forming first")
         strings(value["neighbours"], "Candidate neighbours")
         problem_rubric.validate_grades(value["potential"], potential=True)
         if not isinstance(value["notes"], str):
@@ -251,7 +254,11 @@ def record_slate(store, payload, *, expected_revision, request_id):
                     reference.get("kind") == "record" and reference["record_kind"] in ("forming_call", "form_outcome")
                     for reference in candidates[identifier]["source"]["evidence"])
                 for identifier in value["selected"]):
-            raise ResearchError("problem_slate_review_required", "Selecting a candidate formed in this record requires a current slate review")
+            raise ResearchError("problem_slate_review_required",
+                                "Obtain a current slate review (review-assignment with role slate, to one of the two "
+                                "bar reviewers) and name it in review_ids: this slate selects a candidate formed in "
+                                "this record, one of the kind phenomenon or one whose source evidence cites a forming "
+                                "call or a form outcome")
         record = dict(value, candidate_ids=sorted(candidates), recorded_revision=expected_revision + 1)
         if records.get('problem_objection_carry'):
             from .problem_objection_carry import import_set_digest

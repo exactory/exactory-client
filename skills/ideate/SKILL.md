@@ -15,6 +15,20 @@ read, cohort and probe tools may inform it in any order. Tentative candidates
 grant no direction approval. Managed preparation is advisory; the orchestration
 holds the direction and investigation gates.
 
+In a problem record of math-conjecturer the tool has two commands of its own,
+`exactory-research forming` and `exactory-research form-outcome`. A forming call
+states its own question (a phenomenon with the places where it appears, a
+thought experiment or another start), names the move that produced its forms,
+and records every tentative statement that it produced, with the amounts as the
+performer reports them. An outcome records how a form, an expected relation or a
+planned check ended. These records grant no openness, significance, proof credit
+or test credit. `intent` stays refused in a problem record, and the sections
+below, which rest on a recorded intent, apply to a study. The
+[math-conjecturer skill](../math-conjecturer/SKILL.md#exploration) says when to
+use the two commands, and the
+[tool catalog](../../docs/research-tools.md#forming-calls-and-outcomes) says
+what they record.
+
 ## Direction minimum and Q1 assessment
 
 Before recording a version-2 `investigate` or `pivot` decision, complete the

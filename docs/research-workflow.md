@@ -741,7 +741,9 @@ id>/`, where `series.json` lists every turn and every run with its status,
 error, usage, refusal, correction, the selected run and the record that adopted
 the turn, and `<NN>-<assignment id>.<run id>.json` holds the output of one
 completed run; the route probes in `reviews/routes/`; the problem candidates in
-`problem/candidates/`; the probes and the admitted runs of the lab in
+`problem/candidates/`; the forming calls and the outcomes of their forms in
+`problem/forming/` and `problem/form-outcomes/`; the probes and the admitted
+runs of the lab in
 `lab/probes/` and `lab/runs/<admission id>/`; the bundles that were neither
 selected nor deposited, the generated score history, and the remote intents and
 observations in `study/`; copies of the citation and derivation check reports
@@ -804,7 +806,7 @@ operations of the Mathematics section.
 
 | Milestone | Condition computed from records |
 | --- | --- |
-| `exploration` | `problem-init` records the area, field and immutable authors and adopts the constitution. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
+| `exploration` | `problem-init` records the area, field and immutable authors, and the kind of start when the payload gives it, and adopts the constitution. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
 | `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind bars that state the calibration of levels 2 and 3 (a bar on the version 1 template is refreshed first); no statement exists yet, or the current slate selects no candidate. |
 | `formulation` | The current slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
 | `attempt` | `problem-attempt` records a current, proportionate unresolved solver or critically assessed literature attempt; `assess_attempt` returns no obligations. |
@@ -812,12 +814,28 @@ operations of the Mathematics section.
 | `value` | Value evidence validates and `problem-assessment` binds a current self-assessment meeting the rubric thresholds; both observed bars and both result reviews, grading every rubric item including A7, cover the evidence and pass the assurances and rubric after adjudication; the current decision is `post`. |
 | `post` | `problem-posted` records the confirmed server id against the rebuilt approved export. |
 
+An exploration starts from a field question, from a phenomenon that appears in
+several places or from a thought experiment, and `problem-init` records which in
+its optional `start` entry. When the record forms a statement itself, the two
+commands of the Ideate tool in a problem record keep the history: `forming`
+records one forming call with its question, its move, every form that it
+produced and the amounts that the performer reports, and `form-outcome` records
+how a form, an expected relation or a planned check ended, with the standing of
+the form as a claim and its disposition in the exploration kept apart. A form is
+a tentative statement and no claim: these records pass no gate and grant no
+openness, significance, proof credit or test credit
+([Forming calls and outcomes](research-tools.md#forming-calls-and-outcomes)).
+
 The exploration records each candidate question with `problem-candidate`: its
 tentative statement, its source (the harness's own research records, the
-literature, a computation, the Mathematics section or the user's material), the
+literature, a computation, the Mathematics section, the user's material, a
+thought experiment, or a phenomenon that appears in several places), the
 observation that produced it, its declared neighbours, the provisional potential
-grades and a provisional disposition. Two blind problem bars fix the field's
-standard before any candidate is shown to a reviewer, and the slate
+grades and a provisional disposition. A candidate of the source kind
+`phenomenon` was formed in the record and cites at least one forming call
+(`problem_candidate_forming_missing` otherwise), and a candidate of any kind can
+cite forming calls and form outcomes as records. Two blind problem bars fix the
+field's standard before any candidate is shown to a reviewer, and the slate
 (`problem-slate`) records the decision: every current candidate is selected,
 deferred with the evidence that would raise it, or rejected with the reason. A
 selected candidate needs `max(B1, B2) >= 2` and readiness `pass` in its potential
@@ -831,7 +849,10 @@ on the version 1 template returns `problem_bar_calibration_required`; assigning
 the bar again to the same reviewer refreshes it on the current bar template in
 the same session and slot. A focused slate review by
 a bar reviewer is required after a carry that imported at least one objection
-(`problem_slate_review_unverified` otherwise), and optional otherwise, when the
+(`problem_slate_review_unverified` otherwise), and when the slate selects a
+candidate formed in the record, which is a candidate of the source kind
+`phenomenon` or one whose source evidence cites a forming call or a form outcome
+(`problem_slate_review_required` otherwise). It is optional otherwise, when the
 comparison needs an independent judgment. It is bound to the exact candidate set,
 the current bars and the imported set. After a candidate is added or superseded,
 a bar is refreshed or a carry changes the imported set, assigning
@@ -923,8 +944,9 @@ foothold and result evidence.
 
 Tools remain available in any order before posting: set budgets and depth,
 search the field and neighbouring formulations, read sources, preserve access
-gaps and deferrals, request sources and run probes. They require no intent,
-target, dossier, synthesis section or direction decision. When a paragraph
+gaps and deferrals, request sources, run probes and record forming calls and
+their outcomes. They require no intent, target, dossier, synthesis section or
+direction decision. When a paragraph
 cites a computation, use the shared cycle, admission, binding, execution,
 reconciliation and assessment route with the current problem statement as its
 objective. The statement and adopted constitution are its readiness
@@ -934,11 +956,24 @@ as cited value evidence.
 
 Record motivation and current-state paragraphs with `problem-value`. Every
 paragraph names full readings, admitted, reconciled and assessed computations,
-or `{kind: "result", attempt_id, acceptance_id}`. A result must be an accepted
-`proof`, `reduction` or `obstruction` from the current solver attempt, otherwise
-`problem_value_result_missing` identifies the invalid citation. The evidence
+or a result reference. `{kind: "result", attempt_id, acceptance_id}` cites an
+accepted `proof`, `reduction` or `obstruction` from the current solver attempt,
+otherwise `problem_value_result_missing` identifies the invalid citation.
+`{kind: "result", native_attempt_digest, acceptance_id, purpose,
+extension_reason}` cites an accepted `proof`, `reduction`, `obstruction` or
+`counterexample` of any solver objective delivered into this store, for example
+a bounded objective on a stronger form or on a relation of the statement. It
+names the latest delivered snapshot of the objective
+(`problem_result_superseded` otherwise, `problem_result_unbound` for an
+objective that is not delivered here), an accepted acceptance of it
+(`problem_result_missing`), the purpose of the objective, and the reason when a
+delivered total exceeds a normal limit (`problem_result_extension_unexplained`).
+Such a result supports exactly its conclusion and is no attempt on the
+statement. The evidence
 binding and reviewer packet carry `attempt` and `results`; the latter includes
-the acceptance's checkpoint claim, outcome and standard for each cited result.
+the acceptance's checkpoint claim, outcome and standard for each cited result,
+and for a result of a delivered objective also the claim of that objective, its
+purpose and its extension reason.
 The attempt evidence also carries its literature description and reading binding,
 or the checkpoint claims, outcomes and standards of all acceptances cited by its
 solver footholds and obstructions, once in first citation order.
@@ -946,7 +981,9 @@ A solver attempt additionally carries `applicability`, its complete delivered
 `contract`, `obligations`, `failed_strategies`, `retreats` and `nodes`, alongside
 `state`, `totals` and the cited acceptances. If the latest attempt belongs to
 another statement, both the digest binding and the reviewer projection carry
-`attempt: null` and `results: []`; the gate retains the stale-attempt obligation.
+`attempt: null` and no result of that attempt, so `results` holds the cited
+results of delivered objectives alone; the gate retains the stale-attempt
+obligation.
 Both result reviewers must receive these fields (`problem_evidence_unassessed`).
 An unavailable source stays unread. A requested formal check records the exact
 native claim, proof policy and required deliverables before verification. After
@@ -1020,7 +1057,9 @@ The only gate is `exactory-research gate post`. `status` and `next` compute the
 milestone and first missing condition in the order slate, statement, attempt,
 openness, value, reviews, decision, export. They store no milestone projection.
 `status` also counts the current candidates and the latest slate's selected,
-deferred and rejected candidates, and names the latest slate. Once ready,
+deferred and rejected candidates, and names the latest slate. Once the record
+holds a forming call, it counts the forming calls, the forms by standing and by
+disposition, the forms without an outcome and the outcomes. Once ready,
 `exactory-research export --kind problem` writes the approved parts, projected
 citations and digest manifest to `final/problem/exports/<export digest>/` and
 names the directory under `destination`. Check the exported

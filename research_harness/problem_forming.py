@@ -25,7 +25,10 @@ def collect_forms(records):
 def find_form(forms, identifier):
     text(identifier, "Form ID")
     if identifier not in forms:
-        raise ResearchError("problem_form_missing", "Name a form held in the problem record", {"form_id": identifier})
+        raise ResearchError("problem_form_missing",
+                            "Name a form of this problem record by its ID: a form of a recorded forming call or of "
+                            "this call; previous.form_id names a form that precedes this one",
+                            {"form_id": identifier})
     return forms[identifier]
 
 
@@ -36,14 +39,14 @@ def validate_count(value, name):
 
 def validate_description(value):
     fields(value, ("kind", "description"))
-    text(value["kind"], "Kind")
-    text(value["description"], "Description")
+    text(value["kind"], "Move kind")
+    text(value["description"], "Move description")
 
 
 def validate_grounds(records, artifacts, values, *, required=False):
-    for item in strategy.items(values, "Grounds", code="invalid_input"):
+    for item in strategy.items(values, "Each of question.places, inputs and the grounds of a form", code="invalid_input"):
         fields(item, ("description", "evidence"))
-        text(item["description"], "Ground description")
+        text(item["description"], "The description of a place, an input or a ground")
         strategy.evidence(records, artifacts, item["evidence"], required=required)
 
 
@@ -55,7 +58,10 @@ def validate_checks(values):
         text(check["description"], "Planned check")
         identifiers.append(check["id"])
         if (check["contradiction"] is None) == (check["no_contradiction_reason"] is None):
-            raise ResearchError("invalid_input", "Give the contradicting outcome or the reason that no outcome can contradict the form")
+            raise ResearchError("invalid_input",
+                                "Give each planned check exactly one of contradiction, the outcome that would contradict "
+                                "the form, and no_contradiction_reason, the reason that no outcome can; set the other "
+                                "to null")
         for key in ("contradiction", "no_contradiction_reason"):
             if check[key] is not None:
                 text(check[key], "Check " + key)
@@ -67,7 +73,9 @@ def validate_correction(form, earlier_forms):
     previous = form["previous"]
     if previous is None:
         if checks:
-            raise ResearchError("invalid_input", "Correction checks require an earlier form")
+            raise ResearchError("invalid_input",
+                                "Leave correction_checks empty for a form without previous; a correction names the "
+                                "earlier form in previous as {form_id, reason}")
         return
     fields(previous, ("form_id", "reason"))
     text(previous["reason"], "Correction reason")
@@ -82,7 +90,9 @@ def validate_correction(form, earlier_forms):
                 raise ResearchError("invalid_input", "Correction check " + key + " must be a boolean")
     if (len(identifiers) != len(set(identifiers))
             or set(identifiers) != {check["id"] for check in earlier["planned_checks"]}):
-        raise ResearchError("problem_form_correction_incomplete", "Account for every planned check of the earlier form exactly once")
+        raise ResearchError("problem_form_correction_incomplete",
+                            "Give one correction_checks entry {check_id, was_made, keeps_prediction, chosen_with_outcome} "
+                            "for each planned check of the earlier form, and none for another check")
 
 
 def validate_form(records, artifacts, form, forms, earlier_forms):
@@ -90,25 +100,29 @@ def validate_form(records, artifacts, form, forms, earlier_forms):
                   "expected_relations", "planned_checks", "correction_checks"))
     text(form["text"], "Form text")
     if type(form["exact"]) is not bool:
-        raise ResearchError("invalid_input", "Form exact must be a boolean")
+        raise ResearchError("invalid_input", "Form exact must be true or false: whether the text is an exact statement")
     purpose = form["purpose"]
     fields(purpose, ("kind", "form_id"))
-    strategy.choice(purpose["kind"], ("expected_statement", "alternative"), "Form purpose", "invalid_input")
+    strategy.choice(purpose["kind"], ("expected_statement", "alternative"), "Form purpose kind", "invalid_input")
     if purpose["kind"] == "alternative":
         find_form(forms, purpose["form_id"])
     elif purpose["form_id"] is not None:
-        raise ResearchError("invalid_input", "An expected statement has no purpose form_id")
+        raise ResearchError("invalid_input",
+                            "Set purpose.form_id to null for the kind expected_statement; only the kind alternative "
+                            "names the form that it is an alternative of")
     validate_grounds(records, artifacts, form["grounds"])
     strings(form["nearest_alternatives"], "Nearest alternative form IDs")
     for identifier in form["nearest_alternatives"]:
         find_form(forms, identifier)
     if form["id"] in form["nearest_alternatives"] or purpose["form_id"] == form["id"]:
-        raise ResearchError("invalid_input", "A form cannot be its own alternative")
+        raise ResearchError("invalid_input",
+                            "Name other forms in nearest_alternatives and in purpose.form_id; a form is no "
+                            "alternative of itself")
     relation_ids = []
     for relation in strategy.items(form["expected_relations"], "Expected relations", code="invalid_input"):
         fields(relation, ("id", "description", "form_ids"))
         text(relation["id"], "Expected relation ID")
-        text(relation["description"], "Expected relation")
+        text(relation["description"], "Expected relation description")
         relation_ids.append(relation["id"])
         strings(relation["form_ids"], "Related form IDs")
         for identifier in relation["form_ids"]:
@@ -147,9 +161,11 @@ def record_forming(store, payload, *, expected_revision, request_id):
         question = value["question"]
         fields(question, ("kind", "description", "places"))
         text(question["kind"], "Question kind")
-        text(question["description"], "Question")
+        text(question["description"], "Question description")
         if question["kind"] == "phenomenon" and not question["places"]:
-            raise ResearchError("invalid_input", "A phenomenon question requires its places with evidence")
+            raise ResearchError("invalid_input",
+                                "Give question.places for the kind phenomenon: each place as {description, evidence}, "
+                                "with at least one evidence reference that this record read or produced")
         validate_grounds(records, artifacts, question["places"], required=True)
         validate_description(value["move"])
         validate_grounds(records, artifacts, value["inputs"], required=True)
@@ -160,7 +176,9 @@ def record_forming(store, payload, *, expected_revision, request_id):
             fields(form, ("id",), None)
             text(form["id"], "Form ID")
             if form["id"] in forms:
-                raise ResearchError("problem_form_id_conflict", "Each form ID must be unique in the problem record", {"form_id": form["id"]})
+                raise ResearchError("problem_form_id_conflict",
+                                    "Give this form an ID that no other form of this problem record or of this call has",
+                                    {"form_id": form["id"]})
             forms[form["id"]] = form
         for form in produced:
             validate_form(records, artifacts, form, forms, earlier_forms)
@@ -179,16 +197,21 @@ def record_forming(store, payload, *, expected_revision, request_id):
             fields(dictionary, ("source_setting", "target_setting", "entries"))
             for key in ("source_setting", "target_setting"):
                 text(dictionary[key], "Transfer " + key)
-            for entry in strategy.items(dictionary["entries"], "Transfer dictionary", nonempty=True, code="invalid_input"):
+            for entry in strategy.items(dictionary["entries"], "Transfer dictionary entries", nonempty=True, code="invalid_input"):
                 fields(entry, ("source", "target", "description"))
                 for key in ("source", "target", "description"):
                     text(entry[key], "Dictionary " + key)
         if value["move"]["kind"] == "transfer" and dictionary is None:
-            raise ResearchError("invalid_input", "A transfer requires its dictionary")
+            raise ResearchError("invalid_input",
+                                "Give dictionary as {source_setting, target_setting, entries} for the move kind "
+                                "transfer: each entry {source, target, description} carries one term of the source "
+                                "setting to the target setting")
         if value["comparison_count"] is not None:
             validate_count(value["comparison_count"], "Comparison count")
         if value["move"]["kind"] == "comparison" and (value["comparison_count"] is None or amounts["pairs"] is None):
-            raise ResearchError("invalid_input", "A comparison requires the reported pair count and comparison count")
+            raise ResearchError("invalid_input",
+                                "Give comparison_count and amounts.pairs for the move kind comparison: the number of "
+                                "comparisons made and the number of pairs compared, as the performer reports them")
         for probe in strategy.items(value["probes"], "Used probes", code="invalid_input"):
             fields(probe, ("probe_id", "form_id", "role"))
             strategy.choice(probe["role"], ("observation", "origin"), "Probe role", "invalid_input")
@@ -198,7 +221,9 @@ def record_forming(store, payload, *, expected_revision, request_id):
                 origin = next((call for call in records.get("forming_call", {}).values()
                                if any(form["id"] == probe["form_id"] for form in call["forms"])), None)
                 if probe["role"] == "origin" and origin is not None and observed["revision"] > origin["recorded_revision"]:
-                    raise ResearchError("problem_form_origin_late", "A probe recorded after a form cannot be the origin of that form")
+                    raise ResearchError("problem_form_origin_late",
+                                        "Give this probe the role observation: it was recorded after the forming call "
+                                        "of the form, so it cannot be the origin of that form")
         validate_performer(artifacts, value["performer"])
         if value["usage"] is not None:
             fields(value["usage"], (), None)
@@ -220,7 +245,9 @@ def validate_evidence_date(value):
         else:
             timestamp(value)
     except ResearchError as error:
-        raise ResearchError("invalid_input", "Evidence date must be unknown, YYYY, YYYY-MM, YYYY-MM-DD or a timestamp with a timezone") from error
+        raise ResearchError("invalid_input",
+                            "Give the evidence date as unknown, YYYY, YYYY-MM, YYYY-MM-DD or a timestamp with a "
+                            "timezone, in the precision that the source gives") from error
 
 
 def validate_outcome_evidence(records, artifacts, values, recorded_revision):
@@ -236,7 +263,9 @@ def validate_outcome_evidence(records, artifacts, values, recorded_revision):
         strategy.choice(reference["kind"], ("reading", "computation", "result", "probe"), "Evidence reference kind", "invalid_input")
         expected = "exploratory" if reference["kind"] == "probe" else "admissible"
         if item["standing"] != expected:
-            raise ResearchError("problem_form_evidence_standing", "A probe is exploratory; a full reading, admitted computation or accepted result is admissible")
+            raise ResearchError("problem_form_evidence_standing",
+                                "Set standing to exploratory for a probe reference, and to admissible for a full "
+                                "reading, an admitted computation or an accepted result")
         if reference["kind"] == "reading":
             for key in ("version_id", "reading_id"):
                 text(reference.get(key), "Reading " + key)
@@ -257,24 +286,31 @@ def validate_outcome_evidence(records, artifacts, values, recorded_revision):
 
 def validate_disposition(records, forms, form_id, value):
     fields(value, ("status", "reason", "form_id", "candidate_id"))
-    strategy.choice(value["status"], FORM_DISPOSITIONS, "Form disposition", "invalid_input")
+    strategy.choice(value["status"], FORM_DISPOSITIONS, "Form disposition status", "invalid_input")
     text(value["reason"], "Disposition reason")
     if value["status"] == "superseded":
         later = find_form(forms, value["form_id"]) if value["form_id"] is not None else None
         if later is None or later["id"] == form_id:
-            raise ResearchError("invalid_input", "A superseded form requires a different later form")
+            raise ResearchError("invalid_input",
+                                "Name in disposition.form_id the later form that supersedes this one; a form does not "
+                                "supersede itself")
         positions = {form["id"]: (call["recorded_revision"], index)
                      for call in records["forming_call"].values() for index, form in enumerate(call["forms"])}
         if positions[later["id"]] <= positions[form_id]:
-            raise ResearchError("invalid_input", "The superseding form must have been recorded later")
+            raise ResearchError("invalid_input",
+                                "Name a superseding form that was recorded after this form: in a later forming call, "
+                                "or later in the forms of the same call")
     elif value["form_id"] is not None:
-        raise ResearchError("invalid_input", "Only a superseded disposition names a later form")
+        raise ResearchError("invalid_input", "Set disposition.form_id to null unless the status is superseded")
     if value["status"] == "taken_up_as_candidate":
         if value["candidate_id"] is None:
-            raise ResearchError("invalid_input", "A taken-up form requires its candidate ID")
+            raise ResearchError("invalid_input",
+                                "Name in disposition.candidate_id the candidate that takes this form up; record the "
+                                "candidate with problem-candidate first")
         strategy.get_record(records, "problem_candidate", value["candidate_id"])
     elif value["candidate_id"] is not None:
-        raise ResearchError("invalid_input", "Only a taken-up disposition names a candidate")
+        raise ResearchError("invalid_input",
+                            "Set disposition.candidate_id to null unless the status is taken_up_as_candidate")
 
 
 def record_form_outcome(store, payload, *, expected_revision, request_id):
@@ -292,29 +328,44 @@ def record_form_outcome(store, payload, *, expected_revision, request_id):
         strategy.choice(target["kind"], ("form", "expected_relation", "planned_check"), "Outcome target", "invalid_input")
         if target["kind"] == "form":
             if target["id"] is not None:
-                raise ResearchError("invalid_input", "A form outcome has no target item ID")
+                raise ResearchError("invalid_input",
+                                    "Set target.id to null for the target kind form; an expected relation or a planned "
+                                    "check is named by its ID")
             strategy.choice(value["standing"], CLAIM_STANDINGS, "Claim standing", "invalid_input")
             validate_disposition(records, forms, form["id"], value["disposition"])
             if value["standing"] == "not_examined":
                 text(value["lack_of_means"], "Lack of means")
             elif value["lack_of_means"] is not None:
-                raise ResearchError("invalid_input", "Only a not-examined form records a lack of means")
+                raise ResearchError("invalid_input",
+                                    "Set lack_of_means to null unless the standing is not_examined, which states the "
+                                    "means that were lacking")
         else:
             text(target["id"], "Outcome target item ID")
             key = "expected_relations" if target["kind"] == "expected_relation" else "planned_checks"
             if target["id"] not in {item["id"] for item in form[key]}:
-                raise ResearchError("problem_form_item_missing", "Name an expected relation or planned check held by this form", target)
+                raise ResearchError("problem_form_item_missing",
+                                    "Name in target.id an expected relation or a planned check of the form that form_id "
+                                    "names; target.id is no ID of that kind in the form", target)
             if any(value[key] is not None for key in ("standing", "disposition", "lack_of_means")):
-                raise ResearchError("invalid_input", "Claim standing and exploration disposition belong to a whole-form outcome")
+                raise ResearchError("invalid_input",
+                                    "Set standing, disposition and lack_of_means to null for an expected relation or a "
+                                    "planned check; outcome and reason state how the item ended")
         validate_outcome_evidence(records, artifacts, value["evidence"], expected_revision + 1)
         admissible = any(item["standing"] == "admissible" for item in value["evidence"])
         if value["standing"] in ("refuted", "proved", "implied_by_known_results", "found_in_literature", "supported"):
             if not value["evidence"] or value["standing"] not in ("refuted", "supported") and not admissible:
-                raise ResearchError("problem_form_evidence_missing", "Support this claim standing with evidence; proof and literature standings require admissible evidence")
+                raise ResearchError("problem_form_evidence_missing",
+                                    "Cite evidence for this standing: refuted and supported need at least one evidence "
+                                    "item; proved, implied_by_known_results and found_in_literature need an admissible "
+                                    "item (a full reading, an admitted computation or an accepted result). Without such "
+                                    "evidence, record the standing unresolved or without_evidence")
         refutation_basis = None
         if value["standing"] == "refuted":
             if not admissible and not any(item["counterexample"] is not None for item in value["evidence"]):
-                raise ResearchError("problem_form_counterexample_missing", "An exploratory refutation must exhibit its counterexample")
+                raise ResearchError("problem_form_counterexample_missing",
+                                    "State the counterexample in the counterexample field of an evidence item, or cite "
+                                    "admissible evidence of the refutation: the standing refuted on exploratory "
+                                    "evidence rests on an exhibited counterexample")
             refutation_basis = "admissible_evidence" if admissible else "exploratory_computation"
         earlier = [row for row in records.get("form_outcome", {}).values()
                    if row["form_id"] == value["form_id"] and row["target"] == target]

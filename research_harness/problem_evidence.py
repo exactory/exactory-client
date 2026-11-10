@@ -220,21 +220,28 @@ def validate_result(records, item):
         fields(item, ("kind", "native_attempt_digest", "acceptance_id", "purpose", "extension_reason"))
         text(item["native_attempt_digest"], "Native attempt digest")
         text(item["acceptance_id"], "Result acceptance ID")
-        text(item["purpose"], "Objective purpose")
+        text(item["purpose"], "The purpose of the cited objective (the form or the relation that it is for)")
         reason = validate_extension_reason(item["extension_reason"])
         identifier = item["native_attempt_digest"]
         native = records.get("native_attempt", {}).get(identifier)
         latest_digest = None if native is None else find_latest_native_attempt(records, native)[0]
         if latest_digest is None:
-            raise ResearchError("problem_result_unbound", "Deliver the objective's native attempt into this problem store",
+            raise ResearchError("problem_result_unbound",
+                                "Deliver the objective into this problem store before you cite its result: its "
+                                "math-solver proposal sets review_workspace to this workspace, and search "
+                                "deliver-attempt returns the native_attempt_digest to cite",
                                 {"native_attempt_digest": identifier})
         if identifier != latest_digest:
-            raise ResearchError("problem_result_superseded", "Cite the latest delivered snapshot of this objective",
+            raise ResearchError("problem_result_superseded",
+                                "Cite latest_native_attempt_digest, the latest delivered snapshot of this objective; a "
+                                "recorded value that cites the earlier snapshot needs a new problem-value record",
                                 {"native_attempt_digest": identifier, "latest_native_attempt_digest": latest_digest})
         acceptance = next((row for row in native["acceptances"] if row["id"] == item["acceptance_id"]), None)
         if (acceptance is None or acceptance["status"] != "accepted"
                 or acceptance["outcome"] not in ("proof", "reduction", "obstruction", "counterexample")):
-            raise ResearchError("problem_result_missing", "Cite an accepted proof, reduction, obstruction or counterexample of this objective",
+            raise ResearchError("problem_result_missing",
+                                "Cite an acceptance of this snapshot with status accepted and outcome proof, "
+                                "reduction, obstruction or counterexample; acceptance_id names none",
                                 {"native_attempt_digest": identifier, "acceptance_id": item["acceptance_id"]})
         validate_attempt_extension(native["totals"], reason, code="problem_result_extension_unexplained")
         return acceptance

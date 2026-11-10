@@ -3429,11 +3429,19 @@ A problem workspace uses the shared research store and the `research` profile.
 "problem_creation", slug, area, field, authors, created, updated, research:
 {store, profile: "research"}}`. The nonempty immutable `authors` list governs
 reviewer independence. `area` is a nonempty `math.*` subject class; `field`
-describes the field and question explored for the bar reviewers. When
+describes the field and question explored for the bar reviewers. The optional
+`start` is `{kind, description}`, two nonempty texts that record the kind of
+start as an open value: `field_question`, `phenomenon` (a phenomenon that
+appears in several places), `thought_experiment`, or another kind in the
+author's words. Another shape is `invalid_input`. The marker holds `start` only
+when the payload gives it, so a marker without it keeps the bytes of 0.82.0 and
+reads as "not recorded"; full `status` shows it under `problem.start`. When
 configuration is absent, initialization adopts the constitution and sets a null
 target. Study, draft and research-intent markers conflict with this marker
 (`orchestration_conflict`) in either direction, and so does a research target
-already recorded in the configuration.
+already recorded in the configuration. `intent` is therefore refused in a
+problem record; the Ideate commands that run there are `forming` and
+`form-outcome` ([Forming records](#forming-records)).
 
 | Claim | Mechanical minimum | Independent assessment | Currency |
 | --- | --- | --- | --- |
@@ -3451,8 +3459,10 @@ since 0.73.0, and is checked, not refused.
 
 | Command | JSON payload | Records and behavior |
 | --- | --- | --- |
-| `problem-init` | `{slug, area, field, authors}` | Creates the orchestration marker and initial configuration. |
-| `problem-candidate` | `{id, previous, statement, source, observation, neighbours, potential, notes, disposition}` | `problem_candidate/<id>` records a tentative question, adding `recorded_revision`. `previous` is null or an existing candidate id (`problem_candidate_missing`); a candidate that a later candidate names as `previous` is no longer current. `source` is `{kind, reference, evidence}`: kind `own_record`, `literature`, `computation`, `section`, `user` or `thought_experiment`, a nonempty reference and a possibly empty list of evidence references. `potential` holds the provisional grades `{significance: {B1, B2}, priority}` with an optional `readiness` verdict (`invalid_rubric_grades`). `notes` is a string, possibly empty. `disposition` is `{status, reason, evidence_needed}` with status `open`, `selected`, `deferred` or `rejected` and `evidence_needed` text or null. It is the author's provisional disposition when the candidate is recorded; the slate's lists are the decision of record, may differ from it, and are the only dispositions the gate reads. |
+| `problem-init` | `{slug, area, field, authors}` and the optional `start: {kind, description}` | Creates the orchestration marker and initial configuration. `start` records the kind of start as an open value (above). |
+| `problem-candidate` | `{id, previous, statement, source, observation, neighbours, potential, notes, disposition}` | `problem_candidate/<id>` records a tentative question, adding `recorded_revision`. `previous` is null or an existing candidate id (`problem_candidate_missing`); a candidate that a later candidate names as `previous` is no longer current. `source` is `{kind, reference, evidence}`: kind `own_record`, `literature`, `computation`, `section`, `user`, `thought_experiment` or `phenomenon`, a nonempty reference and a possibly empty list of evidence references. A candidate of kind `phenomenon` was formed in the record from a phenomenon that appears in several places; its evidence cites at least one forming call as `{kind: "record", record_kind: "forming_call", id, digest}` (`problem_candidate_forming_missing` otherwise). A candidate of any kind can cite forming calls and form outcomes in the same way ([Forming records](#forming-records)). `potential` holds the provisional grades `{significance: {B1, B2}, priority}` with an optional `readiness` verdict (`invalid_rubric_grades`). `notes` is a string, possibly empty. `disposition` is `{status, reason, evidence_needed}` with status `open`, `selected`, `deferred` or `rejected` and `evidence_needed` text or null. It is the author's provisional disposition when the candidate is recorded; the slate's lists are the decision of record, may differ from it, and are the only dispositions the gate reads. |
+| `forming` | `{id, question, move, inputs, amounts, dictionary, comparison_count, forms, probes, stopping_reason, performer, usage}` | `forming_call/<id>` records one forming call of the Ideate tool: the question, the move, the inputs, the amounts that the performer reports, every form that the call produced, the probes that it used, the stopping reason and the performer. It adds `recorded_revision` and `recorded_at`. The fields, the rules and the refusals are in [Forming records](#forming-records). |
+| `form-outcome` | `{id, form_id, target, standing, disposition, lack_of_means, outcome, evidence, reason}` | `form_outcome/<id>` records how one form, or one expected relation or planned check of a form, ended, with its evidence. It adds `previous` (the id of the latest earlier outcome of the same item, or null), `refutation_basis`, `recorded_revision` and `recorded_at` ([Forming records](#forming-records)). |
 | `problem-slate` | `{id, selected, deferred, rejected, bar_review_ids, review_ids, comparison, reason}` | `problem_slate/<id>` records the selection decision over every current candidate, adding the computed `candidate_ids`, `recorded_revision` and, in a record with a carry, `problem_objection_carry_digest`. The latest slate by recorded revision is current. |
 | `problem-objections-carry` | `{id, source_workspace, source_revision}` | `problem_objection_carry/<id>` imports every material objection of another problem record's bar and slate reviews, with authenticated provenance and local evidence, and links this record to that source ([Carried objections](#carried-objections)). `source_workspace` is the absolute path of the source workspace and `source_revision` its current revision. The payload has no other field (`invalid_input` otherwise). A carry id with another payload is `record_conflict`, and the same request replays its receipt. `--check` with a reachable source validates the whole carry and writes nothing. Full `status` lists the carries under `problem_objection_carries`. |
 | `problem-statement` | `{id, title, area, statement, resolution_criteria, neighbours, formal_statement, candidate_id}` | `problem_statement/<id>` and `problem_selection/current = {statement_id}`. Statement and criteria are nonempty text with TeX mathematics. Write `statement` in the two parts of [math-conjecturer Formulation step 1](../skills/math-conjecturer/SKILL.md#formulation), with the optional `---` line and the details in the same field. Neighbours are formulation texts, possibly empty. Formal statement is optional, null or `{language, text}`. `candidate_id` is optional, null or the id of a current candidate that the statement formulates (`problem_candidate_missing`). The area must equal the immutable problem record's area (`problem_area_mismatch`); for another subject class, the rule of [math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration) applies. Any other changed field requires a new statement id and moves the selection. |
@@ -3507,10 +3517,17 @@ of each slot is current. A reviewer whose latest bar is on
 assigned another bar (`review_resampling_forbidden`), unless its latest bar
 carries `review_evidence_undelivered` (the refresh below).
 
-A focused slate review is optional, except after a carry that imported at least
-one objection ([Carried objections](#carried-objections)). `review_ids` is then
-nonempty, and an empty list is refused with `problem_slate_review_unverified`,
-which names the current `import_set_digest` and no `review_id`. `review_ids`
+A focused slate review is optional, with two exceptions. The first is a carry
+that imported at least one objection ([Carried objections](#carried-objections)).
+`review_ids` is then nonempty, and an empty list is refused with
+`problem_slate_review_unverified`, which names the current `import_set_digest`
+and no `review_id`. The second is a slate that selects a candidate formed in the
+record: a candidate of the source kind `phenomenon`, or a candidate whose
+`source.evidence` cites a `forming_call` or a `form_outcome` record. Such a slate
+with an empty `review_ids` is refused with `problem_slate_review_required`;
+obtain a slate review of the current candidates and bars and name it. A formed
+candidate that the slate defers or rejects requires no review, and a slate of
+other candidates behaves as in 0.82.0. `review_ids`
 lists zero to two observed
 problem slate reviews from distinct reviewers and slots. Each must assess exactly
 the slate's bars, current candidates and imported objections and keep its observed
@@ -4305,11 +4322,45 @@ statement id starts a separate resolution history. The blocker names the latest
 attempt among those establishing a resolution.
 
 Value evidence is `{kind: "reading", version_id, reading_id}` for a full reading,
-`{kind: "computation", execution_id, output_id, formal_check}`, or
-`{kind: "result", attempt_id, acceptance_id}` for an accepted mathematical result.
-The result must belong to the current solver attempt on the current statement,
-with acceptance status `accepted` and outcome `proof`, `reduction` or `obstruction`;
-otherwise `problem_value_result_missing` names `{attempt_id, acceptance_id}`.
+`{kind: "computation", execution_id, output_id, formal_check}`, or a result
+reference for an accepted mathematical result. A result reference has one of two
+shapes. `{kind: "result", attempt_id, acceptance_id}` cites the current solver
+attempt on the current statement: the acceptance has status `accepted` and
+outcome `proof`, `reduction` or `obstruction`; otherwise
+`problem_value_result_missing` names `{attempt_id, acceptance_id}`.
+`{kind: "result", native_attempt_digest, acceptance_id, purpose,
+extension_reason}` cites any math-solver objective that was delivered into this
+store, for example a bounded objective on a form, on a stronger form or on a
+relation of the statement. It has exactly these fields (`invalid_input`
+otherwise):
+
+- `native_attempt_digest` names the snapshot that the current pointer of its
+  `(attack_root, objective_id)` names. A digest that this store does not hold,
+  or whose objective has no current pointer in this store, is
+  `problem_result_unbound` with `{native_attempt_digest}`: deliver the objective
+  with `search deliver-attempt` from a proposal whose `review_workspace` is this
+  workspace, and cite the digest that the delivery returns. An earlier snapshot
+  of the objective is `problem_result_superseded` with `{native_attempt_digest,
+  latest_native_attempt_digest}`: cite the latest one.
+- `acceptance_id` names an acceptance of that snapshot with status `accepted`
+  and outcome `proof`, `reduction`, `obstruction` or `counterexample`; otherwise
+  `problem_result_missing` names `{native_attempt_digest, acceptance_id}`.
+- `purpose` is nonempty text: the form or the relation that the objective is
+  for. It describes the citation and establishes no relation between the result
+  and the current statement.
+- `extension_reason` is text or null. When a delivered total of the objective
+  exceeds a normal limit (24 moves, 24 runs, one worker or 300 timeout seconds),
+  give a nonempty reason (`problem_result_extension_unexplained` with `{totals,
+  exceeded}`).
+
+Such an objective needs no named scope and no `problem-attempt` record, and its
+contract claim need not be the current statement. Its result supports exactly
+its accepted conclusion: a root proof or counterexample of the objective does
+not resolve the current statement. The same reference is evidence of a form
+outcome ([Forming records](#forming-records)). When the solver delivers a later
+snapshot of the objective, the gate lists `problem_result_superseded` for a
+value record that cites the earlier one, until a new value record cites the
+latest; delivering the earlier snapshot again makes it current again.
 Invalidated acceptances and hypotheses supply no result evidence. Abstract and
 passage readings, availability qualifications and deferrals supply no value
 evidence. A cited computation requires its admission, reconciled output and an
@@ -4327,8 +4378,9 @@ attempts have an empty acceptance list. Solver evidence also gives
 `applicability`, `contract`, `obligations`, `failed_strategies`, `retreats` and
 `nodes` as delivered, alongside `state` and `totals`. Both the binding and the
 reviewer evidence project only an attempt for the current statement. When the
-latest attempt belongs to a previous statement they give `attempt: null` and
-`results: []`; the gate still reports the stale attempt.
+latest attempt belongs to a previous statement they give `attempt: null` and no
+result of that attempt, so `results` holds the cited results of delivered
+objectives alone, or is empty; the gate still reports the stale attempt.
 
 The value's recorded revision fixes the immutable assessment used for each cited
 execution. A later assessment enters the claim through a new value record;
@@ -4397,9 +4449,19 @@ threshold and statement currency checks.
 The evidence binding adds `attempt: {id, digest, native_attempt_digest}` (null
 when absent, with a null native digest for literature) and distinct cited
 `results: [{attempt_id, acceptance_id, digest}]`, where each result digest hashes
-the acceptance. Reviewer evidence adds `attempt` with its `kind`, `outcomes`,
-`proportion` and `literature` binding (`{description, readings}` as recorded for
-literature, null for a solver), plus native `state` and `totals` for a solver.
+the acceptance. A cited result of a delivered objective is bound as
+`{native_attempt_digest, acceptance_id, purpose, extension_reason,
+objective_claim, claim, digest}` and reaches the reviewers as
+`{native_attempt_digest, acceptance_id, purpose, extension_reason,
+objective_claim, claim, outcome, standard}`: `objective_claim` is the contract
+claim of the objective and `claim` the checkpoint claim of the acceptance, so a
+reviewer sees what the objective set out to show beside what was accepted. Two
+references to one acceptance with different `purpose` or `extension_reason` are
+two entries. A value record that cites no such result keeps the binding and the
+projection of 0.82.0. Reviewer evidence adds `attempt` with its `kind`,
+`outcomes`, `proportion` and `literature` binding (`{description, readings}` as
+recorded for literature, null for a solver), plus native `state` and `totals`
+for a solver.
 Its `acceptances` array carries `{acceptance_id, claim, outcome, standard}` for
 every acceptance cited by a solver foothold or obstruction, once in order of
 first citation, with the claim taken from its checkpoint; the array is empty
@@ -4869,6 +4931,7 @@ example the population of the cohort tool. The post decision is
 | `problem_openness_stale` | Refresh the finding for the changed formulation, search or reading. |
 | `problem_value_missing`, `problem_value_reading_missing`, `problem_value_computation_missing` | Supply ordered value paragraphs with valid full readings or admitted, reconciled, assessed computation support. |
 | `problem_value_result_missing` | Cite an accepted proof, reduction or obstruction of the current solver attempt; the obligation names `attempt_id` and `acceptance_id`. |
+| `problem_result_unbound`, `problem_result_superseded`, `problem_result_missing`, `problem_result_extension_unexplained` | A value paragraph cites a result of a delivered objective that does not hold: the objective is not delivered into this store (`native_attempt_digest`), a later snapshot of it was delivered (`latest_native_attempt_digest`), the acceptance is not an accepted proof, reduction, obstruction or counterexample of the snapshot (`acceptance_id`), or a delivered total exceeds a normal limit without a reason (`totals`, `exceeded`). Deliver the objective, or record a new value record that cites the latest snapshot, an accepted acceptance of it and the `extension_reason`. |
 | `problem_assessment_missing` | Record the rubric self-assessment with evidence for every item. |
 | `problem_assessment_evidence_missing` | Supply item evidence with the exact stored record digest at recording and projection, or at least one matching full source reading at projection; names `item` and the record ids or `link`. Re-record an assessment after a mutable record changes. |
 | `problem_assessment_stale` | Record a new assessment for the current statement; the obligation names both ids. |
@@ -4924,7 +4987,11 @@ selects a candidate. The full `status` and `next` reports carry that reason; the
 tool order. `status` also reports
 `candidates: {current, selected, deferred, rejected}`, the number of current
 candidates and the lengths of the latest slate's lists, and `slate_id`, the
-latest slate or null. It lists the current depth plan under `limits` and no
+latest slate or null. Once the record holds a forming call, `status` and
+`status --summary` also report `forming: {calls, forms, by_standing,
+by_disposition, without_outcome, outcomes}`
+([Forming records](#forming-records)); a record without a forming call has no
+such entry. It lists the current depth plan under `limits` and no
 cohort policy counts; those belong to ai-science. The full `status` and `next`
 reports also carry `literature_digest`, the digest of the record's current
 literature scope, frontier, search judgments and requirements. `cycle` compares
@@ -5368,6 +5435,152 @@ route that cannot receive image evidence marks those bytes omitted, and a
 reviewer must not claim to have seen them. Assign such a review on a route that
 receives images.
 
+### Forming records
+
+`forming` and `form-outcome` are the commands of the Ideate tool in a problem
+record ([Forming calls and outcomes](research-tools.md#forming-calls-and-outcomes)).
+They record how the record formed a statement and how each tentative statement
+ended ([math-conjecturer Exploration](../skills/math-conjecturer/SKILL.md#exploration)).
+Both take the ordinary `--file`, `--expected-revision`, `--request-id` and
+`--check` flags, and `exactory-research example forming` and `exactory-research
+example form-outcome` print complete payloads. Both check their own inputs and
+no milestone. Their records grant no openness, no significance, no proof credit
+and no test credit, and the post gate reads none of them. The slate reads the
+source of a selected candidate (the slate review rule under
+[Problem creation](#problem-creation)). In this release the commands run in a
+problem record: in a study, a verification or a math-solver root they are
+refused with `orchestration_conflict`.
+
+An evidence reference in the tables below has one of the shared evidence
+shapes: a held artifact descriptor `{path, sha256, size, media_type}`,
+`{kind: "source", link}` for a full reading, or `{kind: "record", record_kind,
+id, digest}` for an exact record of this store. `digest` is the SHA-256 of the
+stored record as canonical JSON: keys sorted, no whitespace between tokens,
+non-ASCII characters unescaped. The receipt of `forming` or `form-outcome`
+returns the stored record as `result`, and the output folders hold the same
+record (a record over 1 MiB is shown there as a summary), so this command
+prints the digest of a forming call:
+
+```sh
+python3 -c 'import hashlib, json, sys; print(hashlib.sha256(json.dumps(json.load(sys.stdin), ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest())' < intermediate/problem/forming/forming-1.json
+```
+
+A reference whose digest differs from the stored record is refused with
+`strategy_evidence_stale`, and a reference to a record that the store does not
+hold with `strategy_reference_missing`.
+
+The payload of `forming`:
+
+| Field | Content |
+| --- | --- |
+| `id` | The id of the forming call. `forming_call/<id>` is immutable, and an id is used once: the same request replays its receipt, and another request with that id is `record_conflict`. |
+| `question` | `{kind, description, places}`. `kind` and `description` are nonempty text, and the kind is an open value such as `phenomenon`, `thought_experiment` or `field_question`. `places` is a list of `{description, evidence}`, each with at least one evidence reference: the places where a phenomenon appears, each with the reading, search or other evidence that shows it. The kind `phenomenon` needs at least one place. Another kind can leave the list empty. |
+| `move` | `{kind, description}`: the kind of step that produced the forms, as an open value with a description. Two kinds carry a further field: `transfer` needs `dictionary`, and `comparison` needs `comparison_count` and `amounts.pairs`. |
+| `inputs` | A list, possibly empty, of `{description, evidence}`: what the call worked from, each with at least one evidence reference. |
+| `amounts` | `{forms, nearest_alternatives, expected_relations, pairs}`. `forms` is a nonnegative integer. `nearest_alternatives` and `expected_relations` are objects with one nonnegative integer for each form id of this call and no other key. `pairs` is a nonnegative integer or null. The amounts are the performer's report of what was done. The harness records them as reported and does not compare them with `forms`. |
+| `dictionary` | Null, or `{source_setting, target_setting, entries}` for a transfer: the two settings, and at least one entry `{source, target, description}` that carries one term of the source setting to the target setting. |
+| `comparison_count` | Null, or the number of comparisons that the call made, a nonnegative integer. |
+| `forms` | A list, possibly empty, of the forms that the call produced, a form that was set aside at once included (the next table). A call without a form records its question and its stopping reason. |
+| `probes` | A list, possibly empty, of `{probe_id, form_id, role}`: a recorded probe that the call used, the form that it concerns or null, and the role `observation` or `origin`. A probe is the origin of a form when the form was chosen with its result in view. A probe that was recorded after the forming call of a form cannot be the origin of that form (`problem_form_origin_late`). The probe keeps its exploratory provenance. |
+| `stopping_reason` | Nonempty text: why the call ended. |
+| `performer` | `{kind: "session", session_id}` for the session, or `{kind: "model_lane", lane_id, model, effort, prompt, output}` for a model lane outside it: the model and the effort that its runner reports, and its prompt and its output as held artifact descriptors (store each file with `exactory-research artifact`). |
+| `usage` | Null, or an object of named measurements, each a nonnegative number or null: the usage as far as it was measured. |
+
+A form of `forms`:
+
+| Field | Content |
+| --- | --- |
+| `id` | The id of the form, distinct from every form of the record and of the call (`problem_form_id_conflict`). |
+| `text` | The text of the tentative statement, as it was stated. |
+| `exact` | `true` when the text is an exact statement, `false` when it is not yet exact. |
+| `purpose` | `{kind, form_id}`. `expected_statement` with `form_id` null: the statement that the record expects at that time. `alternative` with the id of another form: an alternative of that form, for example a stronger form written to test whether a hypothesis is necessary. |
+| `previous` | Null, or `{form_id, reason}` for a form that changes an earlier one: the earlier form, which is a form of an earlier call or one that precedes this form in the call, and the reason for the change. |
+| `grounds` | A list, possibly empty, of `{description, evidence}`: what speaks for stating the form. The evidence list of a ground can be empty. |
+| `nearest_alternatives` | The ids of the forms that could be posed in place of this one. Each is a form of the record or of the call, and none is the form itself. |
+| `expected_relations` | A list, possibly empty, of `{id, description, form_ids}`: a relation that the performer expects of the form, with an id that is distinct within the form, and the ids of the other forms that it concerns, possibly none. |
+| `planned_checks` | A list, possibly empty, of `{id, description, contradiction, no_contradiction_reason}`, with ids distinct within the form. Exactly one of the last two fields is text and the other is null: the outcome that would contradict the form, or the reason that no outcome can. |
+| `correction_checks` | Empty for a form without `previous`. For a correction, one entry `{check_id, was_made, keeps_prediction, chosen_with_outcome}` for each planned check of the earlier form and for no other check (`problem_form_correction_incomplete`). The three values are booleans: whether the check was made, whether the corrected form keeps its prediction, and whether the correction was chosen with its outcome in view. |
+
+The payload of `form-outcome`:
+
+| Field | Content |
+| --- | --- |
+| `id` | The id of the outcome. `form_outcome/<id>` is immutable, and an id is used once. |
+| `form_id` | A form that the record holds (`problem_form_missing`). |
+| `target` | `{kind, id}`: `form` with `id` null for the form as a whole, or `expected_relation` or `planned_check` with the id of that item in the form (`problem_form_item_missing`). |
+| `standing` | For a form, its standing as a claim: `refuted`, `proved`, `implied_by_known_results`, `found_in_literature`, `supported`, `unresolved`, `without_evidence` or `not_examined`. Null for an expected relation or a planned check. |
+| `disposition` | For a form, its disposition in the exploration, `{status, reason, form_id, candidate_id}` with a nonempty reason. `open` and `set_aside` leave both ids null. `superseded` names in `form_id` another form that was recorded later, in a later forming call or later in the same call. `taken_up_as_candidate` names in `candidate_id` a recorded candidate (`strategy_reference_missing` otherwise). Null for an expected relation or a planned check. |
+| `lack_of_means` | Nonempty text for the standing `not_examined`: the means that were lacking. Null otherwise. |
+| `outcome` | Nonempty text: how the item ended, in words. |
+| `evidence` | A list of `{kind, description, standing, date, reference, counterexample}` (below). |
+| `reason` | Nonempty text: the reason for the outcome. |
+
+An evidence item of an outcome has a `kind`, which is an open value in words, a
+`description`, and:
+
+- `reference`, one of `{kind: "reading", version_id, reading_id}` for a full
+  reading (`problem_value_reading_missing` otherwise), `{kind: "computation",
+  execution_id, output_id, formal_check}` for an admitted, reconciled and
+  assessed computation (`problem_value_computation_missing` otherwise), a result
+  reference in either shape of the value evidence
+  ([Problem creation](#problem-creation)), or `{kind: "probe", id}` for a
+  recorded probe;
+- `standing`: `admissible` for a reading, a computation or a result, and
+  `exploratory` for a probe (`problem_form_evidence_standing` otherwise);
+- `date`: the day on which the fact became available, as `unknown`, `YYYY`,
+  `YYYY-MM`, `YYYY-MM-DD` or a timestamp with a timezone, in the precision that
+  the source gives;
+- `counterexample`: text that states the counterexample, or null.
+
+The standing of a form needs evidence as follows. `proved`,
+`implied_by_known_results` and `found_in_literature` need at least one
+admissible item, and `supported` needs at least one item of either standing
+(`problem_form_evidence_missing`). `refuted` needs an admissible item, or an
+item whose `counterexample` states the counterexample
+(`problem_form_evidence_missing` without evidence,
+`problem_form_counterexample_missing` with exploratory evidence that exhibits
+none). The record then holds `refutation_basis`: `admissible_evidence`, or
+`exploratory_computation` for a refutation that rests on an exhibited
+counterexample. `unresolved`, `without_evidence` and `not_examined` need no
+evidence. A value paragraph cannot cite a probe, so a refutation that a value
+case needs rests on admissible evidence.
+
+A later outcome of the same form and target supersedes the earlier one, which
+stays in the record: the later record names it in `previous`. `status` counts
+each form by the standing and the disposition of its latest outcome:
+`forming: {calls, forms, by_standing, by_disposition, without_outcome,
+outcomes}`, where `without_outcome` is the number of forms that have no outcome
+as a whole form and `outcomes` the number of outcome records.
+
+Refusals of the two commands:
+
+| Code | Cause and next action |
+| --- | --- |
+| `orchestration_conflict` | The workspace holds no problem record. Run the command in a workspace that `problem-init` opened; in this release the forming commands run in a problem record. |
+| `invalid_input` | A field is missing or extra, or has another type or value than the tables state. The message names the field and the repair, for example the `dictionary` of a transfer, the counts of a comparison, the places of a phenomenon, or the two fields of a planned check. |
+| `invalid_strategy` | An evidence reference has none of the three shared shapes, or a place or an input has no evidence. |
+| `strategy_reference_missing` | A cited record, probe or candidate is not in the store (`id`). Record it first. |
+| `strategy_evidence_stale` | The digest of a record reference differs from the stored record (`id`). Compute the digest of the stored record. |
+| `record_conflict` | The id of the call or of the outcome is in use. Choose a new id; to change the outcome of an item, record a later outcome. |
+| `problem_form_id_conflict` | A form id of the call is the id of another form of the record or of the call (`form_id`). Give the form a new id. |
+| `problem_form_missing` | A named form is not a form of the record or of the call, or `previous.form_id` names a form that does not precede this one (`form_id`). |
+| `problem_form_correction_incomplete` | `correction_checks` does not hold exactly one entry for each planned check of the earlier form. |
+| `problem_form_origin_late` | A probe with the role `origin` was recorded after the forming call of the form. Give it the role `observation`. |
+| `problem_form_item_missing` | `target.id` is no expected relation or planned check of the form (`kind`, `id`). |
+| `problem_form_evidence_standing` | An evidence item names another standing than its reference has. |
+| `problem_form_evidence_missing` | The standing needs evidence that the outcome does not cite. Cite it, or record `unresolved` or `without_evidence`. |
+| `problem_form_counterexample_missing` | `refuted` rests on exploratory evidence that states no counterexample. State it in `counterexample`, or cite admissible evidence. |
+| `problem_value_reading_missing`, `problem_value_computation_missing`, `problem_value_result_missing`, `problem_result_unbound`, `problem_result_superseded`, `problem_result_missing`, `problem_result_extension_unexplained` | A cited reading, computation or result is not valid evidence; each code has the meaning that it has for value evidence. |
+
+Two refusals of other commands concern forming records:
+`problem_candidate_forming_missing` when `problem-candidate` records a candidate
+of kind `phenomenon` whose evidence cites no forming call, and
+`problem_slate_review_required` when `problem-slate` selects a candidate formed
+in the record without a slate review.
+
+A record that holds no forming record keeps the `status` report, the output
+folders and the digests of 0.82.0.
+
 ## Development rounds
 
 Managed studies use the compact canonical adapters described above. The detailed
@@ -5629,7 +5842,7 @@ SQLite is authoritative for the managed records. Workspace JSON, decision logs, 
 
 `final/` and `intermediate/` are generated views of the records, in the workspace root: the directory of the store, or, for a store at a math-solver controller root, that root's parent. `final/` holds the current step results and `final/history/` the superseded and historical ones, in the same layout: `reviews/incomplete/<id>.json` for an incomplete assessment of a staged review (current while its epoch is the slot head); `reviews/<role>/<record id>.json` for the recorded reviews and adjudications (a `value_review` under the role of its assignment, `review_adjudication` under `adjudicator`, `manuscript_review` under `manuscript`, `manuscript_prediction` under `prediction`, `readiness_review` under `readiness`, `scoped_readiness_review` under `scoped-readiness`, `round_review` under `round`); `reviews/<role>/<series assignment id>/<NN>-<assignment id>.<run id>.json` for the selected final output of a complete parts v2 series, or `<NN>-<assignment id>.<correction id>.corrected.json` for a corrected final ([Reviews in fresh parts](#reviews-in-fresh-parts)); `overrides/<record id>.json` for every recorded override (`gate_override`), user and automatic ([Stops and overrides](research-workflow.md#stops-and-overrides)); `problem/<kind>/<record id>.json` for the current statement and the latest slate, attempt, openness finding, value, assessment, decision, formal checks and post (`statements/`, `slates/`, `attempts/`, `openness/`, `values/`, `assessments/`, `decisions/`, `formal-checks/`, `posts/`); `study/<kind>/<record id>.json` for the current round admissions, round decisions, round assessments, round factual assessments, research decisions, cycle assessments, contribution analyses, checkpoints and receipts (`round-admissions/`, `round-decisions/`, `round-assessments/`, `round-factual-assessments/`, `decisions/`, `cycle-assessments/`, `contribution-analyses/`, `checkpoints/`, `receipts/`); `study/manuscripts/<bundle id>/bundle.json` with the pinned files under `files/`, for the selected bundle and the bundle of the latest deposit receipt; `study/deposits/<intent id>/receipt.json`, `read-back.json` and the uploaded files under `files/`; `verification/verdicts/` and `verification/tasks/`; `math/deliveries/attempts/` and `math/deliveries/closures/`; and `math/<rel>/`, which the math-solver controller renders (its `SEARCH.md`, "Locked command construction and recoverable projections"). A record whose canonical JSON exceeds 1 MiB is shown as a summary, `{summary: true, kind, id, recorded_revision, status, bytes, sha256, fields}`, in which a field over 64 KiB is `{omitted: true, bytes, sha256}`. An id or a role in a file name that is not a portable file name (`[A-Za-z0-9][A-Za-z0-9._-]{0,127}`), for example an automatic override id with `:`, is rendered as `id-<the first 32 hexadecimal digits of the SHA-256 of the id>`; `index.json` maps each file to its record id.
 
-`intermediate/` holds every other output. `reviews/<role>/<root assignment id>/series.json` and `<NN>-<assignment id>.<run id>.json` show each reviewer series, the turns of one lineage (an adjudicator's turns are grouped by session): `series.json` lists each turn with its link, slot, packet reference, runs, their status, error, usage, refusal and correction, the selected run and the record that adopted the turn, and the file of a run holds its output; a correction's output is `<NN>-<assignment id>.<correction id>.json`. The turns of a parts v2 series are grouped under the series id, each with a `review_parts` progress object (`protocol`, `adapter`, `series_assignment_id`, `kind`, `turn`, the allowances, the estimates, the evaluated progress and the next actions) and each run with `output_path`: the outputs of read, combine and check turns and the request form of a final stay here, and the selected final output of a complete series is written under `final/reviews/<role>/<series assignment id>/`, an ordinary final as `<NN>-<assignment id>.<run id>.json` and a corrected final as `<NN>-<assignment id>.<correction id>.corrected.json` (`corrected_output_path`); the index entries of both carry `series_assignment_id`, `turn`, `adapter` and `review_parts_kind`. When the assignment of a turn is of a posted statement, the `next` list of its `review_parts` object is `[]` ([Problem creation](#problem-creation)). A controller's turn of a staged review adds `raw_output_digest` and `effective`, with its effective output in `<NN>-<assignment id>.effective.json`, and a child's turn names its `task_id`; `reviews/staged/<kind>/<id>.json` holds the records of the staged reviews (epochs, tasks, execution plans, task executions, reservations, observations, acceptance receipts, pool memberships, the capacity policy, slot heads, dispatch records and composition plans) and, under `review_call_observation`, the captured answers of the ordinary reviewer calls. The other entries are `reviews/routes/<route id>/route.json` and `probes/<probe id>.json`; `reviews/usage.json`, the review call usage with the allowance, the charged calls and the remaining calls under `review_budget`; `reviews/packets/<assignment id>/` and `reviews/packets/<kind>-r<revision>/`, the default destinations of the packet exports, with a numeric suffix when the directory exists; `problem/candidates/<record id>.json`; `lab/probes/<probe id>/probe.json`, `lab/artifacts/<id>.json` for a local artifact that no pin ties to a probe, `lab/runs/<admission id>/run.json`, `result.json` and `log.txt`, and `lab/executions/<id>.json` for an execution that no outcome names; `study/bundles/<bundle id>.json` for the bundles that were neither selected nor deposited, `study/score-history.json` (every recorded manuscript review in recorded order), `study/remote-intents/` and `study/remote-observations/`; `checks/citation-check.json` and `checks/derivation-check.json`, copies of the reports in `.exactory/`; `literature/exports/`, the destination of `export --kind foundation`; `legacy/<original path>/`, the copies that a session moved there once; and `math/<rel>/`, rendered by the controller. A run output of at most 1 MiB is copied; a larger, sealed, missing or corrupt one is listed in `series.json` with `output_listed` set to `over_1_mib`, `sealed`, `artifact_missing` or `artifact_corrupt`.
+`intermediate/` holds every other output. `reviews/<role>/<root assignment id>/series.json` and `<NN>-<assignment id>.<run id>.json` show each reviewer series, the turns of one lineage (an adjudicator's turns are grouped by session): `series.json` lists each turn with its link, slot, packet reference, runs, their status, error, usage, refusal and correction, the selected run and the record that adopted the turn, and the file of a run holds its output; a correction's output is `<NN>-<assignment id>.<correction id>.json`. The turns of a parts v2 series are grouped under the series id, each with a `review_parts` progress object (`protocol`, `adapter`, `series_assignment_id`, `kind`, `turn`, the allowances, the estimates, the evaluated progress and the next actions) and each run with `output_path`: the outputs of read, combine and check turns and the request form of a final stay here, and the selected final output of a complete series is written under `final/reviews/<role>/<series assignment id>/`, an ordinary final as `<NN>-<assignment id>.<run id>.json` and a corrected final as `<NN>-<assignment id>.<correction id>.corrected.json` (`corrected_output_path`); the index entries of both carry `series_assignment_id`, `turn`, `adapter` and `review_parts_kind`. When the assignment of a turn is of a posted statement, the `next` list of its `review_parts` object is `[]` ([Problem creation](#problem-creation)). A controller's turn of a staged review adds `raw_output_digest` and `effective`, with its effective output in `<NN>-<assignment id>.effective.json`, and a child's turn names its `task_id`; `reviews/staged/<kind>/<id>.json` holds the records of the staged reviews (epochs, tasks, execution plans, task executions, reservations, observations, acceptance receipts, pool memberships, the capacity policy, slot heads, dispatch records and composition plans) and, under `review_call_observation`, the captured answers of the ordinary reviewer calls. The other entries are `reviews/routes/<route id>/route.json` and `probes/<probe id>.json`; `reviews/usage.json`, the review call usage with the allowance, the charged calls and the remaining calls under `review_budget`; `reviews/packets/<assignment id>/` and `reviews/packets/<kind>-r<revision>/`, the default destinations of the packet exports, with a numeric suffix when the directory exists; `problem/candidates/<record id>.json`; `problem/forming/<record id>.json` for each forming call and `problem/form-outcomes/<record id>.json` for each outcome of a form, where the index entry of an outcome that a later outcome of the same item supersedes names it under `superseded_by`; `lab/probes/<probe id>/probe.json`, `lab/artifacts/<id>.json` for a local artifact that no pin ties to a probe, `lab/runs/<admission id>/run.json`, `result.json` and `log.txt`, and `lab/executions/<id>.json` for an execution that no outcome names; `study/bundles/<bundle id>.json` for the bundles that were neither selected nor deposited, `study/score-history.json` (every recorded manuscript review in recorded order), `study/remote-intents/` and `study/remote-observations/`; `checks/citation-check.json` and `checks/derivation-check.json`, copies of the reports in `.exactory/`; `literature/exports/`, the destination of `export --kind foundation`; `legacy/<original path>/`, the copies that a session moved there once; and `math/<rel>/`, rendered by the controller. A run output of at most 1 MiB is copied; a larger, sealed, missing or corrupt one is listed in `series.json` with `output_listed` set to `over_1_mib`, `sealed`, `artifact_missing` or `artifact_corrupt`.
 
 Each folder has `README.md` and `index.json`. The index lists every file with its `type` (`view`, `controller`, `export`, `legacy`), the `kind`, `id`, `recorded_revision` and `status` of its record (`current`, `superseded`, `historical`, `not_selected`), an `error` when the file could not be written, and every other file under `unowned`. The marker `.exactory/output-views.json` records the rendered revision, the digest of the event at that revision, the plugin version and the size, modification time and digest of every owned file. Each recording command of `exactory-research`, `exactory-lab`, `exactory-draft`, `exactory-cohort` and `exactory` (`submit`, `verify`, `reconcile`) renders once after its last commit, outside every store lock, under its own lock `.exactory/output-views.lock`; read commands and `--check` render nothing. This automatic render builds no model when nothing needs an update: the marker shows a complete render under the installed plugin version with the current inputs, no dirty marker is pending, and no record of a view kind changed since the marker's revision; the marker then takes the current revision. Otherwise, and on every `export --kind outputs`, the render builds the whole model from the records and writes it: a file whose bytes are unchanged and that has no write bits stays in place, a writable owned file is published again even when its bytes match, a file whose bytes differ is written, and the owned files that the model no longer produces are removed; the render never overwrites a file that it does not own (`output_view_conflict` on the entry). The read-only mode is not a condition for reading a view. A failed render prints one warning line on stderr and leaves the command's result and exit status unchanged. `export --kind outputs` renders every view again and returns `{revision, files: {final, intermediate}, errors}`. `status` and `next` carry `advisories` with one `output_views_stale` entry while the views may not show the current records; its `reason` is `shared_workspace_root` (a store at a controller root whose parent also holds a store renders nothing), `marker_unreadable`, `render_failed` (with `path` and `error`), `file_errors` (the first path with an error), `not_rendered`, `plugin_changed`, `history_changed`, `behind` or `render_deferred` (a render waited more than one second for the renderer lock, so it left the dirty marker `.exactory/output-views-dirty.json`, named in `path`; the next recording command or `export --kind outputs` renders every view again); a field that does not apply to the reason is null. `status --summary` and `next --summary` add `advisories: [{code, reason}]` only when the list is not empty. The advisory never changes `ready`, `obligations`, `counts` or `next`, and no gate reads it. The guard hook refuses `Write`, `Edit` and `NotebookEdit` into `<workspace root>/final/` and `<workspace root>/intermediate/` (only these two direct children, so `draft/final/` is not guarded), except `intermediate/legacy/`, when the workspace root holds `.exactory/output-views.json`, or a folder in it holds `.search/output-views.json` (a controller root), or a controller root in it (`.search/tree.json`) holds `.exactory/output-views.json` (a research store located at the controller root); shell commands are not inspected, and each render checks the files it owns.
 

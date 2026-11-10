@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.83.0](docs/releases/0.83.0.md) lets math-conjecturer record how it forms a statement. An exploration can start from a phenomenon that appears in several places, and the Ideate tool gains two commands for a problem record: `forming` records each tentative statement with its alternatives, its expected relations and its planned checks, and `form-outcome` records how each ended. A value paragraph can cite an accepted result of any delivered math-solver objective, `problem-candidate` accepts the source kind `phenomenon`, and a slate that selects a candidate formed in the record cites a slate review.
+
 Version [0.82.0](docs/releases/0.82.0.md) carries the bar and slate objections of a math-conjecturer record into another record that takes up one of its candidates: `problem-objections-carry` imports them with a proof of their source and local evidence, the slate and result reviews of the new record give a finding on each, and an unresolved one blocks the post. It ends the interim rule of 0.77.0, which kept every reviewed candidate in its record.
 
 Version [0.81.1](docs/releases/0.81.1.md) corrects the automatic pass of 0.81.0 after its reviews: one automatic hop, from `experiment` to `write`, and one pass per hop; a ready gate needs no pass; an instruction recorded for an exact public write covers that write on every path; a failure to record a stop never changes the stop; real waits stay `waiting`; and the deposit description explains an automatic entry to a reader of the paper.

@@ -4603,13 +4603,13 @@
   "forming": {
     "id": "forming-1",
     "question": {
-      "kind": "thought_experiment",
-      "description": "How large can B(n) be?",
+      "kind": "field_question",
+      "description": "How large can $B(n)$ be over the admissible sequences of length $n$?",
       "places": []
     },
     "move": {
       "kind": "expectation",
-      "description": "State the expected size as a proposition."
+      "description": "State the size that the known constructions suggest as an exact proposition."
     },
     "inputs": [],
     "amounts": {
@@ -4627,7 +4627,7 @@
     "forms": [
       {
         "id": "form-1",
-        "text": "For every n, B(n) <= n^2.",
+        "text": "For every admissible sequence of length $n$, $B(n) \\leq n^2$.",
         "exact": true,
         "purpose": {
           "kind": "expected_statement",
@@ -4636,7 +4636,7 @@
         "previous": null,
         "grounds": [
           {
-            "description": "The finite constructions suggest the bound.",
+            "description": "The constructions known for small lengths attain $n^2$, and none exceeds it.",
             "evidence": []
           }
         ],
@@ -4645,8 +4645,8 @@
         "planned_checks": [
           {
             "id": "check-1",
-            "description": "Compute B(3).",
-            "contradiction": "B(3) > 9.",
+            "description": "Enumerate the admissible sequences of length 3 and compute $B(3)$.",
+            "contradiction": "$B(3) > 9$.",
             "no_contradiction_reason": null
           }
         ],
@@ -4654,7 +4654,7 @@
       }
     ],
     "probes": [],
-    "stopping_reason": "The proposed forms are ready for checks.",
+    "stopping_reason": "The form is stated and its first check is planned.",
     "performer": {
       "kind": "session",
       "session_id": "session-1"
@@ -4671,13 +4671,13 @@
     "standing": "unresolved",
     "disposition": {
       "status": "open",
-      "reason": "Further work is needed.",
+      "reason": "The planned check and a general argument are still to come.",
       "form_id": null,
       "candidate_id": null
     },
     "lack_of_means": null,
-    "outcome": "The bound remains unresolved.",
+    "outcome": "The bound is unresolved: no check has contradicted it, and no general argument is known.",
     "evidence": [],
-    "reason": "No general argument is available."
+    "reason": "The record holds neither a proof nor a counterexample."
   }
 }
