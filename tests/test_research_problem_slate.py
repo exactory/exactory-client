@@ -2,16 +2,19 @@
 
 import copy
 import json
+from pathlib import Path
 from unittest.mock import patch
 
-from research_harness import problem_candidates, research_decisions as decisions, review_protocol as protocol
+from research_harness import output_views, problem_candidates, problem_evidence, problem_forming
+from research_harness import research_decisions as decisions, review_protocol as protocol
 from research_harness.cli import status_report
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.gates import gate_state
 from research_harness.report_views import next_summary, status_summary
-from test_research_problem_candidates import build_slate
+from test_research_problem_candidates import build_candidate, build_slate
 from test_research_problem_delivery import ProblemDeliveryCase
+from test_research_problem_forming import build_forming, build_outcome
 
 
 class ProblemSlateTests(ProblemDeliveryCase):
@@ -32,6 +35,107 @@ class ProblemSlateTests(ProblemDeliveryCase):
         output["value"]["rubric_potential"] = {identifier: {"significance": {"B1": 2, "B2": 1}, "priority": 2}
                                                for identifier in candidate_ids}
         return output
+
+    def record_formed_candidates(self):
+        self.mutate(problem_forming.record_forming, build_forming())
+        self.mutate(problem_forming.record_form_outcome, build_outcome())
+        records = self.read_records()
+        identifiers = []
+        for identifier, source_kind, record_kind, record_id in (
+                ("phenomenon", "phenomenon", "forming_call", "forming-1"),
+                ("call", "own_record", "forming_call", "forming-1"),
+                ("outcome", "thought_experiment", "form_outcome", "outcome-1")):
+            reference = {"kind": "record", "record_kind": record_kind, "id": record_id,
+                         "digest": digest(records[record_kind][record_id])}
+            self.record_candidate(identifier, source={"kind": source_kind,
+                "reference": "The recorded form and its unresolved outcome.", "evidence": [reference]})
+            identifiers.append(identifier)
+        return identifiers
+
+    def test_each_formed_candidate_requires_a_slate_review_before_selection(self):
+        identifiers = self.record_formed_candidates()
+        self.observe_bars()
+        revision = self.store.revision
+        for identifier in identifiers:
+            with self.subTest(candidate_id=identifier):
+                rejected = [{"candidate_id": other, "reason": "Compare the other form first."}
+                            for other in identifiers if other != identifier]
+                self.assert_error("problem_slate_review_required", lambda: self.record_slate(
+                    selected=[identifier], rejected=rejected))
+                self.assertEqual(self.store.revision, revision)
+        self.assertNotIn("problem_slate", self.read_records())
+
+    def test_stored_phenomenon_source_requires_a_review_independently_of_its_evidence(self):
+        candidate = build_candidate(source={"kind": "phenomenon", "reference": "The recorded phenomenon.", "evidence": []})
+        self.put("problem_candidate", candidate["id"], dict(candidate, recorded_revision=self.store.revision + 1))
+        self.observe_bars()
+        revision = self.store.revision
+        self.assert_error("problem_slate_review_required", lambda: self.record_slate())
+        self.assertEqual(self.store.revision, revision)
+
+    def test_a_current_slate_review_allows_selection_of_formed_candidates(self):
+        identifiers = self.record_formed_candidates()
+        self.observe_bars()
+        review = self.observe("slate", "first", self.build_slate_output(identifiers))
+        saved = self.record_slate(selected=identifiers, review_ids=[review["id"]])
+        self.assertEqual(saved["selected"], identifiers)
+        self.assertEqual(saved["review_ids"], [review["id"]])
+        self.assertEqual(problem_candidates.assess_slate(self.read_records(), self.artifacts), [])
+
+    def test_a_stale_slate_review_cannot_authorize_selection_of_formed_candidates(self):
+        identifiers = self.record_formed_candidates()
+        self.observe_bars()
+        review = self.observe("slate", "first", self.build_slate_output(identifiers))
+        self.record_candidate()
+        revision = self.store.revision
+        self.assert_error("problem_slate_review_unverified", lambda: self.record_slate(
+            selected=identifiers + ["candidate-1"], review_ids=[review["id"]]))
+        self.assertEqual(self.store.revision, revision)
+        self.assertNotIn("problem_slate", self.read_records())
+
+    def test_ordinary_candidates_can_still_be_selected_without_a_slate_review(self):
+        reading = self.record_full_reading()
+        row = self.read_records()["reading"][reading["reading_id"]]
+        self.record_candidate(source={"kind": "literature", "reference": "The read survey's open question.", "evidence": [
+            {"kind": "record", "record_kind": "reading", "id": reading["reading_id"], "digest": digest(row)}]})
+        self.observe_bars()
+        saved = self.record_slate()
+        self.assertEqual(saved["selected"], ["candidate-1"])
+        self.assertEqual(saved["review_ids"], [])
+        self.assertEqual(problem_candidates.assess_slate(self.read_records(), self.artifacts), [])
+
+    def test_0820_slate_keeps_validation_digest_projection_and_rendered_bytes(self):
+        fixture = json.loads((Path(__file__).parent / "fixtures/problem_slate_0820.json").read_text())
+        self.record_candidate()
+        self.observe_bars()
+        payload = {key: value for key, value in fixture["record"].items()
+                   if key not in ("candidate_ids", "recorded_revision")}
+        saved = self.mutate(problem_candidates.record_slate, payload)["result"]
+        self.assertEqual(saved, fixture["record"])
+        self.assertEqual(digest(saved), fixture["digest"])
+        records = self.read_records()
+        self.assertEqual(problem_candidates.find_slate(records), fixture["record"])
+        self.assertEqual(problem_candidates.assess_slate(records, self.artifacts), fixture["assessment"])
+        self.assertEqual(problem_evidence.describe_binding(records, self.artifacts), fixture["binding"])
+        self.assertEqual(problem_evidence.describe_evidence(records, self.artifacts), fixture["evidence"])
+        model = output_views.compute_view_model(records, self.artifacts, output_views._ViewInputs({}, {}))
+        view = model[fixture["view_path"]]
+        self.assertEqual({"content": view.content.decode(), "entry": view.entry}, fixture["view"])
+        output_views.render_all(self.store)
+        self.assertEqual((self.root / fixture["view_path"]).read_text(), fixture["view"]["content"])
+
+    def test_unselected_formed_candidates_do_not_require_a_slate_review(self):
+        identifiers = self.record_formed_candidates()
+        self.record_candidate()
+        self.observe_bars()
+        deferred = [{"candidate_id": identifiers[0], "evidence_needed": "A checked relation to the other forms."}]
+        rejected = [{"candidate_id": identifier, "reason": "No advantage is established."} for identifier in identifiers[1:]]
+        saved = self.record_slate(deferred=deferred, rejected=rejected)
+        self.assertEqual((saved["selected"], saved["review_ids"]), (["candidate-1"], []))
+        saved = self.record_slate("empty", selected=[], deferred=deferred, rejected=rejected + [
+            {"candidate_id": "candidate-1", "reason": "The field standard is not yet met."}],
+            reason="No candidate is ready for further expenditure.")
+        self.assertEqual((saved["selected"], saved["review_ids"]), ([], []))
 
     def test_a_slate_review_after_the_statement_keeps_realized_problem_assurances_unassessed(self):
         self.record_candidate()

@@ -19,10 +19,10 @@ class ProblemCase(LiteratureCase):
     def load_problem_module(self):
         return importlib.import_module("research_harness.problem_claims")
 
-    def initialize_problem(self):
-        return self.mutate(self.load_problem_module().initialize_problem, {
+    def initialize_problem(self, **changes):
+        return self.mutate(self.load_problem_module().initialize_problem, dict({
             "slug": "bounded-sequences", "area": "math.CO", "field": "Extremal sequences and finite bounds",
-            "authors": ["problem-author"]})["result"]
+            "authors": ["problem-author"]}, **changes))["result"]
 
     def build_statement(self, identifier="statement-1", **changes):
         return dict({"id": identifier, "title": "A finite bound problem", "area": "math.CO",
@@ -65,6 +65,32 @@ class ProblemCase(LiteratureCase):
 
 
 class ProblemRecordTests(ProblemCase):
+    def test_start_accepts_an_open_kind_and_description(self):
+        start = {"kind": "an unexpected obstruction in a proof",
+                 "description": "The same step fails in several independently studied constructions."}
+        marker = self.initialize_problem(start=start)
+        self.assertEqual(marker["start"], start)
+        self.assertEqual(self.store.snapshot()["records"]["workspace"]["problem"], marker)
+
+    def test_start_refuses_empty_or_nontext_kind_and_description(self):
+        for key in ("kind", "description"):
+            for invalid in ("", " \n\t", None, 3, True, [], {}, "contains\x00NUL"):
+                with self.subTest(key=key, value=invalid):
+                    start = {"kind": "field question", "description": "Determine the finite bound."}
+                    start[key] = invalid
+                    self.assert_error("invalid_input", lambda: self.initialize_problem(start=start))
+                    self.assertEqual(self.store.revision, 0)
+                    self.assertEqual(self.store.snapshot()["records"], {})
+
+    def test_start_refuses_a_malformed_entry(self):
+        for start in (None, "phenomenon", [], {}, {"kind": "phenomenon"},
+                      {"description": "The same phenomenon appears in several places."},
+                      {"kind": "phenomenon", "description": "Several places.", "places": []}):
+            with self.subTest(start=start):
+                self.assert_error("invalid_input", lambda: self.initialize_problem(start=start))
+                self.assertEqual(self.store.revision, 0)
+                self.assertEqual(self.store.snapshot()["records"], {})
+
     def test_marker_has_discriminator_immutable_authors_and_no_history(self):
         marker = self.initialize_problem()
         records = self.store.snapshot()["records"]

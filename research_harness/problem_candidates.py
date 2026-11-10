@@ -19,7 +19,7 @@ from .review_context_repair import slot_id
 from .review_protocol import build_problem_subject, is_previous_prompt, validate_problem_bars
 from . import problem_rubric, strategy
 
-SOURCE_KINDS = ("own_record", "literature", "computation", "section", "user", "thought_experiment")
+SOURCE_KINDS = ("own_record", "literature", "computation", "section", "user", "thought_experiment", "phenomenon")
 DISPOSITIONS = ("open", "selected", "deferred", "rejected")
 
 
@@ -49,6 +49,13 @@ def record_candidate(store, payload, *, expected_revision, request_id):
         strategy.choice(source["kind"], SOURCE_KINDS, "Candidate source kind", "invalid_input")
         text(source["reference"], "Candidate source reference")
         strategy.evidence(records, artifacts, source["evidence"], required=False)
+        if source["kind"] == "phenomenon" and not any(
+                reference.get("kind") == "record" and reference["record_kind"] == "forming_call"
+                for reference in source["evidence"]):
+            raise ResearchError("problem_candidate_forming_missing",
+                                "Cite in source.evidence at least one forming call of this record, as {kind: record, "
+                                "record_kind: forming_call, id, digest}: a candidate of the kind phenomenon derives "
+                                "from recorded forms. Record the call with forming first")
         strings(value["neighbours"], "Candidate neighbours")
         problem_rubric.validate_grades(value["potential"], potential=True)
         if not isinstance(value["notes"], str):
@@ -242,6 +249,16 @@ def record_slate(store, payload, *, expected_revision, request_id):
                                     {"candidate_id": identifier, "shortfalls": shortfalls})
         _verify_bars(records, artifacts, value["bar_review_ids"])
         _verify_reviews(records, artifacts, value["review_ids"], value["bar_review_ids"], sorted(candidates))
+        if not value["review_ids"] and any(
+                candidates[identifier]["source"]["kind"] == "phenomenon" or any(
+                    reference.get("kind") == "record" and reference["record_kind"] in ("forming_call", "form_outcome")
+                    for reference in candidates[identifier]["source"]["evidence"])
+                for identifier in value["selected"]):
+            raise ResearchError("problem_slate_review_required",
+                                "Obtain a current slate review (review-assignment with role slate, to one of the two "
+                                "bar reviewers) and name it in review_ids: this slate selects a candidate formed in "
+                                "this record, one of the kind phenomenon or one whose source evidence cites a forming "
+                                "call or a form outcome")
         record = dict(value, candidate_ids=sorted(candidates), recorded_revision=expected_revision + 1)
         if records.get('problem_objection_carry'):
             from .problem_objection_carry import import_set_digest

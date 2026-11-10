@@ -8,6 +8,33 @@ from research_harness import cli
 
 
 class ProblemCliTests(ProblemCase):
+    def test_problem_init_and_status_include_a_recorded_start(self):
+        parser = cli.build_parser()
+        payload = cli.run(parser.parse_args(["example", "problem-init"]))
+        payload["start"] = {"kind": "phenomenon",
+                            "description": "The same finite bound appears in several constructions."}
+        path = self.root / "problem-init.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        saved = cli.run(parser.parse_args(["problem-init", "--workspace", str(self.root), "--file", str(path),
+                                          "--expected-revision", "0", "--request-id", "init-start"]))
+        self.assertEqual(saved["result"]["start"], payload["start"])
+        report = cli.run(parser.parse_args(["status", "--workspace", str(self.root)]))
+        self.assertEqual(report["problem"]["start"], payload["start"])
+
+    def test_problem_init_and_status_omit_an_unrecorded_start(self):
+        parser = cli.build_parser()
+        payload = cli.run(parser.parse_args(["example", "problem-init"]))
+        self.assertNotIn("start", payload)
+        path = self.root / "problem-init.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        saved = cli.run(parser.parse_args(["problem-init", "--workspace", str(self.root), "--file", str(path),
+                                          "--expected-revision", "0", "--request-id", "init-legacy"]))
+        self.assertNotIn("start", saved["result"])
+        report = cli.run(parser.parse_args(["status", "--workspace", str(self.root)]))
+        self.assertNotIn("start", report)
+        self.assertNotIn("start", report["problem"])
+        self.assertIsNone(report["problem"].get("start"))
+
     def test_all_problem_mutations_use_json_file_and_explicit_identity(self):
         parser = cli.build_parser()
         for operation in ("problem-init", "problem-statement", "problem-openness", "problem-value",
