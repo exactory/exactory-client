@@ -33,6 +33,15 @@ class ProblemSlateTests(ProblemDeliveryCase):
                                                for identifier in candidate_ids}
         return output
 
+    def test_phenomenon_candidate_can_be_selected_without_a_slate_review(self):
+        self.record_candidate(source={"kind": "phenomenon", "reference": "A bound found across several constructions.",
+                                      "evidence": []})
+        self.observe_bars()
+        saved = self.record_slate()
+        self.assertEqual(saved["selected"], ["candidate-1"])
+        self.assertEqual(saved["review_ids"], [])
+        self.assertEqual(problem_candidates.assess_slate(self.read_records(), self.artifacts), [])
+
     def test_a_slate_review_after_the_statement_keeps_realized_problem_assurances_unassessed(self):
         self.record_candidate()
         self.observe_bars()

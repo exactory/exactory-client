@@ -47,13 +47,17 @@ def initialize_problem(store, payload, *, expected_revision, request_id):
     artifacts = store.build_artifact_store()
 
     def prepare(records, value):
-        fields(value, ("slug", "area", "field", "authors"))
+        fields(value, ("slug", "area", "field", "authors"), ("start",))
         if find_orchestration(records) is not None:
             raise ResearchError("orchestration_conflict", "Keep each orchestration in its own research record")
         for key in ("slug", "field"):
             text(value[key], "Problem " + key)
         validate_area(value["area"])
         strings(value["authors"], "Problem authors", nonempty=True)
+        if "start" in value:
+            fields(value["start"], ("kind", "description"))
+            for key in ("kind", "description"):
+                text(value["start"][key], "Problem start " + key)
         config = records.get("configuration", {}).get("research")
         changes = []
         if config is None:
