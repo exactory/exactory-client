@@ -1045,7 +1045,8 @@ class ProblemResultHistoryTests(ResultPartsCase):
 
     def test_route_pinned_files_match_06918(self):
         root = Path(__file__).resolve().parents[1]
-        # Frozen from git 40690d5, independently of the working tree modules.
+        # Frozen from git 40690d5, independently of the working tree modules; the three
+        # Codex transports are frozen at 0.85.1, which added the Codex 0.167.0 declarations.
         expected = PINNED_SHA256
         for relative, sha in expected.items():
             self.assertEqual(hashlib.sha256((root / relative).read_bytes()).hexdigest(), sha, relative)
@@ -1181,9 +1182,9 @@ class ProblemResultHistoryTests(ResultPartsCase):
 
 
 PINNED_SHA256 = {'research_harness/review_claude_transport.py': 'ee183e027eaad81de13cfab1149000c027b4504842070537a1068c93dfb1a7bf',
- 'research_harness/review_codex_framed_transport.py': '1f8824a96003c0885df028533c0df676f2957b33beb986851a191486c534053d',
- 'research_harness/review_codex_transport.py': 'a53baa420784a146340ae595aadbd370b1917b33725a1abf805d3bab6126d078',
- 'research_harness/review_codex_visual_transport.py': '5ee79b4655535023cd22b41233dc08d9dc69b231715c39e74dd6ac43ec264dd6',
+ 'research_harness/review_codex_framed_transport.py': 'ea137cdc6999bf319cf3aa301dc86b6d4b4c68520bcb08db90b0a24729ecd6ec',
+ 'research_harness/review_codex_transport.py': 'acf50a8472feeae42ebf9d7e0fb9a473be35d3d42066c84abf65f301c078e7ad',
+ 'research_harness/review_codex_visual_transport.py': 'b20abb57e6549a90c172a4dc13f18f49f9bbb9ab11f6d011164abc64db063460',
  'research_harness/review_exact_text.py': 'bdaa6f03311ea602fe4579d9fdb1db0baf5db2a571dba419650acff40fbb931d',
  'research_harness/review_exact_text_cost_v1.py': 'f017125ec32bf89c8aa71c2ccba96ba8e0fcdf1abb53c050d8bd16b90adf7cf5',
  'research_harness/review_exact_text_v2.py': 'fcae2720e7f584936e026427203c945dc18be0794d003113c800e0de898e2bf8',

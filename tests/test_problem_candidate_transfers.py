@@ -14,6 +14,7 @@ class ProblemCandidateTransferTests(CheckCommandMixin, ProblemCase):
         self.initialize_problem(start=dict(kind="phenomenon", description="A recurring bound."))
         self.mutate(cli.OPERATIONS["problem-candidate"], build_candidate())
         self.put_slate("slate-1", selected=["candidate-1"])
+        (self.root.parent / "destination").mkdir()
         self.payload = dict(id="transfer-1", candidate_id="candidate-1",
                             destination_workspace=str((self.root.parent / "destination").resolve()),
                             reason="The candidate belongs to the destination's subject class.")
@@ -42,7 +43,7 @@ class ProblemCandidateTransferTests(CheckCommandMixin, ProblemCase):
         self.assertEqual(candidate["transfers"], [saved])
         self.assertEqual(candidate["ending"], "taken up in another record")
         self.assertEqual(report["outcome"], "No statement was formed")
-        self.assertFalse((self.root.parent / "destination").exists())
+        self.assertEqual(list((self.root.parent / "destination").iterdir()), [])
 
     def test_transfer_can_name_a_deferred_or_rejected_candidate_on_latest_slate(self):
         for status in ("deferred", "rejected"):
@@ -121,10 +122,15 @@ class ProblemCandidateTransferTests(CheckCommandMixin, ProblemCase):
     def test_unresolvable_destination_is_refused_without_a_traceback_or_writes(self):
         loop = self.root.parent / "loop"
         loop.symlink_to(loop)
-        for destination in (str(loop), str(self.root.parent / "invalid\x00path")):
-            with self.subTest(destination=destination):
-                self.assert_refusal_parity("problem-candidate-transfer", dict(self.payload, destination_workspace=destination),
-                                          "invalid_input")
+        for destination, message in ((loop, "destination_workspace cannot be resolved."),
+                                     (self.root.parent / "missing", "destination_workspace does not exist."),
+                                     (self.root.parent / "invalid\x00path",
+                                      "Candidate transfer destination_workspace must be a nonempty string")):
+            with self.subTest(destination=str(destination)):
+                payload = dict(self.payload, destination_workspace=str(destination))
+                self.assert_refusal_parity("problem-candidate-transfer", payload, "invalid_input")
+                error = json.loads(self.invoke_command("problem-candidate-transfer", payload)[2])["error"]
+                self.assertTrue(error["message"].startswith(message), error["message"])
 
     def test_replay_returns_original_transfer_and_reusing_id_refuses_replacement(self):
         operation = cli.OPERATIONS["problem-candidate-transfer"]

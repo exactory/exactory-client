@@ -41,7 +41,19 @@ NATIVE_DECLARATIONS_0162 = (
     '3edd51083129388f52e881435e93e4b981e00c5ee3d62ab5d32e22c428fd504b',
     '6ded806e3cdbb35599ecaf8742574bc5274908472b1729090010c404c2151e8e',
 )
-NATIVE_DECLARATION_SETS = {NATIVE_DECLARATIONS, NATIVE_DECLARATIONS_0162}
+# Codex 0.167.0 (audited 2026-11-10 on the rollouts of two result reviews, threads
+# 01a1c54c-e346-7f90-bcc4-e7e59cc36993 and 01a1c54c-e339-7ee2-8231-dd666c828603):
+# the rollout first records the model's tool list as an additional_tools item (the
+# functions, clock and collaboration namespaces; no MCP, plugin, app, memory or user
+# tool), then the review instructions themselves as a developer message, then the
+# three 0.162.1 declarations unchanged. The tool list is the same in both rollouts
+# and holds no path; it changes when user configuration is loaded, so it is pinned
+# by digest. The instructions message is accepted only when its text is exactly the
+# request's instructions.
+NATIVE_TOOL_DECLARATIONS_0167 = 'a066e4e81a2d3e62b1ac3cd628a56afce8ff553b858fa78cb294ea87bfcfe68d'
+DELIVERED_INSTRUCTIONS_ID = 'request.instructions'
+NATIVE_DECLARATIONS_0167 = (NATIVE_TOOL_DECLARATIONS_0167, DELIVERED_INSTRUCTIONS_ID) + NATIVE_DECLARATIONS_0162
+NATIVE_DECLARATION_SETS = {NATIVE_DECLARATIONS, NATIVE_DECLARATIONS_0162, NATIVE_DECLARATIONS_0167}
 NATIVE_ENVIRONMENTS = {'722c613b0eff734b92f076c866ff2eb55f6298c54180d9d414868d070a6c3ae8'}
 CONTROLS = (
     'project_doc_max_bytes=0', 'developer_instructions=""',
@@ -192,6 +204,11 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls):
         if item.get('type') == 'custom_tool_call':
             issues.append('tool_call:' + str(item.get('name') or 'unknown'))
             continue
+        if item.get('type') == 'additional_tools' and item.get('role') == 'developer' and isinstance(item.get('tools'), list):
+            if packet_seen:
+                issues.append('late_developer_input')
+            developer_digests.append(_native_digest(json.dumps(item['tools'], sort_keys=True), directory))
+            continue
         if item.get('type') not in ('message', 'reasoning'):
             issues.append('unknown_or_tool_input')
             continue
@@ -209,7 +226,8 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls):
         if item.get('role') == 'developer':
             if packet_seen:
                 issues.append('late_developer_input')
-            developer_digests.append(_native_digest(text, directory))
+            developer_digests.append(DELIVERED_INSTRUCTIONS_ID if text == request['instructions']
+                                     else _native_digest(text, directory))
         if item.get('role') == 'assistant':
             if not packet_seen:
                 issues.append('inherited_assistant_history')

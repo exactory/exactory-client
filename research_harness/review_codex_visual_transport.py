@@ -176,6 +176,11 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls, ex
         if item.get('type') == 'custom_tool_call':
             issues.append('tool_call:' + str(item.get('name') or 'unknown'))
             continue
+        if item.get('type') == 'additional_tools' and item.get('role') == 'developer' and isinstance(item.get('tools'), list):
+            if seen:
+                issues.append('late_developer_input')
+            developers.append(text_route._native_digest(json.dumps(item['tools'], sort_keys=True), directory))
+            continue
         if item.get('type') not in ('message', 'reasoning'):
             issues.append('unknown_or_tool_input')
             continue
@@ -196,7 +201,8 @@ def inspect_rollout(events, request, thread_id, directory, excluded_controls, ex
         if role == 'developer':
             if seen:
                 issues.append('late_developer_input')
-            developers.append(text_route._native_digest(text, directory))
+            developers.append(text_route.DELIVERED_INSTRUCTIONS_ID if text == request['instructions']
+                              else text_route._native_digest(text, directory))
         elif role == 'assistant':
             if not seen:
                 issues.append('inherited_assistant_history')
