@@ -383,6 +383,8 @@ REFUSED_OUTCOMES = {
     "defer-source": "artifact_missing",
     "forming": "orchestration_conflict",
     "form-outcome": "orchestration_conflict",
+    "forming-import": "orchestration_conflict",
+    "problem-candidate-transfer": "problem_candidate_transfer_not_on_slate",
     "gate-override": "gate_override_transition",
     "gate-auto-pass": "gate_override_stop_missing",
     "intent": "intent_instruction_missing",

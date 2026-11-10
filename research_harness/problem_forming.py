@@ -16,6 +16,11 @@ from .problem_claims import require_problem
 CLAIM_STANDINGS = ("refuted", "proved", "implied_by_known_results", "found_in_literature", "supported",
                    "unresolved", "without_evidence", "not_examined")
 FORM_DISPOSITIONS = ("open", "superseded", "taken_up_as_candidate", "set_aside")
+EVIDENCE_STANDING_MESSAGE = (
+    "Set standing to exploratory for a probe reference, and to admissible for a full "
+    "reading, an admitted computation or an accepted result. An imported record keeps the standing that it has in "
+    "its source: exploratory for a probe and for an outcome whose evidence is exploratory, admissible for a "
+    "reading, an assessed run, a solver snapshot with a cited accepted result and an outcome with admissible evidence.")
 
 
 def collect_forms(records):
@@ -264,12 +269,16 @@ def validate_outcome_evidence(records, artifacts, values, recorded_revision):
             text(item["counterexample"], "Counterexample")
         reference = item["reference"]
         fields(reference, ("kind",), None)
+        if reference['kind'] == 'record' and 'origin' in reference:
+            from .problem_forming_import import validate_imported_evidence
+            standing = validate_imported_evidence(records, artifacts, reference, exploratory=True)
+            if item['standing'] != standing:
+                raise ResearchError('problem_form_evidence_standing', EVIDENCE_STANDING_MESSAGE)
+            continue
         strategy.choice(reference["kind"], ("reading", "computation", "result", "probe"), "Evidence reference kind", "invalid_input")
         expected = "exploratory" if reference["kind"] == "probe" else "admissible"
         if item["standing"] != expected:
-            raise ResearchError("problem_form_evidence_standing",
-                                "Set standing to exploratory for a probe reference, and to admissible for a full "
-                                "reading, an admitted computation or an accepted result")
+            raise ResearchError("problem_form_evidence_standing", EVIDENCE_STANDING_MESSAGE)
         if reference["kind"] == "reading":
             for key in ("version_id", "reading_id"):
                 text(reference.get(key), "Reading " + key)

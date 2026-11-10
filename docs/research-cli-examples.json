@@ -5,6 +5,11 @@
     "field": "Extremal sequence bounds and their neighbouring formulations",
     "authors": ["problem-author"]
   },
+  "problem-area": {
+    "id": "number-theory",
+    "area": "math.NT",
+    "reason": "The proposed relation also concerns arithmetic bounds."
+  },
   "problem-candidate": {
     "id": "problem-candidate-1",
     "previous": null,
@@ -4769,6 +4774,12 @@
     },
     "usage": null
   },
+  "forming-import": {
+    "id": "forming-import-001",
+    "source_workspace": "/absolute/path/to/source-problem",
+    "source_revision": 12,
+    "source_candidate_ids": ["candidate-001"]
+  },
   "form-outcome": {
     "id": "outcome-1",
     "form_id": "form-1",
@@ -4787,5 +4798,15 @@
     "outcome": "The bound is unresolved: no check has contradicted it, and no general argument is known.",
     "evidence": [],
     "reason": "The record holds neither a proof nor a counterexample."
+  },
+  "problem-candidate-transfer": {
+    "id": "transfer-001",
+    "candidate_id": "candidate-001",
+    "destination_workspace": "/absolute/path/to/destination-problem",
+    "reason": "The candidate's main contribution belongs to the destination's subject class."
+  },
+  "problem-report": {
+    "id": "report-1",
+    "reopen_when": "A new argument resolves the recorded obstruction."
   }
 }

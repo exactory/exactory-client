@@ -22,19 +22,25 @@ IMMUTABLE_KINDS = ('value_review', 'review_assignment', 'review_adjudication',
                    'problem_objection_carry', 'problem_carried_evidence')
 
 
-def source_identity(connection, records):
+def source_identity(connection, records, *, additional_revision_fields=()):
     from .problem_claims import require_problem
     marker = require_problem(records)
     initialization, immutable = None, {}
+    revision_fields = dict(additional_revision_fields)
     for row in connection.execute('SELECT revision, digest, changes FROM events ORDER BY revision'):
         for change in json.loads(row['changes']):
             kind, key = change['kind'], change['key']
-            if kind in IMMUTABLE_KINDS:
+            if kind in IMMUTABLE_KINDS or kind in revision_fields:
                 identity = (kind, key)
+                first = identity not in immutable
                 original = immutable.setdefault(identity, change['value'])
                 if original != change['value'] or records.get(kind, {}).get(key) != original:
                     raise ResearchError('problem_objection_provenance_invalid', 'An immutable review or carry record changed', dict(record_kind=kind, id=key))
-                if kind in ('value_review', 'problem_objection_carry') and original.get('recorded_revision') != row['revision']:
+                invalid_revision = (kind in ('value_review', 'problem_objection_carry')
+                                    and original.get('recorded_revision') != row['revision'])
+                invalid_revision = invalid_revision or (first and kind in revision_fields
+                    and (type(original.get(revision_fields[kind])) is not int or original[revision_fields[kind]] != row['revision']))
+                if invalid_revision:
                     raise ResearchError('problem_objection_provenance_invalid', 'The immutable record has a false creation revision', dict(record_kind=kind, id=key))
             if change['kind'] == 'workspace' and change['key'] == 'problem':
                 if change['value'] != marker:
@@ -164,7 +170,7 @@ def capture_proof(connection, records, source_artifacts, destination_artifacts, 
 
 
 @contextmanager
-def open_proof(artifacts, proof):
+def open_proof(artifacts, proof, *, additional_revision_fields=()):
     if proof.get('protocol') != PROTOCOL:
         raise ResearchError('problem_objection_provenance_invalid', 'Unknown carried proof protocol')
     with tempfile.TemporaryDirectory(prefix='problem-objection-verify-') as directory:
@@ -182,8 +188,9 @@ def open_proof(artifacts, proof):
         with source._connection() as connection:
             from .storage import _read_snapshot
             snapshot = _read_snapshot(connection)
+            options = dict(additional_revision_fields=additional_revision_fields) if additional_revision_fields else {}
             if (snapshot['revision'] != proof['revision']
-                    or source_identity(connection, snapshot['records']) != proof['origin']):
+                    or source_identity(connection, snapshot['records'], **options) != proof['origin']):
                 raise ResearchError('problem_objection_provenance_invalid', 'The proof does not identify its authenticated source cut')
             yield snapshot['records'], local
 

@@ -1042,7 +1042,8 @@ def build_problem_subject(records, role=None):
 
 
 def validate_problem_bars(records, artifacts, bars):
-    """A field bar remains usable only for its original area and field."""
+    """A field bar keeps its original subject and covers every further area."""
+    from .problem_areas import find_missing_areas
     from .problem_claims import find_current_statement
     marker = records['workspace']['problem']
     statement = find_current_statement(records)
@@ -1055,6 +1056,15 @@ def validate_problem_bars(records, artifacts, bars):
         if any(packet.get(key) != marker[key] for key in ('area', 'field')):
             raise ResearchError('review_bar_mismatch', 'Use problem bars for the current area and field',
                                 {'review_id': review['id']})
+        missing = find_missing_areas(records, packet)
+        if missing:
+            raise ResearchError('problem_bar_calibration_required',
+                                'This bar was given before the further areas named in area_ids were recorded, so it '
+                                'states no standard for them. Assign the bar again to the same reviewer with an empty '
+                                'context: the harness continues it in the same session and slot with every area. '
+                                'Do this for each bar, then record a slate that names the continued bars in '
+                                'bar_review_ids',
+                                {'review_id': review['id'], 'area_ids': [area['id'] for area in missing]})
 
 
 def find_current_problem_bar_ids(records, artifacts):
@@ -1062,8 +1072,8 @@ def find_current_problem_bar_ids(records, artifacts):
     return [review['id'] for review, _ in _bars(records, artifacts, None, subject=build_problem_subject(records, 'slate'))]
 
 
-def require_calibrated_bars(records, bars):
-    """Refuse version 1 bars, including those cited by the latest slate, before a result review."""
+def require_calibrated_bars(records, artifacts, bars):
+    """Require calibrated bars and a slate whose bars cover the added areas before a result review."""
     from .problem_candidates import find_slate
     slate = find_slate(records)
     cited = [] if slate is None else [records['value_review'][identifier] for identifier in slate['bar_review_ids']]
@@ -1073,6 +1083,8 @@ def require_calibrated_bars(records, bars):
                                 'Before the result review, assign this version 1 bar again to the same reviewer '
                                 'with an empty context: the harness refreshes it on the current bar template in '
                                 'the same session and slot', {'review_id': review['id']})
+    if records.get('problem_area'):
+        validate_problem_bars(records, artifacts, cited)
 
 
 def collect_result_objections(records, artifacts, subject, evidence_digest, bars):
@@ -1286,6 +1298,10 @@ def _list_packet_records(packet):
     itself, so its own digest binds it. A kind that no problem packet projects is never yielded, so a citation of it
     stays undelivered."""
     from .review_objection_evidence import resolved_objection_entries
+    for imported in packet.get('problem_forming_imports', []):
+        for entry in imported['records']:
+            reference = entry['cite']
+            yield reference['record_kind'], reference['id'], reference['digest'], dict(entry, origin=reference['origin'], id=reference['id']), []
     for kind, identifier, recorded_digest, projection in _list_projected_records(packet):
         yield kind, identifier, recorded_digest, projection, []
     # A record delivered with an objection, as the projection that its stating reviewer received, keeps the artifacts
@@ -1323,7 +1339,8 @@ def _list_projected_records(packet):
             yield 'problem_citation_metadata', metadata['id'], metadata['digest'], metadata
     for entry in evidence.get('account_records', []):
         reference = entry['cite']
-        yield reference['record_kind'], reference['id'], reference['digest'], entry['record']
+        projection = dict(entry, origin=reference['origin'], id=reference['id']) if 'origin' in reference else entry['record']
+        yield reference['record_kind'], reference['id'], reference['digest'], projection
     for entry in evidence.get('assessment_evidence', []):
         if entry.get('kind') == 'record':
             yield entry['record_kind'], entry['id'], entry['digest'], entry
@@ -1362,6 +1379,7 @@ def _find_frozen_carried_record(carried, reference):
     matches = [(recorded_digest, projection, supplied)
                for kind, identifier, recorded_digest, projection, supplied in carried
                if canonical_record_kind(kinds, kind) == record_kind
+               and projection.get('cite', {}).get('origin') == reference.get('origin')
                and (projection.get('id') if identifier is None else identifier) == reference['id']]
     if 'digest' not in reference:
         versions = {recorded_digest for recorded_digest, _, _ in matches if recorded_digest is not None}
@@ -1384,7 +1402,7 @@ def find_carried_record(records, carried, reference, *, frozen=False):
     Frozen checks use delivered versions or equal projections without digests; current checks use stored digests
     to qualify references and legacy rows. A hyphenated kind names the underscore kind when only that one exists in
     the respective delivered or current namespace."""
-    if frozen:
+    if frozen or 'origin' in reference:
         return _find_frozen_carried_record(carried, reference)
     from .strategy import canonical_record_kind
     record_kind = canonical_record_kind(records, reference['record_kind'])
@@ -1396,6 +1414,7 @@ def find_carried_record(records, carried, reference, *, frozen=False):
         return None
     return next(((projection, supplied) for kind, identifier, recorded_digest, projection, supplied in carried
                  if canonical_record_kind(records, kind) == record_kind and identifier in (None, reference['id'])
+                 and projection.get('cite', {}).get('origin') == reference.get('origin')
                  and (recorded_digest or stored_digest) == wanted), None)
 
 
@@ -1774,7 +1793,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 packet['historical_reviews'] = [deliver_review(records, _payload(review)) for review in historical]
             if problem and role == 'result':
                 bars = add_problem_bars(records, artifacts, packet, reviewer_id, slot=context_repair.slot_id(records, prior))
-                require_calibrated_bars(records, bars)
+                require_calibrated_bars(records, artifacts, bars)
                 from .problem_claims import compute_problem_evidence_digest
                 if (not refreshed and review_problem_parts.find_stage(previous) is None
                         and review_parts.find_kind(previous) is None
@@ -1847,6 +1866,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 from .review_source_complete import prepare
                 prepare(records, artifacts, prior, state, packet)
             if problem:
+                from .problem_forming_import import deliver_slate_imports
+                deliver_slate_imports(records, artifacts, packet)
                 from .problem_objection_carry import deliver_imports
                 deliver_imports(records, artifacts, packet)
             packet['evidence'] = _evidence(artifacts, packet, records=records)
@@ -1876,7 +1897,7 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
                 add_problem_candidates(records, packet)
                 packet['material_objections'] = collect_historical_bar_objections(records, artifacts)
             else:
-                require_calibrated_bars(records, bars)
+                require_calibrated_bars(records, artifacts, bars)
                 add_problem_evidence(records, artifacts, packet)
                 add_problem_objections(records, artifacts, packet, bars)
                 packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
@@ -2018,6 +2039,8 @@ def build_packet(records, artifacts, dossier_id, role, reviewer_id, **context):
     if role in ('slate', 'result') and not problem:
         add_direction_evidence(records, artifacts, packet, dossier_id)
     if problem:
+        from .problem_forming_import import deliver_slate_imports
+        deliver_slate_imports(records, artifacts, packet)
         from .problem_objection_carry import deliver_imports
         deliver_imports(records, artifacts, packet)
     packet['evidence'] = _evidence(artifacts, packet, transitive=projected, records=records)
@@ -2648,12 +2671,14 @@ def _repair_packet(records, artifacts, value, repair):
     if problem and value['role'] == 'result':
         add_problem_evidence(records, artifacts, packet)
         bars = add_problem_bars(records, artifacts, packet, value['reviewer_id'], slot=repair['slot_id'])
-        require_calibrated_bars(records, bars)
+        require_calibrated_bars(records, artifacts, bars)
         add_problem_objections(records, artifacts, packet, bars)
         packet['problem_review_currency'] = compute_problem_review_currency(records, artifacts)
     elif value['role'] in ('slate', 'result') and not problem:
         add_direction_evidence(records, artifacts, packet, value['dossier_id'])
     if problem:
+        from .problem_forming_import import deliver_slate_imports
+        deliver_slate_imports(records, artifacts, packet)
         from .problem_objection_carry import deliver_imports
         deliver_imports(records, artifacts, packet)
     if value['role'] == 'adjudicator' and 'rubric_definition' in packet:
@@ -2746,8 +2771,9 @@ def _is_evidence_refresh_needed(records, artifacts, review):
 
 def _is_problem_refresh(records, artifacts, prior, previous):
     """Whether a completed problem review no longer binds the current record: a result's review currency changed, a
-    slate's candidates or bars changed, or a bar lacks rubric calibration. An exact superseded result prompt also
-    permits one prospective contract refresh. Undelivered evidence permits reassessment in the same session and slot."""
+    slate's candidates or bars changed, or a bar lacks rubric calibration or an added area's standard. An exact
+    superseded result prompt also permits one prospective contract refresh. Undelivered evidence permits
+    reassessment in the same session and slot."""
     if any(review['assignment_id'] == prior['id'] and _is_evidence_refresh_needed(records, artifacts, review)
            for review in records.get('value_review', {}).values()):
         return True
@@ -2760,7 +2786,8 @@ def _is_problem_refresh(records, artifacts, prior, previous):
         return (previous['candidate_set_digest'] != compute_candidate_set_digest(records)
                 or (has_imported_objections(records) and previous.get('problem_objection_carry', {}).get('import_set_digest') != import_set_digest(records))
                 or set(previous['bar_ids']) != set(find_current_problem_bar_ids(records, artifacts)))
-    return is_previous_prompt(prior)
+    from .problem_areas import find_missing_areas
+    return is_previous_prompt(prior) or bool(find_missing_areas(records, previous))
 
 
 def _find_problem_refresh_parent(records, artifacts, value):

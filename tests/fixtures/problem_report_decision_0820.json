@@ -1,0 +1,189 @@
+{
+  "producer": "0.82.0 (645a791)",
+  "source_fixture": "problem_forming_0820.json",
+  "decision": {
+    "action": "withdraw",
+    "bar_review_ids": [],
+    "id": "stored-withdrawal",
+    "problem_evidence_digest": null,
+    "reason": "No further work is warranted.",
+    "recorded_revision": 3,
+    "review_ids": []
+  },
+  "decision_digest": "50911b8e2d9f57c2540bcc91c5a31f06f6e9f9db7fce813efe63b38b8b2e8964",
+  "status": {
+    "ready": false,
+    "obligations": [
+      {
+        "code": "problem_slate_missing",
+        "explanation": "Compare the current candidates and record the selection decision."
+      },
+      {
+        "code": "problem_attempt_missing",
+        "explanation": "Attempt the exact statement with math-solver, or assess an existing attempt from full readings, and record it.",
+        "statement_id": "statement-1"
+      },
+      {
+        "code": "problem_openness_missing",
+        "explanation": "Obtain an observed openness finding for the selected statement."
+      },
+      {
+        "code": "problem_value_missing",
+        "explanation": "Bind motivation and current-state paragraphs to this statement's evidence.",
+        "statement_id": "statement-1"
+      },
+      {
+        "code": "problem_assessment_missing",
+        "explanation": "Record the rubric self-assessment with an evidence reference for every item.",
+        "statement_id": "statement-1"
+      },
+      {
+        "code": "problem_bar_pending",
+        "explanation": "A major scientific decision requires two distinct independent assessments",
+        "review_ids": []
+      },
+      {
+        "code": "problem_review_pair_required",
+        "explanation": "A major scientific decision requires two distinct independent assessments",
+        "review_ids": []
+      },
+      {
+        "code": "problem_decision_missing",
+        "explanation": "Record a post decision after both observed result reviews."
+      }
+    ],
+    "counts": {
+      "obligations": 8
+    },
+    "digest": "b9510f9d907eb86cc6fa3f643e9c933a8f34d133edf2465c07b4c3b2326a03de",
+    "orchestration": "problem_creation",
+    "milestone": "exploration",
+    "problem_evidence_digest": "4e5ec44aa8bbf0223cb97d701d03176da453c111ceb44798f27053fdcb908ca5",
+    "statement_id": "statement-1",
+    "decision_id": "stored-withdrawal",
+    "revision": 3,
+    "profile": "research",
+    "problem": {
+      "area": "math.CO",
+      "authors": [
+        "problem-author"
+      ],
+      "created": "2026-11-09T00:00:00+00:00",
+      "field": "Extremal sequences and finite bounds",
+      "orchestration": "problem_creation",
+      "research": {
+        "profile": "research",
+        "store": ".exactory/research.sqlite3"
+      },
+      "slug": "bounded-sequences",
+      "updated": "2026-11-09T00:00:00+00:00",
+      "version": 1
+    },
+    "resources": {},
+    "limits": {
+      "depth": null
+    },
+    "source_deferrals": [],
+    "literature_digest": "6dbc77e9e1ac5c5d613b5417cb37f7a9f2c95989dd1e3603f9f39f921215cf3b",
+    "candidates": {
+      "current": 1,
+      "selected": 0,
+      "deferred": 0,
+      "rejected": 0
+    },
+    "slate_id": null,
+    "next": {
+      "code": "problem_slate_missing",
+      "explanation": "Compare the current candidates and record the selection decision."
+    },
+    "review": {
+      "assignments": {}
+    },
+    "advisories": [
+      {
+        "code": "output_views_stale",
+        "explanation": "The final/ and intermediate/ folders do not show the latest records. This is advisory: the research reads only the records, and no gate depends on these folders.",
+        "action": "exactory-research export --kind outputs",
+        "reason": "not_rendered",
+        "rendered_revision": 0,
+        "revision": 3,
+        "path": null,
+        "error": null
+      }
+    ]
+  },
+  "binding": {
+    "claim": {
+      "area": "math.CO",
+      "candidate_id": "candidate-1",
+      "formal_statement": null,
+      "id": "statement-1",
+      "neighbours": [],
+      "recorded_revision": 3,
+      "resolution_criteria": "Prove the bound for all $n$ or exhibit a counterexample.",
+      "statement": "For every $n$, does $B(n)\\leq n^2$ hold?",
+      "title": "A finite bound problem"
+    },
+    "openness": null,
+    "openness_searches": [],
+    "value": null,
+    "assessment": null,
+    "assessment_evidence": [],
+    "attempt": null,
+    "results": [],
+    "readings": [],
+    "computations": [],
+    "formal_checks": [],
+    "citations": []
+  },
+  "evidence": {
+    "claim": {
+      "title": "A finite bound problem",
+      "area": "math.CO",
+      "statement": "For every $n$, does $B(n)\\leq n^2$ hold?",
+      "resolution_criteria": "Prove the bound for all $n$ or exhibit a counterexample.",
+      "formal_statement": null,
+      "id": "statement-1",
+      "digest": "a1f554c3eb57270e1db3ac8c209faa0ce427a8e3294bd550867fe47cf45b1e2b",
+      "statement_id": "statement-1",
+      "statement_digest": "4dabe5e029c3aec879913c524d5e70bf161fb47c11d19343d94e67eb462a8c18",
+      "cite": {
+        "kind": "record",
+        "record_kind": "problem_statement",
+        "id": "statement-1"
+      }
+    },
+    "openness": null,
+    "openness_searches": [],
+    "value": null,
+    "assessment": null,
+    "assessment_evidence": [],
+    "attempt": null,
+    "results": [],
+    "citations": [],
+    "readings": [],
+    "passages": [],
+    "delivery": {
+      "protocol": "inline-passages-v1",
+      "note": "Each passage is the exact text of one inspected span of a reading, with the reading id, the inspection index and the offsets of the span in the source text. An inspection that covers the complete text is listed in its reading with whole_text true and is not repeated as a passage. Full texts, including those that a material objection names by reference, are not attached in this turn; request a held full text with source_requests by its version_id. Cite a delivered record by copying its cite object, which names the record by kind and id. A source link is citable only for a full text that a source request delivered to you. This review is verified only when it calls no tool, so a held text is obtained only through a source request."
+    },
+    "computations": [],
+    "formal_checks": []
+  },
+  "evidence_digest": "4e5ec44aa8bbf0223cb97d701d03176da453c111ceb44798f27053fdcb908ca5",
+  "views": {
+    "final/problem/decisions/stored-withdrawal.json": {
+      "content": "{\n  \"action\": \"withdraw\",\n  \"bar_review_ids\": [],\n  \"id\": \"stored-withdrawal\",\n  \"problem_evidence_digest\": null,\n  \"reason\": \"No further work is warranted.\",\n  \"recorded_revision\": 3,\n  \"review_ids\": []\n}\n",
+      "entry": {
+        "kind": "problem_decision",
+        "id": "stored-withdrawal",
+        "recorded_revision": 3,
+        "status": "current"
+      }
+    }
+  },
+  "integrity": {
+    "artifacts": 1,
+    "workspace_descriptors": 0
+  }
+}

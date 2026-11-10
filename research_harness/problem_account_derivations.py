@@ -38,15 +38,24 @@ def collect_form_history(records, statement):
     return history
 
 
+def describe_probe_computation(records, row):
+    question = row['question'] if 'question' in row else records['probe_intent'][row['id']]['question']
+    return dict(kind='probe', id=row['id'], question=question, revision=row['revision'])
+
+
 def describe_earlier_computations(records, plan):
-    earlier = [dict(kind='probe', id=row['id'], question=row['question'], revision=row['revision'])
+    earlier = [describe_probe_computation(records, row)
                for row in records.get('probe', {}).values() if row['revision'] < plan['planned_revision']]
     for row in records.get('execution', {}).values():
         if row['recorded_revision'] < plan['planned_revision']:
             earlier_plan = records['cycle_plan'][row['payload']['cycle_id']]
             earlier.append(dict(kind='execution', id=row['id'], question=earlier_plan['payload']['question'],
                                 revision=row['recorded_revision']))
-    return sorted(earlier, key=lambda row: (row['revision'], row['kind'], row['id']))
+    from .problem_forming_import import collect_inherited
+    for origin, imported in collect_inherited(records).items():
+        earlier.extend(dict({key: value for key, value in row.items() if key != 'imported_revision'}, origin=origin)
+                       for row in imported['computations'] if row['imported_revision'] < plan['planned_revision'])
+    return sorted(earlier, key=lambda row: (row.get('origin', ''), row['revision'], row['kind'], row['id']))
 
 
 def describe_run_checks(records, accounts, lineage):
@@ -126,7 +135,13 @@ def describe_account_derivations(records, value):
     statement = records.get('problem_statement', {}).get(value['statement_id'])
     history = collect_form_history(records, statement)
     checks = describe_run_checks(records, value['accounts'], collect_statement_lineage(records, statement))
-    return dict(checks=checks, history=history, counts=compute_history_counts(records, history, checks))
+    derived = dict(checks=checks, history=history, counts=compute_history_counts(records, history, checks))
+    from .problem_forming_import import collect_inherited
+    inherited = collect_inherited(records)
+    if inherited:
+        derived['inherited'] = [dict(origin=origin, source_revision=row['source_revision'], history=row['history'],
+                                    checks=row['checks'], counts=row['counts']) for origin, row in sorted(inherited.items())]
+    return derived
 
 
 def assess_account_currency(records, value):
