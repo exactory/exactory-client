@@ -50,11 +50,24 @@ class ProblemCandidateTests(ProblemCase):
         self.assertEqual(saved, dict(payload, recorded_revision=revision + 1))
         self.assertEqual(records["problem_candidate"]["candidate-1"], saved)
         self.assertEqual(self.load_candidates_module().find_current_candidates(records), {"candidate-1": saved})
-        self.assertEqual(self.load_candidates_module().SOURCE_KINDS,
-                         ("own_record", "literature", "computation", "section", "user", "thought_experiment"))
         for kind in self.load_candidates_module().SOURCE_KINDS:
             self.record_candidate(build_candidate("candidate-" + kind, source={"kind": kind, "reference": "The recorded origin.", "evidence": []}))
         self.assert_error("record_conflict", lambda: self.record_candidate(dict(payload, observation="A changed observation.")))
+
+    def test_records_a_phenomenon_candidate_with_evidence_and_projects_its_source(self):
+        reading = self.record_full_reading()
+        saved_reading = self.store.snapshot()["records"]["reading"][reading["reading_id"]]
+        payload = build_candidate(source={"kind": "phenomenon",
+            "reference": "The same bound appears in the read constructions; comparison produced this candidate.",
+            "evidence": [{"kind": "record", "record_kind": "reading", "id": reading["reading_id"],
+                          "digest": digest(saved_reading)}]})
+        revision = self.store.revision
+        saved = self.record_candidate(payload)
+        records = self.store.snapshot()["records"]
+        self.assertEqual(saved, dict(payload, recorded_revision=revision + 1))
+        self.assertEqual(records["problem_candidate"]["candidate-1"], saved)
+        self.assertEqual(self.load_candidates_module().describe_candidates(records)[0]["source"],
+                         {"kind": "phenomenon", "reference": payload["source"]["reference"]})
 
     def test_records_a_thought_experiment_candidate_with_reading(self):
         reading = self.record_full_reading()
