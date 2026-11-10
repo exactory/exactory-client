@@ -1,0 +1,48 @@
+{
+  "producer": "problem_forming.record_form_outcome from merged stage A (e2a605b), plugin 0.82.0",
+  "record": {
+    "disposition": {
+      "candidate_id": null,
+      "form_id": null,
+      "reason": "Further work is needed.",
+      "status": "open"
+    },
+    "evidence": [
+      {
+        "counterexample": "n=3, B(3)=10 > 9.",
+        "date": "2026-11-09T01:00:00Z",
+        "description": "The finite example exceeds the bound.",
+        "kind": "counterexample",
+        "reference": {
+          "id": "probe-1",
+          "kind": "probe"
+        },
+        "standing": "exploratory"
+      }
+    ],
+    "form_id": "form-1",
+    "id": "outcome-1",
+    "lack_of_means": null,
+    "outcome": "The bound remains unresolved.",
+    "previous": null,
+    "reason": "No general argument is available.",
+    "recorded_at": "2026-11-09T01:00:00+00:00",
+    "recorded_revision": 5,
+    "refutation_basis": null,
+    "standing": "unresolved",
+    "target": {
+      "id": null,
+      "kind": "form"
+    }
+  },
+  "digest": "a20c4ab10da73d7e9f63efad4f9e15cda5a1fdafc29fc8627cec858714b4e5f2",
+  "view_path": "intermediate/problem/form-outcomes/outcome-1.json",
+  "view": {
+    "content": "{\n  \"disposition\": {\n    \"candidate_id\": null,\n    \"form_id\": null,\n    \"reason\": \"Further work is needed.\",\n    \"status\": \"open\"\n  },\n  \"evidence\": [\n    {\n      \"counterexample\": \"n=3, B(3)=10 > 9.\",\n      \"date\": \"2026-11-09T01:00:00Z\",\n      \"description\": \"The finite example exceeds the bound.\",\n      \"kind\": \"counterexample\",\n      \"reference\": {\n        \"id\": \"probe-1\",\n        \"kind\": \"probe\"\n      },\n      \"standing\": \"exploratory\"\n    }\n  ],\n  \"form_id\": \"form-1\",\n  \"id\": \"outcome-1\",\n  \"lack_of_means\": null,\n  \"outcome\": \"The bound remains unresolved.\",\n  \"previous\": null,\n  \"reason\": \"No general argument is available.\",\n  \"recorded_at\": \"2026-11-09T01:00:00+00:00\",\n  \"recorded_revision\": 5,\n  \"refutation_basis\": null,\n  \"standing\": \"unresolved\",\n  \"target\": {\n    \"id\": null,\n    \"kind\": \"form\"\n  }\n}\n",
+    "entry": {
+      "kind": "form_outcome",
+      "id": "outcome-1",
+      "recorded_revision": 5
+    }
+  }
+}

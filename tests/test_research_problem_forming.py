@@ -2,6 +2,7 @@
 
 import copy
 import json
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -332,10 +333,54 @@ class ProblemFormingTests(ProblemCase):
         for reference in (reading, computation):
             evidence = self.build_probe_evidence(standing="admissible", reference=reference, counterexample=None)
             self.assert_error("invalid_input", lambda: self.record_outcome(build_outcome(evidence=[evidence])))
-        for changes in ({"date": "2026-11-09"}, {"kind": ""}, {"description": ""}, {"counterexample": ""},
+        for changes in ({"date": "2026-11-09T01:00:00"}, {"kind": ""}, {"description": ""}, {"counterexample": ""},
                         {"reference": {"kind": "artifact"}}, {"reference": []}):
             evidence = self.build_probe_evidence(**changes)
             self.assert_error("invalid_input", lambda: self.record_outcome(build_outcome(evidence=[evidence])))
+
+    def test_outcome_evidence_preserves_unknown_dates_calendar_dates_and_zoned_timestamps(self):
+        self.record_probe()
+        self.record_forming()
+        for index, value in enumerate(("unknown", "2026", "2026-11", "2026-11-09", "2024-02-29",
+                                       "2026-11-09T01:00:00Z", "2026-11-09T01:00:00.123456+05:30",
+                                       "2026-11-09T01:00:00-08:00")):
+            with self.subTest(date=value):
+                evidence = self.build_probe_evidence(date=value)
+                saved = self.record_outcome(build_outcome("dated-" + str(index), evidence=[evidence]))
+                self.assertEqual(saved["evidence"], [evidence])
+                self.assertEqual(self.store.snapshot()["records"]["form_outcome"][saved["id"]], saved)
+
+    def test_outcome_evidence_refuses_invalid_dates_without_mutating_the_record(self):
+        self.record_probe()
+        self.record_forming()
+        revision = self.store.revision
+        for value in (None, True, 2026, [], {}, "", " unknown", "Unknown", "unknown ", "202", "20261",
+                      "0000", "2026-00", "2026-13", "2026-1", "2026-11-9", "2026-02-29", "2026-04-31",
+                      "20261109", "2026-W46-1", "2026-313", "2026/11/09", "2026-11-09 ",
+                      "2026-11-09T01:00:00", "2026-11-09T01:00:00+25:00", "2026-11-09T25:00:00Z"):
+            with self.subTest(date=value):
+                evidence = self.build_probe_evidence(date=value)
+                self.assert_error("invalid_input", lambda: self.record_outcome(build_outcome(evidence=[evidence])))
+                self.assertEqual(self.store.revision, revision)
+        self.assertNotIn("form_outcome", self.store.snapshot()["records"])
+
+    def test_stored_timestamp_outcome_keeps_validation_digest_projection_and_rendered_bytes(self):
+        fixture = json.loads((Path(__file__).parent / "fixtures/problem_form_outcome_stage_a.json").read_text())
+        self.record_probe()
+        self.record_forming()
+        payload = {key: value for key, value in fixture["record"].items()
+                   if key not in ("previous", "refutation_basis", "recorded_at", "recorded_revision")}
+        with patch("research_harness.problem_forming.datetime") as clock:
+            clock.now.return_value = datetime.fromisoformat(fixture["record"]["recorded_at"])
+            saved = self.record_outcome(payload)
+        self.assertEqual(saved, fixture["record"])
+        self.assertEqual(digest(saved), fixture["digest"])
+        records = self.store.snapshot()["records"]
+        model = output_views.compute_view_model(records, self.artifacts, output_views._ViewInputs({}, {}))
+        view = model[fixture["view_path"]]
+        self.assertEqual({"content": view.content.decode(), "entry": view.entry}, fixture["view"])
+        output_views.render_all(self.store)
+        self.assertEqual((self.root / fixture["view_path"]).read_text(), fixture["view"]["content"])
 
     def test_a_later_probe_cannot_be_the_origin_of_an_earlier_form(self):
         self.record_forming()

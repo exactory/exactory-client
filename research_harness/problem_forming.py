@@ -5,10 +5,11 @@ report; probes retain their exploratory provenance, including counterexamples.
 """
 
 from datetime import datetime, timezone
+import re
 
 from . import problem_evidence, strategy
 from .errors import ResearchError
-from .operations import fields, immutable_record, prepared_mutation, strings, text, timestamp
+from .operations import fields, immutable_record, iso_date, prepared_mutation, strings, text, timestamp
 from .problem_claims import require_problem
 
 
@@ -210,12 +211,24 @@ def record_forming(store, payload, *, expected_revision, request_id):
                              expected_revision=expected_revision, request_id=request_id)
 
 
+def validate_evidence_date(value):
+    if value == "unknown":
+        return
+    try:
+        if isinstance(value, str) and re.fullmatch(r"[0-9]{4}(?:-[0-9]{2}){0,2}", value):
+            iso_date(value + "-01" * (2 - value.count("-")))
+        else:
+            timestamp(value)
+    except ResearchError as error:
+        raise ResearchError("invalid_input", "Evidence date must be unknown, YYYY, YYYY-MM, YYYY-MM-DD or a timestamp with a timezone") from error
+
+
 def validate_outcome_evidence(records, artifacts, values, recorded_revision):
     for item in strategy.items(values, "Outcome evidence", code="invalid_input"):
         fields(item, ("kind", "description", "standing", "date", "reference", "counterexample"))
         text(item["kind"], "Evidence kind")
         text(item["description"], "Evidence description")
-        timestamp(item["date"])
+        validate_evidence_date(item["date"])
         if item["counterexample"] is not None:
             text(item["counterexample"], "Counterexample")
         reference = item["reference"]

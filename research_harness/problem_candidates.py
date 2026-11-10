@@ -246,6 +246,12 @@ def record_slate(store, payload, *, expected_revision, request_id):
                                     {"candidate_id": identifier, "shortfalls": shortfalls})
         _verify_bars(records, artifacts, value["bar_review_ids"])
         _verify_reviews(records, artifacts, value["review_ids"], value["bar_review_ids"], sorted(candidates))
+        if not value["review_ids"] and any(
+                candidates[identifier]["source"]["kind"] == "phenomenon" or any(
+                    reference.get("kind") == "record" and reference["record_kind"] in ("forming_call", "form_outcome")
+                    for reference in candidates[identifier]["source"]["evidence"])
+                for identifier in value["selected"]):
+            raise ResearchError("problem_slate_review_required", "Selecting a candidate formed in this record requires a current slate review")
         record = dict(value, candidate_ids=sorted(candidates), recorded_revision=expected_revision + 1)
         if records.get('problem_objection_carry'):
             from .problem_objection_carry import import_set_digest

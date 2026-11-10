@@ -36,6 +36,12 @@ class ProblemCandidateTests(ProblemCase):
     def record_candidate(self, payload):
         return self.mutate(self.load_candidates_module().record_candidate, payload)["result"]
 
+    def record_forming_reference(self):
+        from research_harness.problem_forming import record_forming
+        from test_research_problem_forming import build_forming
+        call = self.mutate(record_forming, build_forming())["result"]
+        return {"kind": "record", "record_kind": "forming_call", "id": call["id"], "digest": digest(call)}
+
     def test_records_a_candidate_with_source_and_potential(self):
         reading = self.record_full_reading()
         saved_reading = self.store.snapshot()["records"]["reading"][reading["reading_id"]]
@@ -50,17 +56,20 @@ class ProblemCandidateTests(ProblemCase):
         self.assertEqual(saved, dict(payload, recorded_revision=revision + 1))
         self.assertEqual(records["problem_candidate"]["candidate-1"], saved)
         self.assertEqual(self.load_candidates_module().find_current_candidates(records), {"candidate-1": saved})
+        forming = self.record_forming_reference()
         for kind in self.load_candidates_module().SOURCE_KINDS:
-            self.record_candidate(build_candidate("candidate-" + kind, source={"kind": kind, "reference": "The recorded origin.", "evidence": []}))
+            evidence = [forming] if kind == "phenomenon" else []
+            self.record_candidate(build_candidate("candidate-" + kind, source={"kind": kind, "reference": "The recorded origin.", "evidence": evidence}))
         self.assert_error("record_conflict", lambda: self.record_candidate(dict(payload, observation="A changed observation.")))
 
     def test_records_a_phenomenon_candidate_with_evidence_and_projects_its_source(self):
         reading = self.record_full_reading()
         saved_reading = self.store.snapshot()["records"]["reading"][reading["reading_id"]]
+        forming = self.record_forming_reference()
         payload = build_candidate(source={"kind": "phenomenon",
             "reference": "The same bound appears in the read constructions; comparison produced this candidate.",
             "evidence": [{"kind": "record", "record_kind": "reading", "id": reading["reading_id"],
-                          "digest": digest(saved_reading)}]})
+                          "digest": digest(saved_reading)}, forming]})
         revision = self.store.revision
         saved = self.record_candidate(payload)
         records = self.store.snapshot()["records"]

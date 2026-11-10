@@ -1,0 +1,67 @@
+{
+  "producer": "problem_candidates.record_slate from 0.82.0 (645a791)",
+  "record": {
+    "bar_review_ids": [
+      "review-bar-first",
+      "review-bar-second"
+    ],
+    "candidate_ids": [
+      "candidate-1"
+    ],
+    "comparison": "The candidate removes the obstacle that the read survey names; no compared neighbour does.",
+    "deferred": [],
+    "id": "slate-1",
+    "reason": "The candidate meets both bars at potential level 2.",
+    "recorded_revision": 20,
+    "rejected": [],
+    "review_ids": [],
+    "selected": [
+      "candidate-1"
+    ]
+  },
+  "digest": "c6eba47a8027706a42518edf57c43ca429a73ec0d7f341b467f9e49ebffea9b6",
+  "assessment": [],
+  "view_path": "final/problem/slates/slate-1.json",
+  "view": {
+    "content": "{\n  \"bar_review_ids\": [\n    \"review-bar-first\",\n    \"review-bar-second\"\n  ],\n  \"candidate_ids\": [\n    \"candidate-1\"\n  ],\n  \"comparison\": \"The candidate removes the obstacle that the read survey names; no compared neighbour does.\",\n  \"deferred\": [],\n  \"id\": \"slate-1\",\n  \"reason\": \"The candidate meets both bars at potential level 2.\",\n  \"recorded_revision\": 20,\n  \"rejected\": [],\n  \"review_ids\": [],\n  \"selected\": [\n    \"candidate-1\"\n  ]\n}\n",
+    "entry": {
+      "kind": "problem_slate",
+      "id": "slate-1",
+      "recorded_revision": 20,
+      "status": "current"
+    }
+  },
+  "binding": {
+    "claim": null,
+    "openness": null,
+    "openness_searches": [],
+    "value": null,
+    "assessment": null,
+    "assessment_evidence": [],
+    "attempt": null,
+    "results": [],
+    "readings": [],
+    "computations": [],
+    "formal_checks": [],
+    "citations": []
+  },
+  "evidence": {
+    "claim": null,
+    "openness": null,
+    "openness_searches": [],
+    "value": null,
+    "assessment": null,
+    "assessment_evidence": [],
+    "attempt": null,
+    "results": [],
+    "citations": [],
+    "readings": [],
+    "passages": [],
+    "delivery": {
+      "protocol": "inline-passages-v1",
+      "note": "Each passage is the exact text of one inspected span of a reading, with the reading id, the inspection index and the offsets of the span in the source text. An inspection that covers the complete text is listed in its reading with whole_text true and is not repeated as a passage. Full texts, including those that a material objection names by reference, are not attached in this turn; request a held full text with source_requests by its version_id. Cite a delivered record by copying its cite object, which names the record by kind and id. A source link is citable only for a full text that a source request delivered to you. This review is verified only when it calls no tool, so a held text is obtained only through a source request."
+    },
+    "computations": [],
+    "formal_checks": []
+  }
+}
