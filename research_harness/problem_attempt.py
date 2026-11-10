@@ -43,6 +43,19 @@ def find_latest_native_attempt(records, bound):
     return identifier, native
 
 
+def validate_extension_reason(reason):
+    if reason is not None and not isinstance(reason, str):
+        raise ResearchError("invalid_input", "The extension reason must be text or null")
+    return reason
+
+
+def validate_attempt_extension(totals, reason, *, code="problem_attempt_extension_unexplained"):
+    exceeded = [name for name, limit in NORMAL_ATTEMPT_LIMITS.items() if totals[name] > limit]
+    if exceeded and (reason is None or not reason.strip()):
+        raise ResearchError(code, "Record the reason for exceeding the normal limits named in exceeded",
+                            {"totals": totals, "exceeded": exceeded})
+
+
 def validate_attempt(records, artifacts, value):
     from .problem_evidence import validate_reading
     fields(value, ("id", "statement_id", "kind", "solver", "literature", "outcomes", "proportion"),
@@ -71,9 +84,7 @@ def validate_attempt(records, artifacts, value):
                 if key != "evidence":
                     text(row[key], "Attempt " + key)
     fields(value["proportion"], ("extension_reason",))
-    reason = value["proportion"]["extension_reason"]
-    if reason is not None and not isinstance(reason, str):
-        raise ResearchError("invalid_input", "The extension reason must be text or null")
+    reason = validate_extension_reason(value["proportion"]["extension_reason"])
     native, readings = None, []
     if kind == "solver":
         fields(value["solver"], ("native_attempt_digest", "applicability"))
@@ -101,11 +112,7 @@ def validate_attempt(records, artifacts, value):
         if outcomes["resolved"] != is_native_resolved(native):
             raise ResearchError("problem_attempt_outcome_mismatch", "Match the native attempt's recorded root resolution",
                                 {"attempt_id": value["id"], "native_attempt_digest": identifier})
-        totals = native["totals"]
-        exceeded = [name for name, limit in NORMAL_ATTEMPT_LIMITS.items() if totals[name] > limit]
-        if exceeded and (reason is None or not reason.strip()):
-            raise ResearchError("problem_attempt_extension_unexplained", "Record the reason for exceeding the normal limits named in exceeded",
-                                {"totals": totals, "exceeded": exceeded})
+        validate_attempt_extension(native["totals"], reason)
     else:
         fields(value["literature"], ("readings", "description"))
         text(value["literature"]["description"], "Critical assessment of the literature attempt")

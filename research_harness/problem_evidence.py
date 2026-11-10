@@ -210,7 +210,34 @@ def validate_computation(records, artifacts, item, *, recorded_revision=None):
 
 
 def validate_result(records, item):
-    from .problem_attempt import find_attempt
+    """Validate either result reference and return only its recorded acceptance.
+
+    A delivered objective supports its accepted conclusion; its purpose does not
+    establish any relation to the current problem statement.
+    """
+    from .problem_attempt import find_attempt, find_latest_native_attempt, validate_attempt_extension, validate_extension_reason
+    if isinstance(item, dict) and "native_attempt_digest" in item:
+        fields(item, ("kind", "native_attempt_digest", "acceptance_id", "purpose", "extension_reason"))
+        text(item["native_attempt_digest"], "Native attempt digest")
+        text(item["acceptance_id"], "Result acceptance ID")
+        text(item["purpose"], "Objective purpose")
+        reason = validate_extension_reason(item["extension_reason"])
+        identifier = item["native_attempt_digest"]
+        native = records.get("native_attempt", {}).get(identifier)
+        latest_digest = None if native is None else find_latest_native_attempt(records, native)[0]
+        if latest_digest is None:
+            raise ResearchError("problem_result_unbound", "Deliver the objective's native attempt into this problem store",
+                                {"native_attempt_digest": identifier})
+        if identifier != latest_digest:
+            raise ResearchError("problem_result_superseded", "Cite the latest delivered snapshot of this objective",
+                                {"native_attempt_digest": identifier, "latest_native_attempt_digest": latest_digest})
+        acceptance = next((row for row in native["acceptances"] if row["id"] == item["acceptance_id"]), None)
+        if (acceptance is None or acceptance["status"] != "accepted"
+                or acceptance["outcome"] not in ("proof", "reduction", "obstruction", "counterexample")):
+            raise ResearchError("problem_result_missing", "Cite an accepted proof, reduction, obstruction or counterexample of this objective",
+                                {"native_attempt_digest": identifier, "acceptance_id": item["acceptance_id"]})
+        validate_attempt_extension(native["totals"], reason, code="problem_result_extension_unexplained")
+        return acceptance
     fields(item, ("kind", "attempt_id", "acceptance_id"))
     text(item["attempt_id"], "Result attempt ID")
     text(item["acceptance_id"], "Result acceptance ID")
@@ -228,11 +255,37 @@ def validate_result(records, item):
 
 
 def collect_results(records):
+    from .problem_attempt import find_current_attempt
+    attempt = find_current_attempt(records)
     results = {}
     for item in collect_value_items(find_value(records)):
-        if item["kind"] == "result":
-            results[(item["attempt_id"], item["acceptance_id"])] = validate_result(records, item)
-    return [(attempt_id, acceptance) for (attempt_id, _), acceptance in sorted(results.items())]
+        if item["kind"] != "result":
+            continue
+        if "native_attempt_digest" in item:
+            key = ("objective", digest(item))
+        elif attempt is not None:
+            key = ("attempt", item["attempt_id"], item["acceptance_id"])
+        else:
+            # Historical attempt results disappear with their current attempt.
+            continue
+        results[key] = (item, validate_result(records, item))
+    return [result for _, result in sorted(results.items())]
+
+
+def describe_result(records, item, acceptance, *, binding=False):
+    if "native_attempt_digest" in item:
+        result = {key: item[key] for key in ("native_attempt_digest", "acceptance_id", "purpose", "extension_reason")}
+        native = records["native_attempt"][item["native_attempt_digest"]]
+        result["objective_claim"] = native["contract"]["original_claim"]
+    else:
+        result = {key: item[key] for key in ("attempt_id", "acceptance_id")}
+        if binding:
+            return dict(result, digest=digest(acceptance))
+        native = records["native_attempt"][records["problem_attempt"][item["attempt_id"]]["solver"]["native_attempt_digest"]]
+    checkpoint = next(row for row in native["checkpoints"] if row["id"] == acceptance["checkpoint_id"])
+    result["claim"] = checkpoint["claim"]
+    return (dict(result, digest=digest(acceptance)) if binding else
+            dict(result, outcome=acceptance["outcome"], standard=acceptance["standard"]))
 
 
 def validate_value(records, artifacts, value):
@@ -527,8 +580,8 @@ def describe_binding(records, artifacts):
                                     for row in resolve_assessment_evidence(records)],
             "attempt": None if attempt is None else {"id": attempt["id"], "digest": digest(attempt),
                 "native_attempt_digest": None if attempt["solver"] is None else attempt["solver"]["native_attempt_digest"]},
-            "results": [{"attempt_id": attempt_id, "acceptance_id": acceptance["id"], "digest": digest(acceptance)}
-                        for attempt_id, acceptance in ([] if attempt is None else collect_results(records))],
+            "results": [describe_result(records, item, acceptance, binding=True)
+                        for item, acceptance in collect_results(records)],
             "readings": [{"id": row["id"], "digest": digest(row)} for row in collect_readings(records)],
             "computations": [{"execution_id": row["execution_id"], "output_id": row["output_id"],
                               **{key: digest(row[key]) for key in ("admission", "execution", "assessment")}} for row in computations],
@@ -613,12 +666,7 @@ def describe_evidence(records, artifacts):
     held = {(row["id"], row["digest"]) for row in delivered_readings}
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
-    results = []
-    for attempt_id, acceptance in ([] if attempt is None else collect_results(records)):
-        native = records["native_attempt"][records["problem_attempt"][attempt_id]["solver"]["native_attempt_digest"]]
-        checkpoint = next(row for row in native["checkpoints"] if row["id"] == acceptance["checkpoint_id"])
-        results.append({"attempt_id": attempt_id, "acceptance_id": acceptance["id"], "claim": checkpoint["claim"],
-                        "outcome": acceptance["outcome"], "standard": acceptance["standard"]})
+    results = [describe_result(records, item, acceptance) for item, acceptance in collect_results(records)]
     # Each projected record carries the stored record's id and digest, so that a reviewer can cite it exactly.
     delivered = {"claim": None if statement is None else dict(
                 {key: statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")},
