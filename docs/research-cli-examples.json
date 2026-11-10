@@ -4599,5 +4599,85 @@
     "job_id": "fulltext:JOB_DIGEST",
     "max_requests": 2,
     "max_pages": 10
+  },
+  "forming": {
+    "id": "forming-1",
+    "question": {
+      "kind": "thought_experiment",
+      "description": "How large can B(n) be?",
+      "places": []
+    },
+    "move": {
+      "kind": "expectation",
+      "description": "State the expected size as a proposition."
+    },
+    "inputs": [],
+    "amounts": {
+      "forms": 1,
+      "nearest_alternatives": {
+        "form-1": 0
+      },
+      "expected_relations": {
+        "form-1": 0
+      },
+      "pairs": null
+    },
+    "dictionary": null,
+    "comparison_count": null,
+    "forms": [
+      {
+        "id": "form-1",
+        "text": "For every n, B(n) <= n^2.",
+        "exact": true,
+        "purpose": {
+          "kind": "expected_statement",
+          "form_id": null
+        },
+        "previous": null,
+        "grounds": [
+          {
+            "description": "The finite constructions suggest the bound.",
+            "evidence": []
+          }
+        ],
+        "nearest_alternatives": [],
+        "expected_relations": [],
+        "planned_checks": [
+          {
+            "id": "check-1",
+            "description": "Compute B(3).",
+            "contradiction": "B(3) > 9.",
+            "no_contradiction_reason": null
+          }
+        ],
+        "correction_checks": []
+      }
+    ],
+    "probes": [],
+    "stopping_reason": "The proposed forms are ready for checks.",
+    "performer": {
+      "kind": "session",
+      "session_id": "session-1"
+    },
+    "usage": null
+  },
+  "form-outcome": {
+    "id": "outcome-1",
+    "form_id": "form-1",
+    "target": {
+      "kind": "form",
+      "id": null
+    },
+    "standing": "unresolved",
+    "disposition": {
+      "status": "open",
+      "reason": "Further work is needed.",
+      "form_id": null,
+      "candidate_id": null
+    },
+    "lack_of_means": null,
+    "outcome": "The bound remains unresolved.",
+    "evidence": [],
+    "reason": "No general argument is available."
   }
 }

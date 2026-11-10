@@ -381,6 +381,8 @@ REFUSED_OUTCOMES = {
     "contribution-analysis": "publication_bundle_missing",
     "cycle": "objective_mismatch",
     "defer-source": "artifact_missing",
+    "forming": "orchestration_conflict",
+    "form-outcome": "orchestration_conflict",
     "gate-override": "gate_override_transition",
     "gate-auto-pass": "gate_override_stop_missing",
     "intent": "intent_instruction_missing",
@@ -533,6 +535,8 @@ class CommandTableCheckTests(CheckCommandMixin, DevelopmentCase, ProblemCase):
         self.audit_stage = "problem"
         self.build_workspace("problem")
         self.initialize_problem()
+        self.mutate(cli.OPERATIONS["forming"], examples["forming"])
+        self.mutate(cli.OPERATIONS["form-outcome"], examples["form-outcome"])
         statement = self.select_statement()
         reading = self.record_full_reading()
         self.mutate(cli.OPERATIONS["problem-candidate"], build_candidate())

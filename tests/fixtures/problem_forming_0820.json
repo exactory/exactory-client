@@ -1,0 +1,481 @@
+{
+  "records": {
+    "configuration": {
+      "research": {
+        "constitution": {
+          "path": "RESEARCH_CONSTITUTION.md",
+          "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+          "version": "7"
+        },
+        "preparation_policy": {
+          "id": "lineage-v1"
+        },
+        "profile": "research",
+        "target": null
+      }
+    },
+    "constitution": {
+      "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92": {
+        "artifact": {
+          "media_type": "text/markdown; charset=utf-8",
+          "path": "research/sources/objects/fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+          "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+          "size": 16223
+        },
+        "path": "RESEARCH_CONSTITUTION.md",
+        "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+        "version": "7"
+      }
+    },
+    "literature_operation": {
+      "task3-1": {
+        "operation": "problem.initialize",
+        "runtime": {
+          "constitution": {
+            "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+            "version": "7"
+          },
+          "dirty": false,
+          "executable": "/Users/ryshiro/exactory/plugins/exactory-client-worktrees/abc-a2-forming/bin/exactory-research",
+          "package_digest": "c3c6b0bb0e07a1d4ce88d78153732c69da8e1284c22b859b93eb0b64c3693511",
+          "plugin_version": "0.82.0",
+          "schema_version": 1,
+          "source_commit": "645a791fa6e2231b80ffe638606cf83a4da6f7fa"
+        }
+      },
+      "task3-2": {
+        "operation": "problem.candidate",
+        "runtime": {
+          "constitution": {
+            "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+            "version": "7"
+          },
+          "dirty": false,
+          "executable": "/Users/ryshiro/exactory/plugins/exactory-client-worktrees/abc-a2-forming/bin/exactory-research",
+          "package_digest": "c3c6b0bb0e07a1d4ce88d78153732c69da8e1284c22b859b93eb0b64c3693511",
+          "plugin_version": "0.82.0",
+          "schema_version": 1,
+          "source_commit": "645a791fa6e2231b80ffe638606cf83a4da6f7fa"
+        }
+      },
+      "task3-3": {
+        "operation": "problem.statement",
+        "runtime": {
+          "constitution": {
+            "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+            "version": "7"
+          },
+          "dirty": false,
+          "executable": "/Users/ryshiro/exactory/plugins/exactory-client-worktrees/abc-a2-forming/bin/exactory-research",
+          "package_digest": "c3c6b0bb0e07a1d4ce88d78153732c69da8e1284c22b859b93eb0b64c3693511",
+          "plugin_version": "0.82.0",
+          "schema_version": 1,
+          "source_commit": "645a791fa6e2231b80ffe638606cf83a4da6f7fa"
+        }
+      }
+    },
+    "problem_candidate": {
+      "candidate-1": {
+        "disposition": {
+          "evidence_needed": null,
+          "reason": "Compare it with the other candidates of the slate.",
+          "status": "open"
+        },
+        "id": "candidate-1",
+        "neighbours": [
+          "Does $B(n)\\leq 2n^2$ hold for every $n$?"
+        ],
+        "notes": "",
+        "observation": "The survey checks the bound only for small n and states the general case as open.",
+        "potential": {
+          "priority": 2,
+          "readiness": "pass",
+          "significance": {
+            "B1": 2,
+            "B2": 1
+          }
+        },
+        "previous": null,
+        "recorded_revision": 2,
+        "source": {
+          "evidence": [],
+          "kind": "literature",
+          "reference": "The bound is stated as open in the cited survey."
+        },
+        "statement": "For every $n$, does $B(n)\\leq n^2$ hold?"
+      }
+    },
+    "problem_selection": {
+      "current": {
+        "statement_id": "statement-1"
+      }
+    },
+    "problem_statement": {
+      "statement-1": {
+        "area": "math.CO",
+        "candidate_id": "candidate-1",
+        "formal_statement": null,
+        "id": "statement-1",
+        "neighbours": [],
+        "recorded_revision": 3,
+        "resolution_criteria": "Prove the bound for all $n$ or exhibit a counterexample.",
+        "statement": "For every $n$, does $B(n)\\leq n^2$ hold?",
+        "title": "A finite bound problem"
+      }
+    },
+    "workspace": {
+      "problem": {
+        "area": "math.CO",
+        "authors": [
+          "problem-author"
+        ],
+        "created": "2026-11-09T00:00:00+00:00",
+        "field": "Extremal sequences and finite bounds",
+        "orchestration": "problem_creation",
+        "research": {
+          "profile": "research",
+          "store": ".exactory/research.sqlite3"
+        },
+        "slug": "bounded-sequences",
+        "updated": "2026-11-09T00:00:00+00:00",
+        "version": 1
+      }
+    }
+  },
+  "revision": 3,
+  "status": {
+    "ready": false,
+    "obligations": [
+      {
+        "code": "problem_slate_missing",
+        "explanation": "Compare the current candidates and record the selection decision."
+      },
+      {
+        "code": "problem_attempt_missing",
+        "explanation": "Attempt the exact statement with math-solver, or assess an existing attempt from full readings, and record it.",
+        "statement_id": "statement-1"
+      },
+      {
+        "code": "problem_openness_missing",
+        "explanation": "Obtain an observed openness finding for the selected statement."
+      },
+      {
+        "code": "problem_value_missing",
+        "explanation": "Bind motivation and current-state paragraphs to this statement's evidence.",
+        "statement_id": "statement-1"
+      },
+      {
+        "code": "problem_assessment_missing",
+        "explanation": "Record the rubric self-assessment with an evidence reference for every item.",
+        "statement_id": "statement-1"
+      },
+      {
+        "code": "problem_bar_pending",
+        "explanation": "A major scientific decision requires two distinct independent assessments",
+        "review_ids": []
+      },
+      {
+        "code": "problem_review_pair_required",
+        "explanation": "A major scientific decision requires two distinct independent assessments",
+        "review_ids": []
+      },
+      {
+        "code": "problem_decision_missing",
+        "explanation": "Record a post decision after both observed result reviews."
+      }
+    ],
+    "counts": {
+      "obligations": 8
+    },
+    "digest": "ae86c49b405adc4ef9f91c78e0e5dabadd097b409da4b9227032693e02c61808",
+    "orchestration": "problem_creation",
+    "milestone": "exploration",
+    "problem_evidence_digest": "4e5ec44aa8bbf0223cb97d701d03176da453c111ceb44798f27053fdcb908ca5",
+    "statement_id": "statement-1",
+    "decision_id": null,
+    "revision": 3,
+    "profile": "research",
+    "runtime": {
+      "fixture": "0.82.0"
+    },
+    "problem": {
+      "area": "math.CO",
+      "authors": [
+        "problem-author"
+      ],
+      "created": "2026-11-09T00:00:00+00:00",
+      "field": "Extremal sequences and finite bounds",
+      "orchestration": "problem_creation",
+      "research": {
+        "profile": "research",
+        "store": ".exactory/research.sqlite3"
+      },
+      "slug": "bounded-sequences",
+      "updated": "2026-11-09T00:00:00+00:00",
+      "version": 1
+    },
+    "resources": {},
+    "limits": {
+      "depth": null
+    },
+    "source_deferrals": [],
+    "literature_digest": "6dbc77e9e1ac5c5d613b5417cb37f7a9f2c95989dd1e3603f9f39f921215cf3b",
+    "candidates": {
+      "current": 1,
+      "selected": 0,
+      "deferred": 0,
+      "rejected": 0
+    },
+    "slate_id": null,
+    "next": {
+      "code": "problem_slate_missing",
+      "explanation": "Compare the current candidates and record the selection decision."
+    },
+    "review": {
+      "assignments": {}
+    },
+    "advisories": [
+      {
+        "code": "output_views_stale",
+        "explanation": "The final/ and intermediate/ folders do not show the latest records. This is advisory: the research reads only the records, and no gate depends on these folders.",
+        "action": "exactory-research export --kind outputs",
+        "reason": "not_rendered",
+        "rendered_revision": 0,
+        "revision": 3,
+        "path": null,
+        "error": null
+      }
+    ]
+  },
+  "views": {
+    "final/problem/statements/statement-1.json": {
+      "content": "{\n  \"area\": \"math.CO\",\n  \"candidate_id\": \"candidate-1\",\n  \"formal_statement\": null,\n  \"id\": \"statement-1\",\n  \"neighbours\": [],\n  \"recorded_revision\": 3,\n  \"resolution_criteria\": \"Prove the bound for all $n$ or exhibit a counterexample.\",\n  \"statement\": \"For every $n$, does $B(n)\\\\leq n^2$ hold?\",\n  \"title\": \"A finite bound problem\"\n}\n",
+      "entry": {
+        "kind": "problem_statement",
+        "id": "statement-1",
+        "recorded_revision": 3,
+        "status": "current"
+      }
+    },
+    "intermediate/problem/candidates/candidate-1.json": {
+      "content": "{\n  \"disposition\": {\n    \"evidence_needed\": null,\n    \"reason\": \"Compare it with the other candidates of the slate.\",\n    \"status\": \"open\"\n  },\n  \"id\": \"candidate-1\",\n  \"neighbours\": [\n    \"Does $B(n)\\\\leq 2n^2$ hold for every $n$?\"\n  ],\n  \"notes\": \"\",\n  \"observation\": \"The survey checks the bound only for small n and states the general case as open.\",\n  \"potential\": {\n    \"priority\": 2,\n    \"readiness\": \"pass\",\n    \"significance\": {\n      \"B1\": 2,\n      \"B2\": 1\n    }\n  },\n  \"previous\": null,\n  \"recorded_revision\": 2,\n  \"source\": {\n    \"evidence\": [],\n    \"kind\": \"literature\",\n    \"reference\": \"The bound is stated as open in the cited survey.\"\n  },\n  \"statement\": \"For every $n$, does $B(n)\\\\leq n^2$ hold?\"\n}\n",
+      "entry": {
+        "kind": "problem_candidate",
+        "id": "candidate-1",
+        "recorded_revision": 2
+      }
+    }
+  },
+  "candidate_digest": "ba927b7bb1e7c504f7f11f65d6f471cbbe55f626fd40ae85ff6d5d1615752e85",
+  "evidence_digest": "4e5ec44aa8bbf0223cb97d701d03176da453c111ceb44798f27053fdcb908ca5",
+  "binding": {
+    "claim": {
+      "area": "math.CO",
+      "candidate_id": "candidate-1",
+      "formal_statement": null,
+      "id": "statement-1",
+      "neighbours": [],
+      "recorded_revision": 3,
+      "resolution_criteria": "Prove the bound for all $n$ or exhibit a counterexample.",
+      "statement": "For every $n$, does $B(n)\\leq n^2$ hold?",
+      "title": "A finite bound problem"
+    },
+    "openness": null,
+    "openness_searches": [],
+    "value": null,
+    "assessment": null,
+    "assessment_evidence": [],
+    "attempt": null,
+    "results": [],
+    "readings": [],
+    "computations": [],
+    "formal_checks": [],
+    "citations": []
+  },
+  "evidence": {
+    "claim": {
+      "title": "A finite bound problem",
+      "area": "math.CO",
+      "statement": "For every $n$, does $B(n)\\leq n^2$ hold?",
+      "resolution_criteria": "Prove the bound for all $n$ or exhibit a counterexample.",
+      "formal_statement": null,
+      "id": "statement-1",
+      "digest": "a1f554c3eb57270e1db3ac8c209faa0ce427a8e3294bd550867fe47cf45b1e2b",
+      "statement_id": "statement-1",
+      "statement_digest": "4dabe5e029c3aec879913c524d5e70bf161fb47c11d19343d94e67eb462a8c18",
+      "cite": {
+        "kind": "record",
+        "record_kind": "problem_statement",
+        "id": "statement-1"
+      }
+    },
+    "openness": null,
+    "openness_searches": [],
+    "value": null,
+    "assessment": null,
+    "assessment_evidence": [],
+    "attempt": null,
+    "results": [],
+    "citations": [],
+    "readings": [],
+    "passages": [],
+    "delivery": {
+      "protocol": "inline-passages-v1",
+      "note": "Each passage is the exact text of one inspected span of a reading, with the reading id, the inspection index and the offsets of the span in the source text. An inspection that covers the complete text is listed in its reading with whole_text true and is not repeated as a passage. Full texts, including those that a material objection names by reference, are not attached in this turn; request a held full text with source_requests by its version_id. Cite a delivered record by copying its cite object, which names the record by kind and id. A source link is citable only for a full text that a source request delivered to you. This review is verified only when it calls no tool, so a held text is obtained only through a source request."
+    },
+    "computations": [],
+    "formal_checks": []
+  },
+  "rendered_views": {
+    "final/README.md": "# Final outputs\n\nThis folder holds the current result of each step of this workspace: the recorded reviews that count now,\nthe selected problem records, the current decisions and assessments of the study, the selected and the\ndeposited manuscript bundles with their files, the deposits, the receipts, the verification records and\nthe deliveries of the math solver. history/ has the same layout and holds the results that a later record\nsuperseded or that lost their standing.\n\nThe exactory harness generates these files from its records after each command. Do not edit, add or\nremove files here. The harness rewrites the files that it owns. A file that it did not write stays as\nit is, and index.json lists it under \"unowned\". math/<controller>/ belongs to the math-solver controller,\nand problem/exports/ to export --kind problem.\n\nindex.json lists each file with its type, the kind and the id of its record, the revision that the record\nstates and its status: current, superseded or historical.\n\nEvery other output of the process, for example each reviewer turn and each run, is in ../intermediate/.\nTo render this folder again from the records, run:\n\n    exactory-research export --kind outputs\n",
+    "final/index.json": "{\n  \"files\": [\n    {\n      \"id\": \"statement-1\",\n      \"kind\": \"problem_statement\",\n      \"path\": \"problem/statements/statement-1.json\",\n      \"recorded_revision\": 3,\n      \"status\": \"current\",\n      \"type\": \"view\"\n    }\n  ],\n  \"folder\": \"final\",\n  \"schema\": \"exactory-output-index-v2\",\n  \"unowned\": []\n}\n",
+    "final/problem/statements/statement-1.json": "{\n  \"area\": \"math.CO\",\n  \"candidate_id\": \"candidate-1\",\n  \"formal_statement\": null,\n  \"id\": \"statement-1\",\n  \"neighbours\": [],\n  \"recorded_revision\": 3,\n  \"resolution_criteria\": \"Prove the bound for all $n$ or exhibit a counterexample.\",\n  \"statement\": \"For every $n$, does $B(n)\\\\leq n^2$ hold?\",\n  \"title\": \"A finite bound problem\"\n}\n",
+    "intermediate/README.md": "# Intermediate outputs\n\nThis folder holds every output of this workspace that is not a current or earlier step result: each\nreviewer turn in the order of its series (reading turns, source requests, final turns that no record\nadopted, retries, failed runs, refusals and corrections), the probes of each review route, the problem\ncandidates, the probes and runs of the lab, the bundles that were never selected or deposited, the\nscore history, copies of the citation and derivation check reports, and the remote operations.\n\nThe exactory harness generates these files from its records after each command. Do not edit, add or\nremove files here, except once in legacy/. The harness rewrites the files that it owns. A file that it\ndid not write stays as it is, and index.json lists it under \"unowned\". math/<controller>/ belongs to the\nmath-solver controller, and reviews/packets/ and literature/exports/ to the export commands.\n\nIn reviews/<role>/<series>/, series.json lists every turn and every run with its status, error, usage,\nrefusal, correction, the selected run and the record that adopted the turn. <NN>-<assignment>.<run>.json\nholds the output of one completed run of turn NN.\n\nTo render this folder again from the records, run:\n\n    exactory-research export --kind outputs\n",
+    "intermediate/index.json": "{\n  \"files\": [\n    {\n      \"id\": \"candidate-1\",\n      \"kind\": \"problem_candidate\",\n      \"path\": \"problem/candidates/candidate-1.json\",\n      \"recorded_revision\": 2,\n      \"type\": \"view\"\n    }\n  ],\n  \"folder\": \"intermediate\",\n  \"schema\": \"exactory-output-index-v2\",\n  \"unowned\": []\n}\n",
+    "intermediate/problem/candidates/candidate-1.json": "{\n  \"disposition\": {\n    \"evidence_needed\": null,\n    \"reason\": \"Compare it with the other candidates of the slate.\",\n    \"status\": \"open\"\n  },\n  \"id\": \"candidate-1\",\n  \"neighbours\": [\n    \"Does $B(n)\\\\leq 2n^2$ hold for every $n$?\"\n  ],\n  \"notes\": \"\",\n  \"observation\": \"The survey checks the bound only for small n and states the general case as open.\",\n  \"potential\": {\n    \"priority\": 2,\n    \"readiness\": \"pass\",\n    \"significance\": {\n      \"B1\": 2,\n      \"B2\": 1\n    }\n  },\n  \"previous\": null,\n  \"recorded_revision\": 2,\n  \"source\": {\n    \"evidence\": [],\n    \"kind\": \"literature\",\n    \"reference\": \"The bound is stated as open in the cited survey.\"\n  },\n  \"statement\": \"For every $n$, does $B(n)\\\\leq n^2$ hold?\"\n}\n"
+  },
+  "status_summary": {
+    "schema": "research-status-summary-v1",
+    "revision": 3,
+    "ready": false,
+    "preparation_ready": null,
+    "advisory_only": true,
+    "detail_available": true,
+    "next_hint": {
+      "code": "problem_slate_missing",
+      "version_id": null,
+      "work_id": null,
+      "collection_id": null,
+      "unit_id": null,
+      "explanation": "Compare the current candidates and record the selection decision.",
+      "truncated_fields": [],
+      "details_required": true
+    },
+    "details": "exactory-research obligations --code CODE [--limit N] [--cursor CURSOR]",
+    "orchestration": "problem_creation",
+    "milestone": "exploration",
+    "post_obligations": {
+      "total": 8,
+      "shown_obligations": 6,
+      "omitted_obligations": 2,
+      "omitted_codes": 2,
+      "by_code": [
+        {
+          "code": "problem_assessment_missing",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_attempt_missing",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_bar_pending",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_decision_missing",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_openness_missing",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_review_pair_required",
+          "count": 1,
+          "code_truncated": false
+        }
+      ]
+    },
+    "advisories": [
+      {
+        "code": "output_views_stale",
+        "reason": "not_rendered"
+      }
+    ],
+    "runtime": {
+      "fixture": "0.82.0"
+    },
+    "profile": "research",
+    "stage": null,
+    "status": null,
+    "waiting": null,
+    "display_strings_may_be_truncated": true,
+    "obligations": {
+      "total": 8,
+      "shown_obligations": 6,
+      "omitted_obligations": 2,
+      "omitted_codes": 2,
+      "by_code": [
+        {
+          "code": "problem_assessment_missing",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_attempt_missing",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_bar_pending",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_decision_missing",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_openness_missing",
+          "count": 1,
+          "code_truncated": false
+        },
+        {
+          "code": "problem_review_pair_required",
+          "count": 1,
+          "code_truncated": false
+        }
+      ]
+    },
+    "preparation_obligations": {
+      "total": 0,
+      "shown_obligations": 0,
+      "omitted_obligations": 0,
+      "omitted_codes": 0,
+      "by_code": []
+    },
+    "counts": {
+      "obligations": 8
+    },
+    "resources": {},
+    "limits": {
+      "depth": null
+    },
+    "round": null,
+    "evaluation": null,
+    "bundle_drift": null,
+    "grand_challenge": null,
+    "candidates": {
+      "current": 1,
+      "selected": 0,
+      "deferred": 0,
+      "rejected": 0
+    },
+    "slate_id": null,
+    "source_deferrals": {},
+    "deferred_obligations": {
+      "total": 0,
+      "shown_obligations": 0,
+      "omitted_obligations": 0,
+      "omitted_codes": 0,
+      "by_code": []
+    }
+  }
+}
