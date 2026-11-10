@@ -653,6 +653,9 @@ def describe_binding(records, artifacts):
         binding["account_records"] = describe_account_records(records, value["accounts"], binding["derived_accounts"])
     if pending:
         binding["obligations"] = pending
+    if records.get('problem_forming_import'):
+        from .problem_forming_import import describe_imports
+        binding['forming_imports'] = describe_imports(records, artifacts)
     return binding
 
 
@@ -777,6 +780,11 @@ def describe_evidence(records, artifacts):
         entry["cite"] = {"kind": "record", "record_kind": "reading", "id": entry["id"]}
     for row in delivered["openness_searches"]:
         row["cite"] = {"kind": "record", "record_kind": "literature_search", "id": row["search"]["id"]}
+    if records.get('problem_forming_import'):
+        from .problem_forming_import import describe_imports
+        imports = describe_imports(records, artifacts)
+        delivered['forming_imports'] = [{key: value for key, value in row.items() if key != 'records'} for row in imports]
+        delivered.setdefault('account_records', []).extend(entry for row in imports for entry in row['records'])
     return delivered
 
 

@@ -727,7 +727,9 @@ Every workspace of math-solver, ai-science and math-conjecturer has two output
 folders in its workspace root, which the harness generates from its records
 after each command that records something. `final/` holds the step results that
 the harness currently selects: the recorded reviews that count now in
-`reviews/<role>/`, the selected problem records in `problem/`, the current
+`reviews/<role>/`, the selected problem records in `problem/`, among them the
+further areas in `problem/areas/` and the current report of the exploration in
+`problem/reports/`, the current
 decisions, assessments, checkpoints and receipts of a study in `study/`, the
 selected and deposited manuscript bundles with their files in
 `study/manuscripts/` and the deposits in `study/deposits/`, the verification
@@ -806,7 +808,7 @@ operations of the Mathematics section.
 
 | Milestone | Condition computed from records |
 | --- | --- |
-| `exploration` | `problem-init` records the area, field and immutable authors, and the kind of start when the payload gives it, and adopts the constitution. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
+| `exploration` | `problem-init` records the area, field and immutable authors, and the kind of start when the payload gives it, and adopts the constitution. `problem-area` records each further area that the statements concern. No current slate exists: none is recorded, or the latest slate no longer covers exactly the current candidates. |
 | `slate` | `problem-slate` records the selection over every current candidate, bound to two observed blind bars that state the calibration of levels 2 and 3 (a bar on the version 1 template is refreshed first); no statement exists yet, or the current slate selects no candidate. |
 | `formulation` | The current slate selects a candidate and `problem-statement` has selected a statement: the exact statement, resolution criteria, neighbours, optional formal statement and the candidate it formulates. |
 | `attempt` | `problem-attempt` records a current, proportionate unresolved solver or critically assessed literature attempt; `assess_attempt` returns no obligations. |
@@ -816,7 +818,7 @@ operations of the Mathematics section.
 
 An exploration starts from a field question, from a phenomenon that appears in
 several places or from a thought experiment, and `problem-init` records which in
-its optional `start` entry. When the record forms a statement itself, the two
+its optional `start` entry. When the record forms a statement itself, two
 commands of the Ideate tool in a problem record keep the history: `forming`
 records one forming call with its question, its move, every form that it
 produced and the amounts that the performer reports, and `form-outcome` records
@@ -825,6 +827,25 @@ the form as a claim and its disposition in the exploration kept apart. A form is
 a tentative statement and no claim: these records pass no gate and grant no
 openness, significance, proof credit or test credit
 ([Forming calls and outcomes](research-tools.md#forming-calls-and-outcomes)).
+A third command of the tool, `forming-import`, gives a record the forming
+history of another problem record whose candidate it takes up (below).
+
+A problem record has one subject class, and its statements, its bars and its
+post keep that class. When the statements concern another area, the record
+names it as a further area with `problem-area`: a `math.*` subject class and
+the reason. The bar and result packets then carry the areas, and their prompts
+carry the areas paragraph (`exactory-problem-areas-v1`). Each bar states the
+standard of each area separately. The result reviewers judge each relation,
+each earlier statement and each alternative by the standard of the area that
+it belongs to, and they give every grade by the standard of the record's
+subject class, which the thresholds read. An area is added while no slate
+review and no result review has been assigned
+(`problem_area_new_record_required` afterwards). A bar that was given before
+an area was recorded is continued by its reviewer in the same session and slot
+(`problem_bar_calibration_required` until then), and the next slate cites the
+continued bars. After a reviewer has received a candidate, the statement is
+taken up in a new record that names the areas
+([Further areas](research-cli.md#further-areas)).
 
 The exploration records each candidate question with `problem-candidate`: its
 tentative statement, its source (the harness's own research records, the
@@ -845,9 +866,10 @@ legitimate no-post outcome: `next` reports `problem_no_post` until a new slate
 selects a candidate.
 
 The slate cites bars that state the calibration of levels 2 and 3. A bar recorded
-on the version 1 template returns `problem_bar_calibration_required`; assigning
+on the version 1 template returns `problem_bar_calibration_required`, and so
+does a bar that was given before a further area was recorded; assigning
 the bar again to the same reviewer refreshes it on the current bar template in
-the same session and slot. A focused slate review by
+the same session and slot, with every area. A focused slate review by
 a bar reviewer is required after a carry that imported at least one objection
 (`problem_slate_review_unverified` otherwise), and when the slate selects a
 candidate formed in the record, which is a candidate of the source kind
@@ -1074,7 +1096,9 @@ test. When the accounts hold a replacement part, the prompt also carries the
 replacement paragraph (`exactory-problem-replacement-v1`), with the three
 necessary conditions of a statement posed in place of a refuted one. A slate
 review of a candidate formed in the record carries the slate paragraph
-(`exactory-problem-slate-forming-v1`). The response shapes are unchanged, and
+(`exactory-problem-slate-forming-v1`). In a record that names a further area,
+the bar and result prompts carry the areas paragraph
+(`exactory-problem-areas-v1`). The response shapes are unchanged, and
 no rubric item, level or threshold changes. A below-threshold result grade blocks posting
 until repaired or resolved by a ready focused `not_upheld` adjudication of
 `rubric:<review_id>:<item>` for the same subject and current evidence digest,
@@ -1128,6 +1152,43 @@ date, and what it bears on. The record needs no value record and changes no
 reviewed evidence. The posted statement stays terminal, and `status` lists the
 fact under `after_post`. The harness does not review the fact. The agent
 reports it to the user, who decides what to do in the Mathematics section.
+
+A candidate can be taken up in another problem record: a record of another
+subject class, a sibling record, or a new record that names further areas.
+`problem-objections-carry` brings the bar and slate objections of the source
+into the destination. `forming-import` brings the forming history: it keeps a
+verified snapshot of the source in the destination and lists the forming
+calls, outcomes, probes, plans, runs and assessments of the source, each with
+its origin, its original id, its date and its standing. A candidate, an
+outcome and an entry of the accounts of the destination cite an imported
+record by its origin and its id, the reviewers receive it, and the derived
+parts show the forms, the runs and the counts of the source apart from the
+destination's own. The destination stays linked to the source: `gate post`
+lists `problem_forming_refresh_required` when the forming history of the
+source changed, until a new import is recorded. In the source,
+`problem-candidate-transfer` records the candidate, the destination and the
+reason ([Imported forming history](research-cli.md#imported-forming-history)).
+
+An exploration has ended when its current slate selects nothing, or every
+candidate that it selects is posted, withdrawn or taken up in another record.
+`problem-report` records how it ended. The author gives the finding that would
+make the exploration worth reopening, and the harness computes the rest: the
+start, every form with its standing, its disposition and the evidence of its
+outcome, the imports, the candidates with their endings, the statements with
+their publication and the classification of each post kept apart, what
+changed after each post, the proved consequences, the counts, what was spent,
+and one of six outcomes. A post through the gate is classified from the
+accounts of the value record that its decision covered: a gain was
+established, or ordinary. A post outside the gate, and a post whose value
+record holds no accounts, is kind unassessed. The report is due for a record
+that started from a phenomenon or a thought experiment, and for every record
+that holds a forming call. `status` and `next` then show the advisory
+`problem_report_due`, and they show `problem_report_stale` when the records
+that a report read changed after its cutoff. Neither changes a gate, an
+obligation or the next action, and the command refuses a due report while a
+form is open (`problem_report_forms_open`). The report passes no gate and
+receives no review
+([The report of an exploration](research-cli.md#the-report-of-an-exploration)).
 
 ## Initiate and resume
 

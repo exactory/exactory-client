@@ -26,7 +26,7 @@ with actual evidence before recording a call.
 | Search | Question or purpose, queries, providers, hits per query and number of hit abstracts to read; request, byte and reading allowance. State how many distinct works to survey and how many receive abstract-only or full reading. | `acquire`, `import-response`, `search`, `read-batch`, `loop-close`; `population-query` supplies local candidates. | `literature_search` binds captures, scope or provisional question, dates, found works, dispositions, judgment, gaps and effective depth. Readings retain inspections; `loop_closure` records covered purposes, gaps, tried queries and its effective limit. Coverage describes captured results per query as below. |
 | Read | Exact works and versions, abstract or full-text depth, required units and supplements; acquisition and reading allowance. State the number of abstract-only and full readings. | `acquire`, `fulltext`, `fulltext-start`, `fulltext-resume`, `fulltext-status`, `visual`, `bundle`, `read`, `read-batch`, `require-fulltext`, `availability`, `defer-source`, `resume-source`. | Original bytes and extraction provenance, `source_bundle` unit and bibliography inventories, `reading` inspections and notes, `fulltext_requirement` dependencies, availability and source-deferral history. A capture establishes acquisition; a reading establishes only its inspected coverage. An unavailable unit remains a gap. |
 | Expand | Exact roots, references or citing works, number of levels and reading depth at each level; request, byte and reading allowance. | `roots`, `expand`, `acquire`, `import-response`, `search`, and the reading commands. | `literature_scope` selects exact roots and collections. Captured bibliography occurrences and provider responses preserve the source network and identity conflicts. `expand` acquires an unresolved identifier. The caller repeats expansion for the stated levels and records citing-work captures through search. Direction and levels are caller instructions, not additional `expand` flags. |
-| Ideate | Question, candidate count, credible alternatives, evidence, distinguishing tests, failure signals and resource demand. In a problem record: the question of the call with its places, the move, the inputs, and the amounts of forms, nearest alternatives, expected relations and compared pairs. | In a study: `intent`, `strategy`, `research-lead`, `work-item`. In a problem record: `forming`, `form-outcome`. | `research_intent`, `strategy_dossier`, `research_lead` and `research_work_item` retain proposed questions, comparisons, provenance, dispositions, actual execution status and dependencies. Candidate count is the caller's requested depth. Committing a direction uses the orchestration's decision gate. `forming_call` retains the question, the move, the inputs, the amounts as the performer reports them, every form that the call produced, the probes that it used, the stopping reason, the performer and the measured usage. `form_outcome` retains how one form, one expected relation or one planned check ended, with its evidence. See [Forming calls and outcomes](#forming-calls-and-outcomes). |
+| Ideate | Question, candidate count, credible alternatives, evidence, distinguishing tests, failure signals and resource demand. In a problem record: the question of the call with its places, the move, the inputs, and the amounts of forms, nearest alternatives, expected relations and compared pairs. For an import: the source record, its revision and the candidates that are taken up. | In a study: `intent`, `strategy`, `research-lead`, `work-item`. In a problem record: `forming`, `form-outcome`, `forming-import`. | `research_intent`, `strategy_dossier`, `research_lead` and `research_work_item` retain proposed questions, comparisons, provenance, dispositions, actual execution status and dependencies. Candidate count is the caller's requested depth. Committing a direction uses the orchestration's decision gate. `forming_call` retains the question, the move, the inputs, the amounts as the performer reports them, every form that the call produced, the probes that it used, the stopping reason, the performer and the measured usage. `form_outcome` retains how one form, one expected relation or one planned check ended, with its evidence. `problem_forming_import` retains a verified snapshot of the forming history of another problem record, and lists each record of it with its origin, its original id, its date and its standing. See [Forming calls and outcomes](#forming-calls-and-outcomes). |
 | Probe | Exact question, Python program, pinned inputs, timeout and experiment allowance; for a run of a program that a plan will admit, the future cycle id, the program's stable path and the outputs read. | `exactory-lab probe`, `probe-intent`, `probe`. | `probe_intent` pins the program and inputs and reserves time; `probe_launch` retains the frozen local launch; the `probe` outcome retains outputs, streams, exit status, elapsed time and observation with exploratory provenance. A disclosed run adds `program_run` to the intent and the outcome; without a read output its files and streams are sealed unread. See the two-phase contract below. |
 | Run | Current admitted prospective plan, pinned program and inputs, exact runtime, outputs, validation and resource reservation. In a problem record, optionally the test declaration of the plan: the alternative with the outcome that it excludes, the account of prior knowledge and the search for the outcome in print. | `cycle`, `admit`, `bind-run`, `exactory-lab run`, `reconcile-run`, `assess`, `checkpoint`. | `cycle_plan`, `execution_admission`, binding and execution observations, `cycle_assessment` and checkpoints preserve authority, original outcomes, sealed outputs, actual usage, validity, scope, failures and next questions. Acceptance of a result uses the orchestration's gate. A plan with a test declaration keeps the declaration, frozen before the execution. See [Run](#run). |
 | Synthesis notes | Exact supporting sources, field and applicability, claim scope, rationale, innovation cases and context; reading and analysis allowance. Innovation calls state candidate and case counts. | `standards`, `rationale`, `innovation`, `context`. | Selected immutable `synthesis` sections bind their own evidence and assessments. Innovation retains the effective candidate and case amounts. Notes inform claims; the direction gate checks the standards it needs. |
@@ -175,11 +175,13 @@ it ended. A forming call (`forming`) is one piece of forming work. It states
 its own question: a phenomenon with the places where it appears, a thought
 experiment, or another start. That question takes the place that the intent has
 in a study. An outcome (`form-outcome`) records how one form, or one expected
-relation or planned check of a form, ended. In this release both commands run
+relation or planned check of a form, ended. A third command, `forming-import`,
+gives a problem record the forming history of another problem record whose
+candidate it takes up (below). In this release the three commands run
 in a problem record. In a study, a verification or a math-solver root they are
 refused with `orchestration_conflict`. `intent` stays refused in a problem
 record (`orchestration_conflict`), and `strategy`, `research-lead` and
-`work-item` need a recorded intent (`research_intent_missing`), so the two
+`work-item` need a recorded intent (`research_intent_missing`), so the three
 forming commands are the Ideate commands of a problem record.
 
 A form is a tentative statement, kept with its text as it was stated. It passes
@@ -233,16 +235,38 @@ on a probe that exhibits the counterexample, and the outcome then records that
 the refutation rests on an exploratory computation. A later outcome of the same
 item supersedes the earlier one, which stays in the record.
 
+A forming import (`forming-import`) serves a record that takes up a candidate
+of another problem record. The call names the source workspace, its current
+revision and the candidates that are taken up. It keeps a verified snapshot of
+the source in the destination, as the objection carry keeps the proof of its
+source, and it records one manifest, `problem_forming_import`. The manifest
+lists the forming calls and the outcomes of the source, its probes, its plans,
+runs and assessments, the searches that its test declarations name, and the
+readings and solver snapshots that its outcomes cite. Each listed record keeps
+its origin, its original id, its original date and its standing: a probe stays
+exploratory, and an accepted result supports its conclusion. No record of the
+source becomes a record of the destination, and the import grants no credit. A
+candidate, an outcome and an entry of the accounts of the destination cite an
+imported record by its origin and its id, the reviewers receive it from the
+snapshot, and the harness counts the forms, the runs and the probes of the
+source apart from the destination's own. The destination stays linked to the
+source: the post gate reports a source whose forming history changed, and a
+new import refreshes the link.
+
 ```sh
 exactory-research forming --file forming.json --expected-revision REVISION --request-id forming-001
 exactory-research form-outcome --file form-outcome.json --expected-revision REVISION --request-id outcome-001
+exactory-research forming-import --file forming-import.json --expected-revision REVISION --request-id forming-import-001
 ```
 
 `status` reports `forming: {calls, forms, by_standing, by_disposition,
 without_outcome, outcomes}` once the record holds a forming call, and the
 output folders show the calls in `intermediate/problem/forming/` and the
-outcomes in `intermediate/problem/form-outcomes/`. The CLI reference gives the
-[payloads and refusals](research-cli.md#forming-records), and the
+outcomes in `intermediate/problem/form-outcomes/`. An import has no view of
+its own; its receipt returns the manifest. The CLI reference gives the
+[payloads and refusals](research-cli.md#forming-records) of the first two
+commands and those of the [import](research-cli.md#imported-forming-history),
+and the
 [math-conjecturer skill](../skills/math-conjecturer/SKILL.md#exploration) says
 when to use the commands.
 
@@ -281,7 +305,8 @@ The declaration is frozen with the plan, before the execution. It holds:
   that would contradict the statement stands among the failure signals that
   every plan holds.
 - `prior_knowledge`: the account of what the performer knew about the outcome
-  when the plan was frozen, a list of `{source: {kind, description}, known}`.
+  when the plan was frozen, a list of `{source: {kind, description}, known}`
+  with at least one entry.
   The source kind is an open value. The described kinds are
   `record_computations` (the earlier probes and runs of the record),
   `inherited_computations` (the computations of the records that this record
@@ -314,7 +339,9 @@ as a check with the standing `test`, and these conditions hold
 - The check gives, for each source of the declaration's account, the finding
   that the outcome was not known.
 - No earlier run and no earlier probe of the record has the question of the
-  plan, character for character.
+  plan, character for character. The reviewers also receive, beside the test,
+  the probes and the runs of each source that the record imported before the
+  plan ([Forming calls and outcomes](#forming-calls-and-outcomes)).
 - An assessment covers the run. For a passed test it gives `not_observed` for
   every failure signal of the plan.
 - The candidate of the statement cites a form that was recorded before the

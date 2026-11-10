@@ -168,7 +168,7 @@ def check_snapshot(clone):
 def check_integrity(store):
     """Verify artifacts of every historical event, including superseded records."""
     records = store.snapshot()['records']
-    if not records.get('problem_objection_carry'):
+    if not records.get('problem_objection_carry') and not records.get('problem_forming_import'):
         records = None
     artifacts = store.build_artifact_store()
     artifact_prefixes = (_OBJECT_DIRECTORY + '/', _SEALED_DIRECTORY + '/')
@@ -196,6 +196,9 @@ def check_integrity(store):
         with store._connection() as connection:
             origin = source_identity(connection, records)
         result['problem_objection_carries'] = verify_carries(records, artifacts, expected_origin=origin)
+        if records.get('problem_forming_import'):
+            from .problem_forming_import import verify_imports
+            result['problem_forming_imports'] = verify_imports(records, artifacts, expected_origin=origin)
     return result
 
 

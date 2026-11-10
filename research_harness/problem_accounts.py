@@ -74,13 +74,19 @@ def find_result_revision(records, reference):
     native = records["native_attempt"][identifier]
     acceptance = next(row for row in native["acceptances"] if row["id"] == reference["acceptance_id"])
     claim = next(row["claim"] for row in native["checkpoints"] if row["id"] == acceptance["checkpoint_id"])
-    return min(row["recorded_revision"] for row in records["native_attempt"].values()
+    revisions = [row.get("recorded_revision") for row in records["native_attempt"].values()
                if (row["attack_root"], row["objective_id"]) == (native["attack_root"], native["objective_id"])
                and any(digest(item) == digest(acceptance) for item in row["acceptances"])
-               and any(item["id"] == acceptance["checkpoint_id"] and item["claim"] == claim for item in row["checkpoints"]))
+               and any(item["id"] == acceptance["checkpoint_id"] and item["claim"] == claim for item in row["checkpoints"])]
+    return None if None in revisions else min(revisions)
 
 
 def find_evidence_availability(records, reference):
+    if reference['kind'] == 'record' and 'origin' in reference:
+        from .problem_forming_import import find_imported_availability
+        availability = find_imported_availability(records, reference)
+        dates = [row['date'] for row in availability if row['date'] is not None]
+        return max(dates) if dates and len(dates) == len(availability) else None
     if reference["kind"] == "reading":
         year = records["work"][reference["version_id"]].get("year")
         return None if year is None else str(year)
@@ -133,6 +139,10 @@ def validate_account_evidence(records, artifacts, accounts, entries, revision):
         exploratory = entry["id"] in checks and entry.get("standing") != "test"
         for reference in strategy.items(entry.get("evidence", []), "The evidence of an account entry", code="invalid_input"):
             fields(reference, ("kind",), None)
+            if reference['kind'] == 'record' and 'origin' in reference:
+                from .problem_forming_import import validate_imported_evidence
+                validate_imported_evidence(records, artifacts, reference, exploratory=exploratory)
+                continue
             strategy.choice(reference["kind"], ("reading", "computation", "result", "probe") if exploratory else
                             ("reading", "computation", "result"), "The kind of an evidence reference of an account entry", code)
             if reference["kind"] == "reading":
@@ -414,6 +424,8 @@ def collect_candidate_forms(records, statement):
     candidate = records.get("problem_candidate", {}).get(statement.get("candidate_id"))
     identifiers = set()
     for reference in (candidate or {}).get("source", {}).get("evidence", []):
+        if 'origin' in reference:
+            continue
         if reference.get("kind") != "record":
             continue
         if reference.get("record_kind") == "forming_call":
@@ -435,14 +447,31 @@ def precedes_evidence_date(call, date):
     return timestamp(call["recorded_at"]) < timestamp(date)
 
 
-def require_prior_form(records, statement, before_revision, before_date=None):
+def require_prior_form(records, statement, before_revision, before_date=None, *, evidence_origin=None):
     forms = collect_candidate_forms(records, statement)
-    if (before_revision is not None or before_date is not None) and any(
+    if evidence_origin is None and (before_revision is not None or before_date is not None) and any(
             (before_revision is None or call["recorded_revision"] < before_revision)
             and (before_date is None or precedes_evidence_date(call, before_date))
             and any(form["id"] in forms for form in call["forms"])
             for call in records.get("forming_call", {}).values()):
         return
+    from .problem_forming_import import collect_inherited
+    candidate = records.get('problem_candidate', {}).get(statement.get('candidate_id'), {})
+    for reference in candidate.get('source', {}).get('evidence', []):
+        imported = collect_inherited(records).get(reference.get('origin'))
+        if imported is None:
+            continue
+        if evidence_origin is not None and reference['origin'] != evidence_origin:
+            continue
+        for member in imported['members']:
+            if (member['record_kind'], member['id'], member['digest']) != (reference.get('record_kind'), reference.get('id'), reference.get('digest')):
+                continue
+            call = next((row for row in imported['members'] if row['record_kind'] == 'forming_call' and row['id'] == member['forming_call_id']), None)
+            revision = imported['recorded_revision'] if evidence_origin is None else (call or {}).get('revision')
+            if (member['form_ids'] and call is not None and (before_revision is not None or before_date is not None)
+                    and (before_revision is None or revision is not None and revision < before_revision)
+                    and (before_date is None or call['date'] != 'unknown' and precedes_evidence_date(dict(recorded_at=call['date']), before_date))):
+                return
     raise ResearchError("problem_accounts_history_missing",
                         "A gain claim and a passed test need a history. The candidate of the "
                         "statement must cite, in source.evidence, a forming call or a form outcome whose form was "
@@ -670,8 +699,17 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
                             "an accepted result. A probe establishes no gain. Without such evidence, record gain as null")
     if gain["new_object_justification"] is not None:
         text(gain["new_object_justification"], "The new_object_justification of the gain")
-    revisions, dates = [], []
+    revisions, dates, native_evidence = [], [], False
     for reference in establishing:
+        if reference['kind'] == 'record' and 'origin' in reference:
+            from .problem_forming_import import find_imported_availability
+            availability = find_imported_availability(records, reference)
+            if not availability:
+                require_prior_form(records, statement, None)
+            for row in availability:
+                require_prior_form(records, statement, row['revision'], row['date'], evidence_origin=row['origin'])
+            continue
+        native_evidence = True
         revision = None
         if reference["kind"] == "result":
             revision = find_result_revision(records, reference)
@@ -689,7 +727,8 @@ def validate_tier_two(records, value, accounts, entries, alternatives):
             revisions.append(revision)
         if date is not None:
             dates.append(date)
-    require_prior_form(records, statement, min(revisions) if revisions else None, min(dates) if dates else None)
+    if native_evidence:
+        require_prior_form(records, statement, min(revisions) if revisions else None, min(dates) if dates else None)
 
 
 def validate_replacement(records, artifacts, accounts, entries):
@@ -767,6 +806,8 @@ def describe_account_records(records, accounts, derived=None):
             for identifier in entry.get("search_ids", []):
                 held[("literature_search", identifier)] = records["literature_search"][identifier]
     for reference in collect_account_evidence(accounts):
+        if 'origin' in reference:
+            continue
         if reference["kind"] == "computation":
             execution = records["execution"][reference["execution_id"]]
             identifier = execution["payload"]["cycle_id"]
@@ -779,6 +820,8 @@ def describe_account_records(records, accounts, derived=None):
     for entry in accounts["refuted_conjectures"]:
         for reference in entry["sources"]:
             if reference.get("kind") == "record":
+                if 'origin' in reference:
+                    continue
                 held[(reference["record_kind"], reference["id"])] = records[reference["record_kind"]][reference["id"]]
     form_ids = {entry["form_id"] for part in ("alternatives", "replacement") for entry in accounts.get(part, [])
                 if entry["form_id"] is not None}
@@ -812,6 +855,8 @@ def describe_account_records(records, accounts, derived=None):
                 identifier = declaration["search_id"]
                 held[("literature_search", identifier)] = records["literature_search"][identifier]
             for earlier in row.get("earlier_computations", []):
+                if 'origin' in earlier:
+                    continue
                 kind, identifier = earlier["kind"], earlier["id"]
                 held[(kind, identifier)] = records[kind][identifier]
                 if kind == "execution":

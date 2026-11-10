@@ -70,7 +70,7 @@ def list_citations(source):
             continue
         if value.get('kind') == 'record' and {'record_kind', 'id'} <= value.keys():
             citations.append({key: copy.deepcopy(value[key]) for key in
-                              ('kind', 'record_kind', 'id', 'digest') if key in value})
+                              ('kind', 'record_kind', 'id', 'digest', 'origin') if key in value})
             continue
         if value.get('kind') == 'source' and 'link' in value:
             citations.append(copy.deepcopy(value))

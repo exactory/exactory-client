@@ -511,6 +511,12 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
     # evidence is already reported with the more useful minimum obligations.
     reviews = assess_problem_reviews(records, artifacts, check_evidence=not minimum)
     pending = list(minimum)
+    if check_source_freshness and records.get('problem_forming_import'):
+        from .problem_forming_import import require_fresh_sources as require_fresh_forming
+        try:
+            require_fresh_forming(records, artifacts, guards=source_guards)
+        except ResearchError as error:
+            pending.append(obligation(error.code, error.message, **(error.details or {})))
     if check_source_freshness and records.get('problem_objection_carry'):
         from .problem_objection_carry import require_fresh_sources
         try:
@@ -602,6 +608,9 @@ def prepare_decision(records, artifacts, value, revision, *, source_guards=None)
     strings(value["bar_review_ids"], "Problem bar review IDs")
     evidence_digest = None
     if value["action"] == "post":
+        if records.get('problem_forming_import'):
+            from .problem_forming_import import require_fresh_sources as require_fresh_forming
+            require_fresh_forming(records, artifacts, guards=source_guards)
         if records.get('problem_objection_carry'):
             from .problem_objection_carry import require_fresh_sources
             require_fresh_sources(records, artifacts, guards=source_guards)
@@ -619,6 +628,12 @@ def prepare_decision(records, artifacts, value, revision, *, source_guards=None)
             raise ResearchError(pending[0]["code"], pending[0]["explanation"], {"obligations": pending})
         evidence_digest = compute_problem_evidence_digest(records, artifacts)
     record = dict(value, problem_evidence_digest=evidence_digest, recorded_revision=revision)
+    if value["action"] == "withdraw":
+        statement = find_current_statement(records)
+        slate = find_current_slate(records)
+        record["statement_id"] = None if statement is None else statement["id"]
+        record["candidate_ids"] = ([statement["candidate_id"]] if statement is not None and statement.get("candidate_id")
+                                   else slate["selected"] if statement is None and slate is not None else [])
     return [immutable_record(records, "problem_decision", value["id"], record)], record
 
 

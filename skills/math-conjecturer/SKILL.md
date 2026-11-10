@@ -26,7 +26,12 @@ statement itself, instead of finding it in a source, the Ideate tool records how
 statement with its alternatives and its planned checks, and how each ended ("Exploration"). The
 value record of every problem holds the accounts of its statement: the conjectured answer with
 the evidence for or against it, the nearest alternatives with what the statement asserts beyond
-each, and the relations of the statement, each fact entered once ("Value and the rubric").
+each, and the relations of the statement, each fact entered once ("Value and the rubric"). A
+statement has one subject class, the class of its record, and the record names each further
+area that its statements concern, so that the reviewers state and apply the standard of each
+area ("Further areas"). An exploration that formed statements, or that started from a
+phenomenon or a thought experiment, ends with a report of every form and of how each ended
+("The end of an exploration").
 
 Work like a researcher, not like a form filler. A candidate question earns its place by what the
 field would gain from an answer, shown with sources read in full, computations whose scope is
@@ -106,7 +111,8 @@ records something. `final/` holds the current result of each step: the recorded
 reviews that count now in `final/reviews/<role>/` (`bar`, `slate`, `result`,
 `adjudicator`); the selected statement and the latest record of each other kind
 in `final/problem/` (`statements/`, `slates/`, `attempts/`, `openness/`,
-`values/`, `assessments/`, `formal-checks/`, `decisions/`, `posts/`); the problem
+`values/`, `assessments/`, `formal-checks/`, `decisions/`, `posts/`, `reports/`,
+and every further area in `areas/`); the problem
 export in `final/problem/exports/`; the delivered solver attempts and closures in
 `final/math/deliveries/`; and the results that the attack's controller relies on
 in `final/math/attack/`. `final/history/` has the same layout and holds the
@@ -163,6 +169,9 @@ posted.
    sets a ceiling on their number, record it with `exactory-research review-budget` and
    `{max_calls, reason}`, and a run refused with `review_budget_exhausted` waits for a larger
    allowance from the user.
+4. When the statements of the exploration concern an area beside the record's own subject
+   class, name it as a further area with `exactory-research problem-area`, before the bars are
+   assigned where you can foresee it ("Further areas", below).
 
 One principle of problem selection is absolute, and no rubric grade, review or other
 consideration outweighs it. When a counterexample or another proof refutes a conjecture, the
@@ -266,12 +275,15 @@ tool call:
   that the outcome of a form or an entry of the accounts cites ("The attempt", "Objectives
   beside the attempt").
 
-The Ideate tool has two commands in a problem record, `exactory-research forming` and
-`exactory-research form-outcome`. Use them whenever the record forms a statement itself instead
+The Ideate tool has three commands in a problem record. `exactory-research forming` and
+`exactory-research form-outcome` record the forming work of this record. `exactory-research
+forming-import` brings the forming history of another record whose candidate this record takes
+up ("The forming history of a candidate taken up in another record", below). Use the first two
+whenever the record forms a statement itself instead
 of finding it in a source: it carries a theorem to another setting, states an expectation as an
 exact proposition, makes a question exact, isolates a hypothesis from failed proofs, or corrects
 a statement after a check. Their records show how a statement was reached. They grant no
-openness, no significance, no proof credit and no test credit. Both commands check their own
+openness, no significance, no proof credit and no test credit. The two commands check their own
 inputs only, so they are available from the opening of the record to its end.
 [Forming records](../../docs/research-cli.md#forming-records) in the CLI reference gives both
 payloads and every refusal.
@@ -323,14 +335,21 @@ before the exploration ends; `without_outcome` counts the forms that have none.
 
 When the evidence does not support any candidate, end the exploration without a post: record a
 slate with an empty selection and a nonempty `reason`, and keep the negative findings in the
-record. A clean no is a result of the exploration, not a failure of it.
+record. A clean no is a result of the exploration, not a failure of it. "The end of an
+exploration", below, says when an exploration has ended and how its report records the end.
 
 One record holds the exploration. A bar or slate objection binds the candidates of its own record,
 and it reaches another record only through `exactory-research problem-objections-carry` ("Carry a
-reviewed candidate to another record", below):
+reviewed candidate to another record", below). The forming records of a candidate reach another
+record only through `exactory-research forming-import` ("The forming history of a candidate
+taken up in another record", below):
 
-- A connection to another area does not by itself call for another record; the primary subject
-  class of the statement decides.
+- The primary subject class of the statement decides its record. A statement whose relations,
+  earlier statements or alternatives lie in another area stays in the record of its primary
+  class, and that record names the other area as a further area ("Further areas", below). A
+  connection to another area therefore calls for no other record. When the weight of the
+  statement lies in the other area, the statement belongs in a record of that class, under the
+  next two rules.
 - When the initial searches and source readings show that the exploration belongs to another
   class, open a new record in that class, under three conditions. The original record holds no
   carry. No bar or slate review has been requested or assigned in it. No review work is
@@ -339,16 +358,22 @@ reviewed candidate to another record", below):
   counterexample, a settling source, a failed argument, an unresolved source gap. Name the
   successor's workspace in your notes of the original record. In the successor, record again
   every search and source reading that its evidence needs, the adverse ones included. When the
-  original record holds a carry, use the carry below instead, also before it requests its own
-  reviews.
+  original record holds forming records, bring them to the successor with `forming-import`.
+  When the original record holds a carry, use the carry below instead, also before it requests
+  its own reviews.
 - Once a bar or slate review has been requested or assigned, keep every candidate of the
   exploration in this record. Compare every candidate on its slate, whatever its class. This
   record's reviews concern every candidate. For a candidate of the record's class, follow the
   ordinary path. When the comparison favours a candidate of another class and the candidate
   meets the selection requirement of step 9 of "Candidates and the slate", select it. Do not
   formulate it in this record: a statement is bound to the record's class
-  (`problem_area_mismatch`). Take it up in a record of its class with the carry below. Use
-  `deferred` only for a genuine evidence gap.
+  (`problem_area_mismatch`). Take it up in a record of its class with the carry below, and
+  bring its forming history with `forming-import`. Use `deferred` only for a genuine evidence
+  gap.
+- A further area is added in the same record only while no slate review and no result review
+  has been assigned in it. After that, take the statement up in a new record of the same class
+  that names every area from its opening, with the carry and with `forming-import` ("Further
+  areas", step 4).
 - A sibling record on the same field question or seed needs the carry below in both directions.
   Carry from each continuing record of the exploration into the sibling, and from the sibling
   into each continuing record. A carry links its destination only. Record the return carries before
@@ -356,10 +381,59 @@ reviewed candidate to another record", below):
   posting. When a record holds no review yet, its carry is empty and records the live link. A
   record then needs a new carry when its linked record records a review.
 
+### Further areas
+
+A statement keeps one subject class, the class of its record, and its post has that one area. A
+further area is another `math.*` subject class that the statements of the record concern: a
+consequence of a statement lies there, an earlier statement or a nearer alternative has to be
+looked for there, or the phenomenon has a place there. Name each further area in the record.
+The two bar reviewers then state the standard of that area before they see a candidate, and
+they later judge by it what belongs to it. The
+[CLI reference](../../docs/research-cli.md#further-areas) gives the payload, the record and the
+refusals.
+
+1. Record a further area with `exactory-research problem-area` and `{id, area, reason}`.
+   `area` is a `math.*` subject class other than the record's own and other than the areas
+   that the record already names (`problem_area_duplicate`). `reason` says in one or two
+   sentences which part of that area the field question touches. The bar reviewers receive the
+   reason before any candidate is shown to them, so write it without a candidate, a statement
+   or an expected result. An area id is used once: the record is immutable, and the same id
+   with another payload is `record_conflict`. The opening marker of the record keeps its bytes,
+   and the output folders show the areas in `final/problem/areas/`.
+2. Name the areas before the bars are assigned whenever you can foresee them. Each bar then
+   states the standard of each area separately, for the record's own class and for each
+   further area: the active lines, the nearest problems and conjectures, what counts as a
+   substantial advance, and what levels 2 and 3 mean there. The bar prompt carries the areas
+   paragraph (`exactory-problem-areas-v1`) for this, and so does the result prompt.
+3. Add an area later only while no slate review and no result review has been assigned in the
+   record. A bar that was given before the area was recorded states no standard for it.
+   `problem-slate`, a slate assignment and a result assignment then refuse with
+   `problem_bar_calibration_required`, which names the bar and, in `area_ids`, the areas that it
+   lacks. Assign each such bar again to the same reviewer with an empty `context`. The harness
+   continues the bar in the same session and slot, and the continued bar states every standard
+   in full. Record the continued bar with `value-review`, and record a slate that names the
+   continued bars in `bar_review_ids`. A result review needs that slate. In this way the
+   standard of every area comes from a reviewer who has seen no candidate.
+4. Once a slate review or a result review has been assigned, also one that has not run yet,
+   the record takes no further area (`problem_area_new_record_required`). Take the statement up
+   in a new record of the same subject class. Open it with steps 1 to 3 of "Exploration", and
+   name every area there before its bars are assigned. Carry the objections of the original
+   record ("Carry a reviewed candidate to another record"). Bring the forming history, and
+   record in the original record that the candidate was taken up there ("The forming history
+   of a candidate taken up in another record").
+5. The result reviewers continue their bars, so each holds the standard of every area. They
+   judge each relation, each earlier statement and each alternative of the accounts by the
+   standard of the area that it belongs to. They give every grade by the standard of the
+   record's subject class, and the thresholds for posting read those grades. A consequence or
+   a line of work in a further area counts in them as far as it is established and the standard
+   of its own area shows it to be wanted. Grade your self-assessment in the same way. When the
+   weight of a statement lies in a further area, formulate it in a record of that class.
+
 ### Carry a reviewed candidate to another record
 
 The source is the record whose reviews exist. The destination is the record that takes up its
-candidate: a new record in the candidate's class, or a sibling record. Run `exactory-research
+candidate: a new record in the candidate's class, a sibling record, or a new record that names
+further areas. Run `exactory-research
 problem-objections-carry` in the destination to retain the source's complete objection set and
 its live link. See [Carried objections](../../docs/research-cli.md#carried-objections) for the
 payload, the records and the refusals.
@@ -372,11 +446,14 @@ payload, the records and the refusals.
    While a current head is unrecorded, the carry refuses with
    `problem_objections_refresh_required` and names the assignments. For a pending review of an
    earlier statement, see that code's row in the CLI reference.
-2. For a new destination, open it with steps 1 to 3 of this section. An existing destination
+2. For a new destination, open it with steps 1 to 4 of this section. An existing destination
    keeps its initialization and its valid bars. Name each record's workspace in the notes of the
    other. Record the candidate again in the destination. Record again every search and source
    reading that its evidence needs, the adverse ones included. A `source.reference`,
    `observation` or `notes` text that names the source is a description: it carries nothing.
+   When the source holds forming records of the candidate, bring them with `forming-import`
+   before you record the candidate, so that it cites them, and record the transfer in the
+   source ("The forming history of a candidate taken up in another record", below).
 3. In the destination, before the slate review that assesses this imported set, run
    `exactory-research problem-objections-carry --file carry.json` with the destination's current
    `--expected-revision` and a distinct `--request-id`. The payload is
@@ -420,6 +497,98 @@ payload, the records and the refusals.
    `problem_objection_source_unavailable`. Then restore the workspace. When it moved, record a
    new carry that names its new path.
 7. Before you post, apply the rule for a record with a carry in "Compose and post a problem".
+
+### The forming history of a candidate taken up in another record
+
+The forming calls, the outcomes, the probes and the runs that formed a candidate stay in the
+record that made them, the source. When another record, the destination, takes the candidate
+up, two commands keep the history with it. `exactory-research forming-import` runs in the
+destination and gives it the forming history of the source. `exactory-research
+problem-candidate-transfer` runs in the source and records where the candidate went. Use them
+in every case in which a candidate with forming records moves: a restart, a carry to a record
+of another class or to a sibling record, and a new record that names further areas. The carry
+brings the objections, and the import brings the forming history; a move that needs both runs
+both. [Imported forming history](../../docs/research-cli.md#imported-forming-history) in the
+CLI reference gives the payloads, the records and the refusals.
+
+1. In the source, finish the forming records first. Record the candidate that moves, give each
+   of its forms an outcome, and deliver every solver objective that an outcome cites. The
+   import binds the forming history of the source as it stands at one revision. Every later
+   forming call, outcome, probe, plan, run or assessment of the source, and every later
+   delivered snapshot of an objective that its outcomes cite, makes the import stale (step 7).
+2. In the source, record the transfer when its latest slate lists the candidate. Run
+   `exactory-research problem-candidate-transfer` with `{id, candidate_id,
+   destination_workspace, reason}`. `candidate_id` is a candidate that the latest slate
+   selects, defers or rejects (`problem_candidate_transfer_not_on_slate` otherwise).
+   `destination_workspace` is the absolute path of the workspace of the destination, which is
+   another record (`problem_candidate_transfer_self`). The harness records the path and does
+   not open it. `reason` says why the candidate moves. The transfer changes no gate. The report
+   of the source then gives the candidate the ending "taken up in another record" and names
+   the destination ("The end of an exploration"). A later slate decides its candidates again:
+   a transfer that was recorded before the latest slate ends nothing, as a withdrawal that was
+   recorded before it ends nothing. When the candidate is still taken up after a later slate,
+   record the transfer again under a new id. A source that restarts before its bars holds no
+   slate and records no transfer: name the successor in its notes.
+3. In the destination, run `exactory-research forming-import --file import.json` with the
+   destination's current `--expected-revision` and a distinct `--request-id`, first with
+   `--check`. The payload is `{id, source_workspace, source_revision, source_candidate_ids}`: a
+   new import id, the absolute path of the source workspace, the source's current revision
+   (`exactory-research status` in the source), and the ids of the candidates of the source
+   that the destination takes up, at least one. The command reads the source and does not write
+   it. It keeps in the destination a verified snapshot of the source at that revision, as the
+   carry keeps the proof of its source, and it records one manifest of that snapshot,
+   `problem_forming_import/<id>`. No record of the source becomes a record of the destination.
+4. The receipt of the command lists under `members` every record of the source that the
+   destination can cite: the forming calls and the outcomes of the source, its probes, its
+   plans, runs and assessments, the searches that its test declarations name, and the readings
+   and the delivered solver snapshots that its outcomes cite. Each member keeps its `origin`,
+   which identifies the source record, its `record_kind`, its original `id`, its `digest`, its
+   original `date` and its `standing`. A probe stays exploratory, a run keeps the standing that
+   it has for the text that its plan names, and an accepted result supports its conclusion.
+   Cite a member by copying `{kind: "record", origin, record_kind, id, digest}` from it. A
+   reference that no import lists is refused with `problem_forming_reference_missing`, and a
+   reference with another digest with `strategy_evidence_stale`.
+5. Record the candidate in the destination, and cite in its `source.evidence` the imported
+   forming calls and outcomes that it derives from. Such a candidate is a candidate formed in
+   the record: a `phenomenon` candidate needs at least one forming call, its own or an imported
+   one, and a slate that selects the candidate cites a slate review ("Candidates and the
+   slate", step 7). The packet of that review delivers the imported records.
+6. An outcome of a form of the destination and an entry of its accounts can cite a member as
+   evidence. The item has the standing that the member has in the source: an outcome that
+   names another standing is refused with `problem_form_evidence_standing`, and a member that
+   is no evidence of the standing that the item needs with
+   `problem_forming_evidence_invalid`. An imported full reading, an imported run that was
+   admitted and assessed, an imported solver snapshot whose accepted result an outcome of the
+   source cites, and an imported outcome with admissible evidence are admissible. An imported
+   probe, and an imported outcome that rests on probes, are exploratory. Record again in the
+   destination the searches and the source readings that its openness finding, its attempt and
+   its field facts need: the import brings none of them as a record of the destination.
+7. The destination stays linked to the source. `gate post`, `status`, `export --kind problem`
+   and `problem-decision` with `post` open every linked source and compare its current forming
+   history with the imported one. A change is `problem_forming_refresh_required`: run
+   `forming-import` again under a new id, with the source's current revision. The earlier
+   import stays in the record, and a reference that you copied stays valid while its record is
+   unchanged. A new import changes the problem evidence, so result reviews that were recorded
+   before it are refreshed for the same reviewers; import before the result reviews where you
+   can. A source workspace that cannot be opened is `problem_forming_source_unavailable`:
+   restore it, and when it moved, record a new import that names its new path. A source that
+   holds an import of its own brings its sources with it, each under its own origin, and a
+   record is linked to at most 32 sources (`problem_forming_sources_exceeded`).
+8. The harness shows what came from the source apart from what the destination did. For a
+   value record with accounts it derives `inherited`: the forms, the runs and the counts of
+   each source. The earlier computations that it lists beside a test include the probes and
+   the runs of the source, and the result reviewers receive every imported record with its
+   origin, its original date and its standing. The report of the destination lists each
+   import with its source.
+9. The replacement part of the accounts ("The accounts") names forms and refuted conjectures
+   of the destination, and its refuting evidence is a full reading, an admitted computation
+   or an accepted result of the destination. The harness derives the requirement from the
+   forms of the destination only. When the statement that the destination takes up was posed
+   in place of a form that the source held as its expected statement and refuted, the three
+   conditions of "Exploration" decide as before. Enter the refuted statement in
+   `refuted_conjectures` with `identified_by: "author"` and the imported outcome among its
+   `sources`, establish the refutation in the destination, for example with a bounded solver
+   objective on the refuted form, and give the entry its replacement entry.
 
 ### An exploration from a thought experiment
 
@@ -476,7 +645,9 @@ state.
    forming call or a form outcome is a candidate formed in this record, so a slate that selects
    it cites a slate review ("Candidates and the slate", step 7).
 6. The situation's naturalness or simplicity is not evidence of significance and earns no grade.
-7. A settled seed question alone does not end the exploration.
+7. A settled seed question alone does not end the exploration. When the exploration ends,
+   record its report ("The end of an exploration"): the report is due for every record that
+   starts from a thought experiment.
 
 A record that was opened before 0.83.0 keeps its interpretations and expectations as it holds
 them. Record the interpretations and expectations that it states from now on as forms.
@@ -512,7 +683,8 @@ The rule of "Exploration" that one record holds the exploration applies with the
 - Unless you restart, keep the interpretations of every class, their expectations and their
   tests in this record. Record their derived candidates here and compare them on this record's
   slate. A selected derived candidate of another class moves to a record of its class through
-  "Carry a reviewed candidate to another record".
+  "Carry a reviewed candidate to another record", and its forms go with it through "The
+  forming history of a candidate taken up in another record".
 
 ### An exploration from a phenomenon that appears in several places
 
@@ -644,20 +816,121 @@ formed it.
    gain ("Candidates and the slate", steps 6 and 7).
 9. The end. Give every form an outcome: `set_aside` with the reason for a form that you leave,
    and `not_examined` with the means that were lacking for a form that you could not examine.
-   When the exploration ends, report in your summary the forms that it produced and how each
-   ended, and for each posted statement whether the record established a gain. An exploration
-   that ends without a candidate ends without a post, as "Exploration" states.
+   When the exploration ends, record its report with `problem-report` ("The end of an
+   exploration"), and give in your summary the forms that it produced and how each ended, and
+   for each posted statement whether the record established a gain. An exploration that ends
+   without a candidate ends without a post, as "Exploration" states.
 
 The absolute principle of "Exploration" and rubric item A7 apply to every form of this
 exploration. The public text of a problem that comes from it states what the record
 established, and it makes no comparison with a named conjecture as a claim about the standing
 of the statement.
 
-The forming records stay in the record that made them; this release has no command that
-carries them to another record. When a restart or a carry under the rule of "Exploration" takes
-a formed candidate to another record, state its forms again there, in forming calls whose
-descriptions name the original record and the original form ids, and record the outcome of
-each form again with its evidence.
+The places of a phenomenon often lie in several subject classes. Open the record in the class
+in which you expect the statement to lie, and name as a further area each other class in which
+a statement of the record would have a consequence, an earlier statement or a nearer
+alternative ("Further areas").
+
+The forming records stay in the record that made them. When a restart or a carry under the
+rule of "Exploration" takes a formed candidate to another record, bring its forming history
+there with `forming-import`, and record the transfer in this record ("The forming history of a
+candidate taken up in another record"). The imported records keep their origin, their dates
+and their standing, so the destination states no form of this record again. A record that
+stated the forms of another record again under the text of 0.83.0 or 0.84.0 keeps those
+forming calls as it holds them.
+
+### The end of an exploration
+
+An exploration has ended when its current slate selects nothing, or when every candidate that
+the current slate selects has ended in one of three ways:
+
+- It is posted: `problem-posted` or `problem-post-external` records a post of a statement that
+  formulates the candidate ("Compose and post a problem").
+- It is withdrawn: `problem-decision` with the action `withdraw` ("Reviews and the decision",
+  step 9). The decision records what it withdraws: the candidate of the current statement, or,
+  while no statement is formulated, every candidate that the current slate selects.
+- It is taken up in another record: `problem-candidate-transfer` ("The forming history of a
+  candidate taken up in another record").
+
+A later slate decides its candidates again. A withdrawal or a transfer that was recorded before
+the latest slate ends nothing, and a slate that selects a candidate again reopens the
+exploration.
+
+Record how the exploration ended with `exactory-research problem-report`. The payload is
+`{id, reopen_when}`: a new report id, and the finding that would make the exploration worth
+reopening, in one or two sentences. The harness computes everything else from the records at
+the current revision, and it refuses a payload that enters a computed field. The
+[CLI reference](../../docs/research-cli.md#the-report-of-an-exploration) gives every field.
+The report holds:
+
+- the start that was explored and its kind, with the question of the first forming call;
+- every form with its move, its standing, its disposition and the evidence of its latest
+  outcome, and each forming import with the forms and the counts of its source, apart from
+  the record's own;
+- the counts: forming calls and forms; forms whose standing rests on evidence (`refuted`,
+  `proved`, `implied_by_known_results`, `found_in_literature`); forms without evidence; forms
+  that were not examined, each with the means that were lacking; recorded comparisons, probes
+  and runs; relations established and expected; and the runs that the accounts enter as tests,
+  passed, failed and unresolved;
+- every candidate with its disposition on the latest slate and its ending, and every
+  withdrawal;
+- every statement with two entries that are kept apart: its publication (`not posted`, `posted
+  through the gate` or `posted outside the gate`) and, for each post, its classification at
+  the post;
+- for each post: its date, what changed after it (later value records, facts after the post
+  and later reviews), and the consequences that the record proved, each with its result
+  reference. The record does not hold whether the proofs of those consequences were posted,
+  and the report says so;
+- what was spent, as far as the resource accounts, the review records and the forming calls
+  measured it;
+- the outcome.
+
+The classification at the post reads the value record that the post decision covered. It is `a
+gain was established` when the accounts of that value record claim a gain: both result reviews
+judged that claim before the gate accepted the post. It is `ordinary` when they claim none. It
+is `kind unassessed` for a post that was recorded with `problem-post-external`, and for a post
+whose covered value record holds no accounts. A later value record does not change the
+classification; the report shows it under what changed after the post.
+
+The outcome is one of six:
+
+- `A statement of the kind was posted`: at least one post has the classification `a gain was
+  established`.
+- `Only ordinary problems were posted`: every post has the classification `ordinary`.
+- `Statements were posted and the kind of at least one is unassessed`: no post has an
+  established gain, and at least one is `kind unassessed`.
+- `Statements were formed and none was posted`.
+- `No statement was formed`.
+- `The assessment is incomplete`: a candidate that the current slate selects has not ended.
+
+The last outcome takes precedence over the other five. A report that is recorded while the
+record holds no current slate takes its outcome from the posts, the statements and the forms
+that the record holds at that time.
+
+The report is due for a record whose start is `phenomenon` or `thought_experiment`, and for
+every record that holds a forming call, once the exploration has ended. `status` and `next`
+then carry an `advisories` entry with the code `problem_report_due`, until the record holds a
+report. The advisory changes no gate, no obligation and no next action, so a post does not
+wait for the report. Before you record a due report, give every form an outcome whose
+disposition is `superseded`, `taken_up_as_candidate` or `set_aside`: the command refuses a due
+report while a form has no outcome or the disposition `open` (`problem_report_forms_open`,
+with the form ids). A record that started from a field question and holds no forming call has
+no due report, and you can record one for it.
+
+The report records its `cutoff`, the revision at which it was computed, and the digest of the
+records that it read. It is stale once a record of a kind that it read is added or changed
+after the cutoff: a forming call, an outcome, a forming import, a transfer, a further area, a
+candidate, a slate, a statement, an attempt, a delivered solver snapshot, a value record, a
+decision, a post or its time statement, a fact after a post, a review, an adjudication, a
+review assignment or a reviewer call, a plan, a run, an assessment, a probe, a budget, or a
+charge to the resource accounts. `status` then carries the advisory `problem_report_stale`
+with the id of the report. Record a new report under a new id; an id is used once
+(`record_conflict`). Record the report as the last record of the exploration, and record it
+again after work that follows it, for example after a fact that arrives after a post.
+
+The output folders show the current report in `final/problem/reports/` and each earlier
+report in `final/history/problem/reports/`. In your summary to the user, give the outcome, the
+number of forms by standing, and for each posted statement its classification at the post.
 
 ## Candidates and the slate
 
@@ -690,11 +963,16 @@ significance.
    the harness uses the template `exactory-problem-review-v5/bar`. Run the assignment with
    `review-run` and record the observed bar with `value-review`. The bars fix what levels 2 and 3
    of significance and priority mean in this field before the candidates can shape the answer.
+   When the record names further areas, the bar prompt carries the areas paragraph
+   (`exactory-problem-areas-v1`), and each bar states the standard of each area separately
+   ("Further areas" in "Exploration").
 5. When `problem-slate` returns `problem_bar_calibration_required`, the named bar was recorded
-   on the version 1 prompt. Assign the bar again to the same reviewer with an empty `context`;
-   the harness refreshes it on the current prompt in the same session and slot. The refreshed
-   bar gives a finding on every objection the version 1 bar stated; until it is recorded, those
-   objections stay in force. Name the refreshed bar in `bar_review_ids`.
+   on the version 1 prompt, or it was given before a further area was recorded; the second
+   case carries `area_ids`. Assign the bar again to the same reviewer with an empty `context`;
+   the harness refreshes it on the current prompt in the same session and slot, with every
+   further area. The refreshed bar gives a finding on every objection that the earlier bar
+   stated; until it is recorded, those objections stay in force. Name the refreshed bar in
+   `bar_review_ids`.
 6. Compare the candidates by their mathematical payoff, their neighbours, the tests that would
    distinguish them, their failure signals and their resource demand. Write that comparison; it
    goes into the slate. An exploration opened on a phenomenon that appears in several places
@@ -748,8 +1026,9 @@ significance.
 
 For each selected candidate of the record's class, take the following steps in turn. Post each
 one that meets the bar. For a selected candidate of another class, follow "Carry a reviewed
-candidate to another record" in "Exploration". Several problems from one exploration is the
-normal case, not an exception.
+candidate to another record" and "The forming history of a candidate taken up in another
+record" in "Exploration". Several problems from one exploration is the normal case, not an
+exception.
 
 ## Formulation
 
@@ -797,8 +1076,13 @@ normal case, not an exception.
    does not cover it. Declare it as a neighbour when the text next changes.
 6. By this step the slate's bars have been requested, so a candidate of another class does not
    restart the exploration. Take it up in a new record of its class with "Carry a reviewed
-   candidate to another record" in "Exploration". Run the carry there before its first slate
+   candidate to another record" in "Exploration", and bring its forming history with
+   `forming-import`. Run the carry there before its first slate
    review. Formulate the candidate there after the bars, the focused slate review and the slate.
+7. A statement that concerns a further area keeps the record's `area`. The record names the
+   further area with `problem-area` ("Further areas" in "Exploration"), and the accounts enter
+   what belongs to it: the consequences, the earlier statements and the alternatives that lie
+   there.
 
 ## The attempt
 
@@ -1173,6 +1457,12 @@ record, out of the public text.
      attempt", "Objectives beside the attempt"). For the second shape the result reviewers
      receive the claim of the objective beside the accepted claim, and they compare both with
      the relation that the entry states.
+   - a record of a forming import, as `{kind: "record", origin, record_kind, id, digest}`,
+     copied from a member of the import ("The forming history of a candidate taken up in
+     another record" in "Exploration"). It has the standing that it has in its source: an
+     imported full reading, an assessed run, a solver snapshot whose accepted result an
+     outcome of the source cites and an outcome with admissible evidence are admissible, and
+     an imported probe is exploratory.
 3. A paragraph of the motivation or of the current state cites the entries of the accounts that
    carry what it says, each as `{kind: "account", id}`. The harness derives the delivered
    evidence of the paragraph from those entries. A paragraph whose cited entries are all
@@ -1259,11 +1549,12 @@ Every problem holds the first tier:
   statement (`problem_alternative_relation_missing`). A `stronger` alternative gives the
   `reason` why it was not posed: the outcome of the attack on it, or the means that were
   lacking. A `weaker` alternative gives the `surplus`,
-  `{description, status, evidence_ids, relation_ids}`: what the statement asserts beyond it,
+  `{description, status, evidence_ids, relation_ids}` (`problem_surplus_missing` without it):
+  what the statement asserts beyond it,
   and whether that surplus is `supported`, `used`, `supported_and_used` or `neither`.
   `supported` cites an `answer_evidence` entry with the direction `for` whose alternative is
-  this same alternative (`problem_surplus_support_missing`). `used` cites a relation whose
-  consequence is credited to the statement (`problem_surplus_use_missing`).
+  this same alternative (`problem_surplus_support_missing`). `used` cites an established
+  relation whose consequence is credited to the statement (`problem_surplus_use_missing`).
 - `strength`, the parts of the strength: exactly four entries
   `{id, head, description, alternative_ids, no_alternative_reason}`, one for each head:
   `range_of_instances`, `constants`, `exponents` and `exactness`
@@ -1330,7 +1621,11 @@ A gain claim and a passed test need a history. The candidate of the statement ci
 `source.evidence`, a forming call or a form outcome whose form was recorded before the evidence
 of the gain or the plan of the test (`problem_accounts_history_missing`). A statement whose
 candidate cites no forming record can therefore claim no gain and enter no passed test. Record
-the forming work with the Ideate tool when it happens, before the evidence.
+the forming work with the Ideate tool when it happens, before the evidence. An imported
+forming call or outcome that the candidate cites supplies the history in two cases. For
+evidence of this record and for the plan of a test, the import was recorded before that
+evidence or that plan. For imported evidence, the form was recorded in the source before that
+evidence.
 
 The replacement part, `replacement`, is required in two cases (`problem_replacement_missing`).
 The first is a form in the correction chain of the statement that the record held as its
@@ -1344,7 +1639,9 @@ solver objective on the refuted form first. `account` says in words how the stat
 to the refuted one, against the three conditions of "Exploration". A stronger form that you
 wrote as an alternative, to test whether a hypothesis is necessary, and refuted, enters
 `boundaries` and needs no replacement entry. The purpose of a form, recorded when it was
-formed, says which of the two it is.
+formed, says which of the two it is. The first case reads the forms of this record. For a
+statement that this record took up from another record, see step 9 of "The forming history of
+a candidate taken up in another record" in "Exploration".
 
 The harness adds three things that you do not enter, and the reviewers receive them beside the
 accounts. The first is the list of every run whose plan names the current text of the
@@ -1355,7 +1652,11 @@ was frozen, with their questions. The second is the history: the forms from whic
 statement descends, with the reason for each correction and the latest outcome of each. The
 third is the counts for that lineage and for the whole exploration: forming calls, forms,
 recorded comparisons, probes and runs. An agreement found among many tries is weighed against
-their number, so the harness copies the counts and you do not state them.
+their number, so the harness copies the counts and you do not state them. In a record that
+holds a forming import, the harness also shows what the record inherited, apart from its own
+work: for each source, the forms from which the imported candidates descend, the runs on
+their texts and the counts. The earlier computations beside a test then include the probes
+and the runs of the source that were imported before the plan.
 
 Some entries are shortfalls, and you record them as they are: a surplus that is `neither`
 supported nor used, a derivation that was `not_attempted`, and an `expected` relation. The
@@ -1381,7 +1682,8 @@ run can be a test, and only when its plan declared the test before the execution
    - `excluded_outcome` is the outcome that this alternative excludes. The outcome that would
      contradict the statement stands among the `failure_signals` of the plan.
    - `prior_knowledge` is the account of what you knew about the outcome when you froze the
-     plan: one entry `{source: {kind, description}, known}` for each source. Enter these five
+     plan: one entry `{source: {kind, description}, known}` for each source, and at least one
+     entry. Enter these five
      sources, also when an entry says that nothing was known: `record_computations` (the
      earlier probes and runs of this record), `inherited_computations` (the computations of
      the records that this record took material from), `external_computations` (another
@@ -1570,6 +1872,12 @@ it with the definition of that item. Grade your self-assessment by it.
   text states only what a cited entry of the accounts carries, and it uses neither the name
   "conjecture of the abc kind" nor a comparison with a named conjecture as a claim about the
   statement's standing.
+- Areas. When the record names several areas, each relation, each earlier statement and each
+  alternative is judged by the standard of the area that it belongs to, each bar states that
+  standard for each area, and the thresholds below read the grades given by the standard of
+  the record's subject class. The bar and result reviewers receive this in the areas paragraph
+  (`exactory-problem-areas-v1`) when the record names a further area ("Further areas" in
+  "Exploration").
 - A7, for a statement posed in place of a refuted one. Item A7 is unchanged, and its test of
   purpose decides. Such a statement meets the three necessary conditions of "Exploration", of
   which none is sufficient. The reviewers receive them in the replacement paragraph
@@ -1619,8 +1927,10 @@ accounts with the parts that the harness derives, and the records that their ent
 2. Assign one result review to each of the two bar reviewers. Each result review continues that
    reviewer's bar session; the harness refuses a reviewer without that session
    (`review_bar_continuity`), except a replacement that a validated context repair installed in
-   the preserved slot, and refuses the assignment while a bar is still on the version 1 prompt
-   (`problem_bar_calibration_required`). When a route is not yet verified, register and test it
+   the preserved slot, and refuses the assignment while a bar is still on the version 1 prompt,
+   or while a bar of the latest slate was given before a further area was recorded
+   (`problem_bar_calibration_required`; "Further areas", step 3, in "Exploration"). When a
+   route is not yet verified, register and test it
    first with `review-route` and `review-probe`. When a route becomes unavailable (an account
    closes, a model is withdrawn, or the user forbids it), record `review-context` with kind
    `route_retired` on the slot's last observed assignment and the user's instruction as evidence,
@@ -1645,7 +1955,14 @@ accounts with the parts that the harness derives, and the records that their ent
    paragraph (`exactory-problem-accounts-v1`), which gives the reviewer the reading of "The
    rubric" and the questions on the gain, and, when the accounts hold a replacement part, the
    replacement paragraph (`exactory-problem-replacement-v1`) with the three conditions of
-   "Exploration". The response shape of a result review is unchanged: the assurance
+   "Exploration". When the record names a further area, the prompt carries the areas
+   paragraph (`exactory-problem-areas-v1`): the reviewer judges each relation, each earlier
+   statement and each alternative by the standard of the area that it belongs to, and gives
+   every grade by the standard of the record's subject class. In a record that holds a forming
+   import, the packet also delivers every imported record, with its origin, its original date
+   and its standing, and the derived parts of the accounts show the forms, the runs and the
+   counts that the record inherited from each source. The response shape of a result review
+   is unchanged: the assurance
    `problem_value` covers the accounts, and the grades and evidence texts of A3, significance,
    priority, accessibility, calibration and A7 carry the reviewer's judgments. Run the
    assignment with `review-run` and record the observed review with `value-review`. When the result packet does not fit one input of the route, or its fitted
@@ -1848,9 +2165,17 @@ accounts with the parts that the harness derives, and the records that their ent
 9. Record the decision with `exactory-research problem-decision`: `post`, `revise` or
    `withdraw`, with the `review_ids`, the `bar_review_ids` and the reason. Record `revise` for a
    shortfall that evidence can repair, and `withdraw` for a refused candidate (see "The rubric").
+   A `withdraw` decision records what it withdraws, as `statement_id` and `candidate_ids`: the
+   current statement with its candidate, or, while no statement is formulated, every candidate
+   that the current slate selects. Record it while the statement that you withdraw is the
+   current one. The report of the exploration reads these fields ("The end of an exploration"
+   in "Exploration").
 10. When the current minimum and the observed review pair pass, record `post`.
 11. Run `exactory-research gate post`. When it reports ready, continue with "Compose and post a
     problem".
+12. When every candidate that the current slate selects is posted, withdrawn or taken up in
+    another record, the exploration has ended: record its report ("The end of an exploration"
+    in "Exploration").
 
 ## Compose and post a problem
 
@@ -1886,6 +2211,15 @@ changes no post. Report the owed refresh and the source's change in your
 summary. Read the source's new review. When it settles or weakens the posted
 problem, say so to the user, who decides what to do in the Mathematics section
 (the `math-section` skill).
+
+A record that holds a forming import ("The forming history of a candidate taken
+up in another record" in "Exploration") is linked to the source of that import
+in the same way. The gate, the export and `problem-decision` read the forming
+history of the source at their own moment, and `problem-posted` does not, so
+run `exactory-research gate post` again immediately before `exactory
+post-problem`. After a post, `status` lists a source that changed or
+disappeared under `after_post`, as `problem_forming_refresh_required` or
+`problem_forming_source_unavailable`, and the post stands.
 
 For a problem without a research record, compose and post the parts as follows.
 
@@ -2042,6 +2376,10 @@ Optional at creation: `--paper <arxiv-id-or-doi>` (repeat, at most 10) and
   refuses it, and the refusal is right.
 - Do not take a reviewed candidate up in another record without the carry; a `source.reference`
   that names the source record carries nothing ("Carry a reviewed candidate to another record").
+- Do not state the forms of another record again by hand. Bring them with `forming-import`,
+  which keeps their origin, their dates and their standing.
+- Do not write a candidate, a statement or an expected result into the `reason` of a further
+  area. The bar reviewers read it before any candidate is shown to them.
 - Do not repeat an exhausted task of a staged review or assign another reviewer while a slot is
   incomplete; do the research or recovery work that `next` names.
 - Do not edit an exported part before posting; a changed part needs a new statement record and

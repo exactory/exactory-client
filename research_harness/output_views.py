@@ -316,6 +316,7 @@ _RECORD_TREES = {
         records, "round_review", lambda record: record["round_id"])),
     "problem_statement": ("problem/statements", lambda records: _find_pointed_values(
         records, "problem_selection", "statement_id", "current")),
+    "problem_area": ("problem/areas", lambda records: set(records.get("problem_area", {}))),
     "problem_slate": ("problem/slates", lambda records: _find_latest_ids(records, "problem_slate")),
     "problem_attempt": ("problem/attempts", lambda records: _find_latest_ids(records, "problem_attempt")),
     "problem_openness": ("problem/openness", lambda records: _find_latest_ids(records, "problem_openness")),
@@ -329,6 +330,7 @@ _RECORD_TREES = {
     "problem_post_time": ("problem/post-times", lambda records: _find_keys_of(
         records, "problem_post", [find_post(records, find_current_statement(records))])),
     "problem_post_fact": ("problem/post-facts", _find_current_post_fact_ids),
+    "problem_report": ("problem/reports", lambda records: _find_latest_ids(records, "problem_report")),
     "round_admission": ("study/round-admissions", lambda records: _find_latest_keys(
         records, "round_admission", lambda record: record["number"])),
     "round_decision": ("study/round-decisions", lambda records: _find_latest_keys(
@@ -386,7 +388,8 @@ def _build_records(records, artifacts, inputs):
                 status = "historical"
             path = _STATUS_FOLDERS[status] + tree + "/" + _format_file_name(key) + ".json"
             entry = _describe(kind, key, record, status)
-            files[path] = ViewFile(_encode_record(record, entry), entry)
+            content = _encode(record) if kind == "problem_report" else _encode_record(record, entry)
+            files[path] = ViewFile(content, entry)
     return files
 
 
@@ -994,7 +997,7 @@ _UNPLACED_KINDS = (
     "problem_citation_metadata", "citation_locator", "reading", "reading_batch", "reference_occurrence",
     # Carried proof/evidence is retained in the authority store and delivered
     # through reviewer packets, like the native evidence records above.
-    "problem_objection_carry", "problem_carried_evidence",
+    "problem_objection_carry", "problem_carried_evidence", "problem_forming_import", "forming_transfer",
     "reference_resolution", "review_series_stop",
     "screening", "screening_checkpoint",
     "screening_checkpoint_selection", "search_binding", "search_selection", "source", "source_bundle",

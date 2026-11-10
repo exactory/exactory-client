@@ -6,9 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from research_harness import output_views, problem_candidates, problem_evidence
-from research_harness.cli import status_report
+from research_harness.cli import next_summary, status_report
 from research_harness.evidence import digest
+from research_harness.gates import gate_state
 from research_harness.record_check import check_integrity
+from research_harness.problem_reports import describe_report_advisories, is_report_due
 from test_research_problem_claims import ProblemCase
 
 
@@ -17,6 +19,15 @@ class ProblemStartCompatibilityTests(ProblemCase):
         super().setUp()
         path = Path(__file__).parent / "fixtures/problem_start_0_82_0.json"
         self.fixture = json.loads(path.read_text(encoding="utf-8"))
+
+    def test_stored_0820_fixtures_hold_no_stage_c_records(self):
+        directory = Path(__file__).parent / "fixtures"
+        for name in ("problem_start_0_82_0.json", "problem_forming_0820.json", "problem_result_0820.json"):
+            with self.subTest(fixture=name):
+                fixture = json.loads((directory / name).read_text(encoding="utf-8"))
+                records = fixture.get("records", fixture.get("initial_records"))
+                self.assertTrue(records)
+                self.assertTrue(set(records).isdisjoint(("problem_area", "problem_forming_import", "forming_transfer", "problem_report")))
 
     def test_legacy_initialization_keeps_the_0_82_0_marker_and_digest(self):
         expected = self.fixture["initial_records"]["workspace"]["problem"]
@@ -48,6 +59,8 @@ class ProblemStartCompatibilityTests(ProblemCase):
         marker = self.load_problem_module().require_problem(records)
         self.assertEqual(marker, self.fixture["initial_records"]["workspace"]["problem"])
         self.assertIsNone(marker.get("start"))
+        self.assertFalse(is_report_due(records))
+        self.assertEqual(describe_report_advisories(records), [])
         expected = self.fixture["expected"]
         self.assertEqual(digest(marker), expected["problem_digest"])
         self.assertEqual(problem_candidates.compute_candidate_set_digest(records), expected["candidate_set_digest"])
@@ -57,6 +70,9 @@ class ProblemStartCompatibilityTests(ProblemCase):
         report = status_report(self.store)
         report.pop("runtime")  # Build identity changes when code changes; record interpretation must not.
         self.assertEqual(report, expected["status"])
+        self.assertEqual(next_summary(report), next_summary(expected["status"]))
+        gate = gate_state(records, self.artifacts, "post")
+        self.assertEqual(gate, {key: expected["status"][key] for key in gate})
         self.assertEqual(check_integrity(self.store), expected["integrity"])
         model = output_views.compute_view_model(records, self.artifacts, output_views._ViewInputs({}, {}))
         self.assertEqual({path: {"content": view.content.decode("utf-8"), "entry": view.entry}

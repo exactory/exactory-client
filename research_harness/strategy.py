@@ -16,6 +16,7 @@ from .operations import fields, immutable_record, normalized_text, prepared_muta
 
 
 TASK_KINDS = ("open_research", "bounded_research", "specified_delivery")
+STALE_EVIDENCE_MESSAGE = "The cited record differs from the bound evidence"
 PHASES = ("prospective", "result", "post_measurement")
 ACTIONS = ("investigate", "develop_manuscript", "pivot", "close_branch", "deliver_requested")
 CLASSIFICATIONS = ("validity", "consequence_critical", "optional")
@@ -111,9 +112,11 @@ def evidence_fields(reference, *, review_binding=False):
         fields(reference, ("kind", "link"), code="invalid_strategy")
     elif reference.get("kind") == "record":
         fields(reference, ("kind", "record_kind", "id") + (() if review_binding else ("digest",)),
-               ("digest",) if review_binding else (), code="invalid_strategy")
+               ("digest", "origin") if review_binding else ("origin",), code="invalid_strategy")
         text(reference["record_kind"], "Evidence record kind", code="invalid_strategy")
         text(reference["id"], "Evidence record ID", code="invalid_strategy")
+        if 'origin' in reference:
+            text(reference['origin'], 'Evidence record origin', code='invalid_strategy')
         if "digest" in reference:
             text(reference["digest"], "Evidence record digest", code="invalid_strategy")
     else:
@@ -138,11 +141,16 @@ def evidence(records, artifacts, values, *, required=True, review_binding=False)
             from .reading import validate_read_evidence
             validate_read_evidence(records, artifacts, reference["link"])
         elif reference.get("kind") == "record":
+            if 'origin' in reference:
+                from .problem_forming_import import open_imported_record
+                with open_imported_record(records, artifacts, reference):
+                    pass
+                continue
             from .claim_dependencies import verify_record_dependency
             kind = canonical_record_kind(records, reference["record_kind"]) if review_binding else reference["record_kind"]
             saved = get_record(records, kind, reference["id"])
             if "digest" in reference and not verify_record_dependency(records, kind, reference["id"], reference["digest"]):
-                raise ResearchError("strategy_evidence_stale", "The cited record differs from the bound evidence", {"id": reference["id"]})
+                raise ResearchError("strategy_evidence_stale", STALE_EVIDENCE_MESSAGE, {"id": reference["id"]})
             if kind == "local_artifact":
                 artifacts.read(saved["artifact"])
     return values

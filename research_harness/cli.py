@@ -38,17 +38,24 @@ from .probe import record_probe_intent, record_probe, summarize_probes
 from .record_check import DEFAULT_TIME_BUDGET_SECONDS
 from . import problem_attempt, problem_candidates, problem_claims, problem_citation_metadata, problem_evidence
 from . import problem_forming
+from .problem_forming_import import import_forming
 from . import overrides
 from .automatic_overrides import record_automatic_override
 from .problem_objection_carry import carry_objections
 from .problem_post_facts import record_post_fact
+from .problem_areas import record_area
+from .problem_reports import describe_report_advisories, record_report
+from .problem_candidate_transfers import record_candidate_transfer
 
 
 OPERATIONS = {
     "problem-init": problem_claims.initialize_problem,
+    "problem-area": record_area,
     "problem-candidate": problem_candidates.record_candidate,
+    "problem-candidate-transfer": record_candidate_transfer,
     "forming": problem_forming.record_forming,
     "form-outcome": problem_forming.record_form_outcome,
+    "forming-import": import_forming,
     "problem-slate": problem_candidates.record_slate,
     "problem-objections-carry": carry_objections,
     "problem-statement": problem_claims.record_statement,
@@ -63,6 +70,7 @@ OPERATIONS = {
     "problem-posted": problem_claims.record_posted,
     "problem-post-external": problem_claims.record_post_external,
     "problem-post-fact": record_post_fact,
+    "problem-report": record_report,
     "gate-override": overrides.record_override,
     "gate-auto-pass": record_automatic_override,
     "problem-post-time": problem_claims.record_post_time,
@@ -593,6 +601,7 @@ def status_report(store, *, counters=False):
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
         advisories = find_view_advisories(store, snapshot["revision"])
         if "problem" in records.get("workspace", {}):
+            advisories += describe_report_advisories(records)
             report = gate_state(records, evaluation, "post")
             review = _review_status(records, evaluation)
             report = annotate_parts_obligations(report, review)

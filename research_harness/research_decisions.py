@@ -912,6 +912,8 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
     from . import review_problem_parts
     evaluation = Evaluation.of(records, artifacts)
     account_keys = ('value', 'account_records') if 'accounts' in (expected.get('value') or {}) else ()
+    if expected.get('forming_imports') and not account_keys:
+        account_keys = ('account_records',)
     deliveries = []
     for review in reviews:
         try:

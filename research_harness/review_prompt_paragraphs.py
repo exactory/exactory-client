@@ -57,10 +57,10 @@ class PromptParagraph:
     versions: Tuple[Tuple[str, str], ...]
 
 
-# Fixed order. The accounts, slate-forming and replacement texts ship with 0.84.0.
-# The areas text is a placeholder that ships with stage C: replace it before that
-# release, and update its pinned hash in the tests.
-# After release, preserve the bytes and append a new version id instead.
+# Fixed order. Every registered paragraph has shipped: the carry text with 0.82.0,
+# the accounts, slate-forming and replacement texts with 0.84.0, and the areas text
+# with 0.85.0. Preserve the bytes of a shipped version, and append a new version id
+# for a changed text. The tests pin the hash of each version.
 PARAGRAPHS = (
     PromptParagraph('objection-carry', ('slate', 'result'), _has_carry,
                     ((CARRY_PROTOCOL, CARRY_PROMPT),)),
@@ -315,9 +315,57 @@ PARAGRAPHS = (
           'An adjudicator who receives this paragraph with the definition of A7 decides by this reading only whether '
           'the question is of the excluded kind, and keeps its own response shape.'),)),
     PromptParagraph('areas', ('bar', 'result'), _has_areas,
-        (('exactory-problem-areas-v1', '\n\nPLACEHOLDER TEXT TO BE REPLACED '
-          '(exactory-problem-areas-v1). State and apply the standards of each delivered problem area. '
-          'Read the posting thresholds from the record\'s subject class.'),)))
+        (('exactory-problem-areas-v1',
+          '\n\nThe further areas of the record (exactory-problem-areas-v1). '
+          'The statements of this record concern more than one area of mathematics. '
+          'The area of the packet is the subject class of the record. '
+          'It is the area of the post, and it was fixed when the record was opened. '
+          'problem_areas lists each further area, with its subject class (area) and the reason for naming it. '
+          'The reason is the description of the author. '
+          'Read it to find the part of that area which the field question touches, and take it as no evidence of '
+          'value. '
+          'For a bar. '
+          'State the standard of each area separately: once for the subject class of the record, and once for each '
+          'further area. '
+          'For each area, answer the six points of a bar (First to Sixth above) for that area alone: its active lines of '
+          'work with the works that show the activity; its nearest known problems and conjectures, with what a '
+          'resolution of each would give; what it counts as a substantial advance; the meaning that its specialists give '
+          'to levels 2 and 3, on each ground of significance and for comparative priority; what makes a question '
+          'uninteresting there; and its refuted conjectures, with the questions that each refutation opens. '
+          'For a further area, the field is the part of its subject class that the field question of the packet and the '
+          'reason of its entry point to. '
+          'Write the standards one after another in value.reason, each under the name of its subject class, and begin '
+          'with the subject class of the record. '
+          'Rest each standard on delivered sources of its own area, and request the sources of an area that you need and '
+          'do not have. '
+          'Where the delivered sources do not let you state the standard of an area, name that area in limitations; its '
+          'standard then stays unstated, and the standard of another area does not stand in for it. '
+          'When the packet carries problem_refresh, this bar continues your earlier bar, and later readers receive it in '
+          'place of that bar. '
+          'Keep what the earlier bar states for the areas that it covers, add the standard of each area that it does not '
+          'cover, and give every standard in full. '
+          'For a result review. '
+          'The bars of the packet state one standard for each area, and you apply each of them. '
+          'Judge each relation, each earlier statement and each alternative by the standard of the area that it belongs '
+          'to. '
+          'The standard of that area says whether a consequence there is wanted, whether a statement there is an earlier '
+          'statement of the same content, and whether an alternative there is the better question. '
+          'Where the grade of an item rests on such a judgment, say in the text of that item under value.rubric_evidence '
+          'which area the relation, the earlier statement or the alternative belongs to, and what the standard of that '
+          'area shows. '
+          'Give each grade of value.rubric by the standard of the subject class of the record, one grade for each item. '
+          'The thresholds for posting read these grades. '
+          'A consequence or a line of work in a further area enters them as far as it is established and the standard of '
+          'its own area shows it to be wanted, and no further. '
+          'A grade that the statement would have by the standard of a further area belongs to the evidence text of the '
+          'item, and it is not the grade of the item. '
+          'When the weight of the statement lies in a further area, say so in value.reason: such a statement belongs in '
+          'a record of that subject class, and the grades by the standard of this record show what it gives here. '
+          'If a bar states no standard for an area that problem_areas names, say so in limitations; a claim that belongs '
+          'to that area then enters no grade. '
+          'No item, level or threshold changes. '
+          'The response shape of this turn is unchanged: an intermediate, source-request or staged task response gives '
+          'only the fields that its task owns.'),)))
 
 
 def select_prompt_parameters(role, packet):
