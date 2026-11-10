@@ -769,7 +769,9 @@ the Python version of the recording process. The 0.67.0 release changed the
 bytes of that module, so every HTTPS route recorded before it is stale: record
 a new route with the same model, endpoint and configuration, probe it, and
 assign new reviews on it. The Claude transport and the three Codex transports
-are unchanged in 0.67.0, so their routes keep their pins.
+are unchanged in 0.67.0, so their routes keep their pins. The 0.85.1 release
+changed the bytes of the three Codex transports again, so every Codex route
+recorded before it is stale.
 
 The subscription-backed route uses this shape:
 
@@ -783,8 +785,12 @@ The subscription-backed route uses this shape:
 }
 ```
 
-Its inspected startup contract is for Codex CLI 0.159.2 and 0.162.1 with user
-configuration and rules disabled, at reasoning effort `high`. It accepts text
+Its inspected startup contract is for Codex CLI 0.159.2, 0.162.1 and, since
+0.85.1, 0.167.0, with user configuration and rules disabled, at reasoning
+effort `high`. Codex 0.167.0 records two more startup inputs in the rollout:
+the model's tool list as an `additional_tools` item, accepted only with the
+audited digest, and the review instructions as a developer message, accepted
+only when its text is exactly the instructions of the request. It accepts text
 evidence only. The adapter checks actual recorded input and rejects uninspected
 startup declarations, additional context and tool events. Other runtime contexts
 remain unverified until inspected and probed. The route starts the CLI with the

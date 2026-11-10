@@ -170,3 +170,8 @@ class VerbatimFramingTests(unittest.TestCase):
 class FramedCodexIsolationTests(codex_fixtures.CodexTransportTests):
     def module(self):
         return importlib.import_module("research_harness.review_codex_framed_transport")
+
+
+class FramedCodexNativeDeclarationTests(codex_fixtures.CodexNativeDeclarationTests):
+    def module(self):
+        return importlib.import_module("research_harness.review_codex_framed_transport")

@@ -188,6 +188,7 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
     def test_transferred_candidate_ends_with_its_destination(self):
         self.put_candidate()
         self.put_slate(["candidate-1"])
+        (self.root.parent / "destination").mkdir()
         transfer = self.mutate(cli.OPERATIONS["problem-candidate-transfer"], dict(id="transfer", candidate_id="candidate-1",
             destination_workspace=str(self.root.parent / "destination"), reason="The subject class changed."))["result"]
         self.assertTrue(problem_reports.is_report_due(self.store.snapshot()["records"]))
