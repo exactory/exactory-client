@@ -920,7 +920,7 @@ def _assess_problem_coverage(records, artifacts, reviews, expected, evidence_dig
 
     def assess():
         readings = [records['reading'][item['id']] for item in expected['readings']]
-        obligations = []
+        obligations = list(expected.get('obligations', []))
         for review, delivery in zip(reviews, deliveries):
             if isinstance(delivery, ResearchError):
                 obligations.append(obligation('problem_evidence_unassessed',

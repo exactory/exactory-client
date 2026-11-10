@@ -264,7 +264,7 @@ def validate_result(records, item):
 def collect_results(records):
     from .problem_attempt import find_current_attempt
     attempt = find_current_attempt(records)
-    results = {}
+    references = {}
     for item in collect_value_items(find_value(records)):
         if item["kind"] != "result":
             continue
@@ -275,8 +275,21 @@ def collect_results(records):
         else:
             # Historical attempt results disappear with their current attempt.
             continue
-        results[key] = (item, validate_result(records, item))
-    return [result for _, result in sorted(results.items())]
+        references[key] = item
+    results, pending = [], {}
+    for _, item in sorted(references.items()):
+        try:
+            acceptance = validate_result(records, item)
+        except ResearchError as error:
+            if error.code != "problem_result_superseded":
+                raise
+            # A later delivery removes current support, but the stored citation
+            # remains readable. Bind its repair so earlier reviews become stale.
+            finding = obligation(error.code, error.message, **error.details)
+            pending[digest(finding)] = finding
+        else:
+            results.append((item, acceptance))
+    return results, list(pending.values())
 
 
 def describe_result(records, item, acceptance, *, binding=False):
@@ -578,6 +591,7 @@ def describe_binding(records, artifacts):
     openness, value = find_latest(records, "problem_openness"), find_value(records)
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
+    results, pending = collect_results(records)
     binding = {"claim": statement, "openness": openness,
             "openness_searches": [{"formulation": row["formulation"], "search_digest": row["search_digest"],
                                    "source_digests": [digest(source) for source in row["sources"]]}
@@ -588,7 +602,7 @@ def describe_binding(records, artifacts):
             "attempt": None if attempt is None else {"id": attempt["id"], "digest": digest(attempt),
                 "native_attempt_digest": None if attempt["solver"] is None else attempt["solver"]["native_attempt_digest"]},
             "results": [describe_result(records, item, acceptance, binding=True)
-                        for item, acceptance in collect_results(records)],
+                        for item, acceptance in results],
             "readings": [{"id": row["id"], "digest": digest(row)} for row in collect_readings(records)],
             "computations": [{"execution_id": row["execution_id"], "output_id": row["output_id"],
                               **{key: digest(row[key]) for key in ("admission", "execution", "assessment")}} for row in computations],
@@ -607,6 +621,8 @@ def describe_binding(records, artifacts):
                 for record in [find_reading_locator(records, artifacts, row)] if record is not None]
     if locators:
         binding["citation_locators"] = [{"id": row["id"], "digest": digest(row)} for row in locators]
+    if pending:
+        binding["obligations"] = pending
     return binding
 
 
@@ -673,7 +689,7 @@ def describe_evidence(records, artifacts):
     held = {(row["id"], row["digest"]) for row in delivered_readings}
     computations = [validate_computation(records, artifacts, item, recorded_revision=value.get("recorded_revision")) for item in collect_value_items(value)
                     if item["kind"] == "computation"]
-    results = [describe_result(records, item, acceptance) for item, acceptance in collect_results(records)]
+    results, pending = collect_results(records)
     # Each projected record carries the stored record's id and digest, so that a reviewer can cite it exactly.
     delivered = {"claim": None if statement is None else dict(
                 {key: statement[key] for key in ("title", "area", "statement", "resolution_criteria", "formal_statement")},
@@ -693,7 +709,7 @@ def describe_evidence(records, artifacts):
                 and (reference["id"], reference["digest"]) in held else reference
                 for reference in resolve_assessment_evidence(records)],
             "attempt": attempt_evidence,
-            "results": results,
+            "results": [describe_result(records, item, acceptance) for item, acceptance in results],
             "citations": project_citations(records, artifacts),
             "readings": delivered_readings,
             "passages": [passage for passage, _ in prepared],
@@ -705,6 +721,8 @@ def describe_evidence(records, artifacts):
                                    record_references=[cite_record("native_closure", row["native_closure_digest"],
                                                                   records["native_closure"][row["native_closure_digest"]])])
                               for row in find_formal_checks(records)]}
+    if pending:
+        delivered["obligations"] = pending
     # Each projected record names how a reviewer cites it, by kind and id.
     for key, kind, field in (("claim", "problem_statement", "statement_id"), ("openness", "problem_openness", "id"),
                              ("value", "problem_value", "id"), ("assessment", "problem_assessment", "id"),
