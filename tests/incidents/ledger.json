@@ -3635,7 +3635,7 @@
       "expected": "Reconstruct supported recorded text requests with exact nested JSON character lengths and one final materialization per fit-order candidate. Preserve all five fit orders, request bytes, whole-source selection, first observed binding, refusal order and complete reports. Keep provenance and refusal classification on the caller's verified evaluation without additional predicate caches or verification namespaces; authenticate the last metadata-matching probe. No evaluation counter increases against the native path. Exhaustive record-check reconstruction and protected module bytes stay unchanged.",
       "test_kind": "real_shape",
       "tests": [
-        "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_clock",
+        "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_processor_clock",
         "test_research_record_check.RecordCheckFollowupTests.test_each_report_reader_uses_the_supplied_budget",
         "test_review_request_fit.ExactFitTests.test_differential_at_every_observed_boundary_for_all_five_orders",
         "test_review_request_fit.ExactFitTests.test_each_fit_candidate_materializes_once_including_source_trials",
@@ -3788,10 +3788,10 @@
       "class": "classification (record check budget)",
       "summary": "On a copy of a live deposited study under load, status, next and obligations took 1392, 1333 and 1311 s under 0.72.4 and 1344, 1331 and 1303 s under 0.73.0. Each reader stopped at record-check's 900 s ceiling with record_command_timeout, failing the report step although the readers work.",
       "fixed_in": "0.73.2",
-      "expected": "The default ceiling is 3600 s per report or math-solver reader, defined once by record_check.DEFAULT_TIME_BUDGET_SECONDS and used by the CLI parser. The measured reader durations pass within that default; explicit overrides, finite positive validation and timeout failures remain unchanged. The release procedure still compares reader times with the previous release to detect regressions.",
+      "expected": "The default ceiling is record_check.DEFAULT_TIME_BUDGET_SECONDS per report or math-solver reader (3600 s of elapsed time from 0.73.2, 10,800 s of processor time from 0.85.3), defined once and used by the CLI parser. The measured reader durations pass within that default; explicit overrides, finite positive validation and timeout failures remain unchanged. The release procedure still compares reader times with the previous release to detect regressions.",
       "test_kind": "real_shape",
       "tests": [
-        "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_defaults_to_3600_and_accepts_an_override",
+        "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_defaults_to_10800_and_accepts_an_override",
         "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_default_uses_record_check_constant",
         "test_research_record_check.RecordCheckFollowupTests.test_default_budget_allows_measured_report_reader_times"
       ]
@@ -4607,6 +4607,29 @@
         "test_review_render_timeout.RenderTimeoutTests.test_status_next_and_gate_post_end_with_one_json_error",
         "test_review_render_timeout.RenderTimeoutTests.test_unfinished_render_records_no_refusal_and_the_review_records_after_it_finishes",
         "test_review_render_timeout.RenderTimeoutTests.test_visual_bridge_lets_the_unfinished_render_pass_and_validates_once_it_finishes"
+      ]
+    },
+    {
+      "id": "record-check-budget-counts-elapsed-time",
+      "parent": "integration-record-check-default-budget",
+      "record": "20261110222034-record-check-budget-fails-working-reader-under-load",
+      "class": "classification (record check budget)",
+      "summary": "On a clone of studies/2402.14112 (11 GB, 4,758 artifacts) on a loaded machine (load averages 6 to 8), the status reader of 0.85.0 stopped at the 3,600 s default with record_command_timeout, while next took 1,990.9 s and obligations 1,265.6 s in the same run. All three compute the same status report, and under 0.85.1 they took 1,239.0, 1,237.7 and 1,241.2 s. The budget measured elapsed time, so the wait for a loaded machine failed a working reader.",
+      "fixed_in": "0.85.3",
+      "expected": "The time budget bounds the processor time of each reader: its own processor time plus that of the child processes that ended during it. A report reader runs under ITIMER_PROF. A math-solver reader runs as a child process whose launcher arms ITIMER_PROF with the budget and then calls os.execv, so the reader ends on SIGPROF, also when it reads its processor clock on every pass. A reader that only waits passes. A reader that uses more processor time than the budget fails with record_command_timeout. Its message names the reader, the budget and the remedy, and its details give processor_seconds and seconds. A SIGPROF that arrives after a report reader returns and before the timer is disarmed counts as the timeout, and the previous timer and handler are restored. Every row gives processor_seconds next to seconds. The default is 10,800 s of processor time, and a budget above 100,000,000 s is refused with invalid_input before any clone.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_record_check.ProcessorBudgetTests.test_report_reader_that_sleeps_past_its_budget_passes",
+        "test_research_record_check.ProcessorBudgetTests.test_report_reader_that_keeps_the_processor_busy_is_stopped_by_the_processor_timer",
+        "test_research_record_check.ProcessorBudgetTests.test_math_reader_that_keeps_the_processor_busy_fails_with_a_timeout",
+        "test_research_record_check.ProcessorBudgetTests.test_math_reader_that_sleeps_past_its_budget_passes",
+        "test_research_record_check.ProcessorBudgetTests.test_math_reader_runs_under_an_armed_processor_timer_of_at_most_the_budget",
+        "test_research_record_check.ProcessorBudgetTests.test_deadline_while_the_timer_is_disarmed_counts_as_the_timeout_and_restores_the_handler",
+        "test_research_record_check.ProcessorBudgetTests.test_time_budget_above_the_interval_timer_maximum_is_refused_before_cloning",
+        "test_research_record_check.ProcessorBudgetTests.test_cli_refuses_a_time_budget_above_the_maximum_with_a_json_error",
+        "test_research_record_check.RecordCheckTests.test_elapsed_time_over_budget_alone_passes_with_patched_clock",
+        "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_processor_clock",
+        "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_defaults_to_10800_and_accepts_an_override"
       ]
     }
   ]

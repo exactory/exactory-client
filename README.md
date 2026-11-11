@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.85.3](docs/releases/0.85.3.md) makes the `record-check --time-budget` bound the processor time of each reader instead of its elapsed time. A reader that waits while other processes use the machine passes, and a reader that uses more processor time than the budget still fails with `record_command_timeout`. The default budget is now 10,800 seconds of processor time, and the maximum is 100,000,000 seconds. Each reader row now gives `processor_seconds` next to `seconds`.
+
 Version [0.85.2](docs/releases/0.85.2.md) makes a command report a local tool that did not finish within its own time limit, such as a `pdftoppm` page render, with the code `local_tool_timeout` instead of a traceback. `record-check` reports the failed step and `ready` false. An unfinished tool changes no review, records no refusal and is not cached.
 
 Version [0.85.1](docs/releases/0.85.1.md) lets the Codex reviewer routes verify the input of Codex CLI 0.167.0. The three Codex transports accept its tool list only with the audited digest and its instructions message only when the text is exactly the request's instructions. Every Codex route recorded before 0.85.1 needs a new probe before its next review; recorded reviews keep their standing. `problem-candidate-transfer` now refuses a destination that does not exist or cannot be resolved, on every supported Python.
