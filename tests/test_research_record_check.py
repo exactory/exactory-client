@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import tarfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -149,7 +150,9 @@ class RecordCheckTests(unittest.TestCase):
         self.assertTrue(report['ready'], report)
         self.assertEqual([row['step'] for row in report['steps']],
                          ['snapshot', 'integrity', 'reconstruction', 'authentication', 'continuation', 'report'])
-        self.assertTrue(all(row['seconds'] >= 0 for row in report['steps']))
+        self.assertTrue(all(row['seconds'] >= 0 and row['processor_seconds'] >= 0 for row in report['steps']))
+        commands = self.step(report, 'report')['result']['commands'].values()
+        self.assertTrue(all(row['processor_seconds'] >= 0 for row in commands))
         self.assertEqual(digest_tree(self.case.root), before)
         self.assertFalse(Path(report['clone']).exists())
         self.assertEqual(set(self.step(report, 'report')['result']['commands']), {'status', 'next', 'obligations'})
@@ -398,12 +401,21 @@ class RecordCheckTests(unittest.TestCase):
         self.assertEqual(row['error']['details']['step'], 'continuation')
         self.assertTrue(row['error']['details']['reason'])
 
-    def test_command_over_budget_is_failed_with_patched_clock(self):
+    def test_command_over_budget_is_failed_with_patched_processor_clock(self):
+        from research_harness import record_check
+        with patch.object(record_check, 'read_processor_seconds', side_effect=[0, 61]):
+            result = record_check.run_timed_check('status', lambda: {'ready': False}, budget=60)
+        self.assertEqual(result['error']['code'], 'record_command_timeout')
+        self.assertEqual(result['processor_seconds'], 61)
+        self.assertEqual(result['error']['details']['processor_seconds'], 61)
+
+    def test_elapsed_time_over_budget_alone_passes_with_patched_clock(self):
         from research_harness import record_check
         with patch.object(record_check.time, 'monotonic', side_effect=[0, 61]):
             result = record_check.run_timed_check('status', lambda: {'ready': False}, budget=60)
-        self.assertEqual(result['error']['code'], 'record_command_timeout')
+        self.assertEqual(result['status'], 'passed', result)
         self.assertEqual(result['seconds'], 61)
+        self.assertLess(result['processor_seconds'], 60)
 
     def test_command_deadline_cannot_be_swallowed_as_a_record_refusal(self):
         from research_harness import record_check
@@ -869,14 +881,14 @@ class RecordCheckFollowupTests(unittest.TestCase):
     def test_deadline_during_timer_installation_still_reports_a_budget_failure(self):
         from research_harness import record_check
         with patch('signal.getitimer', return_value=(0, 0)), patch('signal.signal') as handler, \
-                patch('signal.setitimer', side_effect=[record_check._CommandDeadline(), (0, 0)]):
+                patch('signal.setitimer', side_effect=[record_check._CommandDeadline(), (0, 0), (0, 0)]):
             result = record_check.run_timed_check('status', lambda: {}, budget=0.001)
         self.assertEqual(result['error']['code'], 'record_command_timeout')
         self.assertEqual(handler.call_count, 2)
 
-    def test_cli_time_budget_defaults_to_3600_and_accepts_an_override(self):
+    def test_cli_time_budget_defaults_to_10800_and_accepts_an_override(self):
         parser = cli.build_parser()
-        self.assertEqual(parser.parse_args(['record-check', '--workspace', '/snapshot']).time_budget, 3600)
+        self.assertEqual(parser.parse_args(['record-check', '--workspace', '/snapshot']).time_budget, 10800)
         args = parser.parse_args(['record-check', '--workspace', '/snapshot', '--time-budget', '17.5'])
         self.assertEqual(args.time_budget, 17.5)
 
@@ -898,11 +910,14 @@ class RecordCheckFollowupTests(unittest.TestCase):
                 store = record_check.OfflineStore(directory)
                 seconds = dict(zip(('status', 'next', 'obligations'), durations))
 
+                # The measured durations were elapsed times. Each one is also an upper bound of the
+                # processor time of its single-threaded reader, the measure of the budget since 0.85.3.
                 def measure(name, check, **kwargs):
-                    with patch.object(record_check.time, 'monotonic', return_value=0) as clock:
+                    with patch.object(record_check.time, 'monotonic', return_value=0) as clock, \
+                            patch.object(record_check, 'read_processor_seconds', return_value=0) as processor:
                         def read():
                             result = check()
-                            clock.return_value = seconds.get(name, 0)
+                            clock.return_value = processor.return_value = seconds.get(name, 0)
                             return result
                         return timed_check(name, read, **kwargs)
 
@@ -912,6 +927,7 @@ class RecordCheckFollowupTests(unittest.TestCase):
                 for command, duration in seconds.items():
                     self.assertEqual(report['commands'][command]['status'], 'passed')
                     self.assertEqual(report['commands'][command]['seconds'], duration)
+                    self.assertEqual(report['commands'][command]['processor_seconds'], duration)
 
     def test_each_report_reader_uses_the_supplied_budget(self):
         from research_harness import record_check
@@ -1029,6 +1045,164 @@ class RecordCheckFollowupTests(unittest.TestCase):
         chain = result['chains'][0]
         self.assertEqual(chain['boundary'], 'controller')
         self.assertEqual(chain['actions'], [plan])
+
+
+# A busy reader stops by itself after this much processor time, so a missing timer fails the test
+# instead of hanging it. Two loop shapes: one reads the processor clock on every pass (a system call
+# per pass, which RLIMIT_CPU did not stop on macOS 27), the other once per block of work.
+BUSY_READER_CAP_SECONDS = 8
+BUSY_LOOP_BODIES = {'per_pass': '    pass\n', 'per_block': '    for _ in range(100000):\n        pass\n'}
+
+
+def build_busy_reader_source(shape):
+    return ('import time\n'
+            'started = time.process_time()\n'
+            'while time.process_time() - started < ' + str(BUSY_READER_CAP_SECONDS) + ':\n'
+            + BUSY_LOOP_BODIES[shape] + 'print("{}")\n')
+
+
+SLEEPING_READER_SOURCE = 'import time\ntime.sleep(1)\nprint("{}")\n'
+TIMER_READER_SOURCE = 'import json, signal\nprint(json.dumps(signal.getitimer(signal.ITIMER_PROF)))\n'
+
+
+class ProcessorBudgetTests(unittest.TestCase):
+    """The time budget bounds processor time, measured with real timers and real child processes."""
+
+    def build_math_case(self, reader_source):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        clone = Path(directory.name) / 'clone'
+        (clone / 'attack/root/.search').mkdir(parents=True)
+        (clone / 'attack/root/.search/tree.json').write_text('{}')
+        harness_root = Path(directory.name) / 'harness'
+        (harness_root / 'bin').mkdir(parents=True)
+        (harness_root / 'bin/exactory-math').write_text(reader_source)
+        return clone, harness_root
+
+    def assert_timeout_describes(self, error, reader, budget):
+        self.assertEqual(error['code'], 'record_command_timeout')
+        for text in (reader, '{:g}'.format(budget), 'processor time', 'decided nothing about the record',
+                     '--time-budget'):
+            self.assertIn(text, error['message'])
+        self.assertNotIn('stopped', error['message'])
+        details = error['details']
+        self.assertEqual(details['budget_seconds'], budget)
+        self.assertGreaterEqual(details['processor_seconds'], 0)
+        self.assertGreaterEqual(details['seconds'], 0)
+
+    def test_report_reader_that_sleeps_past_its_budget_passes(self):
+        from research_harness import record_check
+        result = record_check.run_timed_check('status', lambda: time.sleep(1) or {}, budget=0.5)
+        self.assertEqual(result['status'], 'passed', result)
+        self.assertGreater(result['seconds'], 0.5)
+        self.assertLess(result['processor_seconds'], 0.5)
+
+    def test_report_reader_that_keeps_the_processor_busy_is_stopped_by_the_processor_timer(self):
+        from research_harness import record_check
+        finished = []
+
+        def read_clock_per_pass():
+            started = time.process_time()
+            while time.process_time() - started < BUSY_READER_CAP_SECONDS:
+                pass
+            finished.append(True)
+            return {}
+
+        def read_clock_per_block():
+            started = time.process_time()
+            while time.process_time() - started < BUSY_READER_CAP_SECONDS:
+                for _ in range(100000):
+                    pass
+            finished.append(True)
+            return {}
+
+        for keep_busy in (read_clock_per_pass, read_clock_per_block):
+            with self.subTest(shape=keep_busy.__name__):
+                result = record_check.run_timed_check('status', keep_busy, budget=0.3)
+                self.assertEqual(finished, [])
+                self.assertEqual(result['status'], 'failed')
+                self.assert_timeout_describes(result['error'], 'status', 0.3)
+                self.assertEqual(result['error']['details']['command'], 'status')
+                self.assertGreaterEqual(result['processor_seconds'], 0.3)
+                self.assertLess(result['processor_seconds'], BUSY_READER_CAP_SECONDS)
+                self.assertEqual(record_check.signal.getitimer(record_check.signal.ITIMER_PROF), (0.0, 0.0))
+
+    def test_math_reader_that_keeps_the_processor_busy_fails_with_a_timeout(self):
+        from research_harness.record_check import check_math_roots
+        for shape in BUSY_LOOP_BODIES:
+            with self.subTest(shape=shape):
+                clone, harness_root = self.build_math_case(build_busy_reader_source(shape))
+                with self.assertRaises(ResearchError) as stopped:
+                    check_math_roots(clone, harness_root, time_budget=0.5)
+                error = stopped.exception.as_dict()
+                self.assert_timeout_describes(error, 'exactory-math search status', 0.5)
+                self.assertEqual(error['details']['command'],
+                                 [sys.executable, str(harness_root / 'bin/exactory-math'), '--attack-root',
+                                  str((clone / 'attack/root').resolve()), 'search', 'status', '--json'])
+                self.assertEqual(error['details']['attack_root'], str((clone / 'attack/root').resolve()))
+                self.assertLess(error['details']['processor_seconds'], BUSY_READER_CAP_SECONDS)
+
+    def test_math_reader_that_sleeps_past_its_budget_passes(self):
+        from research_harness.record_check import check_math_roots
+        clone, harness_root = self.build_math_case(SLEEPING_READER_SOURCE)
+        rows = check_math_roots(clone, harness_root, time_budget=0.5)
+        self.assertEqual([row['returncode'] for row in rows], [0, 0])
+        for row in rows:
+            self.assertGreater(row['seconds'], 0.5)
+            self.assertLess(row['processor_seconds'], 0.5)
+            self.assertEqual(row['command'][:2], [sys.executable, str(harness_root / 'bin/exactory-math')])
+
+    def test_math_reader_runs_under_an_armed_processor_timer_of_at_most_the_budget(self):
+        from research_harness.record_check import check_math_roots
+        clone, harness_root = self.build_math_case(TIMER_READER_SOURCE)
+        rows = check_math_roots(clone, harness_root, time_budget=7.5)
+        for remaining, interval in (row['result'] for row in rows):
+            self.assertGreater(remaining, 0)
+            self.assertLessEqual(remaining, 7.5)
+            self.assertEqual(interval, 0)
+
+    def test_deadline_while_the_timer_is_disarmed_counts_as_the_timeout_and_restores_the_handler(self):
+        from research_harness import record_check
+        with patch('signal.getitimer', return_value=(0, 0)), patch('signal.signal') as handler, \
+                patch('signal.setitimer', side_effect=[(0, 0), record_check._CommandDeadline(), (0, 0)]) as timer:
+            result = record_check.run_timed_check('status', lambda: {}, budget=60)
+        self.assertEqual(result['status'], 'failed')
+        self.assertEqual(result['error']['code'], 'record_command_timeout')
+        self.assertEqual(handler.call_args_list[-1].args, (record_check.signal.SIGPROF, handler.return_value))
+        self.assertEqual(timer.call_args_list[-1].args, (record_check.signal.ITIMER_PROF, 0, 0))
+
+    def test_time_budget_above_the_interval_timer_maximum_is_refused_before_cloning(self):
+        from research_harness import record_check
+        with tempfile.TemporaryDirectory() as directory:
+            for budget in (100000001, 1e19):
+                with self.subTest(budget=budget), patch.object(record_check, 'copy_snapshot') as clone:
+                    with self.assertRaises(ResearchError) as refused:
+                        record_check.check_record(directory, time_budget=budget)
+                    self.assertEqual(refused.exception.code, 'invalid_input')
+                    self.assertEqual(refused.exception.message, 'The time budget must be a finite positive '
+                                     'number of seconds, at most 100000000')
+                    clone.assert_not_called()
+            with patch.object(record_check, 'copy_snapshot', side_effect=RuntimeError('cloned')) as clone:
+                with self.assertRaisesRegex(RuntimeError, 'cloned'):
+                    record_check.check_record(directory, time_budget=1e8)
+            clone.assert_called_once()
+
+    def test_cli_refuses_a_time_budget_above_the_maximum_with_a_json_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workspace, temporary = Path(directory) / 'workspace', Path(directory) / 'tmp'
+            workspace.mkdir()
+            temporary.mkdir()
+            for budget in ('100000001', '1e19'):
+                with self.subTest(budget=budget):
+                    completed = subprocess.run(
+                        [sys.executable, str(PLUGIN / 'bin/exactory-research'), 'record-check',
+                         '--workspace', str(workspace), '--time-budget', budget],
+                        cwd=PLUGIN, capture_output=True, text=True, timeout=60,
+                        env=dict(os.environ, TMPDIR=str(temporary), EXACTORY_API_KEY=''))
+                    self.assertEqual(completed.returncode, 1, completed.stderr)
+                    self.assertNotIn('Traceback', completed.stderr)
+                    self.assertEqual(json.loads(completed.stderr)['error']['code'], 'invalid_input')
+                    self.assertEqual(list(temporary.iterdir()), [])
 
 
 if __name__ == '__main__':

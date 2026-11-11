@@ -15,6 +15,7 @@ import math
 import os
 from pathlib import Path
 import platform
+import resource
 import shutil
 import signal
 import stat
@@ -55,8 +56,18 @@ EXPECTED_STOP_CODES = frozenset((
     'assessment_incomplete',
     'openness_review_not_approved',
 ))
-DEFAULT_TIME_BUDGET_SECONDS = 3600
+DEFAULT_TIME_BUDGET_SECONDS = 10800
+# The largest interval timer that macOS accepts: setitimer refuses 100000001 s with EINVAL.
+MAXIMUM_TIME_BUDGET_SECONDS = 100_000_000
 SNAPSHOT_ATTEMPTS = 3
+# Arms the processor-time interval timer of a math-solver reader, then replaces itself with the reader
+# command. Arguments: the budget in seconds, then the reader command. The timer survives execv, and the
+# default action of SIGPROF ends the reader.
+CPU_TIMER_LAUNCHER_SOURCE = (
+    'import os, signal, sys\n'
+    'signal.signal(signal.SIGPROF, signal.SIG_DFL)\n'
+    'signal.setitimer(signal.ITIMER_PROF, float(sys.argv[1]))\n'
+    'os.execv(sys.argv[2], sys.argv[2:])\n')
 
 
 class _CommandDeadline(BaseException):
@@ -519,28 +530,48 @@ def check_continuation(store):
     return {'chains': chains, 'decision_stops': decision_stops}
 
 
+def read_processor_seconds():
+    """Return the processor time of this process plus that of its ended and waited-for child processes."""
+    children = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return time.process_time() + children.ru_utime + children.ru_stime
+
+
+def build_reader_timeout_error(reader, budget, details):
+    return ResearchError(
+        'record_command_timeout',
+        f'The {reader} reader used more processor time than its budget of {budget:g} seconds. '
+        'record-check decided nothing about the record. Run record-check again with a larger --time-budget.',
+        dict(details, budget_seconds=budget))
+
+
 def run_timed_check(name, check, *, budget=None):
-    """Report known record refusals; let implementation defects surface."""
-    started = time.monotonic()
-    previous_handler = None
+    """Report known record refusals; let implementation defects surface.
+
+    The budget bounds processor time. The time that a reader waits for the machine is not its cost."""
+    started, processor_started = time.monotonic(), read_processor_seconds()
+    timed = budget is not None and hasattr(signal, 'setitimer')
+    stopped = False
 
     def expire(signum, frame):
         raise _CommandDeadline()
 
-    def describe_timeout():
-        return {'code': 'record_command_timeout', 'message': 'The record reader exceeded its time budget',
-                'details': {'command': name, 'budget_seconds': budget}}
-
     row = {'step': name, 'status': 'passed'}
+    if timed:
+        previous_timer = signal.getitimer(signal.ITIMER_PROF)
+        previous_handler = signal.signal(signal.SIGPROF, expire)
     try:
-        if budget is not None and hasattr(signal, 'setitimer'):
-            previous_timer = signal.getitimer(signal.ITIMER_REAL)
-            previous_handler = signal.signal(signal.SIGALRM, expire)
-            signal.setitimer(signal.ITIMER_REAL, budget)
-        with describe_tool_timeout():
-            row['result'] = check()
+        # The timer is disarmed inside the block that catches the deadline, so a SIGPROF that
+        # arrives after the reader returns counts as its timeout.
+        try:
+            if timed:
+                signal.setitimer(signal.ITIMER_PROF, budget)
+            with describe_tool_timeout():
+                row['result'] = check()
+        finally:
+            if timed:
+                signal.setitimer(signal.ITIMER_PROF, 0)
     except _CommandDeadline:
-        row.update(status='failed', error=describe_timeout())
+        stopped = True
     except _CheckEffectRequired as error:
         row.update(status='failed', error={
             'code': 'qualification_unavailable', 'message': 'An external effect is required',
@@ -550,12 +581,14 @@ def run_timed_check(name, check, *, budget=None):
                        {'code': 'record_json_invalid', 'message': str(error)})
         row.update(status='failed', error=description)
     finally:
-        if previous_handler is not None:
-            signal.setitimer(signal.ITIMER_REAL, *previous_timer)
-            signal.signal(signal.SIGALRM, previous_handler)
+        if timed:
+            signal.signal(signal.SIGPROF, previous_handler)
+            signal.setitimer(signal.ITIMER_PROF, *previous_timer)
     row['seconds'] = time.monotonic() - started
-    if budget is not None and row['seconds'] > budget:
-        row.update(status='failed', error=describe_timeout())
+    row['processor_seconds'] = read_processor_seconds() - processor_started
+    if budget is not None and (stopped or row['processor_seconds'] > budget):
+        row.update(status='failed', error=build_reader_timeout_error(name, budget, {
+            'command': name, 'processor_seconds': row['processor_seconds'], 'seconds': row['seconds']}).as_dict())
     return row
 
 
@@ -584,16 +617,19 @@ def check_math_roots(clone, harness_root, *, time_budget=DEFAULT_TIME_BUDGET_SEC
             # attack root identifies its one controller, including its slug.
             arguments = [sys.executable, str(harness_root / 'bin/exactory-math'),
                          '--attack-root', str(root), 'search', command, '--json']
-            started = time.monotonic()
-            try:
-                completed = subprocess.run(arguments, cwd=harness_root, capture_output=True,
-                                           text=True, timeout=time_budget,
-                                           env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
-            except subprocess.TimeoutExpired as error:
-                raise ResearchError('record_command_timeout', 'Math reader exceeded its time budget',
-                                    {'command': command, 'attack_root': str(root)}) from error
+            started, processor_started = time.monotonic(), read_processor_seconds()
+            # The launcher arms the processor-time timer in place of preexec_fn, which is not safe
+            # in a process with threads.
+            completed = subprocess.run(
+                [sys.executable, '-I', '-c', CPU_TIMER_LAUNCHER_SOURCE, str(time_budget)] + arguments,
+                cwd=harness_root, capture_output=True, text=True,
+                env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'))
             result = {'attack_root': str(root), 'command': arguments, 'returncode': completed.returncode,
-                      'seconds': time.monotonic() - started}
+                      'seconds': time.monotonic() - started,
+                      'processor_seconds': read_processor_seconds() - processor_started}
+            if completed.returncode == -signal.SIGPROF or result['processor_seconds'] > time_budget:
+                raise build_reader_timeout_error('exactory-math search ' + command, time_budget, {
+                    key: result[key] for key in ('attack_root', 'command', 'processor_seconds', 'seconds')})
             if completed.returncode:
                 raise ResearchError('record_math_read_failed', 'Math reader refused the cloned controller',
                                     dict(result, stderr=completed.stderr, stdout=completed.stdout))
@@ -685,8 +721,10 @@ def check_isolated_snapshot(clone, source, report, report_directory):
 
 def check_record(workspace, *, keep_clone=None, isolate=True, time_budget=DEFAULT_TIME_BUDGET_SECONDS):
     """Clone W before opening any SQLite connection; always remove temporary work."""
-    if not isinstance(time_budget, (int, float)) or not math.isfinite(time_budget) or time_budget <= 0:
-        raise ResearchError('invalid_input', 'The time budget must be a finite positive number of seconds')
+    if (not isinstance(time_budget, (int, float)) or not math.isfinite(time_budget) or time_budget <= 0
+            or time_budget > MAXIMUM_TIME_BUDGET_SECONDS):
+        raise ResearchError('invalid_input', 'The time budget must be a finite positive number of seconds, '
+                            'at most ' + str(MAXIMUM_TIME_BUDGET_SECONDS))
     source = Path(workspace).resolve(strict=True)
     harness_root = Path(__file__).resolve().parents[1]
     version = json.loads((harness_root / '.claude-plugin/plugin.json').read_text(encoding='utf-8'))['version']
@@ -726,7 +764,7 @@ def check_record(workspace, *, keep_clone=None, isolate=True, time_budget=DEFAUL
             raise ResearchError('unsafe_path', 'The clone destination must not exist')
         report['clone'] = str(clone)
         failures = []
-        started = time.monotonic()
+        started, processor_started = time.monotonic(), read_processor_seconds()
         for attempt in range(SNAPSHOT_ATTEMPTS):
             try:
                 copy_snapshot(source, clone)
@@ -746,11 +784,13 @@ def check_record(workspace, *, keep_clone=None, isolate=True, time_budget=DEFAUL
             else:
                 report['steps'].append({'step': 'snapshot', 'status': 'passed',
                                         'seconds': time.monotonic() - started,
+                                        'processor_seconds': read_processor_seconds() - processor_started,
                                         'result': dict(result, attempts=attempt + 1)})
                 break
         else:
             report['steps'].append({'step': 'snapshot', 'status': 'failed',
-                                    'seconds': time.monotonic() - started, 'error': {
+                                    'seconds': time.monotonic() - started,
+                                    'processor_seconds': read_processor_seconds() - processor_started, 'error': {
                                         'code': 'record_snapshot_inconsistent',
                                         'message': 'No consistent snapshot after three copies',
                                         'details': {'attempts': failures}}})
