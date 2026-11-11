@@ -28,7 +28,7 @@ from .artifacts import (
     ArtifactStore, _CheckEffectRequired, _OBJECT_DIRECTORY, _SEALED_DIRECTORY,
     is_sealed_artifact,
 )
-from .errors import ResearchError
+from .errors import ResearchError, describe_tool_timeout
 from .evaluation import Evaluation
 from .evidence import digest
 from . import review_preflight, review_protocol as protocol, review_transport as transport
@@ -537,7 +537,8 @@ def run_timed_check(name, check, *, budget=None):
             previous_timer = signal.getitimer(signal.ITIMER_REAL)
             previous_handler = signal.signal(signal.SIGALRM, expire)
             signal.setitimer(signal.ITIMER_REAL, budget)
-        row['result'] = check()
+        with describe_tool_timeout():
+            row['result'] = check()
     except _CommandDeadline:
         row.update(status='failed', error=describe_timeout())
     except _CheckEffectRequired as error:

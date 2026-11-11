@@ -15,7 +15,7 @@ from . import fulltext_jobs
 from .import_io import read_import_input
 from .check_mode import check_mutation
 from .drafting import find_draft_obligations
-from .errors import ResearchError
+from .errors import ResearchError, describe_tool_timeout
 from .evaluation import Evaluation
 from .evidence import digest
 from .gates import gate_state, require_ready
@@ -1035,7 +1035,8 @@ def main(argv=None, render_views=render_views_after_command):
     request, render_views(--workspace) renders the output views once, outside every store lock."""
     args = build_parser().parse_args(argv)
     try:
-        result = run(args)
+        with describe_tool_timeout():
+            result = run(args)
         if args.command == "review-series":
             raise SystemExit(result)
         print(json.dumps(result, ensure_ascii=False, indent=2, allow_nan=False))

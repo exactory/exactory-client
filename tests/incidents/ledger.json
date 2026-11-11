@@ -4592,6 +4592,22 @@
         "tests.test_search_dispositions.DispositionTests.test_public_cli_checks_and_records_both_commands",
         "test_math_attempt_dispositions.AttemptDispositionConsumerTests.test_common_store_accepts_dispositions_and_problem_reviewer_sees_them"
       ]
+    },
+    {
+      "id": "record-check-pdf-render-timeout-traceback",
+      "record": "20261110164908-record-check-crashes-on-pdf-render-timeout",
+      "class": "local tool time limit (harness defect)",
+      "summary": "Under machine load, a pdftoppm page render of a native PDF review input exceeded its 60 s limit. subprocess.TimeoutExpired is not a ResearchError, so record-check ended in a traceback from its isolated child, and status, next and gate post ended in a traceback too.",
+      "expected": "record-check reports the failed step with local_tool_timeout (tool, budget_seconds), ready false and exit status 1. Every other command ends with the same code in a JSON error. Below the command boundary the exception passes every validator, so the review keeps its standing, no refusal is recorded and nothing is cached; the next run with a finished render passes.",
+      "fixed_in": "0.85.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_render_timeout.RenderTimeoutTests.test_record_check_reports_the_unfinished_render_as_a_failed_step_and_passes_once_it_finishes",
+        "test_review_render_timeout.RenderTimeoutTests.test_record_check_command_prints_its_report_and_exits_one_from_the_isolated_child",
+        "test_review_render_timeout.RenderTimeoutTests.test_status_next_and_gate_post_end_with_one_json_error",
+        "test_review_render_timeout.RenderTimeoutTests.test_unfinished_render_records_no_refusal_and_the_review_records_after_it_finishes",
+        "test_review_render_timeout.RenderTimeoutTests.test_visual_bridge_lets_the_unfinished_render_pass_and_validates_once_it_finishes"
+      ]
     }
   ]
 }

@@ -35,6 +35,8 @@ paper-verification market. One plugin serves both personas:
 
 ## Install
 
+Version [0.85.2](docs/releases/0.85.2.md) makes a command report a local tool that did not finish within its own time limit, such as a `pdftoppm` page render, with the code `local_tool_timeout` instead of a traceback. `record-check` reports the failed step and `ready` false. An unfinished tool changes no review, records no refusal and is not cached.
+
 Version [0.85.1](docs/releases/0.85.1.md) lets the Codex reviewer routes verify the input of Codex CLI 0.167.0. The three Codex transports accept its tool list only with the audited digest and its instructions message only when the text is exactly the request's instructions. Every Codex route recorded before 0.85.1 needs a new probe before its next review; recorded reviews keep their standing. `problem-candidate-transfer` now refuses a destination that does not exist or cannot be resolved, on every supported Python.
 
 Version [0.85.0](docs/releases/0.85.0.md) lets a math-conjecturer record name the further areas that its statements concern, take up a candidate of another record with its forming history, and report how its exploration ended. `problem-area` records a further area, and each bar then states the standard of each area separately. `forming-import` gives a record a verified snapshot of the forming history of another record, and `problem-candidate-transfer` records the move in the source. `problem-report` records every form with its outcome, the candidates with their endings, each post with its classification, and one of six outcomes; `status` shows a due or stale report as an advisory.

@@ -1,6 +1,9 @@
 """Typed failures for research services and their command-line callers."""
 
 from contextlib import contextmanager
+import os
+from pathlib import Path
+import subprocess
 from typing import Optional
 
 
@@ -33,3 +36,21 @@ def describe_error_at(path, **context):
     except ResearchError as error:
         error.details = dict({'path': path, **context}, **(error.details or {}))
         raise
+
+
+@contextmanager
+def describe_tool_timeout():
+    """At a command boundary, report a local tool that did not finish within its own time limit as a failed run.
+
+    Below the boundary subprocess.TimeoutExpired is not a ResearchError, so it passes every validator unchanged:
+    an unfinished tool never refuses, downgrades or caches anything about a record."""
+    try:
+        yield
+    except subprocess.TimeoutExpired as error:
+        arguments = error.cmd if isinstance(error.cmd, (list, tuple)) else str(error.cmd).split()
+        tool = Path(os.fsdecode(arguments[0])).name
+        raise ResearchError(
+            'local_tool_timeout',
+            f'The local tool {tool} did not finish within its {error.timeout:g}-second limit, so this run decided '
+            'nothing about the record. When the machine has less load, run the command again.',
+            {'tool': tool, 'budget_seconds': error.timeout}) from error

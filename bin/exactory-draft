@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import BinaryIO, NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
+from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError, describe_tool_timeout
 from research_harness.file_streams import freeze_file
 from research_harness.exactory_api import UUID_RE, read_api_base_url
 from research_harness.integration import (command_identity, current_store, export_workspace,
@@ -1779,7 +1779,8 @@ def main(render_views=render_views_after_command) -> None:
         if getattr(args, "check", False):
             raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
                                 {"command": args.command})
-        args.handler(args)
+        with describe_tool_timeout():
+            args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
     finally:
