@@ -29,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.citation_report import report_citation_gate
 from research_harness.cli import add_identity, select_managed_path
-from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError
+from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError, describe_tool_timeout
 from research_harness.exactory_api import _DEFAULT_API_URL, read_api_base_url
 from research_harness.integration import command_identity, current_store
 from research_harness.output_views import render_views_after_command
@@ -1807,7 +1807,8 @@ def main(render_views=render_views_after_command) -> None:
     args = _build_parser().parse_args()
     _API_BASE_URL = _read_checked_api_base_url()
     try:
-        args.handler(args)
+        with describe_tool_timeout():
+            args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
     finally:

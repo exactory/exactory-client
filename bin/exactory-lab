@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from research_harness.errors import ResearchError
+from research_harness.errors import ResearchError, describe_tool_timeout
 from research_harness.storage import Store
 from research_harness.integration import (command_identity, current_store, initialization_payload, initialize_workspace,
                                            study_state, update_study, record_decision)
@@ -568,7 +568,8 @@ def main(render_views=render_views_after_command) -> None:
         if getattr(args, "check", False) and args.handler not in (_run_state_set, _run_decide):
             raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
                                 {"command": args.command})
-        args.handler(args)
+        with describe_tool_timeout():
+            args.handler(args)
     except ResearchError as error:
         _exit_with_error(json.dumps({"error": error.as_dict()}))
     finally:
