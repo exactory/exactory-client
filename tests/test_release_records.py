@@ -26,8 +26,8 @@ EMPTY_REPORT = {
     "tags_without_release": [],
     "notes_without_tag": [],
     "tags_without_note": [],
-    "readme_versions_without_note": [],
-    "notes_without_readme_version": [],
+    "changelog_versions_without_note": [],
+    "notes_without_changelog_version": [],
     "plugin_versions_without_note": [],
     "release_versions_without_tag": [],
     "release_versions_without_release": [],
@@ -44,7 +44,7 @@ class ReleaseRecordsAssertions(unittest.TestCase):
 
     def compare_records(self, versions, tags, releases, **kwargs):
         return self.load_api().compare_records(
-            readme_versions=set(versions), note_versions=set(versions),
+            changelog_versions=set(versions), note_versions=set(versions),
             tag_names=tags, release_tag_names=releases,
             plugin_version=versions[-1] if versions else "0.73.0", **kwargs,
         )
@@ -120,10 +120,10 @@ class ReleaseRecordsTests(ReleaseRecordsAssertions):
             release_versions_without_release=["0.58.0"],
         )
 
-    def test_readme_and_note_differences_are_reported(self):
+    def test_changelog_and_note_differences_are_reported(self):
         api = self.load_api()
         report = api.compare_records(
-            readme_versions={"0.58.0", "0.60.0", "0.9.0"},
+            changelog_versions={"0.58.0", "0.60.0", "0.9.0"},
             note_versions={"0.58.0", "0.59.0", "0.10.0"},
             tag_names=["exactory--v" + version for version in
                        ("0.58.0", "0.59.0", "0.10.0")],
@@ -132,12 +132,12 @@ class ReleaseRecordsTests(ReleaseRecordsAssertions):
             plugin_version="0.72.4",
         )
         self.assert_report(
-            report, readme_versions_without_note=["0.9.0", "0.60.0"],
-            notes_without_readme_version=["0.10.0", "0.59.0"],
+            report, changelog_versions_without_note=["0.9.0", "0.60.0"],
+            notes_without_changelog_version=["0.10.0", "0.59.0"],
             plugin_versions_without_note=["0.72.4"],
         )
 
-    def test_parse_readme_release_links_with_any_text(self):
+    def test_parse_changelog_release_links_with_any_text(self):
         text = (
             "Version [0.58.0](docs/releases/0.58.0.md) describes a release.\n"
             "Version\n[0.39.0](docs/releases/0.39.0.md) is wrapped.\n"
@@ -146,36 +146,36 @@ class ReleaseRecordsTests(ReleaseRecordsAssertions):
             "Version [0.66.2](https://example.org/0.66.2.md) is external.\n"
         )
         self.assertEqual(
-            self.load_api().parse_readme_versions(text),
+            self.load_api().parse_changelog_versions(text),
             {"0.39.0", "0.42.1", "0.55.0", "0.58.0"},
         )
 
     def test_note_linked_from_running_text_has_a_complete_record(self):
         api = self.load_api()
-        readme_versions = api.parse_readme_versions(
+        changelog_versions = api.parse_changelog_versions(
             "Version 0.39.2 enforces the final decision; see the "
             "[release notes](docs/releases/0.39.2.md). "
             "[0.42.1](docs/releases/0.42.1.md) keeps the investigation current."
         )
         tags = ["exactory--v0.39.2", "exactory--v0.42.1"]
         self.assert_report(api.compare_records(
-            readme_versions=readme_versions,
+            changelog_versions=changelog_versions,
             note_versions={"0.39.2", "0.42.1"},
             tag_names=tags, release_tag_names=tags, plugin_version="0.42.1",
         ))
 
-    def test_readme_link_to_missing_note_is_reported(self):
+    def test_changelog_link_to_missing_note_is_reported(self):
         api = self.load_api()
-        readme_versions = api.parse_readme_versions(
+        changelog_versions = api.parse_changelog_versions(
             "Version [0.58.0](docs/releases/0.58.0.md) is available. "
             "Read the [upgrade notes](docs/releases/0.73.0.md) before updating."
         )
         self.assert_report(
             api.compare_records(
-                readme_versions=readme_versions, note_versions={"0.58.0"},
+                changelog_versions=changelog_versions, note_versions={"0.58.0"},
                 tag_names=["exactory--v0.58.0"],
                 release_tag_names=["exactory--v0.58.0"], plugin_version="0.58.0",
-            ), readme_versions_without_note=["0.73.0"],
+            ), changelog_versions_without_note=["0.73.0"],
         )
 
     def test_parse_note_filenames_ignores_non_version_documents(self):
@@ -212,7 +212,7 @@ class ReleaseRecordsCLITests(ReleaseRecordsAssertions):
         (self.root / "docs/releases/0.58.0.md").write_text(
             "# Exactory 0.58.0\n", encoding="utf-8",
         )
-        (self.root / "README.md").write_text(
+        (self.root / "CHANGELOG.md").write_text(
             "Version [0.58.0](docs/releases/0.58.0.md) describes a release.\n",
             encoding="utf-8",
         )
@@ -297,7 +297,7 @@ class ReleaseRecordsCLITests(ReleaseRecordsAssertions):
         self.assertEqual(json.loads(result.stdout), EMPTY_REPORT)
 
     def test_unreadable_repository_inputs_exit_two(self):
-        for relative_path in ("README.md", "docs/releases", ".claude-plugin/plugin.json"):
+        for relative_path in ("CHANGELOG.md", "docs/releases", ".claude-plugin/plugin.json"):
             path = self.root / relative_path
             renamed = path.with_name(path.name + ".unavailable")
             with self.subTest(path=relative_path):
@@ -390,17 +390,17 @@ class ReleaseRecordsCLITests(ReleaseRecordsAssertions):
 
 
 class RepositoryReleaseRecordsTests(unittest.TestCase):
-    def test_repository_readme_and_notes_match(self):
+    def test_repository_changelog_and_notes_match(self):
         api = ReleaseRecordsAssertions().load_api()
-        readme_versions = api.parse_readme_versions(
-            (ROOT / "README.md").read_text(encoding="utf-8"),
+        changelog_versions = api.parse_changelog_versions(
+            (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"),
         )
         note_versions = api.read_note_versions(ROOT)
         self.assertEqual(
-            readme_versions, note_versions,
-            "README links without notes: %s; notes without README links: %s"
-            % (sorted(readme_versions - note_versions, key=api.parse_version),
-               sorted(note_versions - readme_versions, key=api.parse_version)),
+            changelog_versions, note_versions,
+            "CHANGELOG links without notes: %s; notes without CHANGELOG links: %s"
+            % (sorted(changelog_versions - note_versions, key=api.parse_version),
+               sorted(note_versions - changelog_versions, key=api.parse_version)),
         )
 
     def test_0570_note_ends_with_supervisor_correction(self):

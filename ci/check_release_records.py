@@ -20,7 +20,7 @@ def parse_version(version):
     return tuple(int(component) for component in version.split("."))
 
 
-def parse_readme_versions(text):
+def parse_changelog_versions(text):
     """Read every local release-note link, regardless of its link text."""
     pattern = r"\[[^\]]*\]\(docs/releases/(%s)\.md\)" % VERSION_PATTERN
     return set(re.findall(pattern, text))
@@ -68,14 +68,14 @@ def parse_release_tag_names(text):
     return tag_names
 
 
-def compare_records(readme_versions, note_versions, tag_names, release_tag_names,
+def compare_records(changelog_versions, note_versions, tag_names, release_tag_names,
                     plugin_version, release=None):
     """Return version-sorted missing records from the supplied immutable facts.
 
     Every report value is a list of X.Y.Z versions. An explicit release has
     separate requirements even when neither its note nor its tag exists yet.
     """
-    readme_versions = set(readme_versions)
+    changelog_versions = set(changelog_versions)
     note_versions = set(note_versions)
     tag_versions = parse_tag_versions(tag_names)
     published_versions = parse_tag_versions(release_tag_names)
@@ -95,8 +95,8 @@ def compare_records(readme_versions, note_versions, tag_names, release_tag_names
         "tags_without_release": tag_versions - published_versions,
         "notes_without_tag": note_versions - tag_versions,
         "tags_without_note": tags_since_first_note - note_versions,
-        "readme_versions_without_note": readme_versions - note_versions,
-        "notes_without_readme_version": note_versions - readme_versions,
+        "changelog_versions_without_note": changelog_versions - note_versions,
+        "notes_without_changelog_version": note_versions - changelog_versions,
         "plugin_versions_without_note": {plugin_version} - note_versions,
         "release_versions_without_tag": requested_versions - tag_versions,
         "release_versions_without_release": requested_versions - published_versions,
@@ -160,8 +160,8 @@ def main(argv=None):
     )
     arguments = parser.parse_args(argv)
     try:
-        readme_versions = parse_readme_versions(
-            (arguments.root / "README.md").read_text(encoding="utf-8"),
+        changelog_versions = parse_changelog_versions(
+            (arguments.root / "CHANGELOG.md").read_text(encoding="utf-8"),
         )
         note_versions = read_note_versions(arguments.root)
         plugin_version = read_plugin_version(arguments.root)
@@ -179,7 +179,7 @@ def main(argv=None):
         else:
             releases_text = arguments.releases_file.read_text(encoding="utf-8")
         report = compare_records(
-            readme_versions, note_versions,
+            changelog_versions, note_versions,
             [line.strip() for line in tags_text.splitlines() if line.strip()],
             parse_release_tag_names(releases_text), plugin_version, arguments.release,
         )
