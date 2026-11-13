@@ -29,6 +29,7 @@ class ProblemReviewTests(LiteratureCase):
         importlib.import_module('research_harness.problem_candidates')
         importlib.import_module('research_harness.problem_evidence')
         importlib.import_module('research_harness.problem_delivery')
+        importlib.import_module('research_harness.problem_areas')
         self.put("workspace", "problem", {"version": 1, "orchestration": "problem_creation",
             "slug": "bounded-sequences", "area": "math.CO", "field": "Extremal bounded sequences",
             "authors": ["author", "coauthor"]})

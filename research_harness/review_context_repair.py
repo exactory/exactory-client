@@ -213,6 +213,19 @@ def historical_reviews(records, dossier_id, stage):
     return _reviews(records, historical)
 
 
+def _raise_binding_mismatch(repair, events):
+    """Name the full recorded binding without changing the legacy set-based acceptance rule."""
+    expected_ids = [event['id'] for event in events]
+    missing_ids = [identifier for identifier in expected_ids if identifier not in repair['event_ids']]
+    expected_evidence = [item for event in events for item in event['evidence']]
+    raise ResearchError('review_context_repair_mismatch',
+        'Bind every actual contamination or retirement event in the predecessor lineage and its exact evidence. '
+        f'Expected event_ids in recorded order: {json.dumps(expected_ids)}. '
+        f'Missing event_ids: {json.dumps(missing_ids)}. '
+        f'Expected evidence in that event order: {json.dumps(expected_evidence, sort_keys=True)}.',
+        {'expected_event_ids': expected_ids, 'missing_event_ids': missing_ids, 'expected_evidence': expected_evidence})
+
+
 def prepare_repair(records, artifacts, assignment_payload):
     """Validate a prospective repair without altering the original record."""
     from .review_protocol import assignment_state, route_state
@@ -247,10 +260,10 @@ def prepare_repair(records, artifacts, assignment_payload):
         raise ResearchError('review_context_repair_pending', 'Reconcile pending reviewer workers and invocations before repairing their context.')
     events = cause_events(records, identifiers)
     if not events or set(repair['event_ids']) != {event['id'] for event in events}:
-        raise ResearchError('review_context_repair_mismatch', 'Bind every actual contamination or retirement event in the predecessor lineage')
+        _raise_binding_mismatch(repair, events)
     strategy.evidence(records, artifacts, repair['evidence'])
     if {digest(item) for item in repair['evidence']} != {digest(item) for event in events for item in event['evidence']}:
-        raise ResearchError('review_context_repair_mismatch', 'Use the exact recorded contamination evidence without author substitutes')
+        _raise_binding_mismatch(repair, events)
     from .review_protocol import retired_routes
     from .review_refusal import refused_attempts
     retired = retired_routes(records)
