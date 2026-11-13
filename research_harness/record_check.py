@@ -57,7 +57,7 @@ EXPECTED_STOP_CODES = frozenset((
     'openness_review_not_approved',
 ))
 DEFAULT_TIME_BUDGET_SECONDS = 10800
-# The largest interval timer that macOS accepts: setitimer refuses 100000001 s with EINVAL.
+# A limit of the harness inside the range that macOS accepts for an interval timer (setitimer refuses 100000001 s).
 MAXIMUM_TIME_BUDGET_SECONDS = 100_000_000
 SNAPSHOT_ATTEMPTS = 3
 # Arms the processor-time interval timer of a math-solver reader, then replaces itself with the reader
