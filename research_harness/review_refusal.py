@@ -46,6 +46,21 @@ def _frozen_pdf_capture(link, packets):
     return None
 
 
+def _find_delivered_part(link, packets):
+    """Use the recorded whole-text range only for this exact delivered part and source."""
+    from .review_supplied_evidence import list_delivered_parts
+    start, end = link['locator'].get('start'), link['locator'].get('end')
+    if type(start) is not int or type(end) is not int:
+        return None
+    for packet in packets:
+        for delivery in list_delivered_parts(packet):
+            if (delivery['version_id'] == link['version_id'] and delivery['excerpt'] == link['artifact']
+                    and delivery['origin']['source_id'] == link['source_id']
+                    and delivery['part']['start'] <= start < end <= delivery['part']['end']):
+                return delivery['part']
+    return None
+
+
 def validate_evidence_contract(records, artifacts, values, *, required=True, packets=(), review_binding=False):
     """Shared evidence grammar and locators over exact bytes; no live source/reading lookup."""
     from . import strategy
@@ -80,7 +95,8 @@ def validate_evidence_contract(records, artifacts, values, *, required=True, pac
             raise
         try:
             validate_link_fields(link)
-            read_locator(artifacts, link['artifact'], link['locator'], capture=capture)
+            part = _find_delivered_part(link, packets) if kind == 'span' else None
+            read_locator(artifacts, link['artifact'], link['locator'], capture=capture, part=part)
         except ResearchError as error:
             if error.code == 'invalid_locator':
                 error.contract_check = 'evidence.locator'

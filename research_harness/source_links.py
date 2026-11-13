@@ -106,7 +106,7 @@ def _read_output_pdf_page_count(data):
     raise ResearchError("invalid_locator", "The output PDF page count requires successful pdfinfo output")
 
 
-def read_locator(artifacts, artifact, locator, *, capture=None, result=False):
+def read_locator(artifacts, artifact, locator, *, capture=None, result=False, part=None):
     data = artifacts.read(artifact)
     if not isinstance(locator, dict):
         raise ResearchError("invalid_locator", "A source locator is required")
@@ -131,6 +131,14 @@ def read_locator(artifacts, artifact, locator, *, capture=None, result=False):
             fields(locator, ("kind", "start", "end", "sha256"), ("excerpt",), code="invalid_locator")
             if (type(locator["start"]) is not int or type(locator["end"]) is not int
                     or not 0 <= locator["start"] < locator["end"] <= len(content)):
+                if (part is not None and type(locator['start']) is int and type(locator['end']) is int
+                        and part['start'] <= locator['start'] < locator['end'] <= part['end']):
+                    relative = {'start': locator['start'] - part['start'], 'end': locator['end'] - part['start']}
+                    raise ResearchError('invalid_locator',
+                        f"This part occupies whole-text character range [{part['start']}, {part['end']}). "
+                        'A span on a part artifact counts from the start of the part; for the supplied whole-text '
+                        f"span, use part-relative start {relative['start']} and end {relative['end']}.",
+                        {'part_relative_span': relative})
                 raise ResearchError("invalid_locator", "The span must lie within the saved text")
             span = content[locator["start"]:locator["end"]]
             if not span.strip() or hashlib.sha256(span.encode("utf-8")).hexdigest() != locator["sha256"]:

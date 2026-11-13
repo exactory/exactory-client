@@ -1,0 +1,236 @@
+{
+  "incident": "synthetic-part-locator-refusal",
+  "attempt_id": "fixture-attempt-final",
+  "evidence": {
+    "kind": "source",
+    "link": {
+      "artifact": {
+        "media_type": "text/plain; charset=utf-8",
+        "path": "research/sources/objects/9d9e13a3b39327836f85e0bae68699ec72d9e0be8a88affe05355f8026f77612",
+        "sha256": "9d9e13a3b39327836f85e0bae68699ec72d9e0be8a88affe05355f8026f77612",
+        "size": 40150
+      },
+      "locator": {
+        "end": 157555,
+        "kind": "span",
+        "sha256": "9d9e13a3b39327836f85e0bae68699ec72d9e0be8a88affe05355f8026f77612",
+        "start": 118926
+      },
+      "source_id": "acq:a2445dd15c2ed1c1c2feb0efe51663c9154abeede5716040ead4d3ed5187beb5",
+      "version_id": "arxiv:0001.00000v1"
+    }
+  },
+  "packet": {
+    "source_deliveries": [
+      {
+        "evidence": [
+          {
+            "media_type": "text/plain; charset=utf-8",
+            "path": "research/sources/objects/9d9e13a3b39327836f85e0bae68699ec72d9e0be8a88affe05355f8026f77612",
+            "sha256": "9d9e13a3b39327836f85e0bae68699ec72d9e0be8a88affe05355f8026f77612",
+            "size": 40150
+          }
+        ],
+        "excerpt": {
+          "media_type": "text/plain; charset=utf-8",
+          "path": "research/sources/objects/9d9e13a3b39327836f85e0bae68699ec72d9e0be8a88affe05355f8026f77612",
+          "sha256": "9d9e13a3b39327836f85e0bae68699ec72d9e0be8a88affe05355f8026f77612",
+          "size": 40150
+        },
+        "origin": {
+          "artifact_descriptor": {
+            "location": "research/sources/objects/a2445dd15c2ed1c1c2feb0efe51663c9154abeede5716040ead4d3ed5187beb5",
+            "media_type": "text/plain; charset=utf-8",
+            "sha256": "a2445dd15c2ed1c1c2feb0efe51663c9154abeede5716040ead4d3ed5187beb5",
+            "size": 159076
+          },
+          "locator": {
+            "end": 157555,
+            "kind": "span",
+            "sha256": "9d9e13a3b39327836f85e0bae68699ec72d9e0be8a88affe05355f8026f77612",
+            "start": 118926
+          },
+          "source_id": "acq:a2445dd15c2ed1c1c2feb0efe51663c9154abeede5716040ead4d3ed5187beb5"
+        },
+        "part": {
+          "characters": 38629,
+          "end": 157555,
+          "part": 2,
+          "parts": 2,
+          "start": 118926,
+          "version_id": "arxiv:0001.00000v1"
+        },
+        "reading_credit": false,
+        "reason": "This delivery carries one part of the extracted text of this version, at the stated character offsets in its stored text. The request stays pending until its last part has arrived. The original file and the other bodies of this source are not delivered with its parts.",
+        "request": {
+          "depth": "fulltext",
+          "id": "fixture-fulltext-request",
+          "kind": "source",
+          "version_id": "arxiv:0001.00000v1"
+        },
+        "scientific_truth_certified": false,
+        "status": "delivered",
+        "version_id": "arxiv:0001.00000v1"
+      }
+    ]
+  },
+  "repair_payload": {
+    "id": "fixture-assignment-repair-2",
+    "route_id": "fixture-route-2",
+    "dossier_id": null,
+    "role": "bar",
+    "reviewer_id": "fixture-reviewer-2",
+    "author_id": "fixture-author",
+    "context": {
+      "context_repair": {
+        "assignment_id": "fixture-assignment-final",
+        "event_ids": [
+          "retire-fixture-route-0",
+          "retire-fixture-route-1"
+        ],
+        "probe_id": "fixture-probe-2",
+        "reason": "Reassess the fixture lineage after its second recorded route retirement.",
+        "evidence": [
+          {
+            "media_type": "text/markdown",
+            "path": "research/sources/objects/a7c23473b8466125de1c8777b55127ed857218fc15eacb92ae71982b81e89260",
+            "sha256": "a7c23473b8466125de1c8777b55127ed857218fc15eacb92ae71982b81e89260",
+            "size": 91
+          },
+          {
+            "media_type": "text/markdown",
+            "path": "research/sources/objects/9f3d676bff539f4063799e98f451d0a87e9a4749839b2c5795d4d68ccc032ab9",
+            "sha256": "9f3d676bff539f4063799e98f451d0a87e9a4749839b2c5795d4d68ccc032ab9",
+            "size": 88
+          }
+        ]
+      }
+    }
+  },
+  "repair_records": {
+    "review_assignment": {
+      "fixture-assignment-final": {
+        "id": "fixture-assignment-final",
+        "role": "bar",
+        "dossier_id": null,
+        "author_id": "fixture-author",
+        "subject": {
+          "kind": "problem",
+          "statement_id": null
+        },
+        "context": {
+          "prior_assignment_id": "fixture-assignment-continuation"
+        },
+        "history_assignment_id": "fixture-assignment-continuation",
+        "recorded_revision": 187
+      },
+      "fixture-assignment-continuation": {
+        "id": "fixture-assignment-continuation",
+        "role": "bar",
+        "dossier_id": null,
+        "author_id": "fixture-author",
+        "subject": {
+          "kind": "problem",
+          "statement_id": null
+        },
+        "context": {
+          "prior_assignment_id": "fixture-assignment-repair-1"
+        },
+        "history_assignment_id": "fixture-assignment-repair-1",
+        "recorded_revision": 181
+      },
+      "fixture-assignment-repair-1": {
+        "id": "fixture-assignment-repair-1",
+        "role": "bar",
+        "dossier_id": null,
+        "author_id": "fixture-author",
+        "subject": {
+          "kind": "problem",
+          "statement_id": null
+        },
+        "context": {
+          "context_repair": {
+            "assignment_id": "fixture-assignment-source-turn",
+            "event_ids": [
+              "retire-fixture-route-0"
+            ],
+            "evidence": [
+              {
+                "media_type": "text/markdown",
+                "path": "research/sources/objects/a7c23473b8466125de1c8777b55127ed857218fc15eacb92ae71982b81e89260",
+                "sha256": "a7c23473b8466125de1c8777b55127ed857218fc15eacb92ae71982b81e89260",
+                "size": 91
+              }
+            ],
+            "probe_id": "fixture-probe-1",
+            "reason": "Reassess the fixture lineage after its first recorded route retirement."
+          }
+        },
+        "history_assignment_id": null,
+        "recorded_revision": 175
+      },
+      "fixture-assignment-source-turn": {
+        "id": "fixture-assignment-source-turn",
+        "role": "bar",
+        "dossier_id": null,
+        "author_id": "fixture-author",
+        "subject": {
+          "kind": "problem",
+          "statement_id": null
+        },
+        "context": {
+          "prior_assignment_id": "fixture-assignment-initial"
+        },
+        "history_assignment_id": "fixture-assignment-initial",
+        "recorded_revision": 101
+      },
+      "fixture-assignment-initial": {
+        "id": "fixture-assignment-initial",
+        "role": "bar",
+        "dossier_id": null,
+        "author_id": "fixture-author",
+        "subject": {
+          "kind": "problem",
+          "statement_id": null
+        },
+        "context": {},
+        "history_assignment_id": null,
+        "recorded_revision": 43
+      }
+    },
+    "review_context_event": {
+      "retire-fixture-route-0": {
+        "assignment_id": "fixture-assignment-source-turn",
+        "evidence": [
+          {
+            "media_type": "text/markdown",
+            "path": "research/sources/objects/a7c23473b8466125de1c8777b55127ed857218fc15eacb92ae71982b81e89260",
+            "sha256": "a7c23473b8466125de1c8777b55127ed857218fc15eacb92ae71982b81e89260",
+            "size": 91
+          }
+        ],
+        "id": "retire-fixture-route-0",
+        "kind": "route_retired",
+        "reason": "Retire fixture-route-0 after a synthetic output-limit failure.",
+        "recorded_revision": 139,
+        "source": "owner"
+      },
+      "retire-fixture-route-1": {
+        "assignment_id": "fixture-assignment-final",
+        "evidence": [
+          {
+            "media_type": "text/markdown",
+            "path": "research/sources/objects/9f3d676bff539f4063799e98f451d0a87e9a4749839b2c5795d4d68ccc032ab9",
+            "sha256": "9f3d676bff539f4063799e98f451d0a87e9a4749839b2c5795d4d68ccc032ab9",
+            "size": 88
+          }
+        ],
+        "id": "retire-fixture-route-1",
+        "kind": "route_retired",
+        "reason": "Retire fixture-route-1 after a synthetic locator failure.",
+        "recorded_revision": 203,
+        "source": "owner"
+      }
+    }
+  }
+}
