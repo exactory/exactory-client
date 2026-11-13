@@ -521,9 +521,9 @@ CLI reference gives the payloads, the records and the refusals.
    destination_workspace, reason}`. `candidate_id` is a candidate that the latest slate
    selects, defers or rejects (`problem_candidate_transfer_not_on_slate` otherwise).
    `destination_workspace` is the absolute path of the workspace of the destination, which is
-   another record (`problem_candidate_transfer_self`). The path must exist (`invalid_input`
-   otherwise). The harness records the resolved path and does not open it. `reason` says why
-   the candidate moves. The transfer changes no gate. The report
+   another record (`problem_candidate_transfer_self`). A path that does not exist or cannot be
+   resolved is refused with `invalid_input`. The harness records the resolved path and does not
+   open it. `reason` says why the candidate moves. The transfer changes no gate. The report
    of the source then gives the candidate the ending "taken up in another record" and names
    the destination ("The end of an exploration"). A later slate decides its candidates again:
    a transfer that was recorded before the latest slate ends nothing, as a withdrawal that was

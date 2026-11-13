@@ -539,7 +539,7 @@ def read_processor_seconds():
 def build_reader_timeout_error(reader, budget, details):
     return ResearchError(
         'record_command_timeout',
-        f'The {reader} reader used more processor time than its budget of {budget:g} seconds. '
+        f'The {reader} reader did not finish within its budget of {budget:g} seconds of processor time. '
         'record-check decided nothing about the record. Run record-check again with a larger --time-budget.',
         dict(details, budget_seconds=budget))
 
