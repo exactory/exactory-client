@@ -4638,7 +4638,7 @@
       "class": "output refusal diagnostics (part offsets and repair lineage)",
       "summary": "Synthetic content reproduces the incident's record shape: a split text part is cited with whole-text offsets, and a later repair binds only the newest of two route retirements.",
       "expected": "invalid_locator refuses the span without reinterpreting it and names the delivered part whole-text range and corresponding part-relative offsets. review_context_repair_mismatch names all expected cause events, missing event ids and concatenated evidence in recorded order. Exact part hashes and excerpts, accepted repairs and stored packet and prompt digests retain their meaning. Slot recovery and retry delivery are separate work.",
-      "fixed_in": "open",
+      "fixed_in": "0.86.0",
       "test_kind": "real_shape",
       "tests": [
         "test_part_locator_refusal.PartLocatorRefusalTests.test_refused_span_names_part_range_and_relative_offsets_without_reinterpreting",
