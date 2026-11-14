@@ -45,6 +45,62 @@ class SearchCaptureCase(CheckCommandMixin, LiteratureCase):
 
 
 class SearchReceiptTests(SearchCaptureCase):
+    def test_check_returns_the_full_recorded_receipt_without_writing(self):
+        self.scope([self.metadata()])
+        invalid = self.capture_page({'meta': {'count': 4}, 'results': [
+            {'id': 'https://openalex.org/W101', 'title': None, 'type': 'article'},
+            {'id': 'https://openalex.org/W102', 'title': None, 'type': 'paratext'}]})
+        later = self.capture_page({'meta': {'count': 4}, 'results': [
+            {'id': 'https://openalex.org/W103', 'title': 'An authored article', 'type': 'article'}]},
+            page=2, captured_at='2026-09-08T12:00:00Z')
+        excluded = self.capture_page({'meta': {'count': 1}, 'results': [
+            {'id': 'https://openalex.org/W104', 'title': 'Front matter', 'type': 'paratext'}]}, query='adjacent')
+        payload = self.build_search_payload([invalid, later, excluded], ['bounded', 'bounded', 'adjacent'])
+        before = self.read_workspace()
+        diagnostic = self.assert_accepted_check(self.invoke_command('search', payload), self.store.revision)
+        self.assertEqual(self.read_workspace(), before)
+        self.assertEqual(diagnostic.get('id'), payload['id'])
+        self.assertEqual(diagnostic['found_work_ids'], ['openalex:W103'])
+        self.assertEqual(diagnostic['invalid_work_count'], 1)
+        self.assertEqual(diagnostic['incomplete_response_count'], 1)
+        self.assertEqual(diagnostic['excluded_item_count'], 2)
+        self.assertEqual([(item['query'], item['record_type']) for item in diagnostic['invalid_works']],
+                         [('bounded', 'article')])
+        self.assertEqual([(item['query'], item['returned_count'], item['reported_count'])
+                          for item in diagnostic['incomplete_responses']], [('bounded', 3, 4)])
+        self.assertEqual({(item['query'], item['id']) for item in diagnostic['excluded_items']},
+                         {('bounded', 'https://openalex.org/W102'), ('adjacent', 'https://openalex.org/W104')})
+        self.assertEqual([item['code'] for item in diagnostic['warnings']], ['search_page_capture_interval'])
+        self.assertTrue({'invalid_work', 'search_response_incomplete'} <=
+                        {item['code'] for item in diagnostic['pending']})
+        written = self.invoke_command('search', payload, check=False)
+        self.assertEqual(written[0], 0, written[2])
+        receipt = json.loads(written[1])
+        for field, value in receipt['result'].items():
+            self.assertEqual(diagnostic[field], value, field)
+        before_replay = self.read_workspace()
+        replay = self.invoke_command('search', payload, revision=diagnostic['revision'])
+        self.assertEqual(replay[0], 0, replay[2])
+        self.assertEqual(json.loads(replay[1]), receipt)
+        self.assertEqual(self.read_workspace(), before_replay)
+
+    def test_check_returns_zero_counts_and_empty_items_for_a_complete_empty_search(self):
+        capture = self.capture_page({'meta': {'count': 0}, 'results': []})
+        payload = self.build_search_payload([capture])
+        before = self.read_workspace()
+        diagnostic = self.assert_accepted_check(self.invoke_command('search', payload), self.store.revision)
+        self.assertEqual(self.read_workspace(), before)
+        self.assertEqual(diagnostic.get('id'), payload['id'])
+        self.assertEqual(diagnostic['pending'], [])
+        self.assertEqual(diagnostic['found_work_ids'], [])
+        self.assertEqual(diagnostic['warnings'], [])
+        for prefix in ('invalid_work', 'incomplete_response', 'excluded_item'):
+            self.assertEqual(diagnostic[prefix + '_count'], 0)
+            self.assertEqual(diagnostic[prefix + 's'], [])
+        receipt, _ = self.record_search_payload(payload)
+        for field, value in receipt.items():
+            self.assertEqual(diagnostic[field], value, field)
+
     def test_receipt_counts_invalid_items_and_incomplete_responses_with_query_and_provider_type(self):
         self.scope([self.metadata()])
         first = self.capture_page({'meta': {'count': 2}, 'results': [

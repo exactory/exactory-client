@@ -31,11 +31,14 @@ def refuse_native_nonapproval(value):
     if ("schema_version" in value and "findings" in value and "unresolved_objections" in value
             and "reason" not in value and "objections" not in value):
         return
-    s.closed(value, "subject_digest claim_digest reviewer decision reason objections")
+    bound = any(key in value for key in ("subject_digest", "claim_digest", "reviewer"))
+    s.closed(value, "subject_digest claim_digest reviewer decision reason objections" if bound
+             else "decision reason objections")
     s.choice(value["decision"], {"revise", "reject"})
-    s.digest_string(value["subject_digest"])
-    s.digest_string(value["claim_digest"])
-    s.validate_provenance(value["reviewer"])
+    if bound:
+        s.digest_string(value["subject_digest"])
+        s.digest_string(value["claim_digest"])
+        s.validate_provenance(value["reviewer"])
     s.text(value["reason"])
     for objection in s.records(value["objections"]):
         s.closed(objection, "blocking description")

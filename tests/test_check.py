@@ -297,6 +297,40 @@ class TestCacheRoundTrip(_CheckTestCase):
 
 
 class TestRefsJsonInput(_CheckTestCase):
+    def test_https_only_reference_searches_registries_by_title_without_fetching_the_locator(self) -> None:
+        from urllib.parse import parse_qs, urlsplit
+
+        title = "An authored repository manuscript"
+        locator = "https://example.org/manuscripts/authored"
+        requested = []
+
+        def route(url, accept="application/json"):
+            requested.append(url)
+            if url.startswith("https://api.crossref.org/works?"):
+                return 200, _CROSSREF_SEARCH_EMPTY_TEXT
+            if url.startswith("https://api.openalex.org/works?"):
+                return 200, _OPENALEX_SEARCH_EMPTY_TEXT
+            raise AssertionError("Unexpected fetch: " + url)
+
+        _check._open_url = route
+        refs_path = self.scratch_dir / "citation-refs.json"
+        refs_path.write_text(json.dumps([{
+            "referenceString": "A. Author. " + title + ". " + locator,
+            "bibliography": {"title": title, "authors": ["A. Author"], "year": 2026,
+                             "doi": None, "url": locator},
+        }]))
+        report = self._lookup(["--refs-json", str(refs_path)], 1)
+        self.assertEqual([(urlsplit(url).netloc, parse_qs(urlsplit(url).query)) for url in requested], [
+            ("api.crossref.org", {"query.bibliographic": [title], "rows": ["5"], "cursor": ["*"]}),
+            ("api.openalex.org", {"search": [title], "per_page": ["5"], "cursor": ["*"]}),
+        ])
+        self.assertEqual(report["entries"][0]["status"], "unresolved")
+        self.assertEqual(report["entries"][0]["detail"], "no Crossref or OpenAlex work matches this title")
+        self.assertEqual(report["counts"], {"verified": 0, "blocking": 1, "warning": 0, "incomplete": 0})
+        self.assertTrue(report["lookup_complete"])
+        self.assertFalse(report["all_verified"])
+        self.assertFalse(report["ok"])
+
     def test_incident_arxiv_titles_with_tex_braces_verify(self) -> None:
         # Synthetic titles retain the TeX shapes from
         # 20261112210200-citation-check-title-with-tex-braces.
