@@ -131,9 +131,10 @@ def inventory(records, artifacts):
             'captured_depths': sorted((['abstract'] if work.get('abstracts') or work.get('abstract') else []) +
                 (['fulltext'] if any(c.get('availability') == 'available' for c in work.get('fulltexts', [])) else []))})
     inventory_digest = digest(rows)
+    from .capture_selection import describe_capture_selections
     return {'artifact_descriptor': descriptor(_save(artifacts, rows)), 'digest': inventory_digest,
             'total': len(rows), 'page_size': PAGE_SIZE, 'metadata_not_read': True,
-            'first_page': _page(rows, inventory_digest, 0)}
+            'first_page': _page(rows, inventory_digest, 0), **describe_capture_selections(records)}
 
 
 def prior_context(records, artifacts, links):
@@ -534,6 +535,11 @@ def _source(records, artifacts, request, original_rows):
             result['scope_status'] = 'declared_with_pending_units' if unit_pending else 'declared_units_available'
     from .review_transport import is_binary_evidence, text_only_enabled
     text_only = text_only_enabled()
+    from .capture_selection import find_replaced_texts
+    replaced = find_replaced_texts(records, work) if request['depth'] == 'fulltext' else set()
+    if replaced:
+        captures = [dict(capture, artifacts=[ref for ref in capture['artifacts'] if ref['sha256'] not in replaced])
+                    for capture in captures]
     if text_only:
         # On a text-only reviewer route the original bytes (PDF, images) are withheld and the delivery says so; the
         # extracted text stays.
@@ -707,5 +713,7 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
         deliveries.append(delivery)
         if delivery['status'] not in ('delivered', 'unavailable_qualified'):
             outstanding.append(request)
+    from .capture_selection import describe_capture_selections
     return {'source_inventory': inventory_value, 'prior_context': [], 'source_deliveries': deliveries,
-            'pending_source_requests': outstanding, review_excerpts.KEY: session}
+            'pending_source_requests': outstanding, review_excerpts.KEY: session,
+            **describe_capture_selections(records)}

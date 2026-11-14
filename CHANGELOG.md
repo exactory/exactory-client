@@ -3,6 +3,8 @@
 Each version has a full release note in [docs/releases](docs/releases/). The
 newest version comes first.
 
+Version [0.87.0](docs/releases/0.87.0.md) keeps a compact full text when the layout mode of PDF extraction pads it. A default PDF extraction whose layout text has a whitespace fraction above 0.90 or an expansion above 2.0 is extracted again without layout mode, and the complete plain text is kept, with both measurements in `extraction.layout_selection`. The new command `select-main-capture` records which available capture of an original the next deliveries use, without changing any capture or reading. No reviewer route becomes stale.
+
 Version [0.86.0](docs/releases/0.86.0.md) makes two refusals of a review output name the facts that correct the output. A span on a delivered part that uses whole-text offsets is still `invalid_locator`, and the message now names the part's whole-text range and the part-relative offsets of the same span. `review_context_repair_mismatch` now names the expected events in recorded order, the missing events and the expected evidence. The texts that 0.85.1 to 0.85.3 added are rewritten, and the `--time-budget` section now states the usage error for input that the parser rejects. No reviewer route becomes stale.
 
 Version [0.85.3](docs/releases/0.85.3.md) makes the `record-check --time-budget` bound the processor time of each reader instead of its elapsed time. A reader that waits while other processes use the machine passes, and a reader that uses more processor time than the budget still fails with `record_command_timeout`. The default budget is now 10,800 seconds of processor time, and the maximum is 100,000,000 seconds. Each reader row now gives `processor_seconds` next to `seconds`.

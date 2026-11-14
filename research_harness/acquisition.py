@@ -716,7 +716,7 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
             if observed_identifier != identifier or version_of(observed_identifier) is None:
                 raise ResearchError("version_mismatch", "Full-text destination differs from the requested arXiv version")
         extracted = extract(response.body, response_media_type(response.headers), extractor=extractor,
-                            layout=options.get("layout", True), ocr=options.get("ocr", False))
+                            layout=options.get("layout"), ocr=options.get("ocr", False))
         if extracted["status"] != "extracted":
             pending.append({"code": extracted["status"]})
     except HttpFailure as error:
@@ -744,6 +744,9 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
                                      if extracted and extracted["text"] is not None else
                                      {"text_bytes": None, "page_count": None, "max_line_length": None,
                                       "whitespace_fraction": None, "expansion_ratio": None}))}
+
+    if extracted and "layout_selection" in extracted:
+        capture["extraction"]["layout_selection"] = extracted["layout_selection"]
 
     if extracted and "visual_asset_names" in extracted:
         capture["visual_asset_names"] = extracted["visual_asset_names"]

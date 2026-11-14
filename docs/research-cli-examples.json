@@ -1,4 +1,9 @@
 {
+  "select-main-capture": {
+    "version_id": "arxiv:2307.02749v3",
+    "source_id": "acq:compact-capture",
+    "reason": "Use the complete extraction without layout padding for this original."
+  },
   "problem-init": {
     "slug": "extremal-sequence-bound",
     "area": "math.CO",
