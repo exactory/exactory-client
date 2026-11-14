@@ -277,6 +277,9 @@ def build_local_adapter_case(name):
     import test_research_codex_controls as controls
     with fix_external_inputs() as emitted, open_fixture(ordinary_fixtures.ReviewProtocolTests) as case, ExitStack() as stack:
         if name == "claude":
+            frozen = json.loads(gzip.decompress(FROZEN_PATH.read_bytes()))
+            runtime = frozen["cases"]["claude-local"]["attempts"]["attempt"]["runtime"]
+            stack.enter_context(patch.object(claude, "runtime", return_value=copy.deepcopy(runtime)))
             specification = dict(claude_fixtures.ROUTE, id="route")
         else:
             stack.enter_context(patch.object(framed, "runtime", return_value={

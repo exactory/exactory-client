@@ -398,6 +398,7 @@ class HttpClient:
         maximum = self.max_bytes if not streaming else max_bytes
         retained = 0
         retained_refs = set()
+        timeout_details = None
         deadline = self.clock.monotonic() + (self.total_timeout if total_timeout is None else total_timeout)
         request_headers = {"User-Agent": self.user_agent, "Accept-Encoding": "identity"}
         request_headers.update(headers or {})
@@ -423,16 +424,20 @@ class HttpClient:
                     attempts.append(attempt)
                     response = None
                     body = bytearray()
+                    reader = None
+                    started = self.clock.monotonic()
+                    attempt_timeout = min(self.timeout, deadline - started)
                     try:
-                        remaining = min(self.timeout, deadline - self.clock.monotonic())
+                        remaining = attempt_timeout
                         if remaining <= 0:
                             raise socket.timeout()
                         addresses = [public_address(item) for item in self.resolver(host, remaining)]
                         if not addresses:
                             raise socket.gaierror()
                         address = addresses[retries % len(addresses)]
+                        attempt_timeout = min(self.timeout, deadline - self.clock.monotonic())
                         response = self.transport(url, request_headers, address=address,
-                                                  timeout=min(self.timeout, deadline - self.clock.monotonic()))
+                                                  timeout=attempt_timeout)
                         if public_address(response.peer_ip) != address:
                             raise ResearchError("unsafe_destination", "Connected peer differs from the approved address")
                         all_headers = {k.lower(): str(v) for k, v in response.headers.items()}
@@ -517,6 +522,9 @@ class HttpClient:
                         attempt["error"] = error.code
                         raise
                     finally:
+                        timeout_details = {"timeout_seconds": max(0, attempt_timeout),
+                                           "elapsed_seconds": self.clock.monotonic() - started,
+                                           "bytes_received": reader.size if reader is not None else len(body)}
                         if not streaming:
                             attempt["body"] = bytes(body)
                         if response is not None:
@@ -564,4 +572,5 @@ class HttpClient:
         except ResearchError as error:
             if attempts and attempts[-1]["error"] is None:
                 attempts[-1]["error"] = error.code
-            raise HttpFailure(error.code, error.message, attempts, error.details) from error
+            details = timeout_details if error.code == "timeout" and error.details is None else error.details
+            raise HttpFailure(error.code, error.message, attempts, details) from error

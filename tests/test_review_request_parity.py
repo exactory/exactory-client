@@ -27,7 +27,22 @@ class ReviewRequestParityTests(unittest.TestCase):
         self.assertEqual(self.frozen["serialization"], "review_protocol._put_json")
 
     def expect_current_result_report(self, name, field, expected):
-        """Pin the 0.73.0 and 0.73.3 presentation changes without changing the byte oracle."""
+        """Pin report presentation and Claude response metadata without changing the byte oracle."""
+        if name == 'claude-local' and field in ('attempts', 'selected'):
+            expected = copy.deepcopy(expected)
+            original = self.frozen['cases'][name]['attempts']['attempt']['response']
+            sha256 = 'b1db6f722adb299139f67ed88514403ff749d8b35995ebbede32d8b5377ce58b'
+            response = dict(original, sha256=sha256, size=3043,
+                            path=original['path'].rsplit('/', 1)[0] + '/' + sha256)
+            # New calls retain the rate event that the historical stream already carried.
+            if field == 'attempts':
+                expected['attempt']['response'] = response
+            else:
+                binding, refused, completed = expected['assignment']['value']
+                binding['response'] = response
+                for attempt in completed:
+                    attempt['response'] = response
+            return expected
         if field not in ('gate', 'status') or name not in ('result-history-06918', 'result-parts-v2'):
             return expected
         expected = copy.deepcopy(expected)

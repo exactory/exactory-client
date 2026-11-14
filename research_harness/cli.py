@@ -522,6 +522,10 @@ def _review_status(records, artifacts):
     result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
+    from .review_provider_usage import describe_usage
+    usage = describe_usage(records, artifacts)
+    if usage['windows']:
+        result['provider_usage'] = usage
     for attempt in completed:
         if 'answer_recovery' in attempt:
             result['assignments'][attempt['assignment_id']].setdefault('answer_recoveries', {})[

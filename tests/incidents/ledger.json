@@ -3370,7 +3370,7 @@
       "class": "Provider API error",
       "summary": "Provider API errors included both unreachable-server messages and a safeguards refusal.",
       "fixed_in": "0.73.0",
-      "expected": "Unreachable API errors wait with durable bounded provider backoff; safeguards refusal gets one additional call and then review_provider_refused, with the total eight-failure allowance and original observations preserved.",
+      "expected": "Unreachable API errors wait with durable bounded provider backoff; safeguards refusal follows its measured three-run allowance and then review_provider_refused, with the total eight-failure allowance and original observations preserved.",
       "test_kind": "real_shape",
       "tests": [
         "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
@@ -4736,6 +4736,31 @@
         "test_research_problem_citations.RegistryCitationTests.test_lookup_projection_keeps_stored_titles_authors_and_registry_identifiers",
         "test_gate_override.ProblemOverrideTests.test_legacy_override_export_keeps_its_files_digest_and_final_index",
         "test_check.TestRefsJsonInput.test_doi_tex_titles_verify_and_keep_chapter_title_matching"
+      ]
+    },
+    {
+      "id": "claude-safeguard-notice-usage-window-fulltext-timeout",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "provider safeguards, account usage and full-text timeout evidence",
+      "summary": "Claude informational safeguard stops were classified as incomplete execution, subscription usage events were discarded, and full-text timeouts did not explain the effective limit.",
+      "fixed_in": "open",
+      "expected": "Retained safeguard notices yield provider_refused and review_provider_refused while their injected continuation stays unverified. Three total provider-refusal runs cover the measured chain size under independent runs and remain subject to the eight-failure cap. New Claude responses retain usage events; status and series show the latest windows and grounded remaining-chain warnings. Full-text timeout pending items retain the effective attempt limit, elapsed time and received bytes without changing stored evidence. Usage remains advisory step metadata and does not change recorded stop plans or identities.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.SafeguardNoticeTests.test_two_notice_shapes_name_provider_refusal_without_verifying_the_continuation",
+        "test_review_failure_class.SafeguardNoticeTests.test_measured_allowance_retries_twice_then_stops_below_the_turn_cap",
+        "test_review_provider_usage.UsageRetentionTests.test_new_calls_retain_each_rate_event_and_still_verify_the_stream",
+        "test_review_provider_usage.ProviderUsageTests.test_remaining_chain_warning_counts_greedy_packing_and_the_final_turn",
+        "test_review_provider_usage.ProviderUsageTests.test_status_and_every_series_step_show_latest_retained_usage",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_fulltext_server_stalls_before_first_body_byte",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_resume_stall_reports_remaining_invocation_limit_and_received_range_prefix",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_legacy_timeout_receipt_and_source_stay_unchanged_after_new_timeout",
+        "test_review_provider_usage.ProviderUsageTests.test_run_step_immediately_shows_the_usage_event_of_the_call_it_just_executed",
+        "test_review_provider_usage.ProviderUsageTests.test_native_capture_order_survives_delayed_acceptance",
+        "test_review_provider_usage.ProviderUsageTests.test_staged_captures_and_probes_contribute_usage_without_an_ordinary_attempt",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_total_deadline_describes_latest_attempt_instead_of_prior_timeout",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_resume_assembly_deadline_reports_invocation_limit_and_received_bytes",
+        "test_review_provider_usage.ProviderUsageTests.test_terminal_usage_does_not_change_the_recorded_stop_plan"
       ]
     }
   ]

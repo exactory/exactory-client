@@ -377,6 +377,9 @@ def send_request(route, request, credential=None):
                               (result.stderr or '').encode('utf-8', 'surrogateescape')).hexdigest(),
                           'malformed_line_digests': malformed, 'event_count': len(events),
                           'event_types': [event.get('type') for event in events], 'fence_removed': fenced,
+                          'rate_limit_events': [{'event_index': index, 'event': event}
+                                                for index, event in enumerate(events)
+                                                if event.get('type') == 'rate_limit_event'],
                           'system_events': retention, **correction_evidence}}
 
 

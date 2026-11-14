@@ -1,0 +1,99 @@
+[
+  {
+    "source": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+    "attempt_id": "synthetic-attempt-1",
+    "status": "failed",
+    "error": {
+      "code": "review_transport_failure",
+      "kind": "JSONDecodeError"
+    },
+    "response": {
+      "status": "completed",
+      "output": [],
+      "execution": {
+        "system_events": {
+          "byte_limit": 4194304,
+          "count_limit": 4096,
+          "events": [
+            {
+              "event_index": 3,
+              "raw_base64": "eyJ0eXBlIjoic3lzdGVtIiwic3VidHlwZSI6ImluZm9ybWF0aW9uYWwiLCJjb250ZW50IjoiRml4dHVyZSBNb2RlbCBBJ3Mgc2FmZWd1YXJkcyBzdG9wcGVkIHRoZSByZXNwb25zZSBhYm92ZSDCtyBjb250aW51aW5nIG9uY2Ugd2l0aCB0aGF0IG5vdGVkIiwibGV2ZWwiOiJub3RpY2UifQo="
+            }
+          ],
+          "observed_bytes": 164,
+          "observed_count": 1,
+          "retained_bytes": 164,
+          "sha256": "1a428cfc7ec03ac6250d6136cae80a79dacd48bd5884532c8dbf304874a263e6",
+          "truncated": false
+        },
+        "event_count": 5,
+        "timeout": false
+      },
+      "context_evidence": {
+        "inspected": true,
+        "input_verified": false,
+        "issues": [
+          "incomplete_turn",
+          "provider_output_mismatch",
+          "system_event_informational",
+          "tool_or_injected_input"
+        ]
+      }
+    },
+    "safeguards_events": [
+      {
+        "type": "system",
+        "subtype": "informational",
+        "content": "Fixture Model A's safeguards stopped the response above · continuing once with that noted",
+        "level": "notice"
+      }
+    ]
+  },
+  {
+    "source": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+    "attempt_id": "synthetic-attempt-2",
+    "status": "completed",
+    "error": null,
+    "response": {
+      "status": "completed",
+      "output": [],
+      "execution": {
+        "system_events": {
+          "byte_limit": 4194304,
+          "count_limit": 4096,
+          "events": [
+            {
+              "event_index": 4,
+              "raw_base64": "eyJ0eXBlIjoic3lzdGVtIiwic3VidHlwZSI6ImluZm9ybWF0aW9uYWwiLCJjb250ZW50IjoiRml4dHVyZSBNb2RlbCBCJ3Mgc2FmZWd1YXJkcyBzdG9wcGVkIHRoZSByZXNwb25zZSBhYm92ZSDCtyBjb250aW51aW5nIG9uY2Ugd2l0aCB0aGF0IG5vdGVkIiwibGV2ZWwiOiJub3RpY2UifQo="
+            }
+          ],
+          "observed_bytes": 164,
+          "observed_count": 1,
+          "retained_bytes": 164,
+          "sha256": "67d8fa13eb543403c3bfd6ebfd31d792111d99d2231547a616e85526553ad221",
+          "truncated": false
+        },
+        "event_count": 6,
+        "timeout": false
+      },
+      "context_evidence": {
+        "inspected": true,
+        "input_verified": false,
+        "issues": [
+          "incomplete_turn",
+          "provider_output_mismatch",
+          "system_event_informational",
+          "tool_or_injected_input"
+        ]
+      }
+    },
+    "safeguards_events": [
+      {
+        "type": "system",
+        "subtype": "informational",
+        "content": "Fixture Model B's safeguards stopped the response above · continuing once with that noted",
+        "level": "notice"
+      }
+    ]
+  }
+]
