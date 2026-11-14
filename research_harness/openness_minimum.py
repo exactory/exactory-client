@@ -1,5 +1,6 @@
 """Mechanical openness minimum over exact common search and reading records."""
 
+from datetime import timezone
 import re
 
 from .errors import ResearchError
@@ -52,9 +53,13 @@ def _require_optional_text(value):
 
 
 def validate_minimum(value):
-    _require_closed_fields(value, "schema_version statement neighbours searches reading_digests settling_work_id"
-             + (" duplicate_resolutions" if isinstance(value, dict) and "duplicate_resolutions" in value else ""))
-    _require_integer(value["schema_version"], 1, 1)
+    fields = "schema_version statement neighbours searches reading_digests settling_work_id"
+    if isinstance(value, dict) and value.get("schema_version") == 2:
+        fields += " duplicate_resolutions family_readings supporting_reading_digests results"
+    elif isinstance(value, dict) and "duplicate_resolutions" in value:
+        fields += " duplicate_resolutions"
+    _require_closed_fields(value, fields)
+    _require_integer(value["schema_version"], 1, 2)
     _require_text(value["statement"])
     _require_strings(value["neighbours"])
     _require(value["statement"] not in value["neighbours"], "Declare distinct neighbouring formulations")
@@ -75,6 +80,30 @@ def validate_minimum(value):
         key = (item["search_digest"], item["work_id"])
         _require(key not in seen and item["work_id"] != item["canonical_work_id"],
                   "Each duplicate needs one distinct canonical source")
+        seen.add(key)
+    # Version 1 has no additional bindings and is never filled with new fields.
+    seen = set()
+    for item in _require_record_list(value.get("family_readings", [])):
+        _require_closed_fields(item, "search_digest work_id version_id")
+        _require_digest(item["search_digest"])
+        _require_text(item["work_id"])
+        _require_text(item["version_id"])
+        key = (item["search_digest"], item["work_id"])
+        _require(key not in seen, "Bind each found work to one family reading per search")
+        seen.add(key)
+    supporting = value.get("supporting_reading_digests", [])
+    _require_strings(supporting)
+    for identity in supporting:
+        _require_digest(identity)
+    seen = set()
+    for item in _require_record_list(value.get("results", [])):
+        _require_closed_fields(item, "native_attempt_digest acceptance_id cited_as link_digest result_digest")
+        for key in ("native_attempt_digest", "link_digest", "result_digest"):
+            _require_digest(item[key])
+        _require_text(item["acceptance_id"])
+        _require_text(item["cited_as"])
+        key = (item["native_attempt_digest"], item["acceptance_id"])
+        _require(key not in seen, "Bind each accepted result once")
         seen.add(key)
 
 
@@ -170,7 +199,7 @@ def audit_minimum(finding, statement, records, artifacts, delivered):
         require_unblocked_outcome(gaps, finding["outcome"],
                                   {"search_integrity", "search_declared_gap", "search_coverage_unspecified"}, item)
         captured = timestamp(search["captured_at"])
-        _require(captured.date().isoformat() <= finding["searched_at"],
+        _require(find_capture_date(minimum, captured) <= finding["searched_at"],
                   "The finding predates its captured searches", "openness_search_date")
         require_unblocked_outcome(gaps, finding["outcome"], {"result_uncertain"}, item)
     require_unblocked_outcome(gaps, finding["outcome"], {"duplicate_unbound", "duplicate_source_not_decisive"})
@@ -367,8 +396,16 @@ def list_minimum_notices(minimum, records, artifacts):
 
 
 def find_searched_through(minimum, records):
-    """Return the recorded date of the latest captured search."""
+    """Return the latest capture's date, normalized to UTC for version 2."""
     from .operations import timestamp
     searches = {digest(row): row for row in records.get("literature_search", {}).values()}
-    return max(timestamp(searches[binding["search_digest"]]["captured_at"])
-               for binding in minimum["searches"]).date().isoformat()
+    captured = max(timestamp(searches[binding["search_digest"]]["captured_at"])
+                   for binding in minimum["searches"])
+    return find_capture_date(minimum, captured)
+
+
+def find_capture_date(minimum, captured):
+    """Keep v1's local calendar date; v2 uses the UTC calendar date."""
+    if minimum["schema_version"] == 2:
+        captured = captured.astimezone(timezone.utc)
+    return captured.date().isoformat()

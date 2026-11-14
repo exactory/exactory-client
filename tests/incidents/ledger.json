@@ -5093,6 +5093,22 @@
         "test_review_session_delivery.SessionDeliveryTests.test_notice_lists_lost_texts_with_verified_excerpts_and_the_final_can_cite_them",
         "test_review_session_delivery.SessionDeliveryTests.test_an_intact_continuation_keeps_its_packet_prompt_and_request_bytes"
       ]
+    },
+    {
+      "id": "openness-minimum-v2-schema-staging",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "openness evidence schema and stored-record compatibility",
+      "summary": "D3 UB1 needs a closed v2 minimum for family readings, supporting readings and accepted results without activating v6 before its forecast and delivery units.",
+      "fixed_in": "open",
+      "expected": "A fixture-store builder produces a v2 minimum with all lists. Both versions validate without mutation, v1 findings retain their audits and packet bytes, and v2 uses the UTC date of the latest capture instant. Current problem exports retain v1 and refuse unavailable new evidence before writing. Math-solver packet exports keep v1 and refuse v2 before writing.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_fixture_export_builder_produces_v2_but_current_packets_keep_v1_bytes",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_nonempty_v2_spec_bindings_are_refused_before_writes_until_their_delivery_ships",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_controller_wrapper_and_stored_finding_readers_keep_v1_results_with_empty_v2_lists",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_v2_search_date_uses_latest_instant_in_utc_while_v1_keeps_local_calendar_dates",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_math_solver_exports_v1_and_refuses_v2_before_writing"
+      ]
     }
   ]
 }
