@@ -15,10 +15,44 @@ SOURCE_LINK_ACCEPTED_FORMS_NOTICE = (
     'Cite the delivered bytes by their artifact descriptor, or use a source link into a full text that this chain delivered.'
 )
 
+# Only output values, frozen packet values, and measurements computed from them belong here.
+# In particular, an existing review's scientific text is never a notice detail.
+_SHAPE_NOTICE_FIELDS = ('expected_type', 'received_type', 'missing_fields', 'unexpected_fields')
+_TEXT_NOTICE_FIELDS = ('characters', 'minimum_characters', 'maximum_characters', 'normalized_characters')
+_DELIVERY_NOTICE_FIELDS = ('record_kind', 'id', 'digest', 'sha256', 'locator')
+CONTRACT_CHECKS = {
+    'evidence.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'evidence.locator': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('part_relative_span',)},
+    'review.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.value': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
+                     ('required', 'bar_ids', 'candidate_id', 'candidate_ids', 'items', 'minimum_items')},
+    'review.objections': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('objection_id', 'candidate_ids')},
+    'review.reassessment': {'notice_fields': _SHAPE_NOTICE_FIELDS + _DELIVERY_NOTICE_FIELDS},
+    'review.support': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.source_requests': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
+                              ('request_id', 'page', 'minimum_page', 'maximum_page', 'page_size', 'total')},
+    'review.evidence_delivery': {'notice_fields': _DELIVERY_NOTICE_FIELDS},
+    'review.staged_final': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.staged_page': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'review.staged_task': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'adjudication.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'adjudication.reassessment': {'notice_fields': _SHAPE_NOTICE_FIELDS + _DELIVERY_NOTICE_FIELDS},
+    'adjudication.evidence_delivery': {'notice_fields': _DELIVERY_NOTICE_FIELDS},
+    'verification.parts': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'native.output': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS + ('request_id',)},
+}
+
+
+def require_contract_check(name):
+    """Reject an unregistered attribution before it can produce a deliverable refusal."""
+    CONTRACT_CHECKS[name]
+    return name
+
 
 @contextmanager
 def contract_check(name):
     """Identify the pure validator, rather than treating a shared error code as eligibility."""
+    require_contract_check(name)
     try:
         yield
     except ResearchError as error:
@@ -102,7 +136,7 @@ def validate_evidence_contract(records, artifacts, values, *, required=True, pac
             read_locator(artifacts, link['artifact'], link['locator'], capture=capture, part=part)
         except ResearchError as error:
             if error.code == 'invalid_locator':
-                error.contract_check = 'evidence.locator'
+                error.contract_check = require_contract_check('evidence.locator')
             else:
                 error.contract_external = True
             raise

@@ -4718,6 +4718,37 @@
       ]
     },
     {
+      "id": "refused-output-notice-with-part-relative-offsets",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "class": "bounded refusal notice",
+      "summary": "A synthetic split-text citation reproduces the whole-text offsets on a part artifact and the notice of the resulting mechanical refusal.",
+      "expected": "A versioned whole notice retains the expected part-relative offsets and the output and refusal digests. The bounded form stays within 45000 serialized characters, and selection charges the notice to the replacement task. Replacement admission and exhaustion recovery belong to later D2 units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_refusal_notice.RefusalNoticeTests.test_part_offset_notice_preserves_expected_offsets_and_every_stored_digest",
+        "test_review_refusal_notice.RefusalNoticeTests.test_bounded_notice_limits_serialized_entries_details_and_part_for_large_outputs",
+        "test_review_refusal_notice.RefusalNoticeTests.test_unbounded_legacy_identity_or_diagnostic_metadata_is_reported_without_changing_types",
+        "test_review_refusal_notice.RefusalNoticeTests.test_form_selection_counts_notice_in_task_and_reports_both_failed_trials",
+        "test_review_refusal_notice.RefusalNoticeTests.test_each_form_measures_its_recorded_prompt_and_non_notice_task"
+      ]
+    },
+    {
+      "id": "refused-output-notice-with-undelivered-evidence-diagnostic",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "filtered refusal notice",
+      "summary": "An observed final review cites evidence that its frozen input does not establish as delivered, and its authenticated refusal supplies a retry notice in a store holding the other slot's judgments.",
+      "expected": "The notice carries the refused output and the mechanical evidence-delivery diagnostic, with no other slot's scientific judgment. Unknown diagnostic details become digests, and the refusal record and stored observations remain unchanged. Chain delivery credit and replacement execution belong to other units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_refusal_notice.UndeliveredNoticeTests.test_reduced_history_final_refusal_is_delivered_without_other_reviewer_judgments",
+        "test_review_refusal_notice.RefusalNoticeTests.test_each_registered_check_withholds_unlisted_details_in_both_forms",
+        "test_review_refusal_notice.RefusalNoticeTests.test_every_registered_validator_produces_a_notice_without_the_other_reviewers_markers",
+        "test_review_refusal_notice.ContractCheckRegistryTests.test_every_check_attribution_is_registered_and_registry_fields_are_explicit"
+      ]
+    },
+    {
       "id": "bar-part-locator-and-repair-binding-diagnostics",
       "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
       "class": "output refusal diagnostics (part offsets and repair lineage)",
