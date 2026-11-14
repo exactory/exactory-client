@@ -9,7 +9,8 @@ from .stop_classes import describe_terminal
 PLAN_STEPS = {
     1: dict(command='review-assignment', roles=('bar', 'slate', 'result', 'adjudicator'),
             chooses=('id', 'route_id', 'reviewer_id', 'context.context_repair.probe_id',
-                     'context.context_repair.reason'),
+                     'context.context_repair.reason', 'context.context_repair.event_ids',
+                     'context.context_repair.evidence'),
             prerequisites=('Record the cause events.', 'Verify the new route after the latest cause event.')),
     2: dict(command='review-assignment', roles=('slate', 'result'),
             chooses=('id', 'route_id', 'context.context_repair.probe_id', 'context.context_repair.reason'),
@@ -198,7 +199,8 @@ def complete_plan(records, artifacts, assignment, plan):
         plan.update(state='handoff', command='review-stop')
     if plan['state'] == 'stop':
         if (code in ('review_turn_failures_exhausted', 'review_output_over_cap', 'review_input_too_large',
-                     'review_timeout', 'review_format_unsupported', 'review_context_unverified')
+                     'review_timeout', 'review_format_unsupported', 'review_context_unverified',
+                     'review_response_too_large')
                 or details.get('recovery', {}).get('kind') == 'decision'):
             numbers = select_route_steps(records, artifacts, assignment)
             if numbers == [4]:
@@ -206,6 +208,8 @@ def complete_plan(records, artifacts, assignment, plan):
             steps = [describe_step(records, artifacts, assignment, number) for number in numbers]
             from .review_failure_class import ROUTE_DECISION_QUESTION
             question = ('Whether this route still serves this slot or chain.' if code == 'review_turn_failures_exhausted'
+                        else 'Whether this slot or chain moves to a serving route on another adapter.'
+                        if code == 'review_response_too_large'
                         else ROUTE_DECISION_QUESTION)
             answers = [dict(answer='Move to another route', steps=steps)]
             if code == 'review_turn_failures_exhausted':
@@ -213,6 +217,16 @@ def complete_plan(records, artifacts, assignment, plan):
                     describe_step(records, artifacts, assignment, 9),
                     dict(command='review-series', assignment_id=assignment['id'])]))
             details['decision'] = dict(owner_decides=question, then=answers)
+            if code == 'review_response_too_large':
+                from .review_route_capacity import find_serving_routes
+                packet = protocol._read_json(artifacts, assignment['packet'])
+                choices = find_serving_routes(records, assignment['role'], packet, artifacts=artifacts,
+                    assignment=assignment, prompt=assignment.get('prompt', {}).get('text', ''))
+                details['serving_routes'] = [row['route_id'] for row in choices
+                    if records['review_route'][row['route_id']]['adapter'] !=
+                    records['review_route'][assignment['route_id']]['adapter']]
+                details['route_availability'] = ('Registered text routes serve this review.' if details['serving_routes']
+                    else 'No registered route serves this review.')
         elif code == 'review_budget_exhausted':
             details['decision'] = dict(owner_decides='Whether to grant more reviewer calls.',
                 then=[dict(answer='Grant more calls', steps=[describe_step(records, artifacts, assignment, 11)])])

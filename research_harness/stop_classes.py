@@ -25,6 +25,7 @@ STOP_REGISTRY.update({
 })
 for _code, _outcome in (
         ('review_provider_refused', 'provider_refused'), ('review_output_over_cap', 'output_over_cap'),
+        ('review_response_too_large', 'response_over_limit'),
         ('review_input_too_large', 'input_over_limit'), ('review_timeout', 'timeout'),
         ('review_execution_incomplete', 'execution_incomplete'), ('review_invocation_interrupted', 'interrupted'),
         ('review_answer_malformed', 'answer_malformed'), ('review_failure_unknown', 'unknown'),

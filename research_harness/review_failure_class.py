@@ -26,6 +26,7 @@ OUTCOME_CODES = {
     'provider_unavailable': 'review_provider_unavailable',
     'provider_refused': 'review_provider_refused',
     'output_over_cap': 'review_output_over_cap',
+    'response_over_limit': 'review_response_too_large',
     'execution_incomplete': 'review_execution_incomplete',
     'interrupted': 'review_invocation_interrupted',
     'stopped': 'review_chain_stopped',
@@ -60,6 +61,7 @@ OUTCOME_ROWS = {
         ('runtime_stale', 1, 'handoff', None),
         ('provider_refused', PROVIDER_REFUSAL_ATTEMPT_LIMIT, 'sequence', None),
         ('output_over_cap', IDENTICAL_OVER_CAP_ATTEMPT_LIMIT, 'decision', None),
+        ('response_over_limit', 2, 'decision', None),
         ('input_over_limit', 1, 'decision', None),
         ('timeout', 2, 'decision', None),
         ('execution_incomplete', 3, 'sequence', None),
@@ -113,6 +115,51 @@ _CODEX_RESET = re.compile(
     re.IGNORECASE)
 _OUTPUT_TOKEN_MAXIMUM_ERROR = re.compile(
     r'^API Error:.*?\bresponse exceeded (?:the )?([0-9]+) output token maximum\b', re.IGNORECASE)
+# SDKCompactBoundaryMessage, read 2026-11-14:
+# https://code.claude.com/docs/en/agent-sdk/typescript#sdkcompactboundarymessage
+CLAUDE_COMPACTION_SUBTYPE = 'compact_boundary'
+
+
+def find_capacity_signal(route, attempt, response, answer):
+    """Recognize size evidence without learning any limit or token ratio from it."""
+    error = attempt.get('error') or {}
+    code = error.get('code')
+    if code == 'review_response_too_large':
+        status = (error.get('details') or {}).get('status')
+        outcome = ('usage_limit' if status == 429 else 'provider_unavailable') if (
+            type(status) is int and not 200 <= status < 300) else 'response_over_limit'
+        return dict(outcome=outcome, signal=dict(source='attempt.error.code', value=code, status=status), reset_at=None)
+    maximum = _OUTPUT_TOKEN_MAXIMUM_ERROR.match(answer.lstrip())
+    if maximum is not None:
+        from .review_route_capacity import describe_route_capacity
+        stated = int(maximum.group(1))
+        signal = dict(source='response.answer', value=answer, max_output_tokens=stated)
+        if 'for a request sent without streaming' in answer:
+            signal['detail'] = 'non_streaming_fallback'
+            return dict(outcome='execution_incomplete', signal=signal, reset_at=None)
+        if stated < describe_route_capacity(route)['output_tokens']['value']:
+            signal['detail'] = 'reduced_by_context'
+        return dict(outcome='output_over_cap', signal=signal, reset_at=None)
+    if answer.lstrip().startswith('Prompt is too long'):
+        return dict(outcome='input_over_limit', signal=dict(source='response.answer', value=answer), reset_at=None)
+    diagnostic = attempt.get('provider_diagnostic') or {}
+    if diagnostic.get('codex_error_info') == 'context_window_exceeded':
+        return dict(outcome='input_over_limit', signal=dict(
+            source='provider_diagnostic.codex_error_info', value='context_window_exceeded'), reset_at=None)
+    issues = (response.get('context_evidence') or {}).get('issues', [])
+    if route['adapter'] in _CODEX_ADAPTERS and issues == ['uninspected_compaction']:
+        return dict(outcome='input_over_limit', signal=dict(
+            source='response.context_evidence.issues', value=issues, detail='compacted'), reset_at=None)
+    if route['adapter'] == 'claude_cli_v1' and issues == ['system_event_' + CLAUDE_COMPACTION_SUBTYPE]:
+        for entry in (response.get('execution') or {}).get('system_events', {}).get('events', []):
+            try:
+                event = json.loads(base64.b64decode(entry['raw_base64'], validate=True))
+            except (KeyError, ValueError, TypeError):
+                continue
+            if isinstance(event, dict) and event.get('type') == 'system' and event.get('subtype') == CLAUDE_COMPACTION_SUBTYPE:
+                return dict(outcome='input_over_limit', signal=dict(
+                    source='response.execution.system_events', value=event, detail='compacted'), reset_at=None)
+    return None
 
 
 def read_attempt_evidence(artifacts, attempt):
@@ -188,7 +235,8 @@ def parse_reset_time(text, observed_at):
 def find_output_cap_signal(records, artifacts, assignment, attempt):
     """Use the adaptive handlers' own detectors before the route-token fallback."""
     route = records.get('review_route', {}).get(assignment['route_id'], {})
-    maximum = route.get('configuration', {}).get('max_output_tokens')
+    from .review_route_capacity import describe_route_capacity
+    maximum = describe_route_capacity(route)['output_tokens']['value']
     # Restrict the existing predicates to this exact attempt; another call cannot decide its outcome.
     evidence = dict(records, review_assignment={assignment['id']: assignment},
                     review_attempt={attempt['id']: attempt})
@@ -248,7 +296,7 @@ def classify_attempt(records, artifacts, attempt):
     error_code = (attempt.get('error') or {}).get('code')
     diagnostic = attempt.get('provider_diagnostic') or {}
     usage_line = re.match(r"^You['’]ve (?:hit|reached) your\b[^\n]*\blimit\b", answer.strip())
-    output_maximum = _OUTPUT_TOKEN_MAXIMUM_ERROR.match(answer.lstrip())
+    capacity_signal = find_capacity_signal(records['review_route'][assignment['route_id']], attempt, response, answer)
     outcome, signal, reset_at = 'unknown', dict(source='retained_evidence', value='undecided'), None
     dispatch = {'review_runtime_missing': 'runtime_unavailable',
                 'review_invocation_interrupted': 'interrupted',
@@ -256,13 +304,11 @@ def classify_attempt(records, artifacts, attempt):
                 'review_format_unsupported': 'format_unsupported', 'review_input_too_large': 'input_over_limit'}
     if error_code in dispatch:
         outcome, signal = dispatch[error_code], dict(source='attempt.error.code', value=error_code)
+    elif capacity_signal is not None:
+        return capacity_signal
     elif safeguard_notice is not None:
         outcome = 'provider_refused'
         signal = dict(source='response.execution.system_events', value=safeguard_notice)
-    elif output_maximum is not None:
-        outcome = 'output_over_cap'
-        signal = dict(source='response.answer', value=answer,
-                      max_output_tokens=int(output_maximum.group(1)))
     elif usage_line or diagnostic.get('codex_error_info') == 'usage_limit_exceeded':
         outcome = 'usage_limit'
         signal = dict(source='response.answer' if usage_line else 'provider_diagnostic.codex_error_info',
@@ -586,9 +632,10 @@ def plan_after_failure(records, artifacts, assignment_id):
         recovery = plan_capacity_recovery(records, artifacts, assignment, outcome)
         details.update(recovery['details'])
         if outcome == 'output_over_cap':
-            configuration = records['review_route'][assignment['route_id']]['configuration']
+            from .review_route_capacity import describe_route_capacity
+            capacity = describe_route_capacity(records['review_route'][assignment['route_id']])
             details.update(output_tokens=(last.get('usage') or {}).get('output_tokens'),
-                           max_output_tokens=configuration['max_output_tokens'],
+                           max_output_tokens=capacity['output_tokens']['value'],
                            over_cap_attempts=position['over_cap_attempts'])
         if (outcome != 'provider_refused' or used >= PROVIDER_REFUSAL_ATTEMPT_LIMIT) and (
                 outcome != 'timeout' or used >= 2):

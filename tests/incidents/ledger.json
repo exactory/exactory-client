@@ -5274,6 +5274,60 @@
         "test_review_route_capacity.RouteLimitTests.test_request_measure_counts_native_packet_and_instructions",
         "test_review_route_capacity.RouteLimitTests.test_model_and_transport_limits_keep_their_sources"
       ]
+    },
+    {
+      "id": "bar-max-verification-counts-all-declared-chains",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "verification output criterion",
+      "summary": "Judging only completed bars or short passing chains hides generated over-limit attempts.",
+      "expected": "The predeclared verification reports every started max bar chain, needs twenty generated calls, enforces both the chain and combined bounds, and refuses size stops, owner steps or missing v4 plans.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_verification_criterion.VerificationCriterionTests.test_real_shape_three_historical_over_cap_turns_fail_and_list_tokens",
+        "test_verification_criterion.VerificationCriterionTests.test_combined_bound_rejects_five_individually_passing_chains",
+        "test_verification_criterion.VerificationCriterionTests.test_minimum_and_incomplete_started_chain_are_not_omitted"
+      ]
+    },
+    {
+      "id": "https-response-cap-has-a-recordable-route-handoff",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "HTTPS response capacity",
+      "summary": "An oversized HTTPS response was unknown and its route decision could leave the review on its stopped head.",
+      "expected": "response_over_limit permits one identical retry, then names the role steps that reach a recorded review on a serving route. Response bytes never become output-token evidence.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_signals.ResponseLimitJourneyTests.test_existing_bar_session_head_moves_by_retirement_probe_and_repair_to_recording",
+        "test_capacity_signals.ResponseLimitJourneyTests.test_problem_openness_moves_by_probe_and_new_export_to_recorded_finding",
+        "test_capacity_signals.ResponseLimitJourneyTests.test_verification_moves_by_probe_and_first_assignment_to_recorded_verdict",
+        "test_capacity_signals.ResponseLimitJourneyTests.test_math_review_moves_by_new_attestation_to_recorded_acceptance"
+      ]
+    },
+    {
+      "id": "retained-compaction-and-fallback-capacity-signals",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "retained capacity signal evidence",
+      "summary": "Claude compaction and non-streaming fallback were folded into unrelated general failures or output caps.",
+      "expected": "A sole documented compaction is input_over_limit with compacted; an unrecognized context event remains unverified. Fallback is execution_incomplete and enters no output row; error text changes no measure.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_signals.CapacitySignalTests.test_claude_compaction_stream_is_input_limit_and_unknown_event_is_unverified",
+        "test_capacity_signals.CapacitySignalTests.test_fallback_enters_no_output_row_and_error_numbers_change_no_measure"
+      ]
+    },
+    {
+      "id": "capacity-advisory-keeps-malformed-packet-stop",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "capacity advisory isolation",
+      "summary": "A capacity warning decoded a malformed packet after the series had already selected its terminal stop and replaced the CLI result with input_io.",
+      "expected": "An unreadable advisory task returns no size warning and preserves the original terminal refusal and exit status.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_automatic_gate_override.RecordedSeriesStopTests.test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code"
+      ]
     }
   ]
 }

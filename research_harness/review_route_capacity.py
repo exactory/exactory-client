@@ -14,6 +14,15 @@ import tempfile
 from . import review_transport as transport
 from .evidence import digest
 POLICY = 'exactory-route-capacity-policy-v1'
+VERIFICATION_CALLS_PER_OVER_LIMIT = 20
+VERIFICATION_POSITION_OVER_LIMIT = 1
+VERIFICATION_MINIMUM_CALLS = 20
+VERIFICATION_RECORDED_OUTPUT_LIMIT = 128000
+VERIFICATION_SIZE_STOP_CODES = (
+    'review_output_over_cap', 'review_input_too_large', 'review_timeout',
+    'review_pending_delivery_over_plan', 'review_route_capacity_below_floor',
+    'review_chain_projection_over_limit', 'review_response_too_large',
+)
 PROFILE_PROTOCOL = 'exactory-route-output-profile-v1'
 PROFILE_ATTEMPT_LIMIT = 500
 DEFAULT_INPUT_TOKENS = 150000
@@ -557,7 +566,7 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
     )
 
 
-def describe_attempt(route, role, packet, request, response, *, operation='review.invoke', observed_at=None, count_carried_state=None):
+def describe_attempt(route, role, packet, request, response, *, operation='review.invoke', observed_at=None, count_carried_state=None, attempt_error=None):
     """Record last-send estimates and generation outcomes, without losing malformed failures."""
     from .review_answer_recovery import extract_answer_text
     response = response if isinstance(response, dict) else {}
@@ -601,7 +610,14 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
     output = usage.get('output_tokens')
     answer_tokens = output - thinking if method == 'provider_usage' and type(output) is int and (output >= thinking) else None
     counts = {key: value if type(value) is int and value >= 0 else None for key, value in ((key, usage.get(key)) for key in ('input_tokens', 'output_tokens'))}
+    from .review_failure_class import find_capacity_signal
+    signal = find_capacity_signal(route, dict(error=attempt_error), response, answer_text or '')
+    excluded = signal is not None and (signal['outcome'] == 'response_over_limit'
+        or signal['signal'].get('detail') == 'non_streaming_fallback'
+        or (attempt_error or {}).get('code') == 'review_response_too_large')
     return dict(
+        **(dict(output_profile_eligible=False) if excluded else {}),
+        **(dict(outcome=signal['outcome']) if signal is not None else {}),
         usage=dict(
             counts,
             thinking_tokens=thinking,
@@ -674,13 +690,20 @@ def _sort_profile_row(row):
     )
 
 
+def qualifies_for_output_profile(sample):
+    return (sample.get('output_profile_eligible') is not False and
+            (sample.get('error') or {}).get('code') != 'review_response_too_large')
+
+
 def build_profile_rows(samples):
     """Keep every attempt; only completed generations supply the usage maxima."""
     groups = {}
     for sample in samples:
+        if not qualifies_for_output_profile(sample):
+            continue
         usage = sample['usage']
         output = usage.get('output_tokens')
-        over = type(output) is int and output >= sample['output_limit']
+        over = sample.get('outcome') == 'output_over_cap' or type(output) is int and output >= sample['output_limit']
         complete = sample.get('completed_generation', False)
         task = sample['task']
         key = (task['kind'], _find_task_level(task['characters']))
@@ -782,6 +805,8 @@ def read_output_profile(records, route, *, priors=None):
     verified = 0
     completions = ((kind, attempt) for kind in ('review_attempt', 'review_route_probe', 'review_output_correction') for attempt in records.get(kind, {}).values())
     for completion_kind, attempt in completions:
+        if not qualifies_for_output_profile(attempt):
+            continue
         if completion_kind != 'review_route_probe' and attempt.get('origin') != 'instrumented':
             continue
         if not all((name in attempt for name in ('task', 'answer'))):
@@ -816,6 +841,38 @@ def read_output_profile(records, route, *, priors=None):
         frame_policy=describe_frame_policy(route),
         frame_measurements=frame_rows,
     )
+
+
+def find_serving_routes(records, role, packet, *, artifacts, assignment, prompt, history=()):
+    """Prove registered route choices using their probes and the shared request measure.
+
+    Binary requests await the documented bounds of binary-input-measure; a text
+    adapter must never qualify by silently omitting bytes from this packet.
+    """
+    from .errors import ResearchError
+    from .review_protocol import route_state, retired_routes
+    from .review_parts_roles import find_adapter
+    result = []
+    retired = retired_routes(records)
+    binary = any(row.get('encoding') == 'base64' for row in packet.get('evidence', []))
+    visual = bool(packet.get('visual_source_delivery') or packet.get('visual_context_repair'))
+    for route in records.get('review_route', {}).values():
+        if route['id'] in retired or binary or visual and route['adapter'] != 'codex_cli_visual_v1':
+            continue
+        if route_state(records, artifacts, route['id'])['context_status'] != 'verified_for_route':
+            continue
+        try:
+            request = transport.request_body(route, prompt, packet, history)
+            measure = measure_request(route, request)
+        except ResearchError:
+            continue
+        if measure['fits']:
+            result.append(dict(route_id=route['id'], delivery='single', measure=measure))
+        elif (route['adapter'] in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1')
+              and find_adapter(assignment, packet) is not None
+              and measure['token_limit'] > 15000 + math.ceil(len(prompt) / CLAUDE_CHARACTERS_PER_TOKEN)):
+            result.append(dict(route_id=route['id'], delivery='parts', measure=measure))
+    return result
 
 
 def describe_material_levels(kind, *, block_room=480000):

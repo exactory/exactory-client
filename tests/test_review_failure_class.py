@@ -44,6 +44,7 @@ class FailureClassTests(unittest.TestCase):
         self.addCleanup(recheck.stop)
         self.records = dict(review_assignment={'head': self.assignment}, review_attempt={},
                             review_route={'route': dict(id='route', adapter='codex_cli_v1',
+                                model='fixture-model', endpoint='codex://local',
                                 configuration=dict(max_output_tokens=128000))})
 
     def put(self, value):
@@ -219,7 +220,8 @@ class FailureClassTests(unittest.TestCase):
         attempt = self.attempt(answer, status='failed', provider_status='completed', tokens=0)
         classification = self.classify(attempt)
         self.assertEqual(classification, dict(outcome='output_over_cap', reset_at=None,
-            signal=dict(source='response.answer', value=answer, max_output_tokens=20000)))
+            signal=dict(source='response.answer', value=answer, max_output_tokens=20000,
+                        detail='reduced_by_context')))
         plan = self.plan()
         self.assertEqual((plan['state'], plan['code'], plan['not_before']),
                          ('run', 'review_output_over_cap', None))
