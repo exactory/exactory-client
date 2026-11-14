@@ -2205,7 +2205,7 @@ Public command specs are closed records:
 | refresh | `{node_ids: [NodeID]}`: 1 to 256 distinct IDs of nodes admitted through a proposal, in any order |
 | complete | `{subject: ClosureSubject, review: ResultReview, inputs: [Input]}` |
 | deliver-closure | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
-| deliver-attempt | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
+| deliver-attempt | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery). It writes the attempt record, its current pointer and one `native_acceptance_review` link record for each accepted result with an observed review ([Attempt delivery](#attempt-delivery)) |
 | adopt | `{mappings: [ImportMapping], inputs: [Input]}` |
 | retreat ID | `Retreat` without `node_id` |
 | replan | The documented `replan_recorded` payload |
@@ -2592,7 +2592,8 @@ every accepted acceptance and any closure whose proof status is `proved` or
 `disproved`. The common mutation checks that snapshot's revision; a concurrent
 change retries with a fresh snapshot
 and audit. An identical current record re-audits and writes neither a record nor
-a receipt. A changed summary writes a new immutable record and preserves the old
+a receipt, except for the acceptance links of an attempt that the store lacks
+([Attempt delivery](#attempt-delivery)). A changed summary writes a new immutable record and preserves the old
 one. Re-delivering an earlier attempt updates its current pointer as described
 below, without rewriting that immutable record.
 
@@ -2675,6 +2676,38 @@ Pointer-only mutations use common request ID
 delivery receipt cannot replay a later pointer update. Record order never
 declares the current snapshot, and different attack roots have separate
 successions even when they share an objective ID.
+
+Each delivery also links every accepted result to the review that accepted it.
+For each acceptance of the delivered state whose status is `accepted` and whose
+review has a `review-assignment:` attestation, the same prepared mutation writes
+one immutable link record:
+
+```text
+native_acceptance_review/<digest({attack_root, objective_id, acceptance_digest})> = {
+  attack_root: AbsolutePath, objective_id: ID,
+  acceptance_digest: digest(acceptance), acceptance_id: ID, checkpoint_id: ID,
+  evidence_digests: [as recorded in the acceptance's audit],
+  review: {assignment_id, final_assignment_id, attempt_id, output_digest},
+  provenance: {source: "operator", actor_id: "search-controller",
+               attestation_id: "filesystem-audit:deliver-attempt"}
+}
+```
+
+`assignment_id` is the review assignment that the attestation names, which is
+the first turn when the review ran as a reading chain or as a series in parts.
+`final_assignment_id` is the last turn of that chain or series, and the same
+assignment for a review of one turn. `attempt_id`
+and `output_digest` are those of the observed output of that final turn in the
+common store. The summary and its digest do not hold the links, so
+`native_attempt_digest` and every record that cites it stay as they are. A
+repeat of `deliver-attempt` for an unchanged state writes the link records that
+the store lacks and nothing else: it adds no attempt record and does not move
+the pointer. This repeat gives the links to an attempt that was delivered before
+0.88.0. A link record stays when its acceptance is later invalidated. A link key
+that already holds other content refuses the whole delivery with
+`record_conflict`. The research harness shows no view of its own for the links,
+and `record-check` verifies each of them against its review
+([Record check](../../docs/research-cli.md#record-check)).
 
 Keyed collections are ordered by controller ID; retreats keep recorded order.
 `failed_strategies` contains the retained entries of

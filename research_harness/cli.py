@@ -424,7 +424,8 @@ def build_parser():
                 "default final/problem/exports/<export digest>/; a directory that already holds exactly the exported "
                 "files is reused. A problem-openness, readiness, manuscript or round packet goes into any new "
                 "directory, by default intermediate/reviews/packets/<assignment id>/ or "
-                "intermediate/reviews/packets/<kind>-r<revision>/. A native export requires a new directory."))
+                "intermediate/reviews/packets/<kind>-r<revision>/. A problem-openness export whose packet a "
+                "directory already holds returns that directory. A native export requires a new directory."))
             item.add_argument("--attack-root", help="Native attack root for an immutable foundation delivery.")
             item.add_argument("--claim-binding", help="JSON source correspondence for an external native verification claim.")
         if command == "recover":
