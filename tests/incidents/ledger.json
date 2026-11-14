@@ -4893,6 +4893,22 @@
         "test_review_account_record_units.AccountRecordUnitTests.test_assessment_and_objection_occurrences_share_the_search_unit",
         "test_review_account_record_units.AccountRecordUnitTests.test_imported_account_duplicates_rebuild_without_local_record_units"
       ]
+    },
+    {
+      "id": "reviewer-call-admission-boundaries",
+      "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
+      "class": "review call admission and launch (continuity foundation)",
+      "summary": "Call starts and launches need one transactional boundary before stop and queue behavior can be added safely.",
+      "expected": "Call admission keeps budget-before-capacity checks and launch ownership, authorization and dependency checks in their existing transactions. Frozen pre-extraction writers produce the same records and digests, including replay. Queue ordering and stop semantics remain open for their later units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_budget_precedes_capacity_and_refusal_rolls_back_every_write",
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_uncovered_route_uses_the_budget_without_taking_local_capacity",
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_claim_and_worker_start_keep_dependency_and_launch_checks",
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_child_registration_checks_release_token_state_and_process_identity",
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_new_boundaries_match_frozen_record_writers_and_replay"
+      ]
     }
   ]
 }
