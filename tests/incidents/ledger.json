@@ -6,7 +6,7 @@
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "generated output views and export delivery",
       "summary": "Merging structured reference exports with export retirement left v2 exports outside history handling and retired unchanged legacy override exports.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "expected": "New reviewed and override exports use v2 with citation-refs.json. Stored legacy exports keep their bytes and digests. Each format compares against its own current projection, then retires intact on changed content or source identity. Unknown formats and incomplete or edited exports stay in place.",
       "test_kind": "real_shape",
       "tests": [
@@ -27,7 +27,7 @@
         "test_review_series_journeys.SeriesJourneyTests.test_openness_chain_renders_native_views_before_the_next_turn"
       ],
       "class": "generated output views and export delivery",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape"
     },
     {
@@ -42,7 +42,7 @@
         "test_research_problem_openness.ProblemOpennessTests.test_0853_packet_reuses_frozen_delivery_without_changing_packet_bytes"
       ],
       "class": "generated output views and export delivery",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape"
     },
     {
@@ -68,7 +68,7 @@
         "test_problem_export_history.OverrideExportHistoryTests.test_default_export_keeps_its_workspace_anchor_when_a_parent_changes_before_writing"
       ],
       "class": "generated output views and export delivery",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape"
     },
     {
@@ -4765,7 +4765,7 @@
       "class": "search receipt (unreported parser and enumeration gaps)",
       "summary": "The search receipt left invalid returned rows and incomplete captured queries without counts or provider record types.",
       "expected": "Search receipts count invalid items and incomplete responses with their queries and preserve supplied provider record types.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape",
       "tests": [
         "test_search_receipts.SearchReceiptTests.test_receipt_counts_invalid_items_and_incomplete_responses_with_query_and_provider_type"
@@ -4777,7 +4777,7 @@
       "class": "search evidence (front matter, capture intervals and path queries)",
       "summary": "OpenAlex front matter became integrity errors, pages captured a day apart received no check warning, and path-addressed citation captures could not bind their query.",
       "expected": "New searches retain identified paratext exclusions without integrity errors; stored searches keep their old interpretation; check reports page groups over 15 minutes apart; web imports can declare a named query path segment.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape",
       "tests": [
         "test_search_receipts.SearchReceiptTests.test_new_search_excludes_null_and_titled_paratext_without_integrity_errors",
@@ -4792,7 +4792,7 @@
       "class": "search capture field selection",
       "summary": "OpenAlex responses captured without select added about 15000 characters per work to search evidence.",
       "expected": "A synthetic response with the recommended select fields imports and retains the original bytes. Pages with different select values remain separate incomplete groups, while titleless article rows are reported as invalid_work. A live capture must still confirm that select retains meta; sandbox DNS resolution was unavailable.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape",
       "tests": [
         "test_openalex_select.OpenAlexSelectTests.test_selected_response_imports_exact_bytes_and_disposition_metadata",
@@ -4819,7 +4819,7 @@
       "record": "20261112210200-citation-check-title-with-tex-braces",
       "class": "citation integrity and registry pacing",
       "summary": "Correct TeX titles were compared after one-sided brace stripping; problem exports lacked structured reference metadata, and citation lookups exceeded the arXiv request interval.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "expected": "Both titles use the same normalization, mismatch details quote original titles, and author-bearing DOI/arXiv reference lists verify. Both problem export kinds add citation-refs.json under a new manifest schema while legacy export bytes, post digests and final indexes remain valid. Shared arXiv admission spaces requests by at least three seconds and retries 429/503 within a fixed attempt bound.",
       "test_kind": "real_shape",
       "tests": [
@@ -4845,7 +4845,7 @@
       "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
       "class": "provider safeguards, account usage and full-text timeout evidence",
       "summary": "Claude informational safeguard stops were classified as incomplete execution, subscription usage events were discarded, and full-text timeouts did not explain the effective limit.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "expected": "Retained safeguard notices yield provider_refused and review_provider_refused while their injected continuation stays unverified. Three total provider-refusal runs cover the measured chain size under independent runs and remain subject to the eight-failure cap. New Claude responses retain usage events; status and series show the latest windows and grounded remaining-chain warnings. Full-text timeout pending items retain the effective attempt limit, elapsed time and received bytes without changing stored evidence. Usage remains advisory step metadata and does not change recorded stop plans or identities.",
       "test_kind": "real_shape",
       "tests": [
@@ -4871,7 +4871,7 @@
       "class": "review scheduling (harness defect)",
       "summary": "A stopped or superseded review chain adds an invocation diagnostic after the posted-statement obligations have been moved to after_post.",
       "expected": "The posted statement keeps only problem_already_posted as its main obligation; all its review findings remain under after_post without next actions, including an invocation without an attempt and an unverified stopped chain.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape",
       "tests": [
         "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews",
@@ -4892,7 +4892,7 @@
       "class": "payload admission (harness defect)",
       "summary": "Artifact and response payloads accept different path forms and interpret relative paths from different roots.",
       "expected": "Every payload file field accepts canonical workspace-relative or in-workspace absolute paths and stores the relative form; escapes, links and noncanonical paths share unsafe_path and one explanation.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape",
       "tests": [
         "test_research_input_validation.ResearchPayloadValidationTests.test_import_response_preview_refuses_a_non_path_before_opening_it",
@@ -4914,7 +4914,7 @@
       "record": "20261112150500-result-review-frame-holds-cited-search-records",
       "class": "review capacity (cited search records in the result frame)",
       "summary": "Account-cited searches and their captured responses stayed in every result turn, even when openness also bound the same searches.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "expected": "New result series deliver each stored record once by kind, id and digest, reconstruct both account and openness occurrences exactly, and give each captured response one owner. Ten searches of 160000 characters plus their captures leave a frame below 1300000 characters. Stored series keep their original inventory rule and authenticated hashes. Size reports remain a separate unit.",
       "test_kind": "real_shape",
       "tests": [
@@ -4947,7 +4947,7 @@
       "record": "20261111223126-layout-extraction-inflates-fulltext-delivery",
       "class": "openness reading and capture selection",
       "summary": "A main-capture choice after an openness finding made it stale, and a choice before export left the bound version without a full-text unit.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "expected": "An openness export binds the current main-capture choices and delivers their text. Reading plans, units, final results and staleness checks use that binding. An unbound packet keeps the first capture. Later choices preserve stored v4 and v5 packet, plan, prompt and request bytes and the standing of their findings.",
       "test_kind": "real_shape",
       "tests": [
@@ -4973,7 +4973,7 @@
         "test_capture_classes.CaptureClassTests.test_capture_fields_stay_in_modules_with_reviewed_roles"
       ],
       "class": "source capture provenance and eligibility",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape"
     },
     {
@@ -5008,7 +5008,7 @@
       "class": "openness minimum assessment before export",
       "summary": "Reading chains ran to unresolved findings although the bound search integrity and reading gaps already blocked both resolved outcomes at export.",
       "expected": "One gap list drives the record-side audit and forecast. Export refuses before writing when both resolved outcomes are blocked, and --accept-gaps exports with the same forecast as a warning. Bounded enumeration remains a notice. Stored v1 audits and v5 packets retain their interpretation and bytes.",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape",
       "tests": [
         "test_minimum_assessment.MinimumAssessmentTests.test_g1_forecast_and_audit_share_every_record_condition_and_legacy_order",
@@ -5027,7 +5027,7 @@
         "test_research_problem_forming.ProblemFormingCompatibilityTests.test_0820_candidate_status_views_and_evidence_keep_their_bytes_and_meaning"
       ],
       "class": "generated output views and export delivery",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape"
     },
     {
@@ -5041,7 +5041,7 @@
         "test_research_output_views.RenderTests.test_export_discovery_failure_names_the_failed_path_and_stays_advisory"
       ],
       "class": "generated output views and export delivery",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape"
     },
     {
@@ -5054,7 +5054,7 @@
         "test_research_cli.ResearchCliTests.test_fresh_verifier_can_acquire_before_exact_target_initialization"
       ],
       "class": "workspace payload file boundary",
-      "fixed_in": "open",
+      "fixed_in": "0.88.0",
       "test_kind": "real_shape"
     }
   ]
