@@ -38,7 +38,9 @@ def _containment(reference, data, containers):
 
 
 def build_delivery(records, artifacts, packet):
-    """Reconstruct selection from authenticated exact versions and current full readings."""
+    """Reconstruct the packet's selection from authenticated exact versions and full readings."""
+    from .capture_selection import bind_packet_selections
+    records = bind_packet_selections(records, packet["scientific_context"])
     from .bar_sources import _source, _capture_digest
     from .identities import version_of
     from .reading import fulltext_coverage

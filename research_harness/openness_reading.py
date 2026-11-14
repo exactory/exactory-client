@@ -409,12 +409,14 @@ def _describe_identity(value):
 
 
 def list_reading_texts(records, native):
-    """The full-text rows of an openness packet: for each version that a bound reading read, the extracted text of each
-    of its main captures that the packet carries as evidence, so that a capture recorded after the export does not
-    enlarge the chain. An alternate main body that the packet's openness_delivery contract omits is not read; the
+    """The full-text rows of an openness packet: for each version that a bound reading read, the extracted texts of
+    its bound main captures carried as evidence, so that a capture recorded after the export does not enlarge the
+    chain. An alternate main body that the packet's openness_delivery contract omits is not read; the
     selected representation of its version is. A row is {kind, version_id, text_sha256, artifact}; the rows follow
     the packet's text_delivery_priority, then the version id and the text digest."""
     from .graph import main_captures
+    from .capture_selection import bind_packet_selections
+    records = bind_packet_selections(records, native['scientific_context'])
     bound = set(native['scientific_context']['openness_minimum']['reading_digests'])
     omitted = set((native['scientific_context'].get('openness_delivery') or {}).get('alternate_body_digests', []))
     carried = {entry['artifact']['sha256'] for entry in native['evidence']} - omitted
@@ -462,10 +464,12 @@ def list_math_response_rows(records, artifacts, native):
 
 def list_math_text_rows(records, native):
     """The full-text rows of a math result openness packet: for each bound reading whose source bundle pins an original,
-    the extracted text of that original's main capture, by version id and then text digest. The packet must carry each
-    text, so that a capture recorded after the export never enlarges the chain. A row is {kind, version_id,
+    the extracted text of that original's bound main capture, by version id and then text digest. The packet must
+    carry each text, so that a capture recorded after the export never enlarges the chain. A row is {kind, version_id,
     text_sha256, artifact}."""
     from .graph import main_captures
+    from .capture_selection import bind_packet_selections
+    records = bind_packet_selections(records, native['scientific_context'])
     bound = set(native['scientific_context']['openness_minimum']['reading_digests'])
     carried = {entry['artifact']['sha256'] for entry in native['evidence']}
     rows = {}
@@ -1124,6 +1128,8 @@ def prepare_packet(records, artifacts, value, route, packet):
     turn. V5 planning diagnostics accompany the returned chain metadata; record_assignment removes them before
     saving the chain and returns them separately from the scientific packet."""
     native = packet['native']
+    from .capture_selection import bind_packet_selections
+    records = bind_packet_selections(records, native['scientific_context'])
     prior_id = value['context'].get('prior_assignment_id')
     if prior_id is None:
         if (not (is_openness_packet(native) or is_math_openness_packet(native))
@@ -1292,6 +1298,8 @@ def _list_legacy_texts(records, native):
     """The stored extracted full text of each version that the readings of the openness minimum read, ordered by the
     packet's text_delivery_priority and then by version id: the full texts of the chains whose final turn 0.64.2 to
     0.66.2 built."""
+    from .capture_selection import bind_packet_selections
+    records = bind_packet_selections(records, native['scientific_context'])
     reading_digests = set(native['scientific_context']['openness_minimum']['reading_digests'])
     versions = {reading['version_id'] for reading in records.get('reading', {}).values()
                 if digest(reading) in reading_digests}
