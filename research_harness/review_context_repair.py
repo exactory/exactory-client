@@ -269,7 +269,7 @@ def prepare_repair(records, artifacts, assignment_payload):
     strategy.evidence(records, artifacts, repair['evidence'])
     if {digest(item) for item in repair['evidence']} != {digest(item) for event in events for item in event['evidence']}:
         _raise_binding_mismatch(repair, events)
-    from .review_protocol import retired_routes
+    from .review_protocol import is_dead_assignment, retired_routes
     from .review_refusal import refused_attempts
     retired = retired_routes(records)
     state = assignment_state(records, artifacts, predecessor['id'])
@@ -289,13 +289,14 @@ def prepare_repair(records, artifacts, assignment_payload):
         if (prior['dossier_id'] != predecessor['dossier_id'] or prior['role'] != predecessor['role']
                 or not is_same_subject(prior, predecessor)):
             continue
-        if slot_id(records, prior) != original_slot and normalized_text(prior['reviewer_id']) == reviewer:
+        if (slot_id(records, prior) != original_slot and normalized_text(prior['reviewer_id']) == reviewer
+                and not is_dead_assignment(records, prior)):
             raise ResearchError('review_not_independent', 'The other fixed slot cannot reassess this slot')
         if prior['id'] not in identifiers and predecessor['id'] in {item['id'] for item in _lineage(records, prior)}:
             attempts = [item for item in records.get('review_attempt', {}).values() if item['assignment_id'] == prior['id']]
             pending = any(item['assignment_id'] == prior['id'] and item['id'] not in records.get('review_attempt', {})
                           for item in records.get('review_invocation', {}).values())
-            dead = not attempts and not pending and prior['route_id'] in retired
+            dead = is_dead_assignment(records, prior)
             # Two refused outputs exhaust an assignment, so an exhausted repair gives way to a new one, as an exhausted
             # initial bar slot takes a new reviewer.
             completed = [item for item in attempts if item['status'] == 'completed']

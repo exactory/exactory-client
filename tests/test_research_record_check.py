@@ -295,7 +295,9 @@ class RecordCheckTests(unittest.TestCase):
         with patch.object(record_check, 'plan_next', return_value=refusal):
             report = self.check()
         self.assertFalse(report['ready'])
-        self.assertEqual(self.step(report, 'continuation')['error']['code'], 'review_parts_no_progress')
+        error = self.step(report, 'continuation')['error']
+        self.assertEqual(error['code'], 'record_unlisted_stop')
+        self.assertEqual(error['details'], refusal)
 
     def test_run_checks_route_limit_without_admission(self):
         from research_harness import record_check
@@ -362,13 +364,17 @@ class RecordCheckTests(unittest.TestCase):
     def test_capacity_code_does_not_allow_an_external_action_or_a_planner_stop(self):
         from research_harness import record_check
         for state, command, expected in [('continue', 'review-probe', 'qualification_unavailable'),
-                                         ('stop', 'review-assignment', 'review_parts_final_too_large')]:
+                                         ('stop', 'review-assignment', 'record_unlisted_stop')]:
             action = dict(state=state, command=command, payload={}, head_id=self.assignment['id'],
                           progress={}, code='review_parts_final_too_large', details={})
             with self.subTest(state=state), patch.object(record_check, 'plan_next', return_value=action):
                 report = self.check()
             self.assertFalse(report['ready'])
-            self.assertEqual(self.step(report, 'continuation')['error']['code'], expected)
+            error = self.step(report, 'continuation')['error']
+            self.assertEqual(error['code'], expected)
+            if state == 'stop':
+                self.assertEqual(error['details']['code'], action['code'])
+                self.assertEqual(error['details']['command'], command)
 
     def test_unknown_state_never_executes_an_otherwise_allowed_operation(self):
         from research_harness import record_check
@@ -872,7 +878,10 @@ else:
         with patch.dict(cli.OPERATIONS, {'review-assignment': lambda *args, **kwargs: (
                 (_ for _ in ()).throw(ResearchError('review_parts_no_progress', 'Refused continuation')))}):
             report = self.check()
-        self.assertEqual(self.step(report, 'continuation')['error']['code'], 'review_parts_no_progress')
+        error = self.step(report, 'continuation')['error']
+        self.assertEqual(error['code'], 'record_unlisted_stop')
+        self.assertEqual(error['details']['error']['code'], 'review_parts_no_progress')
+        self.assertEqual(error['details']['refused_action']['command'], 'review-assignment')
 
     def test_run_boundary_cannot_qualify_an_unlisted_command(self):
         from research_harness import record_check

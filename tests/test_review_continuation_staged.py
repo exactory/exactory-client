@@ -75,8 +75,9 @@ class StagedContinuationTests(unittest.TestCase):
         row = next(row for row in enriched['obligations']
                    if row['code'] == 'review_epoch_stale' and 'task_id' not in row)
         self.assertTrue(row['next'])
-        self.assertEqual(row['next'][0]['command'], 'review-assignment')
-        self.assertEqual(row['next'][0]['state'], 'handoff')
+        self.assertEqual(row['next'][0]['state'], 'stop')
+        self.assertTrue(row['next'][0]['details']['unlisted'])
+        self.assertEqual(row['next'][0]['details']['refused_action']['command'], 'review-assignment')
         self.assertEqual(enriched['next'], row)
         self.assertEqual(original, before)
 

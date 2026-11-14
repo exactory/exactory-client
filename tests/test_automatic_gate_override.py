@@ -276,7 +276,8 @@ class RecordedSeriesStopTests(unittest.TestCase):
         self.assertEqual(exited.exception.code, 3, errors.getvalue())
         rows = [json.loads(line) for line in output.getvalue().splitlines()]
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["code"], "review_format_unsupported")
+        # Its stored unverified context takes the legacy route decision before the malformed packet.
+        self.assertEqual(rows[0]["code"], "review_context_unverified")
         self.assertIn("stop_record_error", rows[0])
         self.assertNotIn("stop_id", rows[0])
         self.assertEqual(errors.getvalue(), "")

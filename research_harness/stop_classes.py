@@ -112,7 +112,7 @@ def classify_stop(code):
     return STOP_REGISTRY.get(code, {}).get('class', 'decision')
 
 
-def describe_terminal(code):
+def describe_terminal(code, *, action=None):
     """Describe a refused action without changing its recorded error or evidence."""
     row = STOP_REGISTRY.get(code)
     next_step = copy.deepcopy(row['next'] if row is not None else dict(kind='decision',
@@ -123,6 +123,10 @@ def describe_terminal(code):
     if classify_stop(code) == 'harness_defect':
         state = 'stop'
     result = dict(state=state, code=code, stop_class=classify_stop(code), details={})
+    if row is None:
+        result['details']['unlisted'] = True
+        if action is not None:
+            result['details']['refused_action'] = copy.deepcopy(action)
     if 'command' in next_step:
         result['command'] = next_step.pop('command')
     if kind == 'decision':

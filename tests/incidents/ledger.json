@@ -5439,6 +5439,47 @@
         "test_reading_forecast.SeriesReadingForecastTests.test_v5_turn_50_cannot_fit_and_series_stops_before_a_call",
         "test_reading_forecast.LegacyReadingForecastTests.test_chain_admitted_by_0870_keeps_packets_prompts_and_request_digests"
       ]
+    },
+    {
+      "id": "unrun-unverified-assignment-holds-review-slot",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "unverified assignment replacement",
+      "summary": "A bar assigned before its route probe kept both its frozen unverified context and its reviewer slot after the probe succeeded.",
+      "expected": "Unrun assignments recorded on an unverified route release their reviewer and position, and the planner executes a verified replacement. A historical attempt on that context requires a route decision.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_dead_assignments.DeadAssignmentTests.test_both_occupied_slots_accept_same_reviewer_after_probe",
+        "test_review_dead_assignments.DeadAssignmentTests.test_unverified_assignment_is_refused_before_any_call_or_attempt",
+        "test_review_dead_assignments.DeadAssignmentTests.test_dead_continuation_can_be_replaced_without_a_fork",
+        "test_review_dead_assignments.DeadAssignmentTests.test_dead_repair_releases_its_position_and_keeps_the_binding",
+        "test_review_dead_assignments.DeadAssignmentTests.test_dead_native_continuations_release_their_parent",
+        "test_review_dead_assignments.DeadAssignmentTests.test_legacy_attempt_on_unverified_assignment_is_a_decision",
+        "test_review_dead_assignments.DeadAssignmentTests.test_same_reviewer_replacement_selects_its_own_dead_slot",
+        "test_review_dead_assignments.DeadAssignmentTests.test_dead_standalone_replacement_is_reached_from_the_original_id",
+        "test_review_dead_assignments.DeadAssignmentTests.test_dead_staged_child_is_refused_before_reservation",
+        "test_review_dead_assignments.DeadAssignmentTests.test_pending_staged_child_precedes_a_dead_controller_replacement",
+        "test_review_dead_assignments.DeadAssignmentTests.test_staged_controller_with_a_completed_child_requires_a_legacy_decision",
+        "test_review_dead_assignments.DeadAssignmentTests.test_captured_staged_child_precedes_the_legacy_context_decision",
+        "test_review_dead_assignments.DeadAssignmentTests.test_dead_other_slot_reviewer_can_repair",
+        "test_review_dead_assignments.DeadAssignmentTests.test_dead_focused_reviewer_is_eligible_after_successor_exhaustion",
+        "test_review_dead_assignments.DeadAssignmentTests.test_unrun_staged_controllers_are_replaced_without_holding_the_epoch"
+      ]
+    },
+    {
+      "id": "series-validator-code-outside-stop-registry",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "reachable stop registry coverage",
+      "summary": "The series code guard missed a refusal raised by an imported openness validator.",
+      "expected": "Whole-package source reach includes imported validator codes. A refusal awaiting a reviewed row retains its code and action as an unlisted decision; record-check names record_unlisted_stop.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_unlisted_stops.UnlistedStopTests.test_series_retains_unlisted_code_and_refused_action",
+        "test_review_unlisted_stops.UnlistedStopTests.test_record_check_names_the_unlisted_recording_refusal",
+        "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row",
+        "test_series_code_reach.CodeReachTests.test_deleting_a_registry_row_or_missing_row_entry_fails_coverage"
+      ]
     }
   ]
 }

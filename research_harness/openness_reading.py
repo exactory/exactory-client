@@ -1417,7 +1417,7 @@ def _project_search_delivery(packet, record):
 
 def _read_prior(records, artifacts, value, prior_id):
     """The earlier turn that a chain turn continues, with its packet and its observed reading response."""
-    from .review_protocol import assignment_state, find_replacement, has_ended_without_output
+    from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
     prior = records.get('review_assignment', {}).get(prior_id)
     if prior is None:
         raise ResearchError('review_record_missing', 'Missing review_assignment: ' + str(prior_id))
@@ -1435,6 +1435,7 @@ def _read_prior(records, artifacts, value, prior_id):
     # A turn whose attempts all ended without output does not hold the chain: this assignment replaces it.
     if any(saved['role'] == 'native_math' and saved['context'].get('prior_assignment_id') == prior_id
            and not has_ended_without_output(records, saved['id'])
+           and not is_dead_assignment(records, saved)
            for saved in records.get('review_assignment', {}).values()):
         raise ResearchError('review_source_continuation_fork', 'Continue the latest turn of the reading chain')
     state = assignment_state(records, artifacts, prior_id)
@@ -1857,13 +1858,14 @@ def find_final_assignment(records, artifacts, identifier):
     """The effective terminal turn of the reading chain whose first turn is the given assignment. A continuation that
     ended without output and that a later continuation of the same turn replaced is history, not a branch; any other
     second continuation is a fork. The terminal turn is a final turn whose observed output is the native result."""
-    from .review_protocol import assignment_state, find_replacement, has_ended_without_output
+    from .review_protocol import assignment_state, find_replacement, has_ended_without_output, is_dead_assignment
     assignments = records.get('review_assignment', {})
     current = assignments[identifier]
     while True:
         live = [saved for saved in assignments.values()
                 if saved['role'] == 'native_math' and saved['context'].get('prior_assignment_id') == current['id']
-                and not (has_ended_without_output(records, saved['id']) and find_replacement(records, saved))]
+                and not ((has_ended_without_output(records, saved['id']) or is_dead_assignment(records, saved))
+                         and find_replacement(records, saved))]
         if len(live) > 1:
             raise ResearchError('review_source_continuation_fork', 'The reading chain has more than one live '
                                 'continuation', {'assignment_ids': sorted(saved['id'] for saved in live)})

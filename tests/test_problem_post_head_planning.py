@@ -245,9 +245,13 @@ class PostedHeadPlanningTests(unittest.TestCase):
         self.assertEqual(case.store.snapshot(), before)
         self.assertEqual(stop_classes.describe_terminal('problem_already_posted')['state'], 'done')
         self.assertIs(record_check.EXPECTED_STOP_CODES, stop_classes.EXPECTED_STOP_CODES)
-        for code in ('review_input_too_large', 'unknown_fixture_stop'):
+        for code, expected in (('review_input_too_large', 'review_input_too_large'),
+                               ('unknown_fixture_stop', 'record_unlisted_stop')):
             with self.subTest(unqualified=code), patch.object(record_check, 'check_prospective_request',
                     side_effect=ResearchError(code, 'Synthetic unqualified request refusal')):
                 with self.assertRaises(ResearchError) as caught:
                     record_check.check_continuation(case.store)
-                self.assertEqual(caught.exception.code, code)
+                self.assertEqual(caught.exception.code, expected)
+                if code == 'unknown_fixture_stop':
+                    self.assertEqual(caught.exception.details['code'], code)
+                    self.assertEqual(caught.exception.details['refused_action']['command'], 'review-run')

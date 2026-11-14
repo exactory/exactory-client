@@ -769,7 +769,9 @@ def build_epoch(records, record, packet, manifest, *, route, artifacts, scale_ch
         for name in ('objective_adequacy', 'method_adequacy'):
             spec['completion_requirements']['permissible_decisions']['/value/' + name] = ['not_assessed']
     previous_epochs = [row for row in records.get('review_epoch', {}).values()
-                       if row['slot_id'] == spec['slot_id'] and row['evidence_currency'] == spec['evidence_currency']]
+                       if row['slot_id'] == spec['slot_id'] and row['evidence_currency'] == spec['evidence_currency']
+                       and not protocol.is_dead_assignment(records,
+                           protocol._get(records, 'review_assignment', row['controller_assignment_id']))]
     if len(previous_epochs) >= spec['budgets']['max_epochs']:
         raise ResearchError('assessment_incomplete', 'The unchanged scientific scope exhausted its epoch recovery budget',
                             dict(slot_id=spec['slot_id'], epoch_ids=[row['id'] for row in previous_epochs],
@@ -1320,6 +1322,7 @@ def invoke_task(store, payload, *, expected_revision, request_id):
                          or retained and retained.get('attempt_id') != payload['id'])
     if requires_unposted:
         require_unposted_review(records, assignment, store.build_artifact_store())
+        protocol.require_verified_assignment(records, store.build_artifact_store(), assignment)
     route = protocol._get(records, 'review_route', assignment['route_id'])
     controller_id = binding['controller_assignment_id']
     from .review_context_repair import validate_repair_binding

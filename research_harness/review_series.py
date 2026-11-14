@@ -32,7 +32,8 @@ def _identify_action(plan):
 
 
 def _describe_stop(plan, code, details):
-    terminal = describe_terminal(code)
+    terminal = describe_terminal(code, action={key: copy.deepcopy(plan[key])
+        for key in ('command', 'state', 'payload') if key in plan})
     if code in HARNESS_DEFECT_CODES:
         terminal.pop('command', None)
         terminal['details']['step'] = dict(command='gate-auto-pass', chooses=['stop_id'])

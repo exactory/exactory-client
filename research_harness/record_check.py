@@ -36,7 +36,8 @@ from . import review_preflight, review_protocol as protocol, review_transport as
 from .review_continuation import list_chain_heads, plan_next
 from .review_failure_class import classify_attempt
 from .storage import Store, _RecordHistory, _RecordedSnapshot, _validate
-from .stop_classes import EXPECTED_STOP_CODES, describe_terminal
+from .stop_classes import (EXPECTED_STOP_CODES as EXPECTED_STOP_CODES, STOP_REGISTRY,
+                           classify_stop, describe_terminal)
 
 
 LOCAL_OPERATIONS = frozenset(('review-assignment', 'value-review',
@@ -481,6 +482,13 @@ def describe_capacity_decision(error, plan):
     return None
 
 
+def require_listed_stop(plan):
+    """Name the live boundary that still needs a reviewed registry row."""
+    if plan.get('code') not in STOP_REGISTRY:
+        raise ResearchError('record_unlisted_stop',
+            'This review boundary has no reviewed stop-registry row. Report its code and refused action.', plan)
+
+
 def check_continuation(store):
     from .cli import OPERATIONS
     snapshot = store.snapshot()
@@ -497,6 +505,8 @@ def check_continuation(store):
             plan = plan_next(records, artifacts, head_id)
             actions.append(plan)
             assignment = records['review_assignment'][head_id]
+            if plan['state'] in ('handoff', 'stop'):
+                require_listed_stop(plan)
             if assignment['role'] == 'native_math':
                 from .native_review import load_packet
                 from .openness_reading import is_openness_packet
@@ -509,7 +519,7 @@ def check_continuation(store):
                 chain['boundary'] = 'done'
                 break
             if state in ('handoff', 'stop'):
-                if plan.get('code') not in EXPECTED_STOP_CODES:
+                if classify_stop(plan.get('code')) == 'harness_defect':
                     raise ResearchError(plan.get('code') or 'record_unknown_stop',
                                         'Continuation reached an unqualified stop', plan)
                 chain['boundary'] = state
@@ -527,6 +537,8 @@ def check_continuation(store):
                 except ResearchError as error:
                     decision = describe_capacity_decision(error, plan)
                     if decision is None:
+                        require_listed_stop(dict(plan, code=error.code, error=error.as_dict(),
+                            refused_action={key: plan[key] for key in ('command', 'state', 'payload') if key in plan}))
                         raise
                     decision_stops.append(decision)
                     chain['boundary'] = 'decision'
@@ -556,7 +568,9 @@ def check_continuation(store):
                 if current.get('review_output_refusal', {}) != records.get('review_output_refusal', {}):
                     plan['refusal'] = error.as_dict()
                     continue
-                if error.code in EXPECTED_STOP_CODES:
+                require_listed_stop(dict(plan, code=error.code, error=error.as_dict(),
+                    refused_action={key: plan[key] for key in ('command', 'state', 'payload') if key in plan}))
+                if classify_stop(error.code) != 'harness_defect':
                     from .review_plan_steps import complete_plan
                     terminal = describe_terminal(error.code)
                     terminal['details'].update(error.details or {})

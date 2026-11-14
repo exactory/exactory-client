@@ -214,7 +214,9 @@ class ReviewProtocolTests(LiteratureCase):
                 'context_status':'verified_for_route'})
 
     def test_allowed_positive_controls_are_required_even_when_canary_absent(self):
-        p = self.protocol(); self.route(); self.run_probe(False); self.assign(); self.invoke({'verdict':'sound'})
+        p = self.protocol(); self.route(); self.run_probe(False); self.assign()
+        self.assert_error('review_context_unverified', lambda: self.invoke({'verdict':'sound'}))
+        self.assertEqual(self.records().get('review_attempt', {}), {})
         state = p.assignment_state(self.records(),self.artifacts,'assignment')
         self.assertFalse(state['ready']); self.assertEqual(state['context_status'],'unverified')
 
@@ -559,7 +561,9 @@ class ReviewProtocolTests(LiteratureCase):
                 self.assertEqual(self.store.snapshot(), before)
 
     def test_assignment_created_before_route_probe_never_becomes_independent_retroactively(self):
-        p = self.protocol(); self.route(); self.assign(); self.run_probe(); self.invoke({'verdict':'sound'})
+        p = self.protocol(); self.route(); self.assign(); self.run_probe()
+        self.assert_error('review_context_unverified', lambda: self.invoke({'verdict':'sound'}))
+        self.assertEqual(self.records().get('review_attempt', {}), {})
         self.assertFalse(p.assignment_state(self.records(),self.artifacts,'assignment')['ready'])
 
     def test_case_and_spacing_cannot_disguise_the_author_identity(self):

@@ -2714,16 +2714,49 @@ def has_ended_without_output(records, assignment_id):
     return bool(attempts) and not pending and all(attempt['status'] != 'completed' for attempt in attempts)
 
 
+def describe_assignment_calls(records, assignment):
+    """Include a staged controller's children and owned reservations in its call state."""
+    identifiers = {assignment['id']}
+    binding = assignment.get('staged_review', {})
+    controller = binding.get('kind') == 'controller'
+    if controller:
+        identifiers.update(row['id'] for row in records.get('review_assignment', {}).values()
+            if row.get('staged_review', {}).get('epoch_id') == binding['epoch_id'])
+    ran = any(read_filtered_records(records, 'review_attempt', assignment_id=identifier)
+              for identifier in identifiers)
+    pending = any(row['id'] not in records.get('review_attempt', {}) for identifier in identifiers
+        for row in read_filtered_records(records, 'review_invocation', assignment_id=identifier).values())
+    if controller:
+        reservations = (row for row in records.get('review_reservation', {}).values()
+                        if row['epoch_id'] == binding['epoch_id'])
+        for reservation in reservations:
+            ran = ran or reservation.get('launch') is not None or reservation.get('observation_id') is not None
+            pending = pending or not reservation['released']
+    return dict(ran=ran, pending=pending)
+
+
+def is_dead_assignment(records, assignment):
+    """An unrun assignment with an unusable frozen context releases its position."""
+    if (assignment['context_state']['context_status'] == 'verified_for_route'
+            and assignment['route_id'] not in retired_routes(records)):
+        return False
+    calls = describe_assignment_calls(records, assignment)
+    return not calls['ran'] and not calls['pending']
+
+
 def find_replacement(records, assignment):
-    """Find a later replacement of the same parent or focused initial slot."""
+    """Find a later replacement of the same parent or initial slot."""
     parent = assignment.get('context', {}).get('prior_assignment_id')
     if parent is None:
-        if assignment['role'] != 'adjudicator':
+        if (assignment['role'] != 'adjudicator'
+                and not (assignment['role'] in ('verification', 'manuscript', 'standalone')
+                         and assignment['context_state']['context_status'] != 'verified_for_route')):
             return None
         slot_identifier = assignment.get('slot_id', assignment['id'])
         return next((other for other in read_filtered_records(records, 'review_assignment',
-                     role='adjudicator', slot_id=slot_identifier).values()
-                     if other['role'] == 'adjudicator' and other.get('slot_id') == slot_identifier
+                     role=assignment['role'], slot_id=slot_identifier).values()
+                     if other['role'] == assignment['role'] and other.get('slot_id') == slot_identifier
+                     and other.get('staged_review', {}).get('kind') != 'task'
                      and other.get('context', {}).get('prior_assignment_id') is None
                      and other['recorded_revision'] > assignment['recorded_revision']), None)
     return next((other for other in read_filtered_records(records, 'review_assignment',
@@ -2871,17 +2904,20 @@ def _initial_slot(records, artifacts, value):
                 and context_repair.is_same_subject(prior, value)):
             slots.setdefault(context_repair.slot_id(records, prior), []).append(prior)
     from .review_refusal import refused_attempts
-    retired = retired_routes(records)
     replaceable = []
     for identifier, members in slots.items():
-        if any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id']) for prior in members):
+        same_reviewer = any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id'])
+                            for prior in members)
+        priority = (not same_reviewer, min(prior['recorded_revision'] for prior in members), identifier)
+        if any(normalized_text(prior['reviewer_id']) == normalized_text(value['reviewer_id'])
+               and not is_dead_assignment(records, prior) for prior in members):
             if (value['role'] == 'result' and value.get('subject', {}).get('kind') == 'problem'
                     and all(_initial_size_failure(records, artifacts, prior, value) for prior in members)):
                 return identifier
             raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; record its observed output, or invoke its assignment again after a refusal')
         head = max(members, key=lambda row: row['recorded_revision'])
         if value['role'] == 'bar' and has_exhausted_position(records, artifacts, head):
-            replaceable.append((min(p['recorded_revision'] for p in members), identifier))
+            replaceable.append(priority)
             continue
         replaceable_members = True
         for prior in members:
@@ -2891,14 +2927,13 @@ def _initial_slot(records, artifacts, value):
             completed = [a for a in attempts if a['status'] == 'completed']
             exhausted = (value['role'] == 'bar' and len(completed) >= 2
                          and len(refused_attempts(records, artifacts, completed)) == len(completed))
-            # An assignment never run on a retired route is dead; it does not hold the slot.
-            dead = not attempts and not pending and prior['route_id'] in retired
+            dead = is_dead_assignment(records, prior)
             if pending or (not attempts and not dead) or (completed and not exhausted):
                 replaceable_members = False
         if replaceable_members:
-            replaceable.append((min(p['recorded_revision'] for p in members), identifier))
+            replaceable.append(priority)
     if replaceable:
-        return min(replaceable)[1]
+        return min(replaceable)[2]
     if len(slots) >= 2:
         raise ResearchError('review_slots_fixed', 'The two independent initial review slots are already assigned')
     return value['id']
@@ -3016,6 +3051,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 raise ResearchError('review_resampling_forbidden', 'A final verification cannot be continued')
             if any(prior.get('context', {}).get('prior_assignment_id') == parent['id']
                    and not has_ended_without_output(records, prior['id'])
+                   and not is_dead_assignment(records, prior)
                    for prior in read_filtered_records(records, 'review_assignment',
                        **{'context.prior_assignment_id': parent['id']}).values()):
                 raise ResearchError('review_source_continuation_fork', 'Continue the latest verification turn')
@@ -3036,6 +3072,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             from .review_parts_repair import has_exhausted_over_cap_repair
             if any(prior.get('context', {}).get('prior_assignment_id') == parent['id']
                    and not has_ended_without_output(records, prior['id'])
+                   and not is_dead_assignment(records, prior)
                    and not has_exhausted_over_cap_repair(records, artifacts, prior)
                    for prior in read_filtered_records(records, 'review_assignment',
                        **{'context.prior_assignment_id': parent['id']}).values()):
@@ -3062,6 +3099,17 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         elif value['role'] in bar_sources.ROLES or repair is not None or repair_adjudicator:
             slot_identifier = (context_repair.slot_id(records, parent) if parent is not None else
                                repair['slot_id'] if repair is not None else _initial_slot(records, artifacts, value))
+        if (slot_identifier is None and value['role'] in ('verification', 'manuscript', 'standalone')
+                and not value['context'].get('prior_assignment_id')):
+            latest = max((prior for prior in read_filtered_records(records, 'review_assignment',
+                role=value['role'], dossier_id=value['dossier_id']).values()
+                if prior['role'] == value['role'] and prior['dossier_id'] == value['dossier_id']
+                and prior['route_id'] == value['route_id'] and prior['context'] == value['context']
+                and all(normalized_text(prior[key]) == normalized_text(value[key])
+                        for key in ('reviewer_id', 'author_id'))),
+                key=lambda prior: prior['recorded_revision'], default=None)
+            if latest is not None and is_dead_assignment(records, latest):
+                slot_identifier = context_repair.slot_id(records, latest)
         diagnostics = {}
         reading_logical = None
         # Derived PNG pages do not deliver original PDFs. Add their explicit native
@@ -3126,12 +3174,15 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             latest = max(previous_assignments, key=lambda previous: previous['recorded_revision'], default=None)
             if latest is not None and has_exhausted_position(records, artifacts, latest):
                 if any(normalized_text(previous['reviewer_id']) == normalized_text(value['reviewer_id'])
-                       for previous in previous_assignments):
+                       and not is_dead_assignment(records, previous) for previous in previous_assignments):
                     raise ResearchError('review_resampling_forbidden',
                                         'An exhausted focused review needs a new eligible reviewer.')
                 slot_identifier = context_repair.slot_id(records, latest)
                 previous_assignments = []
             for previous in previous_assignments:
+                if is_dead_assignment(records, previous):
+                    slot_identifier = context_repair.slot_id(records, previous)
+                    continue
                 if (problem and previous['id'] != latest['id'] and review_parts.KEY in latest
                         and (value['context'].get('prior_assignment_id') == latest['id']
                              or has_ended_without_output(records, latest['id']))):
@@ -3435,6 +3486,18 @@ def _context_observed(artifacts, attempt):
     return not (evidence.get('inspected') is True and evidence.get('input_verified') is False)
 
 
+def require_verified_assignment(records, artifacts, assignment):
+    """Admit a new call only from the context frozen by a verified route."""
+    if assignment['context_state']['context_status'] != 'verified_for_route':
+        from .review_continuation import plan_next
+        raise ResearchError('review_context_unverified',
+            'This assignment was recorded on an unverified route. Verify the route with review-probe, '
+            'then use review-series for its replacement or native-packet attestation; '
+            'an assignment that already ran needs a route decision.',
+            dict(assignment_id=assignment['id'], route_id=assignment['route_id'],
+                 next=plan_next(records, artifacts, assignment['id'])))
+
+
 def invoke_assignment(store, payload, *, expected_revision, request_id, credential=None):
     store_artifacts = store.build_artifact_store()
     def start(records, value):
@@ -3444,6 +3507,7 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         assignment = _get(records, 'review_assignment', value['assignment_id'])
         from .problem_delivery import require_unposted_review
         require_unposted_review(records, assignment, artifacts)
+        require_verified_assignment(records, artifacts, assignment)
         if assignment['route_id'] in retired_routes(records):
             raise ResearchError('review_route_retired', 'The route of this assignment was retired; continue its slot through a context repair on another route')
         if find_replacement(records, assignment) is not None:

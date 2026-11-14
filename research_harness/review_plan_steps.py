@@ -57,6 +57,7 @@ def list_excluded_reviewers(records, assignment, *, include_slot=True):
     reviewers = {normalized_text(row['reviewer_id']) for row in records.get('review_assignment', {}).values()
                  if row['role'] == assignment['role'] and row.get('dossier_id') == assignment.get('dossier_id')
                  and protocol.context_repair.is_same_subject(row, assignment)
+                 and not protocol.is_dead_assignment(records, row)
                  and (include_slot or protocol.context_repair.slot_id(records, row) != slot)}
     if assignment['role'] == 'adjudicator':
         reviews = records.get('value_review', {})
@@ -208,8 +209,7 @@ def complete_plan(records, artifacts, assignment, plan):
     if terminal['details'].get('next', {}).get('kind') == 'role' and plan.get('command') != 'review-output-correction':
         return dict(plan, **describe_role_handoff(records, artifacts, assignment, code, details))
     context_status = assignment.get('context_state', {}).get('context_status')
-    head_ran = any(row['assignment_id'] == assignment['id']
-                   for row in records.get('review_attempt', {}).values())
+    head_ran = protocol.describe_assignment_calls(records, assignment)['ran']
     if code in ('native_review_attestation_required', 'openness_review_not_approved'):
         number = select_route_steps(records, artifacts, assignment)[-1]
         details['step'] = describe_step(records, artifacts, assignment, number)

@@ -65,6 +65,7 @@ def list_chain_heads(records, artifacts):
         peers = [other for other in assignments.values()
                  if row.get('slot_id') is not None and other.get('slot_id') == row['slot_id']
                  and other['role'] == row['role'] and other.get('dossier_id') == row.get('dossier_id')
+                 and other.get('staged_review', {}).get('kind') != 'task'
                  and other.get('recorded_revision', 0) > row.get('recorded_revision', 0)]
         if not peers:
             result.append(row['id'])
@@ -92,8 +93,8 @@ def _find_head(records, artifacts, identifier):
     for head in list_chain_heads(records, artifacts):
         row = assignments[head]
         if (identifier in {entry['id'] for entry in _list_lineage(records, row)}
-                or (assignment.get('slot_id') is not None
-                    and row.get('slot_id') == assignment['slot_id']
+                or (row.get('slot_id') is not None
+                    and row.get('slot_id') == assignment.get('slot_id', assignment['id'])
                     and row['role'] == assignment['role']
                     and row.get('dossier_id') == assignment.get('dossier_id'))):
             candidates.append(row)
@@ -134,7 +135,9 @@ def _build_assignment_payload(records, assignment, *, replace=False):
                ('route_id', 'dossier_id', 'role', 'reviewer_id', 'author_id')}
     # Repair prerequisites identify the first repaired turn, not each later turn.
     context = copy.deepcopy(assignment.get('context', {}))
-    if not replace:
+    if replace and assignment.get('staged_review', {}).get('kind') == 'controller':
+        context = dict(staged_upgrade=dict(assignment_id=assignment['id']))
+    elif not replace:
         context = {key: value for key, value in context.items() if key in
                    ('native_packet', 'verification_task_id', 'review_ids', 'objection_id',
                     'correction', 'source_delivery')}
@@ -369,15 +372,42 @@ def _plan_staged(records, artifacts, assignment, state):
 
 
 def _plan_head(records, artifacts, assignment):
+    pending = _plan_pending_call(records, assignment)
+    if pending is not None:
+        return pending
+    if assignment['context_state']['context_status'] != 'verified_for_route':
+        if assignment.get('staged_review', {}).get('kind') == 'controller':
+            from .problem_delivery import describe_review_tasks
+            epoch = records['review_epoch'][assignment['staged_review']['epoch_id']]
+            for task in describe_review_tasks(records, epoch, {}):
+                if task['state'] in ('reconciling', 'captured') and task.get('next'):
+                    return _plan_staged_action(records, epoch, task, task['next'][0])
+        if protocol.describe_assignment_calls(records, assignment)['ran']:
+            return dict(state='stop', code='review_context_unverified',
+                        details=dict(assignment_id=assignment['id']))
+        if protocol.is_dead_assignment(records, assignment):
+            route = protocol.route_state(records, artifacts, assignment['route_id'])
+            if route['context_status'] != 'verified_for_route':
+                return dict(state='handoff', command='review-probe', code='review_context_unverified',
+                            details=dict(assignment_id=assignment['id'], route_id=assignment['route_id']))
+            if assignment['role'] == 'native_math' and not assignment.get('context', {}).get('prior_assignment_id'):
+                # A native packet attests its first assignment ID; a new first turn needs a new packet.
+                from .native_review import load_packet
+                packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
+                common = openness_reading.is_openness_packet(packet)
+                return dict(state='handoff', command='export' if common else 'search review-packet',
+                            code='native_review_attestation_required',
+                            details=dict(assignment_id=assignment['id'],
+                                         **(dict(kind='problem-openness') if common else {})))
+            return dict(state='replace', command='review-assignment', code='review_context_unverified',
+                        payload=_build_assignment_payload(records, assignment, replace=True),
+                        details=dict(assignment_id=assignment['id']))
     if assignment.get('staged_review'):
         state = protocol.assignment_state(records, artifacts, assignment['id'])
         blocking = [item for item in state['obligations'] if item['code'] != 'review_task_pending']
         if blocking:
             return dict(state='handoff', command='review-assignment', code=blocking[0]['code'], details=blocking[0])
         return _plan_staged(records, artifacts, assignment, state)
-    pending = _plan_pending_call(records, assignment)
-    if pending is not None:
-        return pending
     attempts = [row for row in records.get('review_attempt', {}).values()
                 if row['assignment_id'] == assignment['id']]
     initial = (assignment['role'] in ('adjudicator', 'result')
@@ -528,6 +558,17 @@ def plan_next(records, artifacts, head_id):
                 result.pop('command', None)
         elif result['state'] not in ('done', 'stop'):
             result.update(state='stop', details=describe_terminal('unrecognized')['details'])
+    if result.get('code'):
+        from .stop_classes import describe_terminal
+        action = ({key: copy.deepcopy(result[key]) for key in ('command', 'state', 'payload') if key in result}
+                  if result['state'] == 'handoff' else dict(command='plan_next', assignment_id=head_id))
+        terminal = describe_terminal(result['code'], action=action)
+        if terminal['details'].get('unlisted'):
+            result.setdefault('details', {}).update(terminal['details'])
+            if result['state'] == 'handoff':
+                result.update(state='stop')
+                result.pop('command', None)
+                result.pop('payload', None)
     return copy.deepcopy(result)
 
 
