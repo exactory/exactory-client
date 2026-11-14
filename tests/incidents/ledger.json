@@ -4975,6 +4975,32 @@
       "class": "source capture provenance and eligibility",
       "fixed_in": "open",
       "test_kind": "real_shape"
+    },
+    {
+      "id": "openness-coverage-refuses-a-reading-of-another-record-of-the-work",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "openness evidence (work-family relation)",
+      "summary": "Versionless citation-list hits and registry records need an explicit link to a read exact version of the work.",
+      "fixed_in": "open",
+      "expected": "The R15 relation returns a versionless arXiv, registered DataCite DOI or shared DOI link when every asserted family of each participating identifier is one of the two linked families, with equal normalized authors for DOI links when both lists exist. A third family's assertion, differing authors and shared titles alone link nothing. UA2 supplies this relation; UB2 still owns coverage and export integration.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_work_families.WorkFamilyTests.test_versionless_citation_hit_links_to_its_acquired_version",
+        "test_research_work_families.WorkFamilyTests.test_datacite_doi_as_work_id_links_to_the_arxiv_version",
+        "test_research_work_families.WorkFamilyTests.test_datacite_doi_alias_links_a_registry_record_to_the_arxiv_version",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_links_exact_versions_with_one_asserted_family",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_may_be_a_work_id",
+        "test_research_work_families.WorkFamilyTests.test_conflicting_assertions_on_the_found_or_version_identifier_link_nothing",
+        "test_research_work_families.WorkFamilyTests.test_conflicting_datacite_doi_assertions_link_nothing",
+        "test_research_work_families.WorkFamilyTests.test_datacite_link_checks_the_resolved_arxiv_identifier",
+        "test_research_work_families.WorkFamilyTests.test_conflicting_arxiv_base_does_not_block_an_independent_shared_doi",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_links_normally_acquired_openalex_and_arxiv_records",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_asserted_also_by_a_third_family_links_nothing",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_between_provider_families_still_requires_matching_authors",
+        "test_research_work_families.WorkFamilyTests.test_found_and_version_identifiers_may_be_asserted_by_either_linked_family",
+        "test_research_work_families.WorkFamilyTests.test_datacite_doi_and_resolved_arxiv_id_may_be_asserted_by_either_linked_family",
+        "test_research_work_families.WorkFamilyTests.test_different_author_names_membership_or_order_block_doi_links"
+      ]
     }
   ]
 }
