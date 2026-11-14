@@ -5409,6 +5409,33 @@
         "test_review_session_delivery.SessionDeliveryTests.test_final_citations_follow_the_union_of_two_delivered_parts",
         "test_review_session_delivery.SessionDeliveryProjectionTests.test_part_union_citations_preserve_v2_and_stored_inputs"
       ]
+    },
+    {
+      "id": "route-capacity-keyed-evidence",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "route-capacity",
+      "summary": "A runtime change or a short ordinary answer cannot establish capacity under another execution key or consume the output reservation.",
+      "expected": "Keep keyed verified witnesses, leave the asking reservation, and reject unclassified members and unsupported prior joins.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_closure.CapacityEvidenceTests.test_new_attempt_freezes_its_key_and_legacy_response_supplies_the_same_limit",
+        "test_review_capacity_closure.CapacityEvidenceTests.test_native_settings_authenticate_before_an_ordinary_attempt_raises_capacity",
+        "test_review_capacity_closure.CapacityEvidenceTests.test_codex_prior_matches_version_file_and_controls_only_under_its_key"
+      ]
+    },
+    {
+      "id": "request-profile-safe-start",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "output-profile",
+      "summary": "Session requests can use the wrong kind or start inside their own observed high-risk task range.",
+      "expected": "Use request rows at full task size, and start below every sufficiently sampled range whose over-limit share exceeds five percent.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_closure.ClosureStartTests.test_session_v4_uses_request_rows_and_counts_its_whole_request",
+        "test_review_capacity_closure.ClosureStartTests.test_ruling27_starts_below_an_own_risky_range_beside_step5"
+      ]
     }
   ]
 }

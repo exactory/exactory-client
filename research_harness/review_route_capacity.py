@@ -12,6 +12,8 @@ import os
 from pathlib import Path
 import tempfile
 from . import review_transport as transport
+from .review_capacity_evidence import (DEFAULT_PROBE_INPUT_TOKENS as DEFAULT_INPUT_TOKENS,
+                                       has_capacity_key, read_capacity_priors)
 from .evidence import digest
 POLICY = 'exactory-route-capacity-policy-v1'
 VERIFICATION_CALLS_PER_OVER_LIMIT = 20
@@ -25,7 +27,6 @@ VERIFICATION_SIZE_STOP_CODES = (
 )
 PROFILE_PROTOCOL = 'exactory-route-output-profile-v1'
 PROFILE_ATTEMPT_LIMIT = 500
-DEFAULT_INPUT_TOKENS = 150000
 CLAUDE_CHARACTERS_PER_TOKEN = 1.36
 CODEX_CHARACTERS_PER_TOKEN = 2.10
 TOKEN_RATIO_MARGIN = 0.05
@@ -78,13 +79,11 @@ MODEL_LIMITS = (
     ('gpt-6.1-sol', 1050000, None, 128000, OPENAI_MODELS_URL + 'gpt-6.1-sol'),
     ('gpt-6-luna', 1050000, None, 128000, OPENAI_MODELS_URL + 'gpt-6-luna'),
 )
-VERIFIED_INPUT_TOKENS = (
-    ('codex_cli_v1', 'gpt-6-astra', 359900),
-    ('codex_cli_v1', 'gpt-6.1-sol', 316707),
-    ('codex_cli_v1', 'gpt-6-luna', 193797),
-    ('codex_cli_framed_v1', 'gpt-6-astra', 307507),
-    ('codex_cli_visual_v1', 'gpt-6-astra', 364458),
-    ('codex_cli_visual_v1', 'gpt-6.1-sol', 358029),
+# Legacy D1 values remain available for calibration and reports, not as unkeyed admission.
+VERIFIED_INPUT_TOKENS = tuple(
+    (row['key']['adapter'], row['key']['model'], row['input_tokens'])
+    for row in read_capacity_priors()
+    if has_capacity_key(row) and row['key']['adapter'].startswith('codex_cli_')
 )
 
 
@@ -98,95 +97,57 @@ def _describe_limit(value, source, **evidence):
     return dict(value=value, source=source, **evidence)
 
 
-def describe_route_capacity(route, profile=None):
-    """Report the effective route limits, with documentation or measurement provenance."""
-    adapter, config = (route['adapter'], route['configuration'])
-    model = next((row for row in MODEL_LIMITS if row[0] == route['model']), None)
-    output = config['max_output_tokens']
+def describe_route_capacity(route, profile=None, *, records=None, artifacts=None):
+    """Keep input-evidence keys separate from the class of the output profile."""
+    from . import review_capacity_evidence
+    adapter, config = route['adapter'], route['configuration']
+    model = next((row for row in MODEL_LIMITS if row[0] == route['model']
+                  and (adapter != 'claude_cli_v1' or row[2] is not None)), None)
+    output = min(config['max_output_tokens'], model[3] if model else 128000) if adapter == 'claude_cli_v1' else config['max_output_tokens']
     output_limit = _describe_limit(output, 'route_configuration', field='max_output_tokens')
-    if adapter == 'claude_cli_v1' and output >= (model[3] if model else 128000):
-        output = model[3] if model else 128000
-        output_limit = _describe_limit(
-            output,
-            'documented',
-            url=model[4] if model else CLAUDE_OUTPUT_URL,
-            date=MEASUREMENT_DATE,
-        )
+    if adapter == 'claude_cli_v1' and config['max_output_tokens'] >= output:
+        output_limit = _describe_limit(output, 'documented', url=model[4] if model else CLAUDE_OUTPUT_URL, date=MEASUREMENT_DATE)
+    threshold_models = tuple(row[0] for row in MODEL_LIMITS if row[2] == model[2]) if adapter == 'claude_cli_v1' and model is not None else ()
+    evidence = review_capacity_evidence.read_capacity_evidence(route, records or {}, artifacts=artifacts,
+                                                               threshold_models=threshold_models, reservation=output)
+    observed = _describe_limit(evidence['input_tokens'], 'observed', key=evidence['key'], evidence=evidence['evidence'],
+                               source_record=MEASUREMENT_SOURCE, date=MEASUREMENT_DATE)
+    documented = None
     if adapter == 'claude_cli_v1':
         from .review_claude_transport import INPUT_LIMIT_CHARACTERS
-        characters = _describe_limit(
-            INPUT_LIMIT_CHARACTERS,
-            'transport',
-            file='research_harness/review_claude_transport.py',
-            constant='INPUT_LIMIT_CHARACTERS',
-        )
-        tokens = _describe_limit(
-            (model[2] if model else 200000) - output,
-            'documented' if model else 'default',
-            url=CLAUDE_WINDOW_URL,
-            date=MEASUREMENT_DATE,
-        )
+        characters = _describe_limit(INPUT_LIMIT_CHARACTERS, 'transport', file='research_harness/review_claude_transport.py', constant='INPUT_LIMIT_CHARACTERS')
+        if model is not None:
+            documented = _describe_limit(max(0, model[2] - output), 'documented', threshold=model[2], url=CLAUDE_WINDOW_URL, date=MEASUREMENT_DATE)
+            tokens = dict(observed if observed['value'] <= documented['value'] else documented)
+        else:
+            tokens = dict(observed) if evidence.get('verified_capacity_probe') else _describe_limit(
+                max(0, 200000 - output), 'default', url=CLAUDE_WINDOW_URL, date=MEASUREMENT_DATE)
     elif adapter in transport.LOCAL_ADAPTERS:
         if adapter == 'codex_cli_visual_v1':
             from .review_codex_visual_transport import MAX_USER_TEXT
-            characters = _describe_limit(
-                MAX_USER_TEXT,
-                'transport',
-                file='research_harness/review_codex_visual_transport.py',
-                constant='MAX_USER_TEXT',
-            )
+            characters = _describe_limit(MAX_USER_TEXT, 'transport', file='research_harness/review_codex_visual_transport.py', constant='MAX_USER_TEXT')
         else:
-            characters = _describe_limit(
-                transport.CODEX_INPUT_LIMIT_CHARS,
-                'transport',
-                file='research_harness/review_transport.py',
-                constant='CODEX_INPUT_LIMIT_CHARS',
-            )
-        prior_input_tokens = next(
-            (value for name, name_model, value in VERIFIED_INPUT_TOKENS if (name, name_model) == (adapter, route['model'])),
-            None,
-        )
-        verified = max(prior_input_tokens or 0, (profile or {}).get('verified_input_tokens') or 0)
-        tokens = _describe_limit(
-            verified,
-            'observed',
-            source_record=MEASUREMENT_SOURCE,
-            date=MEASUREMENT_DATE,
-        ) if prior_input_tokens is not None or verified > DEFAULT_INPUT_TOKENS else _describe_limit(DEFAULT_INPUT_TOKENS, 'default')
+            characters = _describe_limit(transport.CODEX_INPUT_LIMIT_CHARS, 'transport', file='research_harness/review_transport.py', constant='CODEX_INPUT_LIMIT_CHARS')
+        tokens = dict(observed)
     else:
         characters = _describe_limit(None, 'transport', file='research_harness/review_transport.py')
-        tokens = _describe_limit(
-            max(0, model[1] - output),
-            'documented',
-            url=model[4],
-            date=MEASUREMENT_DATE,
-        ) if model else _describe_limit(DEFAULT_INPUT_TOKENS, 'default')
-    reservation_basis = 'compaction_threshold' if adapter == 'claude_cli_v1' and model is not None else 'model_window' if tokens['source'] == 'documented' else 'completed_answer' if tokens['source'] == 'observed' else 'adapter_default'
+        if model is not None:
+            documented = _describe_limit(max(0, model[1] - output), 'documented', url=model[4], date=MEASUREMENT_DATE)
+            tokens = dict(documented)
+        else:
+            tokens = dict(observed)
+    reservation_basis = 'compaction_threshold' if adapter == 'claude_cli_v1' and model is not None else 'model_window' if tokens['source'] == 'documented' else 'verified_input' if tokens['source'] == 'observed' else 'adapter_default'
     tokens.update(output_reservation_tokens=output, reservation_basis=reservation_basis)
-    calibrated = model is not None and (adapter == 'claude_cli_v1' or any(
-        ((name, name_model) == (adapter, route['model']) for name, name_model, _ in VERIFIED_INPUT_TOKENS),
-    ))
+    calibrated = model is not None and (adapter == 'claude_cli_v1' or any((name, name_model) == (adapter, route['model']) for name, name_model, _ in VERIFIED_INPUT_TOKENS))
     ratio = CLAUDE_CHARACTERS_PER_TOKEN if adapter == 'claude_cli_v1' else CODEX_CHARACTERS_PER_TOKEN
-    text_room = math.floor(tokens['value'] * ratio) if calibrated else tokens['value']
-    return dict(
-        protocol=POLICY,
-        listed=model is not None,
-        route_class=describe_route_class(route),
-        input_text_characters=_describe_limit(
-            text_room,
-            'estimated',
-            characters_per_token=ratio if calibrated else None,
-            margin=TOKEN_RATIO_MARGIN if calibrated else None,
-        ),
-        input_characters=characters,
-        input_tokens=tokens,
-        output_tokens=output_limit,
-        effort=describe_route_class(route)['effort'],
-        request_measure='calibrated' if calibrated else 'bytes',
-        provider_enforces_output=not adapter.startswith('codex_cli_'),
-        binary_inputs='unmeasured' if adapter in (transport.ADAPTER, 'codex_cli_visual_v1') else 'unsupported',
-        raises_capacity=['Add documented model limits with their URLs.', 'Record a verified single-send attempt to raise the observed input size and output profile.'],
-    )
+    return dict(protocol=POLICY, listed=model is not None, route_class=describe_route_class(route),
+                input_text_characters=_describe_limit(math.floor(tokens['value'] * ratio) if calibrated else tokens['value'], 'estimated',
+                                                      characters_per_token=ratio if calibrated else None, margin=TOKEN_RATIO_MARGIN if calibrated else None),
+                input_characters=characters, input_tokens=tokens, input_limits=dict(documented=documented, observed=observed),
+                capacity_evidence=evidence, output_tokens=output_limit, effort=describe_route_class(route)['effort'],
+                request_measure='calibrated' if calibrated else 'bytes', provider_enforces_output=not adapter.startswith('codex_cli_'),
+                binary_inputs='unmeasured' if adapter in (transport.ADAPTER, 'codex_cli_visual_v1') else 'unsupported',
+                raises_capacity=['Add documented model limits with their URLs.', 'Record a verified capacity probe under this execution key to raise its observed input limit.'])
 
 
 def _read_text_parts(content):
@@ -398,6 +359,8 @@ def describe_task_kind(role, packet, operation='review.invoke'):
         return 'correction'
     if 'staged_review' in packet:
         return 'staged'
+    if 'reviewer_excerpts' in packet:
+        return 'request'
     if 'reading_turn' in packet:
         return 'reading'
     if 'reading_record' in packet:
@@ -407,8 +370,6 @@ def describe_task_kind(role, packet, operation='review.invoke'):
         return header['kind']
     if packet.get('problem_evidence_parts', {}).get('stage') == 'part':
         return 'read'
-    if 'reviewer_excerpts' in packet:
-        return 'request'
     return 'single'
 
 
@@ -604,7 +565,8 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
         value = usage.get('reasoning_output_tokens', details.get('reasoning_tokens'))
         if type(value) is int and value >= 0:
             thinking, method = (value, 'provider_usage')
-        sends = 1 if route['adapter'] == transport.ADAPTER or context.get('input_verified') is True else None
+        from .review_capacity_evidence import read_capacity_sends
+        sends = read_capacity_sends(route, response)
         completed = completed and (route['adapter'] == transport.ADAPTER or context.get('input_verified') is True)
     answer_text = extract_answer_text(response) if response else None
     output = usage.get('output_tokens')
@@ -615,9 +577,13 @@ def describe_attempt(route, role, packet, request, response, *, operation='revie
     excluded = signal is not None and (signal['outcome'] == 'response_over_limit'
         or signal['signal'].get('detail') == 'non_streaming_fallback'
         or (attempt_error or {}).get('code') == 'review_response_too_large')
+    from .review_capacity_evidence import describe_capacity_observation
+    capacity_evidence = describe_capacity_observation(route, response, sends=sends, request=request,
+        probe_controls=packet if 'allowed_control' in packet and 'evidence_control' in packet else None)
     return dict(
         **(dict(output_profile_eligible=False) if excluded else {}),
         **(dict(outcome=signal['outcome']) if signal is not None else {}),
+        capacity_evidence=capacity_evidence,
         usage=dict(
             counts,
             thinking_tokens=thinking,
@@ -922,7 +888,7 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
     target_levels = [max(1, targets)] if kind in ('final', 'single') else [0]
     while target_levels[-1] > 1:
         target_levels.append(max(1, target_levels[-1] // 2))
-    usable = [row for row in profile['rows'] if row['kind'] == kind and row['task_level'] != 'unmeasured' and (row['attempts'] >= 4) and (row['completed_attempts'] >= 4 and row['largest_thinking_tokens'] is not None or row['at_or_over_limit'] > 0)]
+    usable = [row for row in profile['rows'] if row['kind'] == kind and row['task_level'] != 'unmeasured' and (row['attempts'] >= 4) and (row['completed_attempts'] >= 4 or row['at_or_over_limit'] > 0)]
     borrowed = None
     frame_policy = profile.get('frame_policy', {})
     borrowing = frame_policy.get('borrowing_ready', False) and frame_matches_reading
@@ -930,10 +896,9 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
     if frame_limit is not None and frame_characters > frame_limit:
         borrowing = False
     if not usable and kind != 'reading' and borrowing:
-        usable = [row for row in profile['rows'] if row['kind'] == 'reading' and row['task_level'] != 'unmeasured' and (row['attempts'] >= 4) and (row['completed_attempts'] >= 4 and row['largest_thinking_tokens'] is not None or row['at_or_over_limit'] > 0)]
+        usable = [row for row in profile['rows'] if row['kind'] == 'reading' and row['task_level'] != 'unmeasured' and (row['attempts'] >= 4) and (row['completed_attempts'] >= 4 or row['at_or_over_limit'] > 0)]
         borrowed = 'reading'
     output_limit = describe_route_capacity(route)['output_tokens']['value']
-    text_room = describe_route_capacity(route)['input_text_characters']['value']
     candidates = []
     for level in levels:
         task_characters = frame_characters + level + (carried_characters if profile.get('frame_policy', {}).get('count_carried_state', COUNT_CARRIED_STATE) else 0)
@@ -950,7 +915,7 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
             default, minimum = _describe_answer_bounds(kind, target_count, card_minimum)
             attempts = row['attempts'] if row is not None else 0
             over = row['at_or_over_limit'] if row is not None else 0
-            qualifies = row is not None and over == 0 and (room is not None) and (room >= minimum) and (task_characters <= text_room)
+            qualifies = row is not None and over == 0 and (room is not None) and (room >= minimum)
             state = 'fits' if qualifies else 'over_limit_expected' if row is not None else 'unmeasured'
             candidates.append(
                 dict(
@@ -975,13 +940,23 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
                 ),
             )
     selected = next((row for row in candidates if row['qualifies']), None)
+    start_rule = 'fit' if selected is not None else 'unmeasured'
+    step5 = selected
     if selected is None:
         measured = [row for row in candidates if row['sample_size']]
-        viable = [row for row in measured if row['at_or_over_limit_share'] < 1 and row['task_characters'] <= text_room]
-        selected = min(
+        viable = [row for row in measured if row['at_or_over_limit_share'] < 1]
+        step5 = min(
             viable,
             key=lambda row: 1 / ((1 - row['at_or_over_limit_share']) * max(1, row['material_allowance'])),
         ) if viable else measured[-1] if measured else candidates[-1]
+        risk_rows = [row for row in profile['rows'] if row['kind'] == (borrowed or kind)
+                     and row['task_level'] != 'unmeasured' and row['attempts'] >= 4
+                     and row['at_or_over_limit'] * 20 > row['attempts']]
+        ceilings = [TASK_LEVELS[TASK_LEVELS.index(row['task_level']) - 1] if TASK_LEVELS.index(row['task_level']) else 0 for row in risk_rows]
+        ceiling = min(ceilings) if ceilings else None
+        below = [row for row in candidates if ceiling is not None and row['task_characters'] <= ceiling]
+        selected = below[0] if measured and below else step5
+        start_rule = 'below_risky_ranges' if measured and below else 'step5' if measured else 'unmeasured'
     bound = min(selected['default_answer_bound'], selected['answer_room_characters']) if selected['qualifies'] else selected['smallest_answer_bound']
     reported = []
     for level in levels:
@@ -994,6 +969,8 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
         answer_bound=bound,
         borrowed_kind=borrowed if selected['sample_size'] else None,
         policy=POLICY,
+        start_rule=start_rule,
+        step5_material_allowance=step5['material_allowance'],
         levels=reported,
     )
 
@@ -1088,11 +1065,11 @@ def describe_cli_version_status(profile, installed_version):
     )
 
 
-def describe_route_report(records, route):
+def describe_route_report(records, route, artifacts=None):
     profile = read_output_profile(records, route)
     limits = {kind: select_task_limits(route, profile, kind) for kind in TURN_KINDS}
     result = dict(
-        route_capacity=describe_route_capacity(route, profile),
+        route_capacity=describe_route_capacity(route, profile, records=records, artifacts=artifacts),
         output_profile=profile,
         task_limits=limits,
         final_reference_projection=describe_final_projection(limits['final'], limits['reading']),
@@ -1186,7 +1163,7 @@ def describe_open_route_reports(records, artifacts=None):
     routes = {assignments[key]['route_id'] for key in open_ids if assignments[key]['route_id'] in records.get('review_route', {})}
     result = {}
     for route_id in sorted(routes):
-        report = describe_route_report(records, records['review_route'][route_id])
+        report = describe_route_report(records, records['review_route'][route_id], artifacts)
         report.pop('capacity_warning', None)
         selected = {}
         for head in heads:

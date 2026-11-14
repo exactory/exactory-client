@@ -2397,15 +2397,19 @@ def probe_route(store, payload, *, expected_revision, request_id, credential=Non
     def finish(records, value, invocation, observation, revision):
         result = dict(invocation, **observation)
         result['recorded_revision'] = revision
+        if result.get('capacity_evidence') is not None:
+            trial = dict(records, review_route_probe={result['id']: result})
+            if _route_state(trial, store_artifacts, result['route_id'])['probe_id'] != result['id']:
+                result['capacity_evidence'] = None
         return [immutable_record(records, 'review_route_probe', value['id'], result)], result
     return _invoke_once(store, payload, 'review.route_probe', start, finish,
                         expected_revision=expected_revision, request_id=request_id, credential=credential)
 
 
-def describe_route_report(records, route_id):
+def describe_route_report(records, route_id, artifacts=None):
     """Report size forecasts separately from authenticated route state."""
     from .review_route_capacity import describe_route_report as describe_capacity_report
-    return describe_capacity_report(records, records['review_route'][route_id])
+    return describe_capacity_report(records, records['review_route'][route_id], artifacts)
 
 
 def route_state(records, artifacts, route_id):

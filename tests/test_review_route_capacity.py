@@ -41,10 +41,10 @@ class RouteLimitTests(unittest.TestCase):
                 )
                 unknown = self.capacity.describe_route_capacity(build_route(adapter, 'unlisted-model'))
                 self.assertFalse(unknown['listed'])
-                self.assertEqual(unknown['input_tokens']['source'], 'default')
+                self.assertEqual(unknown['input_tokens']['source'], 'default' if adapter == 'claude_cli_v1' else 'observed')
                 self.assertEqual(
                     unknown['input_tokens']['value'],
-                    72000 if adapter == 'claude_cli_v1' else 150000,
+                    72000 if adapter == 'claude_cli_v1' else 0,
                 )
                 self.assertEqual(unknown['request_measure'], 'bytes')
                 self.assertTrue(unknown['raises_capacity'])
@@ -53,7 +53,8 @@ class RouteLimitTests(unittest.TestCase):
         value = self.capacity.describe_route_capacity(build_route(output=600000))
         self.assertEqual(value['output_tokens']['value'], 128000)
         self.assertEqual(value['output_tokens']['source'], 'documented')
-        self.assertEqual(value['input_tokens']['value'], 839000)
+        self.assertEqual(value['input_tokens']['value'], 687640)
+        self.assertEqual(value['input_limits']['documented']['value'], 839000)
         self.assertEqual(value['input_characters']['value'], 1300000)
         self.assertEqual(value['input_characters']['source'], 'transport')
         self.assertIn('https://', value['output_tokens']['url'])
@@ -66,26 +67,25 @@ class RouteLimitTests(unittest.TestCase):
             ('codex_cli_visual_v1', 'gpt-6.1-sol', 358029),
         ):
             with self.subTest(adapter=adapter, model=model):
-                result = self.capacity.describe_route_capacity(build_route(adapter, model))
-                self.assertEqual(result['input_tokens']['value'], tokens)
+                from research_harness.review_capacity_evidence import read_capacity_priors
+                prior = next(row for row in read_capacity_priors() if row['key']['adapter'] == adapter and row['key']['model'] == model)
+                route = dict(build_route(adapter, model), runtime=prior['key']['runtime'])
+                result = self.capacity.describe_route_capacity(route)
+                self.assertEqual(result['input_tokens']['value'], tokens - 128000)
                 self.assertEqual(result['input_tokens']['source'], 'observed')
                 self.assertEqual(result['effort'], 'high')
                 self.assertFalse(result['provider_enforces_output'])
 
-    def test_verified_profile_raises_observed_input_but_cumulative_usage_cannot(self):
+    def test_unkeyed_output_profile_cannot_raise_input_capacity(self):
         route = build_route('codex_cli_v1', 'unlisted-model')
-        for observed in (100, 150000):
+        for observed in (100, 150000, 200000):
             with self.subTest(observed=observed):
-                smaller_profile = dict(verified_input_tokens=observed)
-                unchanged = self.capacity.describe_route_capacity(route, smaller_profile)
-                self.assertEqual(unchanged['input_tokens']['value'], 150000)
-                self.assertEqual(unchanged['input_tokens']['source'], 'default')
-                self.assertEqual(smaller_profile['verified_input_tokens'], observed)
-        profile = dict(verified_input_tokens=200000)
-        result = self.capacity.describe_route_capacity(route, profile)
-        self.assertEqual(result['input_tokens']['value'], 200000)
-        self.assertEqual(result['input_tokens']['source'], 'observed')
-        self.assertEqual(result['request_measure'], 'bytes')
+                profile = dict(verified_input_tokens=observed)
+                result = self.capacity.describe_route_capacity(route, profile)
+                self.assertEqual(result['input_tokens']['value'], 0)
+                self.assertEqual(result['input_tokens']['source'], 'observed')
+                self.assertEqual(profile['verified_input_tokens'], observed)
+                self.assertEqual(result['request_measure'], 'bytes')
 
     def test_request_measure_counts_native_packet_and_instructions(self):
         for adapter in ('claude_cli_v1', 'codex_cli_v1', 'codex_cli_framed_v1'):
@@ -199,7 +199,7 @@ class RouteReceiptTests(unittest.TestCase):
             receipt,
         )
         report = protocol.describe_route_report(case.records(), 'route')
-        self.assertEqual(report['route_capacity']['input_tokens']['source'], 'default')
+        self.assertEqual(report['route_capacity']['input_tokens']['source'], 'observed')
         self.assertEqual(case.records()['review_route']['route'], saved)
         self.assertNotIn(
             'route_capacity',
@@ -305,8 +305,9 @@ class RevisedTokenRoomTests(unittest.TestCase):
         from research_harness import review_route_capacity as capacity
         route = build_route()
         value = capacity.describe_route_capacity(route)
-        self.assertEqual(value['input_text_characters']['value'], 1141040)
-        self.assertEqual(capacity.describe_text_room(route, 10000), 1131040)
+        self.assertEqual(value['input_limits']['documented']['value'], 839000)
+        self.assertEqual(value['input_text_characters']['value'], 935190)
+        self.assertEqual(capacity.describe_text_room(route, 10000), 925190)
         self.assertEqual(
             capacity.describe_text_room(route, 10000, legacy_protocol=True),
             1300000,
@@ -351,9 +352,9 @@ class OutputReservationTests(unittest.TestCase):
         from research_harness import review_route_capacity as capacity
         for adapter, model, basis in (
             ('claude_cli_v1', 'claude-opus-5-5', 'compaction_threshold'),
-            ('codex_cli_v1', 'gpt-6-astra', 'completed_answer'),
+            ('codex_cli_v1', 'gpt-6-astra', 'verified_input'),
             ('openai_responses_v1', 'gpt-6-astra', 'model_window'),
-            ('openai_responses_v1', 'unlisted-model', 'adapter_default'),
+            ('openai_responses_v1', 'unlisted-model', 'verified_input'),
         ):
             with self.subTest(adapter=adapter, model=model):
                 limit = capacity.describe_route_capacity(build_route(adapter, model))['input_tokens']
