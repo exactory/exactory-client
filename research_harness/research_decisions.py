@@ -285,6 +285,12 @@ def find_review_undelivered_references(records, artifacts, evidence, delivery, *
 
 def validate_review_contract(records, artifacts, assignment, output, *, attempt=None):
     """Check the frozen scientific contract and the exact attempt's permitted delivery."""
+    from .review_handles import expand_handles, is_material_output, validate_material
+    packet = read_assignment_packet(records, artifacts, assignment['id'])
+    output = expand_handles(packet, output)
+    if is_material_output(packet, output):
+        validate_material(packet, output)
+        return
     from . import bar_sources, review_context_repair, review_excerpts, review_supplied_evidence
     from .review_protocol import has_problem_result_rubric, is_previous_prompt
     from . import review_problem_parts

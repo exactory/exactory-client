@@ -5487,6 +5487,36 @@
         "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row",
         "test_series_code_reach.CodeReachTests.test_deleting_a_registry_row_or_missing_row_entry_fails_coverage"
       ]
+    },
+    {
+      "id": "packet-handles-expand-before-role-contracts",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "bounded citations and recorded arguments",
+      "summary": "Repeated full native references and argument bodies made final answers grow with the chain.",
+      "expected": "An opt-in packet expands handles into native references before role validation; attempts authenticate that expansion and store bounded argument parts for later descriptor citations. Packets without a table keep their output bytes.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_handles.HandleRecordingTests.test_bar_final_by_handle_records_only_expanded_native_references",
+        "test_review_handles.HandleObservationTests.test_authentication_repeats_expansion_and_refuses_every_certificate_change",
+        "test_review_handles.HandleObservationTests.test_captured_expansion_finishes_after_interruption_without_another_provider_call",
+        "test_review_handles.HandleObservationTests.test_unknown_handle_retains_raw_answer_and_records_a_repeatable_shape_refusal",
+        "test_review_handles.HandleObservationTests.test_material_attempt_retains_part_descriptors_and_next_part_request",
+        "test_review_handles.HandleObservationTests.test_no_table_attempt_bytes_and_authentication_remain_unchanged_for_every_role"
+      ]
+    },
+    {
+      "id": "unit-handle-spans-use-delivered-part-offsets",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "class": "part-relative handle citations",
+      "summary": "A final combined a delivered second-part artifact with whole-text offsets and exhausted its slot.",
+      "expected": "A span under a unit handle is resolved against that delivered part from zero, with the digest of that exact substring; no stored legacy span is reinterpreted.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_handles.HandleExpansionTests.test_two_part_unit_span_addresses_the_second_part_from_zero",
+        "test_review_handles.HandleExpansionTests.test_refuses_unknown_malformed_and_out_of_part_spans_under_review_shape"
+      ]
     }
   ]
 }

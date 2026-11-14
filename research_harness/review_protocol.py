@@ -32,6 +32,7 @@ from . import bar_sources
 from . import openness_reading
 from . import review_excerpts
 from . import review_problem_parts, review_parts
+from . import review_handles
 from . import review_problem_history
 from .review_bodies import read_history, write_history
 from . import review_context_repair as context_repair
@@ -2304,8 +2305,11 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
                                        validate_commit=lambda tx, result, revision: start_call(tx, operation, result, authority, revision))['result']
         artifacts = store.build_artifact_store()
         request = _read_json(artifacts, invocation['request'])
+        packet = _read_json(artifacts, assignment['packet']) if operation == 'review.invoke' else None
         with _own_transport_processes(authority) if route['adapter'] in transport.LOCAL_ADAPTERS else nullcontext():
             observation = _observed(artifacts, route, request, credential)
+        if packet is not None:
+            observation = review_handles.record_handle_output(packet, observation, artifacts)
         capture_call(store, operation, payload, invocation, route, observation,
                      request_id=request_id, _authority=authority)
         authority.finish_transport()
@@ -3597,7 +3601,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
     assignment = store.snapshot()['records']['review_assignment'][payload['assignment_id']]
     if 'preflight' in result.get('result', {}):
         result = dict(result, preflight=result['result']['preflight'])
-    if (review_parts.KEY in assignment or assignment['role'] == 'native_math' or assignment['prompt'].get('parameters', {}).get('evidence_parts')
+    if (review_handles.HANDLE_TABLE in _read_json(store_artifacts, assignment['packet'])
+            or review_parts.KEY in assignment or assignment['role'] == 'native_math' or assignment['prompt'].get('parameters', {}).get('evidence_parts')
             == review_problem_parts.PROTOCOL + '/part'):
         from .review_refusal import record_native_refusal
         record_native_refusal(store, assignment['id'], request_id=request_id)
@@ -3628,6 +3633,12 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
                 return False
         output = _read_json(artifacts, attempt['output'])
         response = _read_json(artifacts, attempt['response'])
+        material_matches = True
+        if review_handles.is_material_output(packet, output):
+            material = _read_json(artifacts, attempt['material']) if 'material' in attempt else None
+            material_matches = review_handles.authenticate_material(packet, output, material, artifacts)
+        elif 'material' in attempt:
+            material_matches = False
         return (has_supported_binding(assignment, attempt)
                 and attempt.get('origin') == 'instrumented' and request is not None
                 and attempt.get('runtime') == route['runtime']
@@ -3637,7 +3648,8 @@ def authenticate_provenance(records, artifacts, assignment, attempt):
                     policy=assignment.get('request_policy')))
                 and attempt.get('packet_digest') == assignment['packet_digest']
                 and attempt.get('prompt_hash') == assignment['prompt_hash']
-                and derive_output(dict(attempt, output=output), response) == output)
+                and review_handles.derive_expanded_output(packet, dict(attempt, output=output), response) == output
+                and material_matches)
     except (ResearchError, ValueError, TypeError, KeyError):
         return False
 
@@ -3787,7 +3799,11 @@ def _assignment_state(records, artifacts, assignment_id):
         state['attempt_id'] = attempt['id']
         if 'answer_recovery' in attempt:
             state['answer_recovery'] = copy.deepcopy(attempt['answer_recovery'])
+        if 'handle_expansion' in attempt:
+            state['handle_expansion'] = copy.deepcopy(attempt['handle_expansion'])
         try:
+            if 'material' in attempt:
+                state['material'] = _read_json(artifacts, attempt['material'])
             state['output'] = _read_json(artifacts, attempt['output'])
             state['output_digest'] = digest(state['output'])
             state.update(raw_output=state['output'], raw_output_digest=state['output_digest'])
@@ -3898,6 +3914,11 @@ def collect_adjudication_evidence(output):
 
 def validate_adjudication_contract(records, artifacts, assignment, packet, output, *, attempt=None):
     """Validate only the focused output and the adjudicator's frozen delivery."""
+    from .review_handles import expand_handles, is_material_output, validate_material
+    output = expand_handles(packet, output)
+    if is_material_output(packet, output):
+        validate_material(packet, output)
+        return
     from .review_refusal import contract_check, validate_evidence_contract
     parts_kind = review_parts.find_kind(packet)
     if parts_kind is not None:

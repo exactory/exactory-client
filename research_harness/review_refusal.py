@@ -301,6 +301,11 @@ def classify_observed_output(records, artifacts, attempt_id):
     try:
         output = protocol.read_raw_observation(records, artifacts, attempt_id)['raw_output']
         packet = json.loads(artifacts.read(assignment['packet']))
+        from .review_handles import expand_handles, is_material_output, validate_material
+        output = expand_handles(packet, output)
+        if is_material_output(packet, output):
+            validate_material(packet, output)
+            return None
         staged = packet.get('staged_review')
         if staged is not None:
             from .review_staged import validate_task_output
