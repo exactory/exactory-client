@@ -12,6 +12,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from .errors import ResearchError
 from .evidence import digest
 from .providers import Arxiv, Crossref, OpenAlex
+from .operations import timestamp
 
 
 # The URL parameters whose value is a native registry's captured query. An OpenAlex
@@ -48,6 +49,8 @@ LIST_PARAMETER_NAMES = {"arxiv": frozenset({"id_list"}), "crossref": frozenset({
 CASELESS_FILTER_PARAMETER_NAMES = {"arxiv": frozenset(), "crossref": frozenset(), "openalex": frozenset({"filter"})}
 ORDERING_PARAMETER_NAMES = {"arxiv": frozenset({"sortBy", "sortOrder"}),
                             "crossref": frozenset({"sort", "order"}), "openalex": frozenset({"sort"})}
+CAPTURE_INTERVAL_SECONDS = 15 * 60
+NATIVE_PARSE_VERSION = 2
 
 
 def _parse_parameters(source):
@@ -102,7 +105,8 @@ def _number(parameters, key, default, minimum, maximum=None):
     return value
 
 
-def native_page(source, data, query, scope):
+def native_page(source, data, query, scope, *, parse_version=1):
+    """Version 1 preserves the parsing of stored searches without an explicit version."""
     provider = source["provider"]
     pairs = _parse_parameters(source)
     parameters = dict(pairs)
@@ -120,7 +124,8 @@ def native_page(source, data, query, scope):
     offset = (_number(parameters, "page", 1, 1) - 1) * size if provider == "openalex" else _number(
         parameters, "start" if provider == "arxiv" else "offset", 0, 0)
     adapter = {"arxiv": Arxiv, "crossref": Crossref, "openalex": OpenAlex}[provider]()
-    page = adapter.parse(data, page_size=size)
+    options = {"legacy": parse_version == 1} if provider in ("openalex", "crossref") else {}
+    page = adapter.parse(data, page_size=size, **options)
     pending = [dict(failure, source_id=source["id"]) for failure in page.failures]
     if page.total is None or page.returned_count > size or provider == "arxiv" and page.start != offset:
         pending.append({"code": "search_page_metadata_mismatch", "source_id": source["id"]})
@@ -132,10 +137,14 @@ def native_page(source, data, query, scope):
     group = {"provider": provider, "endpoint": urlunsplit((url.scheme, url.netloc, url.path, "", "")),
              "parameters": sorted((k, v) for k, v in pairs if k not in PAGINATION_PARAMETER_NAMES[provider]),
              "query": query, "scope": scope, "mode": mode, "cursor_page_size": size if mode == "cursor" else None}
-    return {"group": group, "source_id": source["id"], "sha256": source["response"]["sha256"],
+    result = {"group": group, "source_id": source["id"], "sha256": source["response"]["sha256"],
             "position": cursor if mode == "cursor" else offset, "size": size, "total": page.total,
             "count": page.returned_count, "next_cursor": page.next_cursor,
             "found": [w["id"] for w in page.works], "pending": pending}
+    if parse_version >= 2:
+        result.update(captured_at=source["captured_at"],
+                      excluded_items=[dict(item, source_id=source["id"]) for item in page.excluded_items])
+    return result
 
 
 def enumerate_pages(pages):
@@ -179,9 +188,42 @@ def enumerate_pages(pages):
         # Parsed failures are retained even if the raw row count reaches total.
         summary = dict(group, id=key, source_ids=[p["source_id"] for p in members],
                        returned_count=count, reported_count=total, complete=not failures)
+        if any(page.get("excluded_items") for page in members):
+            summary["excluded_items"] = [item for page in by_position.values() for item in page["excluded_items"]]
         summaries.append(summary)
         pending.extend(dict(f, group_id=key) for f in failures)
     return summaries, pending
+
+
+def find_capture_interval_warnings(pages):
+    groups = {}
+    for page in pages:
+        groups.setdefault(digest(page["group"]), []).append(page)
+    warnings = []
+    for key, members in sorted(groups.items()):
+        if len({page["position"] for page in members}) < 2:
+            continue
+        times = [timestamp(page["captured_at"]) for page in members]
+        if (max(times) - min(times)).total_seconds() <= CAPTURE_INTERVAL_SECONDS:
+            continue
+        page_numbers = {}
+        if members[0]["group"]["mode"] == "cursor":
+            by_position = {page["position"]: page for page in members}
+            position = "*"
+            while position in by_position and position not in page_numbers:
+                page_numbers[position] = len(page_numbers) + 1
+                position = by_position[position]["next_cursor"]
+        else:
+            page_numbers = {page["position"]: page["position"] // page["size"] + 1
+                            for page in members if page["size"]}
+        warnings.append({"code": "search_page_capture_interval", "message":
+            "Pages of this query were captured more than 15 minutes apart; changed results can produce "
+            "search_results_duplicate and search_totals_inconsistent.",
+            "group_id": key, "query": members[0]["group"]["query"], "provider": members[0]["group"]["provider"],
+            "pages": [{"source_id": page["source_id"], "position": page["position"],
+                       "page_number": page_numbers.get(page["position"]),
+                       "captured_at": page["captured_at"]} for page in members]})
+    return warnings
 
 
 def find_captured_ordering(provider, parameters):

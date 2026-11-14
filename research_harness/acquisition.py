@@ -101,7 +101,7 @@ from .evidence import derived_id, digest, media_type as response_media_type, pre
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, XML_MEDIA_TYPES, parse_base_media_type, extract, extraction_measures
 from .http import HttpClient, HttpFailure, RequestBudget, safe_url
 from .identities import family_id, find_doi_family_conflicts, normalize_identifier, version_of
-from .imports import parse_mapped, parse_publisher_capture
+from .imports import bind_import_query, parse_mapped, parse_publisher_capture
 from .import_io import read_import_input, validate_import_size
 from .workspace import checked_parent
 from .operations import text
@@ -794,7 +794,11 @@ def _import_page(provider, response, source_url, captured_at, media_type, mappin
             raise ResearchError("invalid_import",
                                 "Import media type must have no whitespace around type/subtype, "
                                 "and the text after a semicolon must be non-empty printable ASCII") from error
-        page = parse_mapped(response, media_type, mappings)
+        record_mappings, query_binding = bind_import_query(mappings, source_url)
+        if query_binding is not None and provider != "web":
+            raise ResearchError("invalid_import", "URL path query bindings require a web capture")
+        page = parse_mapped(response, media_type, record_mappings)
+        page.query_binding = query_binding
     else:
         adapter = _provider(provider)
         media_type = media_type or ("application/atom+xml" if provider == "arxiv" else "application/json")
@@ -822,6 +826,7 @@ def preview_import_response(store, provider, response, *, source_url, captured_a
     result = {"status": "preview", "scope": "metadata_import", "revision": snapshot["revision"],
               "work_ids": [work["id"] for work in page.works], "pending": _import_pending(page),
               "warnings": list(page.warnings),
+              "excluded_items": page.excluded_items, "excluded_item_count": len(page.excluded_items),
               "identity_conflicts": find_doi_family_conflicts(snapshot["records"], page.works)}
     if publisher_capture is not None:
         from .source_candidates import find_source_candidates
@@ -900,15 +905,18 @@ def import_response(store, provider, response, *, source_url, captured_at, reque
             put_sources(transaction, sources)
             for item in prepared:
                 put_work(transaction, item)
-            transaction.put("source_import", request_id,
-                            dict(payload, source_id=sources[0]["id"], work_ids=[w["id"] for w in page.works], failures=page.failures))
+            imported = dict(payload, source_id=sources[0]["id"], work_ids=[w["id"] for w in page.works], failures=page.failures)
+            if page.query_binding is not None:
+                imported["query_binding"] = page.query_binding
+            transaction.put("source_import", request_id, imported)
 
         # The family conflicts come from this snapshot, so the write keeps its revision instead of retrying on a later one;
         # an import costs no network request to run again.
         return _finish_once(store, request_id, snapshot["revision"],
                             {"status": "pending" if pending else "complete", "scope": "metadata_import", "pending": pending,
                              "work_ids": [w["id"] for w in page.works], "source_ids": [s["id"] for s in sources],
-                             "identity_conflicts": identity_conflicts}, apply=commit)
+                             "identity_conflicts": identity_conflicts, "excluded_items": page.excluded_items,
+                             "excluded_item_count": len(page.excluded_items)}, apply=commit)
 
 
 def digest_bytes(data):

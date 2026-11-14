@@ -4631,6 +4631,33 @@
         "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_processor_clock",
         "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_defaults_to_10800_and_accepts_an_override"
       ]
+    },
+    {
+      "id": "search-receipt-reports-integrity-gaps",
+      "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
+      "class": "search receipt (unreported parser and enumeration gaps)",
+      "summary": "The search receipt left invalid returned rows and incomplete captured queries without counts or provider record types.",
+      "expected": "Search receipts count invalid items and incomplete responses with their queries and preserve supplied provider record types.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_search_receipts.SearchReceiptTests.test_receipt_counts_invalid_items_and_incomplete_responses_with_query_and_provider_type"
+      ]
+    },
+    {
+      "id": "search-capture-shapes-and-paratext-exclusions",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "search evidence (front matter, capture intervals and path queries)",
+      "summary": "OpenAlex front matter became integrity errors, pages captured a day apart received no check warning, and path-addressed citation captures could not bind their query.",
+      "expected": "New searches retain identified paratext exclusions without integrity errors; stored searches keep their old interpretation; check reports page groups over 15 minutes apart; web imports can declare a named query path segment.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_search_receipts.SearchReceiptTests.test_new_search_excludes_null_and_titled_paratext_without_integrity_errors",
+        "test_search_receipts.SearchReceiptTests.test_stored_0853_search_retains_work_digest_projection_errors_and_audit",
+        "test_search_receipts.SearchReceiptTests.test_check_reports_each_page_group_captured_more_than_fifteen_minutes_apart_without_writing",
+        "test_search_receipts.PathQueryTests.test_import_and_search_bind_the_declared_named_path_segment"
+      ]
     }
   ]
 }
