@@ -1,9 +1,11 @@
 """Choose a main extraction without changing captures or their source links."""
 
+import json
+
 from .components import is_component
 from .errors import ResearchError
 from .evidence import digest
-from .operations import fields, prepared_mutation, text
+from .operations import fields, normalized_text, prepared_mutation, text
 from .source_links import exact_work, fulltext_capture
 
 
@@ -58,14 +60,116 @@ def describe_capture_selections(records):
         choices, key=lambda choice: (choice["version_id"], choice["original_sha256"]))}} if choices else {}
 
 
-def bind_packet_selections(records, packet):
-    """Match a parent output against that packet's choices; legacy packets used first captures."""
+def bind_packet_selections(records, packet, *, artifacts=None, review=None):
+    """Keep explicit bindings, or derive a legacy packet's captures from its own review."""
     if SELECTION_KIND not in records:
         return records
-    binding = packet.get(PACKET_KEY, packet.get("source_inventory", {}).get(PACKET_KEY, {}))
-    choices = binding.get("choices", [])
+    inventory = packet.get("source_inventory", {})
+    binding = packet.get(PACKET_KEY, inventory.get(PACKET_KEY, {}))
+    choices = (binding.get("choices", []) if PACKET_KEY in packet or PACKET_KEY in inventory else
+               derive_review_selections(records, packet, artifacts, review))
     return dict(records, **{SELECTION_KIND: {
         digest([choice["version_id"], choice["original_sha256"]]): choice for choice in choices}})
+
+
+def list_bound_captures(records, packet):
+    """Group eligible main extractions by the bound reading version and original bytes."""
+    from .graph import main_captures, index_bundles
+    bound = set(packet.get("openness_minimum", {}).get("reading_digests", []))
+    versions = {row["version_id"] for row in records.get("reading", {}).values() if digest(row) in bound}
+    first_records = dict(records, **{SELECTION_KIND: {}})
+    bundles = index_bundles(records)
+    candidates = {}
+    for version in versions:
+        work = records.get("work", {}).get(version)
+        if work is None:
+            continue
+        originals = {capture["original"]["sha256"] for capture in main_captures(first_records, work)}
+        supplements = bundles.get(version, {}).get("supplements", set())
+        for capture in work["fulltexts"]:
+            if (not is_component(capture) and capture.get("availability") == "available"
+                    and capture.get("extraction_status") == "extracted" and capture.get("text")
+                    and capture["source_id"] not in supplements and capture.get("original")
+                    and capture["original"]["sha256"] in originals):
+                candidates.setdefault((version, capture["original"]["sha256"]), []).append(capture)
+    return candidates
+
+
+def derive_review_selections(records, packet, artifacts, review):
+    """Resolve capture inventory from the contract, recorded plans, then planless observed inputs."""
+    candidates = list_bound_captures(records, packet)
+    if not candidates:
+        return []
+    delivery = packet.get("openness_delivery")
+    stored, requests, carried = ([], [], set()) if delivery is not None else read_review_packets(records, artifacts, review)
+    plans = [value["reading_turn"]["reading_plan"] for value in stored + requests
+             if "reading_plan" in value.get("reading_turn", {})]
+    planned = find_plan_texts(plans, carried)
+    choices = []
+    for (version, original), captures in candidates.items():
+        if delivery is not None:
+            source_ids = {row["source_id"] for source in delivery["sources"] if source["version_id"] == version
+                          for row in source["representations"] if row["main_representation"]
+                          and row["original_descriptor"]["sha256"] == original}
+            shown = [capture for capture in captures if capture["source_id"] in source_ids]
+        elif plans:
+            shown = [capture for capture in captures if (version, capture["text"]["sha256"]) in planned]
+        else:
+            shown = [capture for capture in captures
+                     if any(has_delivered_capture(artifacts, sent, capture) for sent in requests)]
+        if len({capture["text"]["sha256"] for capture in shown}) == 1:
+            capture = shown[0]
+            choices.append(dict(version_id=version, original_sha256=original, source_id=capture["source_id"],
+                                text_sha256=capture["text"]["sha256"]))
+    return choices
+
+
+def read_review_packets(records, artifacts, review):
+    """Read digest-bound stored packets regardless of readiness, and authenticated ready requests."""
+    from .review_protocol import assignment_state
+    from .review_excerpts import read_sent_packet
+    if artifacts is None or review is None:
+        return [], [], set()
+    native = json.loads(artifacts.read(review["context"]["native_packet"]))
+    carried = {row["artifact"]["sha256"] for row in native["evidence"]}
+    stored, requests, seen = [], [], set()
+    current = review
+    while current is not None and current["id"] not in seen:
+        seen.add(current["id"])
+        if (current.get("context", {}).get("native_packet") != review["context"].get("native_packet")
+                or any(current.get(key) != review.get(key) for key in ("role", "route_id"))
+                or any(normalized_text(current[key]) != normalized_text(review[key])
+                       for key in ("reviewer_id", "author_id"))):
+            break
+        if records.get("review_assignment", {}).get(current["id"]) == current:
+            saved = json.loads(artifacts.read(current["packet"]))
+            if (saved.get("digest") == current["packet_digest"]
+                    and digest({key: value for key, value in saved.items() if key != "digest"}) == current["packet_digest"]):
+                stored.append(saved)
+            state = assignment_state(records, artifacts, current["id"])
+            if state["ready"]:
+                attempt = records["review_attempt"][state["attempt_id"]]
+                sent = read_sent_packet(json.loads(artifacts.read(attempt["request"])))
+                if sent is not None:
+                    requests.append(sent)
+        current = records.get("review_assignment", {}).get(current.get("context", {}).get("prior_assignment_id"))
+    return stored, requests, carried
+
+
+def find_plan_texts(plans, carried):
+    """Identify every carried full text named as delivered or pending by this chain's recorded plans."""
+    return {(row["version_id"], row["text_sha256"]) for plan in plans
+            for field in ("delivered_before", "delivered_now", "remaining") for row in plan.get(field, [])
+            if row.get("kind", "fulltext") == "fulltext" and row.get("text_sha256") in carried}
+
+
+def has_delivered_capture(artifacts, sent, capture):
+    """Recognize exact whole bodies or exact parts for inventory selection in a review without plans."""
+    from .review_excerpts import find_complete_bodies, compute_part_digests
+    complete = find_complete_bodies(sent)
+    reference = capture["text"]
+    return (reference["sha256"] in complete or bool(complete.intersection(
+        compute_part_digests(artifacts.read(reference).decode("utf-8")))))
 
 
 def find_replaced_texts(records, work):

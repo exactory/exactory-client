@@ -5347,6 +5347,24 @@
         "test_record_reading_handoff.ReadingHandoffTests.test_catalog_gap_keeps_the_pure_refusal_before_the_corrected_output_needs_reading",
         "test_record_reading_handoff.ReadingHandoffTests.test_a_reading_completed_during_the_recording_error_records_without_a_reviewer_call"
       ]
+    },
+    {
+      "id": "unbound-openness-packet-delivered-capture",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "openness-capture-binding",
+      "summary": "Release 0.88.0 treated a 0.87.0 packet without a binding as the first capture even when its authenticated reading chain delivered a chosen extraction.",
+      "expected": "Derive each unbound original from its delivery contract, then digest-bound stored reading plans including pending units, then planless authenticated delivery. Replay finished and stopped 0.87.0 reviews without changing packet, plan, prompt or request bytes; give delivery credit only to authenticated ready requests. Keep case 2 stale and hand its stopped v5 chain to export before any call.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_stored_0870_findings_replay_with_their_delivered_capture_and_unchanged_bytes",
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_new_chain_refuses_an_unbound_chosen_body_before_a_call_then_a_new_export_reads_it",
+        "test_unbound_packet_captures.UnboundPacketCaptureTests.test_delivery_contract_precedes_requests_and_replays_the_chosen_representation",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_observed_stopped_plans_keep_pending_capture_and_delivery_credit",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_later_choice_does_not_change_a_capture_still_named_only_in_remaining",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_an_uncalled_stored_turn_keeps_its_plan_and_then_continues",
+        "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_a_stopped_case_two_is_reexported_under_v5_and_reads_first_capture_under_v4"
+      ]
     }
   ]
 }

@@ -38,10 +38,10 @@ def _containment(reference, data, containers):
     return None
 
 
-def build_delivery(records, artifacts, packet):
+def build_delivery(records, artifacts, packet, *, review=None):
     """Reconstruct the packet's selection from authenticated exact versions and full readings."""
     from .capture_selection import bind_packet_selections
-    records = bind_packet_selections(records, packet["scientific_context"])
+    records = bind_packet_selections(records, packet["scientific_context"], artifacts=artifacts, review=review)
     from .bar_sources import _source, _capture_digest
     from .identities import version_of
     from .reading import fulltext_coverage
@@ -299,16 +299,16 @@ def validate_delivery(records, artifacts, packet, state):
     delivery = packet["scientific_context"].get("openness_delivery")
     if delivery is None:
         return None
-    require(delivery == build_delivery(records, artifacts, packet), "Reassess changed source captures, readings or containment")
+    attempt = records["review_attempt"][state["attempt_id"]]
+    assignment = records["review_assignment"][attempt["assignment_id"]]
+    require(delivery == build_delivery(records, artifacts, packet, review=assignment), "Reassess changed source captures, readings or containment")
     from .problem_openness_reviews import actual_delivery
     supplied = actual_delivery(records, artifacts, state, packet, required_proof(packet))
     from .openness_reading import PROTOCOL_V5, list_reading_rows, select_delivered_bodies, verify_problem_coverage
     withheld = {}
     if supplied.get('reading_record', {}).get('protocol') == PROTOCOL_V5:
-        attempt = records['review_attempt'][state['attempt_id']]
-        assignment = records['review_assignment'][attempt['assignment_id']]
         coverage = verify_problem_coverage(records, artifacts, assignment, final=True)
-        reasons = classify_selected_texts(records, artifacts, packet, list_reading_rows(records, artifacts, packet))
+        reasons = classify_selected_texts(records, artifacts, packet, list_reading_rows(records, artifacts, packet, review=assignment))
         withheld = {sha256: row['deliveries'] for sha256, row in select_delivered_bodies(coverage['units']).items()
                     if reasons.get(sha256) == {'selected_text'}}
     _projection(supplied, projected=True, withheld_texts=withheld)

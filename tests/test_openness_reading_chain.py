@@ -332,8 +332,8 @@ class OpennessReadingChainTests(OpennessReadingCase):
         native_packet = self.export(priority=self.versions)
         real = openness_reading.list_reading_texts
 
-        def drop_last(records, native):
-            return real(records, native)[:-1]
+        def drop_last(records, native, *, artifacts=None, review=None):
+            return real(records, native, artifacts=artifacts, review=review)[:-1]
         with patch.object(openness_reading, 'list_reading_texts', side_effect=drop_last), \
                 self.omit_final_body(self.texts[self.versions[2]]['sha256']):
             final = self.run_reading_turns(native_packet, turn_count=8)[-1]
