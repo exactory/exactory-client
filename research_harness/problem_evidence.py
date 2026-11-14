@@ -549,7 +549,7 @@ def find_citation_locator(work, units):
                             if isinstance(unit.get("url"), str) and unit["url"].startswith("https://")), None)
 
 
-def project_citations(records, artifacts):
+def project_citations(records, artifacts, *, for_lookup=False):
     from .identities import family_id, resolve_arxiv_family
     from .problem_citation_metadata import find_citation_metadata, validate_citation_metadata
     seen, seen_arxiv_works, citations = set(), set(), []
@@ -586,7 +586,17 @@ def project_citations(records, artifacts):
         citation_values = work if metadata is None else metadata
         authors = ", ".join(author_names if metadata is None else metadata["authors"])
         citation = ". ".join(part for part in (authors, citation_values["title"], str(citation_values.get("year") or "")) if part)
-        citations.append({"citation": citation, "locator": locator})
+        if for_lookup:
+            bibliography = {"title": citation_values["title"],
+                            "authors": author_names if metadata is None else metadata["authors"]}
+            identifier = next((item for item in identifiers if item.startswith("doi:")), None)
+            identifier = identifier or next((item for item in identifiers if item.startswith("arxiv:")), None)
+            if identifier is not None:
+                kind, value = identifier.split(":", 1)
+                bibliography["doi" if kind == "doi" else "arxivId"] = value
+            citations.append({"referenceString": citation, "bibliography": bibliography})
+        else:
+            citations.append({"citation": citation, "locator": locator})
         if arxiv_work_key is not None:
             seen_arxiv_works.add(arxiv_work_key)
     return citations

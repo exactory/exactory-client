@@ -27,6 +27,7 @@ class ProblemReviewTests(LiteratureCase):
         super().setUp()
         # Load dependencies before replacing the claim validator for this fixture.
         importlib.import_module('research_harness.problem_candidates')
+        importlib.import_module('research_harness.problem_areas')
         importlib.import_module('research_harness.problem_evidence')
         importlib.import_module('research_harness.problem_delivery')
         importlib.import_module('research_harness.problem_areas')

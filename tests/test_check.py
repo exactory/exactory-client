@@ -11,6 +11,7 @@ import json
 import os
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 _PLUGIN_ROOT = Path(__file__).resolve().parent.parent
@@ -296,6 +297,107 @@ class TestCacheRoundTrip(_CheckTestCase):
 
 
 class TestRefsJsonInput(_CheckTestCase):
+    def test_incident_arxiv_titles_with_tex_braces_verify(self) -> None:
+        # Synthetic titles retain the TeX shapes from
+        # 20261112210200-citation-check-title-with-tex-braces.
+        titles = [
+            ("1601.03705", r"Synthetic counting example in $\mathrm{SL}_2(\mathbf{Z})$"),
+            ("2605.02518", r"Synthetic expansion example in $\text{SL}_2(\mathbb Z/q\mathbb Z)$"),
+        ]
+        refs = []
+        for identifier, title in titles:
+            refs.append({"referenceString": title, "bibliography": {
+                "arxivId": identifier, "title": title, "authors": ["Alice Example", "Bob Sample"]}})
+
+        def route(url, accept="application/json"):
+            for identifier, title in titles:
+                if "id_list=" + identifier in url:
+                    return 200, _ARXIV_ENTRY_TEXT.replace("2401.01234", identifier).replace(
+                        "Deterministic Citation Verification for Automated Research", title)
+            raise AssertionError(url)
+
+        _check._open_url = route
+        refs_path = self.scratch_dir / "refs.json"
+        refs_path.write_text(json.dumps(refs))
+        report = self._lookup(["--refs-json", str(refs_path)], None)
+        self.assertEqual([entry["status"] for entry in report["entries"]], ["verified", "verified"])
+        # A second pass must verify against cached metadata too.
+        _check._open_url = _refuse_network
+        self.assertTrue(self._lookup(["--refs-json", str(refs_path)], None)["all_verified"])
+        # Grouping braces must not erase the arguments of TeX commands.
+        resolved = r"$\mathrm{SL}_2(\mathbf{Z})$"
+        meta = {"title": resolved, "titles": [resolved], "authors": ["Alice Example"]}
+        entry = {"title": resolved, "author": "Alice Example"}
+        self.assertEqual(_check._compare_entry_with_meta(entry, meta)["status"], "verified")
+        entry["title"] = r"$\mathrm{GL}_2(\mathbf{Q})$"
+        self.assertEqual(_check._compare_entry_with_meta(entry, meta)["status"], "title_mismatch")
+
+    def test_doi_tex_titles_verify_and_keep_chapter_title_matching(self) -> None:
+        resolved = r"$\mathrm{SL}_2(\mathbf{Z})$"
+        crossref = json.loads(_CROSSREF_WORK_TEXT)
+        crossref["message"]["title"] = [resolved]
+        _check._open_url = lambda url, accept="application/json": (200, json.dumps(crossref))
+        refs_path = self.scratch_dir / "refs.json"
+        refs_path.write_text(json.dumps([{"referenceString": resolved, "bibliography": {
+            "doi": "10.1234/exact.5678", "title": resolved, "authors": ["Carol Instance", "Dana Case"]}}]))
+        self.assertTrue(self._lookup(["--refs-json", str(refs_path)], None)["all_verified"])
+        crossref["message"]["title"] = ["Chapter {5}: " + resolved]
+        meta = _check._normalize_crossref_work(crossref["message"])
+        self.assertEqual(_check._compare_entry_with_meta({"title": resolved,
+            "author": "Carol Instance and Dana Case"}, meta)["status"], "verified")
+
+    def test_title_mismatch_quotes_both_original_titles(self) -> None:
+        resolved = r"Registry title in $\mathrm{SL}_2(\mathbf{Z})$"
+        supplied = r"Invented title in $\text{GL}_3(\mathbf{Q})$"
+        _check._open_url = lambda url, accept="application/json": (200, _ARXIV_ENTRY_TEXT.replace(
+            "Deterministic Citation Verification for Automated Research", resolved))
+        refs_path = self.scratch_dir / "refs.json"
+        refs_path.write_text(json.dumps([{"referenceString": supplied, "bibliography": {
+            "arxivId": "2401.01234", "title": supplied, "authors": ["Alice Example", "Bob Sample"]}}]))
+        entry = self._lookup(["--refs-json", str(refs_path)], 1)["entries"][0]
+        self.assertEqual(entry["status"], "title_mismatch")
+        self.assertIn("'" + resolved + "'", entry["detail"])
+        self.assertIn("'" + supplied + "'", entry["detail"])
+
+    def test_doi_mismatch_quotes_registry_markup_and_the_original_bibtex_title(self) -> None:
+        resolved = "A {registry} <i>title</i>"
+        supplied = r"A fabricated title with $\mathrm{GL}_3$"
+        bib_path = self._write_bib("@article{raw, title={" + supplied + "}, doi={10.1234/exact.5678}}")
+        crossref = json.loads(_CROSSREF_WORK_TEXT)
+        crossref["message"]["title"] = [resolved]
+        datacite = json.loads(_DATACITE_DOI_TEXT)
+        datacite["data"]["attributes"]["titles"] = [{"title": resolved}]
+        for registry in ("crossref", "datacite"):
+            with self.subTest(registry=registry):
+                def route(url, accept="application/json"):
+                    if url.startswith(_check._CROSSREF_API_URL):
+                        return (200, json.dumps(crossref)) if registry == "crossref" else (404, None)
+                    return 200, json.dumps(datacite)
+                _check._open_url = route
+                result = self._lookup(["--bib", str(bib_path)], 1)["entries"][0]
+                self.assertEqual(result["status"], "title_mismatch")
+                self.assertIn("'" + resolved + "'", result["detail"])
+                self.assertIn("'" + supplied + "'", result["detail"])
+
+    def test_prescribed_identifier_title_authors_shape_verifies_doi_and_arxiv(self) -> None:
+        _check._open_url = _route_fixture_registry
+        refs_path = self.scratch_dir / "refs.json"
+        refs_path.write_text(json.dumps([
+            {"referenceString": "Carol Instance, Dana Case. Predicting Citation Impact with Cohort Percentiles",
+             "bibliography": {"doi": "10.1234/exact.5678", "title": "Predicting Citation Impact with Cohort Percentiles",
+                              "authors": ["Carol Instance", "Dana Case"]}},
+            {"referenceString": "Alice Example, Bob Sample. Deterministic Citation Verification for Automated Research",
+             "bibliography": {"arxivId": "2401.01234", "title": "Deterministic Citation Verification for Automated Research",
+                              "authors": ["Alice Example", "Bob Sample"]}},
+        ]))
+        self.assertTrue(self._lookup(["--refs-json", str(refs_path)], None)["all_verified"])
+        refs = json.loads(refs_path.read_text())
+        for item in refs:
+            del item["bibliography"]["authors"]
+        refs_path.write_text(json.dumps(refs))
+        report = self._lookup(["--refs-json", str(refs_path)], 1)
+        self.assertEqual([row["status"] for row in report["entries"]], ["author_mismatch", "author_mismatch"])
+
     def test_refs_json_entries_resolve_and_classify(self) -> None:
         _check._open_url = _route_fixture_registry
         refs_path = self.scratch_dir / "refs.json"
@@ -341,6 +443,114 @@ class TestRefsJsonInput(_CheckTestCase):
         self.assertTrue(report["nothing_verified"])
         self.assertEqual(report["blocking"], 0)
         self.assertFalse(report["ok"])
+
+
+class TestRegistryRequests(_CheckTestCase):
+    def test_default_admission_paces_independent_arxiv_calls(self):
+        from research_fixtures import Clock
+        clock = Clock()
+        starts = []
+        initial = clock.monotonic()
+
+        def respond(request, timeout):
+            starts.append(clock.monotonic())
+            response = io.BytesIO(_ARXIV_ENTRY_TEXT.encode())
+            response.getcode = lambda: 200
+            return response
+
+        # Each call constructs its own admission object; only durable state can
+        # preserve the interval between them.
+        with mock.patch.dict(os.environ, {"XDG_STATE_HOME": str(self.scratch_dir)}), \
+                mock.patch.object(_check.urllib.request, "urlopen", side_effect=respond):
+            for identifier in ("2401.01234", "2401.01235"):
+                code, _ = _check._open_url(_check._ARXIV_API_URL + "?id_list=" + identifier, clock=clock)
+                self.assertEqual(code, 200)
+        self.assertEqual(starts, [initial, initial + 3.0])
+        self.assertEqual(clock.sleeps, [3.0])
+
+    def install_registry(self, statuses=(), retry_after=None):
+        from research_fixtures import Clock
+        from research_harness.provider_pacing import ProviderPacing
+        clock = Clock()
+        pacing = ProviderPacing(clock=clock, state_dir=self.scratch_dir / "provider-state")
+        open_url = _check._open_url
+        starts, requests = [], []
+        remaining = iter(statuses)
+        opened_bodies = []
+        admit = pacing.admit
+
+        @contextlib.contextmanager
+        def admit_request(url, **options):
+            with admit(url, **options):
+                try:
+                    yield
+                finally:
+                    self.assertTrue(all(body.closed for body in opened_bodies),
+                                    "close each response before releasing provider admission")
+
+        pacing.admit = admit_request
+
+        def respond(request, timeout):
+            import urllib.error
+            import urllib.parse
+            starts.append(clock.monotonic())
+            requests.append(request.full_url)
+            status = next(remaining, 200)
+            if status != 200:
+                body = io.BytesIO(b"Registry error response")
+                opened_bodies.append(body)
+                raise urllib.error.HTTPError(request.full_url, status, "registry unavailable",
+                                             {"Retry-After": retry_after} if retry_after is not None else {}, body)
+            identifier = urllib.parse.parse_qs(urllib.parse.urlsplit(request.full_url).query)["id_list"][0]
+            response = io.BytesIO(_ARXIV_ENTRY_TEXT.replace("2401.01234", identifier).encode())
+            opened_bodies.append(response)
+            response.getcode = lambda: 200
+            return response
+
+        patcher = mock.patch.object(_check.urllib.request, "urlopen", side_effect=respond)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        _check._open_url = lambda url, accept="application/json", **options: open_url(
+            url, accept, clock=clock, pacing=pacing, **options)
+        return clock, starts, requests
+
+    def test_lookup_paces_forty_arxiv_entries_and_retries_429_and_503(self):
+        clock, starts, requests = self.install_registry([429, 503])
+        initial = clock.monotonic()
+        refs_path = self.scratch_dir / "refs.json"
+        refs_path.write_text(json.dumps([{
+            "referenceString": "Alice Example, Bob Sample. Deterministic Citation Verification for Automated Research",
+            "bibliography": {"arxivId": "2401.%05d" % index,
+                "title": "Deterministic Citation Verification for Automated Research",
+                "authors": ["Alice Example", "Bob Sample"]}} for index in range(40)]))
+        report = self._lookup(["--refs-json", str(refs_path)], None)
+        self.assertTrue(report["all_verified"])
+        self.assertEqual(len(starts), 42)
+        self.assertEqual(starts[0], initial)
+        self.assertTrue(all(later - earlier >= 3.0 for earlier, later in zip(starts, starts[1:])))
+        self.assertEqual(requests[:3], [requests[0]] * 3)
+        self.assertTrue(clock.sleeps)
+
+    def test_arxiv_retry_exhaustion_is_bounded_and_remains_incomplete(self):
+        clock, starts, _ = self.install_registry([503] * 10)
+        refs_path = self.scratch_dir / "refs.json"
+        refs_path.write_text(json.dumps([{"referenceString": "Unavailable work", "bibliography": {
+            "arxivId": "2401.01234", "title": "Unavailable work", "authors": ["Alice Example"]}}]))
+        report = self._lookup(["--refs-json", str(refs_path)], 1)
+        self.assertEqual(report["entries"][0]["status"], "network_error")
+        self.assertIn("HTTP 503", report["entries"][0]["detail"])
+        self.assertFalse(report["lookup_complete"])
+        self.assertEqual(len(starts), 4)
+        self.assertTrue(all(later - earlier >= 3.0 for earlier, later in zip(starts, starts[1:])))
+
+    def test_arxiv_retry_after_waits_and_nonretryable_http_is_not_retried(self):
+        clock, starts, _ = self.install_registry([429, 200, 404], retry_after="7")
+        initial = clock.monotonic()
+        self.assertIn("meta", _check._resolve_arxiv_id("2401.01234"))
+        self.assertEqual(starts[:2], [initial, initial + 7.0])
+        self.assertEqual(_check._resolve_arxiv_id("2401.01235")["status"], "network_error")
+        self.assertEqual(len(starts), 3)
+        self.assertEqual(starts[-1], initial + 10.0)
 
 
 class TestAddSubcommand(_CheckTestCase):
@@ -596,6 +806,28 @@ _FIXTURE_DOI_TITLE_KEY = "title:predicting citation impact with cohort percentil
 
 class TestCacheIdentity(_CheckTestCase):
     """The cache answers an entry only under the identity it is resolved by."""
+
+    def test_old_brace_stripped_cache_is_refreshed_before_reporting_a_mismatch(self) -> None:
+        resolved = r"Synthetic counting example in $\mathrm{SL}_2(\mathbf{Z})$"
+        stripped = resolved.replace("{", "").replace("}", "")
+        cache_path = self.out_path.parent / "citation-cache.json"
+        cache_path.parent.mkdir(parents=True)
+        cache_path.write_text(json.dumps({"version": 2, "records": {"arxiv:1601.03705": {
+            "source": "arxiv", "title": stripped, "titles": [stripped],
+            "authors": ["Alice Example", "Bob Sample"]}}}))
+        refs_path = self.scratch_dir / "refs.json"
+        refs = [{"referenceString": stripped, "bibliography": {"arxivId": "1601.03705", "title": stripped,
+            "authors": ["Alice Example", "Bob Sample"]}}]
+        refs_path.write_text(json.dumps(refs))
+        _check._open_url = _refuse_network
+        self.assertTrue(self._lookup(["--refs-json", str(refs_path)], None)["all_verified"])
+        refs[0]["bibliography"]["title"] = "An entirely different and fabricated title"
+        refs_path.write_text(json.dumps(refs))
+        _check._open_url = lambda url, accept="application/json": (200, _ARXIV_ENTRY_TEXT.replace(
+            "Deterministic Citation Verification for Automated Research", resolved))
+        result = self._lookup(["--refs-json", str(refs_path)], 1)["entries"][0]
+        self.assertEqual(result["status"], "title_mismatch")
+        self.assertIn("'" + resolved + "'", result["detail"])
 
     def test_a_doi_entry_ignores_a_preprint_record_cached_under_its_title(self) -> None:
         # A replaced arXiv entry of the same paper left its record under the title key.
