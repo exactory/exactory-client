@@ -60,6 +60,7 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
             'review-attempt': 'review_record_missing', 'review-context': 'review_record_missing',
             'review-adjudication': 'review_adjudication_unverified', 'probe-intent': 'configuration_missing',
             'probe': 'probe_intent_missing', 'check-claims': 'candidate_checkpoint_missing',
+            'import-fulltext': 'unknown_work',
         }
         extra_reads = {'round', 'round-review', 'round-assess', 'value-review',
                        'review-adjudication', 'import-oai-cohort'}
@@ -78,6 +79,9 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
                         (root / 'work/input.txt').write_bytes(b'Captured source bytes.\n')
                     elif command == 'import-response':
                         (root / payload['response_file']).write_bytes(b'{"meta": {"count": 0}, "results": []}')
+                    elif command == 'import-fulltext':
+                        (root / 'inputs').mkdir()
+                        (root / payload['file']).write_bytes(b'%PDF-1.7\n%%EOF\n')
                     elif command == 'import-oai-cohort':
                         for item in payload['pages']:
                             path = root / item['response_file']
@@ -104,7 +108,8 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
                     expected = [(False, 1), (True, 1)]
                     if command == 'adopt':
                         expected[0] = (False, 0)  # Explicit adoption opens a writable store.
-                    elif command == 'artifact':
+                    elif command in ('artifact', 'import-fulltext'):
+                        # Registration commits its CAS; a full-text import admits in a write transaction.
                         expected.append((True, 0))
                     elif command == 'import-response':
                         # Response imports already read their receipt before W2.
