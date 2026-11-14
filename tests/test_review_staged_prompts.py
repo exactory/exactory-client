@@ -63,11 +63,11 @@ class StagedPromptTests(unittest.TestCase):
         assignment['prompt'] = dict(prompt, text=prompt['text'] + 'changed')
         self.assertFalse(protocol._prompt_matches(assignment))
 
-    def test_staged_common_version_three_and_recorded_version_two(self):
+    def test_staged_common_version_four_and_recorded_versions_two_and_three(self):
         current = self.build_prompt('final')
-        self.assertEqual(current['parameters']['common_version'], 3)
+        self.assertEqual(current['parameters']['common_version'], 4)
         self.assertTrue(current['text'].startswith(protocol._COMMON_PROMPTS[3]))
-        for common_version in (2, 3):
+        for common_version in (2, 3, 4):
             with self.subTest(common_version=common_version):
                 prompt = self.build_prompt('final', common_version=common_version)
                 assignment = dict(role='result', subject={'kind': 'problem'}, prompt=prompt,

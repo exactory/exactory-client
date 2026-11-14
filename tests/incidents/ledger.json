@@ -4756,7 +4756,7 @@
       "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
       "class": "bounded refusal notice",
       "summary": "A synthetic split-text citation reproduces the whole-text offsets on a part artifact and the notice of the resulting mechanical refusal.",
-      "expected": "A versioned whole notice retains the expected part-relative offsets and the output and refusal digests. The bounded form stays within 45000 serialized characters, and selection charges the notice to the replacement task. Replacement admission and exhaustion recovery belong to later D2 units.",
+      "expected": "A replacement is admitted in the preserved slot with the same reviewer at the synthetic revision-200 boundary. Fresh diagnostics supply part-relative offsets while stored refusals, repair, prompts and requests keep their bytes. The corrected part citation records through value-review; its reading prerequisite uses its authenticated whole-text origin. The planner and later exhaustion recovery remain separate units.",
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
@@ -4764,7 +4764,8 @@
         "test_review_refusal_notice.RefusalNoticeTests.test_bounded_notice_limits_serialized_entries_details_and_part_for_large_outputs",
         "test_review_refusal_notice.RefusalNoticeTests.test_unbounded_legacy_identity_or_diagnostic_metadata_is_reported_without_changing_types",
         "test_review_refusal_notice.RefusalNoticeTests.test_form_selection_counts_notice_in_task_and_reports_both_failed_trials",
-        "test_review_refusal_notice.RefusalNoticeTests.test_each_form_measures_its_recorded_prompt_and_non_notice_task"
+        "test_review_refusal_notice.RefusalNoticeTests.test_each_form_measures_its_recorded_prompt_and_non_notice_task",
+        "test_review_refusal_replacement_incident.PartOffsetReplacementIncidentTests.test_revision_200_repaired_bar_gets_part_offsets_and_records_in_its_slot"
       ]
     },
     {
@@ -4772,14 +4773,16 @@
       "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
       "class": "filtered refusal notice",
       "summary": "An observed final review cites evidence that its frozen input does not establish as delivered, and its authenticated refusal supplies a retry notice in a store holding the other slot's judgments.",
-      "expected": "The notice carries the refused output and the mechanical evidence-delivery diagnostic, with no other slot's scientific judgment. Unknown diagnostic details become digests, and the refusal record and stored observations remain unchanged. Chain delivery credit and replacement execution belong to other units.",
+      "expected": "The notice carries the reviewer's own refused output and current mechanical diagnosis without another slot's judgment. Replacement admission freezes each refusal identity and digest; only the position head can record, and later validator changes leave the frozen origin and requests authentic. Chain delivery counts actual replaced inputs. Planner exhaustion recovery remains separate.",
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
         "test_review_refusal_notice.UndeliveredNoticeTests.test_reduced_history_final_refusal_is_delivered_without_other_reviewer_judgments",
         "test_review_refusal_notice.RefusalNoticeTests.test_each_registered_check_withholds_unlisted_details_in_both_forms",
         "test_review_refusal_notice.RefusalNoticeTests.test_every_registered_validator_produces_a_notice_without_the_other_reviewers_markers",
-        "test_review_refusal_notice.ContractCheckRegistryTests.test_every_check_attribution_is_registered_and_registry_fields_are_explicit"
+        "test_review_refusal_notice.ContractCheckRegistryTests.test_every_check_attribution_is_registered_and_registry_fields_are_explicit",
+        "test_review_refusal_replacement.RefusalReplacementTests.test_second_replacement_lists_revived_attempt_and_keeps_head_finality",
+        "test_review_refusal_replacement_parts.PartsReplacementTests.test_every_parts_kind_can_be_replaced_and_the_corrected_series_records"
       ]
     },
     {

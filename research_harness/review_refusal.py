@@ -167,13 +167,14 @@ def validate_source_links_contract(records, output, packets):
     participate in this output refusal. Delivery depth comes from the frozen chain.
     """
     from .reading import validate_fulltext_link
+    from .review_delivered_evidence import resolve_part_source_link
     for path, values in evidence_arrays(output, with_paths=True):
         for index, reference in enumerate(values):
             if reference.get('kind') != 'source':
                 continue
             link = reference['link']
             try:
-                validate_fulltext_link(records, link)
+                validate_fulltext_link(records, resolve_part_source_link(link, packets))
             except ResearchError as error:
                 if error.code in ('unknown_work', 'missing_version'):
                     # Catalog prerequisites cannot hide another pure contract

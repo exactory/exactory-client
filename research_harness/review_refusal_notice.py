@@ -1,7 +1,7 @@
 """Versioned, filtered refusal notices and prospective replacement measurements.
 
 Admission authenticates the refused attempts before calling this module. The notice copies their
-stored certificates without rechecking validators. The later replacement planner owns the next step
+admission diagnoses without rechecking validators. The later replacement planner owns the next step
 when neither measured form fits; stored packets never reselect a form during authentication.
 """
 
@@ -9,7 +9,7 @@ import copy
 import hashlib
 import json
 
-from . import review_excerpts, review_preflight, review_transport
+from . import review_excerpts, review_preflight, review_transport, review_route_capacity as capacity
 from .errors import ResearchError
 from .evidence import digest
 from .review_refusal import CONTRACT_CHECKS
@@ -49,17 +49,25 @@ def _retain_value(value, limit):
     return retained
 
 
-def _build_refused_entry(certificate):
+def _build_refused_entry(certificate, diagnosis):
     """Copy only the registered details; identify every other detail by its digest."""
-    allowed = CONTRACT_CHECKS[certificate['check']]['notice_fields']
-    details = certificate.get('details') or {}
+    entry = {key: certificate[key] for key in ('assignment_id', 'attempt_id', 'output_digest')}
+    entry.update(refusal_digest=digest(certificate), status='not_refused' if diagnosis is None else 'refused')
+    if diagnosis is None:
+        return _check_entry_bound(entry)
+    allowed = CONTRACT_CHECKS[diagnosis['check']]['notice_fields']
+    details = diagnosis.get('details') or {}
     filtered = {key: copy.deepcopy(value) if key in allowed else {'sha256': digest(value)}
                 for key, value in details.items() if key not in ('message', 'path')}
-    entry = {key: certificate[key] for key in ('assignment_id', 'attempt_id', 'output_digest', 'code', 'check')}
-    entry.update(refusal_digest=digest(certificate), path=details.get('path', ''),
+    entry.update(code=diagnosis['code'], check=diagnosis['check'], path=details.get('path', ''),
                  message=details.get('message', ''), details={})
     room = REFUSAL_ENTRY_CHARACTERS - len(_serialize_value(entry)) + len(_serialize_value(entry['details']))
     entry['details'] = _retain_value(filtered, max(0, min(REFUSAL_DETAILS_CHARACTERS, room)))
+    return _check_entry_bound(entry)
+
+
+def _check_entry_bound(entry):
+    """Keep exact metadata within the same bound for either diagnosis status."""
     # Legacy identifiers have no size limit. Their exact strings must still locate the frozen certificates;
     # changing their type to a retention object would break replacement origin authentication.
     characters = len(_serialize_value(entry))
@@ -91,16 +99,20 @@ def _read_refused_part(output, path):
     return value, True
 
 
-def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole'):
+def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole', diagnoses=None):
     """Build a new notice from admitted certificates, leaving every stored byte and digest unchanged."""
     attempt_ids = tuple(attempt_ids)
     if (form not in ('whole', 'bounded') or not 1 <= len(attempt_ids) <= REFUSED_ATTEMPT_LIMIT
             or len(set(attempt_ids)) != len(attempt_ids)):
         raise ValueError(INVALID_NOTICE_ARGUMENTS_MSG)
+    if diagnoses is None:
+        from .review_refusal import classify_observed_output
+        diagnoses = {key: classify_observed_output(records, artifacts, key) for key in attempt_ids}
     certificates = sorted((records['review_output_refusal'][key] for key in attempt_ids),
                           key=lambda row: row['recorded_revision'])
     notice = {'protocol': PROTOCOL, 'form': form,
-              'refused': [_build_refused_entry(certificate) for certificate in certificates]}
+              'refused': [_build_refused_entry(certificate, diagnoses[certificate['attempt_id']])
+                          for certificate in certificates]}
     latest = certificates[-1]
     artifact = records['review_attempt'][latest['attempt_id']]['output']
     text = artifacts.read(artifact).decode('utf-8')
@@ -108,7 +120,7 @@ def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole'):
     if form == 'whole':
         notice['output'] = output
     else:
-        path = (latest.get('details') or {}).get('path', '')
+        path = notice['refused'][-1]['path']
         value, found = _read_refused_part(output, path)
         part = {'path': path, 'value': None, 'complete': found}
         allowance = REFUSED_PART_CHARACTERS - len(_serialize_value(part))
@@ -119,7 +131,7 @@ def build_refusal_notice(records, artifacts, attempt_ids, *, form='whole'):
 
 
 def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, prompt, packet,
-                          task_characters=0, task_limit_characters=None):
+                          task_characters=0, task_limit_characters=None, diagnoses=None):
     """Try whole then bounded as fresh requests, reporting the notice charged to each task.
 
     The caller supplies versioned prompt text, a recorded prompt, or a function from form to either.
@@ -127,18 +139,21 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
     paragraph is measured in both the request and any task that counts the frame. The chosen prompt
     is returned for recording. A None notice means both forms exceeded
     the preflight or task allowance; the trials retain the measurements for refusal-planner. A frozen
-    selected notice is rebuilt with build_refusal_notice(form=...), without repeating this choice.
+    selected notice is read from the frozen packet, without repeating this choice or any check.
     Metadata construction failures propagate separately: a lower task level cannot shorten an identity.
     """
     attempt_ids = tuple(attempt_ids)
+    if diagnoses is None:
+        from .review_refusal import classify_observed_output
+        diagnoses = {key: classify_observed_output(records, artifacts, key) for key in attempt_ids}
     trials = []
     for form in ('whole', 'bounded'):
-        notice = build_refusal_notice(records, artifacts, attempt_ids, form=form)
+        notice = build_refusal_notice(records, artifacts, attempt_ids, form=form, diagnoses=diagnoses)
         rendered_prompt = prompt(form) if callable(prompt) else prompt
         prompt_text = rendered_prompt['text'] if isinstance(rendered_prompt, dict) else rendered_prompt
         base_task_characters = task_characters(form) if callable(task_characters) else task_characters
         characters = len(_serialize_value(notice))
-        task = {'notice_characters': characters, 'characters': base_task_characters + characters,
+        task = {'notice_characters': characters, 'characters': (base_task_characters or 0) + characters,
                 'limit_characters': task_limit_characters}
         supplied = dict(packet, output_refusal=notice)
         if 'digest' in supplied:
@@ -146,7 +161,14 @@ def select_refusal_notice(records, artifacts, attempt_ids, *, route, role, promp
         trial = {'form': form, 'task': task, 'fits': False}
         trials.append(trial)
         try:
-            request = review_transport.request_body(route, prompt_text, supplied)
+            request = review_transport.request_body(route, prompt_text, supplied, order=())
+            trial['request_measure'] = capacity.measure_request(route, request)
+            if task_characters is None:
+                task = capacity.describe_task(role, supplied, route=route, request=request)
+                task.update(notice_characters=characters, limit_characters=task_limit_characters)
+                trial['task'] = task
+            if not trial['request_measure']['fits']:
+                continue
             report = review_preflight.build_report(records, artifacts, route, role, rendered_prompt, supplied, request)
             trial['preflight'] = report
             review_preflight.check_request(report, request, packet=supplied, artifacts=artifacts)

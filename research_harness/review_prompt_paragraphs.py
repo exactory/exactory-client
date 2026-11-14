@@ -41,6 +41,26 @@ DELIVERY_NOTICE_PROMPT = (
     'in reviewer_excerpts; request a passage if the retained excerpts do not contain what you need.')
 
 
+# Placeholders for the writer's pass; each form has one recorded paragraph version.
+REFUSAL_WHOLE_PROMPT = (
+    '\n\nA mechanical harness check refused your answer. output_refusal gives the check and what it expected. '
+    'Return the complete answer of this stage again with that defect corrected. The check says nothing about '
+    'the scientific judgment. An entry with status not_refused is an earlier answer of this position that the '
+    'installed checks no longer refuse, listed for the record, with nothing to correct in it.')
+REFUSAL_BOUNDED_PROMPT = (REFUSAL_WHOLE_PROMPT +
+    ' The earlier answer is named by its digest; refused_part shows the refused part of that answer.')
+REFUSAL_PARAGRAPH_VERSIONS = {'whole': 'exactory-review-output-refusal-whole-v1',
+                              'bounded': 'exactory-review-output-refusal-bounded-v1'}
+
+
+def _has_whole_refusal(role, packet):
+    return packet.get('output_refusal', {}).get('form') == 'whole'
+
+
+def _has_bounded_refusal(role, packet):
+    return packet.get('output_refusal', {}).get('form') == 'bounded'
+
+
 def _has_carry(role, packet):
     return CARRY_PARAMETER in packet
 
@@ -397,11 +417,15 @@ PARAGRAPHS = (
     PromptParagraph('capacity-notice', ('bar', 'slate', 'result'), _has_capacity_notice,
                     ((CAPACITY_NOTICE_PROTOCOL, CAPACITY_NOTICE_PROMPT),)),
     PromptParagraph('delivery-notice', ('bar', 'slate', 'result'), _has_delivery_notice,
-                    ((DELIVERY_NOTICE_PROTOCOL, DELIVERY_NOTICE_PROMPT),)))
+                    ((DELIVERY_NOTICE_PROTOCOL, DELIVERY_NOTICE_PROMPT),)),
+    PromptParagraph('output-refusal-whole', ('bar', 'slate', 'result', 'adjudicator', 'verification', 'native_math', 'manuscript', 'standalone'),
+                    _has_whole_refusal, ((REFUSAL_PARAGRAPH_VERSIONS['whole'], REFUSAL_WHOLE_PROMPT),)),
+    PromptParagraph('output-refusal-bounded', ('bar', 'slate', 'result', 'adjudicator', 'verification', 'native_math', 'manuscript', 'standalone'),
+                    _has_bounded_refusal, ((REFUSAL_PARAGRAPH_VERSIONS['bounded'], REFUSAL_BOUNDED_PROMPT),)))
 
 
 def has_only_shared_paragraphs(versions):
-    shared = [version for paragraph in PARAGRAPHS if paragraph.name == 'delivery-notice'
+    shared = [version for paragraph in PARAGRAPHS if paragraph.name in ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded')
               for version, _ in paragraph.versions]
     return isinstance(versions, list) and all(version in shared for version in versions)
 
@@ -414,12 +438,12 @@ def has_capacity_paragraph(versions):
 def select_prompt_parameters(role, packet):
     """Select the paragraphs called for by this delivered packet, including compact task contexts."""
     problem = packet.get('subject', {}).get('kind') == 'problem'
-    if not problem and not _has_delivery_notice(role, packet):
+    if not problem and not _has_delivery_notice(role, packet) and 'output_refusal' not in packet:
         return {}
     conditions = (packet.get(CONDITIONS) if 'value' not in packet.get('problem_evidence', {}) else None)
     versions = [paragraph.versions[-1][0] for paragraph in PARAGRAPHS[1:]
-                if role in paragraph.roles and (problem or paragraph.name == 'delivery-notice') and
-                (paragraph.name in conditions if conditions is not None and paragraph.name not in ('delivery-notice', 'capacity-notice')
+                if role in paragraph.roles and (problem or paragraph.name in ('delivery-notice', 'output-refusal-whole', 'output-refusal-bounded')) and
+                (paragraph.name in conditions if conditions is not None and paragraph.name not in ('delivery-notice', 'capacity-notice', 'output-refusal-whole', 'output-refusal-bounded')
                  else paragraph.condition(role, packet))]
     if role in PARAGRAPHS[0].roles and _has_carry(role, packet):
         carry_version = PARAGRAPHS[0].versions[-1][0]
@@ -510,7 +534,8 @@ def _append_selected_paragraphs(base, carried, versions, selected, capacity=None
 
 def _describe_template_suffix(selected):
     return ''.join('/' + version[len('exactory-problem-') if version.startswith('exactory-problem-')
-                               else len('exactory-'):] for version, _ in selected)
+                               else len('exactory-'):] for version, _ in selected
+                   if version not in REFUSAL_PARAGRAPH_VERSIONS.values())
 
 
 def strip_prompt_paragraphs(prompt, role):
@@ -531,7 +556,7 @@ def strip_prompt_paragraphs(prompt, role):
         return None
     base_parameters = {key: value for key, value in parameters.items() if key not in (PARAMETER, CARRY_PARAMETER, CAPACITY_PARAMETER)}
     text = prompt['text'][:-len(suffix)]
-    base = dict(template_id=prompt['template_id'][:-len(template_suffix)], template_hash=digest(text),
+    base = dict(template_id=(prompt['template_id'][:-len(template_suffix)] if template_suffix else prompt['template_id']), template_hash=digest(text),
                 rendered_prompt_hash=digest(text), parameters=base_parameters, text=text)
     return base if _append_selected_paragraphs(base, parameters.get(CARRY_PARAMETER), versions, selected,
                                               parameters.get(CAPACITY_PARAMETER)) == prompt else None

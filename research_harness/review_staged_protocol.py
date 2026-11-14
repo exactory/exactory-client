@@ -1046,6 +1046,7 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
     repair = protocol._read_json(artifacts, controller['packet']).get('context_repair')
     claim_range = set(task['claim_ids']) != set(current_contexts)
     prompt = protocol.canonical_prompt(epoch['role'], orchestration='problem_creation', staged_task=task,
+            common_version=protocol.find_common_prompt_version(controller['prompt']),
                               repair=repair is not None, claim_range=claim_range,
                               composed=composition_plan is not None and task['type'] == 'final')
     config = route['configuration']
@@ -1082,6 +1083,7 @@ def prepare_task_plan(records, artifacts, controller, epoch, task, composition_p
     packet['digest'] = digest(packet)
     if prompt_paragraphs.select_prompt_parameters(epoch['role'], packet):
         prompt = protocol.canonical_prompt(epoch['role'], orchestration='problem_creation', staged_task=task,
+            common_version=protocol.find_common_prompt_version(controller['prompt']),
             repair=repair is not None, claim_range=claim_range,
             composed=composition_plan is not None and task['type'] == 'final',
             **prompt_paragraphs.select_prompt_parameters(epoch['role'], packet))

@@ -351,8 +351,9 @@ def collect_scientific_history(records, artifacts, chain, roles):
             intermediate_output, scientific_output = scientific_output, None
         if ancestor.get('staged_review', {}).get('kind') == 'task':
             intermediate_output, scientific_output = prior_state.get('raw_output'), None
+        # Selection of a later head does not invalidate the exact earlier scientific history.
         allowed = {'review_context_contaminated', 'review_source_parent_unverified', 'review_context_repair_stale',
-                   'review_route_retired'}
+                   'review_route_retired', 'review_assignment_replaced', 'review_assignment_superseded'}
         if scientific_output is None:
             allowed.update(('review_output_pending', 'review_output_refused', 'review_task_pending',
                             'assessment_incomplete', 'review_source_coverage_pending', 'review_composition_pending'))

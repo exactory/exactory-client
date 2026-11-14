@@ -1516,6 +1516,7 @@ def read_logical_packet(artifacts, header):
 
 def _list_series(records, artifacts, assignment_id):
     from .operations import normalized_text
+    from .review_context_repair import slot_id
     from .workspace import strict_json
 
     latest = records.get('review_assignment', {}).get(assignment_id)
@@ -1538,12 +1539,16 @@ def _list_series(records, artifacts, assignment_id):
                 or any(binding.get(key) != header.get(key) for key in
                        ('series_assignment_id', 'series_key', 'adapter'))
                 or any(current.get(key) != latest.get(key) for key in
-                       ('role', 'route_id', 'slot_id', 'session_id', 'subject'))
+                       ('role', 'route_id', 'session_id', 'subject'))
+                or slot_id(records, current) != slot_id(records, latest)
                 or any(normalized_text(current[key]) != normalized_text(latest[key])
                        for key in ('reviewer_id', 'author_id'))):
             return []
         chain.append((current, frozen))
-        if current['id'] == header['series_assignment_id']:
+        from .review_failure_class import list_turn_assignments
+        root_replacement = ('output_refusal' in current.get('context', {})
+                            and header['series_assignment_id'] in list_turn_assignments(records, current))
+        if current['id'] == header['series_assignment_id'] or root_replacement:
             return list(reversed(chain))
         parent = current.get('context', {}).get('prior_assignment_id')
         if parent != current.get('history_assignment_id'):

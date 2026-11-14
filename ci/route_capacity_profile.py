@@ -221,6 +221,14 @@ def assess_release_output_share(samples, *, since=None):
     return list(groups.values())
 
 
+def describe_refusal_replacements(samples):
+    """Report measured notice-bearing replacements separately for the release check (F14)."""
+    return [dict(route_class=sample['route_class'], task=sample['task'],
+                 usage=sample['usage'], completed_generation=sample['completed_generation'],
+                 **{key: sample[key] for key in ('attempt_id', 'assignment_id') if key in sample})
+            for sample in samples if 'notice_characters' in sample.get('task', {})]
+
+
 def read_root_paths(path):
     return [Path(line[2:].split(' (', 1)[0].strip()) for line in path.read_text(encoding='utf-8').splitlines() if line.startswith('- /')]
 
@@ -298,6 +306,8 @@ def read_store_samples(root, *, count_carried_state=False):
                 measured['usage'],
                 **{key: value for key, value in (attempt.get('usage') or {}).items() if key not in measured['usage'] or measured['usage'][key] is None},
             )
+            if 'notice_characters' in measured['task']:
+                measured.update(attempt_id=attempt['id'], assignment_id=assignment['id'])
             samples.append(
                 dict(
                     measured,
@@ -447,8 +457,10 @@ def run_cli(argv=None):
         read_summary_rows(args.probe_summary),
         date=args.date,
     )
+    samples = [sample for root in read_root_paths(args.roots_file)
+               for sample in read_store_samples(root, count_carried_state=False)]
     rows = build_prior_rows(
-        (sample for root in read_root_paths(args.roots_file) for sample in read_store_samples(root, count_carried_state=False)),
+        samples,
         source='live-records',
         date=args.date,
     )
@@ -461,7 +473,8 @@ def run_cli(argv=None):
     rows += build_prior_rows(frame_samples, source='probe-frame', date=args.date)
     print(
         json.dumps(
-            dict(protocol=capacity.PROFILE_PROTOCOL, rows=rows, frame_policy=frame_policy),
+            dict(protocol=capacity.PROFILE_PROTOCOL, rows=rows, frame_policy=frame_policy,
+                 refusal_replacements=describe_refusal_replacements(samples)),
             sort_keys=True,
             indent=2,
         ),

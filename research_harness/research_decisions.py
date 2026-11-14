@@ -495,6 +495,9 @@ def record_value_review(store, payload, *, expected_revision, request_id):
         old = strategy.existing_record(records, "value_review", value)
         if old is not None:
             return [], old
+        if saved is not None:
+            from .review_refusal_replacement import require_selected_output
+            require_selected_output(records, saved)
         problem = records["workspace"]["problem"] if strategy.find_orchestration(records) == "problem_creation" else None
         dossier = None if problem is not None else strategy.get_record(records, "strategy_dossier", value["dossier_id"])
         intent = None if problem is not None else strategy.get_record(records, "research_intent", dossier["payload"]["intent_id"])
@@ -540,8 +543,10 @@ def record_value_review(store, payload, *, expected_revision, request_id):
                 raise ResearchError("problem_author_unknown", "Use an assignment by one of the immutable problem authors")
         review_context_repair.validate_repair_origin(records, artifacts, saved_assignment)
         # Reassessment shape and predecessor findings were checked against the frozen packet above.
-        for evidence in evidence_arrays(effective_output):
-            strategy.evidence(records, artifacts, evidence, review_binding=problem is not None)
+        from .review_delivered_evidence import validate_review_readings
+        references = [reference for values in evidence_arrays(effective_output) for reference in values]
+        validate_review_readings(records, artifacts, saved_assignment,
+            records['review_attempt'][assignment['attempt_id']], references, review_binding=problem is not None)
         for finding in value["value"]["work_items"]:
             strategy.get_record(records, "research_work_item", finding["id"])
         _validate_review_bar_records(records, artifacts, value, dossier, problem)
@@ -1479,7 +1484,9 @@ def assess_rubric_reviews(records, artifacts, reviews, evidence_digest):
                                        if item['code'] == 'review_adjudication_evidence_undelivered')
                     resolved = state['ready'] and state['disposition'] == 'not_upheld'
                     if resolved:
-                        strategy.evidence(records, artifacts, saved['evidence'])
+                        from .review_delivered_evidence import validate_review_readings
+                        validate_review_readings(records, artifacts,
+                            records['review_assignment'][saved['assignment_id']], None, saved['evidence'])
                 except ResearchError as error:
                     resolved = False
                     obligations.append(obligation(error.code, str(error), review_id=review['id'],
@@ -1523,7 +1530,9 @@ def _objection_obligations(records, artifacts, dossier, decision, reviews, *, pr
                         or (dossier.get("kind") == "problem" and adjudication["disposition"] == "not_binding")))
             if resolved and dossier.get("kind") == "problem":
                 try:
-                    strategy.evidence(records, artifacts, adjudication["adjudication"]["evidence"])
+                    from .review_delivered_evidence import validate_review_readings
+                    validate_review_readings(records, artifacts,
+                        records['review_assignment'][saved['assignment_id']], None, saved['evidence'])
                 except ResearchError as error:
                     resolved = False
                     adjudication_obligations.append(obligation(error.code, str(error), objection_id=item["id"]))
@@ -1533,9 +1542,12 @@ def _objection_obligations(records, artifacts, dossier, decision, reviews, *, pr
             if any(item["id"] in {objection["id"] for objection in list_stated_objections(review)} for review in reviews):
                 resolved = False
             if resolved and dossier.get("kind") == "problem":
-                for finding in findings:
+                for review, finding in zip(reviews, findings):
                     try:
-                        strategy.evidence(records, artifacts, finding[item["id"]]["evidence"], review_binding=True)
+                        from .review_delivered_evidence import validate_review_readings
+                        validate_review_readings(records, artifacts,
+                            records['review_assignment'][review['assignment_id']], None,
+                            finding[item['id']]['evidence'], review_binding=True)
                     except ResearchError as error:
                         resolved = False
                         obligations.append(obligation(error.code, str(error), objection_id=item["id"]))

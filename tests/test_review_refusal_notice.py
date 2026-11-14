@@ -45,8 +45,18 @@ class RefusalNoticeTests(RefusalCase):
             protocol=refusal.PROTOCOL, code='invalid_locator', check=check, details=details,
             recorded_revision=revision + 1)
 
+    def read_diagnoses(self, records=None):
+        records = self.records if records is None else records
+        return {key: {name: certificate[name] for name in ('code', 'check', 'details')}
+                for key, certificate in records['review_output_refusal'].items()}
+
+    def select_notice(self, records, artifacts, attempt_ids, **options):
+        return self.notices.select_refusal_notice(records, artifacts, attempt_ids,
+            diagnoses=self.read_diagnoses(records), **options)
+
     def build_notice(self, form='whole', attempt_ids=('first',)):
-        return self.notices.build_refusal_notice(self.records, self.artifacts, attempt_ids, form=form)
+        return self.notices.build_refusal_notice(self.records, self.artifacts, attempt_ids,
+            form=form, diagnoses=self.read_diagnoses())
 
     def test_part_offset_notice_preserves_expected_offsets_and_every_stored_digest(self):
         before = copy.deepcopy(self.records)
@@ -67,18 +77,29 @@ class RefusalNoticeTests(RefusalCase):
         self.assertEqual(self.artifacts.read(before['review_attempt']['first']['output']), stored)
         notice['output']['value']['reason'] = 'Mutated by a caller.'
         self.assertEqual(self.build_notice()['output'], self.output)
-        # A pre-W5 certificate stays a frozen diagnosis even when today's validator gives more detail.
+        # Admission supplies a fresh diagnosis, even when the stored certificate predates W5.
         legacy_records = copy.deepcopy(self.records)
         legacy = legacy_records['review_output_refusal']['first']
         legacy['details'] = {'message': 'The span must lie within the saved text', 'path': '/value/evidence'}
         legacy_before = copy.deepcopy(legacy_records)
-        with patch.object(refusal, 'classify_observed_output', side_effect=AssertionError('Keep the saved diagnosis.')):
-            for form in ('whole', 'bounded'):
-                saved = self.notices.build_refusal_notice(legacy_records, self.artifacts, ('first',), form=form)
-                self.assertEqual(saved['refused'][0]['message'], legacy['details']['message'])
-                self.assertEqual(saved['refused'][0]['details'], {})
-                self.assertEqual(saved['refused'][0]['refusal_digest'], digest(legacy))
+        for form in ('whole', 'bounded'):
+            saved = self.notices.build_refusal_notice(legacy_records, self.artifacts, ('first',),
+                form=form, diagnoses=self.read_diagnoses())
+            self.assertIn('start 0 and end 38629', saved['refused'][0]['message'])
+            self.assertEqual(saved['refused'][0]['details']['part_relative_span'], {'start': 0, 'end': 38629})
+            self.assertEqual(saved['refused'][0]['refusal_digest'], digest(legacy))
         self.assertEqual(legacy_records, legacy_before)
+
+    def test_revived_entry_keeps_the_same_fixed_metadata_bound(self):
+        self.records['review_output_refusal']['first']['assignment_id'] = 'legacy-' + 'x' * 7000
+        self.add_refusal('latest', self.output, revision=3)
+        diagnoses = self.read_diagnoses()
+        diagnoses['first'] = None
+        with self.assertRaises(ResearchError) as caught:
+            self.notices.build_refusal_notice(self.records, self.artifacts, ('first', 'latest'),
+                form='bounded', diagnoses=diagnoses)
+        self.assertEqual(caught.exception.code, 'review_refusal_notice_metadata_too_large')
+
 
     def test_refusals_are_ordered_by_recorded_revision_and_latest_output_is_shown(self):
         latest = dict(self.output, latest=True)
@@ -210,7 +231,8 @@ class RefusalNoticeTests(RefusalCase):
                     protocol=refusal.PROTOCOL, code=error.code, check=error.contract_check,
                     details=dict(error.details or {}, message=error.message), recorded_revision=1001)}
                 for form in ('whole', 'bounded'):
-                    notice = self.notices.build_refusal_notice(records, artifacts, (attempt_id,), form=form)
+                    notice = self.notices.build_refusal_notice(records, artifacts, (attempt_id,), form=form,
+                        diagnoses={attempt_id: dict(code=error.code, check=check, details=dict(error.details or {}, message=error.message))})
                     self.assertNotIn('OTHER-REVIEWER-', serialize(notice))
                     self.assertEqual(notice['refused'][0]['code'], error.code)
                     if check == 'evidence.fulltext':
@@ -288,7 +310,7 @@ class RefusalNoticeTests(RefusalCase):
                     self.assertEqual(caught.exception.details['limit_characters'], 6000)
                 self.assertEqual(digest(self.records), before)
                 with self.assertRaises(ResearchError) as caught:
-                    self.notices.select_refusal_notice(self.records, self.artifacts, attempt_ids, route={},
+                    self.select_notice(self.records, self.artifacts, attempt_ids, route={},
                         role='bar', prompt='Frozen reviewer prompt.', packet={})
                 self.assertEqual(caught.exception.code, 'review_refusal_notice_metadata_too_large')
 
@@ -323,7 +345,7 @@ class RefusalNoticeTests(RefusalCase):
         self.add_refusal('first', self.output)
         packet = {'role': 'bar'}
         def select(**options):
-            return self.notices.select_refusal_notice(self.records, self.artifacts, ('first',), route=route,
+            return self.select_notice(self.records, self.artifacts, ('first',), route=route,
                 role='bar', prompt='Frozen reviewer prompt.', packet=packet, task_characters=1000, **options)
         whole = select()
         self.assertEqual(whole['notice']['form'], 'whole')
@@ -352,7 +374,7 @@ class RefusalNoticeTests(RefusalCase):
         self.output['value']['reason'] = 'x' * 100_000
         self.add_refusal('first', self.output)
         def select():
-            return self.notices.select_refusal_notice(self.records, self.artifacts, ('first',), route=route,
+            return self.select_notice(self.records, self.artifacts, ('first',), route=route,
                 role='bar', prompt='Frozen reviewer prompt.', packet={'role': 'bar'})
         with patch.object(transport, 'local_input_limit', return_value=50_000):
             selected = select()
@@ -384,7 +406,7 @@ class RefusalNoticeTests(RefusalCase):
 
         def select(limit, task_limit=65_000):
             with patch.object(transport, 'local_input_limit', return_value=limit):
-                return self.notices.select_refusal_notice(self.records, self.artifacts, ('first',), route=route,
+                return self.select_notice(self.records, self.artifacts, ('first',), route=route,
                     role='bar', prompt=render_prompt, packet={'role': 'bar'},
                     task_characters=lambda form: 1000 + len(texts[form]), task_limit_characters=task_limit)
 
@@ -407,16 +429,16 @@ class RefusalNoticeTests(RefusalCase):
                  'endpoint': 'https://api.openai.com/v1/responses',
                  'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}}
         real_request = transport.request_body
-        def strip_notice(route, prompt, packet):
+        def strip_notice(route, prompt, packet, **options):
             supplied = dict(packet)
             if packet['output_refusal']['form'] == 'whole':
                 supplied.pop('output_refusal')
-            return real_request(route, prompt, supplied)
+            return real_request(route, prompt, supplied, **options)
         packet = {'role': 'bar'}
         packet['digest'] = digest(packet)
         before = copy.deepcopy(packet)
         with patch.object(transport, 'request_body', side_effect=strip_notice):
-            selected = self.notices.select_refusal_notice(self.records, self.artifacts, ('first',), route=route,
+            selected = self.select_notice(self.records, self.artifacts, ('first',), route=route,
                 role='bar', prompt='Frozen reviewer prompt.', packet=packet)
         self.assertEqual(selected['notice']['form'], 'bounded')
         sent = review_excerpts.read_sent_packet(selected['request'])
@@ -424,8 +446,10 @@ class RefusalNoticeTests(RefusalCase):
         self.assertEqual(sent['digest'], digest({key: value for key, value in sent.items() if key != 'digest'}))
         self.assertEqual(packet, before)
         with patch.object(self.notices, 'select_refusal_notice', side_effect=AssertionError('Do not reselect.')), \
-                patch.object(refusal, 'classify_observed_output', side_effect=AssertionError('Do not revalidate.')):
-            self.assertEqual(self.build_notice(selected['notice']['form']), selected['notice'])
+                patch.object(refusal, 'classify_observed_output', side_effect=AssertionError('Do not revalidate.')), \
+                patch.object(self.notices, 'build_refusal_notice', side_effect=AssertionError('Read the frozen packet.')):
+            rebuilt = transport.request_body(route, 'Frozen reviewer prompt.', copy.deepcopy(sent))
+            self.assertEqual(rebuilt, selected['request'])
 
 
 class ContractCheckRegistryTests(unittest.TestCase):

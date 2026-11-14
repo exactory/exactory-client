@@ -122,14 +122,14 @@ class CommonPromptVersionTests(unittest.TestCase):
                     self.assertEqual(review_staged_protocol.matches_prompt(assignment, 2),
                                      case["staged_matches_prompt"])
 
-    def test_new_assignments_bind_common_version_three(self):
-        self.assertEqual(protocol.COMMON_VERSION, 3)
+    def test_recorded_common_version_three_keeps_its_text(self):
+        self.assertIn(3, protocol._COMMON_PROMPTS)
         earlier, current = protocol._COMMON_PROMPTS[2], protocol._COMMON_PROMPTS[3]
         self.assertIn("RETRACTED", current)
         self.assertIn("Call no tool", current)
         for role, options, problem, repair, context in list_current_cases():
             with self.subTest(role=role, options=options):
-                new, recorded = protocol.canonical_prompt(role, **options), protocol.canonical_prompt(
+                new, recorded = protocol.canonical_prompt(role, common_version=3, **options), protocol.canonical_prompt(
                     role, common_version=2, **options)
                 self.assertEqual(new["parameters"], dict(recorded["parameters"], common_version=3))
                 self.assertEqual(new["template_id"], recorded["template_id"])
@@ -145,7 +145,7 @@ class CommonPromptVersionTests(unittest.TestCase):
                                  protocol.is_previous_prompt(assignments[1]))
 
     def test_common_text_only_inserts_sentences_and_keeps_pinned_digests(self):
-        self.assertEqual({version: digest(text) for version, text in protocol._COMMON_PROMPTS.items()}, {
+        self.assertEqual({version: digest(text) for version, text in protocol._COMMON_PROMPTS.items() if version <= 3}, {
             1: "959718bf7a487e3335e733fad01f2604d8f6d26ae91923b69fd4091757801ea3",
             2: "849b9ee2e5307f618fe5c7d65839fb2eeb77b03d73edbfa9c06fd0c82a39dc47",
             3: "af4a01085de573e1a9827041139ea85af85112a46130e3a05c29c54f2ba58f9a",
@@ -161,7 +161,7 @@ class CommonPromptVersionTests(unittest.TestCase):
         self.assertTrue(current.endswith(" "))
         self.assertFalse(current.endswith("  "))
 
-    def test_every_new_prompt_family_uses_common_version_three(self):
+    def test_every_recorded_prompt_family_can_replay_common_version_three(self):
         cases = list_current_cases()
         for role in protocol._PROBLEM_PROMPTS:
             for version in range(1, 7):
@@ -184,7 +184,7 @@ class CommonPromptVersionTests(unittest.TestCase):
             cases.append((role, dict(orchestration=PROBLEM, staged_task=task), True, False, {}))
         for role, options, problem, repair, context in cases:
             with self.subTest(role=role, options=options):
-                prompt = protocol.canonical_prompt(role, **options)
+                prompt = protocol.canonical_prompt(role, common_version=3, **options)
                 self.assertEqual(prompt["parameters"]["common_version"], 3)
                 self.assertTrue(prompt["text"].startswith(protocol._COMMON_PROMPTS[3]))
                 recorded = protocol.canonical_prompt(role, common_version=2, **options)
@@ -195,9 +195,9 @@ class CommonPromptVersionTests(unittest.TestCase):
                 self.assertTrue(protocol._prompt_matches(assignment))
 
     def test_relabeling_common_versions_two_and_three_is_refused(self):
-        self.assertEqual(protocol.COMMON_VERSION, 3)
+        self.assertIn(3, protocol._COMMON_PROMPTS)
         for role, options, problem, repair, context in list_current_cases():
-            current = protocol.canonical_prompt(role, **options)
+            current = protocol.canonical_prompt(role, common_version=3, **options)
             recorded = protocol.canonical_prompt(role, common_version=2, **options)
             unmarked = {key: value for key, value in current["parameters"].items() if key != "common_version"}
             altered = [dict(current, parameters=unmarked),
@@ -221,7 +221,7 @@ class CommonPromptVersionTests(unittest.TestCase):
                                   parameters=altered["parameters"]):
                     self.assertFalse(protocol._prompt_matches(build_frozen_assignment(case, altered)))
         for role, options, problem, repair, context in list_current_cases():
-            new = protocol.canonical_prompt(role, **options)
+            new = protocol.canonical_prompt(role, common_version=3, **options)
             unmarked = dict(new, parameters={key: value for key, value in new["parameters"].items()
                                              if key != "common_version"})
             for altered in (unmarked, rehash(new, "X" + new["text"])):
@@ -230,7 +230,7 @@ class CommonPromptVersionTests(unittest.TestCase):
                     self.assertFalse(protocol._prompt_matches(assignment))
 
     def test_an_unknown_common_version_is_refused_at_rendering(self):
-        for value in (0, 4, True, "3"):
+        for value in (0, 5, True, "3"):
             with self.subTest(value=value):
                 with self.assertRaises(ResearchError) as refused:
                     protocol.canonical_prompt("bar", common_version=value)

@@ -362,6 +362,7 @@ def classify_attempt(records, artifacts, attempt):
 
 def list_turn_assignments(records, assignment):
     """Group replacements of the same initial context or the same continuation parent."""
+    from .review_refusal_replacement import read_position_context
     parent = assignment.get('context', {}).get('prior_assignment_id')
     result = []
     for other in records.get('review_assignment', {}).values():
@@ -379,7 +380,7 @@ def list_turn_assignments(records, assignment):
         if any(normalized_text(other[key]) != normalized_text(assignment[key])
                for key in ('reviewer_id', 'author_id')):
             continue
-        if context == assignment.get('context', {}):
+        if read_position_context(other) == read_position_context(assignment):
             result.append(other['id'])
     return result
 

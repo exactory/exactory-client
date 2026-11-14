@@ -554,9 +554,13 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
     characters = unique if count_carried else without_carried
     frame = copy.deepcopy(projected)
     _clear_material(frame, kind)
+    frame.pop('output_refusal', None)
     frame_characters = min(without_carried, measure(frame)) if frame != projected else without_carried
     minimum = actual.get('native', {}).get('scientific_context', {}).get('openness_minimum', {})
     targets = len(actual.get('review_parts', {}).get('targets', [])) if kind == 'final' and 'review_parts' in actual else 1 + len(minimum.get('neighbours', [])) if kind in ('single', 'final') else 0
+    notice = actual.get('output_refusal')
+    notice_fields = ({'notice_characters': len(json.dumps(notice, ensure_ascii=False, sort_keys=True, allow_nan=False))}
+                     if notice is not None else {})
     return dict(
         kind=kind,
         characters=characters,
@@ -566,6 +570,7 @@ def describe_task(role, packet, *, route, request, operation='review.invoke', co
         duplicate_characters=total - unique,
         targets=targets,
         count_carried_state=count_carried,
+        **notice_fields,
     )
 
 

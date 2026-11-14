@@ -100,6 +100,12 @@ STOP_REGISTRY['openness_minimum_gaps'] = dict(code='openness_minimum_gaps', **{'
 for _code in ('openness_result_gap', 'openness_result_changed'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D3', next=dict(kind='continue'))
 
+# Refusal replacement admission and immutable origin checks (D2 R11-R14, R57).
+for _code in ('review_refusal_replacement_ineligible', 'review_refusal_replacement_mismatch',
+              'review_refusal_replacement_origin_invalid'):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+                                next=dict(kind='handoff', step=1, command='review-assignment'))
+
 
 def validate_registry(rows):
     """Require a next step and an executable proof for every defect classification."""

@@ -558,6 +558,12 @@ def _review_status(records, artifacts):
     result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
+    from .review_refusal_replacement import find_output_successor, NOT_SELECTED_MSG
+    for identifier in by_assignment:
+        successor = find_output_successor(records, records['review_assignment'][identifier])
+        if successor is not None:
+            result['assignments'][identifier]['not_selected'] = dict(
+                assignment_id=successor['id'], message=NOT_SELECTED_MSG)
     from .review_provider_usage import describe_usage
     usage = describe_usage(records, artifacts)
     if usage['windows']:
