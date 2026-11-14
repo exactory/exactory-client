@@ -8,7 +8,7 @@ import hashlib
 import json
 import os
 
-from .errors import ResearchError
+from .errors import ResearchError, describe_error_at
 from .evidence import digest
 from .evaluation import Evaluation
 from .problem_claims import compute_problem_evidence_digest, compute_statement_digest, find_current_statement, find_latest, find_value
@@ -114,8 +114,9 @@ def archive_problem_exports(store_root, workspace_root, records, artifacts):
     from .output_views import PROBLEM_EXPORTS_FOLDER, PROBLEM_EXPORT_HISTORY_FOLDER
     from .problem_delivery import compute_export_digest
     folder = workspace_root / PROBLEM_EXPORTS_FOLDER
-    if find_entry_kind(workspace_root, PROBLEM_EXPORTS_FOLDER) != 'other' or not folder.is_dir():
-        return {}
+    with describe_error_at(PROBLEM_EXPORTS_FOLDER):
+        if not folder.is_dir() or find_entry_kind(workspace_root, PROBLEM_EXPORTS_FOLDER) != 'other':
+            return {}
     artifacts = Evaluation.of(records, artifacts)
     current, errors = {}, {}
     source_digest = None

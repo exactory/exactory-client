@@ -82,6 +82,63 @@ class PayloadFilePathTests(CheckCommandMixin, unittest.TestCase):
         self.assertEqual(written[0], 0, written[2])
         self.assertEqual(self.store.committed_request('check-request')['payload'], relative)
 
+    def test_absolute_input_accepts_an_ancestor_alias_without_following_workspace_links(self):
+        self.root = self.root.resolve()
+        alias = self.root.parent / 'parent-alias'
+        alias.symlink_to(self.root.parent, target_is_directory=True)
+        aliased_root = alias / self.root.name
+        absolute = self.build_artifact_payload(str(aliased_root / 'work/input.txt'))
+        relative = self.build_artifact_payload('work/input.txt')
+        first = self.assert_accepted_check(self.invoke_command('artifact', absolute), 0)
+        second = self.assert_accepted_check(self.invoke_command('artifact', relative), 0)
+        self.assertEqual(first['payload_digest'], second['payload_digest'])
+        parent_alias = self.root.parent / 'relative-parent-alias'
+        parent_alias.symlink_to(self.root.name + '/..', target_is_directory=True)
+        alternate = self.build_artifact_payload(str(parent_alias / self.root.name / 'work/input.txt'))
+        checked = self.assert_accepted_check(self.invoke_command('artifact', alternate), 0)
+        self.assertEqual(checked['payload_digest'], first['payload_digest'])
+        written = self.invoke_command('artifact', absolute, check=False)
+        self.assertEqual(written[0], 0, written[2])
+        self.assertEqual(self.store.committed_request('check-request')['payload'], relative)
+        self.assertEqual(self.store.snapshot()['records']['local_artifact']['input']['path'], 'work/input.txt')
+        replay = self.invoke_command('artifact', relative, check=False, revision=0)
+        self.assertEqual(replay[0], written[0], replay[2])
+        self.assertEqual(json.loads(replay[1]), json.loads(written[1]))
+
+        (self.root / 'alias').symlink_to(self.root / 'work', target_is_directory=True)
+        (self.root / 'work/link').symlink_to(self.root / 'work/input.txt')
+        (self.root / 'parent-link').symlink_to(self.root.parent, target_is_directory=True)
+        before = self.store.snapshot()
+        for index, path in enumerate(('alias/input.txt', 'work/link',
+                                      'parent-link/' + self.root.name + '/work/input.txt')):
+            with self.subTest(path=path):
+                self.assert_refusal_parity('artifact', self.build_artifact_payload(str(aliased_root / path)),
+                                          'unsafe_path', request='unsafe-' + str(index))
+                self.assertEqual(self.store.snapshot(), before)
+
+        alias = self.root.parent / 'work-alias'
+        alias.symlink_to(self.root / 'work', target_is_directory=True)
+        (self.root / 'work/exit').symlink_to(self.root.parent, target_is_directory=True)
+        absolute = alias / 'exit' / self.root.name / 'work/input.txt'
+        self.assert_refusal_parity('artifact', self.build_artifact_payload(str(absolute)), 'unsafe_path',
+                                  request='unsafe-reentry')
+        self.assertEqual(self.store.snapshot(), before)
+        ancestor = self.root.parent / 'ancestor-alias'
+        ancestor.symlink_to(self.root / 'work/exit', target_is_directory=True)
+        absolute = ancestor / self.root.name / 'work/input.txt'
+        self.assert_refusal_parity('artifact', self.build_artifact_payload(str(absolute)), 'unsafe_path',
+                                  request='unsafe-target-reentry')
+        self.assertEqual(self.store.snapshot(), before)
+        alternate_root = self.root.with_name(self.root.name.upper())
+        if not alternate_root.exists():
+            alternate_root.symlink_to(self.root, target_is_directory=True)
+        ancestor = self.root.parent / 'case-alias'
+        ancestor.symlink_to(alternate_root / 'work/exit', target_is_directory=True)
+        absolute = ancestor / self.root.name / 'work/input.txt'
+        self.assert_refusal_parity('artifact', self.build_artifact_payload(str(absolute)), 'unsafe_path',
+                                  request='unsafe-case-reentry')
+        self.assertEqual(self.store.snapshot(), before)
+
     def test_repeated_paper_bundle_keeps_frozen_paths_outside_new_input_admission(self):
         from research_harness import review_protocol
         from research_harness.payload_paths import normalize_payload_paths

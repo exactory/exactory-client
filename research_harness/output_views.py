@@ -1261,14 +1261,16 @@ def _render_locked(store, *, full):
                 marker = dict(marker, revision=revision, event_digest=digests[revision])
                 write_projection(store.root, MARKER_PATH, _encode(marker))
             return _summarize(marker)
-    revision, event_digest, records = store.read_kinds(sorted(_VIEW_KINDS))
+    record_kinds = set(_VIEW_KINDS)
+    revision, event_digest, records = store.read_kinds(sorted(record_kinds))
     evidence_kinds = set()
     while records.get("review_epoch") or records.get("problem_selection"):
         evidence_kinds = collect_binding_record_kinds(records)
-        if evidence_kinds <= set(records):
+        if evidence_kinds <= record_kinds:
             break
         # Re-read the complete set at one revision; never merge two snapshots.
-        revision, event_digest, records = store.read_kinds(sorted(set(records) | evidence_kinds))
+        record_kinds.update(evidence_kinds)
+        revision, event_digest, records = store.read_kinds(sorted(record_kinds))
     artifacts = store.build_artifact_store()
     model = compute_view_model(records, artifacts, inputs)
     export_errors = archive_problem_exports(store.root, workspace_root, records, artifacts)
@@ -1289,8 +1291,9 @@ def _write_views(workspace_root, store_root, marker, model, artifacts, export_er
     owned, errors = marker["files"], dict(export_errors or {})
     added = sorted(set(model) - set(owned))
     for path in added:
-        if find_entry_kind(workspace_root, path) != "absent":
-            errors[path] = "output_view_conflict"
+        with describe_error_at(path):
+            if find_entry_kind(workspace_root, path) != "absent":
+                errors[path] = "output_view_conflict"
     if set(added) - set(errors):
         # Record the ownership of each new file before writing it, so that an interrupted render resumes on it.
         pending = {path: {"size": None, "mtime_ns": None, "sha256": None} for path in added if path not in errors}

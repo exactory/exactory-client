@@ -438,6 +438,26 @@ class ProblemFormingOrchestrationTests(ProblemCase):
 
 
 class ProblemFormingCompatibilityTests(ProblemCase):
+    def test_data_only_0820_snapshot_renders_without_repeating_a_kind_query(self):
+        fixture = json.loads((Path(__file__).parent / "fixtures/problem_forming_0820.json").read_text())
+        self.initialize_problem()
+        queried = set()
+
+        def read_data_only_snapshot(kinds):
+            scope = frozenset(kinds)
+            if scope in queried:
+                self.fail("The renderer repeated a record-kind query without expanding its scope.")
+            queried.add(scope)
+            return fixture["revision"], "a" * 64, {
+                kind: rows for kind, rows in fixture["records"].items() if kind in scope}
+
+        with patch.object(self.store, "read_kinds", side_effect=read_data_only_snapshot):
+            result = output_views.render_all(self.store)
+        self.assertEqual(result["revision"], fixture["revision"])
+        rendered = {str(path.relative_to(self.root)): path.read_text() for folder in ("final", "intermediate")
+                    for path in (self.root / folder).rglob("*") if path.is_file()}
+        self.assertEqual(rendered, fixture["rendered_views"])
+
     def test_0820_candidate_status_views_and_evidence_keep_their_bytes_and_meaning(self):
         fixture = json.loads((Path(__file__).parent / "fixtures/problem_forming_0820.json").read_text())
         records = fixture["records"]
