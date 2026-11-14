@@ -29,6 +29,7 @@ from . import probe_supervision
 from .errors import ResearchError
 from .evidence import digest
 from .finishing import retry_store_write
+from .review_call_admission import check_launch
 from .review_task_execution import (_check_references, _get, _mutate_current, _TransactionRecords,
                                      _transition, capture_observation)
 from .storage import Store
@@ -233,10 +234,9 @@ def _entry_command():
 
 def _claim_launch(store, reservation_id):
     def apply(tx, value, revision):
-        reservation = _get(_TransactionRecords(tx), "review_reservation", reservation_id)
-        if reservation["released"] or reservation["launch"] is not None or reservation["state"] != "reserved":
-            raise ResearchError("review_invocation_pending", "Reconcile the original worker instead of launching twice")
-        _check_references(_TransactionRecords(tx), _get(_TransactionRecords(tx), "review_execution_plan", reservation["plan_id"]))
+        records = _TransactionRecords(tx)
+        reservation = _get(records, "review_reservation", reservation_id)
+        check_launch(records, "review.worker_claim", reservation)
         return _transition(tx, reservation, revision, launch={"authorized": False})
     return _mutate_current(store, "review.worker_claim", {"reservation_id": reservation_id}, apply,
                            request_id="review-worker-claim:" + reservation_id)["result"]
@@ -326,10 +326,8 @@ def _start_worker(store, authority):
         records = _TransactionRecords(tx)
         reservation = _get(records, "review_reservation", authority.reservation_id)
         authority.verify(store, reservation)
-        if (reservation["released"] or reservation["state"] != "reserved" or not reservation["launch"]["authorized"]):
-            raise ResearchError("review_worker_reconciliation_required", "The worker's launch was not authorized")
+        check_launch(records, "review.worker_running", reservation)
         plan = _get(records, "review_execution_plan", reservation["plan_id"])
-        _check_references(records, plan)
         _transition(tx, reservation, revision, state="running")
         return plan
     return _mutate_current(store, "review.worker_running", {"reservation_id": authority.reservation_id}, apply,
@@ -349,17 +347,14 @@ def _register_child(root, reservation_id, token, descriptor, *, call=False):
     if (lock_info.st_dev, lock_info.st_ino) != (descriptor_info.st_dev, descriptor_info.st_ino):
         raise ResearchError("review_worker_reconciliation_required", "Transport child lost its ownership lock")
     def apply(tx, value, revision):
+        records = _TransactionRecords(tx)
         if call:
-            current = _get(_TransactionRecords(tx), "review_pool_membership", reservation_id)
-            if (current["released"] or current["token"] != token
-                    or _identity(current["owner"]["pid"]) != current["owner"]):
-                raise ResearchError("review_worker_reconciliation_required", "The call's owner is no longer live")
+            current = _get(records, "review_pool_membership", reservation_id)
+            check_launch(records, "review.call_child", current, token=token, read_identity=_identity)
             tx.put("review_pool_membership", reservation_id, dict(current, children=current["children"] + [identity], recorded_revision=revision))
             return current
-        reservation = _get(_TransactionRecords(tx), "review_reservation", reservation_id)
-        if (reservation["released"] or reservation["state"] != "running" or reservation["token"] != token
-                or _identity(reservation["worker"]["pid"]) != reservation["worker"]):
-            raise ResearchError("review_worker_reconciliation_required", "The transport child's worker is no longer live")
+        reservation = _get(records, "review_reservation", reservation_id)
+        check_launch(records, "review.worker_child", reservation, token=token, read_identity=_identity)
         return _transition(tx, reservation, revision, children=reservation["children"] + [identity])
     retry_store_write(lambda: _mutate_current(store, "review.call_child" if call else "review.worker_child",
         {"reservation_id": reservation_id, "child": identity}, apply,

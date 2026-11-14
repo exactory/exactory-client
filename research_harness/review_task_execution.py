@@ -25,7 +25,7 @@ review_task_acceptance_index/{task_id} selects its reservation receipt;
 review_epoch_discoveries/{epoch_id} indexes context-changing acceptances only.
 review_resource_ledger/{epoch_id} durably charges admission and records the
 review_execution_exhaustion receipt that blocks further dispatch at a limit.
-Ordinary invocations, probes and corrections call admit_call in their start
+Ordinary invocations, probes and corrections call admit_review_call in their start
 transaction. review_pool_membership retains their inline ownership and guarded
 child groups until checked termination; completion records alone do not release
 these calls. reconcile_call records uncaptured termination as an unknown outcome.
@@ -41,7 +41,7 @@ from .errors import ResearchError
 from .evidence import digest
 from .operations import _read_preparation, fields, immutable_record, prepared_mutation, prepared_task_mutation, text
 from .provenance import runtime_provenance
-from .review_budget import check_admission
+from .review_call_admission import admit_review_call
 from .storage import _canonical
 from .workspace import strict_json
 
@@ -320,8 +320,7 @@ def _active_legacy(records, policy):
 
 def start_call(transaction, operation, invocation, authority, revision):
     """Bind capacity and live ownership to the invocation's start transaction."""
-    check_admission(_TransactionRecords(transaction), operation, invocation['id'])
-    admit_call(transaction, invocation["route_id"])
+    admit_review_call(transaction, operation, invocation['id'], invocation["route_id"])
     record = {"protocol": PROTOCOL, "id": authority.reservation_id, "operation": operation, "invocation_id": invocation["id"],
               "route_id": invocation["route_id"], "token": authority.token, "owner": authority.identity,
               "children": [], "released": False, "termination": None, "state": "running",
@@ -381,24 +380,6 @@ def reconcile_call(store, payload, *, request_id, expected_revision=None):
                 return release_call(tx, lifecycle_id, termination, revision)
             return _mutate_current(store, "review.call_reconcile", payload, apply,
                                    request_id=request_id, expected_revision=expected_revision)
-
-
-def admit_call(transaction, route_id):
-    """Check all covered live calls inside the transaction that records their start."""
-    records = _TransactionRecords(transaction)
-    policy = _policy(records)
-    route = _get(records, "review_route", route_id)
-    if route.get("adapter") not in policy["covered_adapters"]:
-        return
-    memberships = records.get("review_pool_membership", {})
-    active = [row for row in records.get("review_reservation", {}).values()
-              if row["id"] in memberships and not row["released"]]
-    active.extend(_active_legacy(records, policy))
-    route_active = [row for row in active if row["route_id"] == route_id]
-    if len(active) >= policy["store_limit"] or len(route_active) >= policy["route_limits"].get(
-            route_id, policy["store_limit"]):
-        raise ResearchError("review_capacity_wait", "Shared reviewer capacity is occupied; reconcile its reservations",
-                            {"reservations": [row["id"] for row in active], "scope": "store"})
 
 
 def _read_reread_rounds(task):
@@ -528,8 +509,7 @@ def reserve_task(store, payload, *, request_id, expected_revision=None):
         if exhaustion is not None:
             return {"exhaustion": exhaustion}
         reservation_id = "review-reservation:" + digest([plan["id"], request_id])
-        check_admission(records, 'review.task_reserve', reservation_id)
-        admit_call(tx, plan["route_id"])
+        admit_review_call(tx, 'review.task_reserve', reservation_id, plan["route_id"])
         reservation = {"protocol": PROTOCOL, "id": reservation_id, "plan_id": plan["id"],
                        "task_id": plan["task_id"], "task_generation": plan["task_generation"],
                        "epoch_id": plan["epoch_id"], "route_id": plan["route_id"], "attempt": state["attempts"] + 1,
