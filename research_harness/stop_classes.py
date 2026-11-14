@@ -206,6 +206,60 @@ for _code in ('stale_revision', 'review_task_dependency_changed', 'review_output
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
 
 
+_STORED_STATE_CODES_DECISION = (
+    'gate_override_gate', 'gate_override_instruction', 'gate_override_transition',
+    'invalid_round', 'invalid_synthesis', 'objective_mismatch',
+    'problem_attempt_evidence_missing', 'problem_attempt_extension_unexplained',
+    'problem_attempt_outcome_mismatch', 'problem_attempt_scope_restricted',
+    'problem_attempt_statement_mismatch', 'problem_citation_span_mismatch',
+    'problem_forming_origin_conflict',
+    'problem_post_revision_missing', 'publication_evidence_mismatch',
+    'publication_scope_correction_mismatch', 'publication_scope_corrupt',
+    'publication_scope_objective_open', 'scope_assumptions_missing', 'scoped_review_corrupt',
+)
+for _code in _STORED_STATE_CODES_DECISION:
+    STOP_REGISTRY[_code] = dict(copy.deepcopy(STOP_REGISTRY['review_history_invalid']),
+                                code=_code, group='stored_state')
+
+for _code in ('invalid_rubric_grades', 'invalid_strategy'):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+        next=dict(kind='outcome', outcome='scientific_refused'))
+
+# These commands and their input choices come from the CLI reference. A decision
+# carries its own payload rule, so a non-review command receives no assignment_id.
+for _codes, _command, _payload, _chooses in (
+        (('configuration_missing',), 'init', {}, ('profile', 'target')),
+        (('constitution_revalidation_required',), 'constitution', {}, ('previous_sha256', 'reason')),
+        (('grand_challenge_missing',), 'grand-challenge', {}, ('id', 'reason', 'challenges')),
+        (('problem_attempt_superseded',), 'problem-attempt', {},
+         ('id', 'statement_id', 'kind', 'solver', 'literature', 'outcomes', 'proportion')),
+        (('problem_attempt_unbound', 'problem_result_unbound'), 'search deliver-attempt', {},
+         ('attack_root', 'expected_revision', 'request_id')),
+        (('problem_citation_evidence_unbound',), 'problem-citation-metadata', {},
+         ('id', 'version_id', 'title', 'authors', 'evidence')),
+        (('problem_citation_locator_unbound',), 'problem-citation-locator', {},
+         ('id', 'version_id', 'reading_id', 'original_sha256', 'url', 'source_id')),
+        (('problem_objections_refresh_required',), 'problem-objections-carry', {},
+         ('id', 'source_workspace', 'source_revision')),
+        (('problem_result_extension_unexplained', 'problem_result_missing', 'problem_result_superseded',
+          'problem_value_stale'), 'problem-value', {},
+         ('id', 'statement_id', 'accounts', 'motivation', 'current_state')),
+        (('problem_value_reading_missing',), 'read', {},
+         ('id', 'version_id', 'depth', 'bundle_id', 'inspections', 'notes')),
+        (('resource_budget_exhausted',), 'budget', {}, ('profile', 'purpose', 'limits', 'reason')),
+        (('round_exemplar_missing',), 'require-fulltext', {'purpose': 'exemplar'},
+         ('id', 'profile', 'version_id', 'reason')),
+        (('round_search_missing',), 'search', {},
+         ('id', 'profile', 'purpose', 'queries', 'responses', 'captured_at', 'scope', 'found_work_ids',
+          'verdict', 'cited_work_ids', 'impact', 'gaps', 'dispositions')),
+):
+    for _code in _codes:
+        STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
+            next=dict(kind='decision', owner_decides='How should this prerequisite be completed?',
+                then=[dict(answer='Complete the prerequisite', steps=[dict(command=_command,
+                    payload=copy.deepcopy(_payload), chooses=list(_chooses))])]))
+
+
 STOP_GROUPS = {
     'stored_state': dict(id='stored_state', **{'class': 'decision'}, owner='D2',
         next=copy.deepcopy(STOP_REGISTRY['artifact_corrupt']['next']),

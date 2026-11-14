@@ -5633,6 +5633,22 @@
         "test_d2_rows_store.StoreRowTests.test_hot_journal_recovery_preserves_committed_history",
         "test_d2_rows_store.StoreRowTests.test_public_write_refusal_accepts_the_named_instruction_command"
       ]
+    },
+    {
+      "id": "decision-record-series-stops-have-reviewed-next-steps",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review series decision-record boundaries",
+      "summary": "Decision and problem record refusals reached a series without reviewed next steps, conflating workflow prerequisites with damaged retained records.",
+      "expected": "Stored-state refusals keep their reviewed record-check decision, output evidence refusals use scientific_refused, and documented prerequisites accept their named command without a review assignment_id.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_code_rows_decision.DecisionRowTests.test_each_stored_state_member_ends_with_the_group_record_check_decision",
+        "test_series_code_rows_decision.DecisionRowTests.test_invalid_strategy_output_records_its_refusal_then_accepts_the_retry",
+        "test_series_code_rows_decision.DecisionRowTests.test_invalid_rubric_output_records_its_refusal_then_accepts_the_retry",
+        "test_series_code_rows_decision.DecisionRowTests.test_result_steps_record_a_replacement_value_and_preserve_earlier_bytes",
+        "test_series_code_rows_decision.DecisionRowTests.test_native_delivery_step_resolves_both_unbound_references"
+      ]
     }
   ]
 }
