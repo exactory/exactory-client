@@ -3,10 +3,13 @@
 Regenerate with tests/generate_review_request_parity.py, never from the harness
 under test. Every case compares full reports and states, ordered obligations,
 selected attempts, refusal details and fingerprints of exact serialized bytes.
+The separate r3 fixture pins only added advisory fields and cannot replace any
+field authenticated by the original oracle.
 """
 
 import copy
 import gzip
+import hashlib
 import json
 import unittest
 from unittest import mock
@@ -16,15 +19,60 @@ from research_harness import review_continuation
 from research_harness.evidence import digest
 
 
+CAPACITY_PATH = fixtures.FROZEN_PATH.with_name('review-capacity-advisory-r3.json')
+
+
 class ReviewRequestParityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.frozen = json.loads(gzip.decompress(fixtures.FROZEN_PATH.read_bytes()))
+        cls.capacity = json.loads(CAPACITY_PATH.read_bytes())
 
     def test_oracle_origin_and_case_inventory(self):
         self.assertEqual(self.frozen["source_commit"], fixtures.BASE_COMMIT)
         self.assertEqual(set(self.frozen["cases"]), set(fixtures.CASE_BUILDERS))
         self.assertEqual(self.frozen["serialization"], "review_protocol._put_json")
+        self.assertEqual(self.capacity['byte_oracle_sha256'],
+                         hashlib.sha256(fixtures.FROZEN_PATH.read_bytes()).hexdigest())
+        self.assertEqual(set(self.capacity['cases']), set(fixtures.CASE_BUILDERS))
+        self.assertEqual(self.capacity['protocol'], 'exactory-route-output-profile-v1')
+
+    def extend_expected_attempt(self, name, attempt):
+        if attempt is None:
+            return None
+        metadata = self.capacity['cases'][name]['attempts'].get(attempt['id'])
+        if metadata is None:
+            return attempt
+        self.assertEqual(attempt['origin'], 'instrumented')
+        self.assertEqual(set(metadata), {'task', 'answer', 'cli_version', 'completed_generation',
+                                         'verified_input_tokens', 'usage'})
+        result = copy.deepcopy(attempt)
+        for key, value in metadata.items():
+            if key == 'usage':
+                self.assertEqual(set(value), {'thinking_tokens', 'thinking_method', 'sends', 'request_characters'})
+                self.assertFalse(set(value) & set(result['usage']))
+                result['usage'].update(value)
+            else:
+                self.assertNotIn(key, result)
+                result[key] = value
+        return result
+
+    def extend_expected_capacity(self, name, field, expected):
+        if field == 'attempts':
+            return {key: self.extend_expected_attempt(name, value) for key, value in expected.items()}
+        expected = copy.deepcopy(expected)
+        if field == 'selected':
+            for selection in expected.values():
+                if 'value' in selection:
+                    binding, refused, completed = selection['value']
+                    selection['value'] = [self.extend_expected_attempt(name, binding), refused,
+                                          [self.extend_expected_attempt(name, value) for value in completed]]
+        if field == 'status' and 'value' in expected:
+            routes = self.capacity['cases'][name]['routes']
+            if routes is not None:
+                self.assertNotIn('routes', expected['value']['review'])
+                expected['value']['review']['routes'] = routes
+        return expected
 
     def expect_current_result_report(self, name, field, expected):
         """Pin report presentation and Claude response metadata without changing the byte oracle."""
@@ -152,7 +200,8 @@ def add_case(name, build):
         # or truncating a comparison of large request bodies.
         for field in expected:
             with self.subTest(case=name, field=field):
-                self.assertEqual(actual[field], self.expect_current_result_report(name, field, expected[field]))
+                current = self.expect_current_result_report(name, field, expected[field])
+                self.assertEqual(actual[field], self.extend_expected_capacity(name, field, current))
     test.__doc__ = "Replay " + name + " against ceb050b."
     setattr(ReviewRequestParityTests, "test_" + name.replace("-", "_"), test)
 

@@ -339,7 +339,7 @@ class RecordCheckTests(unittest.TestCase):
         self.assertEqual(result['decision_stops'][0]['details'], details)
         self.assertFalse(self.case.read_records().get('review_invocation'))
 
-    def test_nonfinal_input_capacity_refusal_still_fails(self):
+    def test_nonfinal_input_capacity_refusal_reports_the_registered_route_decision(self):
         from research_harness import record_check
         action = dict(state='continue', command='review-assignment', payload={},
                       head_id=self.assignment['id'], progress={})
@@ -348,8 +348,15 @@ class RecordCheckTests(unittest.TestCase):
                     patch.dict(cli.OPERATIONS, {'review-assignment': unittest.mock.Mock(side_effect=ResearchError(
                         'review_input_too_large', 'Synthetic ordinary input', details))}):
                 report = self.check()
-            self.assertFalse(report['ready'])
-            self.assertEqual(self.step(report, 'continuation')['error']['code'], 'review_input_too_large')
+            self.assertTrue(report['ready'], report)
+            chain = self.step(report, 'continuation')['result']['chains'][0]
+            self.assertEqual(chain['boundary'], 'stop')
+            terminal = chain['actions'][-1]
+            self.assertEqual(terminal['code'], 'review_input_too_large')
+            self.assertEqual(terminal['details']['next'], dict(kind='outcome', outcome='input_over_limit'))
+            self.assertTrue(terminal['details']['decision']['owner_decides'])
+            self.assertEqual([step['id'] for step in terminal['details']['decision']['then'][0]['steps']],
+                             [8, 7, 1])
 
     def test_capacity_code_does_not_allow_an_external_action_or_a_planner_stop(self):
         from research_harness import record_check
@@ -992,9 +999,17 @@ class RecordCheckFollowupTests(unittest.TestCase):
                 plan = plan_next(records, case.artifacts, 'turn-1')
                 self.assertEqual((plan['state'], plan['code'], plan['command']),
                                  ('handoff', 'openness_review_not_approved', 'export'))
-                self.assertEqual(plan['details'], dict(
+                expected = dict(
                     assignment_id='turn-1', decision=decision, reason=output['reason'], kind='problem-openness',
-                    refusal=dict(code=refused.exception.code, message=refused.exception.message)))
+                    refusal=dict(code=refused.exception.code, message=refused.exception.message))
+                for field, value in expected.items():
+                    self.assertEqual(plan['details'][field], value)
+                step = plan['details']['step']
+                self.assertEqual((step['id'], step['command'], step['payload']),
+                                 (4, 'export', dict(kind='problem-openness')))
+                self.assertEqual(step['chooses'], ['assignment_id', 'reviewer_id', 'minimum'])
+                self.assertEqual(step['then'][0]['command'], 'review-assignment')
+                self.assertEqual(step['then'][0]['payload']['role'], 'native_math')
 
     def test_accepted_native_openness_output_plans_the_real_record_preparation(self):
         from research_harness.problem_openness import prepare_openness

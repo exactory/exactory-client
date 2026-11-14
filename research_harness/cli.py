@@ -513,6 +513,21 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
     return acquisition.import_response_file(store, **values, **identity)
 
 
+def describe_review_receipt(store, command, payload, receipt):
+    """Keep current capacity diagnostics outside the stored mutation receipt and record."""
+    from .review_route_capacity import describe_assignment_warning, describe_route_report
+    records = store.snapshot()['records']
+    if command == 'review-assignment':
+        assignment = records.get('review_assignment', {}).get(payload['id'])
+        if assignment is None:
+            return receipt
+        warning = describe_assignment_warning(records, payload['id'], artifacts=store.build_artifact_store())
+        return dict(receipt, capacity_warning=warning) if warning is not None else receipt
+    routes = records.get('review_route', {})
+    route = routes.get(payload['id'], payload) if command == 'review-route' else routes[payload['route_id']]
+    return dict(receipt, **describe_route_report(records, route))
+
+
 def _review_status(records, artifacts):
     from . import review_parts, review_refusal
     from .report_views import describe_parts_turn
@@ -555,6 +570,10 @@ def _review_status(records, artifacts):
         progress = result['assignments'][identifier]['review_parts']
         if progress['next']:
             progress['next'] = describe_next_actions(records, artifacts, identifier, progress['next'])
+    from .review_route_capacity import describe_open_route_reports
+    routes = describe_open_route_reports(records, artifacts)
+    if routes:
+        result['routes'] = routes
     # Legacy status remains a cheap refusal listing. Staged science is selected
     # by assignment_state, never by treating a raw answer page as a final.
     if not records.get("review_epoch"):
@@ -607,12 +626,17 @@ def status_report(store, *, counters=False):
             status_scope.callback(scope.pop, 'review_closure_roots', None)
         scope['review_closure_roots'] = {}
         records = snapshot["records"]
-        override_status = overrides.describe_overrides(records, store.root)
+        override_status = overrides.describe_overrides(records, store.root, artifacts=evaluation)
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
         advisories = find_view_advisories(store, snapshot["revision"])
         if "problem" in records.get("workspace", {}):
             advisories += describe_report_advisories(records)
             report = gate_state(records, evaluation, "post")
+            export_authority = overrides.assess_write_authority(records,
+                overrides.read_unrecorded_overrides(store.root) or [], dict(kind="problem-override"), artifacts=evaluation)
+            if export_authority["authorized"] and not report["ready"] and report.get("post") is None:
+                advisories.append(dict(code="gate_override_condition_met",
+                    reason="The recorded instruction authorizes export --kind problem-override."))
             review = _review_status(records, evaluation)
             report = annotate_parts_obligations(report, review)
             slots = report.get('slot_outcomes', {})
@@ -638,7 +662,9 @@ def status_report(store, *, counters=False):
                         # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
                         literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                         candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
-                        next=upcoming, review=review, advisories=advisories)
+                        next=upcoming, review=review, advisories=advisories,
+                        **({"override_export_authority": export_authority}
+                           if export_authority["override_ids"] or "authority" in report.get("post", {}) else {}))
             if records.get("forming_call"):
                 result["forming"] = problem_forming.count_forming(records)
             if records.get('problem_objection_carry'):
@@ -927,10 +953,14 @@ def run(args):
                     return record_reconciliation(store, value, None, **identity)
                 replay = replay_reconciliation
             try:
-                return check_mutation(Store(find_workspace(root)), operation, payload,
-                                      expected_revision=args.expected_revision, request_id=args.request_id,
-                                      bounded_payload=bounded_payload, replay=replay,
-                                      prepare_payload=normalize_check_payload)
+                checking_store = Store(find_workspace(root))
+                receipt = check_mutation(checking_store, operation, payload,
+                                         expected_revision=args.expected_revision, request_id=args.request_id,
+                                         bounded_payload=bounded_payload, replay=replay,
+                                         prepare_payload=normalize_check_payload)
+                if args.command in ('review-route', 'review-probe', 'review-assignment'):
+                    return describe_review_receipt(checking_store, args.command, payload, receipt)
+                return receipt
             except ResearchError as error:
                 if args.command == "review-budget":
                     describe_review_budget_refusal(error)
@@ -974,7 +1004,10 @@ def run(args):
         identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
         if args.command in OPERATIONS:
             try:
-                return OPERATIONS[args.command](store, payload, **identity)
+                receipt = OPERATIONS[args.command](store, payload, **identity)
+                if args.command in ('review-route', 'review-probe', 'review-assignment'):
+                    return describe_review_receipt(store, args.command, payload, receipt)
+                return receipt
             except ResearchError as error:
                 if args.command == "review-budget":
                     describe_review_budget_refusal(error)
@@ -994,7 +1027,9 @@ def run(args):
                 return dict(research_decisions.decision_state(snapshot["records"], artifacts, args.boundary,
                                                              decision_id=args.decision_id), revision=snapshot["revision"])
             if args.command == "review-route-assess":
-                return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id), revision=snapshot["revision"])
+                return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id),
+                            **review_protocol.describe_route_report(snapshot["records"], args.route_id),
+                            revision=snapshot["revision"])
             context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
             if not isinstance(context, dict):
                 raise ResearchError("invalid_input", "Reviewer context must be a JSON object")
@@ -1074,8 +1109,12 @@ def run(args):
                                 "--destination the export goes to " + PROBLEM_EXPORTS_FOLDER + "/<export digest>/.",
                                 {"destination": args.destination, "folder": str(folder)})
         from .problem_delivery import export_problem, export_problem_override
-        export = export_problem if args.kind == "problem" else export_problem_override
-        return export(store, args.destination)
+        if args.kind == "problem-override":
+            spec = {} if args.spec is None else strict_json(Path(args.spec).read_bytes())
+            if spec is None:
+                raise ResearchError("invalid_input", "The override export spec must be an object")
+            return export_problem_override(store, args.destination, spec=spec)
+        return export_problem(store, args.destination)
     if args.kind == "problem-openness":
         if not args.spec:
             raise ResearchError("invalid_input", "Problem openness export requires --spec")

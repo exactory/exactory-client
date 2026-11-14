@@ -91,6 +91,59 @@ def read_attempt_delivery(records, artifacts, assignment, attempt=None):
     return _read_authenticated_delivery(records, evaluation, assignment, attempt)
 
 
+def collect_prior_session_turns(records, artifacts, assignment):
+    """Select verified earlier turns of this session, oldest first.
+
+    Follow only the recorded session history. Repairs, replacements and carried
+    chains have their own counting contracts, outside this session projection.
+    """
+    from .bar_sources import ROLES
+    if (assignment.get('role') not in ROLES or assignment.get(fresh.KEY)
+            or assignment.get('staged_review')
+            or assignment.get('prompt', {}).get('parameters', {}).get('evidence_parts')):
+        return []
+    turns, seen = [], {assignment['id']}
+    identifier = assignment.get('history_assignment_id')
+    while identifier is not None and identifier not in seen:
+        seen.add(identifier)
+        parent = records.get('review_assignment', {}).get(identifier)
+        if (parent is None or parent.get('session_id') != assignment.get('session_id')
+                or protocol.normalized_text(parent['reviewer_id']) != protocol.normalized_text(assignment['reviewer_id'])):
+            break
+        state = protocol.assignment_state(records, artifacts, identifier)
+        attempt = records.get('review_attempt', {}).get(state.get('attempt_id'))
+        if (state['ready'] and attempt is not None and attempt.get('status') == 'completed'
+                and protocol.authenticate_attempt(records, artifacts, parent, attempt)):
+            turns.append((parent, attempt))
+        identifier = parent.get('history_assignment_id')
+    return list(reversed(turns))
+
+
+def _read_session_delivery(records, artifacts, assignment, delivery):
+    """Add only the current packet of each counted turn, never its saved packet."""
+    packets = []
+    for parent, attempt in collect_prior_session_turns(records, artifacts, assignment):
+        observed = _read_authenticated_delivery(records, artifacts, parent, attempt)
+        packets.append(observed['current_input']['packets'][-1])
+    if not packets:
+        return delivery
+    packets += delivery['packets']
+    unique = []
+    for packet in packets:
+        if packet not in unique:
+            unique.append(packet)
+    return fresh.read_series_delivery(records, artifacts, packets=unique)
+
+
+def read_chain_delivery(records, artifacts, assignment, *, attempt=None):
+    """Read citation delivery from authenticated actual turns of one chain."""
+    evaluation = Evaluation.of(records, artifacts)
+    if assignment.get('staged_review', {}).get('kind') == 'controller':
+        return read_selected_delivery(records, evaluation, assignment['id'], require_ready=False)['citation_history']
+    delivery = read_attempt_delivery(records, evaluation, assignment, attempt)['citation_history']
+    return _read_session_delivery(records, evaluation, assignment, delivery)
+
+
 def _read_authenticated_delivery(records, evaluation, assignment, attempt):
     """Project a delivery after explicit authentication or ready-state selection."""
     for name in ('request', 'response', 'output'):
@@ -235,4 +288,7 @@ def read_selected_delivery(records, artifacts, assignment_id, *, require_ready=T
     attempt = records.get('review_attempt', {}).get(state.get('attempt_id'))
     if attempt is None:
         raise ResearchError('review_invocation_unverified', 'The selected result must bind its scientific attempt')
-    return _read_authenticated_delivery(records, evaluation, assignment, attempt)
+    delivery = copy.deepcopy(_read_authenticated_delivery(records, evaluation, assignment, attempt))
+    for key in ('citation_history', 'coverage_witnesses'):
+        delivery[key] = _read_session_delivery(records, evaluation, assignment, delivery[key])
+    return delivery

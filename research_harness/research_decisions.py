@@ -264,10 +264,8 @@ def collect_delivery_packets(records, artifacts, assignment, packets, series):
 
 def read_review_citation_delivery(records, artifacts, assignment, *, attempt=None):
     """Read authenticated citation history independently of current scientific readiness."""
-    from .review_delivered_evidence import read_attempt_delivery, read_selected_delivery
-    if assignment.get('staged_review', {}).get('kind') == 'controller':
-        return read_selected_delivery(records, artifacts, assignment['id'], require_ready=False)['citation_history']
-    return read_attempt_delivery(records, artifacts, assignment, attempt)['citation_history']
+    from .review_delivered_evidence import read_chain_delivery
+    return read_chain_delivery(records, artifacts, assignment, attempt=attempt)
 
 
 def find_review_undelivered_references(records, artifacts, evidence, delivery, *, require_complete_artifacts=False):
@@ -453,6 +451,8 @@ def validate_review_contract(records, artifacts, assignment, output, *, attempt=
                 with contract_check("review.evidence_delivery"), describe_error_at(path):
                     raise ResearchError("review_evidence_undelivered",
                         "Cite only content that this review received: no packet of the review delivered " + description, details)
+    from .review_refusal import validate_source_links_contract
+    validate_source_links_contract(records, output, packets)
     with contract_check("review.support"), describe_error_at('/support'):
         if problem and output["support"] is not None:
             raise ResearchError("invalid_value_review", "A problem review supplies problem assurances, not native proof acceptance")

@@ -27,15 +27,21 @@ class ContinuationRegressionTests(unittest.TestCase):
         before = case.store.snapshot()
         plan = plan_next(before['records'], case.artifacts, identifier)
         self.assertEqual((plan['state'], plan['code']), ('stop', 'review_slot_exhausted'))
-        self.assertEqual(plan['details'], dict(assignment_id=identifier, refused_attempts=[
+        self.assertEqual(plan['details']['assignment_id'], identifier)
+        self.assertEqual(plan['details']['refused_attempts'], [
             dict(attempt_id='refused-1', code='review_evidence_undelivered'),
-            dict(attempt_id='refused-2', code='review_evidence_undelivered')]))
+            dict(attempt_id='refused-2', code='review_evidence_undelivered')])
+        self.assertEqual([step['id'] for step in plan['details']['steps']], [8, 7, 1])
+        self.assertEqual(plan['details']['step']['payload'], dict(
+            assignment_id=identifier, source='owner', kind='route_retired'))
+        self.assertTrue(plan['details']['decision']['owner_decides'])
+        self.assertEqual(plan['details']['decision']['then'][0]['steps'], plan['details']['steps'])
         self.assertNotIn('command', plan)
         self.assertNotIn('payload', plan)
         self.assertEqual(case.store.snapshot(), before)
         return plan
 
-    def test_two_bar_continuation_refusals_stop_the_fixed_slot(self):
+    def test_two_bar_continuation_refusals_hand_off_a_new_blind_reviewer(self):
         fixture = self.fixture()
         case = fixture.case
         case.assign('bar', 'second')
@@ -58,13 +64,19 @@ class ContinuationRegressionTests(unittest.TestCase):
             self.assertEqual(caught.exception.code, 'review_evidence_undelivered')
         before = case.store.snapshot()
         with self.assertRaises(ResearchError) as caught:
-            case.assign('bar', 'third', identifier='replacement')
-        self.assertEqual(caught.exception.code, 'review_slots_fixed')
-        with self.assertRaises(ResearchError) as caught:
             case.assign('bar', 'third', identifier='replacement', prior_assignment_id='bar-first')
         self.assertEqual(caught.exception.code, 'review_source_continuation_mismatch')
         self.assertEqual(case.store.snapshot(), before)
-        self.assert_exhausted_slot_stops(case, identifier)
+        plan = plan_next(before['records'], case.artifacts, identifier)
+        self.assertEqual((plan['state'], plan['code'], plan['command']),
+                         ('handoff', 'review_slot_exhausted', 'review-assignment'))
+        step = plan['details']['step']
+        self.assertEqual(step['id'], 3)
+        self.assertEqual(step['excluded_reviewer_ids'], ['first', 'second'])
+        self.assertEqual(case.store.snapshot(), before)
+        accepted = case.mutate(protocol.record_assignment, dict(
+            step['payload'], id='replacement', route_id='route', reviewer_id='third'))['result']
+        self.assertEqual(accepted['context'], {})
 
     def test_two_slate_refusals_stop_the_fixed_slot(self):
         from test_research_problem_adjudication_resolution import ReviewOutputRefusalTests
@@ -81,7 +93,7 @@ class ContinuationRegressionTests(unittest.TestCase):
         case.exhaust_later_role('result')
         self.assert_exhausted_slot_stops(case, 'result-first')
 
-    def test_two_adjudicator_refusals_stop_the_fixed_slot(self):
+    def test_two_adjudicator_refusals_hand_off_a_new_blind_reviewer(self):
         from test_research_problem_adjudication_resolution import ReviewOutputRefusalTests
 
         case = self.fixture(ReviewOutputRefusalTests)
@@ -96,13 +108,18 @@ class ContinuationRegressionTests(unittest.TestCase):
             error = case.refuse(output, 'focused', attempt, command='review-adjudication')
             self.assertEqual(error.code, 'review_evidence_undelivered')
         before = case.store.snapshot()
-        with self.assertRaises(ResearchError) as caught:
-            case.assign('adjudicator', 'fourth', identifier='replacement', **context)
-        self.assertEqual(caught.exception.code, 'review_adjudicator_fixed')
+        plan = plan_next(before['records'], case.artifacts, 'focused')
+        self.assertEqual((plan['state'], plan['code'], plan['command']),
+                         ('handoff', 'review_slot_exhausted', 'review-assignment'))
+        step = plan['details']['step']
+        self.assertEqual(step['id'], 3)
+        self.assertEqual(step['excluded_reviewer_ids'], ['first', 'second', 'third'])
         self.assertEqual(case.store.snapshot(), before)
-        self.assert_exhausted_slot_stops(case, 'focused')
+        accepted = case.mutate(protocol.record_assignment, dict(
+            step['payload'], id='replacement', route_id='route', reviewer_id='fourth'))['result']
+        self.assertEqual(accepted['context'], before['records']['review_assignment']['focused']['context'])
 
-    def test_two_verification_refusals_keep_the_assignment_handoff(self):
+    def test_two_verification_refusals_name_a_new_route_and_first_turn(self):
         from test_review_parts_study import VerificationPartsTests
         from review_parts_fixtures import make_output
 
@@ -118,10 +135,15 @@ class ContinuationRegressionTests(unittest.TestCase):
         before = case.case.store.snapshot()
         plan = plan_next(before['records'], case.case.artifacts, assignment['id'])
         self.assertEqual((plan['state'], plan['code'], plan['command']),
-                         ('handoff', 'review_slot_exhausted', 'review-assignment'))
-        self.assertEqual(plan['details'], dict(assignment_id=assignment['id'], refused_attempts=[
+                         ('handoff', 'review_slot_exhausted', 'review-route'))
+        self.assertEqual(plan['details']['assignment_id'], assignment['id'])
+        self.assertEqual(plan['details']['refused_attempts'], [
             dict(attempt_id='refused-1', code='invalid_value_review'),
-            dict(attempt_id='refused-2', code='invalid_value_review')]))
+            dict(attempt_id='refused-2', code='invalid_value_review')])
+        self.assertEqual([step['id'] for step in plan['details']['steps']], [7, 6])
+        self.assertEqual(plan['details']['steps'][1]['payload']['context'],
+                         {key: value for key, value in assignment['context'].items()
+                          if key != 'prior_assignment_id'})
         self.assertNotIn('payload', plan)
         self.assertEqual(case.case.store.snapshot(), before)
 
@@ -151,13 +173,19 @@ class ContinuationRegressionTests(unittest.TestCase):
         expected_records['literature_operation'][stop['request_id']] = dict(
             operation='review.series_stop', runtime=case.store.describe_runtime())
         self.assertEqual(after['records'], expected_records)
-        self.assertEqual([json.loads(line) for line in output.getvalue().splitlines()],
+        lines = [json.loads(line) for line in output.getvalue().splitlines()]
+        warning = lines[0]['capacity_warning']
+        self.assertEqual({key: warning['output'][key] for key in (
+            'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
+            dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['single']))
+        self.assertEqual(lines,
                          [dict(plan, stop_id=stop['id'], revision_after_stop=after['revision'],
                                provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                               stop_class='decision')])
+                               stop_class='decision', capacity_warning=warning)])
         receipt = case.store.committed_request(stop['request_id'])
         self.assertEqual(receipt['operation'], 'review.series_stop')
         self.assertEqual(receipt['payload'], {'stop': stop})
+        self.assertEqual(receipt['response']['result'], stop)
 
     def test_two_reassessment_mismatches_hand_off_eligible_correction(self):
         from research_harness import review_output_correction
@@ -173,9 +201,14 @@ class ContinuationRegressionTests(unittest.TestCase):
         plan = plan_next(before['records'], case.fixture.artifacts, identifier)
         self.assertEqual((plan['state'], plan['code'], plan['command']),
                          ('handoff', 'review_slot_exhausted', 'review-output-correction'))
-        self.assertEqual(plan['details'], dict(assignment_id='repair-result', refused_attempts=[
+        self.assertEqual(plan['details']['assignment_id'], 'repair-result')
+        self.assertEqual(plan['details']['refused_attempts'], [
             dict(attempt_id='refused-one', code='review_reassessment_mismatch'),
-            dict(attempt_id='refused-two', code='review_reassessment_mismatch')]))
+            dict(attempt_id='refused-two', code='review_reassessment_mismatch')])
+        self.assertEqual(plan['details']['step']['command'], 'review-output-correction')
+        self.assertEqual(plan['details']['step']['payload'], dict(
+            assignment_id=identifier, route_id=case.case.assignment['route_id']))
+        self.assertEqual(plan['details']['step']['chooses'], ['id'])
         self.assertNotIn('payload', plan)
         self.assertEqual(case.fixture.store.snapshot(), before)
 
@@ -195,9 +228,12 @@ class ContinuationRegressionTests(unittest.TestCase):
         plan = plan_next(before['records'], case.artifacts, 'openness-first')
         self.assertEqual((plan['state'], plan['code'], plan['command']),
                          ('handoff', 'review_slot_exhausted', 'export'))
-        self.assertEqual(plan['details'], dict(assignment_id='openness-first', kind='problem-openness',
-            refused_attempts=[dict(attempt_id='refused-one', code='invalid_reading_response'),
-                              dict(attempt_id='refused-two', code='invalid_reading_response')]))
+        self.assertEqual(plan['details']['assignment_id'], 'openness-first')
+        self.assertEqual(plan['details']['refused_attempts'], [
+            dict(attempt_id='refused-one', code='invalid_reading_response'),
+            dict(attempt_id='refused-two', code='invalid_reading_response')])
+        self.assertEqual(plan['details']['step']['id'], 4)
+        self.assertEqual(plan['details']['step']['payload'], dict(kind='problem-openness'))
         self.assertNotIn('payload', plan)
         self.assertEqual(case.store.snapshot(), before)
 

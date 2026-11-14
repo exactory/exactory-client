@@ -122,6 +122,8 @@ def run_live(*, case, source_copy, snapshot_revision, max_calls, output, assignm
             # The operation has already retained the provider observation. Stop
             # here before the real driver can enter a wait or select a retry.
             budget.require_running()
+            if step['state'] == 'wait':
+                budget.require_available()
         def refuse_worker(*args, **kwargs):
             # A staged task calls its reviewer from a worker process, outside the wrapped sender.
             raise ResearchError('measurement_worker_unsupported',

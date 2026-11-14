@@ -70,8 +70,8 @@ class StopClassificationTests(unittest.TestCase):
                 elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
                     if any(isinstance(target, ast.Name) and target.id == "OUTCOME_CODES" for target in node.targets):
                         values.extend(node.value.values)
-                emitted.update(value.value for value in values
-                               if isinstance(value, ast.Constant) and isinstance(value.value, str))
+                emitted.update(child.value for value in values for child in ast.walk(value)
+                               if isinstance(child, ast.Constant) and isinstance(child.value, str))
         self.assertLessEqual(policy.WAITING_CODES | policy.HARNESS_DEFECT_CODES, emitted)
 
     def test_material_unknown_and_budget_codes_are_decisions(self):
@@ -116,7 +116,7 @@ class StopClassificationTests(unittest.TestCase):
 
         def advance(seconds):
             delays.append(seconds)
-            self.assertLessEqual(len(delays), 6, "Authentication failures waited forever")
+            self.assertLessEqual(len(delays), 20, "Authentication failures waited forever")
             now[0] += timedelta(seconds=seconds)
 
         response = fixture.case.build_provider_response({})
@@ -131,14 +131,15 @@ class StopClassificationTests(unittest.TestCase):
                 patch("research_harness.review_transport.send_request", return_value=response):
             result = run_series(fixture.case.store, fixture.assignment["id"], emit=steps.append)
         self.assertEqual(result, 3, steps)
-        self.assertEqual(delays, [60, 120, 240, 480, 960, 1800])
+        self.assertEqual(delays, [60, 120, 240, 480, 960, 1800, 1800] * 2
+                         + [60, 120, 240, 480, 960, 1800])
         waits = [step for step in steps if step["state"] == "wait"]
-        self.assertEqual(len(waits), 6)
+        self.assertEqual(len(waits), 20)
         self.assertTrue(all(step["stop_class"] == "waiting" for step in waits))
         self.assertEqual((steps[-1]["state"], steps[-1]["code"]),
-                         ("stop", "review_provider_unavailable"))
+                         ("stop", "review_turn_failures_exhausted"))
         attempts = fixture.case.read_records()["review_attempt"]
-        self.assertEqual(len(attempts), 7)
+        self.assertEqual(len(attempts), 21)
 
     def test_reentrant_store_access_is_a_prompt_decision_stop(self):
         import time
@@ -395,7 +396,7 @@ class PublicWriteCompatibilityTests(unittest.TestCase):
             (root / ".exactory/automatic-passes").mkdir()
             store.mutate("fixture.action_scope", {}, lambda tx: (
                 tx.put("configuration", "research", {}),
-                tx.put("gate_override", "instruction", dict(authority="user", gate="publication",
+                tx.put("gate_override", "instruction", dict(id="instruction", authority="user", gate="publication",
                     public_action="POST /api/v1/verifications"))), expected_revision=0, request_id="action-scope")
             opened, report, error = cli.select_managed_path(lambda store: "accepted", root, public_gate="submitted")
             self.assertEqual(report, "accepted")
@@ -436,7 +437,7 @@ class PublicWriteCompatibilityTests(unittest.TestCase):
             self.assertEqual(refused["discarded"][-1]["observation"]["kind"], "local_authority_refusal")
             self.assertEqual(sent, [])
             store.mutate("fixture.instruction", {}, lambda tx: tx.put("gate_override", "user",
-                dict(authority="user", gate="submitted", public_action="POST /api/deposit/depositions")),
+                dict(id="user", authority="user", gate="submitted", public_action="POST /api/deposit/depositions")),
                 expected_revision=store.revision, request_id="user")
             self.assertEqual(remote_step(store, intent["id"], "create", {}, perform), {"id": 42})
             self.assertEqual(sent, ["POST"])
@@ -1101,8 +1102,16 @@ class AutomaticStudyPassTests(DevelopmentCase):
             store = Store(root, create=True)
             (root / "context").mkdir()
             (root / "context/old-instruction.txt").write_text("Continue to local writing.")
-            receipt = overrides.record_override(store, fixture["payload"], expected_revision=0,
-                                                request_id="released-user-override")
+            instruction = fixture["receipt"]["result"]["instruction"]
+            self.assertEqual(store.build_artifact_store().put(instruction["text"].encode("utf-8"),
+                             "text/plain; charset=utf-8"), instruction["artifact"])
+            def restore_user_override(transaction):
+                # Restore the released record; new instructions use the current form.
+                row = fixture["receipt"]["result"]
+                transaction.put("gate_override", row["id"], row)
+                return row
+            receipt = store.mutate(fixture["event"][0], fixture["payload"], restore_user_override,
+                                   expected_revision=0, request_id="released-user-override")
             self.assertEqual(receipt, fixture["receipt"])
             with sqlite3.connect(root / ".exactory/research.sqlite3") as connection:
                 event = connection.execute("SELECT operation,payload,changes,result FROM events").fetchone()

@@ -414,7 +414,7 @@ class ProblemReportTests(CheckCommandMixin, ProblemCase):
         shown = report["statements"][0]["posts"][0]
         self.assertEqual(shown["posted_at"], None)
         self.assertTrue(shown["has_post_fact"])
-        self.assertEqual(shown["after_post"], dict(values=[value], facts=[fact], reviews=reviews))
+        self.assertEqual(shown["after_post"], dict(values=[value], facts=[fact], reviews=reviews, conditions=[]))
         self.assertEqual(shown["consequences"], [dict(relation=relation, result_references=[reference], value_id=value["id"])])
         self.assertIn("does not hold whether", shown["proof_publication"])
         self.assertEqual(report["counts"]["relations"], dict(established=1, expected=1))

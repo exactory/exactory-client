@@ -21,6 +21,7 @@ from .problem_openness import assess_openness
 _RECORD_RESULT_NOTE = ('Record the observed complete final of the current series with value-review from its '
                        'exact output. No further reviewer call is needed.')
 _REFERENCE_EXPORT_SCHEMA = "exactory-problem-export-v2"
+_OVERRIDE_CITATIONS_EXPORT_SCHEMA = "exactory-problem-export-v3"
 
 
 def assess_minimum(records, artifacts):
@@ -575,6 +576,8 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
     posted_state = {}
     if posted is not None:
         after_post = describe_after_post_obligations(unique)
+        from .problem_reports import describe_post_condition_findings
+        after_post.extend(describe_post_condition_findings(posted))
         after_post.extend(dict(row, code="problem_post_fact", explanation=row["fact"], reason=row["fact"])
                           for row in sorted(records.get("problem_post_fact", {}).values(),
                                             key=lambda row: (row["recorded_revision"], row["id"]))
@@ -644,17 +647,20 @@ def prepare_decision(records, artifacts, value, revision, *, source_guards=None)
     return [immutable_record(records, "problem_decision", value["id"], record)], record
 
 
-def build_post_files(records, artifacts, *, include_references=False):
+def build_post_files(records, artifacts, *, include_references=False, citation_projection=None):
     """Compose the statement, value paragraphs and citations without claiming any decision or review."""
     statement, value = find_current_statement(records), find_value(records)
+    citations = (project_citations(records, artifacts) if citation_projection is None
+                 else citation_projection["citations"])
     files = {"title.txt": statement["title"], "statement.md": statement["statement"],
              "criteria.md": statement["resolution_criteria"],
              "motivation.md": "\n\n".join(row["text"] for row in value["motivation"]),
              "state.md": "\n\n".join(row["text"] for row in value["current_state"]),
-             "citations.json": json.dumps(project_citations(records, artifacts), ensure_ascii=False, sort_keys=True, indent=2)}
+             "citations.json": json.dumps(citations, ensure_ascii=False, sort_keys=True, indent=2)}
     if include_references:
-        files["citation-refs.json"] = json.dumps(project_citations(records, artifacts, for_lookup=True),
-                                                ensure_ascii=False, sort_keys=True, indent=2)
+        references = (project_citations(records, artifacts, for_lookup=True) if citation_projection is None
+                      else citation_projection["references"])
+        files["citation-refs.json"] = json.dumps(references, ensure_ascii=False, sort_keys=True, indent=2)
     formal = statement["formal_statement"]
     if formal is not None:
         files["formal-statement.txt"] = formal["text"]
@@ -726,20 +732,30 @@ def export_problem(store, destination=None):
     return write_problem_export(store, records, files, manifest, destination)
 
 
-def export_problem_override(store, destination=None):
+def export_problem_override(store, destination=None, *, spec=None):
     """Compose the exact post material on a recorded instruction, with no reviewed decision claim."""
-    records = store.snapshot()["records"]
+    snapshot = store.snapshot()
+    records = snapshot["records"]
     require_problem(records)
+    from .overrides import assess_write_authority, read_unrecorded_overrides, require_met_override_conditions
+    artifacts = Evaluation.of(records, ArtifactStore(store.root))
+    authority = assess_write_authority(records, read_unrecorded_overrides(store.root) or [],
+                                       dict(kind="problem-override"), artifacts=artifacts)
     override = find_post_override(records)
-    if override is None:
+    if not authority["covered"]:
         raise ResearchError("gate_override_required", "This export needs a recorded post override whose statement digest "
                             "matches the current statement text and resolution criteria. If the user has instructed you to "
                             "pass this stop, record their words with gate-override, gate post; otherwise report the stop")
+    require_met_override_conditions(authority)
     if find_value(records) is None:
         raise ResearchError("problem_value_missing", "Record the problem's motivation and current state with problem-value "
                             "before this export")
-    artifacts = Evaluation.of(records, ArtifactStore(store.root))
-    files, manifest = build_override_projection(records, artifacts, override, include_references=True)
+    from .problem_evidence import validate_override_citation_spec
+    citation_spec = validate_override_citation_spec({} if spec is None else spec)
+    manifest_authority = {key: authority[key] for key in ("override_ids", "conditions")}
+    manifest_authority["evaluated_at_revision"] = snapshot["revision"]
+    files, manifest = build_override_projection(records, artifacts, override, include_references=True,
+                                                citation_spec=citation_spec, authority=manifest_authority)
     return write_problem_export(store, records, files, manifest, destination)
 
 
@@ -747,15 +763,30 @@ def find_post_override(records):
     statement = find_current_statement(records)
     statement_digest = None if statement is None else compute_statement_digest(statement)
     return max((row for row in records.get("gate_override", {}).values()
-                if row["gate"] == "post" and row.get("statement_digest") == statement_digest),
+                if row.get("authority") == "user" and row["gate"] == "post"
+                and row.get("statement_digest") == statement_digest),
                key=lambda row: row["recorded_revision"], default=None)
 
 
-def build_override_projection(records, artifacts, override, *, include_references=False):
-    """Compose an override projection in its stored format, or v2 with structured references."""
+def build_override_projection(records, artifacts, override, *, include_references=False, citation_spec=None,
+                              authority=None):
+    """Reproduce a stored format, or compose v3 with the override's expanded citation set and its authority."""
+    include_references = include_references or citation_spec is not None
     statement = find_current_statement(records)
-    files = {name: (content + "\n").encode("utf-8") for name, content in
-             build_post_files(records, artifacts, include_references=include_references).items()}
+    citation_metadata, projected = {}, None
+    if citation_spec is not None:
+        from .problem_evidence import POST_CITATION_LIMIT, project_override_citations
+        projected = project_override_citations(records, artifacts, citation_spec)
+        citation_metadata = {key: projected[key] for key in (
+            "citation_counts", "uncited_relevant_works")}
+        citation_metadata["citation_spec"] = citation_spec
+    files = build_post_files(records, artifacts, include_references=include_references, citation_projection=projected)
+    if projected is not None:
+        omitted = projected["citations"][POST_CITATION_LIMIT:]
+        files["citations.json"] = json.dumps(projected["citations"][:POST_CITATION_LIMIT], ensure_ascii=False, sort_keys=True, indent=2)
+        if omitted:
+            files["citations-omitted.json"] = json.dumps(omitted, ensure_ascii=False, sort_keys=True, indent=2)
+    files = {name: (content + "\n").encode("utf-8") for name, content in files.items()}
     formal = statement["formal_statement"]
     manifest = dict(statement_id=statement["id"],
                     statement_digest=compute_statement_digest(statement), area=statement["area"],
@@ -764,6 +795,10 @@ def build_override_projection(records, artifacts, override, *, include_reference
                     decision_id=None, problem_evidence_digest=None, override_id=override["id"], gate="bypassed")
     if include_references:
         manifest["schema"] = _REFERENCE_EXPORT_SCHEMA
+    if citation_spec is not None:
+        manifest.update(citation_metadata, schema=_OVERRIDE_CITATIONS_EXPORT_SCHEMA)
+    if authority is not None:
+        manifest["authority"] = authority
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     return files, manifest
 
@@ -785,6 +820,14 @@ def write_problem_export(store, records, files, manifest, destination):
     with _hold_lock(store.root):
         current = store.snapshot()['records']
         archive_problem_exports(store.root, workspace_root, current, ArtifactStore(store.root))
+        if 'authority' in manifest:
+            from .problem_export_history import find_reusable_override_export
+            reused = find_reusable_override_export(store.root, records, manifest)
+            if reused is not None:
+                files, manifest = reused
+                if use_default_destination:
+                    directory = workspace_root / PROBLEM_EXPORTS_FOLDER / compute_export_digest(files)
+                result = dict(manifest, destination=str(directory))
         if use_default_destination:
             from .workspace import checked_parent
             relative = directory.relative_to(workspace_root).as_posix()
@@ -813,7 +856,11 @@ def write_problem_export(store, records, files, manifest, destination):
                     write_projection(workspace_root, relative + '/' + name, content)
                 else:
                     write_projection(directory, name, content)
-            source_digest = manifest.get('problem_evidence_digest') or compute_problem_evidence_digest(records, artifacts)
+            if manifest.get('schema') == _OVERRIDE_CITATIONS_EXPORT_SCHEMA:
+                from .problem_evidence import compute_override_source_digest
+                source_digest = compute_override_source_digest(records)
+            else:
+                source_digest = manifest.get('problem_evidence_digest') or compute_problem_evidence_digest(records, artifacts)
             record_export_sources(store.root, workspace_root, directory, files, source_digest)
     render_workspace_views(store.root, full=True)
     if not directory.exists():

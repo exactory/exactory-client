@@ -22,7 +22,7 @@
       "class": "generated output views and export delivery",
       "summary": "Merging structured reference exports with export retirement left v2 exports outside history handling and retired unchanged legacy override exports.",
       "fixed_in": "0.88.0",
-      "expected": "New reviewed and override exports use v2 with citation-refs.json. Stored legacy exports keep their bytes and digests. Each format compares against its own current projection, then retires intact on changed content or source identity. Unknown formats and incomplete or edited exports stay in place.",
+      "expected": "Reviewed exports use v2 with citation-refs.json, and stored v2 overrides keep that format when newer overrides expand their citations. Stored legacy exports keep their bytes and digests. Each format compares against its own current projection, then retires intact on changed content or source identity. Unknown formats and incomplete or edited exports stay in place.",
       "test_kind": "real_shape",
       "tests": [
         "test_problem_export_history.OverrideExportHistoryTests.test_stored_legacy_and_new_v2_override_exports_retire_on_source_identity_change",
@@ -2641,7 +2641,7 @@
       "expected": "Activation reports the wrapper, executable and route mismatch before dispatch; recording and probing a compatible route is an explicit handoff and old attempts continue authenticating under their pins.",
       "test_kind": "real_shape",
       "tests": [
-        "test_review_runtime_retry.RuntimeRetryTests.test_observed_stale_runtime_stops_with_stale_code",
+        "test_review_runtime_retry.RuntimeRetryTests.test_observed_stale_runtime_hands_off_with_stale_code",
         "test_review_continuation.ContinuationTests.test_stale_runtime_failure_hands_off_recording_a_new_route",
         "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
       ]
@@ -3841,12 +3841,12 @@
       "class": "classification (route capacity)",
       "summary": "Both bunkbed copies failed the continuation step at assign-openness-4-t18, whose mandatory final input (1,303,063 characters) is over the route limit of 1,300,000, although the next step is a decision on the route or the material.",
       "fixed_in": "0.73.0",
-      "expected": "review_input_too_large in the phase final_preflight and the three parts planning refusals of an allowed action are decision stops listed with their head, command, code and details; every other refusal keeps its result.",
+      "expected": "review_input_too_large in the phase final_preflight and the three parts planning refusals of an allowed action are decision stops listed with their head, command, code and details. Other review_input_too_large refusals take D2's registered input_over_limit decision; every other refusal keeps its result.",
       "test_kind": "real_shape",
       "tests": [
         "test_research_record_check.RecordCheckTests.test_allowed_capacity_refusals_are_reported_as_decision_stops",
         "test_research_record_check.RecordCheckTests.test_final_preflight_capacity_is_a_decision_without_running_the_invocation",
-        "test_research_record_check.RecordCheckTests.test_nonfinal_input_capacity_refusal_still_fails"
+        "test_research_record_check.RecordCheckTests.test_nonfinal_input_capacity_refusal_reports_the_registered_route_decision"
       ]
     },
     {
@@ -5078,6 +5078,275 @@
       "class": "workspace payload file boundary",
       "fixed_in": "0.88.0",
       "test_kind": "real_shape"
+    },
+    {
+      "id": "bar-final-delivered-source-lost-from-replay",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "review session (coverage and reduced history)",
+      "summary": "A final assessment was refused for citing a text delivered by an authenticated earlier turn after its body disappeared from replayed history.",
+      "fixed_in": "0.89.0",
+      "expected": "Citation and result coverage count selected verified actual turns of the session. An undelivered text stays refused. A new continuation whose fitted input loses earlier source bodies names those texts, their delivering turns, missing characters and retained verified excerpts under a versioned delivery notice; intact continuations and stored inputs keep their bytes. Exhausted-slot recovery and input-size reports belong to other units.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_delivery.SessionDeliveryTests.test_final_credits_the_actual_delivering_turn_after_history_reduction",
+        "test_review_session_delivery.SessionDeliveryTests.test_chain_view_keeps_current_input_separate_and_excludes_undelivered_sources",
+        "test_review_session_delivery.SessionDeliveryTests.test_notice_lists_lost_texts_with_verified_excerpts_and_the_final_can_cite_them",
+        "test_review_session_delivery.SessionDeliveryTests.test_an_intact_continuation_keeps_its_packet_prompt_and_request_bytes"
+      ]
+    },
+    {
+      "id": "openness-minimum-v2-schema-staging",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "openness evidence schema and stored-record compatibility",
+      "summary": "D3 UB1 needs a closed v2 minimum for family readings, supporting readings and accepted results without activating v6 before its forecast and delivery units.",
+      "fixed_in": "0.89.0",
+      "expected": "A fixture-store builder produces a v2 minimum with all lists. Both versions validate without mutation, v1 findings retain their audits and packet bytes, and v2 uses the UTC date of the latest capture instant. Current problem exports retain v1 and refuse unavailable new evidence before writing. Math-solver packet exports keep v1 and refuse v2 before writing.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_fixture_export_builder_produces_v2_but_current_packets_keep_v1_bytes",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_nonempty_v2_spec_bindings_are_refused_before_writes_until_their_delivery_ships",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_controller_wrapper_and_stored_finding_readers_keep_v1_results_with_empty_v2_lists",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_v2_search_date_uses_latest_instant_in_utc_while_v1_keeps_local_calendar_dates",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_math_solver_exports_v1_and_refuses_v2_before_writing"
+      ]
+    },
+    {
+      "id": "bar-continuation-exhausted-without-command",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "exhausted blind review slot",
+      "summary": "Earlier successful source turns prevented a new reviewer after the final turn was refused twice.",
+      "expected": "An exhausted bar head hands off to a new eligible blind reviewer in the same slot, preserving the earlier records and excluding both earlier reviewers.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_exhausted_bar_continuation_accepts_a_new_blind_reviewer"
+      ]
+    },
+    {
+      "id": "exhausted-repaired-bar-needs-no-new-retirement",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "class": "exhausted repaired bar slot",
+      "summary": "A repaired bar continuation had no accepted next step after two audit refusals.",
+      "expected": "Under D2 ruling Q4 a new eligible blind reviewer takes the exhausted slot. Same-reviewer refusal replacement and event-free slate or result repair remain later units.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_event_repair_step_contains_the_complete_ordered_binding"
+      ]
+    },
+    {
+      "id": "session-turn-over-cap-ends-chain",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "output capacity recovery",
+      "summary": "One over-cap session answer ended its chain without a retry.",
+      "expected": "Without a smaller task the same assignment gets one identical retry, then review_output_over_cap with role-specific route choices. The harness retains the effort.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry",
+        "test_d2_outcomes.OutcomeTests.test_recovery_results_have_one_shape_and_keep_the_route"
+      ]
+    },
+    {
+      "id": "reading-chain-ended-by-provider-refusal",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "provider refusal sequences",
+      "summary": "Two safeguard stops ended a reading chain and lost its earlier completed turns.",
+      "expected": "The current turn retains the measured three-attempt allowance and then waits for a new sequence, up to three sequences and later evidenced owner extensions. Cross-chain carried readings remain later units.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_sequences_reset_outcome_counts_and_owner_grants_one_more",
+        "test_d2_outcomes.OutcomeTests.test_later_provider_reset_controls_sequence_wait",
+        "test_d2_outcomes.OutcomeTests.test_two_provider_refusals_at_turn_three_finish_without_rereading"
+      ]
+    },
+    {
+      "id": "reconciled-review-interruption-spends-only-turn-limit",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "interrupted call accounting",
+      "summary": "Reconciled calls without a capture used the shorter incomplete-execution allowance.",
+      "expected": "Three reconciled interruptions of a reading turn remain runnable without changing stored calls or requests. An explicitly stopped call spends no failure allowance, and a completed capture retains its meaning. Stop admission and driver settlement remain later units.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_three_reconciled_interruptions_continue_the_reading_chain",
+        "test_d2_outcomes.OutcomeTests.test_stopped_calls_spend_no_allowance_and_captured_completion_keeps_its_meaning"
+      ]
+    },
+    {
+      "id": "override-export-cites-fewer-works-than-the-record-read",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "generated output views and export delivery",
+      "summary": "An override exported only the value citations although the statement searches had 29 relevant works read in full and no openness finding existed.",
+      "fixed_in": "0.89.0",
+      "expected": "Override citations extend the ordinary projection with complete full readings of relevant and contradictory search works for the current statement. Family readings, version choices, a stable order, a shared 50-citation limit, overflow entries and origin counts remain explicit, while stored export bytes and review digests keep their meaning.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_override_citations.OverrideCitationTests.test_four_value_citations_expand_to_29_of_40_full_readings",
+        "test_problem_override_citations.OverrideCitationTests.test_six_value_citations_expand_to_the_29_read_search_works",
+        "test_problem_override_citations.OverrideCitationTests.test_60_read_works_export_50_repeatably_and_first_can_promote_an_omitted_work",
+        "test_problem_override_citations.OverrideCitationTests.test_versionless_search_work_uses_its_read_version_and_spec_can_select_v2",
+        "test_problem_override_citations.OverrideCitationTests.test_stored_v2_keeps_its_bytes_and_digest_beside_the_enriched_export"
+      ]
+    },
+    {
+      "id": "override-instruction-given-by-a-selection-has-no-form",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "instruction attribution",
+      "summary": "A selection was saved with user messages and session text in a single undifferentiated instruction file.",
+      "expected": "The parts form retains every message, dialog option, choice and note, pins the original bytes and separates user words from session-authored selections in status, next and final views. Stored text instructions keep their digests and views.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_override_instruction_parts.InstructionPartsTests.test_selection_keeps_three_messages_apart_from_all_options_in_reports_and_view",
+        "test_override_instruction_parts.InstructionPartsTests.test_new_text_form_and_stored_text_and_local_shapes_keep_their_meaning"
+      ]
+    },
+    {
+      "id": "override-holds-no-condition-and-no-order-of-instructions",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "override authority",
+      "summary": "A conditional selection followed by a general instruction had no structured condition or explicit lifting relation in the override record.",
+      "expected": "All applicable user overrides retain their conditions across overlapping actions and changed statements. Named or after-report lifts identify the earlier condition. Authority computes current check states and evidence without changing stored overrides or legacy coverage. Enforcement by export and public transports follows in UA5.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_override_authority.OverrideAuthorityTests.test_incident_step_one_selection_records_unmet_condition_and_its_obligation",
+        "test_override_authority.OverrideAuthorityTests.test_incident_step_two_general_message_lifts_nothing_while_finding_is_pending",
+        "test_override_authority.OverrideAuthorityTests.test_incident_step_three_chain_without_finding_retains_unmet_condition_without_new_record",
+        "test_override_authority.OverrideAuthorityTests.test_incident_step_four_after_report_lift_authorizes_export_and_post",
+        "test_override_authority.OverrideAuthorityTests.test_condition_on_previous_statement_stands_after_new_statement_is_covered",
+        "test_override_authority.OverrideAuthorityTests.test_legacy_authority_equals_coverage_for_recorded_and_local_shapes_and_all_scopes"
+      ]
+    },
+    {
+      "id": "override-readers-enforce-standing-conditions",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "override publication authority",
+      "summary": "The export and public transports could proceed after a general continuation while the selected condition was still unmet.",
+      "expected": "Export and every public transport assess all applicable conditions, including local instructions without an automatic pass. The export refuses until met or explicitly lifted and pins authority in its manifest. Status, next and check mode expose the same assessment.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_override_readers.OverrideReaderTests.test_incident_export_refuses_before_lift_and_manifest_keeps_lifting_authority",
+        "test_override_readers.OverrideReaderTests.test_public_write_checks_all_overlapping_conditions_without_an_automatic_pass",
+        "test_override_readers.OverrideReaderTests.test_record_and_check_show_authority_without_putting_state_in_the_override",
+        "test_override_readers.OverrideReaderTests.test_stored_0853_projection_and_override_digest_stay_unchanged"
+      ]
+    },
+    {
+      "id": "external-post-keeps-export-authority",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "post attribution",
+      "summary": "Recording an external post did not preserve the instructions or the condition evidence under which its export was composed.",
+      "expected": "A complete export named by digest supplies immutable post authority even after later instructions or findings. Without export authority, recording succeeds with a recording-time observation; after_post reports its unmet conditions without claiming their state at delivery. Stored posts retain their meaning and digest.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_post_override_attribution.PostOverrideAttributionTests.test_g13_export_authority_survives_intervening_instruction_and_changed_finding",
+        "test_post_override_attribution.PostOverrideAttributionTests.test_g13_recording_observation_reports_unmet_condition_without_refusing_the_post",
+        "test_post_override_attribution.PostOverrideAttributionTests.test_stored_post_has_no_new_inferred_authority_and_preserves_digest_and_view"
+      ]
+    },
+    {
+      "id": "bar-max-output-profile-warning",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "review route output profile",
+      "summary": "An effort-max bar exceeded its output cap without a route-capacity warning.",
+      "fixed_in": "0.89.0",
+      "expected": "Route and probe receipts report the effective model output limit and measured task-size state. Route assessment names large stored attempts; status warns for an open chain while the reviewer effort and historical request bindings stay unchanged. Smaller-task recovery belongs to later D1 and D2 units.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_output_profile.ProfileIntegrationTests.test_real_shape_max_bar_warns_and_assessment_names_large_attempts",
+        "test_review_output_profile.ProfileIntegrationTests.test_new_attempt_records_profile_fields_and_old_attempt_stays_verifiable"
+      ]
+    },
+    {
+      "id": "reading-chain-route-limit-measure",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "review route size measure",
+      "summary": "A long reading chain reached a final input larger than its route could admit.",
+      "fixed_in": "0.89.0",
+      "expected": "The shared route-capacity measure reports character and token limits with provenance, including conservative unknown-model defaults. This unit supplies the measure; the reading forecast and final delivery recovery remain in their own units.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_request_measure_counts_native_packet_and_instructions",
+        "test_review_route_capacity.RouteLimitTests.test_model_and_transport_limits_keep_their_sources"
+      ]
+    },
+    {
+      "id": "bar-max-verification-counts-all-declared-chains",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "verification output criterion",
+      "summary": "Judging only completed bars or short passing chains hides generated over-limit attempts.",
+      "expected": "The predeclared verification reports every started max bar chain, needs twenty generated calls, enforces both the chain and combined bounds, and refuses size stops, owner steps or missing v4 plans.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_verification_criterion.VerificationCriterionTests.test_real_shape_three_historical_over_cap_turns_fail_and_list_tokens",
+        "test_verification_criterion.VerificationCriterionTests.test_combined_bound_rejects_five_individually_passing_chains",
+        "test_verification_criterion.VerificationCriterionTests.test_minimum_and_incomplete_started_chain_are_not_omitted"
+      ]
+    },
+    {
+      "id": "https-response-cap-has-a-recordable-route-handoff",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "HTTPS response capacity",
+      "summary": "An oversized HTTPS response was unknown and its route decision could leave the review on its stopped head.",
+      "expected": "response_over_limit permits one identical retry, then names the role steps that reach a recorded review on a serving route. Response bytes never become output-token evidence.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_signals.ResponseLimitJourneyTests.test_existing_bar_session_head_moves_by_retirement_probe_and_repair_to_recording",
+        "test_capacity_signals.ResponseLimitJourneyTests.test_problem_openness_moves_by_probe_and_new_export_to_recorded_finding",
+        "test_capacity_signals.ResponseLimitJourneyTests.test_verification_moves_by_probe_and_first_assignment_to_recorded_verdict",
+        "test_capacity_signals.ResponseLimitJourneyTests.test_math_review_moves_by_new_attestation_to_recorded_acceptance"
+      ]
+    },
+    {
+      "id": "retained-compaction-and-fallback-capacity-signals",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "retained capacity signal evidence",
+      "summary": "Claude compaction and non-streaming fallback were folded into unrelated general failures or output caps.",
+      "expected": "A sole documented compaction is input_over_limit with compacted; an unrecognized context event remains unverified. Fallback is execution_incomplete and enters no output row; error text changes no measure.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_capacity_signals.CapacitySignalTests.test_claude_compaction_stream_is_input_limit_and_unknown_event_is_unverified",
+        "test_capacity_signals.CapacitySignalTests.test_fallback_enters_no_output_row_and_error_numbers_change_no_measure"
+      ]
+    },
+    {
+      "id": "capacity-advisory-keeps-malformed-packet-stop",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "capacity advisory isolation",
+      "summary": "A capacity warning decoded a malformed packet after the series had already selected its terminal stop and replaced the CLI result with input_io.",
+      "expected": "An unreadable advisory task returns no size warning and preserves the original terminal refusal and exit status.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_automatic_gate_override.RecordedSeriesStopTests.test_malformed_packet_keeps_the_cli_terminal_stop_and_exit_code"
+      ]
+    },
+    {
+      "id": "delivered-fulltext-needs-an-agent-reading",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "review recording prerequisites and output refusals",
+      "summary": "A final can cite delivered full text without an agent reading, or cite an abstract in a source-link form that no full reading satisfies.",
+      "expected": "Unread full-text citations hand off to read before recording, preserving the selected output. Non-fulltext links write rechecked output refusals before reading checks, allow one more identical request, then use the exhausted role step. A corrected descriptor leaves only the actual reading work.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_record_reading_handoff.ReadingHandoffTests.test_delivered_fulltext_hands_off_reading_then_records_the_same_output_without_a_call",
+        "test_record_reading_handoff.ReadingHandoffTests.test_abstract_refusal_precedes_every_missing_reading_and_rechecks_from_frozen_output",
+        "test_record_reading_handoff.ReadingHandoffTests.test_second_output_citing_descriptor_hands_off_only_the_fulltext_reading",
+        "test_record_reading_handoff.ReadingHandoffTests.test_abstract_alone_refuses_twice_then_new_blind_reviewer_takes_the_slot",
+        "test_record_reading_handoff.FocusedReadingHandoffTests.test_adjudication_final_hands_off_a_stale_reading_then_records_the_same_output",
+        "test_record_reading_handoff.FocusedReadingHandoffTests.test_adjudication_abstract_refusal_is_bounded_and_uses_its_role_handoff",
+        "test_record_reading_handoff.ReadingHandoffTests.test_catalog_gap_keeps_the_pure_refusal_before_the_corrected_output_needs_reading",
+        "test_record_reading_handoff.ReadingHandoffTests.test_a_reading_completed_during_the_recording_error_records_without_a_reviewer_call"
+      ]
     }
   ]
 }

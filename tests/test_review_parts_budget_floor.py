@@ -270,7 +270,13 @@ class BudgetFloorReplacementTests(PartsResultCase):
         signal = actual.pop('signal')
         self.assertEqual(signal['source'], 'review_parts.find_failed_replacement')
         self.assertEqual(signal['value']['failed_assignment_id'], assignment['id'])
-        self.assertEqual(actual, details)
+        for field, value in details.items():
+            self.assertEqual(actual[field], value)
+            self.assertEqual(actual['recovery']['details'][field], value)
+        self.assertEqual((actual['recovery']['kind'], actual['recovery']['code']),
+                         ('decision', 'review_parts_budget_exhausted'))
+        self.assertTrue(actual['decision']['owner_decides'])
+        self.assertEqual([step['id'] for step in actual['decision']['then'][0]['steps']], [8, 7, 1])
         self.assertEqual(self.case.store.snapshot(), before)
 
     def test_series_ends_with_the_floor_budget_stop_without_another_call(self):
@@ -291,11 +297,17 @@ class BudgetFloorReplacementTests(PartsResultCase):
             self.assertEqual(stop['details'][key], value, key)
         after = self.case.store.snapshot()
         recorded_stop, = after['records']['review_series_stop'].values()
+        warning = stop['capacity_warning']
+        self.assertEqual({key: warning['output'][key] for key in (
+            'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
+            dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['read']))
         self.assertEqual(stop, dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
                                    provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                                   revision_after_stop=after['revision']))
+                                   revision_after_stop=after['revision'], capacity_warning=warning))
         self.assertEqual(recorded_stop['plan'], plan)
         self.assertEqual(recorded_stop['recorded_revision'], after['revision'])
+        self.assertEqual(self.case.store.committed_request(recorded_stop['request_id'])['response']['result'],
+                         recorded_stop)
         operations = dict(before['records']['literature_operation'])
         operations[recorded_stop['request_id']] = dict(operation='review.series_stop',
                                                       runtime=self.case.store.describe_runtime())

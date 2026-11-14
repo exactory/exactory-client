@@ -214,13 +214,30 @@ def serialize_record(record):
     return json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
+def build_minimum(statement, bound, readings, spec, *, schema_version=2):
+    """Build the declaration; later stage-B units bind the additional evidence."""
+    minimum = {"schema_version": schema_version, "statement": statement["statement"], "neighbours": statement["neighbours"],
+               "searches": [{"formulation": formulation, "search_digest": digest(search)}
+                            for formulation, search in bound],
+               "reading_digests": sorted(digest(row) for row in readings.values()),
+               "settling_work_id": spec["settling_work_id"], "duplicate_resolutions": spec["duplicate_resolutions"]}
+    if schema_version == 2:
+        minimum.update(family_readings=[], supporting_reading_digests=[], results=[])
+    return minimum
+
+
 def export_openness(store, spec, destination=None, *, accept_gaps=False):
     records = store.snapshot()["records"]
     marker = require_problem(records)
     fields(spec, ("assignment_id", "reviewer_id", "minimum"), ("native_reviews", "source_evidence"))
     text(spec["assignment_id"], "Openness assignment ID")
     text(spec["reviewer_id"], "Openness reviewer ID")
-    fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"), ("text_priority",))
+    fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"),
+           ("text_priority", "family_readings", "supporting_reading_ids", "results"))
+    for field in ("family_readings", "supporting_reading_ids", "results"):
+        if field in spec["minimum"] and spec["minimum"][field] != []:
+            raise ResearchError("invalid_input", "The additional minimum bindings must be empty until their "
+                                "delivery ships with protocol v6.", {"field": field})
     statement = find_current_statement(records)
     if statement is None:
         raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
@@ -254,12 +271,8 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
             continue
         for reading_id in coverage["readings"]:
             readings[reading_id] = records["reading"][reading_id]
-    minimum = {"schema_version": 1, "statement": statement["statement"], "neighbours": statement["neighbours"],
-               "searches": [{"formulation": formulation, "search_digest": digest(search)}
-                            for formulation, search in bound],
-               "reading_digests": sorted(digest(row) for row in readings.values()),
-               "settling_work_id": spec["minimum"]["settling_work_id"],
-               "duplicate_resolutions": spec["minimum"]["duplicate_resolutions"]}
+    # UB6 and reading-forecast activate v2 together. Current packets keep v1.
+    minimum = build_minimum(statement, bound, readings, spec["minimum"], schema_version=1)
     # The declaration is checked against the store before the export writes anything.
     from .openness_minimum import validate_minimum_bindings
     validate_minimum_bindings(minimum, statement["statement"], records)

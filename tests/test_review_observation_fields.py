@@ -37,16 +37,25 @@ class ObservationFieldsTests(LiteratureCase):
         self.addCleanup(self.environment.stop)
 
     def failed(self, *, thread='thread-123', answer='', adapter='codex_cli_v1', status='failed'):
-        route = dict(id='local-route', adapter=adapter, runtime={'fixture': True})
+        original = self.records()['review_route']['route']
+        configuration = dict(original['configuration'])
+        if adapter == 'claude_cli_v1':
+            configuration['effort'] = 'max'
+        route = dict(original, id='local-route', adapter=adapter, runtime={'fixture': True},
+                     endpoint='claude://local' if adapter == 'claude_cli_v1' else 'codex://local',
+                     configuration=configuration)
+        request = transport.request_body(route, 'Return JSON.', dict(
+            allowed_control='A' * 32, evidence_control='B' * 32, evidence=[]))
         response = self.response({})
         response['status'] = 'incomplete'
         response['output'][0]['content'][0]['text'] = answer
         response['context_evidence'] = {'thread_id': thread}
-        observation = dict(status=status, request={}, response=response, output=None,
+        observation = dict(status=status, request=request, response=response, output=None,
+                           usage=dict(input_tokens=None, output_tokens=None, cost_usd=None, wall_seconds=0),
                            error=dict(kind='JSONDecodeError', code='review_transport_failure'))
         with patch.object(transport, 'runtime', return_value=route['runtime']), \
                 patch.object(transport, 'observe', return_value=observation):
-            return protocol._observed(self.artifacts, route, {}, None)
+            return protocol._observed(self.artifacts, route, request, None)
 
     def rollout(self, error=None):
         path = self.codex_home / 'sessions' / '2026' / '11' / '04' / 'rollout-test-thread-123.jsonl'
@@ -63,6 +72,9 @@ class ObservationFieldsTests(LiteratureCase):
         for adapter in ('codex_cli_v1', 'codex_cli_framed_v1', 'codex_cli_visual_v1'):
             before = datetime.now(timezone.utc).replace(microsecond=0)
             observed = self.failed(adapter=adapter)
+            self.assertEqual(observed['task']['kind'], 'probe')
+            self.assertGreater(observed['task']['characters'], 0)
+            self.assertGreater(observed['usage']['request_characters'], 0)
             after = datetime.now(timezone.utc)
             self.assertLessEqual(before, datetime.fromisoformat(observed['observed_at']))
             self.assertLessEqual(datetime.fromisoformat(observed['observed_at']), after)

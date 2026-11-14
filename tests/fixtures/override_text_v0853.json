@@ -1,0 +1,113 @@
+{
+  "source": "0.86.0 text shape, also written by 0.85.3",
+  "text": "Continue through the named gate on my instruction. Keep the missing reviews visible.\n",
+  "record": {
+    "authority": "user",
+    "evidence": "reported_by_agent",
+    "gate": "post",
+    "id": "override-1",
+    "instruction": {
+      "artifact": {
+        "media_type": "text/plain; charset=utf-8",
+        "path": "research/sources/objects/3b7d1cafef33143300afd7ca07b42ca4fc5919428cac865ecf9f0a0c8113cba7",
+        "sha256": "3b7d1cafef33143300afd7ca07b42ca4fc5919428cac865ecf9f0a0c8113cba7",
+        "size": 85
+      },
+      "path": "context/instruction.txt",
+      "text": "Continue through the named gate on my instruction. Keep the missing reviews visible.\n"
+    },
+    "obligations": [
+      {
+        "code": "problem_slate_missing",
+        "explanation": "Compare the current candidates and record the selection decision."
+      },
+      {
+        "code": "problem_attempt_missing",
+        "explanation": "Attempt the exact statement with math-solver, or assess an existing attempt from full readings, and record it."
+      },
+      {
+        "code": "problem_openness_missing",
+        "explanation": "Obtain an observed openness finding for the selected statement."
+      },
+      {
+        "code": "problem_value_missing",
+        "explanation": "Bind motivation and current-state paragraphs to this statement's evidence."
+      },
+      {
+        "code": "problem_assessment_missing",
+        "explanation": "Record the rubric self-assessment with an evidence reference for every item."
+      },
+      {
+        "code": "problem_bar_pending",
+        "explanation": "A major scientific decision requires two distinct independent assessments"
+      },
+      {
+        "code": "problem_review_pair_required",
+        "explanation": "A major scientific decision requires two distinct independent assessments"
+      },
+      {
+        "code": "problem_decision_missing",
+        "explanation": "Record a post decision after both observed result reviews."
+      }
+    ],
+    "reason": "The user requested continued work with the obligations retained.",
+    "recorded_revision": 3,
+    "statement_digest": "4dabe5e029c3aec879913c524d5e70bf161fb47c11d19343d94e67eb462a8c18",
+    "statement_id": "statement-1"
+  },
+  "local": {
+    "authority": "user",
+    "evidence": "reported_by_agent",
+    "expected_revision": 3,
+    "gate": "post",
+    "id": "local",
+    "instruction": {
+      "path": "context/instruction.txt",
+      "sha256": "3b7d1cafef33143300afd7ca07b42ca4fc5919428cac865ecf9f0a0c8113cba7",
+      "text": "Continue through the named gate on my instruction. Keep the missing reviews visible.\n"
+    },
+    "reason": "The user requested continued work with the obligations retained.",
+    "request_id": "local"
+  },
+  "record_digest": "44aa7826e8b6e6964a6eebfa13775dd0791f610f4f6defa915d3dea794f1bfc2",
+  "local_digest": "d6da3865e0efca4f6400f2af163b20f611d1b24e27dc8024017910f9206b6df2",
+  "view": "{\n  \"authority\": \"user\",\n  \"evidence\": \"reported_by_agent\",\n  \"gate\": \"post\",\n  \"id\": \"override-1\",\n  \"instruction\": {\n    \"artifact\": {\n      \"media_type\": \"text/plain; charset=utf-8\",\n      \"path\": \"research/sources/objects/3b7d1cafef33143300afd7ca07b42ca4fc5919428cac865ecf9f0a0c8113cba7\",\n      \"sha256\": \"3b7d1cafef33143300afd7ca07b42ca4fc5919428cac865ecf9f0a0c8113cba7\",\n      \"size\": 85\n    },\n    \"path\": \"context/instruction.txt\",\n    \"text\": \"Continue through the named gate on my instruction. Keep the missing reviews visible.\\n\"\n  },\n  \"obligations\": [\n    {\n      \"code\": \"problem_slate_missing\",\n      \"explanation\": \"Compare the current candidates and record the selection decision.\"\n    },\n    {\n      \"code\": \"problem_attempt_missing\",\n      \"explanation\": \"Attempt the exact statement with math-solver, or assess an existing attempt from full readings, and record it.\"\n    },\n    {\n      \"code\": \"problem_openness_missing\",\n      \"explanation\": \"Obtain an observed openness finding for the selected statement.\"\n    },\n    {\n      \"code\": \"problem_value_missing\",\n      \"explanation\": \"Bind motivation and current-state paragraphs to this statement's evidence.\"\n    },\n    {\n      \"code\": \"problem_assessment_missing\",\n      \"explanation\": \"Record the rubric self-assessment with an evidence reference for every item.\"\n    },\n    {\n      \"code\": \"problem_bar_pending\",\n      \"explanation\": \"A major scientific decision requires two distinct independent assessments\"\n    },\n    {\n      \"code\": \"problem_review_pair_required\",\n      \"explanation\": \"A major scientific decision requires two distinct independent assessments\"\n    },\n    {\n      \"code\": \"problem_decision_missing\",\n      \"explanation\": \"Record a post decision after both observed result reviews.\"\n    }\n  ],\n  \"reason\": \"The user requested continued work with the obligations retained.\",\n  \"recorded_revision\": 3,\n  \"statement_digest\": \"4dabe5e029c3aec879913c524d5e70bf161fb47c11d19343d94e67eb462a8c18\",\n  \"statement_id\": \"statement-1\"\n}\n",
+  "view_sha256": "9166027c99a13f8538ec4e3d324ffc4f813de154951625c4f21a5b723e45534b",
+  "description": {
+    "overrides": [
+      {
+        "id": "override-1",
+        "gate": "post",
+        "transition": null,
+        "stop_code": null,
+        "instruction": "Continue through the named gate on my instruction. Keep the missing reviews visible.\n",
+        "obligations": [
+          "problem_slate_missing",
+          "problem_attempt_missing",
+          "problem_openness_missing",
+          "problem_value_missing",
+          "problem_assessment_missing",
+          "problem_bar_pending",
+          "problem_review_pair_required",
+          "problem_decision_missing"
+        ]
+      }
+    ],
+    "unrecorded_overrides": [
+      {
+        "authority": "user",
+        "evidence": "reported_by_agent",
+        "expected_revision": 3,
+        "gate": "post",
+        "id": "local",
+        "instruction": {
+          "path": "context/instruction.txt",
+          "sha256": "3b7d1cafef33143300afd7ca07b42ca4fc5919428cac865ecf9f0a0c8113cba7",
+          "text": "Continue through the named gate on my instruction. Keep the missing reviews visible.\n"
+        },
+        "reason": "The user requested continued work with the obligations retained.",
+        "request_id": "local"
+      }
+    ]
+  }
+}

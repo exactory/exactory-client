@@ -242,27 +242,41 @@ def record_automatic_override(store, payload, *, expected_revision, request_id, 
 
 
 def _covers_public_write(rows, gate, public_action):
-    return any(row.get("authority") == "user" and (
-        row.get("public_action") == public_action if row.get("public_action") is not None else
-        gate is not None and row["gate"] == gate) for row in rows)
+    from .overrides import covers_public_write
+    return any(covers_public_write(row, gate, public_action) for row in rows)
 
 
 def require_public_write_instruction(store, gate, *, public_action=None, precheck=False):
-    """An automatic continuation never supplies authority for a remote write."""
-    if not (store.root / ".exactory/automatic-passes").exists():
+    """Enforce standing user conditions, and require coverage after an automatic pass."""
+    from .overrides import (assess_write_authority, collect_applicable_overrides,
+                            read_unrecorded_overrides, require_met_override_conditions)
+    automatic = (store.root / ".exactory/automatic-passes").exists()
+    local = read_unrecorded_overrides(store.root) or []
+    write = dict(gate=gate, public_action=public_action)
+    observed, readable = {}, True
+    try:
+        # This cheap discovery read grants no authority. A condition or an
+        # automatic pass requires the authenticated snapshot below.
+        records = store.read_kinds(("gate_override",))[2]
+        observed = {row["id"]: row for row in records.get("gate_override", {}).values() if "condition" in row}
+        applicable = collect_applicable_overrides(records, local, write)
+        if automatic or any("condition" in row for row in applicable):
+            records = store.snapshot()["records"]
+    except ResearchError:
+        # Discovery can retain a condition to refuse, but cannot establish its
+        # evidence or grant coverage from an unreadable authoritative store.
+        records, readable = dict(gate_override=observed), False
+    # A managed path has not chosen its concrete requests yet. Every
+    # transport checks its exact action before sending a write.
+    rows = list((records or {}).get("gate_override", {}).values()) + local
+    if precheck and public_action is None and any(row.get("authority") == "user"
+                                               and row.get("public_action") is not None for row in rows):
         return
-    from .overrides import read_unrecorded_overrides
-    records = store.snapshot()["records"]
-    rows = list(records.get("gate_override", {}).values())
-    for entries in (rows, read_unrecorded_overrides(store.root) or []):
-        if _covers_public_write(entries, gate, public_action):
-            return
-        # A managed path has not chosen its concrete requests yet (a deposit
-        # can resume several different steps). Admit scoped instructions here;
-        # every transport still checks its exact action before sending a write.
-        if precheck and public_action is None and any(row.get("authority") == "user"
-                            and row.get("public_action") is not None for row in entries):
-            return
+    authority = assess_write_authority(records, local, write,
+        artifacts=store.build_artifact_store() if readable else None)
+    require_met_override_conditions(authority)
+    if authority["authorized"] or not automatic:
+        return
     _refuse("public_write", "Need the user's instruction recorded for this public write.", gate=gate,
             public_action=public_action, next="exactory-research gate-override")
 
@@ -277,21 +291,21 @@ def check_public_write(gate, *, public_action=None):
     # Discover those independently of the ordinary workspace contract.
     root = find_workspace(required=False)
     for directory in (start, *start.parents):
-        if (directory / ".exactory/automatic-passes").exists():
+        if ((directory / ".exactory/automatic-passes").exists()
+                or (directory / ".exactory/unrecorded-overrides.jsonl").exists()):
             root = directory
             break
         if directory == root:
             break
-    # Automatic passes write reports before commit, so no report directory means no pass.
-    if root is not None and (root / ".exactory/automatic-passes").exists():
+    if root is not None:
         try:
             store = Store(root)
-            store.snapshot()
         except ResearchError:
-            if not (root / ".exactory/automatic-passes").exists():
-                return
-            from .overrides import read_unrecorded_overrides
-            if _covers_public_write(read_unrecorded_overrides(root) or [], gate, public_action):
+            from .overrides import assess_write_authority, read_unrecorded_overrides, require_met_override_conditions
+            authority = assess_write_authority(None, read_unrecorded_overrides(root) or [],
+                                               dict(gate=gate, public_action=public_action))
+            require_met_override_conditions(authority)
+            if authority["authorized"] or not (root / ".exactory/automatic-passes").exists():
                 return
             _refuse("public_write", "Need a readable store or a local user instruction covering this public write.",
                     gate=gate, public_action=public_action)

@@ -5,6 +5,7 @@ import copy
 from datetime import datetime, timedelta, timezone
 import json
 import re
+from typing import Any, Dict, List, Literal, TypedDict, Union
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .errors import ResearchError
@@ -25,7 +26,10 @@ OUTCOME_CODES = {
     'provider_unavailable': 'review_provider_unavailable',
     'provider_refused': 'review_provider_refused',
     'output_over_cap': 'review_output_over_cap',
+    'response_over_limit': 'review_response_too_large',
     'execution_incomplete': 'review_execution_incomplete',
+    'interrupted': 'review_invocation_interrupted',
+    'stopped': 'review_chain_stopped',
     'timeout': 'review_timeout',
     'answer_malformed': 'review_answer_malformed',
     'context_unverified': 'review_context_unverified',
@@ -39,6 +43,67 @@ SINGLE_RETRY_LIMIT = 2
 # 18 safeguards stops in 1,114 retained CLI runs across LIVE-RECORDS (2026-11-13).
 # (1 - (18/1114)**3)**66 = 0.9997216, including the largest chain's planned final turn.
 PROVIDER_REFUSAL_ATTEMPT_LIMIT = 3
+SEQUENCE_LIMIT = 3
+SEQUENCE_WAIT_SECONDS = 1800
+IDENTICAL_OVER_CAP_ATTEMPT_LIMIT = 2
+ROUTE_DECISION_QUESTION = 'Whether this slot or chain moves to a route with another effort or limit.'
+# c bounds attempts at different task levels only (ruling 19). Independence is
+# an assumption, not a measured property. Test it by grouping retained retries
+# by task level and hour, then comparing P(over cap | earlier over cap) with p.
+# Provider safeguards have the same assumption; group W4's sample by hour.
+OUTCOME_ROWS = {
+    name: dict(attempt_limit=limit, exhausted=exhausted, schedule=schedule)
+    for name, limit, exhausted, schedule in (
+        ('usage_limit', 7, 'sequence', 'provider'),
+        ('model_at_capacity', 7, 'sequence', 'provider'),
+        ('provider_unavailable', 7, 'sequence', 'provider'),
+        ('runtime_unavailable', 7, 'handoff', 'runtime'),
+        ('runtime_stale', 1, 'handoff', None),
+        ('provider_refused', PROVIDER_REFUSAL_ATTEMPT_LIMIT, 'sequence', None),
+        ('output_over_cap', IDENTICAL_OVER_CAP_ATTEMPT_LIMIT, 'decision', None),
+        ('response_over_limit', 2, 'decision', None),
+        ('input_over_limit', 1, 'decision', None),
+        ('timeout', 2, 'decision', None),
+        ('execution_incomplete', 3, 'sequence', None),
+        ('interrupted', TURN_FAILURE_LIMIT, 'sequence', None),
+        ('stopped', 0, 'none', None),
+        ('answer_malformed', 2, 'sequence', None),
+        ('context_unverified', 2, 'sequence', None),
+        ('scientific_refused', SINGLE_RETRY_LIMIT, 'role', None),
+        ('format_unsupported', 1, 'decision', None),
+        ('unknown', 2, 'sequence', None))
+}
+
+
+class ReplacementRecovery(TypedDict):
+    kind: Literal['replace']
+    reason: str
+    payload: Dict[str, Any]
+    preflight: Dict[str, Any]
+    details: Dict[str, Any]
+
+
+class DecisionRecovery(TypedDict):
+    kind: Literal['decision']
+    code: str
+    owner_decides: str
+    then: List[Dict[str, Any]]
+    details: Dict[str, Any]
+
+
+RecoveryResult = Union[ReplacementRecovery, DecisionRecovery]
+
+
+def calculate_over_cap_allowance(share=None, turns=66):
+    """Bound attempts at distinct levels; identical runs always have their own cap."""
+    if share is None:
+        return 2
+    for count in range(2, 8):
+        if (1 - share ** count) ** turns >= 0.99:
+            return count
+    return 7
+
+
 CHEAP_FAILURE_SECONDS = 120
 _CODEX_ADAPTERS = ('codex_cli_v1', 'codex_cli_framed_v1', 'codex_cli_visual_v1')
 _MONTH_NUMBERS = {name: number for number, name in enumerate(
@@ -50,6 +115,51 @@ _CODEX_RESET = re.compile(
     re.IGNORECASE)
 _OUTPUT_TOKEN_MAXIMUM_ERROR = re.compile(
     r'^API Error:.*?\bresponse exceeded (?:the )?([0-9]+) output token maximum\b', re.IGNORECASE)
+# SDKCompactBoundaryMessage, read 2026-11-14:
+# https://code.claude.com/docs/en/agent-sdk/typescript#sdkcompactboundarymessage
+CLAUDE_COMPACTION_SUBTYPE = 'compact_boundary'
+
+
+def find_capacity_signal(route, attempt, response, answer):
+    """Recognize size evidence without learning any limit or token ratio from it."""
+    error = attempt.get('error') or {}
+    code = error.get('code')
+    if code == 'review_response_too_large':
+        status = (error.get('details') or {}).get('status')
+        outcome = ('usage_limit' if status == 429 else 'provider_unavailable') if (
+            type(status) is int and not 200 <= status < 300) else 'response_over_limit'
+        return dict(outcome=outcome, signal=dict(source='attempt.error.code', value=code, status=status), reset_at=None)
+    maximum = _OUTPUT_TOKEN_MAXIMUM_ERROR.match(answer.lstrip())
+    if maximum is not None:
+        from .review_route_capacity import describe_route_capacity
+        stated = int(maximum.group(1))
+        signal = dict(source='response.answer', value=answer, max_output_tokens=stated)
+        if 'for a request sent without streaming' in answer:
+            signal['detail'] = 'non_streaming_fallback'
+            return dict(outcome='execution_incomplete', signal=signal, reset_at=None)
+        if stated < describe_route_capacity(route)['output_tokens']['value']:
+            signal['detail'] = 'reduced_by_context'
+        return dict(outcome='output_over_cap', signal=signal, reset_at=None)
+    if answer.lstrip().startswith('Prompt is too long'):
+        return dict(outcome='input_over_limit', signal=dict(source='response.answer', value=answer), reset_at=None)
+    diagnostic = attempt.get('provider_diagnostic') or {}
+    if diagnostic.get('codex_error_info') == 'context_window_exceeded':
+        return dict(outcome='input_over_limit', signal=dict(
+            source='provider_diagnostic.codex_error_info', value='context_window_exceeded'), reset_at=None)
+    issues = (response.get('context_evidence') or {}).get('issues', [])
+    if route['adapter'] in _CODEX_ADAPTERS and issues == ['uninspected_compaction']:
+        return dict(outcome='input_over_limit', signal=dict(
+            source='response.context_evidence.issues', value=issues, detail='compacted'), reset_at=None)
+    if route['adapter'] == 'claude_cli_v1' and issues == ['system_event_' + CLAUDE_COMPACTION_SUBTYPE]:
+        for entry in (response.get('execution') or {}).get('system_events', {}).get('events', []):
+            try:
+                event = json.loads(base64.b64decode(entry['raw_base64'], validate=True))
+            except (KeyError, ValueError, TypeError):
+                continue
+            if isinstance(event, dict) and event.get('type') == 'system' and event.get('subtype') == CLAUDE_COMPACTION_SUBTYPE:
+                return dict(outcome='input_over_limit', signal=dict(
+                    source='response.execution.system_events', value=event, detail='compacted'), reset_at=None)
+    return None
 
 
 def read_attempt_evidence(artifacts, attempt):
@@ -125,7 +235,8 @@ def parse_reset_time(text, observed_at):
 def find_output_cap_signal(records, artifacts, assignment, attempt):
     """Use the adaptive handlers' own detectors before the route-token fallback."""
     route = records.get('review_route', {}).get(assignment['route_id'], {})
-    maximum = route.get('configuration', {}).get('max_output_tokens')
+    from .review_route_capacity import describe_route_capacity
+    maximum = describe_route_capacity(route)['output_tokens']['value']
     # Restrict the existing predicates to this exact attempt; another call cannot decide its outcome.
     evidence = dict(records, review_assignment={assignment['id']: assignment},
                     review_attempt={attempt['id']: attempt})
@@ -166,8 +277,16 @@ def find_safeguard_notice(response):
 
 def classify_attempt(records, artifacts, attempt):
     """Return the first decided failure layer, or None for a usable completed output."""
+    from .review_refusal import refused_attempts
+    if not (attempt['status'] == 'completed' and attempt.get('output') is not None):
+        for stop in records.get('review_stop', {}).values():
+            if stop['mode'] == 'now' and any(
+                    (call['operation'] == 'review.invoke' and call.get('invocation_id') == attempt['id'])
+                    or (attempt.get('reservation_id') is not None
+                        and call.get('reservation_id') == attempt['reservation_id']) for call in stop['calls']):
+                return dict(outcome='stopped', signal=dict(source='review_stop', value=stop['id']), reset_at=None)
     if (attempt['status'] == 'completed' and attempt.get('output') is not None
-            and attempt['id'] not in records.get('review_output_refusal', {})
+            and not refused_attempts(records, artifacts, [attempt])
             and attempt.get('reservation_id') not in records.get('review_task_refusal', {})
             and protocol._context_observed(artifacts, attempt)):
         return None
@@ -177,20 +296,19 @@ def classify_attempt(records, artifacts, attempt):
     error_code = (attempt.get('error') or {}).get('code')
     diagnostic = attempt.get('provider_diagnostic') or {}
     usage_line = re.match(r"^You['’]ve (?:hit|reached) your\b[^\n]*\blimit\b", answer.strip())
-    output_maximum = _OUTPUT_TOKEN_MAXIMUM_ERROR.match(answer.lstrip())
+    capacity_signal = find_capacity_signal(records['review_route'][assignment['route_id']], attempt, response, answer)
     outcome, signal, reset_at = 'unknown', dict(source='retained_evidence', value='undecided'), None
     dispatch = {'review_runtime_missing': 'runtime_unavailable',
+                'review_invocation_interrupted': 'interrupted',
                 'review_route_runtime_stale': 'runtime_stale',
                 'review_format_unsupported': 'format_unsupported', 'review_input_too_large': 'input_over_limit'}
     if error_code in dispatch:
         outcome, signal = dispatch[error_code], dict(source='attempt.error.code', value=error_code)
+    elif capacity_signal is not None:
+        return capacity_signal
     elif safeguard_notice is not None:
         outcome = 'provider_refused'
         signal = dict(source='response.execution.system_events', value=safeguard_notice)
-    elif output_maximum is not None:
-        outcome = 'output_over_cap'
-        signal = dict(source='response.answer', value=answer,
-                      max_output_tokens=int(output_maximum.group(1)))
     elif usage_line or diagnostic.get('codex_error_info') == 'usage_limit_exceeded':
         outcome = 'usage_limit'
         signal = dict(source='response.answer' if usage_line else 'provider_diagnostic.codex_error_info',
@@ -213,13 +331,10 @@ def classify_attempt(records, artifacts, attempt):
             outcome = 'timeout'
             signal = (dict(source='response.execution.timeout', value=True) if execution.get('timeout') is True
                       else dict(source='attempt.status', value=attempt['status']))
-        elif (error_code == 'review_invocation_interrupted'
-              or 'incomplete_turn' in issues or 'tool_or_injected_input' in issues
+        elif ('incomplete_turn' in issues or 'tool_or_injected_input' in issues
               or (bool(answer.strip()) and response.get('status') == 'incomplete')):
             outcome = 'execution_incomplete'
-            if error_code == 'review_invocation_interrupted':
-                signal = dict(source='attempt.error.code', value=error_code)
-            elif 'incomplete_turn' in issues or 'tool_or_injected_input' in issues:
+            if 'incomplete_turn' in issues or 'tool_or_injected_input' in issues:
                 signal = dict(source='response.context_evidence.issues', value=issues)
             else:
                 signal = dict(source='response.status', value=response['status'], answer_characters=len(answer))
@@ -343,71 +458,229 @@ def plan_scheduled_retry(attempt, failure_count, reset_at=None):
     return 'wait', deadline.isoformat(timespec='seconds')
 
 
-def plan_after_failure(records, artifacts, assignment_id):
-    """Derive all counts and deadlines from the whole retained failure sequence."""
-    assignment = records['review_assignment'][assignment_id]
+def plan_capacity_recovery(records, artifacts, assignment, outcome) -> RecoveryResult:
+    """Adapt the existing smaller-request proof to D2's shared recovery result."""
+    replacement = (plan_output_replacement(records, artifacts, assignment)
+                   if outcome in ('output_over_cap', 'timeout', 'provider_refused') else None)
+    if replacement is not None and replacement['state'] == 'replace':
+        payload = {key: copy.deepcopy(assignment[key]) for key in
+                   ('id', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
+        payload['id'] += '-replacement'
+        payload['context'] = replacement['context']
+        return dict(kind='replace', reason='capacity', payload=payload,
+                    preflight=replacement['preflight'], details=replacement)
+    steps = [dict(command='review-route',
+                  chooses=['id', 'adapter', 'model', 'endpoint', 'configuration'])]
+    return dict(kind='decision', code=(replacement or {}).get('code', OUTCOME_CODES[outcome]),
+        owner_decides=ROUTE_DECISION_QUESTION,
+        then=[dict(answer='Move to another route', steps=steps)], details=replacement or {})
+
+
+def _is_scheduled_unknown(records, artifacts, failures):
+    """Retain the Codex rule for a prefix of cheap empty failures."""
+    for attempt, _ in failures:
+        _, answer = read_attempt_evidence(artifacts, attempt)
+        seconds = (attempt.get('usage') or {}).get('wall_seconds')
+        if answer.strip() or type(seconds) not in (int, float) or not 0 <= seconds <= CHEAP_FAILURE_SECONDS:
+            return False
+    assignment = records['review_assignment'][failures[-1][0]['assignment_id']]
+    return records['review_route'][assignment['route_id']]['adapter'] in _CODEX_ADAPTERS
+
+
+def _describe_sequence_counts(records, artifacts, failures):
+    counts = {}
+    provider_count = 0
+    for index, (attempt, item) in enumerate(failures):
+        outcome = item['outcome']
+        counts[outcome] = counts.get(outcome, 0) + 1
+        eligible = outcome in _PROVIDER_OUTCOMES or (
+            outcome == 'unknown' and _is_scheduled_unknown(records, artifacts, failures[:index + 1]))
+        provider_count += eligible
+    return counts, provider_count, eligible
+
+
+def has_smaller_task(artifacts, previous, assignment):
+    """Read the level change that the existing parts handler stored in its packets.
+
+    D1 extends this reader when it stores levels for the other turn kinds.
+    A new assignment id by itself does not start a smaller task or a sequence.
+    """
+    old = protocol._read_json(artifacts, previous['packet'])
+    new = protocol._read_json(artifacts, assignment['packet'])
+    if parts.find_kind(new) != 'read':
+        return False
+    return (parts.find_kind(old) != 'read'
+            or new[parts.KEY]['unit_characters'] < old[parts.KEY]['unit_characters'])
+
+
+def count_position(records, artifacts, assignment):
+    """Count sequences from retained attempts, replacements, stops and owner events."""
     identifiers = set(list_turn_assignments(records, assignment))
-    attempts = sorted((attempt for attempt in records.get('review_attempt', {}).values()
-                       if attempt['assignment_id'] in identifiers), key=lambda attempt: attempt['recorded_revision'])
-    failures = []
-    for attempt in attempts:
-        classification = classify_attempt(records, artifacts, attempt)
+    attempts = [row for row in records.get('review_attempt', {}).values()
+                if row['assignment_id'] in identifiers]
+    events = [row for row in records.get('review_context_event', {}).values()
+              if row['assignment_id'] in identifiers and row['kind'] == 'observation'
+              and row['source'] == 'owner']
+    members = [records['review_assignment'][key] for key in identifiers]
+    ordered = sorted([(row.get('recorded_revision', 0), 'attempt', row) for row in attempts]
+                     + [(row.get('recorded_revision', 0), 'event', row) for row in events]
+                     + [(row.get('recorded_revision', 0), 'assignment', row) for row in members],
+                     key=lambda item: (item[0], item[1], item[2]['id']))
+    failures, sequence, permitted, ended = [], 1, SEQUENCE_LIMIT, False
+    over_cap, replacements, complete = 0, dict(capacity=0, output_refused=0), False
+    over_cap_by_assignment, over_cap_by_level = {}, {}
+    levels, previous_member, level = {}, None, 0
+    for member in members:
+        if member['id'] == min(members, key=lambda row: row.get('recorded_revision', 0))['id']:
+            continue
+        reason = 'output_refused' if member.get('context', {}).get('output_refusal') else 'capacity'
+        replacements[reason] += 1
+    counts, provider_count, eligible = {}, 0, False
+    sequence_ends = {}
+    for revision, kind, row in ordered:
+        if kind == 'assignment':
+            if previous_member is not None and has_smaller_task(artifacts, previous_member, row):
+                level += 1
+                if ended and len(failures) < TURN_FAILURE_LIMIT and failures[-1][1]['outcome'] in (
+                        'provider_refused', 'output_over_cap', 'input_over_limit', 'timeout'):
+                    ended = False
+                    sequence_ends.pop(sequence, None)
+            levels[row['id']] = level
+            previous_member = row
+            continue
+        if kind == 'event':
+            if permitted in sequence_ends and revision > sequence_ends[permitted]:
+                permitted += 1
+            continue
+        classification = classify_attempt(records, artifacts, row)
         if classification is None:
+            if row['assignment_id'] != assignment['id']:
+                continue
+            failures, ended, complete = [], False, True
+            counts, provider_count, eligible = {}, 0, False
+            break
+        if classification['outcome'] == 'stopped':
+            continue
+        complete = False
+        if ended:
+            sequence += 1
             failures = []
-        else:
-            failures.append((attempt, classification))
+        failures.append((row, classification))
+        outcome = classification['outcome']
+        over_cap += outcome == 'output_over_cap'
+        if outcome == 'output_over_cap':
+            key = row['assignment_id']
+            over_cap_by_assignment[key] = over_cap_by_assignment.get(key, 0) + 1
+            task_level = levels.get(key, 0)
+            over_cap_by_level[task_level] = over_cap_by_level.get(task_level, 0) + 1
+        counts, provider_count, eligible = _describe_sequence_counts(records, artifacts, failures)
+        limit = len(PROVIDER_WAIT_SECONDS) + 1 if eligible else OUTCOME_ROWS[outcome]['attempt_limit']
+        used = provider_count if eligible else counts[outcome]
+        ended = len(failures) >= TURN_FAILURE_LIMIT or used >= limit
+        if ended:
+            sequence_ends[sequence] = revision
+    return dict(sequence=sequence, failures=failures, failures_by_outcome=counts,
+                failed_attempts=len(failures), sequence_ended=ended,
+                sequences_remaining=max(0, permitted - sequence), permitted_sequences=permitted,
+                provider_count=provider_count, provider_eligible=eligible, complete=complete,
+                over_cap_attempts=over_cap, over_cap_by_assignment=over_cap_by_assignment,
+                over_cap_by_level=over_cap_by_level, level=levels.get(assignment['id'], 0),
+                replacements=replacements)
+
+
+def _plan_sequence_end(last, classification, position):
+    if position['sequences_remaining'] == 0:
+        return dict(state='stop', code='review_turn_failures_exhausted', not_before=None)
+    observed = parse_observation_time(last)
+    deadline = observed + timedelta(seconds=SEQUENCE_WAIT_SECONDS) if observed is not None else None
+    reset = classification.get('reset_at')
+    if reset is not None:
+        reset = datetime.fromisoformat(reset)
+        deadline = max(deadline, reset) if deadline is not None else reset
+    return dict(state='wait' if deadline is not None else 'run',
+                code='review_provider_unavailable' if position['provider_eligible'] else 'review_sequence_wait',
+                not_before=deadline.isoformat(timespec='seconds') if deadline is not None else None)
+
+
+def plan_after_failure(records, artifacts, assignment_id):
+    """Select the outcome row with one counter and one bounded recovery interface."""
+    assignment = records['review_assignment'][assignment_id]
+    position = count_position(records, artifacts, assignment)
+    failures = position['failures']
     if not failures:
         return dict(state='run', not_before=None, code=None, details=dict(failed_attempts=0))
     last, classification = failures[-1]
-    count = len(failures)
     outcome = classification['outcome']
-    code = OUTCOME_CODES[outcome]
-    state, not_before = 'stop', None
-    details = dict(classification, failed_attempts=count, attempt_id=last['id'])
-    if outcome == 'output_over_cap':
-        configuration = records['review_route'][assignment['route_id']]['configuration']
-        details.update(output_tokens=(last.get('usage') or {}).get('output_tokens'),
-                       max_output_tokens=configuration['max_output_tokens'])
-    if count >= TURN_FAILURE_LIMIT:
-        code = 'review_turn_failures_exhausted'
-    elif outcome == 'output_over_cap':
-        replacement = plan_output_replacement(records, artifacts, assignment)
-        if replacement is not None:
-            replacement = dict(replacement)
-            state, code = replacement.pop('state'), replacement.pop('code')
-            details.update(replacement)
-    elif outcome == 'input_over_limit':
-        if protocol._initial_size_failure(records, artifacts, assignment, assignment):
-            state = 'replace'
+    row = OUTCOME_ROWS[outcome]
+    details = dict(classification, failed_attempts=position['failed_attempts'], attempt_id=last['id'],
+                   sequence=position['sequence'], failures_by_outcome=position['failures_by_outcome'],
+                   sequences_remaining=position['sequences_remaining'], replacements=position['replacements'])
+    result = dict(state='run', not_before=None, code=OUTCOME_CODES[outcome], details=details)
+    used = position['failures_by_outcome'][outcome]
+    if position['sequence'] > position['permitted_sequences']:
+        result.update(state='stop', code='review_turn_failures_exhausted')
+        return result
+    if position['failed_attempts'] >= TURN_FAILURE_LIMIT and row['exhausted'] in ('sequence', 'role'):
+        result.update(_plan_sequence_end(last, classification, position))
+        if result['state'] == 'wait' and datetime.now(timezone.utc) >= datetime.fromisoformat(result['not_before']):
+            result['state'] = 'run'
+        return result
+    if (assignment.get('recorded_revision', 0) > last.get('recorded_revision', 0)
+            and not position['sequence_ended']):
+        return result
+    if outcome in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused'):
+        recovery = plan_capacity_recovery(records, artifacts, assignment, outcome)
+        details.update(recovery['details'])
+        if outcome == 'output_over_cap':
+            from .review_route_capacity import describe_route_capacity
+            capacity = describe_route_capacity(records['review_route'][assignment['route_id']])
+            details.update(output_tokens=(last.get('usage') or {}).get('output_tokens'),
+                           max_output_tokens=capacity['output_tokens']['value'],
+                           over_cap_attempts=position['over_cap_attempts'])
+        if (outcome != 'provider_refused' or used >= PROVIDER_REFUSAL_ATTEMPT_LIMIT) and (
+                outcome != 'timeout' or used >= 2):
+            allowance = calculate_over_cap_allowance()
+            if recovery['kind'] == 'replace' and (position['failed_attempts'] >= TURN_FAILURE_LIMIT
+                    or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance):
+                result.update(state='stop')
+                details.update(over_cap_allowance=allowance, recovery=recovery)
+                return result
+            if recovery['kind'] == 'replace':
+                result.update(state='replace')
+                details.update(recovery['details'], reason=recovery['reason'], recovery=recovery)
+                return result
+        if (outcome == 'input_over_limit' and position['failed_attempts'] < TURN_FAILURE_LIMIT
+                and protocol._initial_size_failure(
+                records, artifacts, assignment, assignment)):
+            result['state'] = 'replace'
             details['context'] = copy.deepcopy(assignment['context'])
-    elif outcome == 'runtime_unavailable':
-        runtime_count = sum(item['outcome'] == outcome for _, item in failures)
-        state, not_before = plan_scheduled_retry(last, runtime_count)
-    elif outcome == 'provider_refused':
-        outcome_count = sum(item['outcome'] == outcome for _, item in failures)
-        state = 'run' if outcome_count < PROVIDER_REFUSAL_ATTEMPT_LIMIT else 'stop'
-    elif outcome in ('scientific_refused', 'execution_incomplete',
-                     'answer_malformed', 'context_unverified'):
-        outcome_count = sum(item['outcome'] == outcome for _, item in failures)
-        state = 'run' if outcome_count < SINGLE_RETRY_LIMIT else 'stop'
-    elif outcome in _PROVIDER_OUTCOMES or outcome == 'unknown':
-        provider_count = 0
-        failures_were_cheap_and_empty = True
-        for attempt, item in failures:
-            _, answer = read_attempt_evidence(artifacts, attempt)
-            seconds = (attempt.get('usage') or {}).get('wall_seconds')
-            if answer.strip() or type(seconds) not in (int, float) or not 0 <= seconds <= CHEAP_FAILURE_SECONDS:
-                failures_were_cheap_and_empty = False
-            route_id = records['review_assignment'][attempt['assignment_id']]['route_id']
-            adapter = records['review_route'][route_id]['adapter']
-            eligible = (item['outcome'] in _PROVIDER_OUTCOMES
-                        or (item['outcome'] == 'unknown' and adapter in _CODEX_ADAPTERS
-                            and failures_were_cheap_and_empty))
-            provider_count += eligible
-        if eligible:
-            state, not_before = plan_scheduled_retry(last, provider_count, classification['reset_at'])
-            if state == 'stop':
-                code = 'review_provider_unavailable'
-    if state == 'wait' and datetime.now(timezone.utc) >= datetime.fromisoformat(not_before):
-        state = 'run'
-    return dict(state=state, not_before=not_before, code=code, details=details)
+            return result
+        if outcome in ('output_over_cap', 'input_over_limit', 'timeout'):
+            # A parts floor retains its existing terminal code. Otherwise at most
+            # one identical retry is allowed, independent of a profile's c.
+            floor = recovery['kind'] == 'decision' and recovery['code'] == 'review_parts_budget_exhausted'
+            same_level = (position['over_cap_by_level'].get(position['level'], 0)
+                          if outcome == 'output_over_cap' else used)
+            if floor or outcome == 'input_over_limit' or same_level >= 2 or position['failed_attempts'] >= TURN_FAILURE_LIMIT:
+                result.update(state='stop', code=recovery.get('code', OUTCOME_CODES[outcome]))
+                if recovery['kind'] == 'decision':
+                    details['decision'] = {key: recovery[key] for key in ('owner_decides', 'then')}
+                details.update(recovery['details'], recovery=recovery)
+                return result
+    if position['sequence_ended']:
+        if row['exhausted'] == 'sequence':
+            result.update(_plan_sequence_end(last, classification, position))
+        else:
+            result['state'] = 'handoff' if row['exhausted'] == 'handoff' else 'stop'
+            if outcome == 'runtime_unavailable':
+                if position['sequences_remaining'] == 0:
+                    result.update(state='stop', code='review_turn_failures_exhausted')
+                else:
+                    result['not_before'] = _plan_sequence_end(last, classification, position)['not_before']
+    elif row['schedule'] or position['provider_eligible']:
+        count = position['provider_count'] if position['provider_eligible'] else used
+        state, deadline = plan_scheduled_retry(last, count, classification['reset_at'])
+        result.update(state=state, not_before=deadline)
+    if result['state'] == 'wait' and datetime.now(timezone.utc) >= datetime.fromisoformat(result['not_before']):
+        result['state'] = 'run'
+    return result

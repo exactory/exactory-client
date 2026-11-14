@@ -350,6 +350,15 @@ class WorkerExecutionTests(TaskExecutionFixture):
         self.assertTrue(self.current(reservation)["released"])
 
     def test_existing_instrumented_observer_keeps_raw_provenance(self):
+        from research_harness import review_transport
+        route = dict(id='route', adapter='codex_cli_v1', endpoint='codex://local', model='fixture-model',
+                     configuration=dict(max_output_tokens=1000, timeout_seconds=30))
+        self.put('review_route', 'route', route)
+        request = review_transport.request_body(route, 'Return JSON.', dict(
+            allowed_control='A' * 32, evidence_control='B' * 32, evidence=[]))
+        request['history'] = []
+        self.request = self.store.build_artifact_store().put(json.dumps(request, sort_keys=True).encode(),
+                                                           'application/json')
         reservation = self.reserve()["result"]
         process = self.launch(reservation, "instrumented")
         self.assertEqual(process.wait(timeout=60), 0)

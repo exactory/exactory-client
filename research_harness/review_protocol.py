@@ -850,7 +850,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
     if problem_objection_carry is not None or problem_paragraphs is not None:
-        if problem_paragraphs and orchestration != 'problem_creation':
+        if (problem_paragraphs and orchestration != 'problem_creation'
+                and not prompt_paragraphs.has_only_shared_paragraphs(problem_paragraphs)):
             raise ResearchError('invalid_review_context', prompt_paragraphs.INVALID_CONTEXT)
         base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
             repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
@@ -2221,6 +2222,13 @@ def _observed(artifacts, route, request, credential):
             if diagnostic is not None:
                 observed['provider_diagnostic'] = diagnostic
     record_disabled_exec_notices(route, response)
+    from .review_route_capacity import describe_attempt
+    packet = review_excerpts.read_sent_packet(request) or {}
+    measured = describe_attempt(route, packet.get('role', 'unknown'), packet, request, response,
+                                observed_at=observed['observed_at'])
+    observed.update({key: value for key, value in measured.items() if key != 'usage'})
+    observed['usage'].update({key: value for key, value in measured['usage'].items()
+                              if value is not None or key not in ('input_tokens', 'output_tokens')})
     record = {key: value for key, value in observed.items() if key not in ('request', 'response', 'output')}
     record['request'] = _put_json(artifacts, request)
     record['response'] = None if response is None else _put_json(artifacts, response)
@@ -2350,6 +2358,12 @@ def probe_route(store, payload, *, expected_revision, request_id, credential=Non
         return [immutable_record(records, 'review_route_probe', value['id'], result)], result
     return _invoke_once(store, payload, 'review.route_probe', start, finish,
                         expected_revision=expected_revision, request_id=request_id, credential=credential)
+
+
+def describe_route_report(records, route_id):
+    """Report size forecasts separately from authenticated route state."""
+    from .review_route_capacity import describe_route_report as describe_capacity_report
+    return describe_capacity_report(records, records['review_route'][route_id])
 
 
 def route_state(records, artifacts, route_id):
@@ -2619,6 +2633,7 @@ def _repair_packet(records, artifacts, value, repair):
     packet.pop(review_parts.KEY, None)
     packet.pop(review_parts.STATE_KEY, None)
     packet.pop(review_problem_parts.KEY, None)
+    packet.pop(prompt_paragraphs.DELIVERY_NOTICE_KEY, None)
     from .review_source_capacity import BODY_DELIVERY, MARKER
     # The prior capacity receipt stays in scientific_history. Its actual pending
     # requests are inherited below, rather than labelling this new packet with it.
@@ -2837,6 +2852,17 @@ def _initial_size_failure(records, artifacts, prior, value):
         and attempt.get('response') is None and attempt.get('output') is None for attempt in attempts)
 
 
+def has_exhausted_position(records, artifacts, assignment):
+    """An exhausted head frees a blind slot while earlier source turns stay historical."""
+    attempts = list(read_filtered_records(records, 'review_attempt', assignment_id=assignment['id']).values())
+    pending = any(row['id'] not in records.get('review_attempt', {}) for row in
+                  read_filtered_records(records, 'review_invocation', assignment_id=assignment['id']).values())
+    from .review_refusal import refused_attempts
+    completed = [row for row in attempts if row['status'] == 'completed']
+    return (not pending and len(completed) >= 2
+            and len(refused_attempts(records, artifacts, completed)) == len(completed))
+
+
 def _initial_slot(records, artifacts, value):
     slot_records = _read_slot_records(records, value)
     slots = {}
@@ -2853,6 +2879,10 @@ def _initial_slot(records, artifacts, value):
                     and all(_initial_size_failure(records, artifacts, prior, value) for prior in members)):
                 return identifier
             raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; record its observed output, or invoke its assignment again after a refusal')
+        head = max(members, key=lambda row: row['recorded_revision'])
+        if value['role'] == 'bar' and has_exhausted_position(records, artifacts, head):
+            replaceable.append((min(p['recorded_revision'] for p in members), identifier))
+            continue
         replaceable_members = True
         for prior in members:
             attempts = list(read_filtered_records(records, 'review_attempt', assignment_id=prior['id']).values())
@@ -3081,6 +3111,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 and previous['context'].get('objection_id') == value['context'].get('objection_id')
                 and (not problem or previous.get('subject') == value['subject'])]
             latest = max(previous_assignments, key=lambda previous: previous['recorded_revision'], default=None)
+            if latest is not None and has_exhausted_position(records, artifacts, latest):
+                if any(normalized_text(previous['reviewer_id']) == normalized_text(value['reviewer_id'])
+                       for previous in previous_assignments):
+                    raise ResearchError('review_resampling_forbidden',
+                                        'An exhausted focused review needs a new eligible reviewer.')
+                slot_identifier = context_repair.slot_id(records, latest)
+                previous_assignments = []
             for previous in previous_assignments:
                 if (problem and previous['id'] != latest['id'] and review_parts.KEY in latest
                         and (value['context'].get('prior_assignment_id') == latest['id']
@@ -3270,8 +3307,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
                 packet.pop('digest')
                 packet['digest'] = digest(packet)
-        from .review_source_batches import plan_packet
-        packet = plan_packet(records, artifacts, route, packet, prompt, history)
+        from .review_delivery_notice import prepare_notice
+        packet, prompt, history = prepare_notice(records, artifacts, route,
+            dict(value, session_id=session_id, history_assignment_id=history_assignment_id), packet, prompt, history)
         controller = packet.get('staged_review', {}).get('kind') == 'controller'
         record = dict(value, packet=None if controller else _put_json(artifacts, packet), packet_digest=packet['digest'],
                       prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'], route_digest=digest(route),
@@ -3816,6 +3854,8 @@ def validate_adjudication_contract(records, artifacts, assignment, packet, outpu
             with contract_check('adjudication.evidence_delivery'):
                 raise ResearchError('review_evidence_undelivered',
                     'Cite only content that this adjudicator received in its own packets.', missing[0])
+        from .review_refusal import validate_source_links_contract
+        validate_source_links_contract(records, output, packets)
 
 
 @record_refusal_on_error

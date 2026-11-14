@@ -77,7 +77,7 @@ class ActualDeliveryContractTests(unittest.TestCase):
         self.assertNotIn(body['sha256'], references)
         self.assert_refused_at_all_boundaries(payload, {'sha256': body['sha256']})
 
-    def test_ordinary_review_cannot_cite_a_record_only_in_elided_history(self):
+    def test_session_can_cite_a_record_delivered_before_history_was_elided(self):
         reference = dict(kind='record', record_kind='problem_value', id='value-1')
         value = dict(self.case.expected['value'])
         self.case.put('problem_value', 'value-1', value)
@@ -98,7 +98,11 @@ class ActualDeliveryContractTests(unittest.TestCase):
         self.assertTrue(any('packet-elided-route-limit' in message.get('content', '')
                             for message in self.read_request('continued')['input']))
         payload = dict(output, id='review-continued', dossier_id=None, assignment_id=assignment['id'])
-        self.assert_refused_at_all_boundaries(payload, dict(record_kind='problem_value', id='value-1', digest=None))
+        records = self.case.read_records()
+        self.assertIsNone(refusal.classify_observed_output(records, self.case.artifacts, 'attempt-continued'))
+        saved = self.case.mutate(decisions.record_value_review, payload)['result']
+        self.assertEqual(decisions.find_undelivered_review_references(
+            self.case.read_records(), self.case.artifacts, saved), [])
 
     def test_fitting_ordinary_review_keeps_credit_at_every_boundary(self):
         payload = self.case.observe('result', 'first', record=False)
@@ -124,7 +128,12 @@ class ActualDeliveryContractTests(unittest.TestCase):
                       response=protocol._put_json(self.case.artifacts, self.case.build_provider_response(output)),
                       recorded_revision=attempt['recorded_revision'] + 1)
         records['review_attempt'][second['id']] = second
-        with patch.object(protocol, 'assignment_state', side_effect=AssertionError('Recursive attempt selection')):
+        select_state = protocol.assignment_state
+        def select_prior(records, artifacts, identifier):
+            if identifier == attempt['assignment_id']:
+                raise AssertionError('Recursive attempt selection')
+            return select_state(records, artifacts, identifier)
+        with patch.object(protocol, 'assignment_state', side_effect=select_prior):
             self.assertIsNone(refusal.classify_observed_output(records, self.case.artifacts, attempt['id']))
             finding = refusal.classify_observed_output(records, self.case.artifacts, second['id'])
         self.assertEqual(finding['code'], 'review_evidence_undelivered')

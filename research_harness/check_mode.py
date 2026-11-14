@@ -89,6 +89,12 @@ class _CheckingStore:
                               "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()}
         if operation == "literature.search":
             response.update(result)
+        if operation == "research.gate_override":
+            from .overrides import describe_override_write_authorities, read_unrecorded_overrides
+            authorities = describe_override_write_authorities(self._records,
+                read_unrecorded_overrides(self.root) or [], result, self._artifacts)
+            if authorities:
+                response["write_authorities"] = authorities
         raise _CheckComplete(response)
 
 
@@ -111,6 +117,13 @@ def check_mutation(store, operation, payload, *, expected_revision, request_id, 
     try:
         operation(checking_store, payload, expected_revision=expected_revision, request_id=request_id)
     except _CheckComplete as completion:
+        from .overrides import describe_override_write_authorities, read_unrecorded_overrides, record_override
+        if operation is record_override and "result" in completion.response:
+            authorities = describe_override_write_authorities(checking_store._records,
+                read_unrecorded_overrides(checking_store.root) or [], completion.response["result"],
+                checking_store._artifacts)
+            if authorities:
+                return dict(completion.response, write_authorities=authorities)
         return completion.response
     except _CheckEffectRequired as error:
         raise ResearchError("check_unsupported", "Check mode cannot prepare external tool effects") from error

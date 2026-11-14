@@ -584,9 +584,12 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
         for name, content in expected.items():
             self.assertEqual((directory / name).read_bytes(), content.encode())
         self.assertEqual(json.loads((directory / "problem-export.json").read_text()), manifest)
-        self.assertEqual(manifest, dict(schema="exactory-problem-export-v2", statement_id=statement["id"], statement_digest=record["statement_digest"],
+        self.assertEqual(manifest, dict(schema="exactory-problem-export-v3", statement_id=statement["id"], statement_digest=record["statement_digest"],
+            citation_spec={"first": [], "versions": []}, uncited_relevant_works=[],
+            citation_counts=dict(value=1, attempt=0, self_assessment=0, openness=0, searches=0, total=1, included=1, omitted=0),
             area="math.CO", formal_statement_language="Lean", files={name: hashlib.sha256(content.encode()).hexdigest() for name, content in expected.items()},
-            decision_id=None, problem_evidence_digest=None, override_id="override-1", gate="bypassed"))
+            decision_id=None, problem_evidence_digest=None, override_id="override-1", gate="bypassed",
+            authority=dict(override_ids=["override-1"], conditions=[], evaluated_at_revision=receipt["revision"])))
         self.assertNotEqual(self.export_problem("problem").returncode, 0)
         replay = self.export_problem()
         self.assertEqual(replay.returncode, 0, replay.stderr)

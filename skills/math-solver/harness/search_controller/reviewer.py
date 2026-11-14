@@ -364,6 +364,8 @@ def export_packet(controller, spec):
     from research_harness.storage import Store
     from .evidence import import_inputs
     s.closed(spec, "kind subject claim_digest reviewer inputs" + (" openness" if "openness" in spec else ""))
+    if isinstance(spec.get("openness"), dict) and spec["openness"].get("schema_version") == 2:
+        raise SearchError("invalid_record", "Math-solver review packets require a version 1 openness minimum.")
     s.choice(spec["kind"], KINDS)
     s.require(isinstance(spec["subject"], dict), "Native review subject must be a record")
     s.validate_provenance(spec["reviewer"])

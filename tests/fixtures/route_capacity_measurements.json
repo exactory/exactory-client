@@ -1,0 +1,510 @@
+{
+  "source": "20261113110022-every-open-record-and-review-capacity",
+  "date": "2026-11-13",
+  "rows": [
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "characters": 1299484,
+      "text_characters": 1306921,
+      "tokens_upper": 960972,
+      "input_tokens": 687640
+    },
+    {
+      "adapter": "codex_cli_v1",
+      "model": "gpt-6-astra",
+      "characters": 1027537,
+      "text_characters": 1041701,
+      "tokens_upper": 496049,
+      "input_tokens": 359900
+    },
+    {
+      "adapter": "codex_cli_visual_v1",
+      "model": "gpt-6-astra",
+      "characters": 1047217,
+      "text_characters": 1065743,
+      "tokens_upper": 507497,
+      "input_tokens": 364458
+    },
+    {
+      "adapter": "codex_cli_visual_v1",
+      "model": "gpt-6.1-sol",
+      "characters": 1028820,
+      "text_characters": 1046462,
+      "tokens_upper": 498316,
+      "input_tokens": 358029
+    },
+    {
+      "adapter": "codex_cli_v1",
+      "model": "gpt-6.1-sol",
+      "characters": 1044370,
+      "text_characters": 1060750,
+      "tokens_upper": 505120,
+      "input_tokens": 316707
+    },
+    {
+      "adapter": "codex_cli_framed_v1",
+      "model": "gpt-6-astra",
+      "characters": 1045443,
+      "text_characters": 1052208,
+      "tokens_upper": 501052,
+      "input_tokens": 307507
+    },
+    {
+      "adapter": "codex_cli_v1",
+      "model": "gpt-6-luna",
+      "characters": 596466,
+      "text_characters": 612846,
+      "tokens_upper": 291832,
+      "input_tokens": 193797
+    }
+  ],
+  "probe_requests": [
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "W",
+      "text_characters": 173774,
+      "input_tokens": 202210,
+      "sends": 2,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "Q1",
+      "text_characters": 71984,
+      "input_tokens": 36540,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "H1",
+      "text_characters": 105584,
+      "input_tokens": 57445,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "W",
+      "text_characters": 173774,
+      "input_tokens": 101105,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "Q2",
+      "text_characters": 73774,
+      "input_tokens": 42070,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "H2",
+      "text_characters": 106804,
+      "input_tokens": 63828,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "W",
+      "text_characters": 173774,
+      "input_tokens": 101105,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "Q3",
+      "text_characters": 74741,
+      "input_tokens": 45269,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "H1",
+      "text_characters": 105584,
+      "input_tokens": 57446,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "W",
+      "text_characters": 173774,
+      "input_tokens": 101103,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "Q4",
+      "text_characters": 72237,
+      "input_tokens": 39692,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "max",
+      "arm": "H2",
+      "text_characters": 106804,
+      "input_tokens": 63827,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "arm": "W",
+      "text_characters": 173774,
+      "input_tokens": 101103,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "arm": "H1",
+      "text_characters": 105584,
+      "input_tokens": 57443,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "arm": "Q1",
+      "text_characters": 71984,
+      "input_tokens": 36542,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "arm": "W",
+      "text_characters": 173774,
+      "input_tokens": 101105,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "arm": "H2",
+      "text_characters": 106804,
+      "input_tokens": 63827,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "model": "claude-opus-5-5",
+      "effort": "xhigh",
+      "arm": "Q3",
+      "text_characters": 74741,
+      "input_tokens": 45269,
+      "sends": 1,
+      "cli_version": "2.1.325 (Claude Code)"
+    }
+  ],
+  "material_pairs": [
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "Q1",
+      "second_arm": "H1",
+      "first_text_characters": 71984,
+      "second_text_characters": 105584,
+      "first_input_tokens": 36540,
+      "second_input_tokens": 57445,
+      "characters_per_token": 1.6072709878019613
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "Q1",
+      "second_arm": "W",
+      "first_text_characters": 71984,
+      "second_text_characters": 173774,
+      "first_input_tokens": 36540,
+      "second_input_tokens": 101105,
+      "characters_per_token": 1.576550762797181
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "H1",
+      "second_arm": "W",
+      "first_text_characters": 105584,
+      "second_text_characters": 173774,
+      "first_input_tokens": 57445,
+      "second_input_tokens": 101105,
+      "characters_per_token": 1.5618415025194685
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "Q2",
+      "second_arm": "H1",
+      "first_text_characters": 73774,
+      "second_text_characters": 105584,
+      "first_input_tokens": 42070,
+      "second_input_tokens": 57445,
+      "characters_per_token": 2.0689430894308942
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "Q2",
+      "second_arm": "W",
+      "first_text_characters": 73774,
+      "second_text_characters": 173774,
+      "first_input_tokens": 42070,
+      "second_input_tokens": 101105,
+      "characters_per_token": 1.6939103921402558
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "H2",
+      "second_arm": "W",
+      "first_text_characters": 106804,
+      "second_text_characters": 173774,
+      "first_input_tokens": 63828,
+      "second_input_tokens": 101105,
+      "characters_per_token": 1.796550151567991
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "Q3",
+      "second_arm": "W",
+      "first_text_characters": 74741,
+      "second_text_characters": 173774,
+      "first_input_tokens": 45269,
+      "second_input_tokens": 101105,
+      "characters_per_token": 1.7736406619385343
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "Q4",
+      "second_arm": "W",
+      "first_text_characters": 72237,
+      "second_text_characters": 173774,
+      "first_input_tokens": 39692,
+      "second_input_tokens": 101105,
+      "characters_per_token": 1.653347011219123
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "Q3",
+      "second_arm": "H2",
+      "first_text_characters": 74741,
+      "second_text_characters": 106804,
+      "first_input_tokens": 45269,
+      "second_input_tokens": 63828,
+      "characters_per_token": 1.7276254108518778
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "max",
+      "first_arm": "Q4",
+      "second_arm": "H2",
+      "first_text_characters": 72237,
+      "second_text_characters": 106804,
+      "first_input_tokens": 39692,
+      "second_input_tokens": 63828,
+      "characters_per_token": 1.4321760026516408
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "xhigh",
+      "first_arm": "H1",
+      "second_arm": "W",
+      "first_text_characters": 105584,
+      "second_text_characters": 173774,
+      "first_input_tokens": 57443,
+      "second_input_tokens": 101103,
+      "characters_per_token": 1.5618415025194685
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "xhigh",
+      "first_arm": "Q1",
+      "second_arm": "W",
+      "first_text_characters": 71984,
+      "second_text_characters": 173774,
+      "first_input_tokens": 36542,
+      "second_input_tokens": 101103,
+      "characters_per_token": 1.576648441009278
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "xhigh",
+      "first_arm": "H2",
+      "second_arm": "W",
+      "first_text_characters": 106804,
+      "second_text_characters": 173774,
+      "first_input_tokens": 63827,
+      "second_input_tokens": 101103,
+      "characters_per_token": 1.796598347462174
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "xhigh",
+      "first_arm": "Q3",
+      "second_arm": "W",
+      "first_text_characters": 74741,
+      "second_text_characters": 173774,
+      "first_input_tokens": 45269,
+      "second_input_tokens": 101103,
+      "characters_per_token": 1.773704194576781
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "xhigh",
+      "first_arm": "Q1",
+      "second_arm": "H1",
+      "first_text_characters": 71984,
+      "second_text_characters": 105584,
+      "first_input_tokens": 36542,
+      "second_input_tokens": 57443,
+      "characters_per_token": 1.6075785847567101
+    },
+    {
+      "adapter": "claude_cli_v1",
+      "source": "20261113110022-every-open-record-and-review-capacity",
+      "date": "2026-11-13",
+      "effort": "xhigh",
+      "first_arm": "Q3",
+      "second_arm": "H2",
+      "first_text_characters": 74741,
+      "second_text_characters": 106804,
+      "first_input_tokens": 45269,
+      "second_input_tokens": 63827,
+      "characters_per_token": 1.727718504149154
+    }
+  ],
+  "interim_material_estimate": {
+    "adapter": "claude_cli_v1",
+    "source": "20261113110022-every-open-record-and-review-capacity",
+    "text_characters": 36127,
+    "input_tokens": 25101,
+    "removed_frame_characters": 38614,
+    "removed_frame_tokens": 20168
+  },
+  "probe_task_partitions": {
+    "source": "20261113110022-every-open-record-and-review-capacity",
+    "date": "2026-11-14",
+    "rows": [
+      {
+        "arm": "W",
+        "characters": 173774,
+        "material_characters": 136190,
+        "frame_characters": 37584
+      },
+      {
+        "arm": "H1",
+        "characters": 105584,
+        "material_characters": 67484,
+        "frame_characters": 38100
+      },
+      {
+        "arm": "H2",
+        "characters": 106804,
+        "material_characters": 68706,
+        "frame_characters": 38098
+      },
+      {
+        "arm": "Q1",
+        "characters": 71984,
+        "material_characters": 32846,
+        "frame_characters": 39138
+      },
+      {
+        "arm": "Q2",
+        "characters": 73774,
+        "material_characters": 34638,
+        "frame_characters": 39136
+      },
+      {
+        "arm": "Q3",
+        "characters": 74741,
+        "material_characters": 35605,
+        "frame_characters": 39136
+      },
+      {
+        "arm": "Q4",
+        "characters": 72237,
+        "material_characters": 33101,
+        "frame_characters": 39136
+      }
+    ]
+  }
+}
