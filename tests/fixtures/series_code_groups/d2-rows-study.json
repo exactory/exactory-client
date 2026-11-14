@@ -1,0 +1,83 @@
+{
+  "stored_state": {
+    "members": {
+      "development_question_repeated": {
+        "research_harness/development.py:_inheritance": "content"
+      },
+      "execution_observation_mismatch": {
+        "research_harness/execution_evidence.py:validate_observed_execution": "content"
+      },
+      "execution_output_mismatch": {
+        "research_harness/execution_outputs.py:_inventory": "content",
+        "research_harness/execution_outputs.py:validate_observed_outputs": "content"
+      },
+      "failure_scope_mismatch": {
+        "research_harness/development.py:_assessed_checks": "content"
+      },
+      "inheritance_assumptions_missing": {
+        "research_harness/development.py:_build_assessment_plan": "content",
+        "research_harness/development.py:_inheritance": "content",
+        "research_harness/development.py:_unresolved_plan_sources": "content"
+      },
+      "inheritance_mismatch": {
+        "research_harness/development.py:_inheritance": "content"
+      },
+      "inheritance_missing": {
+        "research_harness/development.py:_assess": "content",
+        "research_harness/development.py:_inheritance": "content"
+      },
+      "inheritance_refresh_evidence_changed": {
+        "research_harness/development.py:_build_assessment_plan": "content"
+      },
+      "inheritance_refresh_mismatch": {
+        "research_harness/development.py:_build_assessment_plan": "content"
+      },
+      "inheritance_result_mismatch": {
+        "research_harness/development.py:_build_assessment_plan": "content",
+        "research_harness/development.py:_inheritance": "content"
+      },
+      "invalid_import_identity": {
+        "research_harness/probe_provenance.py:check_normalized_identity": "content",
+        "research_harness/probe_provenance.py:read_import_identity": "content",
+        "skills/math-solver/harness/search_controller/provenance.py:check_import_identity": "content"
+      },
+      "invalid_source_deferral": {
+        "research_harness/source_deferrals.py:_check_artifact": "content"
+      },
+      "invalid_target": {
+        "research_harness/graph.py:validate_target": "content",
+        "research_harness/principles.py:_validate_objective": "content",
+        "research_harness/principles.py:_validate_target": "content"
+      },
+      "lineage_cycle": {
+        "research_harness/development.py:_Context.assess_record": "content"
+      },
+      "objective_scope_mismatch": {
+        "research_harness/development.py:_scope": "content"
+      },
+      "outside_reading_unit": {
+        "research_harness/reading.py:_assess": "content"
+      },
+      "unknown_assessment": {
+        "research_harness/development.py:_Context.assess_record": "content",
+        "research_harness/development.py:_build_assessment_plan": "content"
+      },
+      "unknown_checkpoint": {
+        "research_harness/development.py:_build_assessment_plan": "content",
+        "research_harness/development.py:_compose_candidate": "content",
+        "research_harness/development.py:_inheritance": "content"
+      },
+      "unknown_cycle": {
+        "research_harness/development.py:_Evidence.one": "content",
+        "research_harness/development.py:_assess": "content",
+        "research_harness/development.py:_development": "content"
+      },
+      "unknown_review": {
+        "research_harness/development.py:assess_readiness": "content"
+      },
+      "unknown_review_assignment": {
+        "research_harness/development.py:_Context.verify_assignment_candidate": "content"
+      }
+    }
+  }
+}

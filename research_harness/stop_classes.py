@@ -156,10 +156,22 @@ STOP_REGISTRY['output_view_render_deferred'] = dict(code='output_view_render_def
 for _code in ('invalid_identifier', 'unsafe_url'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
                                 next=dict(kind='outcome', outcome='scientific_refused'))
-for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
+
+
+_STORED_STATE_CODES_STUDY = (
+    'development_question_repeated', 'execution_observation_mismatch', 'execution_output_mismatch',
+    'failure_scope_mismatch', 'inheritance_assumptions_missing', 'inheritance_mismatch',
+    'inheritance_missing', 'inheritance_refresh_evidence_changed', 'inheritance_refresh_mismatch',
+    'inheritance_result_mismatch', 'invalid_import_identity',
+    'invalid_source_deferral', 'invalid_target', 'lineage_cycle', 'objective_scope_mismatch',
+    'outside_reading_unit', 'unknown_assessment', 'unknown_checkpoint', 'unknown_cycle',
+    'unknown_review', 'unknown_review_assignment',
+)
+for _code in (('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
               'review_quality_measurement_pending', 'review_invocation_unverified',
               'review_output_unavailable', 'review_inventory_mismatch', 'review_source_parent_unverified',
-              'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted'):
+              'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted')
+              + _STORED_STATE_CODES_STUDY):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
         next=dict(kind='decision', owner_decides='How should this review boundary be resolved?',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
@@ -204,6 +216,25 @@ STOP_REGISTRY[PROJECTION_STOP] = dict(code=PROJECTION_STOP, **{'class': 'decisio
                          dict(command='review-assignment', check=True)])]))
 for _code in ('stale_revision', 'review_task_dependency_changed', 'review_output_pending', 'review_sources_pending'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
+
+
+STOP_REGISTRY.update({
+    'prediction_required': dict(code='prediction_required', **{'class': 'decision'}, owner='D2',
+        next=dict(kind='outcome', outcome='scientific_refused')),
+    'literature_comparison_stale': dict(code='literature_comparison_stale', **{'class': 'decision'}, owner='D2',
+        next=dict(kind='decision', owner_decides='How should the prospective literature comparison be renewed?',
+            then=[dict(answer='Record a plan with the current literature comparison',
+                steps=[dict(command='cycle', chooses=[
+                    'id', 'author', 'objective', 'scope', 'hypothesis', 'question', 'strategy',
+                    'predecessor', 'inheritance', 'reopening', 'distinguishing_test', 'expected_outcomes',
+                    'failure_signals', 'evidence_requirements', 'literature', 'resource_limits'])])])),
+    'problem_citation_locator_missing': dict(code='problem_citation_locator_missing',
+        **{'class': 'decision'}, owner='D2',
+        next=dict(kind='decision', owner_decides='Which retained original supplies the missing citation location?',
+            then=[dict(answer='Bind the location to the existing reading', steps=[dict(
+                command='problem-citation-locator',
+                chooses=['id', 'version_id', 'reading_id', 'original_sha256', 'url', 'source_id'])])])),
+})
 
 
 _STORED_STATE_CODES_DECISION = (

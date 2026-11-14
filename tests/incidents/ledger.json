@@ -5649,6 +5649,21 @@
         "test_series_code_rows_decision.DecisionRowTests.test_result_steps_record_a_replacement_value_and_preserve_earlier_bytes",
         "test_series_code_rows_decision.DecisionRowTests.test_native_delivery_step_resolves_both_unbound_references"
       ]
+    },
+    {
+      "id": "study-series-codes-retain-reviewed-next-steps",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "study series stop classification",
+      "summary": "Study record validators could end a series on codes with no reviewed registry row.",
+      "expected": "Inconsistent retained study bindings end at the shared record-check decision. A current literature plan or an exact citation locator resolves its named workflow boundary without replacing prior readings. A missing verdict prediction remains an authenticated scientific output refusal and can retry.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_code_rows_study.StudyRowTests.test_every_stored_state_member_ends_the_series_at_record_check",
+        "test_series_code_rows_study.StudyRowTests.test_late_citation_locator_step_preserves_the_existing_reading",
+        "test_series_code_rows_study.StudyRowTests.test_current_literature_comparison_step_records_a_distinct_plan",
+        "test_series_code_rows_study.StudyRowTests.test_missing_prediction_is_a_scientific_output_refusal_that_can_retry"
+      ]
     }
   ]
 }
