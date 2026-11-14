@@ -1,0 +1,577 @@
+{
+  "attack-the-negative-side": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.quantifiers"
+      },
+      {
+        "question": 2,
+        "answer": "yes",
+        "cites": "quadruple.direction"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 5,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      },
+      {
+        "question": 6,
+        "answer": "yes",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 7,
+        "answer": "no",
+        "cites": "shape.base_theory"
+      }
+    ]
+  },
+  "decompose-and-parallelise": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.target_quantity"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 6,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      }
+    ]
+  },
+  "ladder-the-parameter": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.target_quantity"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.uniformity_parameter"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "shape.monotonicity"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.neighbours"
+      }
+    ]
+  },
+  "make-the-proof-constructive": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "yes",
+        "cites": "quadruple.mode"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.objects"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.ambient_structure"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.configuration"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "shape.finite_certificates"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.base_theory"
+      },
+      {
+        "question": 7,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      }
+    ]
+  },
+  "prove-the-barrier-first": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 4,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "shape.base_theory"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.neighbours"
+      }
+    ]
+  },
+  "reduce-and-translate": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "yes",
+        "cites": "shape.configuration"
+      },
+      {
+        "question": 2,
+        "answer": "yes",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.objects"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "shape.quantifiers"
+      },
+      {
+        "question": 6,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      },
+      {
+        "question": 7,
+        "answer": "no",
+        "cites": "shape.missing_input"
+      },
+      {
+        "question": 8,
+        "answer": "yes",
+        "cites": "shape.target_quantity"
+      }
+    ]
+  },
+  "reduce-to-a-finite-computation": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.finite_certificates"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "quadruple.mode"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.monotonicity"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "shape.extremal_candidate"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 7,
+        "answer": "no",
+        "cites": "shape.target_quantity"
+      },
+      {
+        "question": 8,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      }
+    ]
+  },
+  "replace-existence-with-probability": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.quantifiers"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.ambient_structure"
+      },
+      {
+        "question": 4,
+        "answer": "yes",
+        "cites": "quadruple.mode"
+      }
+    ]
+  },
+  "solve-the-model-world-first": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.ambient_structure"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.missing_input"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 4,
+        "answer": "yes",
+        "cites": "shape.configuration"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "quadruple.statement"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 7,
+        "answer": "yes",
+        "cites": "shape.target_quantity"
+      }
+    ]
+  },
+  "split-structure-from-randomness": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.target_quantity"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.configuration"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.ambient_structure"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "shape.symmetries"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.objects"
+      },
+      {
+        "question": 7,
+        "answer": "no",
+        "cites": "shape.objects"
+      }
+    ]
+  },
+  "strengthen-and-generalise": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 2,
+        "answer": "yes",
+        "cites": "shape.configuration"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 5,
+        "answer": "yes",
+        "cites": "shape.finite_certificates"
+      }
+    ]
+  },
+  "transfer-between-finitary-and-infinitary": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "yes",
+        "cites": "shape.objects"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.finite_certificates"
+      },
+      {
+        "question": 3,
+        "answer": "no",
+        "cites": "shape.monotonicity"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.monotonicity"
+      },
+      {
+        "question": 5,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 7,
+        "answer": "yes",
+        "cites": "quadruple.mode"
+      },
+      {
+        "question": 8,
+        "answer": "yes",
+        "cites": "shape.target_quantity"
+      },
+      {
+        "question": 9,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      }
+    ]
+  },
+  "transport-to-a-tractable-category": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "no",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 3,
+        "answer": "yes",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 4,
+        "answer": "no",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 5,
+        "answer": "yes",
+        "cites": "shape.objects"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.ambient_structure"
+      }
+    ]
+  },
+  "verify-formally-with-lean4": {
+    "verdict": "no",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "yes",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 2,
+        "answer": "no",
+        "cites": "shape.objects"
+      },
+      {
+        "question": 3,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      },
+      {
+        "question": 4,
+        "answer": "yes",
+        "cites": "shape.finite_certificates"
+      },
+      {
+        "question": 5,
+        "answer": "yes",
+        "cites": "quadruple.mode"
+      }
+    ]
+  },
+  "work-conditionally-then-discharge": {
+    "verdict": "yes",
+    "answers": [
+      {
+        "question": 1,
+        "answer": "yes",
+        "cites": "shape.missing_input"
+      },
+      {
+        "question": 2,
+        "answer": "yes",
+        "cites": "shape.missing_input"
+      },
+      {
+        "question": 3,
+        "answer": "yes",
+        "cites": "shape.proof_shape"
+      },
+      {
+        "question": 4,
+        "answer": "yes",
+        "cites": "shape.known_bounds"
+      },
+      {
+        "question": 5,
+        "answer": "yes",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 6,
+        "answer": "no",
+        "cites": "shape.base_theory"
+      },
+      {
+        "question": 7,
+        "answer": "no",
+        "cites": "shape.quantifiers"
+      },
+      {
+        "question": 8,
+        "answer": "no",
+        "cites": "shape.neighbours"
+      },
+      {
+        "question": 9,
+        "answer": "yes",
+        "cites": "shape.base_theory"
+      }
+    ]
+  }
+}

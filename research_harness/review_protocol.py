@@ -2901,7 +2901,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             if normalized_text(value['reviewer_id']) in authors:
                 raise ResearchError('review_not_independent', 'A problem author cannot provide an independent assessment')
             if normalized_text(value['author_id']) not in authors:
-                raise ResearchError('problem_author_unknown', 'The assignment author must be one of the immutable problem authors')
+                raise ResearchError('problem_author_unknown',
+                                    'author_id must name one of the immutable problem authors listed in details.authors',
+                                    {'authors': records['workspace']['problem']['authors']})
             if value['role'] in bar_sources.ROLES + ('adjudicator',):
                 value = dict(value, subject=build_problem_subject(records, value['role']))
             from .problem_delivery import require_unposted_review
