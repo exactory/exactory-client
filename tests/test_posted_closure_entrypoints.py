@@ -60,13 +60,12 @@ class PostedClosureEntrypointTests(unittest.TestCase):
 
     def assert_closed_actions(self, report):
         self.assertEqual(report['next']['code'], 'problem_already_posted')
-        actions = [action for obligation in report['obligations']
-                   for action in obligation.get('next', [])]
-        self.assertTrue(actions)
-        self.assertTrue(all(action['state'] == 'done' for action in actions))
-        for action in actions:
-            for key in ('command', 'payload', 'workflow', 'scope'):
-                self.assertNotIn(key, action)
+        self.assertEqual([row['code'] for row in report['obligations']], ['problem_already_posted'])
+        self.assertEqual(report['counts']['obligations'], 1)
+        self.assertTrue(any(row.get('assignment_id') == self.case.assignment['id']
+                            and row['code'] == 'review_output_pending' for row in report['after_post']))
+        for row in report['obligations'] + report['after_post']:
+            self.assertNotIn('next', row)
 
     def test_status_closes_the_pending_openness_head_without_mutation(self):
         self.case.post(legacy=True)

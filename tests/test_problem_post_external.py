@@ -120,9 +120,15 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         self.assertFalse((self.root / 'final/problem/exports').exists())
         report = cli.status_report(self.store)
         self.assertEqual(report['next']['code'], 'problem_already_posted')
-        self.assertEqual(report['after_post'], [dict(
+        self.assertEqual([row['code'] for row in report['obligations']], ['problem_already_posted'])
+        retained = [dict(
             {key: value for key, value in row.items() if key != 'next'},
-            reason=row.get('reason', row['explanation'])) for row in before_findings])
+            reason=row.get('reason', row['explanation'])) for row in before_findings]
+        self.assertEqual(report['after_post'][:len(retained)], retained)
+        pending = report['after_post'][len(retained):]
+        self.assertEqual({row['assignment_id'] for row in pending},
+                         {'outstanding-bar', 'outstanding-second-bar'})
+        self.assertTrue(all(row['code'] == 'review_output_pending' and 'next' not in row for row in pending))
         self.assertEqual(review_continuation.plan_next(self.store.snapshot()['records'], self.artifacts,
                                                      assignment['id'])['state'], 'done')
         after = self.read_workspace()

@@ -980,7 +980,7 @@
   },
   "import-response": {
     "provider": "mcp",
-    "response_file": "/absolute/path/to/original-response.json",
+    "response_file": "sources/original-response.json",
     "source_url": "https://example.org/search?q=finite+bound",
     "captured_at": "2026-09-07T12:00:00Z",
     "media_type": "application/json",

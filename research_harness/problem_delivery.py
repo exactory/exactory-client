@@ -572,9 +572,7 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
         milestone = "post"
     posted_state = {}
     if posted is not None:
-        after_post = [dict({key: value for key, value in row.items() if key != "next"},
-                           reason=row.get("reason", row["explanation"])) for row in unique
-                      if row["code"] != "problem_already_posted"]
+        after_post = describe_after_post_obligations(unique)
         after_post.extend(dict(row, code="problem_post_fact", explanation=row["fact"], reason=row["fact"])
                           for row in sorted(records.get("problem_post_fact", {}).values(),
                                             key=lambda row: (row["recorded_revision"], row["id"]))
@@ -594,6 +592,13 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
             "orchestration": "problem_creation", "milestone": milestone,
             "problem_evidence_digest": evidence_digest, "statement_id": None if statement is None else statement["id"],
             "decision_id": None if decision is None else decision["id"]}, **slots, **posted_state)
+
+
+def describe_after_post_obligations(rows):
+    """Retain posted-statement findings without prospective review actions."""
+    return [dict({key: value for key, value in row.items() if key != "next"},
+                 reason=row.get("reason", row["explanation"])) for row in rows
+            if row["code"] != "problem_already_posted"]
 
 
 def prepare_decision(records, artifacts, value, revision, *, source_guards=None):

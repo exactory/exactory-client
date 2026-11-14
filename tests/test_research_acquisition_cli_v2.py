@@ -197,7 +197,7 @@ class AcquisitionV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             target = Path(directory) / 'workspace'
             target.mkdir()
-            response = Path(directory) / 'response'
+            response = target / 'response'
             response.write_bytes(b'x' * (MAX_IMPORT_RESPONSE_BYTES + 1))
             payload = dict(provider='crossref', response_file=str(response), source_url=self.import_values()['source_url'],
                            captured_at=self.import_values()['captured_at'])
@@ -208,4 +208,4 @@ class AcquisitionV2Tests(unittest.TestCase):
             with self.assertRaises(ResearchError) as caught:
                 cli.run(args)
             self.assertEqual(caught.exception.code, 'import_input_too_large')
-            self.assertEqual(list(target.iterdir()), [])
+            self.assertEqual(list(target.iterdir()), [response])

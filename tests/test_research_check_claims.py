@@ -88,6 +88,30 @@ class ResearchCheckClaimsTests(DevelopmentCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), {"revision": before["revision"], "mismatches": []})
 
+    def test_absolute_candidate_artifact_paths_match_relative_evidence_without_changing_store(self):
+        reference = copy.deepcopy(self.current)
+
+        def replace_paths(value):
+            if isinstance(value, dict):
+                if {'path', 'sha256', 'size', 'media_type'} <= value.keys():
+                    value['path'] = str(self.root / value['path'])
+                for child in value.values():
+                    replace_paths(child)
+            elif isinstance(value, list):
+                for child in value:
+                    replace_paths(child)
+
+        replace_paths(reference)
+        self.assertNotEqual(reference, self.current)
+        ledger = [{'claim_id': 'bound', 'evidence': [reference]}]
+        before, files = self.store.snapshot(), self.read_stored_files()
+        for payload in (ledger, {'claim_evidence': ledger}):
+            result = self.run_cli('check-claims', payload)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), {'revision': before['revision'], 'mismatches': []})
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertEqual(self.read_stored_files(), files)
+
     def test_manuscript_refusal_names_the_first_outside_claim_and_reference(self):
         self.mutate(self.development().record_readiness_review, self.review(self.execution_payload))
         result_decision(self)

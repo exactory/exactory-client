@@ -393,9 +393,16 @@ class PostedReviewTests(ResultPartsCase):
         self.assertTrue(all(not task['next'] for task in shown['tasks']))
         self.assertEqual(records['assessment_incomplete'][outcome['id']], outcome)
         self.assertEqual(protocol.assignment_state(records, staged.case.artifacts, controller['id']), before_state)
-        self.assertEqual(report['after_post'], [dict(
+        retained = [dict(
             {key: value for key, value in row.items() if key != 'next'},
-            reason=row.get('reason', row['explanation'])) for row in before['obligations']])
+            reason=row.get('reason', row['explanation'])) for row in before['obligations']]
+        self.assertEqual(report['after_post'][:len(retained)], retained)
+        pending = report['after_post'][len(retained):]
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]['code'], 'review_task_pending')
+        self.assertEqual(pending[0]['assignment_id'], controller['id'])
+        self.assertEqual(pending[0]['controller_assignment_id'], controller['id'])
+        self.assertNotIn('next', pending[0])
         self.assertEqual(self.read_fingerprint(staged.case), fingerprint)
 
     def test_completed_unrecorded_final_is_advisory_but_can_still_be_recorded(self):
