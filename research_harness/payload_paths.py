@@ -19,6 +19,7 @@ PAYLOAD_FILE_FIELDS = {
     'artifact': (('path',),),
     'adopt': (('files', '*'),),
     'import-response': (('response_file',),),
+    'import-fulltext': (('file',),),
     'import-oai-cohort': (('pages', '*', 'response_file'),),
     'manuscript': (('files', '*'),),
     'problem-posted': (('export_directory',),),

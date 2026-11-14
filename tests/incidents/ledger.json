@@ -5396,6 +5396,19 @@
         "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_an_uncalled_stored_turn_keeps_its_plan_and_then_continues",
         "test_unbound_packet_stopped.UnboundStoppedPacketTests.test_a_stopped_case_two_is_reexported_under_v5_and_reads_first_capture_under_v4"
       ]
+    },
+    {
+      "id": "openness-file-saved-by-a-person-cannot-become-a-capture",
+      "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
+      "class": "supplied full-text provenance",
+      "summary": "T3: a browser-saved full text could not become a capture after automated publisher access failed.",
+      "fixed_in": "open",
+      "expected": "Import the saved PDF or UTF-8 text with its original bytes, SHA-256, reported origin and unverified supplied_file label; status lists it. UC3 adds no admission at the UC2 uses. UC4 completes bundle and review delivery before the two units release together.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_import_fulltext.ImportFulltextTests.test_browser_saved_pdf_after_403_retains_original_origin_and_unverified_class",
+        "test_import_fulltext.ImportFulltextTests.test_record_check_requires_the_retained_origin_fixed_note_and_capture_labels"
+      ]
     }
   ]
 }

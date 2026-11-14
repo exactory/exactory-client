@@ -236,7 +236,7 @@ from .publication_files import find_bundle_drift, restore_bundle
 from .verification import bind_verdict
 OPERATIONS.update({"manuscript": prepare_publication, "manuscript-review": record_manuscript_review, "bind-verdict": bind_verdict})
 
-ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
+ACQUISITION = ("collect", "resume", "acquire", "expand", "fulltext", "import-fulltext", "fulltext-start", "fulltext-resume", "import-response", "import-oai-cohort", "visual")
 GATES = ("cohort", "foundation", "preparation", "direction", "readiness", "manuscript-readiness", "execution", "verification", "manuscript", "publication", "deposited", "submitted", "round", "post")
 RECORD_CHECK_HELP_MSG = "Qualify a copy of a research record offline; print a JSON report and exit 0 when ready is true, 1 otherwise."
 
@@ -488,6 +488,9 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
     if command == "fulltext":
         fields(payload, ("identifier", "url"), ("max_requests", "extraction_options", "component"))
         return acquisition.acquire_fulltext(store, **payload, **identity)
+    if command == "import-fulltext":
+        fields(payload, ("identifier", "file", "origin"), ("extraction_options",))
+        return acquisition.import_fulltext(store, **payload, **identity)
     if command == "fulltext-start":
         fields(payload, ("identifier",), ("url", "source_id", "extraction_options", "allowances", "use_ranges"))
         return fulltext_jobs.start_job(store, **payload, **identity)
@@ -627,6 +630,9 @@ def status_report(store, *, counters=False):
         scope['review_closure_roots'] = {}
         records = snapshot["records"]
         override_status = overrides.describe_overrides(records, store.root, artifacts=evaluation)
+        supplied_texts = acquisition.describe_supplied_texts(records)
+        if supplied_texts:
+            override_status = dict(override_status, supplied_texts=supplied_texts)
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
         advisories = find_view_advisories(store, snapshot["revision"])
         if "problem" in records.get("workspace", {}):

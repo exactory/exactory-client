@@ -380,6 +380,10 @@ def check_authentication(store):
               'captures': captures, 'corrections': corrections}
     if links:
         result['acceptance_reviews'] = links
+    from .acquisition import check_supplied_sources
+    supplied_texts = check_supplied_sources(records)
+    if supplied_texts:
+        result['supplied_texts'] = supplied_texts
     return result
 
 

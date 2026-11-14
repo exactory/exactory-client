@@ -985,6 +985,17 @@
     "provider": "crossref",
     "max_requests": 2
   },
+  "import-fulltext": {
+    "identifier": "doi:10.1234/example",
+    "file": "inputs/survey.pdf",
+    "origin": {
+      "saved_by": "A reader",
+      "obtained_from": "https://publisher.example/survey.pdf",
+      "obtained_at": "2026-11-12T16:30:00-08:00",
+      "statement": "Saved the complete publisher PDF using a browser."
+    },
+    "extraction_options": {"layout": false}
+  },
   "fulltext": {
     "identifier": "arxiv:2601.00001v1",
     "url": "https://arxiv.org/html/2601.00001v1",
