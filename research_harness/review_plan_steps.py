@@ -286,7 +286,8 @@ def complete_plan(records, artifacts, assignment, plan):
     elif 'step' not in details and 'payload' in terminal['details'].get('next', {}):
         rule = terminal['details']['next']
         details['step'] = dict(id=plan['command'], command=plan['command'],
-            payload=copy.deepcopy(rule['payload']), chooses=copy.deepcopy(rule['chooses']), prerequisites=[])
+            payload=copy.deepcopy(rule['payload']), chooses=copy.deepcopy(rule['chooses']),
+            prerequisites=copy.deepcopy(rule.get('prerequisites', [])))
     elif 'step' not in details:
         # Existing recording boundaries retain their command-specific input choices.
         command = plan.get('command')

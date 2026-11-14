@@ -209,6 +209,7 @@ EXTERNAL_COMMAND_ROOTS = {
     'review-series': ('research_harness/review_series.py:run_series',),
     'search review-packet': ('skills/math-solver/harness/search_controller/reviewer.py:export_packet',),
     'search accept': ('skills/math-solver/harness/search_controller/service.py:Controller.command',),
+    'search deliver-attempt': ('skills/math-solver/harness/search_controller/service.py:Controller.command',),
     'export': ('research_harness/integration.py:export_workspace',
                'research_harness/problem_openness.py:export_openness',
                'research_harness/native_export.py:export_native'),

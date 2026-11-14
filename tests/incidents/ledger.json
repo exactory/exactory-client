@@ -5631,7 +5631,8 @@
         "test_d2_rows_store.StoreRowTests.test_stale_search_rows_accept_a_current_judgment",
         "test_d2_rows_store.StoreRowTests.test_ambiguous_reference_accepts_a_bundle_resolution_without_rewriting_the_old_one",
         "test_d2_rows_store.StoreRowTests.test_hot_journal_recovery_preserves_committed_history",
-        "test_d2_rows_store.StoreRowTests.test_public_write_refusal_accepts_the_named_instruction_command"
+        "test_d2_rows_store.StoreRowTests.test_public_write_refusal_accepts_the_named_instruction_command",
+        "test_d2_rows_store.StoreRowTests.test_handoff_payload_keeps_the_row_prerequisites"
       ]
     },
     {

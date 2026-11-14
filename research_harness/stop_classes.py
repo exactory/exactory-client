@@ -167,11 +167,10 @@ _STORED_STATE_CODES_STUDY = (
     'outside_reading_unit', 'unknown_assessment', 'unknown_checkpoint', 'unknown_cycle',
     'unknown_review', 'unknown_review_assignment',
 )
-for _code in (('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
+for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
               'review_quality_measurement_pending', 'review_invocation_unverified',
               'review_output_unavailable', 'review_inventory_mismatch', 'review_source_parent_unverified',
-              'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted')
-              + _STORED_STATE_CODES_STUDY):
+              'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
         next=dict(kind='decision', owner_decides='How should this review boundary be resolved?',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
@@ -202,9 +201,6 @@ _STORED_STATE_CODES_STORE = (
     'constitution_archive_missing', 'contract_changed', 'corrupt_artifact', 'corrupt_blob',
     'corrupt_state', 'invalid_digest', 'invalid_profile', 'request_conflict', 'unsupported_schema',
 )
-for _code in _STORED_STATE_CODES_STORE:
-    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', group='stored_state',
-        next=copy.deepcopy(STOP_REGISTRY['review_history_invalid']['next']))
 STOP_REGISTRY['problem_already_posted'] = dict(code='problem_already_posted', **{'class': 'decision'},
                                              owner='D2', next=dict(kind='done'))
 from .openness_reading import PROJECTION_STOP, PROBLEM_PROJECTION_DECISION, WAIT_PROBLEM_ANSWER, SMALLER_PACKET_ANSWER
@@ -248,9 +244,6 @@ _STORED_STATE_CODES_DECISION = (
     'publication_scope_correction_mismatch', 'publication_scope_corrupt',
     'publication_scope_objective_open', 'scope_assumptions_missing', 'scoped_review_corrupt',
 )
-for _code in _STORED_STATE_CODES_DECISION:
-    STOP_REGISTRY[_code] = dict(copy.deepcopy(STOP_REGISTRY['review_history_invalid']),
-                                code=_code, group='stored_state')
 
 for _code in ('invalid_rubric_grades', 'invalid_strategy'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
@@ -306,6 +299,9 @@ for _group, _codes in (
         ('stored_state', _STORED_STATE_CODES_FIRST),
         ('stored_state', _STORED_CONTENT_CODES_REVIEW_A),
         ('stored_state', _STORED_CONTENT_CODES_REVIEW_B),
+        ('stored_state', _STORED_STATE_CODES_STORE),
+        ('stored_state', _STORED_STATE_CODES_DECISION),
+        ('stored_state', _STORED_STATE_CODES_STUDY),
 ):
     for _code in _codes:
         _row = copy.deepcopy(STOP_GROUPS[_group])

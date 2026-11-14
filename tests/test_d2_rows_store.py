@@ -29,8 +29,15 @@ FULLTEXT_CODES = ('xml_depth_limit', 'xml_element_limit', 'xml_external_entity',
 class StoreRowTests(unittest.TestCase):
     def test_public_handoff_roots_follow_the_cli_dispatch_paths(self):
         from ci import series_code_reach
-        roots = series_code_reach.collect_command_roots(series_code_reach.read_sources(ROOT))
+        self.assertIn('search deliver-attempt', series_code_reach.EXTERNAL_COMMAND_ROOTS)
+        sources = series_code_reach.read_sources(ROOT)
+        roots = series_code_reach.collect_command_roots(sources)
         self.assertEqual(roots['recover'], ('research_harness/cli.py:run',))
+        self.assertEqual(roots['search deliver-attempt'], (
+            'skills/math-solver/harness/search_controller/service.py:Controller.command',))
+        executable = series_code_reach.read_executable_commands(sources)
+        self.assertTrue(executable <= set(roots))
+        self.assertTrue({'recover', 'search deliver-attempt'}.isdisjoint(executable))
 
     def prepare_case(self, case_class):
         case = case_class()
@@ -98,6 +105,15 @@ class StoreRowTests(unittest.TestCase):
 
     def refuse_operation(self, code):
         raise ResearchError(code, 'The retained record does not verify.')
+
+    def test_handoff_payload_keeps_the_row_prerequisites(self):
+        from research_harness.review_plan_steps import complete_plan
+        terminal = stop_classes.describe_terminal('openness_minimum_gaps')
+        rule = copy.deepcopy(terminal['details']['next'])
+        plan = complete_plan({}, None, dict(id='row-head'), terminal)
+        self.assertEqual(plan['details']['step']['payload'], rule['payload'])
+        self.assertEqual(plan['details']['step']['chooses'], rule['chooses'])
+        self.assertEqual(plan['details']['step']['prerequisites'], rule['prerequisites'])
 
     def test_renderer_contention_waits_for_the_render_lock(self):
         from research_harness.review_series import run_series
