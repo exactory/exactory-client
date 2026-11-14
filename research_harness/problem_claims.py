@@ -304,6 +304,16 @@ def record_post_external(store, payload, *, expected_revision, request_id):
                       posted_at=value.get("posted_at"),
                       recorded_at=datetime.now(timezone.utc).isoformat(),
                       recorded_revision=expected_revision + 1)
+        from .overrides import assess_write_authority, read_unrecorded_overrides
+        from .problem_export_history import find_export_authority
+        authority = (find_export_authority(store.root, records, value["export_digest"], statement_digest)
+                     if "export_digest" in value else None)
+        if authority is None:
+            assessment = assess_write_authority(records, read_unrecorded_overrides(store.root) or [],
+                dict(gate="post", public_action="POST /api/v1/math-problems"), artifacts=artifacts)
+            authority = dict(source="recording", override_ids=assessment["override_ids"],
+                             conditions=assessment["conditions"])
+        record["authority"] = authority
         return [immutable_record(records, "problem_post", value["id"], record)], record
 
     return prepared_mutation(store, "problem.post_external", payload, prepare,

@@ -576,6 +576,8 @@ def assess_post(records, artifacts, *, source_guards=None, check_source_freshnes
     posted_state = {}
     if posted is not None:
         after_post = describe_after_post_obligations(unique)
+        from .problem_reports import describe_post_condition_findings
+        after_post.extend(describe_post_condition_findings(posted))
         after_post.extend(dict(row, code="problem_post_fact", explanation=row["fact"], reason=row["fact"])
                           for row in sorted(records.get("problem_post_fact", {}).values(),
                                             key=lambda row: (row["recorded_revision"], row["id"]))
@@ -732,21 +734,28 @@ def export_problem(store, destination=None):
 
 def export_problem_override(store, destination=None, *, spec=None):
     """Compose the exact post material on a recorded instruction, with no reviewed decision claim."""
-    records = store.snapshot()["records"]
+    snapshot = store.snapshot()
+    records = snapshot["records"]
     require_problem(records)
+    from .overrides import assess_write_authority, read_unrecorded_overrides, require_met_override_conditions
+    artifacts = Evaluation.of(records, ArtifactStore(store.root))
+    authority = assess_write_authority(records, read_unrecorded_overrides(store.root) or [],
+                                       dict(kind="problem-override"), artifacts=artifacts)
     override = find_post_override(records)
-    if override is None:
+    if not authority["covered"]:
         raise ResearchError("gate_override_required", "This export needs a recorded post override whose statement digest "
                             "matches the current statement text and resolution criteria. If the user has instructed you to "
                             "pass this stop, record their words with gate-override, gate post; otherwise report the stop")
+    require_met_override_conditions(authority)
     if find_value(records) is None:
         raise ResearchError("problem_value_missing", "Record the problem's motivation and current state with problem-value "
                             "before this export")
-    artifacts = Evaluation.of(records, ArtifactStore(store.root))
     from .problem_evidence import validate_override_citation_spec
     citation_spec = validate_override_citation_spec({} if spec is None else spec)
+    manifest_authority = {key: authority[key] for key in ("override_ids", "conditions")}
+    manifest_authority["evaluated_at_revision"] = snapshot["revision"]
     files, manifest = build_override_projection(records, artifacts, override, include_references=True,
-                                               citation_spec=citation_spec)
+                                                citation_spec=citation_spec, authority=manifest_authority)
     return write_problem_export(store, records, files, manifest, destination)
 
 
@@ -754,12 +763,14 @@ def find_post_override(records):
     statement = find_current_statement(records)
     statement_digest = None if statement is None else compute_statement_digest(statement)
     return max((row for row in records.get("gate_override", {}).values()
-                if row["gate"] == "post" and row.get("statement_digest") == statement_digest),
+                if row.get("authority") == "user" and row["gate"] == "post"
+                and row.get("statement_digest") == statement_digest),
                key=lambda row: row["recorded_revision"], default=None)
 
 
-def build_override_projection(records, artifacts, override, *, include_references=False, citation_spec=None):
-    """Reproduce a stored format, or compose v3 with the override's expanded citation set."""
+def build_override_projection(records, artifacts, override, *, include_references=False, citation_spec=None,
+                              authority=None):
+    """Reproduce a stored format, or compose v3 with the override's expanded citation set and its authority."""
     include_references = include_references or citation_spec is not None
     statement = find_current_statement(records)
     citation_metadata, projected = {}, None
@@ -786,6 +797,8 @@ def build_override_projection(records, artifacts, override, *, include_reference
         manifest["schema"] = _REFERENCE_EXPORT_SCHEMA
     if citation_spec is not None:
         manifest.update(citation_metadata, schema=_OVERRIDE_CITATIONS_EXPORT_SCHEMA)
+    if authority is not None:
+        manifest["authority"] = authority
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     return files, manifest
 
@@ -807,6 +820,14 @@ def write_problem_export(store, records, files, manifest, destination):
     with _hold_lock(store.root):
         current = store.snapshot()['records']
         archive_problem_exports(store.root, workspace_root, current, ArtifactStore(store.root))
+        if 'authority' in manifest:
+            from .problem_export_history import find_reusable_override_export
+            reused = find_reusable_override_export(store.root, records, manifest)
+            if reused is not None:
+                files, manifest = reused
+                if use_default_destination:
+                    directory = workspace_root / PROBLEM_EXPORTS_FOLDER / compute_export_digest(files)
+                result = dict(manifest, destination=str(directory))
         if use_default_destination:
             from .workspace import checked_parent
             relative = directory.relative_to(workspace_root).as_posix()

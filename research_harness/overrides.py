@@ -19,6 +19,7 @@ _INSTRUCTION_LIMIT_BYTES = 64 * 1024
 _UNRECORDED_OVERRIDES_PATH = ".exactory/unrecorded-overrides.jsonl"
 _OVERRIDE_REQUIRED_FIELDS = ("id", "gate", "instruction", "reason")
 _OVERRIDE_OPTIONAL_FIELDS = ("stop_code", "transition", "public_action", "condition", "lifts")
+CONDITION_STATES = ("met", "unmet", "user_decides", "lifted", "unknown")
 
 
 def check_openness_supported_open(records, artifacts):
@@ -284,11 +285,35 @@ def assess_write_authority(records, local_overrides, write, *, artifacts=None):
                 conditions=conditions, authorized=covered and all(row["state"] in ("met", "lifted") for row in conditions))
 
 
+def require_met_override_conditions(authority):
+    """Refuse a write while an applicable condition stands without met evidence."""
+    if any(row["state"] not in ("met", "lifted") for row in authority["conditions"]):
+        raise ResearchError("gate_override_condition_unmet",
+                            "A recorded instruction's condition still stands and has not been established as met. "
+                            "Report the condition and its obligations; continue independent work, or record the owner's explicit lift.",
+                            authority)
+
+
+def describe_override_write_authorities(records, local_overrides, row, artifacts):
+    """Show current authority for the writes of a recorded or proposed instruction."""
+    proposed = records
+    if records is not None and "recorded_revision" in row:
+        proposed = dict(records, gate_override={**records.get("gate_override", {}), row["id"]: row})
+    writes = [dict(gate=row["gate"], public_action=row.get("public_action"))]
+    if row["gate"] == "post":
+        writes.append(dict(kind="problem-override"))
+    assessments = [dict(write=write, **assess_write_authority(proposed, local_overrides, write, artifacts=artifacts))
+                   for write in writes]
+    return assessments if any(item["conditions"] for item in assessments) or row.get("lifts") else []
+
+
 def record_override(store, payload, *, expected_revision, request_id):
     """Record a reported user instruction and the gate's current unmet obligations."""
     artifacts = store.build_artifact_store()
+    known_authority_records = None
 
     def prepare(records, value):
+        nonlocal known_authority_records
         from .cli import build_gate_report
         from .problem_claims import compute_statement_digest, find_current_statement
         validate_override_payload(value)
@@ -324,10 +349,26 @@ def record_override(store, payload, *, expected_revision, request_id):
             raise ResearchError("gate_override_conflict", "An override with this id is already recorded with another payload; "
                                 "use a new id, or repeat the original payload with its original request id",
                                 error.details) from error
+        known_authority_records = {kind: dict(records.get(kind, {}))
+                                   for kind in ("gate_override", "problem_statement", "problem_selection")}
         return [change], record
 
-    return prepared_mutation(store, "research.gate_override", payload, prepare,
-                             expected_revision=expected_revision, request_id=request_id)
+    receipt = prepared_mutation(store, "research.gate_override", payload, prepare,
+                                expected_revision=expected_revision, request_id=request_id)
+    local = read_unrecorded_overrides(store.root) or []
+    available = True
+    try:
+        records = store.snapshot()["records"]
+    except ResearchError:
+        records, artifacts, available = known_authority_records, None, False
+        if records is None:
+            # A replay bypasses preparation. Without a current read, its old
+            # lift alone cannot establish the other conditions of this write.
+            local = [receipt["result"]] if "condition" in receipt["result"] else []
+    authorities = describe_override_write_authorities(records, local, receipt["result"], artifacts)
+    if not available:
+        authorities = [dict(authority, available=False) for authority in authorities]
+    return dict(receipt, write_authorities=authorities) if authorities else receipt
 
 
 def append_unrecorded_override(root, payload, *, expected_revision, request_id):
@@ -371,7 +412,15 @@ def append_unrecorded_override(root, payload, *, expected_revision, request_id):
         raise ResearchError("gate_override_storage", "The store refused the override, and the local log "
                             + _UNRECORDED_OVERRIDES_PATH + " could not be written; nothing is recorded. "
                             "Repair the log or its directory, then record the override again") from error
-    return dict(recorded=False, path=str(root / _UNRECORDED_OVERRIDES_PATH))
+    result = dict(recorded=False, path=str(root / _UNRECORDED_OVERRIDES_PATH))
+    from .storage import Store
+    try:
+        store = Store(root)
+        records, artifacts = store.snapshot()["records"], store.build_artifact_store()
+    except ResearchError:
+        records, artifacts = None, None
+    authorities = describe_override_write_authorities(records, read_unrecorded_overrides(root) or [], record, artifacts)
+    return dict(result, write_authorities=authorities) if authorities else result
 
 
 def build_unreadable_override(line_number):

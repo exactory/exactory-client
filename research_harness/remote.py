@@ -76,7 +76,7 @@ def remote_step(store, identifier, name, request, perform, *, expected_revision=
     try:
         response = perform()
     except ResearchError as error:
-        if error.code == "gate_override_public_write":
+        if error.code in ("gate_override_public_write", "gate_override_condition_unmet"):
             # The local transport guard refuses before sending anything. Keep
             # that fact rather than forcing remote reconciliation of no write.
             discard_step(store, identifier, name, {"kind": "local_authority_refusal", "code": error.code})

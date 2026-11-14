@@ -396,7 +396,7 @@ class PublicWriteCompatibilityTests(unittest.TestCase):
             (root / ".exactory/automatic-passes").mkdir()
             store.mutate("fixture.action_scope", {}, lambda tx: (
                 tx.put("configuration", "research", {}),
-                tx.put("gate_override", "instruction", dict(authority="user", gate="publication",
+                tx.put("gate_override", "instruction", dict(id="instruction", authority="user", gate="publication",
                     public_action="POST /api/v1/verifications"))), expected_revision=0, request_id="action-scope")
             opened, report, error = cli.select_managed_path(lambda store: "accepted", root, public_gate="submitted")
             self.assertEqual(report, "accepted")
@@ -437,7 +437,7 @@ class PublicWriteCompatibilityTests(unittest.TestCase):
             self.assertEqual(refused["discarded"][-1]["observation"]["kind"], "local_authority_refusal")
             self.assertEqual(sent, [])
             store.mutate("fixture.instruction", {}, lambda tx: tx.put("gate_override", "user",
-                dict(authority="user", gate="submitted", public_action="POST /api/deposit/depositions")),
+                dict(id="user", authority="user", gate="submitted", public_action="POST /api/deposit/depositions")),
                 expected_revision=store.revision, request_id="user")
             self.assertEqual(remote_step(store, intent["id"], "create", {}, perform), {"id": 42})
             self.assertEqual(sent, ["POST"])

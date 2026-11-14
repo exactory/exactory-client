@@ -394,6 +394,8 @@ def _build_records(records, artifacts, inputs):
             path = _STATUS_FOLDERS[status] + tree + "/" + _format_file_name(key) + ".json"
             entry = _describe(kind, key, record, status)
             retain_fields = ()
+            if kind == "problem_post" and "authority" in record:
+                retain_fields = ("authority",)
             if kind == "gate_override" and record.get("authority") == "user":
                 from .overrides import describe_instruction
                 record = dict(record, **describe_instruction(record["instruction"]))

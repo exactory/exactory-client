@@ -182,6 +182,24 @@ def _obligations(values):
             "by_code": [{"code": _short(code, 48), "count": count, "code_truncated": len(code) > 48} for code, count in selected]}
 
 
+def summarize_authority(authority):
+    """Keep authority states visible within the navigation view's existing bounds."""
+    result = {key: authority[key] for key in ("source", "covered", "authorized", "export_digest") if key in authority}
+    result["override_ids"] = [_short(item, 96) for item in authority["override_ids"][:3]]
+    result["omitted_override_ids"] = max(0, len(authority["override_ids"]) - 3)
+    result["conditions"] = [dict(
+        **{key: _short(row[key], 120) for key in ("override_id", "text", "check", "state")},
+        lifted_by=[_short(item, 96) for item in row["lifted_by"][:3]],
+        evidence=[dict(id=_short(item["id"], 96), digest=_short(item["digest"], 64),
+                       id_truncated=len(item["id"]) > 96) for item in row["evidence"][:1]],
+        obligations=[_short(item["code"], 64) for item in row.get("obligations", [])[:3]],
+        omitted_lifted_by=max(0, len(row["lifted_by"]) - 3), omitted_evidence=max(0, len(row["evidence"]) - 1),
+        omitted_obligations=max(0, len(row.get("obligations", [])) - 3))
+        for row in authority["conditions"][:2]]
+    result["omitted_conditions"] = max(0, len(authority["conditions"]) - 2)
+    return result
+
+
 def summarize_overrides(report):
     """Keep bounded instruction quotes and obligation codes in both navigation summaries."""
     result = {}
@@ -206,6 +224,15 @@ def summarize_overrides(report):
             example["truncated_fields"] = [name for name, value in strings.items()
                                             if isinstance(value, str) and len(value) > limits[name]]
             example["transition"] = row.get("transition")
+            if "condition" in row:
+                example["condition"] = summarize_authority(dict(override_ids=[], conditions=[row["condition"]]))["conditions"][0]
+                example["lifted_by"] = list(example["condition"]["lifted_by"])
+                example["omitted_lifted_by"] = example["condition"]["omitted_lifted_by"]
+            if "lifts" in row:
+                example["lifts"] = [dict(part=lift["part"], **{key: _short(lift[key], 120)
+                                    for key in ("override_id", "basis", "quote")})
+                                    for lift in row["lifts"][:2]]
+                example["omitted_lifts"] = max(0, len(row["lifts"]) - 2)
             if "user_words" in row:
                 example["user_words"] = [dict(at=part["at"], text=_short(part["text"], 120))
                                          for part in row["user_words"][:3]]
@@ -233,13 +260,30 @@ def bound_override_summaries(result, limit):
     while len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > limit:
         removable = [key for key in ("overrides", "unrecorded_overrides") if len(result.get(key, [])) > 1]
         if not removable:
-            previews = [(row, key) for group in ("overrides", "unrecorded_overrides") for row in result.get(group, [])
-                        for key in ("user_words", "selections") if row.get(key)]
+            rows = [row for group in ("overrides", "unrecorded_overrides") for row in result.get(group, [])]
+            previews = [(row, key) for row in rows
+                        for key in ("user_words", "selections", "lifts", "lifted_by") if row.get(key)]
+            previews.extend((row["condition"], key) for row in rows if "condition" in row
+                            for key in ("evidence", "obligations", "lifted_by") if row["condition"].get(key))
+            authorities = [result.get("override_export_authority"), result.get("post", {}).get("authority")]
+            previews.extend((authority, key) for authority in authorities if authority
+                            for key in ("conditions", "override_ids") if authority.get(key))
             if not previews:
-                break
+                strings = [(row, key) for row in rows for key in ("id", "instruction", "public_action", "stop_code")
+                           if isinstance(row.get(key), str) and len(row[key]) > 16]
+                strings.extend((row["condition"], key) for row in rows if "condition" in row
+                               for key in ("override_id", "text") if len(row["condition"][key]) > 16)
+                if not strings:
+                    break
+                row, key = max(strings, key=lambda pair: len(pair[0][pair[1]].encode("utf-8")))
+                row[key] = row[key][:max(16, len(row[key]) // 2)]
+                truncated = row.setdefault("truncated_fields", [])
+                if key not in truncated:
+                    truncated.append(key)
+                continue
             row, key = max(previews, key=lambda pair: len(json.dumps(pair[0][pair[1]], ensure_ascii=False)))
             row[key].pop()
-            row["omitted_" + key] += 1
+            row["omitted_" + key] = row.get("omitted_" + key, 0) + 1
             continue
         key = max(removable, key=lambda key: len(result[key]))
         result[key].pop()
@@ -269,6 +313,15 @@ def next_summary(report, *, counters=False):
                       post_obligations=_obligations(report["obligations"]))
         if "after_post" in report:
             result["after_post"] = len(report["after_post"])
+        if "override_export_authority" in report:
+            result["override_export_authority"] = summarize_authority(report["override_export_authority"])
+        if "authority" in report.get("post", {}):
+            post = report["post"]
+            result["post"] = {key: _short(post[key], 96) for key in ("id", "problem_id", "export_digest") if key in post}
+            result["post"]["truncated_fields"] = [key for key in ("id", "problem_id", "export_digest")
+                                                    if key in post and len(post[key]) > 96]
+            if "authority" in post:
+                result["post"]["authority"] = summarize_authority(post["authority"])
     if report.get("advisories"):
         # Stale output views are advisory and never replace the next hint.
         result["advisories"] = [{"code": item["code"], "reason": item["reason"]} for item in report["advisories"]]

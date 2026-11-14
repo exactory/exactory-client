@@ -40,6 +40,18 @@ UNASSESSED_CLASSIFICATION = "kind unassessed"
 POST_CLASSIFICATIONS = (GAIN_CLASSIFICATION, ORDINARY_CLASSIFICATION, UNASSESSED_CLASSIFICATION)
 
 
+def describe_post_condition_findings(post):
+    """Report an unmet recording-time condition without inferring the state at delivery."""
+    authority = post.get("authority", {})
+    pending = [row for row in authority.get("conditions", []) if row["state"] not in ("met", "lifted")]
+    if authority.get("source") != "recording" or not pending:
+        return []
+    return [dict(code="problem_post_condition_unmet", post_id=post["id"], conditions=pending,
+        explanation="A standing condition was not established as met when the post was recorded. The harness holds no evidence "
+                    "of its state when the write was sent.",
+        reason="The post authority is an observation made after the write.")]
+
+
 def order_records(records, kind):
     return sorted(records.get(kind, {}).values(), key=lambda row: (row.get("recorded_revision", 0), row["id"]))
 
@@ -206,7 +218,8 @@ def describe_statements(records, artifacts):
                 posted_at=post.get("posted_at") if time is None else time["posted_at"],
                 time_statement=time, has_post_fact=bool(facts),
                 after_post=dict(values=[row for row in values if row["recorded_revision"] > revision],
-                                facts=facts, reviews=later_reviews),
+                                facts=facts, reviews=later_reviews,
+                                **({"conditions": describe_post_condition_findings(post)} if "authority" in post else {})),
                 consequences=describe_consequences(values), proof_publication=PROOF_PUBLICATION_NOTE))
         statements.append(dict(statement=statement, publication=("not posted" if not posts else
             "posted through the gate" if posts[0]["passed"] else "posted outside the gate"), posts=posts))

@@ -5219,6 +5219,35 @@
         "test_override_authority.OverrideAuthorityTests.test_condition_on_previous_statement_stands_after_new_statement_is_covered",
         "test_override_authority.OverrideAuthorityTests.test_legacy_authority_equals_coverage_for_recorded_and_local_shapes_and_all_scopes"
       ]
+    },
+    {
+      "id": "override-readers-enforce-standing-conditions",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "override publication authority",
+      "summary": "The export and public transports could proceed after a general continuation while the selected condition was still unmet.",
+      "expected": "Export and every public transport assess all applicable conditions, including local instructions without an automatic pass. The export refuses until met or explicitly lifted and pins authority in its manifest. Status, next and check mode expose the same assessment.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_override_readers.OverrideReaderTests.test_incident_export_refuses_before_lift_and_manifest_keeps_lifting_authority",
+        "test_override_readers.OverrideReaderTests.test_public_write_checks_all_overlapping_conditions_without_an_automatic_pass",
+        "test_override_readers.OverrideReaderTests.test_record_and_check_show_authority_without_putting_state_in_the_override",
+        "test_override_readers.OverrideReaderTests.test_stored_0853_projection_and_override_digest_stay_unchanged"
+      ]
+    },
+    {
+      "id": "external-post-keeps-export-authority",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "post attribution",
+      "summary": "Recording an external post did not preserve the instructions or the condition evidence under which its export was composed.",
+      "expected": "A complete export named by digest supplies immutable post authority even after later instructions or findings. Without export authority, recording succeeds with a recording-time observation; after_post reports its unmet conditions without claiming their state at delivery. Stored posts retain their meaning and digest.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_post_override_attribution.PostOverrideAttributionTests.test_g13_export_authority_survives_intervening_instruction_and_changed_finding",
+        "test_post_override_attribution.PostOverrideAttributionTests.test_g13_recording_observation_reports_unmet_condition_without_refusing_the_post",
+        "test_post_override_attribution.PostOverrideAttributionTests.test_stored_post_has_no_new_inferred_authority_and_preserves_digest_and_view"
+      ]
     }
   ]
 }

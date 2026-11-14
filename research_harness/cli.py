@@ -613,6 +613,11 @@ def status_report(store, *, counters=False):
         if "problem" in records.get("workspace", {}):
             advisories += describe_report_advisories(records)
             report = gate_state(records, evaluation, "post")
+            export_authority = overrides.assess_write_authority(records,
+                overrides.read_unrecorded_overrides(store.root) or [], dict(kind="problem-override"), artifacts=evaluation)
+            if export_authority["authorized"] and not report["ready"] and report.get("post") is None:
+                advisories.append(dict(code="gate_override_condition_met",
+                    reason="The recorded instruction authorizes export --kind problem-override."))
             review = _review_status(records, evaluation)
             report = annotate_parts_obligations(report, review)
             slots = report.get('slot_outcomes', {})
@@ -638,7 +643,9 @@ def status_report(store, *, counters=False):
                         # A cycle plan's literature comparison carries this digest (literature_comparison_stale).
                         literature_digest=synthesis.synthesis_state(records, evaluation, "research")["literature_digest"],
                         candidates=problem_candidates.count_candidates(records), slate_id=None if slate is None else slate["id"],
-                        next=upcoming, review=review, advisories=advisories)
+                        next=upcoming, review=review, advisories=advisories,
+                        **({"override_export_authority": export_authority}
+                           if export_authority["override_ids"] or "authority" in report.get("post", {}) else {}))
             if records.get("forming_call"):
                 result["forming"] = problem_forming.count_forming(records)
             if records.get('problem_objection_carry'):
