@@ -5598,11 +5598,11 @@
       "class": "openness evidence (supporting readings)",
       "summary": "A search claimed a reading of an out-of-scope work but its openness packet delivered no reading record.",
       "fixed_in": "open",
-      "expected": "The v2 export binds exact reading-id citations from the five search text fields and explicit supporting IDs, reports their citing fields, and v6 plans and verifies complete delivery of their supporting reading records. Stored v1 evidence and prompts keep their bytes.",
+      "expected": "The v2 export binds exact reading-id citations from the six search text fields and explicit supporting IDs, reports their citing fields, and v6 plans and verifies complete delivery of their supporting reading records. Stored v1 evidence and prompts keep their bytes.",
       "test_kind": "real_shape",
       "tests": [
         "test_openness_supporting_readings.SupportingReadingTests.test_g3_search_export_plan_and_verification_require_the_supporting_reading",
-        "test_openness_supporting_readings.SupportingReadingTests.test_each_of_the_five_search_text_fields_binds_and_reports_a_reading",
+        "test_openness_supporting_readings.SupportingReadingTests.test_each_of_the_six_search_text_fields_binds_and_reports_a_reading",
         "test_openness_supporting_readings.SupportingReadingTests.test_stored_v1_search_reading_rows_and_prompts_keep_the_released_projection"
       ]
     },
@@ -5650,6 +5650,44 @@
       "tests": [
         "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post",
         "test_supplied_eligibility.SuppliedEligibilityTests.test_http_reported_origins_keep_url_guards_and_never_relax_fetch_urls"
+      ]
+    },
+    {
+      "id": "openness-search-row-that-cannot-be-imported",
+      "record": "20261114070000-openness-finding-unrecordable-and-unbindable-captures",
+      "class": "openness search rows",
+      "summary": "Two pages return 53 OpenAlex rows, including an identified row without a title that cannot become a work.",
+      "fixed_in": "0.90.0",
+      "expected": "A source/index row disposition retains canonical provider evidence, makes coverage complete and permits export without accepting gaps; imported, excluded and absent rows refuse with the entry.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_search_row_dispositions.RowDispositionExportTests.test_two_pages_53_rows_export_requires_a_disposition_and_preserves_the_stored_search",
+        "test_search_row_dispositions.RowDispositionTests.test_refuses_imported_excluded_and_absent_rows_with_the_entry"
+      ]
+    },
+    {
+      "id": "openness-row-disposition-cites-a-reading-that-the-packet-lacks",
+      "record": "20261114070000-openness-finding-unrecordable-and-unbindable-captures",
+      "class": "openness supporting readings",
+      "summary": "A judgment on an unimportable provider row cites a reading record that the packet must deliver.",
+      "fixed_in": "0.90.0",
+      "expected": "The export binds the cited supporting reading, its chain plan identifies the citing search, and verification requires complete delivery.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_supporting_readings.SupportingReadingTests.test_g3_row_disposition_citation_binds_plans_and_requires_complete_supporting_delivery"
+      ]
+    },
+    {
+      "id": "arxiv-id-list-capture-cannot-be-bound",
+      "record": "20261114070000-openness-finding-unrecordable-and-unbindable-captures",
+      "class": "search query provenance",
+      "summary": "An arXiv identifier-list response cannot bind when search accepts only search_query.",
+      "fixed_in": "0.90.0",
+      "expected": "The exact id_list value binds without a search_query filter; every requested identifier needs an entry for complete coverage and missing identifiers are named.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_arxiv_id_list_binding.ArxivIdListBindingTests.test_three_identifiers_bind_and_establish_complete_coverage",
+        "test_arxiv_id_list_binding.ArxivIdListBindingTests.test_missing_entry_names_the_requested_identifier_despite_matching_response_total"
       ]
     }
   ]

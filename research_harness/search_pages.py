@@ -7,7 +7,10 @@ changed totals, duplicate results and missing chain segments remain pending.
 Count equality proves only coverage of this captured query, never field novelty.
 """
 
+import hashlib
+import json
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
+from xml.parsers import expat
 
 from .errors import ResearchError
 from .evidence import digest
@@ -51,6 +54,16 @@ ORDERING_PARAMETER_NAMES = {"arxiv": frozenset({"sortBy", "sortOrder"}),
                             "crossref": frozenset({"sort", "order"}), "openalex": frozenset({"sort"})}
 CAPTURE_INTERVAL_SECONDS = 15 * 60
 NATIVE_PARSE_VERSION = 2
+ROW_EXCERPT_CHARACTERS = 20000
+
+
+def find_captured_query_values(source):
+    """id_list binds an arXiv enumeration only when no search expression filters it."""
+    pairs = _parse_parameters(source)
+    names = QUERY_PARAMETER_NAMES.get(source["provider"], {"q", "query", "search", "search_query"})
+    if source["provider"] == "arxiv" and not any(key == "search_query" and value for key, value in pairs):
+        names = names | {"id_list"}
+    return [value for key, value in pairs if key in names]
 
 
 def _parse_parameters(source):
@@ -112,7 +125,7 @@ def native_page(source, data, query, scope, *, parse_version=1):
     parameters = dict(pairs)
     if len(parameters) != len(pairs):
         raise ResearchError("invalid_search", "Captured query parameters cannot have ambiguous repeated values")
-    if not any(k in QUERY_PARAMETER_NAMES[provider] and v == query for k, v in pairs):
+    if query not in find_captured_query_values(source):
         raise ResearchError("invalid_search", "The native page must retain its actual captured query parameter")
     size_key, default, maximum = {"arxiv": ("max_results", 10, 2000), "crossref": ("rows", 20, 1000),
                                  "openalex": ("per_page", 25, 100)}[provider]
@@ -141,10 +154,46 @@ def native_page(source, data, query, scope, *, parse_version=1):
             "position": cursor if mode == "cursor" else offset, "size": size, "total": page.total,
             "count": page.returned_count, "next_cursor": page.next_cursor,
             "found": [w["id"] for w in page.works], "pending": pending}
+    imported_indices = []
+    for work in page.works:
+        locator = work["source_locator"]
+        tail = locator.get("pointer", "").rsplit("/", 1)[-1]
+        imported_indices.append(locator["index"] if "index" in locator else int(tail) if tail.isdigit() else 0)
+    result["imported_indices"] = imported_indices
     if parse_version >= 2:
         result.update(captured_at=source["captured_at"],
                       excluded_items=[dict(item, source_id=source["id"]) for item in page.excluded_items])
+    if provider == "arxiv" and parameters.get("id_list") and not parameters.get("search_query"):
+        from .providers import _MetadataTreeBuilder
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(data, parser=ET.XMLParser(target=_MetadataTreeBuilder()))
+        result["listed_ids"] = list(dict.fromkeys(value.strip() for value in parameters["id_list"].split(",")
+                                                if value.strip()))
+        result["returned_ids"] = [node.findtext("{http://www.w3.org/2005/Atom}id") for node in
+                                  root.findall("{http://www.w3.org/2005/Atom}entry")]
     return result
+
+
+def find_missing_arxiv_identifiers(members):
+    from .identities import normalize_identifier, family_id, version_of
+    returned = set()
+    for page in members:
+        for identifier in page.get("returned_ids", []):
+            try:
+                returned.add(normalize_identifier(identifier))
+            except ResearchError:
+                continue
+    families = {family_id(identifier) for identifier in returned}
+    missing = []
+    for identifier in members[0].get("listed_ids", []):
+        try:
+            canonical = normalize_identifier(identifier)
+            found = canonical in returned if version_of(canonical) is not None else canonical in families
+        except ResearchError:
+            found = False
+        if not found:
+            missing.append({"code": "search_id_list_entry_missing", "identifier": identifier})
+    return missing
 
 
 def enumerate_pages(pages):
@@ -185,6 +234,8 @@ def enumerate_pages(pages):
         if count != total or len(visited) != len(by_position) or not visited:
             failures.append({"code": "search_response_incomplete", "next_position": position,
                              "returned_count": count, "reported_count": total})
+        if members[0].get("listed_ids"):
+            failures.extend(find_missing_arxiv_identifiers(members))
         # Parsed failures are retained even if the raw row count reaches total.
         summary = dict(group, id=key, source_ids=[p["source_id"] for p in members],
                        returned_count=count, reported_count=total, complete=not failures)
@@ -263,10 +314,12 @@ def build_search_coverage(queries, requested_k, captures, page_groups, pending):
         providers = sorted({capture["source"]["provider"] for capture in members})
         provider = providers[0] if len(providers) == 1 else providers or None
         positions, seen_positions, seen, returned = [], set(), set(), 0
-        found, orders = set(), []
+        found, disposed, orders = set(), set(), []
         for capture in members:
             source, page = capture["source"], capture["page"]
             found.update(capture["found"])
+            disposed.update((row["provider"], row["row_id"], row["row_digest"] if row["row_id"] is None else None)
+                            for row in capture.get("row_dispositions", []))
             if page is not None:
                 identity = digest([page["group"], page["position"], page["sha256"]])
                 if page["position"] not in seen_positions:
@@ -293,7 +346,7 @@ def build_search_coverage(queries, requested_k, captures, page_groups, pending):
         else:
             kind = "bounded_unordered"
         coverage.append({"query": query, "requested_k": requested_k, "returned_count": returned,
-                         "inspected_count": len(found), "page_positions": positions,
+                         "inspected_count": len(found) + len(disposed), "page_positions": positions,
                          "provider": provider, "ordering": ordering, "kind": kind})
     return coverage
 
@@ -328,6 +381,56 @@ def read_search_row_ids(records, artifacts, source, response):
     by_index = {mapping["id"][len(prefix):].partition("/")[0]: _pointer(document, mapping["id"])
                 for mapping in mappings if mapping["id"].startswith(prefix)}
     return [by_index.get(str(index)) for index, _ in enumerate(_pointer(document, response["results_pointer"]))]
+
+
+def read_atom_entry_bytes(data):
+    """Retain exact entry bytes, including prefixes and whitespace, without XML reserialization."""
+    parser = expat.ParserCreate(namespace_separator="}")
+    parser.SetParamEntityParsing(expat.XML_PARAM_ENTITY_PARSING_NEVER)
+    stack, entries, starts = [], [], []
+
+    def start_element(name, attributes):
+        stack.append(name)
+        if len(stack) == 2 and name == "http://www.w3.org/2005/Atom}entry":
+            starts.append(parser.CurrentByteIndex)
+
+    def end_element(name):
+        if len(stack) == 2 and name == "http://www.w3.org/2005/Atom}entry":
+            end = parser.CurrentByteIndex
+            if data[end:end + 2] == b"</":
+                end = data.index(b">", end) + 1
+            entries.append(data[starts.pop():end])
+        stack.pop()
+
+    parser.StartElementHandler = start_element
+    parser.EndElementHandler = end_element
+    parser.Parse(data, True)
+    return entries
+
+
+def read_search_rows(records, artifacts, source, response):
+    """Read canonical evidence for every returned row, including rejected and excluded rows."""
+    from .providers import _json
+    from .imports import _pointer
+
+    data = artifacts.read(source["response"])
+    provider = source["provider"]
+    identifiers = read_search_row_ids(records, artifacts, source, response)
+    if provider == "arxiv":
+        bodies = read_atom_entry_bytes(data)
+        types = [None] * len(bodies)
+    else:
+        document = _json(data, require_object=False)
+        rows = (document["results"] if provider == "openalex" else document["message"]["items"]
+                if provider == "crossref" else _pointer(document, response["results_pointer"]))
+        bodies = [json.dumps(row, ensure_ascii=False, sort_keys=True, allow_nan=False,
+                             separators=(",", ":")).encode() for row in rows]
+        types = [row.get("type") if isinstance(row, dict) and isinstance(row.get("type"), str) else None
+                 for row in rows]
+    return [dict(source_id=source["id"], index=index, provider=provider, row_id=identifier, record_type=kind,
+                 row_digest=hashlib.sha256(body).hexdigest(), row_byte_length=len(body),
+                 row_excerpt=body.decode("utf-8")[:ROW_EXCERPT_CHARACTERS])
+            for index, (identifier, kind, body) in enumerate(zip(identifiers, types, bodies))]
 
 
 def check_search_page_prefix(pages):

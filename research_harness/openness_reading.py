@@ -401,6 +401,9 @@ PROMPTS = {PROTOCOL_V1: {'reading': READING_PROMPT_V1, 'final': FINAL_PROMPT_V1}
 V6_READING_PARAGRAPH = (' [X2: v6 family readings, accepted results, and supplied origin.]')
 V6_FINAL_PARAGRAPH = (' [X2: v6 delivered family readings, accepted results, and supplied origin.]')
 # Each recorded search key has one class and one writer-pass placeholder. Both v6 prompts use these lines.
+ROW_DISPOSITION_GUIDE_LINE = ('A row disposition is the author\'s statement about a row that the harness could '
+    'not import; the row beside the reason is what the provider returned. A reading named in the reason is '
+    'bound as a supporting reading and is a unit of the chain that requires complete delivery.')
 SEARCH_FIELD_GUIDE = {
     'id': {'class': 'identity', 'line': '[X2 R42: identity; the search record identifier.]'},
     'profile': {'class': 'identity', 'line': '[X2 R42: identity; the literature profile.]'},
@@ -415,6 +418,7 @@ SEARCH_FIELD_GUIDE = {
     'verdict': {'class': 'author_judgment', 'line': '[X2 R42: author_judgment; the author verdict is no coverage finding.]'},
     'impact': {'class': 'author_judgment', 'line': '[X2 R42: author_judgment; the author impact assessment is no coverage finding.]'},
     'dispositions': {'class': 'coverage', 'line': '[X2 R42: coverage; the relevance judgment and reason for each found work.]'},
+    'row_dispositions': {'class': 'coverage', 'line': ROW_DISPOSITION_GUIDE_LINE},
     'resolved': {'class': 'coverage', 'line': '[X2 R42: coverage; explicit resolutions of earlier work judgments.]'},
     'gaps': {'class': 'coverage', 'line': '[X2 R42: coverage; the declared remaining gaps.]'},
     'coverage': {'class': 'coverage', 'line': '[X2 R42: coverage; per-query complete, top_k, bounded_unordered or unspecified coverage.]'},

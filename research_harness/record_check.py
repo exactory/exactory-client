@@ -320,6 +320,8 @@ def check_authentication(store):
     from .literature import check_search_completion_pins
     completions = check_search_completion_pins(records)
     artifacts = Evaluation(records, store.build_artifact_store())
+    from .literature import check_search_row_dispositions
+    row_dispositions = check_search_row_dispositions(records, artifacts)
     from .review_state_evaluation import runtime_scope
     with runtime_scope(records, artifacts):
         attempts = {}
@@ -387,6 +389,8 @@ def check_authentication(store):
     supplied_texts = check_supplied_sources(records)
     if completions:
         result['search_completions'] = completions
+    if row_dispositions:
+        result['search_row_dispositions'] = row_dispositions
     if supplied_texts:
         result['supplied_texts'] = supplied_texts
     return result

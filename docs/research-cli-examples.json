@@ -1194,37 +1194,33 @@
   },
   "search": {
     "id": "direct-search-1",
+    "question": "Which citing works address the same finite bound?",
     "profile": "research",
     "purpose": "direct",
     "queries": [
-      "finite bound"
+      "arXiv:1208.4714"
     ],
     "responses": [
       {
         "source_id": "SOURCE_ID",
-        "query": "finite bound",
-        "query_locator": {
-          "kind": "json",
-          "pointer": "/q",
-          "value": "finite bound"
-        },
-        "results_pointer": "/results"
+        "query": "arXiv:1208.4714",
+        "results_pointer": "/data"
       }
     ],
     "captured_at": "2026-09-07T12:00:00Z",
     "scope": "The complete objective and its exact comparison class.",
     "found_work_ids": [
-      "arxiv:2601.00001v1"
+      "url:https://example.org/citing-paper"
     ],
     "verdict": "replicate-extend",
     "cited_work_ids": [
-      "arxiv:2601.00001v1"
+      "url:https://example.org/citing-paper"
     ],
     "impact": "State what the retrieved work changes about the comparison.",
     "gaps": [],
     "dispositions": [
       {
-        "work_id": "arxiv:2601.00001v1",
+        "work_id": "url:https://example.org/citing-paper",
         "disposition": "relevant",
         "reason": "The retrieved work addresses the same bound under the same assumptions."
       }

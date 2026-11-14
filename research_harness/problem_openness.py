@@ -399,7 +399,8 @@ def list_reading_citations(reading_id, searches):
     for search in searches:
         texts = [("dispositions.reason", [row["reason"] for row in search["dispositions"]]),
                  ("resolved.reason", [row["reason"] for row in search.get("resolved", [])]),
-                 ("impact", [search["impact"]]), ("scope", [search["scope"]]), ("gaps", search["gaps"])]
+                 ("impact", [search["impact"]]), ("scope", [search["scope"]]), ("gaps", search["gaps"]),
+                 ("row_dispositions.reason", [row["reason"] for row in search.get("row_dispositions", [])])]
         fields = []
         for field, bodies in texts:
             if any(pattern.search(body) for body in bodies):

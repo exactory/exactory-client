@@ -10,6 +10,7 @@ from research_harness.evidence import digest
 from research_harness.errors import ResearchError
 from research_harness.literature import import_bundle, record_search
 from research_harness.reading import record_reading
+from research_harness.acquisition import import_response
 
 
 class SupportingReadingTests(OpennessReadingCase):
@@ -31,7 +32,16 @@ class SupportingReadingTests(OpennessReadingCase):
         payload.update(id='citing-' + str(self.sequence), question=self.selected['statement'],
                        scope=self.selected['statement'], resolved=[])
         payload['dispositions'][0]['disposition'] = 'out_of_scope'
-        if field in ('dispositions.reason', 'resolved.reason'):
+        if field == 'row_dispositions.reason':
+            self.sequence += 1
+            captured = import_response(self.store, 'openalex', json.dumps(dict(meta=dict(count=1), results=[
+                dict(id='https://openalex.org/W9', title=None, type='article')])).encode(),
+                source_url='https://api.openalex.org/works?search=untitled', captured_at=payload['captured_at'],
+                expected_revision=self.store.revision, request_id='untitled-' + str(self.sequence))
+            payload['queries'].append('untitled')
+            payload['responses'].append(dict(source_id=captured['source_ids'][0], query='untitled'))
+            payload['row_dispositions'] = [dict(source_id=captured['source_ids'][0], index=0, reason=citation)]
+        elif field in ('dispositions.reason', 'resolved.reason'):
             key = field.split('.')[0]
             if key == 'resolved':
                 payload[key] = [dict(work_id=self.support_version, reason=citation)]
@@ -55,13 +65,20 @@ class SupportingReadingTests(OpennessReadingCase):
 
     def test_g3_search_export_plan_and_verification_require_the_supporting_reading(self):
         # Source: 20261113074000-openness-packet-cannot-deliver-what-its-searches-cite T1.
-        search = self.record_citing_search()
+        self.run_supporting_reading_journey(self.record_citing_search(), 'dispositions.reason')
+
+    def test_g3_row_disposition_citation_binds_plans_and_requires_complete_supporting_delivery(self):
+        # Source: 20261114070000-openness-finding-unrecordable-and-unbindable-captures T2.
+        self.run_supporting_reading_journey(self.record_citing_search('row_dispositions.reason'),
+                                            'row_dispositions.reason')
+
+    def run_supporting_reading_journey(self, search, field):
         before = self.store.snapshot()['records']
         result = self.export_supporting([self.search, search])
         native = json.loads(self.artifacts.read(result['native_packet']))
         minimum = native['scientific_context']['openness_minimum']
         self.assertEqual(minimum['supporting_reading_digests'], [digest(self.support)])
-        citation = dict(search_id=search['id'], search_digest=digest(search), fields=['dispositions.reason'])
+        citation = dict(search_id=search['id'], search_digest=digest(search), fields=[field])
         self.assertEqual(result['supporting_readings'], [dict(reading_id='support-note',
             reading_digest=digest(self.support), cited_by=[citation])])
         rows = reading.list_reading_rows(before, self.artifacts, native)
@@ -104,8 +121,10 @@ class SupportingReadingTests(OpennessReadingCase):
                 reading.verify_chain(records, self.artifacts, assignment)
         self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
 
-    def test_each_of_the_five_search_text_fields_binds_and_reports_a_reading(self):
-        for field in ('dispositions.reason', 'resolved.reason', 'impact', 'scope', 'gaps'):
+        self.assertEqual(reading.verify_chain(records, self.artifacts, assignment), verified)
+
+    def test_each_of_the_six_search_text_fields_binds_and_reports_a_reading(self):
+        for field in ('row_dispositions.reason', 'dispositions.reason', 'resolved.reason', 'impact', 'scope', 'gaps'):
             with self.subTest(field=field):
                 search = self.record_citing_search(field)
                 result = self.export_supporting([self.search, search])

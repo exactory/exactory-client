@@ -2,6 +2,8 @@
 
 import json
 
+from research_harness.acquisition import import_response
+
 from openness_reading_fixtures import OpennessReadingCase
 from research_harness import openness_reading as reading
 from research_harness.literature import record_search
@@ -32,6 +34,15 @@ class SearchFieldGuideTests(OpennessReadingCase):
         page = self.page('crossref', {'message': {'total-results': 0, 'items': []}},
                          {'query': 'bounded', 'rows': '10'})
         self.search_pages([page])
+        captured = import_response(self.store, 'openalex', json.dumps(dict(meta=dict(count=1), results=[
+            dict(id='https://openalex.org/W9', title=None, type='article')])).encode(),
+            source_url='https://api.openalex.org/works?search=untitled', captured_at=payload['captured_at'],
+            expected_revision=self.store.revision, request_id='guide-row')
+        row_payload = dict(payload, id='row-disposition-search', queries=['untitled'],
+            responses=[dict(source_id=captured['source_ids'][0], query='untitled')], found_work_ids=[],
+            dispositions=[], cited_work_ids=[], row_dispositions=[dict(source_id=captured['source_ids'][0],
+                index=0, reason='No usable title.')])
+        self.mutate(record_search, row_payload)
         records = self.store.snapshot()['records']['literature_search']
         keys = {key for search in records.values() for key in search}
         self.assertEqual(set(reading.SEARCH_FIELD_GUIDE), keys)
@@ -42,6 +53,10 @@ class SearchFieldGuideTests(OpennessReadingCase):
             self.assertTrue(row['line'])
         self.assertEqual(reading.SEARCH_FIELD_GUIDE['provisional']['class'], 'scope_binding')
         self.assertEqual(reading.SEARCH_FIELD_GUIDE['coverage']['class'], 'coverage')
+        self.assertEqual(reading.SEARCH_FIELD_GUIDE['row_dispositions']['class'], 'coverage')
+        self.assertEqual(reading.SEARCH_FIELD_GUIDE['row_dispositions']['line'], reading.ROW_DISPOSITION_GUIDE_LINE)
+        for prompt in reading.PROMPTS[reading.PROTOCOL_V6].values():
+            self.assertIn('row_dispositions: ' + reading.ROW_DISPOSITION_GUIDE_LINE, prompt)
         self.assertEqual(reading.SEARCH_FIELD_GUIDE['impact']['class'], 'author_judgment')
         self.assertEqual(provisional['scope_digest'], None)
         self.assertTrue(provisional['provisional'])
