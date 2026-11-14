@@ -345,6 +345,15 @@ actual invocation, delivered packet and inspected context boundary. These checks
 do not decide mathematical relevance from prose. Previous scientific assessments
 and failures are intended continuity evidence, and are included explicitly.
 
+A review of a strategy assessment that returns `revise` or `reject` is not
+submitted, because it cannot authorize the reassessment. Read its `reason` and
+its `objections`. Revise the assessment or the work that it depends on: for
+example, record the checkpoint that an objection asks for and have it accepted.
+Then obtain a new review of the revised assessment, with a new packet under a
+new assignment id. `search reassess` refuses such a review when it is
+submitted, in its complete form with `native_review_not_approved`
+([Observed native review delivery](#observed-native-review-delivery)).
+
 Submit the reviewed record with the current revision and a unique request ID.
 The service freezes the context, assessment, review and native plans, and records
 an `assessment-000001` style ID with its predecessor. Replaying the original
@@ -1119,6 +1128,12 @@ Create this assignment with the returned `native_packet` reference:
  context: {native_packet: ArtifactRef}}
 ```
 
+`author_id` names the author of the reviewed work. When the workspace is a
+problem record, it names one of the authors that `problem-init` recorded, also
+when the session that wrote the proposal or the result has another name.
+Another value is refused with `problem_author_unknown`, and the details of the
+refusal list those authors under `authors`.
+
 Run `exactory-research review-assignment --workspace WORKSPACE --file assignment.json`
 and `exactory-research review-run --workspace WORKSPACE --file invocation.json`,
 each with its current `--expected-revision` and unique `--request-id`. `--check`
@@ -1138,6 +1153,18 @@ between the blocks, is a failed attempt on every route. For native verification,
 save that exact input `ResultReview` as `verification-review.json`. The shared
 runner retains rejected result/recovery responses, but they cannot be converted
 into approve-only native records.
+
+A result or recovery review with the decision `revise` or `reject` is such a
+response. Do not submit it to a native command. In its complete form,
+`{subject_digest, claim_digest, reviewer, decision, reason, objections:
+[{blocking, description}]}`, `search reassess`, `accept`, `review` and
+`complete` refuse it with `native_review_not_approved`: the details give its
+`decision`, `reason` and `objections`, and no event is written. In any other
+form it is refused with `invalid_record`. A proposal review keeps its versioned
+form, in which `search review` records `revise` and `reject` as before. Read
+the reason and the objections, revise or replace the reviewed record or the
+work that it depends on, and obtain a new review, with a new packet under a new
+assignment id.
 
 In a reading chain, run reading turn 1 with `review-run`, then run the chain
 to its end with `exactory-research review-series --workspace WORKSPACE

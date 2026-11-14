@@ -532,7 +532,8 @@ resolution criteria (`gate_override_required` otherwise), and the value record
 (`problem_value_missing` otherwise). It writes
 `final/problem/exports/<export digest>/` with `title.txt`, `statement.md`,
 `criteria.md`, `motivation.md`, `state.md`, `formal-statement.txt` when the
-statement has one, `citations.json` and `problem-export.json`, whose manifest
+statement has one, `citations.json`, `citation-refs.json` (the reference list
+for the citation check before the post) and `problem-export.json`, whose manifest
 has `decision_id` and `problem_evidence_digest` null, the `override_id` and
 `gate: "bypassed"`. Run `exactory post-problem` on those files as the
 [math-conjecturer skill](../skills/math-conjecturer/SKILL.md#compose-and-post-a-problem)

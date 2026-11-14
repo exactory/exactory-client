@@ -2198,7 +2198,11 @@ files is returned as it is; one that holds other files is refused with
 is refused (`export_destination_outside_final`). Use the exported `title.txt`,
 `statement.md`, `motivation.md`, `state.md`, `criteria.md` and `citations.json`;
 `problem-export.json` identifies the approved claim, evidence, decision and area.
-Keep an exported `formal-statement.txt` when the record includes one. Run the
+Keep an exported `formal-statement.txt` when the record includes one. The export
+also writes `citation-refs.json`, the reference list of the same citations for
+the citation check: one entry for each entry of `citations.json`, in the same
+order, with the title and the authors that the record holds for the work and
+with its DOI or its arXiv id. That file is not sent with the post. Run the
 citation and duplicate checks below on those exported files unchanged. A change
 to any part after export requires a new statement record and starts the post gate
 again.
@@ -2254,17 +2258,38 @@ and display a long definition or inequality with `$$...$$` on its own line.
 
 Check every citation locator before posting, exactly as `/exactory:propose-grand-challenge` does:
 
-1. Write DOI and arXiv locators to `problem-refs.json` as a reference list.
-   Use `[{"referenceString": "<citation>", "bibliography": {"doi": "<doi>"}}]` for a DOI.
-   For an arXiv locator, replace `{"doi": "<doi>"}` with `{"arxivId": "<arxiv-id>"}`.
-   If the citation names a title, include it as `bibliography.title`.
+1. Write the citations that have a DOI or an arXiv locator to `problem-refs.json` as a reference
+   list: a JSON array with one entry for each citation. For a DOI, the file with one entry is
+   `[{"referenceString": "<citation>", "bibliography": {"doi": "<doi>", "title": "<title>", "authors": ["<author>", "<author>"]}}]`.
+   For an arXiv locator, give `"arxivId": "<arxiv-id>"` in place of `"doi"`. Give the title
+   and every author of the work, one name in each string, in the order of the work. The check
+   compares both with the registry record of the identifier. An entry without `authors` is
+   blocking (`author_mismatch`) whenever the registry record lists authors, because the author
+   comparison catches a fabricated citation that carries a real identifier.
+   For a problem with a research record, do not write this file: the reference list is the
+   exported `citation-refs.json`. Do not build a list from the `citation` strings of
+   `citations.json` either, because a split of such a string at a full stop breaks a name that
+   has an initial.
 2. Run `exactory-check lookup --refs-json problem-refs.json --out problem-citation-report.json`.
-   Always give `--out`. The default path belongs to a draft workspace's citation gate.
+   For a problem with a research record, give the exported list in place of `problem-refs.json`:
+   `--refs-json "$EXPORT/citation-refs.json"`, where `EXPORT` is the export directory.
+   Always give `--out`, with a path outside the export directory. The default path belongs to
+   a draft workspace's citation gate, and a report inside the export directory changes the
+   file set that `problem-posted` compares.
 3. Fix or remove every blocking entry. Run the check again until all entries pass. The check
    also fails while an entry is incomplete (`no_query`, `network_error` or `search_incomplete`).
    A `search_incomplete` entry is a title search that stopped at its page bound; the output
    prints the command with twice the pages (`--search-pages`), but the reliable fix is the DOI
    or the arXiv id in `bibliography`, which is resolved without a search.
+   The exported list is not edited. An entry of it that has an identifier and is blocking
+   shows a difference between the record and the registry: the title or the authors that the
+   record holds for the work differ from the registry record of the identifier, or the
+   registry holds another work, or no work, under the identifier. The entry's `detail` states
+   the difference. Correct the citation in the record and export again. An entry of the
+   exported list without `doi` and without `arxivId` is a work whose locator is an https URL.
+   The check searches Crossref and OpenAlex for its title and reports it `unresolved` when
+   neither lists the work. Check such a work under step 4. When its locator returns the cited
+   document, its status in the report does not hold the post back.
 4. Fetch every https locator. Check that it returns the cited document.
 
 Check that the problem is not already posted:

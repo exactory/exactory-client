@@ -83,11 +83,16 @@ resolution criterion stays exact instead of being paraphrased into prose.
 Do not run `post-challenge` until every locator resolves.
 
 1. For the DOI and arXiv locators, write a reference list file in the shape
-   `exactory-check lookup --refs-json` reads:
-   `[{"referenceString": "<the citation>", "bibliography": {"doi": "<doi>"}}]`
-   for a DOI locator, or `{"arxivId": "<arxiv-id>"}` for an arXiv locator.
-   When the citation names a title, put it in `bibliography.title` too, so a
-   wrong title is caught.
+   `exactory-check lookup --refs-json` reads: a JSON array with one entry for
+   each citation. For a DOI locator, the file with one entry is
+   `[{"referenceString": "<the citation>", "bibliography": {"doi": "<doi>", "title": "<title>", "authors": ["<author>", "<author>"]}}]`.
+   For an arXiv locator, give `"arxivId": "<arxiv-id>"` in place of `"doi"`.
+   Give the title and every author of the work, one name in each string, in
+   the order of the work. The check compares both with the registry record of
+   the identifier, so a wrong title or a wrong author list is caught. An entry
+   without `authors` is blocking (`author_mismatch`) whenever the registry
+   record lists authors, because the author comparison catches a fabricated
+   citation that carries a real identifier.
 2. Run
    `exactory-check lookup --refs-json challenge-refs.json --out challenge-citation-report.json`.
    Always give `--out`: the default report path belongs to a draft

@@ -42,8 +42,10 @@ def refuse_native_nonapproval(value):
         s.require(type(objection["blocking"]) is bool, "Objection blocking flag must be boolean")
         s.text(objection["description"])
     raise SearchError("native_review_not_approved",
-                      "The native review did not approve this transition. Revise the assessment or the work it "
-                      "depends on, and obtain a new review.",
+                      "The submitted native review has the decision revise or reject, and a review with that decision "
+                      "authorizes no native transition. No event was written. Read the reason and the objections in "
+                      "the details. Revise or replace the reviewed record, for example the strategy assessment or the "
+                      "checkpoint, or the work that it depends on. Then obtain a new review.",
                       {key: value[key] for key in ("decision", "reason", "objections")})
 
 

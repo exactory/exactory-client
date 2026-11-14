@@ -9,8 +9,11 @@ from .errors import ResearchError
 from .workspace import find_entry_kind
 
 
-PAYLOAD_PATH_MESSAGE = ('Use a canonical workspace-relative path or an absolute path inside the workspace; '
-                        'paths must not traverse symbolic links.')
+PAYLOAD_PATH_MESSAGE = (
+    'A file path in this payload was refused. A payload names a file or a directory of the workspace by a '
+    'workspace-relative path or by an absolute path inside the workspace. In either form, the path must have '
+    "no empty, '.' or '..' component and no backslash. No component can be a symbolic link. Give the path from "
+    'the workspace root. If the file is outside the workspace, copy it into the workspace first.')
 PAYLOAD_FILE_FIELDS = {
     'artifact': (('path',),),
     'adopt': (('files', '*'),),
