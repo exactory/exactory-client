@@ -345,6 +345,15 @@ actual invocation, delivered packet and inspected context boundary. These checks
 do not decide mathematical relevance from prose. Previous scientific assessments
 and failures are intended continuity evidence, and are included explicitly.
 
+A review of a strategy assessment that returns `revise` or `reject` is not
+submitted, because it cannot authorize the reassessment. Read its `reason` and
+its `objections`. Revise the assessment or the work that it depends on: for
+example, record the checkpoint that an objection asks for and have it accepted.
+Then obtain a new review of the revised assessment, with a new packet under a
+new assignment id. `search reassess` refuses such a review when it is
+submitted, in its complete form with `native_review_not_approved`
+([Observed native review delivery](#observed-native-review-delivery)).
+
 Submit the reviewed record with the current revision and a unique request ID.
 The service freezes the context, assessment, review and native plans, and records
 an `assessment-000001` style ID with its predecessor. Replaying the original
@@ -1119,6 +1128,12 @@ Create this assignment with the returned `native_packet` reference:
  context: {native_packet: ArtifactRef}}
 ```
 
+`author_id` names the author of the reviewed work. When the workspace is a
+problem record, it names one of the authors that `problem-init` recorded, also
+when the session that wrote the proposal or the result has another name.
+Another value is refused with `problem_author_unknown`, and the details of the
+refusal list those authors under `authors`.
+
 Run `exactory-research review-assignment --workspace WORKSPACE --file assignment.json`
 and `exactory-research review-run --workspace WORKSPACE --file invocation.json`,
 each with its current `--expected-revision` and unique `--request-id`. `--check`
@@ -1138,6 +1153,18 @@ between the blocks, is a failed attempt on every route. For native verification,
 save that exact input `ResultReview` as `verification-review.json`. The shared
 runner retains rejected result/recovery responses, but they cannot be converted
 into approve-only native records.
+
+A result or recovery review with the decision `revise` or `reject` is such a
+response. Do not submit it to a native command. In its complete form,
+`{subject_digest, claim_digest, reviewer, decision, reason, objections:
+[{blocking, description}]}`, `search reassess`, `accept`, `review` and
+`complete` refuse it with `native_review_not_approved`: the details give its
+`decision`, `reason` and `objections`, and no event is written. In any other
+form it is refused with `invalid_record`. A proposal review keeps its versioned
+form, in which `search review` records `revise` and `reject` as before. Read
+the reason and the objections, revise or replace the reviewed record or the
+work that it depends on, and obtain a new review, with a new packet under a new
+assignment id.
 
 In a reading chain, run reading turn 1 with `review-run`, then run the chain
 to its end with `exactory-research review-series --workspace WORKSPACE
@@ -2205,7 +2232,7 @@ Public command specs are closed records:
 | refresh | `{node_ids: [NodeID]}`: 1 to 256 distinct IDs of nodes admitted through a proposal, in any order |
 | complete | `{subject: ClosureSubject, review: ResultReview, inputs: [Input]}` |
 | deliver-closure | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
-| deliver-attempt | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery) |
+| deliver-attempt | `{}` in required `--file FILE` or `--spec FILE`; see [Common-store delivery](#common-store-delivery). It writes the attempt record, its current pointer and one `native_acceptance_review` link record for each accepted result with an observed review ([Attempt delivery](#attempt-delivery)) |
 | adopt | `{mappings: [ImportMapping], inputs: [Input]}` |
 | retreat ID | `Retreat` without `node_id` |
 | replan | The documented `replan_recorded` payload |
@@ -2592,7 +2619,8 @@ every accepted acceptance and any closure whose proof status is `proved` or
 `disproved`. The common mutation checks that snapshot's revision; a concurrent
 change retries with a fresh snapshot
 and audit. An identical current record re-audits and writes neither a record nor
-a receipt. A changed summary writes a new immutable record and preserves the old
+a receipt, except for the acceptance links of an attempt that the store lacks
+([Attempt delivery](#attempt-delivery)). A changed summary writes a new immutable record and preserves the old
 one. Re-delivering an earlier attempt updates its current pointer as described
 below, without rewriting that immutable record.
 
@@ -2675,6 +2703,41 @@ Pointer-only mutations use common request ID
 delivery receipt cannot replay a later pointer update. Record order never
 declares the current snapshot, and different attack roots have separate
 successions even when they share an objective ID.
+
+Each delivery also links every accepted result to the review that accepted it.
+For each acceptance of the delivered state whose status is `accepted` and whose
+review has a `review-assignment:` attestation, the same prepared mutation writes
+one immutable link record:
+
+```text
+native_acceptance_review/<digest({attack_root, objective_id, acceptance_digest})> = {
+  attack_root: AbsolutePath, objective_id: ID,
+  acceptance_digest: digest(acceptance), acceptance_id: ID, checkpoint_id: ID,
+  evidence_digests: [as recorded in the acceptance's audit],
+  review: {assignment_id, final_assignment_id, attempt_id, output_digest},
+  provenance: {source: "operator", actor_id: "search-controller",
+               attestation_id: "filesystem-audit:deliver-attempt"}
+}
+```
+
+`assignment_id` is the review assignment that the attestation names, which is
+the first turn when the review ran as a reading chain or as a series in parts.
+`final_assignment_id` is the last turn of that chain or series, and the same
+assignment for a review of one turn. `attempt_id`
+and `output_digest` are those of the observed output of that final turn in the
+common store. The summary and its digest do not hold the links, so
+`native_attempt_digest` and every record that cites it stay as they are. A
+repeat of `deliver-attempt` for an unchanged state that the current pointer
+already names writes the link records that the store lacks and nothing else:
+it adds no attempt record and does not move the pointer. Such a repeat gives the
+links to an attempt that was delivered before 0.88.0. A repeat of an earlier
+snapshot, which the pointer no longer names, writes the missing links too and
+moves the pointer back, as stated above. A link record stays when its
+acceptance is later invalidated. A link key
+that already holds other content refuses the whole delivery with
+`record_conflict`. The research harness shows no view of its own for the links,
+and `record-check` verifies each of them against its review
+([Record check](../../docs/research-cli.md#record-check)).
 
 Keyed collections are ordered by controller ID; retreats keep recorded order.
 `failed_strategies` contains the retained entries of

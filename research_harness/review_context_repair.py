@@ -219,10 +219,15 @@ def _raise_binding_mismatch(repair, events):
     missing_ids = [identifier for identifier in expected_ids if identifier not in repair['event_ids']]
     expected_evidence = [item for event in events for item in event['evidence']]
     raise ResearchError('review_context_repair_mismatch',
-        'Bind every actual contamination or retirement event in the predecessor lineage and its exact evidence. '
-        f'Expected event_ids in recorded order: {json.dumps(expected_ids)}. '
-        f'Missing event_ids: {json.dumps(missing_ids)}. '
-        f'Expected evidence in that event order: {json.dumps(expected_evidence, sort_keys=True)}.',
+        'The context repair does not name exactly the events and the evidence that the lineage of its predecessor '
+        'records. A context repair binds every contamination and route retirement event of that lineage, with the '
+        'evidence recorded for each event. '
+        f'The lineage records these events, in the order of their recording: {json.dumps(expected_ids)}. '
+        f'Of these, event_ids does not name: {json.dumps(missing_ids)}. '
+        f'The evidence of these events, in the same order, is: {json.dumps(expected_evidence, sort_keys=True)}. '
+        'Set event_ids to exactly these events and evidence to exactly this evidence. '
+        'If the list of events is empty, the lineage records no contamination and no route retirement, and a '
+        'context repair needs one.',
         {'expected_event_ids': expected_ids, 'missing_event_ids': missing_ids, 'expected_evidence': expected_evidence})
 
 

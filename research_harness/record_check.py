@@ -416,7 +416,14 @@ def check_acceptance_reviews(records, artifacts):
                 or observed.get('output_digest') != review['output_digest']
                 or observed['output'].get('reviewer', {}).get('attestation_id') != ATTESTATION_PREFIX + assignment_id):
             raise ResearchError('record_acceptance_review_changed',
-                                'The acceptance link does not match its observed final review',
+                                'A native_acceptance_review record does not match the review that it links. The '
+                                'record links an accepted result of a math-solver objective to the final turn of '
+                                'the review that accepted it. In this store, at least one of three things is wrong. '
+                                '(1) That turn is missing, is not a native mathematical review, or is not ready. '
+                                '(2) Its id, attempt, output digest or reviewer attestation differs from the '
+                                'record. (3) The key of the record is not the digest of its attack_root, '
+                                'objective_id and acceptance_digest. record-check changed nothing. Report link_id '
+                                'and acceptance_id of the details with the failed step.',
                                 {'link_id': identifier, 'acceptance_id': link['acceptance_id']})
         verified[identifier] = review
     return verified

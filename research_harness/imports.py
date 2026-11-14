@@ -32,23 +32,41 @@ def bind_import_query(mappings, source_url):
     if isinstance(mappings, list):
         return mappings, None
     if not isinstance(mappings, dict) or set(mappings) != {"records", "query_path"}:
-        raise ResearchError("invalid_import", "Mappings must be a record list or declare records and query_path")
+        raise ResearchError("invalid_import",
+                            "The payload has no mappings in an accepted form. Give mappings as a list of record "
+                            "mappings, or as an object with exactly the fields records (that list) and query_path. "
+                            "query_path binds a path segment of the captured URL as the query.")
     path = mappings["query_path"]
     if (not isinstance(path, dict) or set(path) != {"template", "segment"}
             or not isinstance(path["template"], str) or not path["template"].startswith("/")
             or not isinstance(path["segment"], str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", path["segment"])):
-        raise ResearchError("invalid_import", "query_path requires a URL path template and its named segment")
+        raise ResearchError("invalid_import",
+                            "query_path does not have the form {template, segment}. Give exactly these two fields. "
+                            "template is a URL path that starts with a slash. segment is a name of ASCII letters, "
+                            "digits and underscores that does not start with a digit. An example is "
+                            '{"template": "/graph/v1/paper/{paper_id}/citations", "segment": "paper_id"}.')
     parts = path["template"].split("/")
     placeholder = "{" + path["segment"] + "}"
     if (parts.count(placeholder) != 1
             or any("{" in part or "}" in part for part in parts if part != placeholder)):
-        raise ResearchError("invalid_import", "The path template must contain exactly one named query segment")
+        raise ResearchError("invalid_import",
+                            "The template of query_path does not hold " + placeholder + " exactly once as a whole "
+                            "path segment, or it holds another brace. Write the template with " + placeholder
+                            + " as one whole path segment, once, and with no other brace. It can be the last "
+                            "segment of the path.")
     actual = urlsplit(source_url).path.split("/")
     if len(parts) != len(actual) or any(part != value for part, value in zip(parts, actual) if part != placeholder):
-        raise ResearchError("invalid_import", "The captured URL must match the declared query path template")
+        raise ResearchError("invalid_import",
+                            "The path of source_url does not match the template of query_path. The two have a "
+                            "different number of segments, or a segment outside " + placeholder + " differs. Give "
+                            "the template of the captured URL, with every other segment written exactly as the URL "
+                            "has it.")
     query = unquote(actual[parts.index(placeholder)])
     if not query.strip():
-        raise ResearchError("invalid_import", "The captured query path segment must be nonempty")
+        raise ResearchError("invalid_import",
+                            "The segment of source_url at " + placeholder + " is empty or, after percent-decoding, "
+                            "holds only white space, so it gives no query. Give a template whose named segment is "
+                            "the part of the URL that holds the query.")
     return mappings["records"], dict(path, kind="url_path", value=query)
 
 

@@ -153,7 +153,7 @@ Write four parts.
    - `ambient_structure`: which kinds of structure coexist (order and arithmetic; metric and measure; a symmetry and a conserved quantity), and which simpler ambient keeps the constraint.
    - `symmetries`: the symmetries and invariants visible on the statement.
    - `configuration`: the forbidden or required configuration, and whether it is an algebraic relation.
-   - `extremal_candidate`: known or not; unique up to symmetry or not.
+   - `extremal_candidate`: known or not; unique up to symmetry or not. For a structural claim, which asks for a classification or a yes-or-no property and has no quantity to maximise or minimise, the candidate is the family of objects that the claim singles out. The line names that family and says that it is a classification candidate, which carries no value of a target quantity.
    - `finite_certificates`: which side of the statement has a finite certificate.
    - `monotonicity`: monotonicity in a parameter, and the smallest open parameter.
    - `uniformity_parameter`: the free parameter over which uniformity is the difficulty.
@@ -163,6 +163,15 @@ Write four parts.
    - `missing_input`: the one missing input, when the strongest known method leaves exactly one.
    - `base_theory`: the axiom system the statement is posed in, the cardinality at which the difficulty starts, and which hypotheses beyond the base theory decide the statement or a neighbour, in which direction.
 4. `known`: one line per known result, with a reference. It is filled from the study at stage 3 and extended whenever a study record at stage 5 finds one; each extension is followed by `check-problem`.
+
+### A claim that is an implication
+
+A claim can be an implication "if (S), then T", where (S) is a stated hypothesis, for example the statement of a problem record, and T is the consequent. The objective is then the implication. A proof of it proves neither (S) nor T. Write the parts as follows. Stage 3 states the novelty study for such a claim, stage 4 the reading of the precondition questions, and stage 5 the costs of its moves and the use of a proof that was drafted before the objective.
+
+- `claim` states (S) in full and then the implication, in the form "Let (S) be the following statement: ... If (S) holds, then ...". Give the text of (S) word for word as its source gives it. A name of (S) or a reference to it does not replace the text, because the claim digest, the reviews and the novelty check bind the text of the claim. The one-sentence rule applies to the sentence that states the implication.
+- `quadruple.statement` is the whole implication at the start, as for any claim. `quadruple.stage` names the setting of T and says that (S) is assumed in it. `quadruple.direction` is about the implication: `true` is that T follows from (S), and `false` is that (S) holds and T fails. A counterexample to T alone refutes nothing while (S) is open.
+- Every `shape` field describes the implication. A line that holds for (S) alone, for T alone or for the implication alone says which. Six fields always describe the parts separately. `quantifiers` gives the quantifier structure of (S) and that of T. `missing_input` names (S) as the unproved input from which T is derived, and says what the deduction of T from (S) still lacks, or that it lacks nothing. `known_bounds` records what is known about T, about (S) and about the implication, and whether (S) and T are known to be equivalent. `neighbours` includes T by itself and (S) by itself: T and the negation of (S) each imply the claim. `proof_shape` gives the shape of the deduction of T from (S) and its threshold: how much of (S) suffices, or from which value of a parameter the deduction gives T. `base_theory` says whether (S) is a statement inside the base theory or an axiom beyond it. The other fields describe T and the setting that (S) and T share.
+- An equivalent form of (S) and a restriction of (S) are recorded differently. A form is equivalent to (S) when each of the two statements follows from the other by an argument that the record states, for example a relabelling of the objects, a normalisation, or a restriction of a parameter to values from which the full range follows. Record it in `neighbours` as equivalent to (S), with that argument in a clause, and in `symmetries` when a symmetry gives it. It is the same hypothesis in another description: it does not weaken the hypothesis, it is not the restricted hypothesis that a strategy step asks for, and it is not the claim of a second record. A restriction of (S) is a statement that follows from (S) and from which the record does not derive (S), for example (S) for a subclass of its objects. Record the restriction that the deduction uses in `missing_input`, and call it a restriction there. Only a restriction is a weaker hypothesis, a special case or the claim of a second record. A form whose equivalence with (S) the record does not prove is not recorded as equivalent.
 
 ## Stage 3: study the problem and check novelty
 
@@ -174,6 +183,25 @@ The problem-level study under `STUDY.md`, run against the sources in `references
 4. Write `study/problem.md` under the contract in `STUDY.md`: the queries, the hits worth reading, what was learned as constraints on the plan (a route already in print, a route that stopped and where, a settled range), and the stop reason (the queries ran dry, or the fixed count was reached). Copy each result found into `known` in `problem.json` and re-run `check-problem`. The plan checks these populated inputs directly, including explicit `unknown` where the evidence leaves a question open.
 5. A statement already solved in the literature ends the local research route on that statement. Record the exact source in `novelty.md`; `finish <slug>` may record the native stage 3 literature finish. Then return the result and every remaining deliverable to the controller objective. A literature hit does not create accepted proof evidence, change a requested formalization into optional work, or close the root. If the original request includes formal verification, propose and admit the exact missing formal bridge or verification node and continue it. A neighbouring open statement is a separately reviewed logical proposal that preserves the original objective; it is not an automatic native child or a substitute target.
 6. Repeat steps 1 to 3 for each unit at stage 7, with the unit's one-sentence statement as the query, before `check-unit` runs on it.
+
+For a claim that is an implication (stage 2), the formulations of the novelty
+study are the claim, T by itself and (S) by itself, with the other neighbours.
+When the objective belongs to a problem record, and its `review_workspace` is
+that record, the searches and readings of the record are records of this
+objective's common store. Cite them in `novelty.md` for the formulation that
+they address, without a new capture of the same evidence. A search of the
+record addresses (S) when its `question`, or one of its `queries`, is the text
+of (S): declare (S) as a neighbour with exactly that text. Those searches asked
+about (S). They do not show that T or the implication was searched. For T and
+for the implication, run the queries of steps 1 and 2 with the objects and
+quantities of T, and record for the claim a search whose `question` is the
+claim's exact text, however long that text is.
+This search record can carry captured responses of an earlier search without a
+new capture (`SEARCH.md#checkpoints-and-accepted-results`). It then covers what
+the queries of those captures asked and no more, and each of their hits is
+judged again for the implication. Before you cite a saved search, check its
+queries, its date, its coverage and the readings of its decisive hits against
+the formulation that it is to support.
 
 For `supported_open` or `already_solved`, prepare the mechanical
 [`OpennessMinimum`](SEARCH.md#checkpoints-and-accepted-results) with the exact `statement`, declared
@@ -339,6 +367,8 @@ Produces: `preconditions.json`, `openings.json` written by the harness, and `ran
 
 For every strategy file under `strategies/` (every `.md` file with front matter; `README.md` is not a strategy), answer every numbered question of its Precondition procedure yes, no, or unknown, from the field of `problem.json` the question names, and write into `preconditions.json` one object per strategy with the verdict and the answers, each answer citing its field (`shape.<name>`, `quadruple.<name>`, `claim`, or `known`). The verdict follows the rule in the strategy file: yes when every required question is yes; unknown when a required answer is unknown and none is no; no otherwise. An answer taken from memory instead of from the cited field is a defect in the scan; the correction is to fill the field at stage 2 or to answer unknown.
 
+For a claim that is an implication (stage 2), a question that reads `quadruple.statement` or `claim` reads the whole implication, (S) included. Question 5 of `solve-the-model-world-first` is such a question: the statement reads verbatim in a model only when every clause of (S) and of T does, so a clause of (S) that rests on the dropped kind of structure makes the answer no. A question about the missing input, the target or the threshold reads (S) as the input and T as the target, from the lines that stage 2 writes for each part.
+
 The fifteen strategies, the component each moves, and the precondition in one line:
 
 | strategy | component | precondition |
@@ -414,6 +444,8 @@ satisfy the requirement. Verification and cash-out follow their existing priorit
 
 When `problem_changed` is true, write the change to `problem.json` before running `journal add` (a statement move changes `quadruple.statement`, a stage move `quadruple.stage`, a direction move `quadruple.direction`, a mode move `quadruple.mode`, and any move the shape fields it settled); when the statement moved, write into `output` the deduction from the new statement back to `claim`. `journal add` validates `problem.json` as `check-problem` does and refuses the move while it fails. A quantity attacked in place of the claim with no such move is a red flag below.
 
+For a claim that is an implication (stage 2), a move whose output is a proof of T from (S) has proved `claim`, so it is journalled with `closes` true. It pays neither `object` nor `obligations`: the statement proved is the one the attack started from, and (S) is the hypothesis of the claim, not a statement that the record owes. This holds at step 2 of `work-conditionally-then-discharge` as well. The `object` and `obligations` that the strategy declares for that step are the costs of putting a conditional theorem in the place of an unconditional claim, and here the implication is the claim. Say so in the strategy's study record. `check-unit` refuses a `full-proof` unit that carries either cost (stage 7), and the proof of the implication is the full proof of this claim: its unit states the implication, with (S) as the hypothesis. State in the move's `output` how much of (S) the deduction uses. The steps of that strategy after step 2 open a second record for the hypothesis and discharge it. They are no part of this objective: a proof of (S), or of a restriction of it, is an objective of its own. A move pays `obligations` as for any claim when its proof of T uses a further unproved statement beside (S), and `object` when it proves another statement than the implication.
+
 ### The budget
 
 The constants as the code enforces them: 8 moves per pass, 3 passes, 24 moves in all. `journal add` rejects a move whose number is not the next, a move in a spent pass (the next move starts the next pass, up to pass 3), and every move while a stall is due. A stall is due when the last three moves since the last `fail` all fired their failure signal, when pass 3 has used its 8 moves, when 24 moves are used, or when a move closed the attack. Ending a strategy with `fail` starts the count again, so a failure signal ends the strategy and not the attack. Run `budget <slug>` at the start of every pass and after every move whose failure signal fired; when it prints `stall due: yes`, go to stage 7.
@@ -429,6 +461,8 @@ The attack has closed when a move's output is a proof of `claim` or a counterexa
 3. Apply consolidate-the-proof to the argument. It is a harness entry: it runs outside the move budget, is not journalled, and writes its output to `units/consolidation.md` (the steps marked and replaced, the rewritten proof, the second route when one exists, and the general statement the proof proves).
 
 Then go to stage 7 with the closing rule. The formal check of a closed proof is the output of verify-formally-with-lean4 when the walk ends in it; the full-proof unit records the formalisation when it ran (`CASHOUT.md`).
+
+A proof that was written before the objective started, for example a deduction that a problem record made before it opened the objective for it, enters the record as the output of a move. Put its text in the node workspace as a file, for example `proof/<name>.md` (admission keeps the bytes of a file that exists), and name the file in `shape.proof_shape` as a draft that precedes the objective. The draft is no evidence yet. The walk opens as for any claim: the strategy's study record, `search begin` and the entry's Trigger apply, and the move carries out the entry's Action on the draft, checks each step against `claim`, quantifier by quantifier, and repairs a step that fails. Journal the move with an `output` that names the file and states what the checked text proves, and with `closes` true when that is `claim`. The three steps above then apply. At stage 7 the unit's `evidence` is the path of the file and its `moves` lists that move. `check-unit` refuses a unit without a move, so a draft that no move checked is the evidence of no unit. An earlier date gives the draft no credit: acceptance needs the checkpoint and the independent result review, as for any proof.
 
 ## Stage 6: verify under frozen inputs
 
