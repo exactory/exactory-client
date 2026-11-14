@@ -66,7 +66,10 @@ def record_export_sources(store_root, workspace_root, directory, files, source_d
 
 def read_problem_export(directory, records):
     """Recognize a complete generated export; leave foreign or edited folders alone."""
-    from .problem_delivery import _OVERRIDE_CITATIONS_EXPORT_SCHEMA, _REFERENCE_EXPORT_SCHEMA, has_exported_files
+    from .problem_delivery import (
+        _OVERRIDE_CITATIONS_EXPORT_SCHEMA, _REFERENCE_EXPORT_SCHEMA, _REGISTRY_CITATIONS_EXPORT_SCHEMA,
+        has_exported_files,
+    )
     if directory.is_symlink() or find_entry_kind(directory, 'problem-export.json') != 'regular':
         return None
     manifest_bytes = read_file(directory, 'problem-export.json')
@@ -80,10 +83,14 @@ def read_problem_export(directory, records):
                    'decision_id', 'problem_evidence_digest'}
     if 'supplied_texts' in manifest:
         base_fields.add('supplied_texts')
-    expanded_citations = manifest.get('schema') == _OVERRIDE_CITATIONS_EXPORT_SCHEMA
-    include_references = expanded_citations or manifest.get('schema') == _REFERENCE_EXPORT_SCHEMA
+    use_registry = manifest.get('schema') == _REGISTRY_CITATIONS_EXPORT_SCHEMA
+    expanded_citations = (manifest.get('schema') == _OVERRIDE_CITATIONS_EXPORT_SCHEMA
+                          or use_registry and manifest.get('gate') == 'bypassed')
+    include_references = use_registry or expanded_citations or manifest.get('schema') == _REFERENCE_EXPORT_SCHEMA
     if include_references:
         base_fields.add('schema')
+    if use_registry:
+        base_fields.add('missing_registry_citations')
     if expanded_citations:
         base_fields.update(('citation_counts', 'uncited_relevant_works', 'citation_spec'))
         from .problem_evidence import validate_override_citation_spec
@@ -139,7 +146,7 @@ def read_problem_export(directory, records):
 
 
 def build_current_export(records, artifacts, bypassed, *, include_references=False, citation_spec=None,
-                         authority=None):
+                         authority=None, use_registry=False):
     """Build the current projection without reopening a post gate or altering any record."""
     from .problem_delivery import build_override_projection, build_projection, find_post_override
     statement, value = find_current_statement(records), find_value(records)
@@ -149,10 +156,10 @@ def build_current_export(records, artifacts, bypassed, *, include_references=Fal
         override = find_post_override(records)
         return None if override is None else build_override_projection(
             records, artifacts, override, include_references=include_references, citation_spec=citation_spec,
-            authority=authority)[0]
+            authority=authority, use_registry=use_registry)[0]
     decision = find_latest(records, 'problem_decision')
     return None if decision is None or decision['action'] != 'post' else build_projection(
-        records, artifacts, include_references=include_references)[0]
+        records, artifacts, include_references=include_references, use_registry=use_registry)[0]
 
 
 def iterate_problem_exports(store_root, records):
@@ -210,6 +217,7 @@ def archive_problem_exports(store_root, workspace_root, records, artifacts):
     """Move only complete generated exports, preserving conflicts and every historical byte."""
     from .output_views import PROBLEM_EXPORTS_FOLDER, PROBLEM_EXPORT_HISTORY_FOLDER
     from .problem_delivery import compute_export_digest
+    from .problem_delivery import _REGISTRY_CITATIONS_EXPORT_SCHEMA
     folder = workspace_root / PROBLEM_EXPORTS_FOLDER
     with describe_error_at(PROBLEM_EXPORTS_FOLDER):
         if not folder.is_dir() or find_entry_kind(workspace_root, PROBLEM_EXPORTS_FOLDER) != 'other':
@@ -228,6 +236,7 @@ def archive_problem_exports(store_root, workspace_root, records, artifacts):
             bypassed = manifest.get('gate') == 'bypassed'
             include_references = 'schema' in manifest
             citation_spec = manifest.get('citation_spec')
+            use_registry = manifest.get('schema') == _REGISTRY_CITATIONS_EXPORT_SCHEMA
             authority = None
             authorized = True
             if 'authority' in manifest:
@@ -237,12 +246,12 @@ def archive_problem_exports(store_root, workspace_root, records, artifacts):
                 authorized = assessment['authorized']
                 authority = dict(override_ids=assessment['override_ids'], conditions=assessment['conditions'],
                                  evaluated_at_revision=manifest['authority']['evaluated_at_revision'])
-            export_format = (bypassed, include_references, digest(citation_spec), digest(authority))
+            export_format = (bypassed, include_references, digest(citation_spec), digest(authority), use_registry)
             if export_format not in current:
                 try:
                     current[export_format] = (build_current_export(
                         records, artifacts, bypassed, include_references=include_references,
-                        citation_spec=citation_spec, authority=authority) if authorized else None)
+                        citation_spec=citation_spec, authority=authority, use_registry=use_registry) if authorized else None)
                 except ResearchError:
                     # An export with unavailable source evidence has lost its standing.
                     current[export_format] = None

@@ -981,8 +981,8 @@
     "max_requests": 2
   },
   "expand": {
-    "identifier": "doi:10.1234/example",
-    "provider": "crossref",
+    "identifier": "doi:10.5281/zenodo.12345",
+    "provider": "datacite",
     "max_requests": 2
   },
   "import-fulltext": {

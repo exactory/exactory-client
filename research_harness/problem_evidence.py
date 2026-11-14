@@ -541,9 +541,11 @@ def find_reading_locator(records, artifacts, reading):
     return record
 
 
-def find_citation_locator(work, units):
+def find_citation_locator(work, units, *, named_version=None):
     """The locator of a cited work: its DOI, else its arXiv id, else the first HTTPS url of a unit of the bundle that
     its reading binds. None when the work has none of them."""
+    if named_version is not None and named_version.startswith(("doi:", "arxiv:")):
+        return named_version.split(":", 1)[1]
     identifiers = [work["id"], *work.get("aliases", [])]
     locator = next((item[4:] for item in identifiers if item.startswith("doi:")), None)
     locator = locator or next((item[6:] for item in identifiers if item.startswith("arxiv:")), None)
@@ -586,41 +588,31 @@ def select_citation_readings(records, readings):
     return [group[0] for group in group_citation_readings(records, readings)]
 
 
-def project_citations(records, artifacts, *, for_lookup=False, readings=None):
-    from .problem_citation_metadata import find_citation_metadata, validate_citation_metadata
-    citations = []
-    for reading in select_citation_readings(records, collect_readings(records) if readings is None else readings):
+def compose_citations(records, artifacts, readings, *, use_registry=True, named_versions=()):
+    from .problem_citation_metadata import compose_citation
+    composed = []
+    for reading in readings:
         version = reading["version_id"]
         work = records["work"][version]
-        author_names = [author if isinstance(author, str) else author.get("name", "")
-                        for author in work.get("authors", [])]
-        identifiers = [work["id"], *work.get("aliases", [])]
         bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
         location = find_reading_locator(records, artifacts, reading)
-        locator = find_citation_locator(work, (bundle or {}).get("units", []))
+        locator = find_citation_locator(work, (bundle or {}).get("units", []),
+                                       named_version=version if use_registry and version in named_versions else None)
         if locator is None and location is not None:
             locator = location["url"]
         if locator is None:
             raise ResearchError("problem_citation_locator_missing", "Record a DOI, arXiv id or HTTPS locator for the read source",
                                 {"version_id": version, "reading_id": reading["id"]})
-        metadata = find_citation_metadata(records, version)
-        if metadata is not None:
-            validate_citation_metadata(records, artifacts, metadata)
-        citation_values = work if metadata is None else metadata
-        authors = ", ".join(author_names if metadata is None else metadata["authors"])
-        citation = ". ".join(part for part in (authors, citation_values["title"], str(citation_values.get("year") or "")) if part)
-        if for_lookup:
-            bibliography = {"title": citation_values["title"],
-                            "authors": author_names if metadata is None else metadata["authors"]}
-            identifier = next((item for item in identifiers if item.startswith("doi:")), None)
-            identifier = identifier or next((item for item in identifiers if item.startswith("arxiv:")), None)
-            if identifier is not None:
-                kind, value = identifier.split(":", 1)
-                bibliography["doi" if kind == "doi" else "arxivId"] = value
-            citations.append({"referenceString": citation, "bibliography": bibliography})
-        else:
-            citations.append({"citation": citation, "locator": locator})
-    return citations
+        composed.append(compose_citation(records, artifacts, work, locator, use_registry=use_registry))
+    return {"citations": [row["citation"] for row in composed],
+            "references": [row["reference"] for row in composed],
+            "missing_registry_citations": [row["fallback"] for row in composed if row["fallback"] is not None]}
+
+
+def project_citations(records, artifacts, *, for_lookup=False, readings=None, use_registry=True):
+    selected = select_citation_readings(records, collect_readings(records) if readings is None else readings)
+    projected = compose_citations(records, artifacts, selected, use_registry=use_registry)
+    return projected["references" if for_lookup else "citations"]
 
 
 def validate_override_citation_spec(spec):
@@ -715,7 +707,7 @@ def collect_override_readings(records, artifacts):
     return ordinary, [readings[key] for key in sorted(readings)], origins, judgments
 
 
-def project_override_citations(records, artifacts, spec):
+def project_override_citations(records, artifacts, spec, *, use_registry=False):
     """Select one read version per citation, with stable ordering and explicit overflow."""
     from .identities import family_id, find_work_family_link
     artifacts = Evaluation.of(records, artifacts)
@@ -786,13 +778,13 @@ def project_override_citations(records, artifacts, spec):
                   omitted=max(0, len(groups) - POST_CITATION_LIMIT))
     uncited = [{"work_id": work_id, "search_ids": sorted(judgment["search_ids"])}
                for work_id, judgment in sorted(judgments.items()) if not judgment["reading_ids"]]
+    projected = compose_citations(records, artifacts, selected, use_registry=use_registry,
+                                  named_versions={entry["version_id"] for entry in spec.get("versions", [])})
+    projected["references"] = projected["references"][:POST_CITATION_LIMIT]
     from .source_links import describe_supplied_readings
     supplied = describe_supplied_readings(records, selected[:POST_CITATION_LIMIT])
-    return {"citations": [project_citations(records, artifacts, readings=[row])[0] for row in selected],
-            "references": [project_citations(records, artifacts, readings=[row], for_lookup=True)[0]
-                           for row in selected[:POST_CITATION_LIMIT]],
-            "citation_counts": counts, "uncited_relevant_works": uncited,
-            **({'supplied_texts': supplied} if supplied else {})}
+    return dict(projected, citation_counts=counts, uncited_relevant_works=uncited,
+                **({'supplied_texts': supplied} if supplied else {}))
 
 
 def compute_override_source_digest(records):
@@ -841,7 +833,8 @@ def describe_binding(records, artifacts):
                               **{key: digest(row[key]) for key in ("admission", "execution", "assessment")}} for row in computations],
             "formal_checks": [{"id": row["id"], "digest": digest(row),
                                "native_closure": digest(records["native_closure"][row["native_closure_digest"]])}
-                              for row in find_formal_checks(records)], "citations": project_citations(records, artifacts)}
+                              for row in find_formal_checks(records)],
+            "citations": project_citations(records, artifacts, use_registry=False)}
     metadata = []
     for version in sorted({row["version_id"] for row in collect_readings(records)}):
         record = find_citation_metadata(records, version)
@@ -951,7 +944,7 @@ def describe_evidence(records, artifacts):
                 for reference in resolve_assessment_evidence(records)],
             "attempt": attempt_evidence,
             "results": [describe_result(records, item, acceptance) for item, acceptance in results],
-            "citations": project_citations(records, artifacts),
+            "citations": project_citations(records, artifacts, use_registry=False),
             "readings": delivered_readings,
             "passages": [passage for passage, _ in prepared],
             "delivery": {"protocol": "inline-passages-v1", "note": INLINE_DELIVERY_NOTE},

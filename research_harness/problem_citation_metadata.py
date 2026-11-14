@@ -1,11 +1,83 @@
 """Immutable citation text supported by exact byte spans of retained captures."""
 
 import re
+import json
+import shlex
 
 from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, immutable_record, prepared_mutation, text
 from .problem_claims import require_problem
+
+
+REGISTRY_CAPTURE_COMMAND = (
+    "printf '%s\\n' {payload} > registry-citation.json && "
+    "exactory-research acquire --workspace . --file registry-citation.json "
+    "--expected-revision REVISION --request-id NEW_REQUEST_ID")
+
+
+def read_registry_assertion(records, artifacts, identifier):
+    """Read the latest captured assertion of this registry identity, never an alias."""
+    from .identities import family_id, version_of
+    from .operations import timestamp
+    from .providers import Arxiv, Crossref, DataCite
+    providers = {"arxiv": Arxiv, "crossref": Crossref, "datacite": DataCite}
+    candidates = []
+    for assertion in records.get("work_assertion", {}).values():
+        source = records.get("source", {}).get(assertion["source_id"])
+        if (source is None or source.get("status") != "captured" or not source.get("response_complete")
+                or source["provider"] not in providers):
+            continue
+        if (identifier.startswith("doi:") and source["provider"] == "arxiv"
+                or identifier.startswith("arxiv:") and source["provider"] != "arxiv"):
+            continue
+        exact = assertion["id"] == identifier
+        if not exact and not (identifier.startswith("arxiv:") and version_of(identifier) is None
+                              and source.get("requested_identifier") == identifier
+                              and family_id(assertion["id"]) == identifier):
+            continue
+        if source["provider"] == "arxiv" and assertion["source_locator"]["type"] != "atom_entry":
+            continue
+        revision = records.get("acquisition_operation", {}).get(source["operation_id"], {}).get("admission_revision", 0)
+        candidates.append((timestamp(source["captured_at"]), revision, assertion["assertion_id"], assertion, source))
+    if not candidates:
+        return None
+    _, _, _, assertion, source = max(candidates, key=lambda row: row[:3])
+    page = providers[source["provider"]]().parse(artifacts.read(source["response"]))
+    return next(row for row in page.works if row["id"] == assertion["id"]
+                and row["source_locator"] == assertion["source_locator"])
+
+
+def compose_citation(records, artifacts, work, locator, *, use_registry=True):
+    """Compose both citation files from the same locator and metadata values."""
+    from .identities import normalize_identifier
+    identifier = normalize_identifier("url:" + locator if locator.startswith("https://") else locator)
+    registry_identifier = identifier if identifier.startswith(("doi:", "arxiv:")) else None
+    metadata = find_citation_metadata(records, work["id"])
+    if metadata is not None:
+        validate_citation_metadata(records, artifacts, metadata)
+    registry = (read_registry_assertion(records, artifacts, registry_identifier)
+                if use_registry and registry_identifier is not None else None)
+    values = registry if registry is not None else metadata if metadata is not None else work
+    authors = [row if isinstance(row, str) else row.get("name", "") for row in values.get("authors", [])]
+    citation = ". ".join(part for part in (", ".join(authors), values["title"],
+                        str((metadata if metadata is not None else work).get("year") or "")) if part)
+    bibliography = {"title": values["title"], "authors": authors}
+    if registry_identifier is not None:
+        kind, value = registry_identifier.split(":", 1)
+        bibliography["doi" if kind == "doi" else "arxivId"] = value
+    fallback = None
+    if use_registry and registry_identifier is not None and registry is None:
+        provider = "arxiv" if identifier.startswith("arxiv:") else None
+        payload = {"identifier": identifier}
+        if provider is not None:
+            payload["provider"] = provider
+        fallback = {"work_id": work.get("work_id", work["id"]), "version_id": work["id"],
+                    "locator": locator, "capture_command": REGISTRY_CAPTURE_COMMAND.format(
+                        payload=shlex.quote(json.dumps(payload, sort_keys=True)))}
+    return {"citation": {"citation": citation, "locator": locator},
+            "reference": {"referenceString": citation, "bibliography": bibliography},
+            "fallback": fallback}
 
 
 def find_citation_metadata(records, version_id):

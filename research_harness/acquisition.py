@@ -107,7 +107,7 @@ from .import_io import open_import_descriptor, read_import_input, validate_impor
 from .workspace import checked_parent
 from .operations import fields, text, timestamp
 from .payload_paths import normalize_payload_path
-from .providers import Arxiv, Crossref, OpenAlex
+from .providers import Arxiv, Crossref, DataCite, OpenAlex
 from .provenance import runtime_provenance
 from . import resources
 
@@ -115,6 +115,7 @@ from . import resources
 SUPPLIED_TEXT_NOTE = (
     "A person saved this text. The harness did not fetch it and did not verify its origin. "
     "A finding states when a decisive judgment rests on this supplied text.")
+SUPPORTED_PROVIDERS_MESSAGE = "Expected arxiv, openalex, crossref or datacite"
 
 
 @contextmanager
@@ -614,9 +615,9 @@ def _next_eligible(records, identifier):
 
 
 def _provider(name):
-    providers = {"arxiv": Arxiv, "openalex": OpenAlex, "crossref": Crossref}
+    providers = {"arxiv": Arxiv, "openalex": OpenAlex, "crossref": Crossref, "datacite": DataCite}
     if name not in providers:
-        raise ResearchError("unsupported_provider", "Expected arxiv, openalex or crossref")
+        raise ResearchError("unsupported_provider", SUPPORTED_PROVIDERS_MESSAGE)
     return providers[name]()
 
 
@@ -641,9 +642,20 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
     snapshot = store.snapshot()
     http, artifacts = http or HttpClient(), ArtifactStore(store.root)
     attempts, pending, works, observed_identifier, warnings = [], [], [], None, []
+    sources = []
     try:
-        response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
-                            not_before=_next_eligible(snapshot["records"], identifier))
+        try:
+            response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
+                                not_before=_next_eligible(snapshot["records"], identifier))
+        except HttpFailure as error:
+            if provider.name != "crossref" or not error.attempts or error.attempts[-1]["status"] != 404:
+                raise
+            sources = prepare_sources(artifacts, error.attempts, provider.name, request_id,
+                                      requested_identifier=identifier)
+            provider = DataCite()
+            request = provider.work_request(identifier)
+            response = http.get(request.url, headers=request.headers, accept=request.accept, budget=budget,
+                                not_before=_next_eligible(snapshot["records"], identifier))
         attempts = response.attempts
         page = provider.parse(response.body)
         pending.extend(page.failures)
@@ -658,7 +670,8 @@ def acquire_work(store, identifier, *, request_id, expected_revision, http=None,
         attempts, pending = error.attempts, [{"code": error.code}]
     except ResearchError as error:
         pending.append({"code": error.code})
-    sources = prepare_sources(artifacts, attempts, provider.name, request_id, requested_identifier=identifier)
+    sources.extend(prepare_sources(artifacts, attempts, provider.name, request_id, start=len(sources),
+                                   requested_identifier=identifier))
     if observed_identifier and sources:
         sources[-1].update({"exact_version": version_of(observed_identifier), "observed_identifier": observed_identifier})
     prepared = [prepare_work(artifacts, work, sources[-1]["id"]) for work in works]

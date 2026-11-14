@@ -1498,6 +1498,7 @@
     "search_evidence_stale",
     "search_findings_dropped",
     "search_frontier_stale",
+    "search_id_list_entry_missing",
     "search_page_capture_interval",
     "search_page_conflict",
     "search_page_metadata_mismatch",
@@ -2636,6 +2637,7 @@
     "search_evidence_stale",
     "search_findings_dropped",
     "search_frontier_stale",
+    "search_id_list_entry_missing",
     "search_page_capture_interval",
     "search_page_conflict",
     "search_page_metadata_mismatch",
@@ -3714,6 +3716,7 @@
     "search_evidence_stale",
     "search_findings_dropped",
     "search_frontier_stale",
+    "search_id_list_entry_missing",
     "search_page_capture_interval",
     "search_page_conflict",
     "search_page_metadata_mismatch",
@@ -6622,6 +6625,9 @@
       "unit": "registry-rows"
     },
     "search_frontier_stale": {
+      "unit": "registry-rows"
+    },
+    "search_id_list_entry_missing": {
       "unit": "registry-rows"
     },
     "search_page_capture_interval": {

@@ -254,6 +254,15 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
             return entry(*args, **kwargs).replace("A. Researcher", "Katherine E. Stange")
         with mock.patch("literature_fixtures.entry", side_effect=build_entry):
             self.prepare_ready()
+        from research_harness.acquisition import import_response
+        from research_harness.problem_claims import compute_problem_evidence_digest
+        before = compute_problem_evidence_digest(self.store.snapshot()["records"], self.artifacts)
+        registry_entry = registry_entry.replace("An authored example", "Registry citation title")
+        import_response(self.store, "arxiv", atom([registry_entry]),
+            source_url="https://export.arxiv.org/api/query?id_list=2601.00001v1",
+            captured_at="2026-10-01T12:00:00Z", expected_revision=self.store.revision,
+            request_id="refs-registry-title")
+        self.assertEqual(compute_problem_evidence_digest(self.store.snapshot()["records"], self.artifacts), before)
         self.record_post_decision()
         (self.root / "context").mkdir(exist_ok=True)
         (self.root / "context/instruction.txt").write_text("Synthetic fixture authorization for the post gate.")
@@ -267,8 +276,8 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
                 refs_path = directory / "citation-refs.json"
                 self.assertTrue(refs_path.is_file())
                 self.assertEqual(json.loads(refs_path.read_text()), [{
-                    "referenceString": "Katherine E. Stange. An authored example",
-                    "bibliography": {"arxivId": "2601.00001v1", "title": "An authored example",
+                    "referenceString": "Katherine E. Stange. Registry citation title",
+                    "bibliography": {"arxivId": "2601.00001v1", "title": "Registry citation title",
                                      "authors": ["Katherine E. Stange"]}}])
                 self.assertEqual(result["files"]["citation-refs.json"], hashlib.sha256(refs_path.read_bytes()).hexdigest())
                 args = _check._build_parser().parse_args(["lookup", "--refs-json", str(refs_path),

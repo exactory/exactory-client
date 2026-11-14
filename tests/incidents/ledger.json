@@ -5437,7 +5437,8 @@
         "test_import_fulltext.ImportFulltextTests.test_record_check_requires_the_retained_origin_fixed_note_and_capture_labels",
         "test_capture_classes.CaptureClassTests.test_supplied_capture_is_admitted_at_the_four_uses_and_never_elided",
         "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post",
-        "test_supplied_eligibility.SuppliedEligibilityTests.test_fetched_main_replaces_supplied_and_identical_original_keeps_reading_credit"
+        "test_supplied_eligibility.SuppliedEligibilityTests.test_fetched_main_replaces_supplied_and_identical_original_keeps_reading_credit",
+        "test_openness_export_integration.ExportIntegrationTests.test_registry_exports_keep_supplied_origin_and_override_authority"
       ]
     },
     {
@@ -5688,6 +5689,43 @@
       "tests": [
         "test_arxiv_id_list_binding.ArxivIdListBindingTests.test_three_identifiers_bind_and_establish_complete_coverage",
         "test_arxiv_id_list_binding.ArxivIdListBindingTests.test_missing_entry_names_the_requested_identifier_despite_matching_response_total"
+      ]
+    },
+    {
+      "id": "exported-citation-author-name-differs-from-registry",
+      "record": "20261114035541-citation-author-name-in-another-script",
+      "class": "citation_metadata",
+      "summary": "An OpenAlex author name uses another script from the DOI registry.",
+      "expected": "The locator selects the registry assertion used by both exported citation files; a named version keeps its exact identifier.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_registry_citation_names.RegistryCitationExportTests.test_openalex_name_in_korean_is_listed_then_datacite_capture_supplies_the_latin_name",
+        "test_openness_export_integration.ExportIntegrationTests.test_registry_exports_keep_supplied_origin_and_override_authority"
+      ]
+    },
+    {
+      "id": "exported-citation-title-differs-from-registry",
+      "record": "20261113213949-citation-check-published-version-title",
+      "class": "citation_metadata",
+      "summary": "A preprint title is paired with the journal DOI.",
+      "expected": "The locator selects the registry assertion used by both exported citation files; a named version keeps its exact identifier.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_registry_citation_names.RegistryCitationExportTests.test_doi_citation_uses_the_published_title_instead_of_the_preprint_title"
+      ]
+    },
+    {
+      "id": "chosen-version-is-cited-by-the-identifier-of-another",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "citation_metadata",
+      "summary": "Two read arXiv versions share a published DOI alias.",
+      "expected": "The locator selects the registry assertion used by both exported citation files; a named version keeps its exact identifier.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_registry_citation_names.RegistryCitationExportTests.test_named_arxiv_versions_choose_their_own_locators_titles_and_check_records"
       ]
     }
   ]

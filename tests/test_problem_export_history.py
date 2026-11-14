@@ -327,12 +327,16 @@ class ReviewedExportHistoryTests(ProblemDeliveryCase):
         legacy.mkdir(parents=True)
         for name, data in legacy_files.items():
             (legacy / name).write_bytes(data)
+        v2_files, v2_manifest = problem_delivery.build_projection(records, self.artifacts, include_references=True)
+        v2 = self.root / 'final/problem/exports' / problem_delivery.compute_export_digest(v2_files)
+        problem_delivery.write_problem_export(self.store, records, v2_files, v2_manifest, v2)
         current = Path(problem_delivery.export_problem(self.store)['destination'])
         current_files = {path.name: path.read_bytes() for path in current.iterdir()}
-        self.assertEqual(json.loads(current_files['problem-export.json'])['schema'], 'exactory-problem-export-v2')
+        self.assertEqual(json.loads(current_files['problem-export.json'])['schema'], 'exactory-problem-export-v4')
         self.assertIn('citation-refs.json', current_files)
         render_all(self.store)
         self.assertEqual({path.name: path.read_bytes() for path in legacy.iterdir()}, legacy_files)
+        self.assertEqual({path.name: path.read_bytes() for path in v2.iterdir()}, v2_files)
         self.assertEqual({path.name: path.read_bytes() for path in current.iterdir()}, current_files)
         value = copy.deepcopy(problem_claims.find_value(records))
         value.pop('recorded_revision')
@@ -340,7 +344,7 @@ class ReviewedExportHistoryTests(ProblemDeliveryCase):
         value['current_state'][0]['text'] = 'A later source changes the current state.'
         self.mutate(problem_claims.record_value, value)
         render_all(self.store)
-        for directory, files in [(legacy, legacy_files), (current, current_files)]:
+        for directory, files in [(legacy, legacy_files), (v2, v2_files), (current, current_files)]:
             self.assertFalse(directory.exists())
             historical = self.root / 'final/history/problem/exports' / directory.name
             self.assertEqual({path.name: path.read_bytes() for path in historical.iterdir()}, files)

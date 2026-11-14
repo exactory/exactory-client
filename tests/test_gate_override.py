@@ -584,7 +584,8 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
         for name, content in expected.items():
             self.assertEqual((directory / name).read_bytes(), content.encode())
         self.assertEqual(json.loads((directory / "problem-export.json").read_text()), manifest)
-        self.assertEqual(manifest, dict(schema="exactory-problem-export-v3", statement_id=statement["id"], statement_digest=record["statement_digest"],
+        self.assertEqual(manifest, dict(schema="exactory-problem-export-v4", missing_registry_citations=[],
+            statement_id=statement["id"], statement_digest=record["statement_digest"],
             citation_spec={"first": [], "versions": []}, uncited_relevant_works=[],
             citation_counts=dict(value=1, attempt=0, self_assessment=0, openness=0, searches=0, total=1, included=1, omitted=0),
             area="math.CO", formal_statement_language="Lean", files={name: hashlib.sha256(content.encode()).hexdigest() for name, content in expected.items()},
@@ -645,7 +646,8 @@ class NormalProblemExportTests(OverrideCommandMixin, ProblemDeliveryCase):
             "citation-refs.json": json.dumps([{"referenceString": "A. Researcher. An authored example",
                 "bibliography": {"arxivId": "2601.00001v1", "title": "An authored example",
                                  "authors": ["A. Researcher"]}}], ensure_ascii=False, sort_keys=True, indent=2) + "\n"}
-        manifest = dict(schema="exactory-problem-export-v2", statement_id=statement["id"], statement_digest=problem_claims.compute_statement_digest(statement),
+        manifest = dict(schema="exactory-problem-export-v4", missing_registry_citations=[],
+            statement_id=statement["id"], statement_digest=problem_claims.compute_statement_digest(statement),
             problem_evidence_digest=problem_claims.compute_problem_evidence_digest(records, self.artifacts), decision_id=decision["id"],
             area=statement["area"], formal_statement_language="Lean", files={name: hashlib.sha256(content.encode()).hexdigest() for name, content in sorted(expected.items())})
         expected["problem-export.json"] = json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
