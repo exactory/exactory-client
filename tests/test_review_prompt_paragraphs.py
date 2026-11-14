@@ -43,12 +43,14 @@ def render_packet(packet, **options):
         **paragraphs.select_prompt_parameters(packet['role'], packet), **options)
 
 
-def select_texts(prompt):
+def select_texts(prompt, *, include_capacity=True):
     parameters = prompt['parameters']
     versions = parameters.get('problem_paragraphs', [])
     if 'problem_objection_carry' in parameters:
         versions = ['exactory-problem-objection-carry-v1'] + versions
-    return [text for paragraph in paragraphs.PARAGRAPHS for version, text in paragraph.versions if version in versions]
+    return [text.format(**parameters['capacity']) if paragraph.name == 'capacity-notice' else text
+            for paragraph in paragraphs.PARAGRAPHS if include_capacity or paragraph.name != 'capacity-notice'
+            for version, text in paragraph.versions if version in versions]
 
 
 FROZEN = Path(__file__).with_name('fixtures') / 'review-prompts-0.82.0.json.xz'
@@ -141,7 +143,8 @@ class OptionalParagraphTests(unittest.TestCase):
             'exactory-problem-slate-forming-v1': 'e14ff7ce5d6f1a0bd2d03b1f2fd7f45c596e14902eea5083dd7bc66d78f78d2b',
             'exactory-problem-replacement-v1': '92d8d0ace0a5c7dbd61d340f2fe6e6c5f93760ca1b7764853b7217f1dbbd12c0',
             'exactory-problem-areas-v1': 'e9a1aa5a8fa12579bbaff0cc1902f1f012c6bb7e872c02dff25131afab93da05',
-            'exactory-review-delivery-notice-v1': '56dea5b68d33ecb400797772300180198ecafafa1bd1b2b77fb1ba4053284825'}
+            'exactory-review-delivery-notice-v1': '56dea5b68d33ecb400797772300180198ecafafa1bd1b2b77fb1ba4053284825',
+            'exactory-route-capacity-notice-v1': 'be3da5b20146135957a8d1b5d4f275a4cbedc6ce4085df533f44ccb65b9df9f1'}
         actual = {version: hashlib.sha256(text.encode()).hexdigest()
                   for paragraph in paragraphs.PARAGRAPHS[1:] for version, text in paragraph.versions}
         self.assertEqual(actual, expected)
@@ -173,6 +176,9 @@ class OptionalParagraphTests(unittest.TestCase):
             role = 'adjudicator' if paragraph.name == 'replacement' else paragraph.roles[0]
             for carry in ((False, True) if role in ('result', 'slate') else (False,)):
                 parameters = dict(problem_paragraphs=[paragraph.versions[0][0]])
+                if paragraph.name == 'capacity-notice':
+                    parameters['capacity'] = dict(protocol=paragraphs.CAPACITY_NOTICE_PROTOCOL,
+                        kind='request', output_tokens=128000, answer_bound=15000)
                 if carry:
                     parameters['problem_objection_carry'] = CARRY
                 prompt = protocol.canonical_prompt(role, orchestration='problem_creation', **parameters)
@@ -411,18 +417,19 @@ class ParagraphPathTests(ResultPartsCase):
         self.case.expected['value']['accounts'] = dict(answer='A supported answer.', replacement=dict(statement='Earlier form.'))
         self.oversized(count=6)
         assignment = self.assign('parts-with-accounts')
-        expected = select_texts(render_packet(self.packet(assignment)))
+        # The scientific paragraphs persist; capacity belongs to the current turn.
+        expected = select_texts(render_packet(self.packet(assignment)), include_capacity=False)
         self.assertEqual(len(expected), 2)
         turns = 0
         while self.packet(assignment).get('review_parts', {}).get('kind',
                 self.packet(assignment).get('problem_evidence_parts', {}).get('stage')) != 'final':
-            self.assertEqual(select_texts(assignment['prompt']), expected)
+            self.assertEqual(select_texts(assignment['prompt'], include_capacity=False), expected)
             self.assertTrue(protocol._prompt_matches(assignment, packet=self.packet(assignment)))
             self.invoke(assignment)
             turns += 1
             self.assertLess(turns, 20)
             assignment = self.assign('turn-' + str(turns), assignment['id'])
-        self.assertEqual(select_texts(assignment['prompt']), expected)
+        self.assertEqual(select_texts(assignment['prompt'], include_capacity=False), expected)
         self.assertTrue(protocol._prompt_matches(assignment, packet=self.packet(assignment)))
 
     def test_stage_b_bar_has_no_areas_paragraph(self):
@@ -472,7 +479,8 @@ class CurrentParagraphPathTests(ParagraphPathTests):
         repaired = ResultRepairJourneyTests.repair_assignment(self, first, binding)
         packet = self.packet(repaired)
         self.assertTrue(protocol._prompt_matches(repaired, packet=packet))
-        self.assertEqual(select_texts(repaired['prompt']), select_texts(first['prompt']))
+        self.assertEqual(select_texts(repaired['prompt'], include_capacity=False),
+                         select_texts(first['prompt'], include_capacity=False))
 
     def test_replacement_preflight_keeps_the_recorded_paragraph_versions(self):
         from research_harness import review_failure_class as failures

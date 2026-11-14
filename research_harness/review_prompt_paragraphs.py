@@ -21,6 +21,15 @@ FORMING_RECORD_KINDS = ('forming_call', 'form_outcome')
 INVALID_CONTEXT = 'Use admitted problem prompt paragraph versions once, in their registered order and roles'
 DELIVERY_NOTICE_KEY = 'delivery_notice'
 DELIVERY_NOTICE_PROTOCOL = 'exactory-review-delivery-notice-v1'
+CAPACITY_NOTICE_KEY = 'route_capacity'
+CAPACITY_NOTICE_PROTOCOL = 'exactory-route-capacity-notice-v1'
+CAPACITY_PARAMETER = 'capacity'
+INVALID_CAPACITY_NOTICE = 'Use the registered capacity notice with its turn kind, positive output tokens and positive answer bound'
+# Placeholder for the writer's pass. A text change requires a new registered version.
+CAPACITY_NOTICE_PROMPT = (
+    '\n\nRoute capacity (exactory-route-capacity-notice-v1). '
+    'The route output limit is {output_tokens} tokens; reasoning and answer share this limit. '
+    'The answer bound of this turn is {answer_bound} characters. An answer cut at the limit is lost.')
 # Placeholder for the writer's pass. A text change requires a new registered version.
 DELIVERY_NOTICE_PROMPT = (
     '\n\nDelivery notice (exactory-review-delivery-notice-v1). '
@@ -62,6 +71,10 @@ def _has_areas(role, packet):
 
 def _has_delivery_notice(role, packet):
     return packet.get(DELIVERY_NOTICE_KEY, {}).get('protocol') == DELIVERY_NOTICE_PROTOCOL
+
+
+def _has_capacity_notice(role, packet):
+    return packet.get(CAPACITY_NOTICE_KEY, {}).get('protocol') == CAPACITY_NOTICE_PROTOCOL
 
 
 @dataclass(frozen=True)
@@ -381,6 +394,8 @@ PARAGRAPHS = (
           'No item, level or threshold changes. '
           'The response shape of this turn is unchanged: an intermediate, source-request or staged task response gives '
           'only the fields that its task owns.'),)),
+    PromptParagraph('capacity-notice', ('bar', 'slate', 'result'), _has_capacity_notice,
+                    ((CAPACITY_NOTICE_PROTOCOL, CAPACITY_NOTICE_PROMPT),)),
     PromptParagraph('delivery-notice', ('bar', 'slate', 'result'), _has_delivery_notice,
                     ((DELIVERY_NOTICE_PROTOCOL, DELIVERY_NOTICE_PROMPT),)))
 
@@ -391,6 +406,11 @@ def has_only_shared_paragraphs(versions):
     return isinstance(versions, list) and all(version in shared for version in versions)
 
 
+def has_capacity_paragraph(versions):
+    return any(version in versions for paragraph in PARAGRAPHS if paragraph.name == 'capacity-notice'
+               for version, _ in paragraph.versions)
+
+
 def select_prompt_parameters(role, packet):
     """Select the paragraphs called for by this delivered packet, including compact task contexts."""
     problem = packet.get('subject', {}).get('kind') == 'problem'
@@ -399,7 +419,7 @@ def select_prompt_parameters(role, packet):
     conditions = (packet.get(CONDITIONS) if 'value' not in packet.get('problem_evidence', {}) else None)
     versions = [paragraph.versions[-1][0] for paragraph in PARAGRAPHS[1:]
                 if role in paragraph.roles and (problem or paragraph.name == 'delivery-notice') and
-                (paragraph.name in conditions if conditions is not None and paragraph.name != 'delivery-notice'
+                (paragraph.name in conditions if conditions is not None and paragraph.name not in ('delivery-notice', 'capacity-notice')
                  else paragraph.condition(role, packet))]
     if role in PARAGRAPHS[0].roles and _has_carry(role, packet):
         carry_version = PARAGRAPHS[0].versions[-1][0]
@@ -408,6 +428,8 @@ def select_prompt_parameters(role, packet):
     parameters = {PARAMETER: versions} if versions else {}
     if role in PARAGRAPHS[0].roles and _has_carry(role, packet):
         parameters[CARRY_PARAMETER] = packet[CARRY_PARAMETER]
+    if has_capacity_paragraph(versions):
+        parameters[CAPACITY_PARAMETER] = packet[CAPACITY_NOTICE_KEY]
     return parameters
 
 
@@ -423,7 +445,7 @@ def preserve_prompt_conditions(role, source, packet):
 def read_paragraph_parameters(prompt):
     """Replay the paragraph versions of an existing assignment when sizing another turn."""
     parameters = prompt['parameters']
-    return {key: parameters[key] for key in (CARRY_PARAMETER, PARAMETER) if key in parameters}
+    return {key: parameters[key] for key in (CARRY_PARAMETER, PARAMETER, CAPACITY_PARAMETER) if key in parameters}
 
 
 def _select_versions(role, carried, versions):
@@ -450,18 +472,38 @@ def _select_versions(role, carried, versions):
     return selected
 
 
-def append_prompt_paragraphs(base, role, carried=None, versions=None):
+def _render_selected_paragraphs(selected, capacity):
+    capacity_versions = [version for paragraph in PARAGRAPHS if paragraph.name == 'capacity-notice'
+                         for version, _ in paragraph.versions]
+    has_capacity = has_capacity_paragraph([version for version, _ in selected])
+    if has_capacity:
+        from .review_route_capacity import TURN_KINDS
+        if (not isinstance(capacity, dict)
+                or set(capacity) != {'protocol', 'kind', 'output_tokens', 'answer_bound'}
+                or capacity['protocol'] != CAPACITY_NOTICE_PROTOCOL or capacity['kind'] not in TURN_KINDS
+                or any(type(capacity[key]) is not int or capacity[key] <= 0
+                       for key in ('output_tokens', 'answer_bound'))):
+            raise ResearchError('invalid_review_context', INVALID_CAPACITY_NOTICE)
+    elif capacity is not None:
+        raise ResearchError('invalid_review_context', INVALID_CAPACITY_NOTICE)
+    return ''.join(text.format(**capacity) if version in capacity_versions else text
+                   for version, text in selected)
+
+
+def append_prompt_paragraphs(base, role, carried=None, versions=None, capacity=None):
     selected = _select_versions(role, carried, versions)
-    return _append_selected_paragraphs(base, carried, versions, selected)
+    return _append_selected_paragraphs(base, carried, versions, selected, capacity)
 
 
-def _append_selected_paragraphs(base, carried, versions, selected):
+def _append_selected_paragraphs(base, carried, versions, selected, capacity=None):
     parameters = dict(base['parameters'])
     if carried is not None:
         parameters[CARRY_PARAMETER] = carried
     if versions:
         parameters[PARAMETER] = list(versions)
-    text = base['text'] + ''.join(text for _, text in selected)
+    text = base['text'] + _render_selected_paragraphs(selected, capacity)
+    if capacity is not None:
+        parameters[CAPACITY_PARAMETER] = dict(capacity)
     return dict(template_id=base['template_id'] + _describe_template_suffix(selected),
                 template_hash=digest(text), rendered_prompt_hash=digest(text), parameters=parameters, text=text)
 
@@ -474,24 +516,25 @@ def _describe_template_suffix(selected):
 def strip_prompt_paragraphs(prompt, role):
     """Return the exact base envelope, or None for an unregistered or altered addition."""
     parameters = prompt.get('parameters', {})
-    if PARAMETER not in parameters and CARRY_PARAMETER not in parameters:
+    if PARAMETER not in parameters and CARRY_PARAMETER not in parameters and CAPACITY_PARAMETER not in parameters:
         return prompt
     versions = parameters.get(PARAMETER)
     if PARAMETER in parameters and not versions:
         return None
     try:
         selected = _select_versions(role, parameters.get(CARRY_PARAMETER), versions)
+        suffix = _render_selected_paragraphs(selected, parameters.get(CAPACITY_PARAMETER))
     except (ResearchError, TypeError, KeyError):
         return None
-    suffix = ''.join(text for _, text in selected)
     template_suffix = _describe_template_suffix(selected)
     if not selected or not prompt.get('text', '').endswith(suffix) or not prompt.get('template_id', '').endswith(template_suffix):
         return None
-    base_parameters = {key: value for key, value in parameters.items() if key not in (PARAMETER, CARRY_PARAMETER)}
+    base_parameters = {key: value for key, value in parameters.items() if key not in (PARAMETER, CARRY_PARAMETER, CAPACITY_PARAMETER)}
     text = prompt['text'][:-len(suffix)]
     base = dict(template_id=prompt['template_id'][:-len(template_suffix)], template_hash=digest(text),
                 rendered_prompt_hash=digest(text), parameters=base_parameters, text=text)
-    return base if _append_selected_paragraphs(base, parameters.get(CARRY_PARAMETER), versions, selected) == prompt else None
+    return base if _append_selected_paragraphs(base, parameters.get(CARRY_PARAMETER), versions, selected,
+                                              parameters.get(CAPACITY_PARAMETER)) == prompt else None
 
 
 def matches_packet_paragraphs(prompt, role, packet):
@@ -499,6 +542,8 @@ def matches_packet_paragraphs(prompt, role, packet):
     actual = prompt.get('parameters', {})
     expected = select_prompt_parameters(role, packet)
     if actual.get(CARRY_PARAMETER) != expected.get(CARRY_PARAMETER):
+        return False
+    if actual.get(CAPACITY_PARAMETER) != expected.get(CAPACITY_PARAMETER):
         return False
     versions = actual.get(PARAMETER, [])
     wanted = expected.get(PARAMETER, [])

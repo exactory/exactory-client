@@ -81,6 +81,8 @@ def build_legacy_codex_response(route, request, output):
 @contextmanager
 def fix_external_inputs():
     """Fix external observations before storing them, rather than scrubbing requests."""
+    # Recreate pre-notice assignments for the unchanged byte oracle. Fresh
+    # profiled assignments are covered by test_review_capacity_notice.
     original_runtime = transport.runtime
     numbers = itertools.count(1)
     emitted = []
@@ -96,6 +98,7 @@ def fix_external_inputs():
         return original_observe(route, request, credential)
 
     with patch.object(transport, "runtime", side_effect=describe_fixture_runtime), \
+            patch.object(protocol, "prepare_capacity_notice", side_effect=lambda records, route, role, packet: packet), \
             patch.object(codex_fixtures, "build_codex_response", new=build_legacy_codex_response), \
             patch.object(review_codex_invocation, "supports_route", return_value=False), \
             patch.object(review_request_restoration, "select_policy", return_value=None), \

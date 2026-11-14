@@ -88,7 +88,8 @@ def _append_notice_prompt(prompt, role):
     base = paragraphs.strip_prompt_paragraphs(prompt, role)
     parameters = prompt['parameters']
     versions = list(parameters.get(paragraphs.PARAMETER, [])) + [paragraphs.DELIVERY_NOTICE_PROTOCOL]
-    return paragraphs.append_prompt_paragraphs(base, role, parameters.get(paragraphs.CARRY_PARAMETER), versions)
+    return paragraphs.append_prompt_paragraphs(base, role, parameters.get(paragraphs.CARRY_PARAMETER), versions,
+                                               parameters.get(paragraphs.CAPACITY_PARAMETER))
 
 
 def prepare_notice(records, artifacts, route, assignment, packet, prompt, history):

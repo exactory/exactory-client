@@ -5517,6 +5517,21 @@
         "test_review_handles.HandleExpansionTests.test_two_part_unit_span_addresses_the_second_part_from_zero",
         "test_review_handles.HandleExpansionTests.test_refuses_unknown_malformed_and_out_of_part_spans_under_review_shape"
       ]
+    },
+    {
+      "id": "problem-review-prompts-state-route-output-and-turn-answer-bounds",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review output capacity",
+      "summary": "Problem review prompts did not state the shared reasoning and answer output cap or the answer bound selected for the turn.",
+      "expected": "New profiled bar, slate and result assignments state both limits; session turns use request rows, old turns authenticate, and routes without profile rows retain their exact input bytes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_notice.CapacityAssignmentTests.test_new_bar_slate_and_result_assignments_take_the_profile_rule",
+        "test_review_capacity_notice.CapacityAssignmentTests.test_running_unprofiled_session_adds_notice_without_changing_stored_turns",
+        "test_review_capacity_notice.CapacityChainTests.test_legacy_parts_chain_adds_current_turn_bounds_and_authenticates_old_turn",
+        "test_review_capacity_notice.CapacityChainTests.test_fitted_session_keeps_capacity_and_delivery_notices_together"
+      ]
     }
   ]
 }

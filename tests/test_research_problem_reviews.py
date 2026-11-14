@@ -349,6 +349,7 @@ class ProblemReviewTests(LiteratureCase):
             return original(role, **options)
         # A 0.53.0 store recorded these results before version 1 bars were refused at result assignment.
         with patch.object(protocol, 'canonical_prompt', side_effect=previous_prompt), \
+                patch.object(protocol, 'prepare_capacity_notice', side_effect=lambda records, route, role, packet: packet), \
                 patch.object(protocol, 'require_calibrated_bars', return_value=None):
             self.observe_bar_reviews()
             for reviewer in ('first', 'second'):
@@ -418,10 +419,13 @@ class ProblemReviewTests(LiteratureCase):
         records = self.read_records()
         review = records['value_review']['review-result-first']
         assignment = records['review_assignment'][review['assignment_id']]
+        from research_harness.review_prompt_paragraphs import strip_prompt_paragraphs
+        base = strip_prompt_paragraphs(assignment['prompt'], 'result')
+        paragraph_suffix = assignment['prompt']['template_id'][len(base['template_id']):]
         with patch.object(protocol, 'PROBLEM_RESULT_PROTOCOL', 'exactory-problem-review-next'):
             for suffix in ('/result', '/result/context-repair'):
                 with self.subTest(suffix=suffix):
-                    assignment['prompt']['template_id'] = protocol.PROBLEM_RESULT_PROTOCOL + suffix
+                    assignment['prompt']['template_id'] = protocol.PROBLEM_RESULT_PROTOCOL + suffix + paragraph_suffix
                     self.assertEqual(decisions.assess_rubric_reviews(
                         records, self.artifacts, [review], digest(self.expected)), [])
 

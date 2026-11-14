@@ -82,9 +82,11 @@ class ProblemResultHistoryTests(ResultPartsCase):
                     def read_observation(records, artifacts, operation, payload, request_id):
                         return held[operation, payload['id']]
 
-                    # The frozen 0.69.18 request records common text version 2.
+                    # The frozen 0.69.18 request records common text version 2
+                    # and predates capacity-notice assignment metadata.
                     with patch.object(review_call_capture, 'capture_call', side_effect=keep_observation), \
                             patch.object(review_call_capture, 'read_call_observation', side_effect=read_observation), \
+                            patch.object(protocol, 'prepare_capacity_notice', side_effect=lambda records, route, role, packet: packet), \
                             patch.object(protocol, 'COMMON_VERSION', 2):
                         ResultPartsCase.setUp(builder)
                         install_codex_runtime(builder)

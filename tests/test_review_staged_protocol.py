@@ -46,9 +46,12 @@ class StagedEntryTests(ResultPartsCase):
         records = self.case.read_records()
         with transport.text_only_delivery(True):
             expected = protocol.build_packet(records, self.case.artifacts, None, 'result', 'first')
+        expected = protocol.prepare_capacity_notice(records, records['review_route']['route'], 'result', expected)
         assignment = self.assign('ordinary')
         self.assertEqual(self.packet(assignment), expected)
-        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('result', orchestration='problem_creation'))
+        from research_harness.review_prompt_paragraphs import select_prompt_parameters
+        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('result', orchestration='problem_creation',
+            **select_prompt_parameters('result', expected)))
         self.assertTrue(read_history(self.case.artifacts, assignment))
 
     def test_explicit_oversized_upgrade_is_a_controller_with_immutable_frame_children(self):

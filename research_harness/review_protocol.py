@@ -840,7 +840,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
                      adjudicator_prompt=None, excerpts=False, reading_stage=None, excerpt_rules=None,
                      reading_protocol=None, common_version=None, evidence_parts=None, part_suffix=None,
                      staged_task=None, composed=False, claim_range=False, review_parts=None,
-                     problem_objection_carry=None, problem_paragraphs=None):
+                     problem_objection_carry=None, problem_paragraphs=None, capacity=None):
     """The canonical prompt of a role. A previous version (version 1) keeps the context-repair suffix it was recorded
     with; a later version uses the current suffix; repair_prompt names a suffix explicitly. excerpts adds the excerpt
     rules of a bar, slate or result session to the current template under its unchanged id; an earlier version only
@@ -850,7 +850,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     reading or final turn of a native openness reading chain, and reading_protocol the
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
-    if problem_objection_carry is not None or problem_paragraphs is not None:
+    if problem_objection_carry is not None or problem_paragraphs is not None or capacity is not None:
         if (problem_paragraphs and orchestration != 'problem_creation'
                 and not prompt_paragraphs.has_only_shared_paragraphs(problem_paragraphs)):
             raise ResearchError('invalid_review_context', prompt_paragraphs.INVALID_CONTEXT)
@@ -859,7 +859,7 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             reading_stage=reading_stage, excerpt_rules=excerpt_rules, reading_protocol=reading_protocol,
             common_version=common_version, evidence_parts=evidence_parts, part_suffix=part_suffix,
             staged_task=staged_task, composed=composed, claim_range=claim_range, review_parts=review_parts)
-        return prompt_paragraphs.append_prompt_paragraphs(base, role, problem_objection_carry, problem_paragraphs)
+        return prompt_paragraphs.append_prompt_paragraphs(base, role, problem_objection_carry, problem_paragraphs, capacity)
     if version is None:
         version = 7 if role == 'verification' else 6
     if review_parts is not None:
@@ -2638,6 +2638,7 @@ def _repair_packet(records, artifacts, value, repair):
     packet.pop(review_parts.STATE_KEY, None)
     packet.pop(review_problem_parts.KEY, None)
     packet.pop(prompt_paragraphs.DELIVERY_NOTICE_KEY, None)
+    packet.pop(prompt_paragraphs.CAPACITY_NOTICE_KEY, None)
     from .review_source_capacity import BODY_DELIVERY, MARKER
     # The prior capacity receipt stays in scientific_history. Its actual pending
     # requests are inherited below, rather than labelling this new packet with it.
@@ -2949,6 +2950,34 @@ def _require_focused_identity(previous, value):
                    for key in ('reviewer_id', 'author_id'))):
         raise ResearchError('review_adjudicator_fixed',
                             'A focused continuation retains its adjudicator, route and author')
+
+
+def prepare_capacity_notice(records, route, role, packet):
+    """Add fixed capacity metadata only to a prospective profiled problem assignment."""
+    if packet.get('subject', {}).get('kind') != 'problem' or role not in bar_sources.ROLES:
+        return packet
+    from .review_route_capacity import (describe_route_capacity, describe_task_kind,
+                                        read_output_profile, select_task_limits)
+    profile = read_output_profile(records, route)
+    if not profile['rows']:
+        return packet
+    kind = describe_task_kind(role, packet)
+    limits = select_task_limits(route, profile, kind)
+    if limits['answer_bound'] is None:
+        if prompt_paragraphs.CAPACITY_NOTICE_KEY in packet:
+            packet = dict(packet)
+            packet.pop(prompt_paragraphs.CAPACITY_NOTICE_KEY)
+            packet.pop('digest', None)
+            packet['digest'] = digest(packet)
+        return packet
+    packet = dict(packet)
+    packet[prompt_paragraphs.CAPACITY_NOTICE_KEY] = dict(
+        protocol=prompt_paragraphs.CAPACITY_NOTICE_PROTOCOL, kind=kind,
+        output_tokens=describe_route_capacity(route, profile)['output_tokens']['value'],
+        answer_bound=limits['answer_bound'])
+    packet.pop('digest', None)
+    packet['digest'] = digest(packet)
+    return packet
 
 
 def record_assignment(store, payload, *, expected_revision, request_id):
@@ -3280,6 +3309,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 focused_context['prior_assignment_id'] = focused_parent['id']
             value = dict(value, context=focused_context)
         reassessment_required = 'context_repair' in packet
+        # Staged controllers dispatch no review call. Their child protocol sizes
+        # each task jointly and has no answer bound in the route-profile rule.
+        if upgrade is None and not staged_repair:
+            packet = prepare_capacity_notice(records, route, value['role'], packet)
         base_prompt_parameters = dict(repair=reassessment_required and value['role'] != 'adjudicator',
             orchestration='problem_creation' if problem else None,
             staged_task=({'type': 'final'} if staged_repair and
@@ -3375,6 +3408,23 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
                 packet.pop('digest')
                 packet['digest'] = digest(packet)
+        # Parts planners can change a session turn into read/check/final. Select
+        # that turn's bound without changing the recorded paragraphs of ancestors.
+        packet = prepare_capacity_notice(records, route, value['role'], packet)
+        parameters = prompt_paragraphs.select_prompt_parameters(value['role'], packet)
+        if (prompt_paragraphs.CAPACITY_PARAMETER in parameters
+                or prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters']):
+            base = prompt_paragraphs.strip_prompt_paragraphs(prompt, value['role'])
+            recorded = prompt_paragraphs.read_paragraph_parameters(prompt)
+            prompt = prompt_paragraphs.append_prompt_paragraphs(base, value['role'],
+                recorded.get(prompt_paragraphs.CARRY_PARAMETER),
+                parameters.get(prompt_paragraphs.PARAMETER), parameters.get(prompt_paragraphs.CAPACITY_PARAMETER))
+        if (review_problem_parts.find_stage(packet) is not None
+                and prompt_paragraphs.CAPACITY_PARAMETER in prompt['parameters']
+                and 'prompt_hash' in packet.get('problem_refresh', {})):
+            packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
+            packet.pop('digest')
+            packet['digest'] = digest(packet)
         from .review_route_capacity import CAPACITY_REQUEST_KEY, prepare_assignment_capacity
         capacity_members = {}
         if CAPACITY_REQUEST_KEY in packet:

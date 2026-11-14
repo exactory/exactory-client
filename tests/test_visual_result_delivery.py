@@ -32,6 +32,12 @@ class VisualResultDeliveryTests(unittest.TestCase):
         previous_contract = patch.object(protocol, 'canonical_prompt', side_effect=old_prompt)
         previous_contract.start()
         self.addCleanup(previous_contract.stop)
+        # These initial records predate capacity notices, as well as the current
+        # scientific result contract. New visual assignments below use both.
+        previous_capacity = patch.object(protocol, 'prepare_capacity_notice',
+            side_effect=lambda records, route, role, packet: packet)
+        previous_capacity.start()
+        self.addCleanup(previous_capacity.stop)
         self.native = fixtures.NativeCompleteSourceTests()
         self.addCleanup(self.native.doCleanups)
         self.native.setUp()
@@ -78,6 +84,7 @@ class VisualResultDeliveryTests(unittest.TestCase):
         case.mutate(decisions.record_value_review,
             dict(output, id='review-legacy', dossier_id=None, assignment_id=prior['id']))
         previous_contract.stop()
+        previous_capacity.stop()
         case.mutate(protocol.record_route, {'id': 'visual-route', 'adapter': visual.ADAPTER,
             'model': 'fixture-model', 'endpoint': 'codex://local',
             'configuration': {'max_output_tokens': 1000, 'timeout_seconds': 5}})
