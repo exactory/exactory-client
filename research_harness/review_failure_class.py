@@ -13,6 +13,7 @@ from .operations import normalized_text
 from . import review_parts as parts
 from . import review_parts_repair as repair
 from . import review_protocol as protocol
+from .review_route_capacity import plan_capacity_recovery
 
 
 # Outcome names, terminal codes and allowances have one policy home.
@@ -245,7 +246,7 @@ def find_output_cap_signal(records, artifacts, assignment, attempt):
     if parts.find_kind(packet) == 'read' and maximum is not None:
         detected = parts.find_failed_replacement(evidence, artifacts, assignment, header['adapter'],
             header['series_key'], assignment.get('slot_id'),
-            assignment.get('context', {}).get('prior_assignment_id'), maximum)
+            assignment.get('context', {}).get('prior_assignment_id'), maximum, capacity_events=False)
         if detected is not None:
             return dict(source='review_parts.find_failed_replacement', value=detected)
     if repair.applies(assignment, packet) and maximum is not None:
@@ -391,7 +392,7 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
 
     packet = protocol._read_json(artifacts, assignment['packet'])
     from .review_route_capacity import describe_task_kind
-    if describe_task_kind(assignment['role'], packet) == 'single':
+    if describe_task_kind(assignment['role'], packet) == 'single' and not repair.applies(assignment, packet):
         if not allow_single:
             return None
         from .review_single_request import build_output_replacement
@@ -473,22 +474,20 @@ def plan_scheduled_retry(attempt, failure_count, reset_at=None):
     return 'wait', deadline.isoformat(timespec='seconds')
 
 
-def plan_capacity_recovery(records, artifacts, assignment, outcome) -> RecoveryResult:
-    """Adapt the existing smaller-request proof to D2's shared recovery result."""
-    replacement = (plan_output_replacement(records, artifacts, assignment, allow_single=outcome == 'output_over_cap')
-                   if outcome in ('output_over_cap', 'timeout', 'provider_refused') else None)
-    if replacement is not None and replacement['state'] == 'replace':
-        payload = {key: copy.deepcopy(assignment[key]) for key in
-                   ('id', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
-        payload['id'] += '-replacement'
-        payload['context'] = replacement['context']
-        return dict(kind='replace', reason='capacity', payload=payload,
-                    preflight=replacement['preflight'], details=replacement)
-    steps = [dict(command='review-route',
-                  chooses=['id', 'adapter', 'model', 'endpoint', 'configuration'])]
-    return dict(kind='decision', code=(replacement or {}).get('code', OUTCOME_CODES[outcome]),
-        owner_decides=ROUTE_DECISION_QUESTION,
-        then=[dict(answer='Move to another route', steps=steps)], details=replacement or {})
+def should_reduce_capacity_task(records, artifacts, assignment):
+    """Let the parts builder consume D2's events after their identical-run allowance.
+
+    The classifier's legacy detector disables this extension, so detecting an output
+    event never turns a timeout or a safeguard stop into an output event.
+    """
+    position = count_position(records, artifacts, assignment)
+    if not position['failures']:
+        return False
+    outcome = position['failures'][-1][1]['outcome']
+    used = position['failures_by_outcome'][outcome]
+    return (outcome in ('output_over_cap', 'input_over_limit')
+            or outcome == 'timeout' and used >= 2
+            or outcome == 'provider_refused' and used >= PROVIDER_REFUSAL_ATTEMPT_LIMIT)
 
 
 def _is_scheduled_unknown(records, artifacts, failures):
@@ -654,11 +653,16 @@ def plan_after_failure(records, artifacts, assignment_id):
                            over_cap_attempts=position['over_cap_attempts'])
         if (outcome != 'provider_refused' or used >= PROVIDER_REFUSAL_ATTEMPT_LIMIT) and (
                 outcome != 'timeout' or used >= 2):
-            allowance = calculate_over_cap_allowance()
+            allowance = calculate_over_cap_allowance(recovery['details']['at_or_over_limit_share'])
             if recovery['kind'] == 'replace' and (position['failed_attempts'] >= TURN_FAILURE_LIMIT
                     or outcome == 'output_over_cap' and len(position['over_cap_by_level']) >= allowance):
+                from .review_route_capacity import describe_capacity_decision
+                recovery = describe_capacity_decision(records, artifacts, assignment, outcome,
+                    dict(recovery['details'], over_cap_allowance=allowance,
+                         untried_material_allowance=recovery['details'].get('unit_characters')))
                 result.update(state='stop')
-                details.update(over_cap_allowance=allowance, recovery=recovery)
+                details.update(recovery['details'], recovery=recovery,
+                               decision={key: recovery[key] for key in ('owner_decides', 'then')})
                 return result
             if recovery['kind'] == 'replace':
                 result.update(state='replace')

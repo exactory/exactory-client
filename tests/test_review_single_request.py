@@ -553,6 +553,12 @@ class FrozenSingleTests(unittest.TestCase):
             original = protocol.record_assignment(self.case.store, payload,
                 expected_revision=self.case.store.revision, request_id='historic-opus')['result']
         invoke(original, {}, over_cap=True)
+        recovery = capacity.plan_capacity_recovery(self.case.store.snapshot()['records'],
+                                                   self.case.artifacts, original, 'output_over_cap')
+        self.assertEqual(recovery['kind'], 'replace')
+        self.assertEqual(recovery['details']['effort'], 'max')
+        self.assertEqual(recovery['details']['kind'], 'single')
+        self.assertEqual(recovery['details']['attempts'][0]['output_tokens'], 128000)
         assignment = protocol.record_assignment(self.case.store,
             plan_next(self.case.store.snapshot()['records'], self.case.artifacts, original['id'])['payload'],
             expected_revision=self.case.store.revision, request_id='enter-series')['result']

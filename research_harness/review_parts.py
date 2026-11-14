@@ -1785,7 +1785,7 @@ def verify_series(records, artifacts, final_assignment_id):
 
 
 def find_failed_replacement(records, artifacts, value, adapter, series_key, slot_id, prior_id, output_tokens,
-                      *, logical_packet=None):
+                      *, logical_packet=None, capacity_events=True):
     from .operations import normalized_text
     from .review_parts_roles import get_adapter
     from .workspace import strict_json
@@ -1812,6 +1812,9 @@ def find_failed_replacement(records, artifacts, value, adapter, series_key, slot
         over_cap = any(((attempt.get('usage') or {}).get('output_tokens') or 0) >= output_tokens
                        or (attempt.get('error') or {}).get('code') == 'review_incomplete'
                        for attempt in attempts)
+        if not over_cap and capacity_events:
+            from .review_failure_class import should_reduce_capacity_task
+            over_cap = should_reduce_capacity_task(records, artifacts, failed)
         if over_cap:
             if header.get('series_key') != series_key:
                 replacement_key = get_adapter(adapter).get('replacement_key')

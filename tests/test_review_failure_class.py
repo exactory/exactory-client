@@ -35,7 +35,8 @@ class FailureClassTests(unittest.TestCase):
         self.artifacts = ArtifactStore(Path(directory.name))
         self.assignment = dict(id='head', role='result', route_id='route', context={},
                                reviewer_id='reviewer', author_id='author', dossier_id=None,
-                               packet=self.put({}), recorded_revision=1)
+                               packet=self.put({}), recorded_revision=1,
+                               context_state=dict(context_status='verified_for_route'))
         # These small output stubs do not include authenticated request envelopes.
         # Supply the contract reader explicitly; real observations are covered in test_d2_outcomes.
         recheck = patch('research_harness.review_refusal.classify_observed_output',
@@ -475,6 +476,7 @@ class FailureClassTests(unittest.TestCase):
         next(iter(self.records['review_attempt'].values()))['response'] = None
         self.assertTrue(protocol._initial_size_failure(self.records, self.artifacts, self.assignment, self.assignment))
         self.assertEqual(self.plan()['state'], 'replace')
+        self.records['review_assignment']['parent'] = dict(self.assignment, id='parent', context={}, recorded_revision=0)
         self.assignment['context'] = dict(prior_assignment_id='parent')
         self.assertFalse(protocol._initial_size_failure(
             self.records, self.artifacts, self.assignment, self.assignment))

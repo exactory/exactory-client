@@ -169,8 +169,8 @@ COMPUTED_CODE_SITES = {
         'sources': ['research_harness/review_continuation.py:plan_next']},
     "research_harness/review_failure_class.py:plan_after_failure:recovery.get('code', OUTCOME_CODES[outcome])": {
         'sources': ['research_harness/review_failure_class.py:plan_after_failure']},
-    "research_harness/review_failure_class.py:plan_capacity_recovery:(replacement or {}).get('code', OUTCOME_CODES[outcome])": {
-        'sources': ['research_harness/review_failure_class.py:plan_capacity_recovery']},
+    "research_harness/review_route_capacity.py:describe_capacity_decision:details.get('code', OUTCOME_CODES[outcome])": {
+        'sources': ['research_harness/review_route_capacity.py:plan_capacity_recovery']},
     "research_harness/review_output_correction.py:_prepare_packet:failure['code']": {
         'sources': ['research_harness/review_refusal.py:refused_attempts']},
     "research_harness/review_output_correction.py:invoke_correction.finish:getattr(error, 'code', 'review_correction_invalid')": {

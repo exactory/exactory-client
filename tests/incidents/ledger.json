@@ -2,6 +2,23 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "capacity-task-size-keeps-route-effort",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "output capacity recovery at pinned task levels",
+      "summary": "A capacity event could not consistently select a smaller task on the same route, and exhausted capacity recovery did not carry the measured evidence into a decision.",
+      "expected": "Pinned observations halve a 120,000-character reading task after 138,371 output tokens at max. Parts reads also halve after a reduced context cap, two timeouts or three provider refusals. A floor or exhausted allowance returns the D2 decision with profile rows, share, tokens, levels and route choices; an Opus max single review at 128,000 tokens finishes through its parts series.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_task_size.TaskAllowanceTests.test_retained_chain_attempts_choose_the_next_allowance_without_new_profile_rows",
+        "test_review_task_size.RecoveryRowsTests.test_floor_has_one_identical_retry_and_then_full_decision_evidence",
+        "test_review_task_size.RecoveryRowsTests.test_c_exhaustion_returns_a_decision_and_names_the_untried_level",
+        "test_review_task_size.RecoveryRowsTests.test_a19_reduced_context_cap_replaces_a_read_and_real_assignment_halves_it",
+        "test_review_task_size.RecoveryRowsTests.test_a21_timeout_and_provider_refusal_use_the_lower_read_after_their_retries",
+        "test_review_single_request.FrozenSingleTests.test_opus_max_128000_output_replacement_reaches_a_recorded_native_final"
+      ]
+    },
+    {
       "id": "chain-capacity-plan-pins-serialized-budgets",
       "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
       "class": "review capacity (serialized carried state and immutable chain budgets)",

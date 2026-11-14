@@ -246,6 +246,10 @@ def complete_plan(records, artifacts, assignment, plan):
         details['step'] = describe_step(records, artifacts, assignment, 10, stop_id=details.get('stop_id'))
         plan.update(state='handoff', command='review-stop')
     if plan['state'] == 'stop':
+        recovery = details.get('recovery', {})
+        if recovery.get('kind') == 'decision':
+            details['decision'] = {key: copy.deepcopy(recovery[key]) for key in ('owner_decides', 'then')}
+            return plan
         if (code in ('review_turn_failures_exhausted', 'review_output_over_cap', 'review_input_too_large',
                      'review_timeout', 'review_format_unsupported', 'review_context_unverified',
                      'review_response_too_large')

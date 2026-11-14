@@ -11,8 +11,11 @@ import math
 import os
 from pathlib import Path
 import tempfile
+from typing import TYPE_CHECKING
 from . import review_transport as transport
 from .evidence import digest
+if TYPE_CHECKING:
+    from .review_failure_class import RecoveryResult
 POLICY = 'exactory-route-capacity-policy-v1'
 VERIFICATION_CALLS_PER_OVER_LIMIT = 20
 VERIFICATION_POSITION_OVER_LIMIT = 1
@@ -1598,7 +1601,7 @@ def describe_assignment_capacity(records, artifacts, assignment):
         plan, route, read_output_profile(records, route), records=records, turn_kind=assignment['capacity_plan_kind']))
 
 
-def derive_plan_task_limits(plan, kind, observations=()):
+def derive_plan_task_limits(plan, kind, observations=(), *, notice_characters=0):
     """Derive allowances from pinned levels and authenticated observations supplied by the verifier."""
     task = copy.deepcopy(plan['task'][kind])
     levels = [row['material_allowance'] for row in task['levels']]
@@ -1606,22 +1609,204 @@ def derive_plan_task_limits(plan, kind, observations=()):
     adaptation = task['adaptation']
     output_limit = plan['limits']['output_tokens']['value']
     for observation in observations:
-        value = observation.get('material_allowance', allowance)
+        outcome = observation.get('outcome')
+        if outcome is not None and outcome not in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused'):
+            continue
+        value = observation.get('material_allowance', observation.get('material_characters', allowance))
         index = next((index for index in range(len(levels) - 1, -1, -1) if levels[index] >= value), 0)
         output = observation.get('output_tokens')
-        if output is not None and output * 100 >= output_limit * adaptation['lower_at_percent']:
+        if outcome is not None or output is not None and output * 100 >= output_limit * adaptation['lower_at_percent']:
             index = min(index + 1, len(levels) - 1)
         elif output is not None and output * 100 <= output_limit * adaptation['raise_at_percent']:
             index = max(0, index - 1)
         allowance = min(adaptation['ceiling'], levels[index])
-    if allowance == task['material_allowance']:
-        return task
-    selected = next(row for row in task['levels'] if row['material_allowance'] == allowance)
-    task.update(copy.deepcopy(selected))
-    task['answer_bound'] = (min(selected['default_answer_bound'], selected['answer_room_characters'])
-                            if selected['qualifies'] else selected['smallest_answer_bound'])
-    task['request_bound']['text_characters'] = selected['task_characters']
+    if allowance != task['material_allowance']:
+        selected = next(row for row in task['levels'] if row['material_allowance'] == allowance)
+        task.update(copy.deepcopy(selected))
+        task['answer_bound'] = (min(selected['default_answer_bound'], selected['answer_room_characters'])
+                                if selected['qualifies'] else selected['smallest_answer_bound'])
+        task['request_bound']['text_characters'] = selected['task_characters']
+    if notice_characters:
+        task.update(level_material_allowance=allowance, notice_characters=notice_characters,
+                    material_allowance=max(levels[-1], allowance - notice_characters))
+        task['task_characters'] = (plan['frame'][kind]['bound'] + task.get('carried_characters', 0)
+                                   + task['material_allowance'] + notice_characters)
+        task['request_bound']['text_characters'] = task['task_characters']
     return task
+
+
+def derive_turn_task_limits(records, artifacts, assignment, *, kind=None, notice_characters=0):
+    """Read the chain's attempts against its stored plan; later profiles cannot change an allowance."""
+    from . import openness_reading, review_failure_class as failures
+
+    plan = read_chain_capacity_plan(artifacts, assignment)
+    kind = kind or assignment.get('capacity_plan_kind') or describe_assignment_kind(assignment)
+    identifiers = set()
+    for member in openness_reading._list_chain(records, assignment):
+        identifiers.update(failures.list_turn_assignments(records, member))
+    observations = []
+    for attempt in sorted(records.get('review_attempt', {}).values(),
+                          key=lambda row: (row.get('recorded_revision', 0), row['id'])):
+        if attempt['assignment_id'] not in identifiers:
+            continue
+        member = records['review_assignment'][attempt['assignment_id']]
+        task = attempt.get('task') or describe_assignment_task(records, None, member)
+        if member.get('capacity_plan_kind', task['kind']) != kind or member['route_id'] != assignment['route_id']:
+            continue
+        classification = failures.classify_attempt(records, artifacts, attempt)
+        observation = dict(output_tokens=(attempt.get('usage') or {}).get('output_tokens'),
+                           outcome=classification['outcome'] if classification else None)
+        value = task.get('level_material_allowance', task.get('material_allowance', task.get('material_characters')))
+        if value is not None:
+            observation['material_allowance'] = value
+        observations.append(observation)
+    return derive_plan_task_limits(plan, kind, observations, notice_characters=notice_characters)
+
+
+CAPACITY_EFFORT_MESSAGE = 'The harness keeps the route and its effort. A change of effort requires an owner decision and a new route recorded with review-route.'
+OUTPUT_OVER_CAP_DECISION_MESSAGE = 'No smaller admissible task remains within the capacity recovery allowance. Review the measured share, profile rows and turn attempts; decide whether this review moves to a route with another effort or output limit using review-route.'
+CAPACITY_DECISION_MESSAGE = 'No smaller admissible task is available on this protocol and route. Use the outcome row and its route decision steps.'
+
+
+def list_capacity_recovery_rows():
+    """D1 11.2: every installed kind and protocol has a handler or explicitly has none.
+
+    Reading-v7-turns adds its reading/material-level row when that builder ships.
+    Parts v3, session rules v4 and final pages likewise add their own rows, never change legacy packets.
+    """
+    from . import openness_reading, review_excerpts, review_parts, review_problem_parts
+    from . import review_protocol, review_staged, review_output_correction, bar_sources
+
+    rows = []
+    for version in (openness_reading.PROTOCOL_V1, openness_reading.PROTOCOL_V2, openness_reading.PROTOCOL,
+                    openness_reading.PROTOCOL_V4, openness_reading.PROTOCOL_V5, openness_reading.PROTOCOL_V6,
+                    openness_reading.MATH_PROTOCOL):
+        unit = 'reading-math-v2' if version == openness_reading.MATH_PROTOCOL else 'reading-v7-turns'
+        for kind in ('reading', 'final'):
+            rows.append(dict(kind=kind, protocol=version, handler='nothing', required_unit=unit))
+    for kind in review_parts.KINDS:
+        rows.append(dict(kind=kind, protocol=review_parts.PROTOCOL,
+                         handler='parts_v2_read' if kind == 'read' else 'nothing'))
+    # Its frozen final also carries reviewer_excerpts, so its measured kind is request.
+    for kind in ('read', 'request'):
+        rows.append(dict(kind=kind, protocol=review_problem_parts.PROTOCOL, handler='nothing'))
+    for version in (review_excerpts.PROTOCOL_V1, review_excerpts.PROTOCOL, review_excerpts.SESSION_PROTOCOL):
+        rows.append(dict(kind='request', protocol=version, handler='nothing'))
+    for version in dict.fromkeys((review_protocol.PROTOCOL, review_protocol._VERIFICATION_PROTOCOL,
+                                 bar_sources.PROTOCOL, review_protocol._PROBLEM_PROTOCOL_V1,
+                                 review_protocol._PROBLEM_PROTOCOL, review_protocol._PROBLEM_RESULT_PROTOCOL_V3,
+                                 review_protocol._PROBLEM_RESULT_PROTOCOL_V4, review_protocol.PROBLEM_PROTOCOL)):
+        rows.append(dict(kind='single', protocol=version, handler='single_request_series'))
+    rows.append(dict(kind='staged', protocol=review_staged.PROTOCOL, handler='staged_controller'))
+    rows.append(dict(kind='correction', protocol=review_output_correction.PROTOCOL, handler='nothing',
+                     next='refusal_replacement'))
+    for adapter in tuple(transport.LOCAL_ADAPTERS) + (transport.ADAPTER,):
+        rows.append(dict(kind='probe', protocol=adapter, handler='nothing', next='route_unverified'))
+    return rows
+
+
+def describe_capacity_recovery_row(assignment, packet, route):
+    from . import openness_reading, review_excerpts, review_parts, review_problem_parts, review_staged
+    from .review_protocol import PROTOCOL
+
+    kind = describe_task_kind(assignment['role'], packet)
+    version = openness_reading.find_protocol(packet)
+    if version is None:
+        if kind in review_parts.KINDS and review_parts.KEY in packet:
+            version = packet[review_parts.KEY]['protocol']
+        elif 'problem_evidence_parts' in packet:
+            version = review_problem_parts.PROTOCOL
+        elif kind == 'request':
+            version = packet[review_excerpts.KEY]['protocol']
+        elif kind == 'staged':
+            version = review_staged.PROTOCOL
+        elif kind == 'probe':
+            version = route['adapter']
+        else:
+            version = packet.get('protocol', PROTOCOL)
+    row = next(row for row in list_capacity_recovery_rows()
+               if row['kind'] == kind and row['protocol'] == version)
+    # A repair is the existing initial-size handler even when its ordinary packet is single.
+    from .review_parts_repair import applies
+    if applies(assignment, packet) and kind not in ('read', 'combine', 'check', 'final'):
+        row = dict(row, handler='context_repair')
+    return row
+
+
+def describe_capacity_decision(records, artifacts, assignment, outcome, details):
+    """Use D2's role-specific route steps for the decision member of R52."""
+    from .review_failure_class import OUTCOME_CODES, ROUTE_DECISION_QUESTION
+    from .review_plan_steps import select_route_steps, describe_step
+
+    # Diagnostics without a native packet can name route setup, but cannot fill an attestation.
+    numbers = (select_route_steps(records, artifacts, assignment)
+               if assignment['role'] != 'native_math' or assignment.get('context', {}).get('native_packet')
+               else [7])
+    if numbers in ([4], [5]):
+        numbers = [7] + numbers
+    steps = [describe_step(records, artifacts, assignment, number) for number in numbers]
+    if details.get('required_unit'):
+        for step in steps:
+            if step['id'] in (4, 5):
+                step['prerequisites'].insert(0, dict(condition='The installed release holds ' + details['required_unit'] + '.'))
+    details = dict(details, message=(OUTPUT_OVER_CAP_DECISION_MESSAGE if outcome == 'output_over_cap'
+                                    else CAPACITY_DECISION_MESSAGE))
+    return dict(kind='decision', code=details.get('code', OUTCOME_CODES[outcome]),
+                owner_decides=ROUTE_DECISION_QUESTION,
+                then=[dict(answer='Move to another route', steps=steps)], details=details)
+
+
+def plan_capacity_recovery(records, artifacts, assignment, outcome) -> 'RecoveryResult':
+    """Return a proved smaller request or D2's decision member, preserving route and effort."""
+    from . import review_failure_class as failures, review_protocol
+
+    packet = review_protocol._read_json(artifacts, assignment['packet'])
+    route = records['review_route'][assignment['route_id']]
+    row = describe_capacity_recovery_row(assignment, packet, route)
+    plan = read_chain_capacity_plan(artifacts, assignment) if assignment.get('capacity_plan') else None
+    profile = plan['profile'] if plan else read_output_profile(records, route)
+    profile_rows = [copy.deepcopy(value) for value in profile['rows'] if value['kind'] == row['kind']]
+    sample = sum(value['attempts'] for value in profile_rows)
+    share = sum(value['at_or_over_limit'] for value in profile_rows) / sample if sample else None
+    identifiers = set(failures.list_turn_assignments(records, assignment))
+    attempts = []
+    for attempt in sorted(records.get('review_attempt', {}).values(),
+                          key=lambda value: (value.get('recorded_revision', 0), value['id'])):
+        if attempt['assignment_id'] not in identifiers:
+            continue
+        member = records['review_assignment'][attempt['assignment_id']]
+        task = attempt.get('task') or describe_assignment_task(records, None, member)
+        frozen = review_protocol._read_json(artifacts, member['packet'])
+        header = frozen.get('review_parts', {})
+        material = task.get('level_material_allowance', task.get('material_allowance',
+                       header.get('unit_characters', task.get('material_characters'))))
+        levels = ([value['material_allowance'] for value in plan['task'][row['kind']]['levels']]
+                  if plan and row['kind'] in plan['task'] else describe_material_levels(row['kind']))
+        level = (next((index for index in range(len(levels) - 1, -1, -1)
+                       if levels[index] >= material), 0) if material is not None else None)
+        attempts.append(dict(attempt_id=attempt['id'], assignment_id=member['id'],
+            output_tokens=(attempt.get('usage') or {}).get('output_tokens'),
+            material_characters=task.get('material_characters'), task_level=task.get('task_level'),
+            material_allowance=material, level=level))
+    details = dict(row, route_id=assignment['route_id'], effort=describe_route_class(route)['effort'],
+                   effort_message=CAPACITY_EFFORT_MESSAGE,
+                   at_or_over_limit_share=share, profile_rows=profile_rows, attempts=attempts)
+    replacement = (failures.plan_output_replacement(records, artifacts, assignment,
+                    allow_single=outcome == 'output_over_cap')
+                   if row['handler'] in ('single_request_series', 'parts_v2_read', 'context_repair')
+                   and outcome in ('output_over_cap', 'input_over_limit', 'timeout', 'provider_refused') else None)
+    if replacement is not None:
+        details.update(replacement)
+        if outcome != 'output_over_cap':
+            details['code'] = failures.OUTCOME_CODES[outcome]
+    if replacement is not None and replacement['state'] == 'replace':
+        payload = {key: copy.deepcopy(assignment[key]) for key in
+                   ('id', 'role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id', 'context')}
+        payload['id'] += '-replacement'
+        payload['context'] = replacement['context']
+        return dict(kind='replace', reason='capacity', payload=payload,
+                    preflight=replacement['preflight'], details=details)
+    return describe_capacity_decision(records, artifacts, assignment, outcome, details)
 
 
 def describe_next_capacity_call(records, route, selected):

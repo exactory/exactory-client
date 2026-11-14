@@ -373,12 +373,6 @@
       ],
       "values": "reachable"
     },
-    "research_harness/review_failure_class.py:plan_capacity_recovery:(replacement or {}).get('code', OUTCOME_CODES[outcome])": {
-      "sources": [
-        "research_harness/review_failure_class.py:plan_capacity_recovery"
-      ],
-      "values": "reachable"
-    },
     "research_harness/review_output_correction.py:_prepare_packet:failure['code']": {
       "sources": [
         "research_harness/review_refusal.py:refused_attempts"
@@ -410,6 +404,12 @@
     "research_harness/review_refusal.py:refused_attempts:failure['code']": {
       "sources": [
         "research_harness/review_refusal.py:refused_attempts"
+      ],
+      "values": "reachable"
+    },
+    "research_harness/review_route_capacity.py:describe_capacity_decision:details.get('code', OUTCOME_CODES[outcome])": {
+      "sources": [
+        "research_harness/review_route_capacity.py:plan_capacity_recovery"
       ],
       "values": "reachable"
     },
