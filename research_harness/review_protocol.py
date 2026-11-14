@@ -2913,6 +2913,8 @@ def _require_focused_identity(previous, value):
 
 
 def record_assignment(store, payload, *, expected_revision, request_id):
+    # Archived builders reconstruct scientific bytes; receipts use the installed capacity policy.
+    from . import openness_reading as reading_capacity
     if isinstance(payload, dict) and 'controller_assignment_id' in payload:
         from .review_staged_protocol import plan_frontier
         return plan_frontier(store, payload, expected_revision=expected_revision, request_id=request_id)
@@ -3061,6 +3063,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             slot_identifier = (context_repair.slot_id(records, parent) if parent is not None else
                                repair['slot_id'] if repair is not None else _initial_slot(records, artifacts, value))
         diagnostics = {}
+        reading_logical = None
         # Derived PNG pages do not deliver original PDFs. Add their explicit native
         # image bindings after constructing the same truthful source text packet.
         with transport.text_only_delivery(route['adapter'] in transport.TEXT_ONLY_ADAPTERS
@@ -3082,7 +3085,17 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                     parent = read_prior_assignment(records, artifacts, value)
                     value = dict(value, **{review_parts.KEY: parent[review_parts.KEY]})
                 else:
-                    packet, reading_chain = openness_reading.prepare_packet(records, artifacts, value, route, packet)
+                    reading_logical = packet
+                    try:
+                        packet, reading_chain = openness_reading.prepare_packet(records, artifacts, value, route, packet)
+                    except ResearchError as error:
+                        if error.code == reading_capacity.PROJECTION_STOP:
+                            protocol = reading_capacity.find_chain_protocol(reading_logical['native'])
+                            error.details['decision'] = reading_capacity.describe_projection_decision(
+                                protocol, records=records, artifacts=artifacts, assignment=prior or value)
+                            error.details['units'] = reading_capacity.describe_reading_units(artifacts,
+                                reading_capacity.list_reading_rows(records, artifacts, reading_logical['native']))
+                        raise
                     if reading_chain is not None:
                         diagnostics = reading_chain.pop('diagnostics', {})
                         value = dict(value, reading_chain=reading_chain)
@@ -3346,8 +3359,14 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 controller_artifacts.publish()
             return changes + [immutable_record(records, 'review_assignment', value['id'], record)], dict(
                 record, next=[describe_planning_command(record['id'])])
-        return changes + [immutable_record(records, 'review_assignment', value['id'], record)], (
-            dict(record, diagnostics=diagnostics) if diagnostics else record)
+        receipt = dict(record, diagnostics=diagnostics) if diagnostics else record
+        if value.get('reading_chain') and reading_logical is not None:
+            request = build_assignment_request(records, artifacts, record)
+            receipt = dict(receipt, **reading_capacity.describe_reading_receipt(
+                records, artifacts, record, route, reading_logical, packet, request))
+            receipt['diagnostics']['final_input'] = dict(diagnostics.get('final_input', {}),
+                                                         **receipt['diagnostics']['final_input'])
+        return changes + [immutable_record(records, 'review_assignment', value['id'], record)], receipt
     try:
         result = _prepare_review_mutation(store, 'review.assignment', payload, prepare, expected_revision=expected_revision, request_id=request_id, scoped=True)
     finally:
@@ -3470,6 +3489,15 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         if history_parent is not None and not assignment_state(records, artifacts, history_parent)['ready']:
             raise ResearchError('review_source_continuation_unverified', 'The exact earlier scientific history must remain verified before dispatch')
         request = build_assignment_request(records, artifacts, assignment)
+        if assignment.get('reading_chain'):
+            from .openness_reading import describe_reading_receipt, find_protocol, MATH_PROTOCOL
+            from .review_route_capacity import measure_request
+            measured = measure_request(route, request)
+            if (find_protocol(packet) == MATH_PROTOCOL or measured['character_limit'] is not None
+                    and measured['characters'] > measured['character_limit']):
+                logical = build_packet(records, artifacts, assignment['dossier_id'], assignment['role'],
+                                       assignment['reviewer_id'], **assignment['context'])
+                describe_reading_receipt(records, artifacts, assignment, route, logical, packet, request)
         if any(attempt.get('request_digest') != digest(request) for attempt in completed):
             raise ResearchError('review_request_changed', 'A retry must retain the exact request of every completed attempt')
         from . import review_preflight

@@ -5409,6 +5409,20 @@
         "test_import_fulltext.ImportFulltextTests.test_browser_saved_pdf_after_403_retains_original_origin_and_unverified_class",
         "test_import_fulltext.ImportFulltextTests.test_record_check_requires_the_retained_origin_fixed_note_and_capture_labels"
       ]
+    },
+    {
+      "id": "reading-chain-projection-and-legacy-forecast",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "reading chain admission and forecast",
+      "summary": "Text-only allowances left diagnostic entries and serialized metadata outside the final-input forecast.",
+      "fixed_in": "open",
+      "expected": "A bounded protocol projects fixed requests plus its serialized record total. Earlier protocols report exact requests and a labelled forecast, and a turn that cannot fit stops before any call while its verified turns stay.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_reading_forecast.AdversarialProjectionTests.test_adversarial_shapes_fit_the_projected_total_in_reading_and_final_builders",
+        "test_reading_forecast.SeriesReadingForecastTests.test_v5_turn_50_cannot_fit_and_series_stops_before_a_call",
+        "test_reading_forecast.LegacyReadingForecastTests.test_chain_admitted_by_0870_keeps_packets_prompts_and_request_digests"
+      ]
     }
   ]
 }

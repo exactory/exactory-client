@@ -97,6 +97,9 @@ def describe_step(records, artifacts, assignment, number, *, stop_id=None, readi
             if review_parts.find_kind(packet) is not None:
                 packet = review_parts.read_logical_packet(artifacts, packet[review_parts.KEY])
             native = packet.get('native', {})
+            if packet.get('reading_turn'):
+                from .native_review import load_packet
+                native = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
             payload = {key: copy.deepcopy(native[key]) for key in ('kind', 'subject', 'claim_digest')
                        if key in native}
             result['root'] = native.get('root')
@@ -191,6 +194,16 @@ def complete_plan(records, artifacts, assignment, plan):
             if len(steps) > 1:
                 details['steps'] = steps
         return dict(plan, state='handoff', command='read')
+    if (code in ('review_input_too_large', 'review_chain_projection_over_limit')
+            and assignment.get('reading_chain')):
+        # Reading-v7 changes the problem-chain row to export when it can carry these verified turns.
+        from .openness_reading import describe_projection_decision, find_protocol
+        packet = protocol._read_json(artifacts, assignment['packet'])
+        details['decision'] = describe_projection_decision(find_protocol(packet), records=records,
+                                                           artifacts=artifacts, assignment=assignment)
+        plan['state'] = 'stop'
+        plan.pop('command', None)
+        return plan
     terminal = describe_terminal(code)
     if terminal['details'].get('next', {}).get('kind') == 'role' and plan.get('command') != 'review-output-correction':
         return dict(plan, **describe_role_handoff(records, artifacts, assignment, code, details))

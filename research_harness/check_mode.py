@@ -95,6 +95,9 @@ class _CheckingStore:
                 read_unrecorded_overrides(self.root) or [], result, self._artifacts)
             if authorities:
                 response["write_authorities"] = authorities
+        if operation == 'review.assignment' and 'reading_chain_admission' in result:
+            response.update({key: result[key] for key in
+                ('reading_chain_admission', 'capacity_forecast', 'capacity_warning', 'diagnostics')})
         raise _CheckComplete(response)
 
 

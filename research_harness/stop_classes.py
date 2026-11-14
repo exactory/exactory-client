@@ -70,6 +70,13 @@ for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
 STOP_REGISTRY['problem_already_posted'] = dict(code='problem_already_posted', **{'class': 'decision'},
                                              owner='D2', next=dict(kind='done'))
+from .openness_reading import PROJECTION_STOP, PROBLEM_PROJECTION_DECISION, WAIT_PROBLEM_ANSWER, SMALLER_PACKET_ANSWER
+STOP_REGISTRY[PROJECTION_STOP] = dict(code=PROJECTION_STOP, **{'class': 'decision'}, owner='D1',
+    next=dict(kind='decision', owner_decides=PROBLEM_PROJECTION_DECISION,
+              then=[dict(answer=WAIT_PROBLEM_ANSWER, steps=[dict(id=4, command='export',
+                    prerequisites=[dict(condition='Install a bounded reading protocol for this packet.')])]),
+                    dict(answer=SMALLER_PACKET_ANSWER, steps=[dict(id=4, command='export'),
+                         dict(command='review-assignment', check=True)])]))
 for _code in ('stale_revision', 'review_task_dependency_changed'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
 

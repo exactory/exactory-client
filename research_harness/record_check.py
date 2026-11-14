@@ -473,7 +473,7 @@ def check_prospective_request(records, artifacts, plan):
 def describe_capacity_decision(error, plan):
     """Recognize material that cannot finish on the selected route."""
     if (error.code in ('review_parts_frame_too_large', 'review_parts_inventory_too_large',
-                       'review_parts_final_too_large')
+                       'review_parts_final_too_large', 'review_chain_projection_over_limit')
             or (error.code == 'review_input_too_large'
                 and (error.details or {}).get('phase') == 'final_preflight')):
         return {'head_id': plan['head_id'], 'command': plan['command'],

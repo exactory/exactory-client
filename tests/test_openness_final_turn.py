@@ -283,14 +283,13 @@ class FinalTurnWithholdingTests(FinalTurnCase):
                      ('reading', 'read-2'), ('reading', 'read-3'), ('reading', 'read-1'),
                      ('literature_search', self.search['id'])] + [('notes', identifier) for identifier in turns])
         self.assertEqual(steps, expected)
-        self.assertEqual(refusal.code, 'review_input_too_large')
+        self.assertEqual(refusal.code, 'review_chain_projection_over_limit')
         parts = refusal.details['parts']
         self.assertEqual(sorted(parts), ['base_packet', 'excerpts', 'notes', 'passages'])
         self.assertTrue(all(value > 0 for value in parts.values()), parts)
         self.assertEqual(sum(parts.values()), refusal.details['input_characters'])
         self.assertEqual(refusal.details['input_characters'], self.measure(packet))
-        for name in ('base packet', 'notes', 'excerpts', 'passages'):
-            self.assertIn(name, str(refusal))
+        self.assertEqual(str(refusal), openness_reading.PROJECTION_STOP_MESSAGE)
 
 
 class ReadingTurnNotesTests(FinalTurnCase):

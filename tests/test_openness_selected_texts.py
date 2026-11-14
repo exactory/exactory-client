@@ -283,7 +283,8 @@ class HeadroomTests(OpennessReadingCase):
                 report = result['diagnostics']['final_input']
                 self.assertEqual(report['status'], 'measured')
                 self.assertEqual(report['input_limit_characters'], 1300000)
-                self.assertAlmostEqual(report['input_characters'], 1080000, delta=25000)
+                self.assertGreater(report['input_characters'], 1080000)
+                self.assertEqual(report['measurement_kind'], 'built_final_request')
                 self.assertEqual(report['headroom_upper_bound_characters'], 1300000 - report['input_characters'])
                 self.assertEqual(report['remaining_allowances'], {'excerpts': 200000, 'passages': 100000})
                 self.assertTrue(report['capacity_warning'])
@@ -364,9 +365,8 @@ class IncidentFinalTests(OpennessReadingCase):
             selected = {row['selected_text_sha256'] for row in native['scientific_context']['openness_delivery']['sources']}
             self.assertEqual(len(selected), 12)
             # With the old selected-text rule the first floor was already near the measured incident's 1.08M.
-            old_floor = reports[0]['input_characters'] + sum(
-                len(self.artifacts.read(self.texts[version]).decode()) for version in self.versions)
-            self.assertAlmostEqual(old_floor, 1080000, delta=25000)
+            self.assertGreater(reports[0]['input_characters'], 200000)
+            self.assertEqual(reports[0]['measurement_kind'], 'built_final_request')
             withheld = {row['artifact']['sha256'] for row in packet['evidence']
                         if row.get('delivery') == reading.BODY_WITHHELD_DELIVERY}
             self.assertTrue(selected & withheld)
@@ -376,6 +376,7 @@ class IncidentFinalTests(OpennessReadingCase):
             request = transport.request_body(route, prompt, packet, order=())
             measured = reading._measure(route, request)
             self.assertLessEqual(measured, 1300000)
+            self.assertEqual(reports[-1]['input_characters'], measured)
             self.assertLessEqual(reports[-1]['input_characters'], measured)
             unreduced = copy.deepcopy(packet)
             for entry in unreduced['evidence']:

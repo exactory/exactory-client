@@ -311,7 +311,8 @@ class RecordCheckTests(unittest.TestCase):
                       head_id=self.assignment['id'], progress={})
         before = digest_tree(self.case.root)
         codes = ('review_input_too_large', 'review_parts_frame_too_large',
-                 'review_parts_inventory_too_large', 'review_parts_final_too_large')
+                 'review_parts_inventory_too_large', 'review_parts_final_too_large',
+                 'review_chain_projection_over_limit')
         for code in codes:
             details = {'input_characters': 101, 'input_limit_characters': 100}
             if code == 'review_input_too_large':

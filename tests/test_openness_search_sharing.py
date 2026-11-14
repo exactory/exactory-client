@@ -170,7 +170,7 @@ class SearchSharingTests(SearchSharingCase):
         paths = set((self.root / 'research' / 'sources').rglob('*'))
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 150000), self.assertRaises(ResearchError) as caught:
             self.assign('turn-1', reference)
-        self.assertEqual(caught.exception.code, 'review_input_too_large')
+        self.assertEqual(caught.exception.code, 'review_chain_projection_over_limit')
         self.assertEqual(caught.exception.details['phase'], 'final_preflight')
         self.assertEqual(self.store.snapshot(), before)
         self.assertEqual(set((self.root / 'research' / 'sources').rglob('*')), paths)

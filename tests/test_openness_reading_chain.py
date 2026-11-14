@@ -367,7 +367,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.invoke(final, self.build_reading_response(self.read_packet(final), excerpts=[], passages=[passage]))
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 2000), self.assertRaises(Exception) as raised:
             self.assign('turn-further', native_packet, prior=final)
-        self.assertEqual(raised.exception.code, 'review_input_too_large')
+        self.assertEqual(raised.exception.code, 'review_chain_projection_over_limit')
         details = raised.exception.details
         self.assertEqual(details['phase'], 'final_preflight')
         self.assertEqual(details['measurement_kind'], 'mandatory_input_lower_bound')
@@ -379,7 +379,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         self.limit_input(9000)
         with self.assertRaises(Exception) as raised:
             self.assign('turn-1', self.export())
-        self.assertEqual(raised.exception.code, 'review_input_too_large')
+        self.assertEqual(raised.exception.code, 'review_chain_projection_over_limit')
         self.assertEqual(sum(raised.exception.details['parts'].values()), raised.exception.details['input_characters'])
         self.assertNotIn('turn-1', self.store.snapshot()['records'].get('review_assignment', {}))
 

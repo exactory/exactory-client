@@ -42,7 +42,10 @@ def _describe_stop(plan, code, details):
         terminal['state'] = 'stop'
         terminal['details']['decision'] = dict(owner_decides='Whether to retry after the store changes.',
             then=[dict(answer='Inspect the record', steps=[dict(command='record-check')])])
-    terminal['details'] = dict(details, **terminal['details'])
+    if code == 'review_chain_projection_over_limit':
+        terminal['details'] = dict(terminal['details'], **details)
+    else:
+        terminal['details'] = dict(details, **terminal['details'])
     return dict(plan, **terminal)
 
 
@@ -109,7 +112,26 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             from .review_route_capacity import describe_assignment_warning
             warning = describe_assignment_warning(capacity_records, head, artifacts=store.build_artifact_store())
             if warning is not None:
-                row = dict(row, capacity_warning=warning)
+                row = dict(row, capacity_warning=dict(row.get('capacity_warning', {}), **warning))
+        if head in capacity_records.get('review_assignment', {}):
+            assignment = capacity_records['review_assignment'][head]
+            if assignment.get('reading_chain'):
+                from . import openness_reading, review_protocol
+                try:
+                    artifacts = store.build_artifact_store()
+                    packet = review_protocol._read_json(artifacts, assignment['packet'])
+                    route = capacity_records['review_route'][assignment['route_id']]
+                    logical = review_protocol.build_packet(capacity_records, artifacts, assignment['dossier_id'],
+                        assignment['role'], assignment['reviewer_id'], **assignment['context'])
+                    request = review_protocol.build_assignment_request(capacity_records, artifacts, assignment)
+                    receipt = openness_reading.describe_reading_receipt(capacity_records, artifacts, assignment,
+                        route, logical, packet, request, admit_turn=False)
+                    row = dict(row, capacity_forecast=receipt['capacity_forecast'],
+                        capacity_warning=dict(row.get('capacity_warning', {}), **receipt['capacity_warning']))
+                except (ResearchError, ValueError) as error:
+                    row = dict(row, capacity_forecast=dict(status='unavailable', is_bound=False,
+                        message=openness_reading.FORECAST_NO_BOUND_MESSAGE,
+                        reason=error.code if isinstance(error, ResearchError) else type(error).__name__))
         output(row)
 
     executed = {}
