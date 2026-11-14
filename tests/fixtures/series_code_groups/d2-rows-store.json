@@ -2,20 +2,93 @@
   "stored_state": {
     "members": {
       "constitution_archive_missing": {
-        "research_harness/principles.py:_configuration_state": "content"
+        "research_harness/principles.py:_configuration_state#1": [
+          "content"
+        ]
       },
       "corrupt_state": {
-        "research_harness/storage.py:Store._check_files": "store",
-        "research_harness/storage.py:_commit_mutation": "store",
-        "research_harness/storage.py:_load": "store",
-        "research_harness/storage.py:_sql_error": "store",
-        "research_harness/storage.py:_validate": "store"
+        "research_harness/storage.py:Store._check_files#1": [
+          "store"
+        ],
+        "research_harness/storage.py:Store._check_files#2": [
+          "store"
+        ],
+        "research_harness/storage.py:_commit_mutation#1": [
+          "store"
+        ],
+        "research_harness/storage.py:_load#1": [
+          "store"
+        ],
+        "research_harness/storage.py:_load#2": [
+          "store"
+        ],
+        "research_harness/storage.py:_load#3": [
+          "store"
+        ],
+        "research_harness/storage.py:_sql_error#1": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#1": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#10": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#11": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#12": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#13": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#14": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#15": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#16": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#17": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#2": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#3": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#4": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#5": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#6": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#7": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#8": [
+          "store"
+        ],
+        "research_harness/storage.py:_validate#9": [
+          "store"
+        ]
       },
       "invalid_profile": {
-        "research_harness/operations.py:profile_name": "content"
+        "research_harness/operations.py:profile_name#1": [
+          "content"
+        ]
       },
       "unsupported_schema": {
-        "research_harness/storage.py:_validate": "store"
+        "research_harness/storage.py:_validate#1": [
+          "store"
+        ]
       }
     }
   }

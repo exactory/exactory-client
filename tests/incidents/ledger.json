@@ -5673,15 +5673,24 @@
       "fixed_in": "open",
       "test_kind": "real_shape",
       "class": "review continuity source boundaries",
-      "summary": "Untyped receiver edges crossed packages, forwarding sites obscured the writing checks, and computed codes lacked entry-flow evidence.",
-      "expected": "Each root stays within its import closure; member evidence names direct writers; entry and no_call evidence fails when the graph admits an ending or loses the named edge; literal automatic refusals retain their complete codes and evidence.",
+      "summary": "Import boundaries discarded declared crossings, and function-level evidence combined distinct writing places.",
+      "expected": "Declared edges and code producers grow each reached root to a fixed point. Direct writing expressions have per-code numbered sites and sorted condition lists. Their union determines stored_state or named_cause; source-written codes outside the driver reach still fail both recorder checks. Literal automatic refusals keep their complete codes and evidence.",
       "tests": [
         "test_series_rows_close_foundation.ImportClosureTests.test_untyped_receiver_stays_within_each_roots_import_closure",
-        "test_series_rows_close_foundation.WritingSiteTests.test_only_direct_writers_are_sites_and_terminal_sites_take_precedence_over_entries",
-        "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_refuses_an_entry_that_a_computed_site_can_pass_on",
-        "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_refuses_an_entry_with_a_constructor_or_a_plan_site",
-        "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_no_call_edges_must_remain_in_the_series_graph_and_reach_the_site",
-        "test_series_rows_close_foundation.LiteralRefusalTests.test_all_refusals_preserve_their_complete_codes_messages_and_details"
+        "test_series_rows_close_foundation.CrossingTests.test_declared_computed_import_reaches_the_other_package",
+        "test_series_rows_close_foundation.CrossingTests.test_declared_host_receiver_reaches_its_method",
+        "test_series_rows_close_foundation.CrossingTests.test_declared_child_code_producer_crosses_the_package_boundary",
+        "test_series_rows_close_foundation.CrossingTests.test_crossings_expand_until_the_modules_and_functions_stop_growing",
+        "test_series_rows_close_foundation.WritingSiteTests.test_two_refusals_in_one_function_have_separate_places_and_conditions",
+        "test_series_rows_close_foundation.WritingSiteTests.test_stored_state_rejects_a_condition_outside_its_three",
+        "test_series_rows_close_foundation.WritingSiteTests.test_named_cause_rejects_a_union_containing_only_stored_conditions",
+        "test_series_rows_close_foundation.ExcludedCodeRecorderTests.test_driver_recorder_rejects_a_source_written_code_excluded_by_rule_ten",
+        "test_series_rows_close_foundation.LiteralRefusalTests.test_all_refusals_preserve_their_complete_codes_messages_and_details",
+        "test_series_rows_close_foundation.CrossingTests.test_declared_import_time_edge_runs_when_the_module_is_loaded",
+        "test_series_rows_close_foundation.CrossingTests.test_crossing_modules_include_their_package_initializers",
+        "test_series_rows_close_foundation.CrossingTests.test_script_only_sources_do_not_expand_an_imported_root",
+        "test_series_rows_close_foundation.WritingSiteTests.test_a_constructor_and_a_plan_in_one_function_keep_both_places",
+        "test_series_code_reach.CodeReachTests.test_ending_declarations_preserve_numbered_diagnostic_writers"
       ]
     },
     {

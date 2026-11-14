@@ -2,77 +2,302 @@
   "stored_state": {
     "members": {
       "gate_override_gate": {
-        "research_harness/overrides.py:validate_override_payload": "content"
+        "research_harness/overrides.py:validate_override_payload#1": [
+          "content"
+        ]
       },
       "gate_override_instruction": {
-        "research_harness/overrides.py:parse_override_instruction": "content",
-        "research_harness/overrides.py:read_unrecorded_overrides": "content"
+        "research_harness/overrides.py:parse_override_instruction#1": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#10": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#11": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#12": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#13": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#14": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#15": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#2": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#3": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#4": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#5": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#6": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#7": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#8": [
+          "content"
+        ],
+        "research_harness/overrides.py:parse_override_instruction#9": [
+          "content"
+        ],
+        "research_harness/overrides.py:read_unrecorded_overrides#1": [
+          "content"
+        ],
+        "research_harness/overrides.py:read_unrecorded_overrides#2": [
+          "content"
+        ]
       },
       "gate_override_transition": {
-        "research_harness/overrides.py:validate_override_payload": "content"
+        "research_harness/overrides.py:validate_override_payload#1": [
+          "content"
+        ],
+        "research_harness/overrides.py:validate_override_payload#2": [
+          "content"
+        ]
       },
       "invalid_round": {
-        "research_harness/rounds.py:_RoundEvidence.many": "content",
-        "research_harness/rounds.py:_items": "content"
+        "research_harness/rounds.py:_RoundEvidence.many#1": [
+          "content"
+        ],
+        "research_harness/rounds.py:_RoundEvidence.many#2": [
+          "content"
+        ],
+        "research_harness/rounds.py:_RoundEvidence.many#3": [
+          "content"
+        ],
+        "research_harness/rounds.py:_items#1": [
+          "content"
+        ]
       },
       "invalid_synthesis": {
-        "research_harness/synthesis.py:_Assessment.claim": "content",
-        "research_harness/synthesis.py:_Assessment.events": "content",
-        "research_harness/synthesis.py:_assess": "content",
-        "research_harness/synthesis.py:_beneficiaries": "content",
-        "research_harness/synthesis.py:_gaps": "content",
-        "research_harness/synthesis.py:_innovation": "content",
-        "research_harness/synthesis.py:_items": "content",
-        "research_harness/synthesis.py:_strings": "content",
-        "research_harness/synthesis.py:_text": "content",
-        "research_harness/synthesis.py:_value": "content"
+        "research_harness/synthesis.py:_Assessment.claim#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#2": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#3": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#4": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#5": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#6": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#7": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#8": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.claim#9": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.events#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_Assessment.events#2": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_assess#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_assess#2": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_beneficiaries#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_gaps#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_innovation#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_innovation#2": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_innovation#3": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_innovation#4": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_innovation#5": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_innovation#6": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_items#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_strings#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_text#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_value#1": [
+          "content"
+        ],
+        "research_harness/synthesis.py:_value#2": [
+          "content"
+        ]
       },
       "objective_mismatch": {
-        "research_harness/development.py:_inheritance": "content"
+        "research_harness/development.py:_inheritance#1": [
+          "content"
+        ]
       },
       "problem_attempt_evidence_missing": {
-        "research_harness/problem_attempt.py:validate_attempt": "content"
+        "research_harness/problem_attempt.py:validate_attempt#1": [
+          "content"
+        ],
+        "research_harness/problem_attempt.py:validate_attempt#2": [
+          "content"
+        ]
       },
       "problem_attempt_extension_unexplained": {
-        "research_harness/problem_attempt.py:validate_attempt_extension": "content"
+        "research_harness/problem_attempt.py:validate_attempt_extension#1": [
+          "content"
+        ]
       },
       "problem_attempt_outcome_mismatch": {
-        "research_harness/problem_attempt.py:validate_attempt": "content"
+        "research_harness/problem_attempt.py:validate_attempt#1": [
+          "content"
+        ]
       },
       "problem_attempt_scope_restricted": {
-        "research_harness/problem_attempt.py:validate_attempt": "content"
+        "research_harness/problem_attempt.py:validate_attempt#1": [
+          "content"
+        ]
       },
       "problem_attempt_statement_mismatch": {
-        "research_harness/problem_attempt.py:validate_attempt": "content"
+        "research_harness/problem_attempt.py:validate_attempt#1": [
+          "content"
+        ]
       },
       "problem_citation_span_mismatch": {
-        "research_harness/problem_citation_metadata.py:_resolve_span": "content"
+        "research_harness/problem_citation_metadata.py:_resolve_span#1": [
+          "content"
+        ]
       },
       "problem_forming_origin_conflict": {
-        "research_harness/problem_forming_import.py:verify_imports": "content"
+        "research_harness/problem_forming_import.py:verify_imports#1": [
+          "content"
+        ]
       },
       "problem_post_revision_missing": {
-        "research_harness/problem_delivery.py:find_review_post": "content"
+        "research_harness/problem_delivery.py:find_review_post#1": [
+          "content"
+        ]
       },
       "publication_evidence_mismatch": {
-        "research_harness/publication_scope.py:_validate_payload": "content"
+        "research_harness/publication_scope.py:_validate_payload#1": [
+          "content"
+        ]
       },
       "publication_scope_correction_mismatch": {
-        "research_harness/publication_scope.py:_load_scope_snapshot": "content",
-        "research_harness/publication_scope.py:_validate_correction": "content"
+        "research_harness/publication_scope.py:_load_scope_snapshot#1": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_load_scope_snapshot#2": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#1": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#10": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#11": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#12": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#13": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#14": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#15": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#16": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#17": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#2": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#3": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#4": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#5": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#6": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#7": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#8": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_correction#9": [
+          "content"
+        ]
       },
       "publication_scope_corrupt": {
-        "research_harness/publication_scope.py:find_publication_scope": "content"
+        "research_harness/publication_scope.py:find_publication_scope#1": [
+          "content"
+        ]
       },
       "publication_scope_objective_open": {
-        "research_harness/publication_scope.py:_validate_debt": "content"
+        "research_harness/publication_scope.py:_validate_debt#1": [
+          "content"
+        ]
       },
       "scope_assumptions_missing": {
-        "research_harness/development.py:_assess": "content",
-        "research_harness/publication_scope.py:_validate_payload": "content"
+        "research_harness/development.py:_assess#1": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_payload#1": [
+          "content"
+        ],
+        "research_harness/publication_scope.py:_validate_payload#2": [
+          "content"
+        ]
       },
       "scoped_review_corrupt": {
-        "research_harness/publication_scope.py:_assess_manuscript_readiness": "content"
+        "research_harness/publication_scope.py:_assess_manuscript_readiness#1": [
+          "content"
+        ]
       }
     }
   }

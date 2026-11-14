@@ -2,80 +2,257 @@
   "stored_state": {
     "members": {
       "artifact_corrupt": {
-        "research_harness/artifacts.py:_verify_content": "content",
-        "research_harness/file_streams.py:_check_file_size": "content",
-        "research_harness/file_streams.py:_copy_stream": "content",
-        "research_harness/file_streams.py:freeze_file": "content",
-        "research_harness/review_protocol.py:_save_derivatives": "content",
-        "research_harness/review_protocol.py:add_problem_evidence": "content",
-        "research_harness/review_protocol.py:build_direction_evidence": "content",
-        "research_harness/review_protocol.py:describe_direction_evidence": "content",
-        "research_harness/review_route_capacity.py:read_chain_capacity_plan": "content",
-        "research_harness/scientific_delivery.py:ScientificDelivery.__init__": "content",
-        "research_harness/scientific_delivery.py:ScientificDelivery._read_derived_locator_mapping": "content"
+        "research_harness/artifacts.py:_verify_content#1": [
+          "content"
+        ],
+        "research_harness/file_streams.py:_check_file_size#1": [
+          "content"
+        ],
+        "research_harness/file_streams.py:_copy_stream#1": [
+          "content"
+        ],
+        "research_harness/file_streams.py:_copy_stream#2": [
+          "content"
+        ],
+        "research_harness/file_streams.py:freeze_file#1": [
+          "content"
+        ],
+        "research_harness/review_protocol.py:_save_derivatives#1": [
+          "content"
+        ],
+        "research_harness/review_protocol.py:add_problem_evidence#1": [
+          "content"
+        ],
+        "research_harness/review_protocol.py:build_direction_evidence#1": [
+          "content"
+        ],
+        "research_harness/review_protocol.py:describe_direction_evidence#1": [
+          "content"
+        ],
+        "research_harness/review_route_capacity.py:read_chain_capacity_plan#1": [
+          "content"
+        ],
+        "research_harness/scientific_delivery.py:ScientificDelivery.__init__#1": [
+          "content"
+        ],
+        "research_harness/scientific_delivery.py:ScientificDelivery._read_derived_locator_mapping#1": [
+          "content"
+        ],
+        "research_harness/scientific_delivery.py:ScientificDelivery._read_derived_locator_mapping#2": [
+          "content"
+        ]
       },
       "artifact_missing": {
-        "research_harness/artifacts.py:ArtifactStore._open_source": "content",
-        "research_harness/artifacts.py:ArtifactStore.read": "content",
-        "research_harness/artifacts.py:ArtifactStore.verify_sealed": "content",
-        "research_harness/workspace.py:open_file": "content",
-        "research_harness/workspace.py:read_file": "content"
+        "research_harness/artifacts.py:ArtifactStore._open_source#1": [
+          "content"
+        ],
+        "research_harness/artifacts.py:ArtifactStore.read#1": [
+          "content"
+        ],
+        "research_harness/artifacts.py:ArtifactStore.verify_sealed#1": [
+          "content"
+        ],
+        "research_harness/workspace.py:open_file#1": [
+          "content"
+        ],
+        "research_harness/workspace.py:read_file#1": [
+          "content"
+        ]
       },
       "review_answer_recovery_invalid": {
-        "research_harness/review_answer_recovery.py:derive_output": "content"
+        "research_harness/review_answer_recovery.py:derive_output#1": [
+          "content"
+        ]
       },
       "review_correction_route_mismatch": {
-        "research_harness/review_output_correction.py:_route": "content"
+        "research_harness/review_output_correction.py:_route#1": [
+          "content"
+        ]
       },
       "review_history_ambiguous": {
-        "research_harness/review_bodies.py:_read_pages": "content",
-        "research_harness/review_bodies.py:read_history": "content"
+        "research_harness/review_bodies.py:_read_pages#1": [
+          "content"
+        ],
+        "research_harness/review_bodies.py:read_history#1": [
+          "content"
+        ]
       },
       "review_history_invalid": {
-        "research_harness/review_bodies.py:_read_pages": "content",
-        "research_harness/review_bodies.py:_require": "content"
+        "research_harness/review_bodies.py:_read_pages#1": [
+          "content"
+        ],
+        "research_harness/review_bodies.py:_read_pages#2": [
+          "content"
+        ],
+        "research_harness/review_bodies.py:_read_pages#3": [
+          "content"
+        ],
+        "research_harness/review_bodies.py:_require#1": [
+          "content"
+        ]
       },
       "review_inventory_mismatch": {
-        "research_harness/bar_sources.py:_page": "content",
-        "research_harness/bar_sources.py:validate_inventory": "content"
+        "research_harness/bar_sources.py:_page#1": [
+          "content"
+        ],
+        "research_harness/bar_sources.py:validate_inventory#1": [
+          "content"
+        ],
+        "research_harness/bar_sources.py:validate_inventory#2": [
+          "content"
+        ],
+        "research_harness/bar_sources.py:validate_inventory#3": [
+          "content"
+        ]
       },
       "review_invocation_unverified": {
-        "research_harness/direction_reviews.py:_collect_task_graph": "content",
-        "research_harness/research_decisions.py:validate_review_contract": "content",
-        "research_harness/review_call_capture.py:_check_bindings": "content",
-        "research_harness/review_delivered_evidence.py:_read_authenticated_delivery.project": "content",
-        "research_harness/review_delivered_evidence.py:read_attempt_delivery": "content",
-        "research_harness/review_delivered_evidence.py:read_selected_delivery": "content",
-        "research_harness/review_handles.py:derive_expanded_output": "content",
-        "research_harness/review_output_correction.py:validate_output": "content",
-        "research_harness/review_staged_protocol.py:_collect_successor_findings": "content",
-        "research_harness/review_staged_protocol.py:accept_capture": "content",
-        "research_harness/review_staged_protocol.py:invoke_task.prepare_capture": "content"
+        "research_harness/direction_reviews.py:_collect_task_graph#1": [
+          "content"
+        ],
+        "research_harness/direction_reviews.py:_collect_task_graph#2": [
+          "content"
+        ],
+        "research_harness/direction_reviews.py:_collect_task_graph#3": [
+          "content"
+        ],
+        "research_harness/direction_reviews.py:_collect_task_graph#4": [
+          "content"
+        ],
+        "research_harness/direction_reviews.py:_collect_task_graph#5": [
+          "content"
+        ],
+        "research_harness/research_decisions.py:validate_review_contract#1": [
+          "content"
+        ],
+        "research_harness/review_call_capture.py:_check_bindings#1": [
+          "content"
+        ],
+        "research_harness/review_delivered_evidence.py:_read_authenticated_delivery.project#1": [
+          "content"
+        ],
+        "research_harness/review_delivered_evidence.py:read_attempt_delivery#1": [
+          "content"
+        ],
+        "research_harness/review_delivered_evidence.py:read_attempt_delivery#2": [
+          "content"
+        ],
+        "research_harness/review_delivered_evidence.py:read_attempt_delivery#3": [
+          "content"
+        ],
+        "research_harness/review_delivered_evidence.py:read_attempt_delivery#4": [
+          "content"
+        ],
+        "research_harness/review_delivered_evidence.py:read_selected_delivery#1": [
+          "content"
+        ],
+        "research_harness/review_delivered_evidence.py:read_selected_delivery#2": [
+          "content"
+        ],
+        "research_harness/review_delivered_evidence.py:read_selected_delivery#3": [
+          "content"
+        ],
+        "research_harness/review_handles.py:derive_expanded_output#1": [
+          "content"
+        ],
+        "research_harness/review_handles.py:derive_expanded_output#2": [
+          "content"
+        ],
+        "research_harness/review_output_correction.py:validate_output#1": [
+          "content"
+        ],
+        "research_harness/review_staged_protocol.py:_collect_successor_findings#1": [
+          "content"
+        ],
+        "research_harness/review_staged_protocol.py:_collect_successor_findings#2": [
+          "content"
+        ],
+        "research_harness/review_staged_protocol.py:accept_capture#1": [
+          "content"
+        ],
+        "research_harness/review_staged_protocol.py:invoke_task.prepare_capture#1": [
+          "content"
+        ]
       },
       "review_objection_evidence_invalid": {
-        "research_harness/review_objection_evidence.py:resolve_objection_entry": "content",
-        "research_harness/review_staged.py:_validate_observation": "content",
-        "research_harness/review_staged.py:freeze_epoch": "content"
+        "research_harness/review_objection_evidence.py:resolve_objection_entry#1": [
+          "content"
+        ],
+        "research_harness/review_staged.py:_validate_observation#1": [
+          "content"
+        ],
+        "research_harness/review_staged.py:_validate_observation#2": [
+          "content"
+        ],
+        "research_harness/review_staged.py:freeze_epoch#1": [
+          "content"
+        ]
       },
       "review_output_unavailable": {
-        "research_harness/review_staged_protocol.py:read_raw_observation": "content"
+        "research_harness/review_staged_protocol.py:read_raw_observation#1": [
+          "content"
+        ]
       },
       "review_parts_delivery_invalid": {
-        "research_harness/review_parts.py:_list_series": "content",
-        "research_harness/review_parts.py:prepare_packet": "content",
-        "research_harness/review_parts.py:read_delivered_items": "content",
-        "research_harness/review_parts.py:read_logical_packet": "content",
-        "research_harness/review_parts.py:validate_deliveries": "content",
-        "research_harness/review_parts_repair.py:prepare_packet": "content"
+        "research_harness/review_parts.py:_list_series#1": [
+          "content"
+        ],
+        "research_harness/review_parts.py:prepare_packet#1": [
+          "content"
+        ],
+        "research_harness/review_parts.py:read_delivered_items#1": [
+          "content"
+        ],
+        "research_harness/review_parts.py:read_delivered_items#2": [
+          "content"
+        ],
+        "research_harness/review_parts.py:read_logical_packet#1": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#1": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#2": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#3": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#4": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#5": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#6": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#7": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#8": [
+          "content"
+        ],
+        "research_harness/review_parts.py:validate_deliveries#9": [
+          "content"
+        ],
+        "research_harness/review_parts_repair.py:prepare_packet#1": [
+          "content"
+        ]
       },
       "review_prompt_mismatch": {
-        "research_harness/review_protocol.py:invoke_assignment.start": "content"
+        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+          "content"
+        ]
       },
       "review_request_changed": {
-        "research_harness/review_protocol.py:invoke_assignment.start": "content"
+        "research_harness/review_protocol.py:invoke_assignment.start#1": [
+          "content"
+        ]
       },
       "review_source_parent_unverified": {
-        "research_harness/review_protocol.py:_assignment_state": "content"
+        "research_harness/review_protocol.py:_assignment_state#1": [
+          "content"
+        ]
       }
     }
   }

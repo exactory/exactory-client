@@ -2,24 +2,110 @@
   "stored_state": {
     "members": {
       "invalid_native_review_packet": {
-        "research_harness/native_review.py:_sha": "content",
-        "research_harness/native_review.py:load_packet": "content",
-        "research_harness/native_review.py:require_assignment_identity": "content",
-        "research_harness/problem_delivery.py:find_review_post": "content"
+        "research_harness/native_review.py:_sha#1": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#1": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#10": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#11": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#12": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#2": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#3": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#4": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#5": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#6": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#7": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#8": [
+          "content"
+        ],
+        "research_harness/native_review.py:load_packet#9": [
+          "content"
+        ],
+        "research_harness/native_review.py:require_assignment_identity#1": [
+          "content"
+        ],
+        "research_harness/problem_delivery.py:find_review_post#1": [
+          "content"
+        ],
+        "research_harness/problem_delivery.py:find_review_post#2": [
+          "content"
+        ]
       },
       "invalid_review_prompt_version": {
-        "research_harness/review_protocol.py:_select_common_prompt": "content"
+        "research_harness/review_protocol.py:_select_common_prompt#1": [
+          "content"
+        ]
       },
       "invalid_review_role": {
-        "research_harness/review_protocol.py:canonical_prompt": "content"
+        "research_harness/review_protocol.py:canonical_prompt#1": [
+          "content"
+        ],
+        "research_harness/review_protocol.py:canonical_prompt#2": [
+          "content"
+        ]
       },
       "invalid_review_route": {
-        "research_harness/review_codex_framed_transport.py:validate_route": "content",
-        "research_harness/review_codex_transport.py:validate_route": "content",
-        "research_harness/review_transport.py:validate_route": "content"
+        "research_harness/review_codex_framed_transport.py:validate_route#1": [
+          "content"
+        ],
+        "research_harness/review_codex_framed_transport.py:validate_route#2": [
+          "content"
+        ],
+        "research_harness/review_codex_framed_transport.py:validate_route#3": [
+          "content"
+        ],
+        "research_harness/review_codex_framed_transport.py:validate_route#4": [
+          "content"
+        ],
+        "research_harness/review_codex_transport.py:validate_route#1": [
+          "content"
+        ],
+        "research_harness/review_codex_transport.py:validate_route#2": [
+          "content"
+        ],
+        "research_harness/review_codex_transport.py:validate_route#3": [
+          "content"
+        ],
+        "research_harness/review_codex_transport.py:validate_route#4": [
+          "content"
+        ],
+        "research_harness/review_transport.py:validate_route#1": [
+          "content"
+        ],
+        "research_harness/review_transport.py:validate_route#2": [
+          "content"
+        ],
+        "research_harness/review_transport.py:validate_route#3": [
+          "content"
+        ],
+        "research_harness/review_transport.py:validate_route#4": [
+          "content"
+        ]
       },
       "value_review_output_mismatch": {
-        "research_harness/research_decisions.py:record_value_review.prepare": "payload"
+        "research_harness/research_decisions.py:record_value_review.prepare#1": [
+          "payload"
+        ]
       }
     }
   }

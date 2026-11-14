@@ -519,9 +519,9 @@ def mention():
     return 'forwarded'
 """}
         report = reach.analyze_sources(sources, {'entry': ['pkg/core.py:entry']})
-        self.assertEqual(report['code_sites'], {'forwarded': ['pkg/core.py:entry'], 'planned': ['pkg/core.py:entry']})
+        self.assertEqual(report['code_sites'], {'forwarded': ['pkg/core.py:entry#1'], 'planned': ['pkg/core.py:entry#1']})
         self.assertEqual(reach.build_unreviewed_rows(report, {})['forwarded'], dict(
-            unit='registry-rows', sites=['pkg/core.py:entry'], status_obligation=False))
+            unit='registry-rows', sites=['pkg/core.py:entry#1'], status_obligation=False))
 
     def test_resolves_inheritance_through_empty_and_enclosing_classes(self):
         result = reach.analyze_sources({'pkg/core.py': """
@@ -616,8 +616,8 @@ def check(status):
     raise ResearchError(status['code'], '')
 """}
         report = reach.analyze_sources(sources, {'entry': ['pkg/core.py:check']}, {
-            "pkg/core.py:check:status['code']": {'sources': ['pkg/core.py:producer'], 'passes': 'error'}})
-        self.assertEqual(report['code_sites']['computed'], ['pkg/core.py:producer'])
+            "pkg/core.py:check:status['code']": {'sources': ['pkg/core.py:producer']}})
+        self.assertEqual(report['code_sites']['computed'], ['pkg/core.py:producer#1'])
 
     def test_computed_producers_follow_the_new_edges(self):
         sources = {'pkg/core.py': """
@@ -635,7 +635,7 @@ def entry(status):
     ResearchError(status['code'], '')
 """}
         result = reach.analyze_sources(sources, {'entry': ['pkg/core.py:entry']}, {
-            "pkg/core.py:entry:status['code']": {'sources': ['pkg/core.py:producer'], 'passes': 'error'}})
+            "pkg/core.py:entry:status['code']": {'sources': ['pkg/core.py:producer']}})
         self.assertEqual(result['reachable'], ['produced'])
 
     def test_declared_edges_require_an_existing_uninferred_call_and_a_reason(self):
@@ -740,6 +740,22 @@ def entry():
         del registry['review_context_unverified']
         with self.assertRaisesRegex(AssertionError, 'review_context_unverified'):
             reach.validate_registry_coverage(actual, registry)
+
+    def test_ending_declarations_preserve_numbered_diagnostic_writers(self):
+        fixture = json.loads(FIXTURE.read_text())
+        # The retry and scope readers each write the name; a forwarder does not.
+        sites = ['research_harness/automatic_overrides.py:record_series_stop#1',
+                 'research_harness/automatic_overrides.py:record_series_stop#2',
+                 'research_harness/review_series.py:_record_omission#1']
+        for code in ('BrokenPipeError', 'ConnectionResetError', 'JSONDecodeError'):
+            with self.subTest(code=code):
+                self.assertEqual(reach.read_code_sites(fixture, code), sites)
+        for site in ("research_harness/record_check.py:describe_series_stops:row['code']",
+                     "research_harness/record_check.py:read_ending_files:line['code']",
+                     'research_harness/review_series.py:_end_series:error.code',
+                     'research_harness/review_series.py:_end_series:code'):
+            self.assertIn(site, fixture['computed_sites'])
+            self.assertNotIn('passes', fixture['computed_sites'][site])
 
     def test_deleting_a_registry_row_or_missing_row_entry_fails_coverage(self):
         fixture = dict(reachable=['listed', 'pending'],

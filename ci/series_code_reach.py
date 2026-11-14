@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only, conservative error-code analysis for the D2 continuity guard.
 
-Each root's function/reference graph stays within its module's import closure.
+Each root's function/reference graph follows imports and declared crossings.
 Resolved imports and lexical names take precedence; unresolved attributes reach methods and functions
 of modules used as values. Function references include callbacks and locally imported aliases.
 Code parameters propagate to a fixed point before their call arguments are read.
@@ -33,22 +33,22 @@ PLANNER_MODULES = frozenset(('research_harness.review_continuation',
 # Keys use path, qualified function and source expression, not shifting line numbers.
 COMPUTED_CODE_SITES = {
     "research_harness/direction_reviews.py:_collect_task_graph:problem['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
+        'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
     'research_harness/extraction_units.py:_SupervisedTools.__call__:error["code"]': {
-        'passes': 'error', 'sources': ['research_harness/extraction_units.py:run_bounded_tool']},
+        'sources': ['research_harness/extraction_units.py:run_bounded_tool']},
     'research_harness/fulltext_transfer.py:FulltextTransfer.run:error.code': {
-        'passes': 'error', 'sources': ['research_harness/fulltext_transfer.py:FulltextTransfer.run']},
+        'sources': ['research_harness/fulltext_transfer.py:FulltextTransfer.run']},
     'research_harness/http.py:HttpClient._get:code': {'codes': ['rate_limited', 'http_status']},
     'research_harness/http.py:HttpClient._get:error.code': {
-        'passes': 'error', 'sources': ['research_harness/http.py:HttpClient._get']},
+        'sources': ['research_harness/http.py:HttpClient._get']},
     'research_harness/http.py:_StreamingReader.read:self.limit_code': {
         'codes': ['fulltext_storage_limit', 'response_too_large', 'fulltext_transfer_changed']},
     'research_harness/oai_cohort.py:validate_chain:error.code': {
-        'passes': 'error', 'sources': ['research_harness/oai_cohort.py:validate_chain']},
+        'sources': ['research_harness/oai_cohort.py:validate_chain']},
     'research_harness/openness_minimum.py:require_unblocked_outcome:code': {
         'codes': ['openness_search_gap', 'openness_reading_gap', 'openness_settling_source']},
     'research_harness/openness_minimum.py:require_unblocked_outcome:error["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/openness_minimum.py:list_minimum_gaps']},
+        'sources': ['research_harness/openness_minimum.py:list_minimum_gaps']},
     'research_harness/probe_provenance.py:read_probe_pin_source:code': {'codes': ['unsafe_path', 'storage_io']},
     'research_harness/problem_accounts.py:validate_account_evidence:code': {
         'codes': ['invalid_input', 'problem_answer_evidence_missing', 'problem_boundary_evidence_missing',
@@ -57,19 +57,19 @@ COMPUTED_CODE_SITES = {
         'codes': ['problem_relation_evidence_missing']},
     'research_harness/problem_accounts.py:validate_fact:required_code or "invalid_input"': {'codes': ['invalid_input']},
     'research_harness/problem_candidates.py:_verify_bars:pending[0]["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/research_decisions.py:_independence']},
+        'sources': ['research_harness/research_decisions.py:_independence']},
     'research_harness/problem_delivery.py:prepare_decision:pending[0]["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/problem_delivery.py:prepare_decision']},
+        'sources': ['research_harness/problem_delivery.py:prepare_decision']},
     'research_harness/publication_files.py:restore_bundle:error.code': {
-        'passes': 'error', 'sources': ['research_harness/publication_files.py:restore_bundle']},
+        'sources': ['research_harness/publication_files.py:restore_bundle']},
     "research_harness/record_check.py:check_continuation:plan.get('code') or 'record_unknown_stop'": {
-        'codes': ['record_unknown_stop'], 'passes': 'plan', 'sources': ['research_harness/review_continuation.py:plan_next']},
+        'codes': ['record_unknown_stop'], 'sources': ['research_harness/review_continuation.py:plan_next']},
     'research_harness/research_decisions.py:prepare_objective_commitment:code': {
         'codes': ['direction_evidence_unassessed', 'research_decision_required']},
     "research_harness/review_composition.py:_reject:'review_composition_pending' if pending else 'review_composition_conflict'": {
         'codes': ['review_composition_pending', 'review_composition_conflict']},
     "research_harness/review_output_correction.py:invoke_correction.finish:error['code']": {
-        'passes': 'error', 'sources': ['research_harness/review_output_correction.py:invoke_correction']},
+        'sources': ['research_harness/review_output_correction.py:invoke_correction']},
     "research_harness/review_protocol.py:_assignment_state:'review_context_' + state['context_status']": {
         'codes': ['review_context_unverified', 'review_context_contaminated']},
     "research_harness/review_staged_followups.py:_raise_composition_error:'review_composition_pending' if pending else 'review_composition_conflict'": {
@@ -77,64 +77,64 @@ COMPUTED_CODE_SITES = {
     "research_harness/review_staged_protocol.py:build_state:'review_context_' + state['context_status']": {
         'codes': ['review_context_unverified', 'review_context_contaminated']},
     "research_harness/review_staged_protocol.py:collect_current_planning_records:obligations[0]['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
+        'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
     "research_harness/review_staged_protocol.py:invoke_task.validate_capture:obligations[0]['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
+        'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
     "research_harness/review_staged_protocol.py:invoke_task:'assessment_incomplete' if head['state'] == 'incomplete' else 'review_resampling_forbidden'": {
         'codes': ['assessment_incomplete', 'review_resampling_forbidden']},
     "research_harness/review_staged_protocol.py:plan_frontier.prepare:obligations[0]['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
+        'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
     "research_harness/review_staged_protocol.py:plan_remaining_tasks:obligations[0]['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
+        'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
     "research_harness/review_staged_protocol.py:prepare_attempt:obligations[0]['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
+        'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
     "research_harness/review_staged_protocol.py:prepare_partitions:obligations[0]['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
+        'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
     "research_harness/review_staged_protocol.py:prepare_task_plan:obligations[0]['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
+        'sources': ['research_harness/review_staged_protocol.py:collect_observations']},
     'research_harness/review_task_execution.py:reserve_task:exhaustion["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/review_task_execution.py:_consume_resources']},
+        'sources': ['research_harness/review_task_execution.py:_consume_resources']},
     'research_harness/rounds.py:_RoundEvidence.many:self.error_code': {'codes': ['invalid_round']},
     "research_harness/rounds.py:_canonical_adapter.prepare:item['code']": {
-        'passes': 'entry', 'sources': ['research_harness/rounds.py:find_claim_revision_obligations']},
+        'sources': ['research_harness/rounds.py:find_claim_revision_obligations']},
     "research_harness/rounds.py:record_round.prepare:item['code']": {
-        'passes': 'entry', 'sources': ['research_harness/rounds.py:find_claim_revision_obligations']},
+        'sources': ['research_harness/rounds.py:find_claim_revision_obligations']},
     'research_harness/rounds.py:record_round.prepare:owed[0]["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/rounds.py:_list_analysis_obligations']},
+        'sources': ['research_harness/rounds.py:_list_analysis_obligations']},
     'research_harness/synthesis.py:_record.prepare:item["code"]': {
         'codes': ['configuration_missing', 'profile_mismatch', 'constitution_revalidation_required', 'objective_mismatch']},
     'research_harness/synthesis.py:_synthesis_state:kind + "_missing"': {
         'codes': ['rationale_missing', 'innovation_missing', 'standards_missing', 'context_missing']},
     'skills/math-solver/harness/search_controller/attempt_delivery.py:deliver_snapshot:error.code': {
-        'passes': 'error', 'sources': ['skills/math-solver/harness/search_controller/attempt_delivery.py:deliver_snapshot']},
+        'sources': ['skills/math-solver/harness/search_controller/attempt_delivery.py:deliver_snapshot']},
     'skills/math-solver/harness/search_controller/openness.py:_call:error.code': {
-        'passes': 'error', 'sources': ['research_harness/openness_minimum.py:validate_minimum',
+        'sources': ['research_harness/openness_minimum.py:validate_minimum',
                     'research_harness/openness_minimum.py:audit_minimum',
                     'research_harness/openness_minimum.py:validate_minimum_bindings']},
     'skills/math-solver/harness/search_controller/provenance.py:check_normalized_identity:error.code': {
-        'passes': 'error', 'sources': ['skills/math-solver/harness/search_controller/provenance.py:check_normalized_identity']},
+        'sources': ['skills/math-solver/harness/search_controller/provenance.py:check_normalized_identity']},
     'skills/math-solver/harness/search_controller/provenance.py:collect_import_sources:"exploratory_evidence" if state["service"].get("probe_origins", {}).get(current) else "missing_evidence"': {
         'codes': ['exploratory_evidence', 'missing_evidence']},
     'skills/math-solver/harness/search_controller/reviewer.py:require_review:"review_parts_incomplete" if review_parts.KEY in assignment else "openness_reading_incomplete"': {
         'codes': ['review_parts_incomplete', 'openness_reading_incomplete']},
     'research_harness/acquisition.py:_page_update:error.code': {
-        'passes': 'error', 'sources': ['research_harness/acquisition.py:_page_update']},
+        'sources': ['research_harness/acquisition.py:_page_update']},
     'research_harness/acquisition.py:acquire_fulltext:extracted["status"]': {
-        'passes': 'entry', 'sources': ['research_harness/acquisition.py:acquire_fulltext']},
+        'sources': ['research_harness/acquisition.py:acquire_fulltext']},
     "research_harness/acquisition.py:import_fulltext:extracted['status']": {
-        'passes': 'entry', 'sources': ['research_harness/acquisition.py:import_fulltext']},
+        'sources': ['research_harness/acquisition.py:import_fulltext']},
     'research_harness/automatic_overrides.py:record_series_stop:code': {
-        'passes': 'plan', 'sources': ['research_harness/review_continuation.py:plan_next']},
+        'sources': ['research_harness/review_continuation.py:plan_next']},
     'research_harness/cli.py:run:args.code': {
-        'passes': 'entry', 'sources': ['research_harness/cli.py:status_report']},
+        'sources': ['research_harness/cli.py:status_report']},
     'research_harness/openness_minimum.py:list_minimum_gaps.add_gap:code': {
         'codes': ['openness_search_gap', 'openness_reading_gap', 'openness_settling_source']},
     'research_harness/problem_delivery.py:assess_source_requests:task["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/problem_delivery.py:assess_source_requests']},
+        'sources': ['research_harness/problem_delivery.py:assess_source_requests']},
     'research_harness/publication_files.py:find_bundle_drift:code': {
-        'passes': 'error', 'sources': ['research_harness/publication_files.py:find_bundle_drift']},
+        'sources': ['research_harness/publication_files.py:find_bundle_drift']},
     'research_harness/reading.py:required_unit_obligations:p["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/reading.py:required_unit_obligations']},
+        'sources': ['research_harness/reading.py:required_unit_obligations']},
     'research_harness/record_check.py:check_record:type(error).__name__': {
         'codes': ['OSError', 'JSONDecodeError', 'Error', 'SameFileError', 'SpecialFileError',
                   'ExecError', 'ReadError', 'RegistryError', 'BlockingIOError', 'ChildProcessError',
@@ -142,69 +142,69 @@ COMPUTED_CODE_SITES = {
                   'ConnectionResetError', 'FileExistsError', 'FileNotFoundError', 'InterruptedError',
                   'IsADirectoryError', 'NotADirectoryError', 'PermissionError', 'ProcessLookupError', 'TimeoutError']},
     'research_harness/record_check.py:describe_capacity_decision:error.code': {
-        'passes': 'error', 'sources': ['research_harness/record_check.py:check_prospective_request']},
+        'sources': ['research_harness/record_check.py:check_prospective_request']},
     'research_harness/report_views.py:_obligations:_short(code, 48)': {
-        'passes': 'entry', 'sources': ['research_harness/report_views.py:_obligations']},
+        'sources': ['research_harness/report_views.py:_obligations']},
     'research_harness/report_views.py:_summarize_bundle_drift:item["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/publication_files.py:find_bundle_drift']},
+        'sources': ['research_harness/publication_files.py:find_bundle_drift']},
     'research_harness/report_views.py:next_summary:item["code"]': {
-        'passes': 'entry', 'sources': ['research_harness/report_views.py:next_summary']},
+        'sources': ['research_harness/report_views.py:next_summary']},
     'research_harness/research_decisions.py:_assess_problem_coverage.assess:delivery.code': {
-        'passes': 'error', 'sources': ['research_harness/research_decisions.py:_assess_problem_coverage']},
+        'sources': ['research_harness/research_decisions.py:_assess_problem_coverage']},
     "research_harness/review_call_capture.py:capture_call:getattr(error, 'code', 'review_correction_invalid')": {
-        'codes': ['review_correction_invalid'], 'passes': 'error', 'sources': ['research_harness/review_call_capture.py:capture_call']},
+        'codes': ['review_correction_invalid'], 'sources': ['research_harness/review_call_capture.py:capture_call']},
     "research_harness/review_codex_invocation.py:capture_observation:getattr(error, 'code', 'review_context_unverified')": {
-        'codes': ['review_context_unverified'], 'passes': 'error', 'sources': ['research_harness/review_codex_invocation.py:capture_observation']},
+        'codes': ['review_context_unverified'], 'sources': ['research_harness/review_codex_invocation.py:capture_observation']},
     "research_harness/review_continuation.py:_plan_head:blocking[0]['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_protocol.py:assignment_state']},
+        'sources': ['research_harness/review_continuation.py:_plan_head']},
     "research_harness/review_continuation.py:_plan_head:item['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_protocol.py:assignment_state']},
+        'sources': ['research_harness/review_continuation.py:_plan_head']},
     "research_harness/review_continuation.py:_plan_staged_action:task['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_continuation.py:_plan_staged_action']},
+        'sources': ['research_harness/review_continuation.py:_plan_staged_action']},
     "research_harness/review_continuation.py:plan_next:getattr(detail_error, 'code', 'review_input_unreadable')": {
-        'codes': ['review_input_unreadable'], 'passes': 'error', 'sources': ['research_harness/review_continuation.py:plan_next']},
+        'codes': ['review_input_unreadable'], 'sources': ['research_harness/review_continuation.py:plan_next']},
     "research_harness/review_continuation.py:plan_next:result['code']": {
-        'passes': 'plan', 'sources': ['research_harness/review_continuation.py:plan_next']},
+        'sources': ['research_harness/review_continuation.py:plan_next']},
     "research_harness/review_failure_class.py:plan_after_failure:recovery.get('code', OUTCOME_CODES[outcome])": {
-        'passes': 'plan', 'sources': ['research_harness/review_failure_class.py:plan_after_failure']},
+        'sources': ['research_harness/review_failure_class.py:plan_after_failure']},
     "research_harness/review_failure_class.py:plan_capacity_recovery:(replacement or {}).get('code', OUTCOME_CODES[outcome])": {
-        'passes': 'plan', 'sources': ['research_harness/review_failure_class.py:plan_capacity_recovery']},
+        'sources': ['research_harness/review_failure_class.py:plan_capacity_recovery']},
     "research_harness/review_output_correction.py:_prepare_packet:failure['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_refusal.py:refused_attempts']},
+        'sources': ['research_harness/review_refusal.py:refused_attempts']},
     "research_harness/review_output_correction.py:invoke_correction.finish:getattr(error, 'code', 'review_correction_invalid')": {
-        'codes': ['review_correction_invalid'], 'passes': 'error', 'sources': ['research_harness/review_output_correction.py:invoke_correction']},
+        'codes': ['review_correction_invalid'], 'sources': ['research_harness/review_output_correction.py:invoke_correction']},
     'research_harness/review_plan_steps.py:complete_plan:code': {
-        'passes': 'plan', 'sources': ['research_harness/review_continuation.py:plan_next']},
+        'sources': ['research_harness/review_continuation.py:plan_next']},
     "research_harness/review_refusal.py:refused_attempts:failure['code']": {
-        'passes': 'entry', 'sources': ['research_harness/review_refusal.py:refused_attempts']},
+        'sources': ['research_harness/review_refusal.py:refused_attempts']},
     'research_harness/review_staged.py:_record_completion_rejection:error.code': {
-        'passes': 'error', 'sources': ['research_harness/review_staged.py:_record_completion_rejection']},
+        'sources': ['research_harness/review_staged.py:_record_completion_rejection']},
     'research_harness/review_staged.py:_summarize_completion_issues:code': {
-        'passes': 'entry', 'sources': ['research_harness/review_staged.py:_summarize_completion_issues']},
+        'sources': ['research_harness/review_staged.py:_summarize_completion_issues']},
     'research_harness/review_staged_protocol.py:invoke_task.prepare_exhaustion:error.code': {
-        'passes': 'error', 'sources': ['research_harness/review_staged_protocol.py:invoke_task']},
+        'sources': ['research_harness/review_staged_protocol.py:invoke_task']},
     'research_harness/review_staged_protocol.py:prepare_capture_recovery:error.code': {
-        'passes': 'error', 'sources': ['research_harness/review_staged_protocol.py:prepare_capture_recovery']},
+        'sources': ['research_harness/review_staged_protocol.py:prepare_capture_recovery']},
     "research_harness/review_transport.py:observe:getattr(error, 'code', 'review_transport_failure')": {
-        'codes': ['review_transport_failure'], 'passes': 'error', 'sources': ['research_harness/review_transport.py:observe']},
+        'codes': ['review_transport_failure'], 'sources': ['research_harness/review_transport.py:observe']},
     'research_harness/review_worker.py:run_worker:error.code if isinstance(error, ResearchError) else "review_worker_failed"': {
-        'codes': ['review_worker_failed'], 'passes': 'error', 'sources': ['research_harness/review_worker.py:run_worker']},
+        'codes': ['review_worker_failed'], 'sources': ['research_harness/review_worker.py:run_worker']},
     'skills/math-solver/harness/search_controller/cli.py:print_error:error.code': {
-        'passes': 'error', 'sources': ['skills/math-solver/harness/search_controller/cli.py:run_search']},
+        'sources': ['skills/math-solver/harness/search_controller/cli.py:run_search']},
     'skills/math-solver/harness/search_controller/execution.py:launch.require_launcher_end:refusal_error.code': {
-        'passes': 'error', 'sources': ['skills/math-solver/harness/search_controller/execution.py:launch']},
+        'sources': ['skills/math-solver/harness/search_controller/execution.py:launch']},
 }
 
 # RR8 forwards retained or observed codes without constructing a new refusal.
 COMPUTED_CODE_SITES.update({
     "research_harness/record_check.py:describe_series_stops:row['code']": {
-        'passes': 'plan', 'sources': ['research_harness/review_series.py:run_series']},
+        'sources': ['research_harness/review_series.py:run_series']},
     "research_harness/record_check.py:read_ending_files:line['code']": {
-        'passes': 'plan', 'sources': ['research_harness/review_series.py:run_series']},
+        'sources': ['research_harness/review_series.py:run_series']},
     'research_harness/review_series.py:_end_series:error.code': {
-        'passes': 'error', 'sources': ['research_harness/review_series.py:run_series']},
+        'sources': ['research_harness/review_series.py:run_series']},
     'research_harness/review_series.py:_end_series:code': {
-        'passes': 'plan', 'sources': ['research_harness/review_continuation.py:plan_next']},
+        'sources': ['research_harness/review_continuation.py:plan_next']},
     'research_harness/automatic_overrides.py:record_series_stop:type(error).__name__':
         COMPUTED_CODE_SITES['research_harness/record_check.py:check_record:type(error).__name__'],
     'research_harness/review_series.py:_record_omission:type(error).__name__':
@@ -307,6 +307,8 @@ def collect_module_imports(index):
         package = module if body['path'].endswith('/__init__.py') else module.rpartition('.')[0]
         nodes = list(ast.walk(body['tree']))
         imports = collect_imports(nodes, module + '.__init__' if body['path'].endswith('/__init__.py') else module)
+        parts = module.split('.')
+        graph[module].update('.'.join(parts[:end]) for end in range(1, len(parts)))
         for node in nodes:
             if isinstance(node, ast.Import):
                 graph[module].update(alias.name for alias in node.names)
@@ -346,16 +348,62 @@ def collect_module_imports(index):
 
 
 def collect_allowed_functions(entries, index, module_graph):
-    """Limit a root to functions of the modules its process can import."""
+    """Select functions in modules reached by the import rules."""
     modules = collect_closure({index['functions'][key]['module'] for key in entries}, module_graph)
     return {key for key, function in index['functions'].items() if function['module'] in modules}
 
 
+def collect_root_functions(entries, index, module_graph, graph, deferred, declared_edges, initial):
+    """Grow a root's modules and functions through imports and declared crossings."""
+    module_entries, crossings = set(entries), set()
+    while True:
+        allowed = collect_allowed_functions(module_entries, index, module_graph)
+        seen = collect_closure((set(entries) | crossings | initial) & allowed, graph, allowed)
+        modules = {key for key in allowed if key.endswith(':<module>')}
+        targets = {target for caller in seen | modules for target in declared_edges.get(caller, ())}
+        sources = {source for caller, kind, site, names in deferred
+                   if caller in seen or caller.endswith(':<module>') and caller in allowed for source in names}
+        new_modules = (targets | sources) - module_entries
+        new_crossings = (targets | sources) - crossings
+        if not new_modules and not new_crossings:
+            return seen, frozenset(seen | modules)
+        module_entries.update(new_modules)
+        crossings.update(new_crossings)
+
+
+def collect_writing_sites(index, direct_places, functions, initial_codes, reachable):
+    """Number distinct writing expressions per code and function in source order."""
+    terminal, entries = defaultdict(dict), defaultdict(dict)
+    for key in functions:
+        for kind, codes in direct_places[key].items():
+            for code, places in codes.items():
+                (entries if kind == 'domain' else terminal)[code].setdefault(key, {}).update(places)
+    for key, codes in initial_codes.items():
+        positions = {(node.lineno, node.col_offset, node.end_lineno, node.end_col_offset)
+                     for node in walk_initial_scope(index['functions'][key]['node'])
+                     if hasattr(node, 'lineno')}
+        for code in codes:
+            places = {position: expression for position, expression in
+                      direct_places[key]['emitted'].get(code, {}).items() if position in positions}
+            if places:
+                terminal[code].setdefault(key, {}).update(places)
+    sites, descriptions = {}, {}
+    for code in sorted(reachable):
+        sites[code] = []
+        descriptions[code] = {}
+        for key, places in sorted((terminal[code] or entries[code]).items()):
+            for number, (position, expression) in enumerate(sorted(places.items()), 1):
+                site = key + '#' + str(number)
+                sites[code].append(site)
+                descriptions[code][site] = dict(line=position[0], column=position[1], expression=expression)
+    return sites, descriptions
+
+
 def resolve_computed_codes(direct_codes, deferred, graph, allowed):
-    """Fill computed sources within the same import closure as their root."""
+    """Fill computed sources within a root's reached functions."""
     codes = {key: {kind: set(values) for kind, values in row.items()}
              for key, row in direct_codes.items() if key in allowed}
-    closures = {site: collect_closure(set(entries) & allowed, graph, allowed)
+    closures = {site: collect_closure(set(entries), graph, allowed)
                 for key, kind, site, entries in deferred if key in allowed}
     changed = True
     while changed:
@@ -378,11 +426,9 @@ def resolve_computed_sites(declarations, deferred, codes, graph, allowed):
             continue
         declaration = declarations[site]
         values = set(declaration.get('codes', ()))
-        producers = collect_closure(set(entries) & allowed, graph, allowed)
+        producers = collect_closure(set(entries), graph, allowed)
         values.update(set().union(*(set().union(*codes[producer].values()) for producer in producers)))
         result[site] = dict(values=sorted(values), sources=list(entries))
-        if 'sources' in declaration:
-            result[site]['passes'] = declaration['passes']
     return result
 
 
@@ -1299,10 +1345,6 @@ def collect_obligation_codes(functions, calls, index, resolved_sites):
 def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, series_commands=None):
     """Analyze source strings and explicit public-operation roots without execution."""
     declarations = {} if computed_sites is None else computed_sites
-    for site, declaration in declarations.items():
-        if isinstance(declaration, dict) and 'sources' in declaration:
-            if declaration.get('passes') not in ('error', 'plan', 'entry'):
-                raise ValueError('Computed code sources need passes error, plan or entry: ' + site)
     index = build_index(sources)
     module_graph = collect_module_imports(index)
     functions = index['functions']
@@ -1316,13 +1358,14 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
         for key, function in functions.items()}
     unfollowed = find_unfollowed_sites(index)
     initial = collect_initial_functions(index)
-    for caller, targets in (declared_edges or {}).items():
+    declared_edges = {} if declared_edges is None else declared_edges
+    for caller, targets in declared_edges.items():
         if caller not in functions:
             raise ValueError('Unknown declared edge caller: ' + caller)
         for target, reason in targets.items():
             if target not in functions or not isinstance(reason, str) or not reason.strip():
                 raise ValueError('Declared edge needs an existing target and a reason: ' + caller + ' -> ' + target)
-            if target in graph[caller]:
+            if target in graph[caller] and target in collect_allowed_functions([caller], index, module_graph):
                 raise ValueError('Unused declared edge: ' + caller + ' -> ' + target)
             graph[caller].add(target)
 
@@ -1354,6 +1397,8 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
                 changed = changed or len(forwarding[key][kind]) != old
 
     codes = {key: {'emitted': set(), 'planned': set(), 'domain': set()} for key in functions}
+    direct_places = {key: {kind: defaultdict(dict) for kind in ('emitted', 'planned', 'domain')}
+                     for key in functions}
     used, unknown = set(), set()
     deferred = []
     for key, function in functions.items():
@@ -1387,6 +1432,11 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
                 else:
                     unknown.add(site)
             codes[key][kind].update(values)
+            if values:
+                position = (expression.lineno, expression.col_offset, expression.end_lineno, expression.end_col_offset)
+                text = read_source_expression(function, expression, index)
+                for code in values:
+                    direct_places[key][kind][code][position] = text
     if unknown:
         raise ValueError('Undeclared computed code site(s):\n' + '\n'.join(sorted(unknown)))
     unused = set(declarations) - used
@@ -1397,6 +1447,11 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
         missing = set(entries) - set(functions)
         if missing:
             raise ValueError('Unknown computed-code producer for %s: %s' % (site, ', '.join(sorted(missing))))
+    module_sources = {key for key, kind, site, entries in deferred if key.endswith(':<module>')}
+    initial_sites = {describe_site(functions[key], node, index)
+                     for key in module_sources for node in walk_initial_scope(functions[key]['node'])
+                     if isinstance(node, ast.expr)}
+    crossing_sources = [item for item in deferred if not item[0].endswith(':<module>') or item[2] in initial_sites]
     codes = resolve_computed_codes(direct_codes, deferred, graph, set(functions))
     emitted = set().union(*(row['emitted'] for row in codes.values()))
     planned = set().union(*(row['planned'] | row['domain'] for row in codes.values()))
@@ -1417,7 +1472,8 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
         contexts = []
         command_functions, values = set(), set()
         for entry in entries:
-            allowed = frozenset(collect_allowed_functions([entry], index, module_graph))
+            seen, allowed = collect_root_functions(
+                [entry], index, module_graph, graph, crossing_sources, declared_edges, initial)
             if allowed not in contextual_codes:
                 contextual_codes[allowed] = resolve_computed_codes(direct_codes, deferred, graph, allowed)
                 contextual_sites[allowed] = resolve_computed_sites(
@@ -1425,7 +1481,6 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
                 contextual_initial[allowed] = collect_initial_codes(
                     index, calls, forwarding, dict(resolved_declarations, **contextual_sites[allowed]))
             local_codes = contextual_codes[allowed]
-            seen = collect_closure(({entry} | initial) & allowed, graph, allowed)
             contexts.append((seen, allowed))
             command_functions.update(seen)
             values.update(set().union(*(values for key, values in contextual_initial[allowed].items() if key in allowed)))
@@ -1446,56 +1501,30 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
             by_command_functions[command] = set().union(*(by_command_functions[name] for name in series_roots))
     series_functions = set().union(*(by_command_functions[command] for command in (
         ('plan_next', 'run_series') + tuple(series_commands) if series_commands is not None else roots)))
-    sites = defaultdict(set)
-    terminal_sites = defaultdict(set)
-    entry_sites = defaultdict(set)
-    for key in series_functions:
-        for kind, values in direct_codes[key].items():
-            for code in values:
-                (entry_sites if kind == 'domain' else terminal_sites)[code].add(key)
-    entry_codes_passed = set()
+    initial_codes = defaultdict(set)
     series_names = (('plan_next', 'run_series') + tuple(series_commands) if series_commands is not None else tuple(roots))
     for command in series_names:
         for seen, allowed in command_contexts[command]:
             for key, values in contextual_initial[allowed].items():
                 if key in allowed:
-                    for code in values:
-                        terminal_sites[code].add(key)
-            for key, kind, site, entries in deferred:
-                if key in seen and declarations[site].get('passes') == 'entry':
-                    producers = collect_closure(set(entries) & allowed, graph, allowed)
-                    entry_codes_passed.update(set().union(*(direct_codes[producer]['domain'] for producer in producers)))
+                    initial_codes[key].update(values)
+    sites, places = collect_writing_sites(index, direct_places, series_functions, initial_codes, reachable)
     # Sites outside the public roots still have a domain, bounded by their own
-    # module's imports. Reached sites use the union of their actual root contexts.
+    # module's imports and declared crossings. Reached sites use their root contexts.
     for key, kind, site, entries in deferred:
         if site in reached_sites:
             resolved_declarations[site]['values'] = sorted(reached_sites[site])
         else:
-            allowed = frozenset(collect_allowed_functions([key], index, module_graph))
+            seen, allowed = collect_root_functions(
+                [key], index, module_graph, graph, crossing_sources, declared_edges, initial)
             if allowed not in contextual_codes:
                 contextual_codes[allowed] = resolve_computed_codes(direct_codes, deferred, graph, allowed)
                 contextual_sites[allowed] = resolve_computed_sites(
                     declarations, deferred, contextual_codes[allowed], graph, allowed)
             resolved_declarations[site] = contextual_sites[allowed][site]
-    for code in reachable:
-        sites[code] = terminal_sites[code] or entry_sites[code]
     status_key = 'research_harness/cli.py:status_report'
-    status_allowed = collect_allowed_functions([status_key], index, module_graph) if status_key in functions else set()
-    status_functions = collect_closure(({status_key} | initial) & status_allowed, graph, status_allowed)
-    reference_edges = {}
-    for key in series_functions:
-        function = functions[key]
-        for node in function['nodes']:
-            if isinstance(node, ast.Call) or (isinstance(node, (ast.Name, ast.Attribute))
-                                             and isinstance(node.ctx, ast.Load)):
-                targets = resolve_references(node, function, index)
-                if isinstance(node, ast.Call):
-                    targets = targets | resolve_references(node.func, function, index)
-                targets = targets & graph[key] & series_functions
-                if targets:
-                    expression = read_source_expression(function, node, index)
-                    edges = reference_edges.setdefault(key, {})
-                    edges[expression] = sorted(set(edges.get(expression, ())) | targets)
+    status_functions = collect_root_functions([status_key], index, module_graph, graph, crossing_sources,
+                                              declared_edges, initial)[0] if status_key in functions else set()
     obligation_codes = collect_obligation_codes(functions, calls, index, resolved_declarations)
     status_obligations = set().union(*(obligation_codes[key] for key in status_functions))
     return dict(emitted=sorted(emitted), planned=sorted(planned),
@@ -1505,8 +1534,7 @@ def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, se
         initial_functions=sorted(initial), status_obligations=sorted(status_obligations),
         unfollowed_sites=[unfollowed[site] for site in sorted(unfollowed)],
         graph=graph, codes_by_function=codes, direct_codes=direct_codes,
-        terminal_sites={code: sorted(keys) for code, keys in terminal_sites.items() if keys},
-        entry_codes_passed=sorted(entry_codes_passed), reference_edges=reference_edges,
+        code_places=places,
         by_command=by_command, forwarding={key: sorted(row['emitted']) for key, row in sorted(forwarding.items())
                                          if row['emitted']},
         computed_sites=resolved_declarations,
@@ -1663,28 +1691,24 @@ def analyze_repository(root):
                            DECLARED_EDGES, read_executable_commands(sources))
 
 
-def build_unreviewed_rows(report, registry, groups=None):
+def build_unreviewed_rows(report, registry):
     """Keep every reachable code pending until its own or grouped row exists."""
-    members = set((groups or {}).get('no_series_ending', {}).get('members', {}))
     return {code: dict(unit='registry-rows', sites=report['code_sites'].get(code, []),
                        status_obligation=code in report['status_obligations'])
-            for code in report['reachable'] if code not in registry and code not in members}
+            for code in report['reachable'] if code not in registry}
 
 
 def build_fixture(root):
     report = analyze_repository(root)
     # Read the one real registry only after the static source analysis succeeds.
-    from research_harness.stop_classes import STOP_REGISTRY, STOP_GROUPS, _NO_SERIES_ENDING_CODES_CLOSE
+    from research_harness.stop_classes import STOP_REGISTRY, STOP_GROUPS
     from ci.series_code_groups import read_group_entries
     report['groups'] = read_group_entries(root, report, STOP_REGISTRY, STOP_GROUPS)
-    members = report['groups'].get('no_series_ending', {}).get('members', {})
-    if set(members) != set(_NO_SERIES_ENDING_CODES_CLOSE):
-        raise ValueError('no_series_ending tuple and group evidence differ')
-    report['unreviewed_rows'] = build_unreviewed_rows(report, STOP_REGISTRY, report['groups'])
+    report['unreviewed_rows'] = build_unreviewed_rows(report, STOP_REGISTRY)
     validate_registry_coverage(report, STOP_REGISTRY)
     for field in ('graph', 'codes_by_function', 'direct_codes', 'code_sites',
                   'by_command_functions', 'status_obligations', 'initial_functions',
-                  'terminal_sites', 'entry_codes_passed', 'reference_edges'):
+                  'code_places'):
         del report[field]
     report['unavailable_commands'] = {command: reason for command, reason in UNAVAILABLE_COMMANDS.items()
                                       if command not in report['by_command']}
@@ -1737,12 +1761,11 @@ def read_code_sites(fixture, code):
 
 def validate_registry_coverage(fixture, registry):
     reachable, pending = set(fixture['reachable']), set(fixture['unreviewed_rows'])
-    members = set(fixture.get('groups', {}).get('no_series_ending', {}).get('members', {}))
-    missing = reachable - set(registry) - pending - members
+    missing = reachable - set(registry) - pending
     assert not missing, 'Reachable codes need rows or pending entries: ' + ', '.join(sorted(missing))
     stale = pending - reachable
     assert not stale, 'Pending entries outside reachable: ' + ', '.join(sorted(stale))
-    reviewed = pending & (set(registry) | members)
+    reviewed = pending & set(registry)
     assert not reviewed, 'Reviewed codes must leave unreviewed_rows: ' + ', '.join(sorted(reviewed))
 
 

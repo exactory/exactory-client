@@ -49,9 +49,9 @@ class GroupEntryTests(unittest.TestCase):
         self.groups = copy.deepcopy(stop_classes.STOP_GROUPS)
         self.registry = {'grouped': dict(code='grouped', group='stored_state',
             **{'class': 'decision'}, owner='D2', next=copy.deepcopy(self.groups['stored_state']['next']))}
-        self.report = {'code_sites': {'grouped': ['pkg/core.py:check', 'pkg/store.py:read']}}
+        self.report = {'code_sites': {'grouped': ['pkg/core.py:check#1', 'pkg/store.py:read#1']}}
         self.entry = {'stored_state': {
-            'members': {'grouped': {'pkg/core.py:check': 'store', 'pkg/store.py:read': 'store'}}}}
+            'members': {'grouped': {'pkg/core.py:check#1': ['store'], 'pkg/store.py:read#1': ['store']}}}}
 
     def write(self, entry, lane='lane'):
         (self.fixtures / (lane + '.json')).write_text(json.dumps(entry))
@@ -64,20 +64,20 @@ class GroupEntryTests(unittest.TestCase):
         self.assertEqual(read_group_entries(self.root, {}, {}, {}), {})
 
     def test_accepts_member_only_entries_without_proofs_or_command_function_sets(self):
-        self.entry['stored_state']['members']['grouped']['pkg/core.py:check'] = 'content'
-        self.entry['stored_state']['members']['grouped']['pkg/store.py:read'] = 'payload'
+        self.entry['stored_state']['members']['grouped']['pkg/core.py:check#1'] = ['content']
+        self.entry['stored_state']['members']['grouped']['pkg/store.py:read#1'] = ['payload']
         self.write(self.entry)
         self.assertEqual(self.read(), {'stored_state': {'members': {'grouped': {
-            'pkg/core.py:check': 'content', 'pkg/store.py:read': 'payload'}}}})
+            'pkg/core.py:check#1': ['content'], 'pkg/store.py:read#1': ['payload']}}}})
 
     def test_merges_members_across_lanes(self):
         self.registry['other'] = dict(self.registry['grouped'], code='other')
-        self.report['code_sites']['other'] = ['pkg/core.py:other']
+        self.report['code_sites']['other'] = ['pkg/core.py:other#1']
         self.write(self.entry, 'a_members')
-        self.write({'stored_state': {'members': {'other': {'pkg/core.py:other': 'content'}}}}, 'b_members')
+        self.write({'stored_state': {'members': {'other': {'pkg/core.py:other#1': ['content']}}}}, 'b_members')
         self.assertEqual(self.read(), {'stored_state': {
-            'members': {'grouped': {'pkg/core.py:check': 'store', 'pkg/store.py:read': 'store'},
-                        'other': {'pkg/core.py:other': 'content'}}}})
+            'members': {'grouped': {'pkg/core.py:check#1': ['store'], 'pkg/store.py:read#1': ['store']},
+                        'other': {'pkg/core.py:other#1': ['content']}}}})
 
     def test_refuses_the_obsolete_proofs_field(self):
         self.registry = {}
@@ -94,9 +94,9 @@ class GroupEntryTests(unittest.TestCase):
                     self.read()
 
     def test_refuses_added_removed_or_moved_member_sites(self):
-        for sites in ({'pkg/core.py:check': 'store'},
-                      {'pkg/core.py:check': 'store', 'pkg/store.py:read': 'store', 'pkg/extra.py:check': 'store'},
-                      {'pkg/core.py:check': 'store', 'pkg/store.py:renamed': 'store'}):
+        for sites in ({'pkg/core.py:check#1': ['store']},
+                      {'pkg/core.py:check#1': ['store'], 'pkg/store.py:read#1': ['store'], 'pkg/extra.py:check#1': ['store']},
+                      {'pkg/core.py:check#1': ['store'], 'pkg/store.py:renamed#1': ['store']}):
             with self.subTest(sites=sites):
                 self.entry['stored_state']['members']['grouped'] = sites
                 self.write(self.entry)
@@ -104,7 +104,7 @@ class GroupEntryTests(unittest.TestCase):
                     self.read()
 
     def test_refuses_a_condition_the_group_does_not_define(self):
-        self.entry['stored_state']['members']['grouped']['pkg/core.py:check'] = 'network'
+        self.entry['stored_state']['members']['grouped']['pkg/core.py:check#1'] = ['network']
         self.write(self.entry)
         with self.assertRaisesRegex(ValueError, 'Unknown group condition.*network'):
             self.read()

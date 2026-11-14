@@ -154,6 +154,6 @@ class ReviewARowTests(unittest.TestCase):
                 self.assertEqual(stop_classes.STOP_REGISTRY[code]['group'], 'stored_state')
                 self.assertTrue(sites)
                 for site, condition in sites.items():
-                    self.assertIn(site, functions)
-                    self.assertEqual(condition, 'content')
+                    self.assertIn(site.rsplit('#', 1)[0], functions)
+                    self.assertEqual(condition, ['content'])
         self.assertEqual(set(json.loads(GROUPS.read_text())['stored_state']), {'members'})
