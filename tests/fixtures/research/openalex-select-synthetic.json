@@ -1,0 +1,73 @@
+{
+  "meta": {
+    "count": 2,
+    "db_response_time_ms": 1,
+    "page": 1,
+    "per_page": 2
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W101",
+      "doi": "https://doi.org/10.1234/bounded-example",
+      "title": "An authored bounded example",
+      "display_name": "An authored bounded example",
+      "type": "article",
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A101",
+            "display_name": "A. Example",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "A. Example",
+          "raw_affiliation_strings": [],
+          "affiliations": []
+        }
+      ],
+      "publication_date": "2026-01-03",
+      "publication_year": 2026,
+      "abstract_inverted_index": {
+        "An": [0],
+        "authored": [1],
+        "bounded": [2],
+        "example.": [3]
+      }
+    },
+    {
+      "id": "https://openalex.org/W102",
+      "doi": null,
+      "title": "Another authored bounded comparison",
+      "display_name": "Another authored bounded comparison",
+      "type": "article",
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A102",
+            "display_name": "B. Example",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "B. Example",
+          "raw_affiliation_strings": [],
+          "affiliations": []
+        }
+      ],
+      "publication_date": "2026-01-04",
+      "publication_year": 2026,
+      "abstract_inverted_index": {
+        "Another": [0],
+        "authored": [1],
+        "bounded": [2],
+        "comparison.": [3]
+      }
+    }
+  ],
+  "group_by": []
+}
