@@ -2,6 +2,46 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "output-view-binding-kind-reads-make-progress",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "The W8 renderer repeated one binding-kind query indefinitely when a stored 0.82.0 fixture returned only populated kinds and omitted empty ones.",
+      "expected": "Track the requested kind set rather than returned dictionary keys, expand each subsequent read, and keep every snapshot at one revision. The 0.82.0 rendered views remain byte-identical.",
+      "tests": [
+        "test_research_problem_forming.ProblemFormingCompatibilityTests.test_data_only_0820_snapshot_renders_without_repeating_a_kind_query",
+        "test_research_problem_forming.ProblemFormingCompatibilityTests.test_0820_candidate_status_views_and_evidence_keep_their_bytes_and_meaning"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "output-render-failure-retains-advisory-path",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "Export-history discovery failed before the output writer when final/ was a regular file, leaving the render advisory without its failed path.",
+      "expected": "A blocked final/ directory leaves readiness unchanged and reports unsafe_path at final/README.md in both the advisory and warning. New-view checks and export discovery also name their failed paths. Removing the obstruction lets the next render recover.",
+      "tests": [
+        "test_research_output_views.RenderTests.test_a_failed_render_warns_and_stays_advisory",
+        "test_research_output_views.RenderTests.test_an_added_view_failure_names_the_failed_path_and_stays_advisory",
+        "test_research_output_views.RenderTests.test_export_discovery_failure_names_the_failed_path_and_stays_advisory"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "payload-absolute-path-accepts-workspace-ancestor-alias",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "An absolute payload file path through an ancestor symbolic link was refused when the CLI used the canonical workspace root.",
+      "expected": "Ancestor aliases normalize to the same workspace-relative payload, record and receipt. Links inside the workspace still refuse with unsafe_path, including exit and reentry after an external alias enters a workspace subdirectory.",
+      "tests": [
+        "test_payload_file_paths.PayloadFilePathTests.test_absolute_input_accepts_an_ancestor_alias_without_following_workspace_links",
+        "test_research_cli.ResearchCliTests.test_fresh_verifier_can_acquire_before_exact_target_initialization"
+      ],
+      "class": "workspace payload file boundary",
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
       "id": "openness-series-views-between-turns",
       "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
       "summary": "T5: one review-series process advanced several turns while series.json and adopted-output views stayed behind.",

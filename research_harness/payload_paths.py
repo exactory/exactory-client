@@ -2,6 +2,7 @@
 
 import copy
 from itertools import chain
+import os
 from pathlib import Path
 
 from .artifacts import _Workspace, _relative_parts
@@ -30,13 +31,14 @@ def normalize_payload_path(root, value, *, check_filesystem=True):
         if value.startswith('/'):
             _relative_parts(value[1:])
             selected = Path(value)
-            roots = (Path(root).absolute(), _Workspace(root).root)
-            for workspace in roots:
-                try:
-                    value = selected.relative_to(workspace).as_posix()
+            workspace = _Workspace(root).root
+            # Resolve only workspace ancestors, retaining every component inside
+            # the workspace for the existing link checks below.
+            for parent in reversed(selected.parents):
+                if (parent.name == workspace.name
+                        and resolve_payload_ancestor(parent.parent, workspace) == workspace.parent):
+                    value = selected.relative_to(parent).as_posix()
                     break
-                except ValueError:
-                    pass
             else:
                 raise ResearchError('unsafe_path', PAYLOAD_PATH_MESSAGE)
         parts = _relative_parts(value)
@@ -52,6 +54,30 @@ def normalize_payload_path(root, value, *, check_filesystem=True):
         if error.code != 'unsafe_path':
             raise
         raise ResearchError('unsafe_path', PAYLOAD_PATH_MESSAGE) from error
+    except (OSError, RuntimeError, ValueError) as error:
+        raise ResearchError('unsafe_path', PAYLOAD_PATH_MESSAGE) from error
+
+
+def resolve_payload_ancestor(path, workspace, links=()):
+    """Resolve an ancestor while refusing links inside the workspace, including in link targets."""
+    if path == path.parent:
+        return path.resolve()
+    parent = resolve_payload_ancestor(path.parent, workspace, links)
+    if path.name == '..':
+        return parent.parent
+    candidate = parent / path.name
+    if candidate.is_symlink():
+        inside_workspace = workspace in candidate.parents
+        if not inside_workspace and workspace.exists():
+            # Directory identity also covers case aliases on macOS volumes.
+            inside_workspace = any(ancestor.samefile(workspace) for ancestor in candidate.parents)
+        if candidate == workspace or inside_workspace or candidate in links:
+            raise ResearchError('unsafe_path', PAYLOAD_PATH_MESSAGE)
+        target = Path(os.readlink(candidate))
+        if not target.is_absolute():
+            target = parent / target
+        return resolve_payload_ancestor(target, workspace, links + (candidate,))
+    return candidate
 
 
 def normalize_payload_paths(root, command, payload, *, check_filesystem=True):

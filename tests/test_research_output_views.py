@@ -1134,6 +1134,7 @@ class RenderTests(ViewCase):
         with contextlib.redirect_stderr(stderr):
             self.assertIsNone(output_views.render_workspace_views(self.root))
         self.assertEqual(len(stderr.getvalue().splitlines()), 1)
+        self.assertIn("final/README.md", stderr.getvalue())
         self.assertIn("exactory-research export --kind outputs", stderr.getvalue())
         report = status_report(self.store)
         self.assertEqual([(item["code"], item["reason"], item["path"], item["error"]) for item in report["advisories"]],
@@ -1151,6 +1152,41 @@ class RenderTests(ViewCase):
         self.assertEqual(json.loads(stdout.getvalue())["revision"], self.store.revision)
         self.assertTrue((self.root / "intermediate/problem/candidates/candidate-1.json").is_file())
         self.assertEqual(status_report(self.store)["advisories"], [])
+
+    def test_an_added_view_failure_names_the_failed_path_and_stays_advisory(self):
+        output_views.render_workspace_views(self.root)
+        shutil.rmtree(self.root / "final")
+        (self.root / "final").write_text("in the way", encoding="utf-8")
+        self.put(("problem_statement", "statement-1", {"id": "statement-1", "previous": None}))
+        before = self.store.snapshot()
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            self.assertIsNone(output_views.render_workspace_views(self.root))
+        path = "final/history/problem/statements/statement-1.json"
+        self.assertIn(path, stderr.getvalue())
+        self.assertEqual(len(stderr.getvalue().splitlines()), 1)
+        advisory = output_views.find_view_advisories(self.store, self.store.revision)[0]
+        self.assertEqual((advisory["reason"], advisory["path"], advisory["error"]),
+                         ("render_failed", path, "unsafe_path"))
+        self.assertEqual(self.store.snapshot(), before)
+
+    def test_export_discovery_failure_names_the_failed_path_and_stays_advisory(self):
+        output_views.render_workspace_views(self.root)
+        outside = self.root.parent / "outside-problem"
+        (outside / "exports").mkdir(parents=True)
+        (self.root / "final/problem").symlink_to(outside, target_is_directory=True)
+        self.put(("problem_candidate", "candidate-1", {"id": "candidate-1", "previous": None}))
+        before = self.store.snapshot()
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            self.assertIsNone(output_views.render_workspace_views(self.root))
+        self.assertIn("final/problem/exports", stderr.getvalue())
+        self.assertEqual(len(stderr.getvalue().splitlines()), 1)
+        advisory = output_views.find_view_advisories(self.store, self.store.revision)[0]
+        self.assertEqual((advisory["reason"], advisory["path"], advisory["error"]),
+                         ("render_failed", "final/problem/exports", "unsafe_path"))
+        self.assertEqual(self.store.snapshot(), before)
+        self.assertEqual(list((outside / "exports").iterdir()), [])
 
     def test_a_store_at_a_controller_root_renders_beside_it_or_not_at_all(self):
         controller = self.root / "attack"
