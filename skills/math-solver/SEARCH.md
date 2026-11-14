@@ -351,7 +351,7 @@ its `objections`. Revise the assessment or the work that it depends on: for
 example, record the checkpoint that an objection asks for and have it accepted.
 Then obtain a new review of the revised assessment, with a new packet under a
 new assignment id. `search reassess` refuses such a review when it is
-submitted, in its complete form with `native_review_not_approved`
+submitted, with `native_review_not_approved` in either form of a non-approval
 ([Observed native review delivery](#observed-native-review-delivery)).
 
 Submit the reviewed record with the current revision and a unique request ID.
@@ -1155,12 +1155,16 @@ runner retains rejected result/recovery responses, but they cannot be converted
 into approve-only native records.
 
 A result or recovery review with the decision `revise` or `reject` is such a
-response. Do not submit it to a native command. In its complete form,
-`{subject_digest, claim_digest, reviewer, decision, reason, objections:
-[{blocking, description}]}`, `search reassess`, `accept`, `review` and
-`complete` refuse it with `native_review_not_approved`: the details give its
-`decision`, `reason` and `objections`, and no event is written. In any other
-form it is refused with `invalid_record`. A proposal review keeps its versioned
+response. Do not submit it to a native command. `search reassess`, `accept`,
+`review` and `complete` refuse it with `native_review_not_approved` in two
+forms: `{decision, reason, objections: [{blocking, description}]}`, which is
+the form that the reviewer prompt asks for, and the same fields with
+`subject_digest`, `claim_digest` and `reviewer`. The details give its
+`decision`, `reason` and `objections`, and no event is written. `objections`
+can be an empty list. A non-approval in any other form is refused with
+`invalid_record`: for example one without `reason` or `objections`, with a
+blank `reason`, with a further field, or with only some of `subject_digest`,
+`claim_digest` and `reviewer`. A proposal review keeps its versioned
 form, in which `search review` records `revise` and `reject` as before. Read
 the reason and the objections, revise or replace the reviewed record or the
 work that it depends on, and obtain a new review, with a new packet under a new
