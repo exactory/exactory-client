@@ -292,6 +292,9 @@ def packet(root, state, content, subject, review_kind, claim_digest, reviewer, a
     seed = {"subject": subject, "contract": state["contract"], "scientific_context": context,
             "claim_digest": claim_digest}
     evidence, unavailable, provenance = _closure(seed, state, content, artifacts, write=write, common_records=common_records)
+    if openness is not None:
+        from research_harness.capture_selection import describe_capture_selections
+        context.update(describe_capture_selections(common_records or {}))
     if supplementary is not None:
         entries = {(entry["kind"], entry["digest"]): entry for entry in evidence}
         binding = context["supplementary_inputs"]
@@ -507,9 +510,12 @@ def require_review(root, state, content, value, *, subject=None, new=False, comm
         supplementary = supplied["scientific_context"].get("supplementary_inputs")
         validate_supplementary_inputs(supplementary, supplied["evidence"])
         if new:
+            from research_harness.capture_selection import bind_packet_selections
             minimum = value.get("findings", {}).get("openness", {}).get("minimum")
+            bound_records = (bind_packet_selections(records, supplied["scientific_context"])
+                             if minimum is not None else records)
             expected = packet(root, state, content, subject, kind(value), value.get("claim_digest"), value["reviewer"], artifacts,
-                              openness=minimum, common_records=records, supplementary=supplementary)
+                              openness=minimum, common_records=bound_records, supplementary=supplementary)
             drift = validate_packet_context(supplied, expected, state)
             if drift:
                 current = dict(current, context_drift=drift)

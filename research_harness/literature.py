@@ -63,7 +63,7 @@ from . import screening
 from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
 from .search_pages import (NATIVE_PARSE_VERSION, QUERY_PARAMETER_NAMES, build_search_coverage, enumerate_pages,
                            find_capture_interval_warnings, find_captured_ordering, native_page)
-from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
+from .source_links import admits_capture_class, captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
 
 
 SEARCH_PURPOSES = ("direct", "originals", "theory", "adjacent", "recent")
@@ -110,7 +110,7 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         if is_component(capture):
             raise ResearchError("invalid_bundle", "A supplement component cannot be an article main source")
         if value["scope"] == "article" and (capture is None or capture["availability"] != "available"
-                or source["capture_method"] != "http" or source["origin_verified"] is not True):
+                or not admits_capture_class(source, 'article_bundle')):
             raise ResearchError("invalid_bundle", "Article bundles require acquired original full text; tool responses remain passages")
         if value["scope"] == "passage" and value["completeness"] == "complete":
             raise ResearchError("invalid_bundle", "A passage cannot certify a complete article bundle")

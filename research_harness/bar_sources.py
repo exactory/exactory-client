@@ -14,7 +14,7 @@ from .evaluation import Evaluation
 from .evidence import digest
 from .operations import describe_received_value, fields, text
 from .reading import current_readings, validate_read_evidence
-from .source_links import captured_source, validate_link
+from .source_links import admits_capture_class, captured_source, validate_link
 from .source_candidates import find_source_candidates
 
 PAGE_SIZE = 10
@@ -380,8 +380,7 @@ def _fulltext_source(records, artifacts, work, capture):
     source = captured_source(records, artifacts, capture['source_id'])
     if (capture.get('requested_version_id') != work['id'] or source.get('requested_identifier') != work['id']
             or capture.get('original') != source['response']
-            or source.get('capture_method') not in ('http', 'http_range_v1')
-            or source.get('origin_verified') is not True or capture.get('extraction_status') != 'extracted'
+            or not admits_capture_class(source, 'session_source_delivery') or capture.get('extraction_status') != 'extracted'
             or capture.get('text') is None):
         raise ResearchError('review_source_binding_mismatch', 'Deliver the exact acquired version, original response and recorded extraction')
     if source.get('observed_identifier') is not None and source['observed_identifier'] != work['id']:
