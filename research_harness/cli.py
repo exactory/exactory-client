@@ -524,6 +524,9 @@ def describe_review_receipt(store, command, payload, receipt):
         assignment = records.get('review_assignment', {}).get(payload['id'])
         if assignment is None:
             return receipt
+        if 'capacity_plan_kind' in assignment:
+            from .review_route_capacity import describe_assignment_capacity
+            receipt = dict(receipt, **describe_assignment_capacity(records, store.build_artifact_store(), assignment))
         warning = describe_assignment_warning(records, payload['id'], artifacts=store.build_artifact_store())
         return dict(receipt, capacity_warning=warning) if warning is not None else receipt
     routes = records.get('review_route', {})

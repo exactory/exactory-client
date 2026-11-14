@@ -2,6 +2,22 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "chain-capacity-plan-pins-serialized-budgets",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "review capacity (serialized carried state and immutable chain budgets)",
+      "summary": "Excerpt text allowances omitted serialized entry fields and the final floor omitted mandatory carried state, so a long chain could not honor its advertised allowances.",
+      "expected": "Fixture assignments store one pinned capacity plan. The allocator charges serialized entries once, reserves the bounded refusal notice and carried state, refuses excessive final minimums before any call, and keeps live forecasts outside verification and stored allowances.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_capacity_plan.DivideRoomTests.test_finding_three_does_not_charge_the_budget_per_turn",
+        "test_review_capacity_plan.StoredCapacityPlanTests.test_a5_check_five_thousand_targets_refuses_before_recording_or_calling",
+        "test_review_capacity_plan.StoredCapacityPlanTests.test_check_returns_complete_plan_then_stored_digest_survives_new_priors_and_attempts",
+        "test_review_capacity_plan.CapacityPlanTests.test_exact_request_above_pinned_bound_is_harness_defect",
+        "test_review_capacity_plan.ForecastAndFrameTests.test_q15_pages_pack_granted_entries_and_remaining_inputs_reduce_turns"
+      ]
+    },
+    {
       "id": "payload-path-admission-repeats-store-validation",
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "payload admission (redundant store authentication)",

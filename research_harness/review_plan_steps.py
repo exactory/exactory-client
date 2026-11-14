@@ -234,6 +234,14 @@ def complete_plan(records, artifacts, assignment, plan):
             details['step'].update(command='review-probe', payload=dict(route_id=assignment['route_id']),
                                    chooses=['id'])
             details['step'].pop('then', None)
+    elif code == 'review_route_capacity_below_floor':
+        details['step'] = describe_step(records, artifacts, assignment, 7)
+        plan.update(state='handoff', command='review-route')
+    elif code == 'review_route_capacity_plan_violated':
+        plan.update(state='stop', stop_class='harness_defect', command='gate-auto-pass')
+        details['step'] = dict(command='gate-auto-pass', payload=dict(stop_id=details.get('stop_id')),
+            chooses=[] if details.get('stop_id') else ['stop_id'],
+            prerequisites=[dict(condition='Retain the harness stop with the exact request and pinned capacity plan.')])
     elif code == 'review_chain_stopped':
         details['step'] = describe_step(records, artifacts, assignment, 10, stop_id=details.get('stop_id'))
         plan.update(state='handoff', command='review-stop')

@@ -27,6 +27,14 @@ STOP_REGISTRY.update({
     'review_chain_stopped': dict(code='review_chain_stopped', **{'class': 'requested'}, owner='D2',
         next=dict(kind='handoff', step=10, command='review-stop')),
 })
+STOP_REGISTRY.update({
+    'review_route_capacity_plan_violated': dict(code='review_route_capacity_plan_violated',
+        **{'class': 'harness_defect'}, owner='D1',
+        proof='test_review_capacity_plan.CapacityPlanTests.test_exact_request_above_pinned_bound_is_harness_defect',
+        next=copy.deepcopy(STOP_REGISTRY['review_series_no_progress']['next'])),
+    'review_route_capacity_below_floor': dict(code='review_route_capacity_below_floor',
+        **{'class': 'decision'}, owner='D1', next=dict(kind='handoff', step=7, command='review-route')),
+})
 for _code, _outcome in (
         ('review_provider_refused', 'provider_refused'), ('review_output_over_cap', 'output_over_cap'),
         ('review_response_too_large', 'response_over_limit'),

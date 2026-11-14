@@ -32,6 +32,21 @@ def _scope(records, artifacts, assignment_id):
     return dict(gate=gate, transition={"from": source, "to": destination}, target_digest=target)
 
 
+def _describe_plan_violation_proof(records, artifacts, assignment_id):
+    """Authenticate a defect from the exact stored request and its pinned plan, not supplied diagnostics."""
+    from . import review_protocol, review_preflight
+    assignment = records.get('review_assignment', {}).get(assignment_id, {})
+    if 'capacity_plan_kind' not in assignment:
+        _refuse('stop_untrusted', 'Need a stored assignment with a pinned capacity plan.')
+    request = review_protocol.build_assignment_request(records, artifacts, assignment)
+    report = review_preflight.build_assignment_report(records, artifacts, assignment, request)
+    if report['plan_comparison']['fits']:
+        _refuse('stop_untrusted', 'Need an exact request that exceeds its stored capacity plan.')
+    return dict(policy='stored_capacity_plan_bound', exhausted=True,
+                plan_digest=assignment['capacity_plan']['digest'], request_digest=digest(request),
+                sizes=report['plan_comparison']['sizes'])
+
+
 def record_series_stop(store, plan):
     """Retain a terminal observation at the driver's current store revision."""
     snapshot = store.snapshot()
@@ -43,6 +58,8 @@ def record_series_stop(store, plan):
         retry = dict(policy="one_execution_per_progress_position", executions=1, exhausted=True,
                      **{key: plan["details"][key] for key in
                         ("action_state", "action_digest", "progress_digest", "successful_request_id")})
+    if code == 'review_route_capacity_plan_violated':
+        retry = _describe_plan_violation_proof(snapshot['records'], store.build_artifact_store(), plan['head_id'])
     row = dict(id=identifier, origin="harness", code=code, assignment_id=plan["head_id"],
                plan=plan, retry=retry, request_id=request_id, recorded_revision=snapshot["revision"] + 1)
     row["scope"] = _scope(snapshot["records"], store.build_artifact_store(), plan["head_id"])
@@ -76,6 +93,11 @@ def _trusted_stop(store, records, identifier):
     if classification != "harness_defect":
         _refuse("stop_class", "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",
                 stop_code=stop["code"], stop_class=classification)
+    if stop['code'] == 'review_route_capacity_plan_violated':
+        proof = _describe_plan_violation_proof(records, store.build_artifact_store(), stop['assignment_id'])
+        if stop.get('retry') != proof:
+            _refuse('stop_untrusted', 'Need the unchanged stored request and capacity-plan comparison.')
+        return stop
     retry = stop.get("retry") or {}
     from .review_series import _identify_action
     # The writer records only an ended no-progress schedule. A different retry
@@ -148,6 +170,9 @@ def _check_reviews(store, records, artifacts, stop):
     def current(row):
         plan = plan_next(records, artifacts, row["assignment_id"])
         original = row["plan"]
+        if row['code'] == 'review_route_capacity_plan_violated':
+            return (plan['head_id'] == row['assignment_id'] and plan['progress'] == original['progress']
+                    and row['retry'] == _describe_plan_violation_proof(records, artifacts, row['assignment_id']))
         return (plan["state"] == row["retry"]["action_state"]
                 and plan["head_id"] == row["assignment_id"] and plan["progress"] == original["progress"]
                 and plan.get("command") == original.get("command")

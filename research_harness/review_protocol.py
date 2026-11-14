@@ -3320,6 +3320,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
                 packet.pop('digest')
                 packet['digest'] = digest(packet)
+        from .review_route_capacity import CAPACITY_REQUEST_KEY, prepare_assignment_capacity
+        capacity_members = {}
+        if CAPACITY_REQUEST_KEY in packet:
+            declaration = packet.pop(CAPACITY_REQUEST_KEY)
+            capacity_members = prepare_assignment_capacity(records, artifacts, route, declaration)
+            packet.pop('digest', None)
+            packet['digest'] = digest(packet)
         from .review_delivery_notice import prepare_notice
         packet, prompt, history = prepare_notice(records, artifacts, route,
             dict(value, session_id=session_id, history_assignment_id=history_assignment_id), packet, prompt, history)
@@ -3330,6 +3337,7 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                       history=history, session_id=session_id, history_assignment_id=history_assignment_id,
                       reassessment_required=reassessment_required,
                       recorded_revision=expected_revision + 1)
+        record.update(capacity_members)
         from .review_request_restoration import select_policy
         request_policy = select_policy(route, packet)
         if request_policy is not None:

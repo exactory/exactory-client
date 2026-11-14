@@ -87,6 +87,9 @@ class _CheckingStore:
         response = {"check": "accepted", "revision": self.revision, "recorded": False,
                               "operation": operation, "payload_digest": _digest(encoded_payload),
                               "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()}
+        if operation == 'review.assignment' and 'capacity_plan' in result:
+            from .review_route_capacity import describe_assignment_capacity
+            response.update(describe_assignment_capacity(self._records, self._artifacts, result))
         if operation == "literature.search":
             response.update(result)
         if operation == "research.gate_override":

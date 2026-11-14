@@ -10,6 +10,7 @@ from .errors import ResearchError
 from .evidence import digest
 
 PROTOCOL = 'exactory-review-preflight-v1'
+PLANNED_PROTOCOL = 'exactory-review-preflight-v2'
 # Output and duration forecasts need a bounded profile of observed usage; 0.71.0 reports them as unknown
 # instead of scanning every earlier invocation for each call (staged-review v3 workload work, 0.72.0).
 _ESTIMATE_REASON_MSG = 'No bounded usage profile exists yet; the estimate is not computed.'
@@ -21,7 +22,7 @@ def describe_work(role, packet):
     return describe_work_units(role, packet)
 
 
-def build_report(records, artifacts, route, role, prompt, packet, request):
+def build_report(records, artifacts, route, role, prompt, packet, request, *, capacity_plan=None, turn_kind=None, observations=()):
     """Measure the exact request in the route's own representation.
 
     Output and duration are reported as unknown. No report enters the reviewer input, and nothing is
@@ -67,7 +68,7 @@ def build_report(records, artifacts, route, role, prompt, packet, request):
     required = dict(work)
     if work['type'] == 'openness_reading':
         required.update(unit='response', count=1)
-    return dict(protocol=PROTOCOL, input_size=input_size,
+    report = dict(protocol=PROTOCOL, input_size=input_size,
         mandatory_final_input={'kind': 'unknown', 'value': None, 'reason': 'No supported final projection supplied.'},
         required_output_units=dict(required, kind='measurement', value=required['count']),
         work_units=dict(work, kind='measurement', value=work['count']),
@@ -75,16 +76,25 @@ def build_report(records, artifacts, route, role, prompt, packet, request):
         remaining_cost_usd={'kind': 'unknown', 'value': None},
         dependency_digest=digest({'route': route, 'prompt': prompt_text, 'role': role, 'work': work,
                                   'packet': digest(packet), 'request': digest(request)}), **estimates)
+    if capacity_plan is not None:
+        from .review_route_capacity import describe_plan_preflight
+        report.update(describe_plan_preflight(records, route, request, capacity_plan, turn_kind, observations=observations))
+    return report
 
 
-def build_assignment_report(records, artifacts, assignment, request=None):
+def build_assignment_report(records, artifacts, assignment, request=None, *, observations=()):
     """Report a prospective assignment without changing its saved packet, prompt or request."""
     from . import openness_reading as reading, review_protocol as protocol
     route = records['review_route'][assignment['route_id']]
     packet = protocol._read_json(artifacts, assignment['packet'])
     if request is None:
         request = protocol.build_assignment_request(records, artifacts, assignment)
-    report = build_report(records, artifacts, route, assignment['role'], assignment['prompt'], packet, request)
+    plan = None
+    if 'capacity_plan_kind' in assignment:
+        from .review_route_capacity import read_chain_capacity_plan
+        plan = read_chain_capacity_plan(artifacts, assignment)
+    report = build_report(records, artifacts, route, assignment['role'], assignment['prompt'], packet, request,
+                          capacity_plan=plan, turn_kind=assignment.get('capacity_plan_kind'), observations=observations)
     if (assignment['role'] == 'native_math' and reading.find_stage(packet) is not None
             and assignment.get('context', {}).get('native_packet')):
         # This native branch only loads artifacts. Other build_packet branches can publish derivatives and must
@@ -117,6 +127,10 @@ def build_assignment_report(records, artifacts, assignment, request=None):
 
 def check_request(report, request, *, packet=None, artifacts=None, correction_packet=None):
     """Refuse exact input overflow or loss of required correction material before recording an invocation."""
+    if report['protocol'] == PLANNED_PROTOCOL and not report['plan_comparison']['fits']:
+        from .review_route_capacity import PLAN_VIOLATED_MESSAGE
+        raise ResearchError('review_route_capacity_plan_violated', PLAN_VIOLATED_MESSAGE,
+                            dict(phase='dispatch_preflight', preflight=report, **report['plan_comparison']))
     size = report['input_size']
     if size['limit'] is not None and size['value'] > size['limit']:
         raise ResearchError('review_input_too_large', 'The exact reviewer request exceeds the route input limit.',
