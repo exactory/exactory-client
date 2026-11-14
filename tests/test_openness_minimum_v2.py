@@ -144,7 +144,7 @@ class MinimumV2StoreTests(ProblemCase):
             "searches": [{"formulation": row["question"], "search_id": row["id"]} for row in searches],
             "settling_work_id": None, "duplicate_resolutions": []}}
 
-    def test_fixture_export_builder_produces_v2_but_current_packets_keep_v1_bytes(self):
+    def test_current_exports_activate_v2_and_leave_the_native_packet_immutable(self):
         work = self.metadata()
         reading = self.read(work)
         search = self.search([work])
@@ -152,7 +152,7 @@ class MinimumV2StoreTests(ProblemCase):
         result = problem_openness.export_openness(self.store, spec, self.root / "packet")
         packet = json.loads(self.artifacts.read(result["native_packet"]))
         original = self.artifacts.read(result["native_packet"])
-        self.assertEqual(packet["scientific_context"]["openness_minimum"]["schema_version"], 1)
+        self.assertEqual(packet["scientific_context"]["openness_minimum"]["schema_version"], 2)
         bound = [(self.selected["statement"], search)]
         v2 = problem_openness.build_minimum(self.selected, bound, {reading["id"]: reading}, spec["minimum"],
             records=self.store.snapshot()["records"], artifacts=self.artifacts)

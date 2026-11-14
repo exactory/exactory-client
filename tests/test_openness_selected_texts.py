@@ -16,6 +16,9 @@ from research_harness.evidence import digest
 
 class SelectedSourceTests(unittest.TestCase):
     def setUp(self):
+        patcher = patch.object(reading, 'find_chain_protocol', return_value=reading.PROTOCOL_V5)
+        patcher.start()
+        self.addCleanup(patcher.stop)
         self.fixture = source_fixtures.SourceDeliveryTests()
         self.addCleanup(self.fixture.doCleanups)
         self.fixture.setUp()
@@ -201,12 +204,14 @@ class SelectedSourceTests(unittest.TestCase):
 
 class DuplicateSelectedSourceTests(OpennessReadingCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (3000, 3000)
 
     def build_text(self, number):
         return 'Identical extracted source text. ' * 90 + 'References: none.'
 
     def test_identical_selected_texts_in_different_turns_share_one_final_receipt(self):
+        from openness_legacy_fixtures import load_0_87_0_openness_reading
         native = json.loads(self.artifacts.read(self.export(priority=self.versions)))
         proof = self.artifacts.put(b'Independent required proof.', 'text/plain')
         native['evidence'].append({'digest': proof['sha256'], 'kind': 'artifact', 'artifact': proof})
@@ -226,7 +231,8 @@ class DuplicateSelectedSourceTests(OpennessReadingCase):
                 outer = protocol.build_packet(records, self.artifacts, None, 'native_math',
                                               'openness-reviewer', native_packet=reference)
                 route = records['review_route']['route']
-                trial, _ = reading.prepare_packet(records, self.artifacts, value, route, outer)
+                builder = reading if prior else load_0_87_0_openness_reading()
+                trial, _ = builder.prepare_packet(records, self.artifacts, value, route, outer)
                 if reading.find_stage(trial) == 'final':
                     prompt = protocol.canonical_prompt('native_math', reading_stage='final',
                                                        reading_protocol=reading.PROTOCOL_V5)['text']
@@ -266,6 +272,7 @@ class DuplicateSelectedSourceTests(OpennessReadingCase):
 
 class HeadroomTests(OpennessReadingCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (125000,)
 
     def test_every_assignment_exposes_low_headroom_before_invocation(self):
@@ -319,6 +326,7 @@ class UnknownHeadroomTests(unittest.TestCase):
 
 class IncidentFinalTests(OpennessReadingCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (70000,) * 12
 
     def record_searches(self):

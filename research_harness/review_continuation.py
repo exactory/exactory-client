@@ -119,12 +119,13 @@ def _describe_chain(assignment):
         'session' if assignment['role'] in bar_sources.ROLES else assignment['role'])
 
 
-def _find_unused_id(records, proposed):
+def _find_unused_id(records, proposed, *, maximum=None):
     occupied = {key for rows in records.values() for key in rows}
-    identifier = proposed
+    identifier = proposed if maximum is None else proposed[:maximum]
     suffix = 2
     while identifier in occupied:
-        identifier = proposed + '-' + str(suffix)
+        ending = '-' + str(suffix)
+        identifier = proposed + ending if maximum is None else proposed[:maximum - len(ending)] + ending
         suffix += 1
     return identifier
 
@@ -142,7 +143,9 @@ def _build_assignment_payload(records, assignment, *, replace=False):
                    ('native_packet', 'verification_task_id', 'review_ids', 'objection_id',
                     'correction', 'source_delivery')}
         context['prior_assignment_id'] = assignment['id']
-    payload.update(id=_find_unused_id(records, lineage[0]['id'] + '-t' + str(len(lineage) + 1)),
+    maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
+        openness_reading.PROTOCOL_V6 + '/') else None)
+    payload.update(id=_find_unused_id(records, lineage[0]['id'] + '-t' + str(len(lineage) + 1), maximum=maximum),
                    context=context)
     return payload
 
@@ -153,7 +156,9 @@ def _build_run_payload(records, assignment):
     invocations = [row for row in records.get('review_invocation', {}).values()
                    if row['assignment_id'] == assignment['id']]
     count = len({row['id'] for row in attempts + invocations}) + 1
-    return dict(id=_find_unused_id(records, assignment['id'] + '-run-' + str(count)),
+    maximum = (openness_reading.RESERVED_IDENTIFIER_CHARACTERS if assignment['prompt']['template_id'].startswith(
+        openness_reading.PROTOCOL_V6 + '/') else None)
+    return dict(id=_find_unused_id(records, assignment['id'] + '-run-' + str(count), maximum=maximum),
                 assignment_id=assignment['id'])
 
 
@@ -269,7 +274,7 @@ def _plan_recording(records, artifacts, assignment, state):
         output = copy.deepcopy(effective['effective_output'])
     role = assignment['role']
     if role == 'native_math':
-        from .native_review import load_packet
+        from .native_review import load_packet, uses_finding_contract
         packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
         if openness_reading.is_openness_packet(packet):
             from .problem_openness import prepare_openness
@@ -277,6 +282,10 @@ def _plan_recording(records, artifacts, assignment, state):
                 prepare_openness(records, artifacts, dict(assignment_id=assignment['id']),
                                  assignment['recorded_revision'] + 1)
             except ResearchError as error:
+                if uses_finding_contract(assignment):
+                    return dict(state='handoff', code=error.code, command='export',
+                                details=dict(error.details or {}, assignment_id=assignment['id'],
+                                             kind='problem-openness', message=error.message))
                 return dict(state='handoff', code='openness_review_not_approved', command='export',
                             details=dict(assignment_id=assignment['id'], decision=output.get('decision'),
                                          reason=output.get('reason'), kind='problem-openness',

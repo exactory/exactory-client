@@ -87,6 +87,10 @@ STOP_REGISTRY[PROJECTION_STOP] = dict(code=PROJECTION_STOP, **{'class': 'decisio
                          dict(command='review-assignment', check=True)])]))
 for _code in ('stale_revision', 'review_task_dependency_changed'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
+STOP_REGISTRY['openness_packet_outdated'] = dict(code='openness_packet_outdated', **{'class': 'decision'},
+    owner='D3', next=dict(kind='handoff', step=4, command='export'))
+STOP_REGISTRY['openness_finding_invalid'] = dict(code='openness_finding_invalid', **{'class': 'decision'},
+    owner='D3', next=dict(kind='continue', command='review-run'))
 
 
 def validate_registry(rows):

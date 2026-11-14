@@ -77,7 +77,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         prioritized = sorted([self.texts[version]['sha256'], alternate['text']['sha256']])
         expected = [(version, sha256) for sha256 in prioritized] + [
             (item, self.texts[item]['sha256']) for item in self.versions[:2]]
-        self.limit_input()
+        self.limit_input(30000)
         native_packet = self.export(priority=[self.versions[2], self.versions[0]])
         native = json.loads(self.artifacts.read(native_packet))
         self.assertEqual(native['scientific_context']['text_delivery_priority'],
@@ -276,7 +276,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         native = json.loads(self.artifacts.read(native_packet))
         rows = openness_reading.list_reading_rows(records, self.artifacts, native)
         self.assertEqual(record['turns'][-1]['delivered_units'],
-                         [{key: row[key] for key in row if key != 'artifact'} for row in rows
+                         [openness_reading._describe_identity(row) for row in rows
                           if row['artifact']['sha256'] in complete])
         self.assertTrue(all(unit['kind'] == 'record' for unit in record['turns'][-1]['delivered_units']))
         self.invoke('turn-further', self.build_native_result(self.read_packet('turn-further')))
@@ -348,7 +348,7 @@ class OpennessReadingChainTests(OpennessReadingCase):
         native_packet = self.export()
         assignment = self.assign('turn-1', native_packet)
         self.assertNotIn('reading_chain', assignment)
-        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math'))
+        self.assertEqual(assignment['prompt'], protocol.canonical_prompt('native_math', version=7))
         packet = self.read_packet('turn-1')
         self.assertEqual(sorted(packet),
                          ['digest', 'dossier_id', 'evidence', 'native', 'protocol', 'reviewer_id', 'role'])
@@ -380,7 +380,8 @@ class OpennessReadingChainTests(OpennessReadingCase):
         with self.assertRaises(Exception) as raised:
             self.assign('turn-1', self.export())
         self.assertEqual(raised.exception.code, 'review_chain_projection_over_limit')
-        self.assertEqual(sum(raised.exception.details['parts'].values()), raised.exception.details['input_characters'])
+        self.assertGreater(raised.exception.details['input_characters'], raised.exception.details['input_limit_characters'])
+        self.assertEqual(raised.exception.details['phase'], 'final_preflight')
         self.assertNotIn('turn-1', self.store.snapshot()['records'].get('review_assignment', {}))
 
     def test_a_chain_turn_continues_the_same_reviewer_route_and_packet_without_forking(self):

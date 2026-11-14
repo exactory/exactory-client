@@ -5090,7 +5090,7 @@
         "test_minimum_assessment.MinimumAssessmentTests.test_g1_forecast_and_audit_share_every_record_condition_and_legacy_order",
         "test_minimum_assessment.MinimumAssessmentTests.test_g1_audit_has_no_record_condition_outside_the_gap_list",
         "test_minimum_assessment.MinimumAssessmentTests.test_g2_incident_shape_refuses_without_writes_and_accepts_with_identical_warning",
-        "test_minimum_assessment.MinimumAssessmentTests.test_g2_bounded_enumeration_is_a_notice_and_keeps_legacy_packet_bytes"
+        "test_minimum_assessment.MinimumAssessmentTests.test_g2_bounded_enumeration_is_a_notice_and_keeps_stored_packet_bytes"
       ]
     },
     {
@@ -5157,7 +5157,7 @@
       "expected": "A fixture-store builder produces a v2 minimum with all lists. Both versions validate without mutation, v1 findings retain their audits and packet bytes, and v2 uses the UTC date of the latest capture instant. Current problem exports retain v1 and refuse unavailable new evidence before writing. Math-solver packet exports keep v1 and refuse v2 before writing.",
       "test_kind": "real_shape",
       "tests": [
-        "test_openness_minimum_v2.MinimumV2StoreTests.test_fixture_export_builder_produces_v2_but_current_packets_keep_v1_bytes",
+        "test_openness_minimum_v2.MinimumV2StoreTests.test_current_exports_activate_v2_and_leave_the_native_packet_immutable",
         "test_openness_minimum_v2.MinimumV2StoreTests.test_nonempty_v2_spec_bindings_are_refused_before_writes_until_their_delivery_ships",
         "test_openness_minimum_v2.MinimumV2StoreTests.test_controller_wrapper_and_stored_finding_readers_keep_v1_results_with_empty_v2_lists",
         "test_openness_minimum_v2.MinimumV2StoreTests.test_v2_search_date_uses_latest_instant_in_utc_while_v1_keeps_local_calendar_dates",
@@ -5544,6 +5544,45 @@
       "tests": [
         "test_certificate_path_example.CertificatePathExampleTests.test_native_certificate_journey_and_six_refusals",
         "test_certificate_path_example.CertificatePathExampleTests.test_common_probe_examples_retain_the_residue_certificate"
+      ]
+    },
+    {
+      "id": "openness-final-turn-answers-revise-and-no-finding-is-recorded",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "problem openness finding answer",
+      "summary": "Final reviewers honestly reported unresolved openness with decision revise, leaving no recordable finding.",
+      "expected": "A v6 final or prompt v7 single-turn answer follows the forecast rule and records unresolved as a complete finding; legacy revise answers remain valid only under their stored earlier contracts.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "further_occurrences": [
+        {
+          "record": "20261114070000-openness-finding-unrecordable-and-unbindable-captures",
+          "item": 2
+        }
+      ],
+      "tests": [
+        "test_openness_finding_answer.FindingChainRecordingTests.test_v6_final_records_an_unresolved_finding_over_accepted_gaps",
+        "test_openness_finding_answer.FindingRecordingTests.test_each_rule_row_reaches_record_and_composes_the_native_bindings",
+        "test_openness_finding_answer.FindingRuleTests.test_every_forecast_ground_subset_and_outcome_follows_the_rule",
+        "test_openness_finding_answer.FindingRuleTests.test_prompt_renders_the_same_ordered_rule_table",
+        "test_openness_finding_answer.FindingRuleTests.test_incident_revise_outputs_stay_legacy_and_are_refused_as_findings"
+      ]
+    },
+    {
+      "id": "v6-reading-chain-bounds-every-retained-entry",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "reading chain serialized record admission",
+      "summary": "Uncharged diagnostic metadata and extra passage turns could make the final request exceed its route after earlier turns completed.",
+      "expected": "New chains admit a finite serialized record total before a call. Every admitted request stays within its first projection, all retained entries are charged, and the reviewer reaches a recorded finding or the first assignment stops below the policy floor.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_v6_chain.V6ChainTests.test_g15_short_excerpts_long_purposes_fit_every_request",
+        "test_openness_v6_chain.V6ChainTests.test_g15_long_purposes_are_bounded_before_record_charging",
+        "test_openness_v6_chain.V6ChainTests.test_g15_uncharged_diagnostics_stop_retaining_and_charge_no_text",
+        "test_openness_v6_chain.V6ChainTests.test_g15_passage_turns_end_when_the_record_has_no_room",
+        "test_openness_v6_chain.V6ChainTests.test_g15_reserved_identifiers_and_failed_attempts_fit_the_projection",
+        "test_openness_v6_chain.IncidentV6ChainTests.test_g15_incident_twenty_searches_twenty_nine_texts_is_admitted_or_stops_below_floor"
       ]
     }
   ]

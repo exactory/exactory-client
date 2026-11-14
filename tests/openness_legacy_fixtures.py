@@ -95,3 +95,27 @@ def load_0_72_0_openness_reading():
     module = importlib.util.module_from_spec(spec)
     exec(compile(source, str(location), 'exec'), module.__dict__)
     return module
+
+
+def load_0_87_0_openness_reading():
+    """Load the v5 builder used before new exports select v6, pinned without repository history."""
+    location = Path(__file__).resolve().parent / 'fixtures/openness_reading_0_87_0.py.txt'
+    source = location.read_bytes()
+    if hashlib.sha256(source).hexdigest() != '1b33b0fa64a5be8b74bae463c254346aa6d744981273321c60a87a6ffb3964e1':
+        raise AssertionError('The 0.87.0 reading builder changed')
+    spec = importlib.util.spec_from_loader('research_harness.openness_reading_0_87_0', loader=None)
+    module = importlib.util.module_from_spec(spec)
+    exec(compile(source, str(location), 'exec'), module.__dict__)
+    return module
+
+
+def export_as_0_85_3(*args, **kwargs):
+    """Build the stored minimum-v1 export with its original function, without relabeling new packets."""
+    from research_harness import problem_openness
+    location = Path(__file__).resolve().parent / 'fixtures/openness_export_0_85_3.py.txt'
+    source = location.read_bytes()
+    if hashlib.sha256(source).hexdigest() != '300a91030ed7034ce6abd065d01be6a70caca4a045d67abe08af254508eeabb2':
+        raise AssertionError('The 0.85.3 export builder changed')
+    namespace = dict(vars(problem_openness))
+    exec(compile(source, str(location), 'exec'), namespace)
+    return namespace['export_openness'](*args, **kwargs)

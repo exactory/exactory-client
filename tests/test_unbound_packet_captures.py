@@ -112,7 +112,7 @@ class UnboundPacketCaptureTests(unittest.TestCase):
                 with patch.object(transport, 'send_request') as sender:
                     with self.assertRaises(ResearchError) as caught:
                         case.assign('turn-1', native)
-                    self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
+                    self.assertEqual(caught.exception.code, 'openness_packet_outdated')
                     self.assertEqual(caught.exception.details['handoff'], 'export')
                     sender.assert_not_called()
                 self.assertEqual(case.store.snapshot(), before)
@@ -314,7 +314,7 @@ class UnboundPacketCaptureTests(unittest.TestCase):
             native = case.export(priority=case.versions)
         with self.assertRaises(ResearchError) as caught:
             case.assign('turn-1', native)
-        self.assertEqual(caught.exception.code, 'openness_reading_incomplete')
+        self.assertEqual(caught.exception.code, 'openness_packet_outdated')
         self.assertEqual(caught.exception.details['handoff'], 'export')
 
     def test_normalized_author_identity_keeps_the_earlier_chosen_capture_delivery(self):

@@ -9,17 +9,25 @@ from unittest.mock import patch
 
 from literature_fixtures import LiteratureCase
 from problem_parts_fixtures import ResultPartsCase
+from openness_legacy_fixtures import export_as_0_85_3, load_0_87_0_openness_reading
 from research_harness.review_bodies import read_history
 from research_harness import review_protocol as protocol
 from research_harness import problem_rubric, research_decisions as decisions
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
 from research_harness.problem_rubric import ITEMS, rubric_objection_id
+from research_harness.problem_openness import export_openness as _CURRENT_OPENNESS_EXPORT
 from test_research_problem_claims import ProblemCase
 from test_research_problem_rubric import install_rubric_anchors, passing_grades
 
 
 CHECKS = ("problem_statement", "problem_openness", "problem_value", "problem_citations", "stop")
+
+
+def record_historical_openness_assignment(case, payload):
+    """Seed a minimum-v1 assignment through the exact pre-v6 builder and its native-v6 prompt."""
+    with patch.object(protocol, 'openness_reading', load_0_87_0_openness_reading()):
+        return case.mutate(protocol.record_assignment, payload)
 
 
 class ProblemReviewTests(LiteratureCase):
@@ -886,18 +894,21 @@ class ProblemOpennessReviewTests(ProblemCase):
         self.selected = self.select_statement(candidate_id="candidate-1")
 
     def observe_openness(self, outcome="supported_open", change_output=None):
+        """Observe the historical schema2 contract; current schema3 journeys have their own fixtures."""
         from research_harness.literature import record_search
         from research_harness.problem_openness import export_openness
         search = self.capture_search()
         search["question"] = self.selected["statement"]
         self.mutate(record_search, search)
-        exported = export_openness(self.store, {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
+        # Preserve callers' outer patches, whose wrappers deliberately forge the frozen native packet.
+        exporter = export_as_0_85_3 if export_openness is _CURRENT_OPENNESS_EXPORT else export_openness
+        exported = exporter(self.store, {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
             "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
                 "settling_work_id": None, "duplicate_resolutions": []}}, self.root / "openness-packet")
         native = json.loads(self.artifacts.read(exported["native_packet"]))
         if "route" not in self.store.snapshot()["records"].get("review_route", {}):
             self.prepare_review_route()
-        self.mutate(protocol.record_assignment, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
+        record_historical_openness_assignment(self, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
             "role": "native_math", "reviewer_id": "native-reviewer", "author_id": "problem-author",
             "context": {"native_packet": exported["native_packet"]}})
         openness = {"outcome": outcome, "statement_digest": native["claim_digest"],

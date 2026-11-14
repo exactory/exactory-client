@@ -40,10 +40,13 @@ PASSAGE_OVER_ALLOWANCE_NOTE = ('The anchor of this passage was found, but the de
                                'already use the session total of characters, so its text is not delivered.')
 # The kinds of reading units, each with the fields that name one: required, then optional.
 UNIT_KINDS = ('fulltext', 'search_response', 'record')
+UNIT_KINDS_V6 = UNIT_KINDS + ('result_text',)
 IDENTITY_FIELDS = {'fulltext': (('version_id',), ('text_sha256',)),
                    'search_response': (('source_id',), ('text_sha256',)),
-                   'record': (('record_kind', 'record_id'), ())}
+                   'record': (('record_kind', 'record_id'), ()),
+                   'result_text': (('native_attempt_digest', 'acceptance_id', 'text_sha256'), ())}
 RECORD_KINDS = ('literature_search', 'reading', 'problem_statement')
+RECORD_KINDS_V6 = RECORD_KINDS + ('accepted_result',)
 # The excerpt rules of 0.64.2 to 0.65.1, kept for the assignments recorded with them.
 PHASE_PROMPT_V1 = (
     ' Excerpt rules of this session. The full texts that you request can be longer together than one input of this '
@@ -184,6 +187,8 @@ def find_source_text(records, version_id):
 
 def find_kind(value):
     """The kind of reading unit that an excerpt, a passage request or a unit names by its identity fields."""
+    if 'native_attempt_digest' in value:
+        return 'result_text'
     if 'record_kind' in value or 'record_id' in value:
         return 'record'
     return 'search_response' if 'source_id' in value else 'fulltext'
@@ -277,7 +282,7 @@ def _find_entry_key(entry):
     return find_identity(entry), sha256, entry['status']
 
 
-def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=None, protocol=PROTOCOL, retained=()):
+def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=None, protocol=PROTOCOL, retained=(), retain_entry=None):
     """Check excerpts in output order against the stored text that each names, found as find_source_reference finds
     it. A verified excerpt carries the original characters of its first match; the session allowance counts the
     characters of verified excerpts. Return the checked entries and the allowances after them.
@@ -288,12 +293,14 @@ def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=Non
     length, and its first 200 characters. A purpose longer than 500 characters keeps its first 500 characters plus
     the full purpose's SHA-256 and character length. Verified spans and text-free over-allowance diagnostics otherwise
     keep their existing forms. Earlier protocols keep their original forms and duplicates."""
+    # A serialized-record retainer can decline an entry before it consumes its text allowance.
     allowance = dict(allowances['excerpts'])
     sources = _read_sources(records, artifacts, {find_identity(excerpt) for excerpt in excerpts}, unit_sources)
     checked = []
     bounded = protocol == SESSION_PROTOCOL
     seen = {_find_entry_key(entry) for entry in retained} if bounded else set()
     for excerpt in excerpts:
+        previous_used = allowance['used']
         identity = find_identity(excerpt)
         entry = dict(identity[1:], purpose=excerpt['purpose'])
         if bounded and len(entry['purpose']) > PURPOSE_CHARACTERS:
@@ -327,12 +334,16 @@ def check_excerpts(records, artifacts, excerpts, allowances, *, unit_sources=Non
             key = _find_entry_key(entry)
             if key in seen:
                 continue
+        if retain_entry is not None and not retain_entry(entry, dict(allowances, excerpts=dict(allowance))):
+            allowance['used'] = previous_used
+            continue
+        if bounded:
             seen.add(key)
         checked.append(entry)
     return checked, dict(allowances, excerpts=allowance)
 
 
-def answer_passages(records, artifacts, requests, allowances, *, unit_sources=None, protocol=PROTOCOL):
+def answer_passages(records, artifacts, requests, allowances, *, unit_sources=None, protocol=PROTOCOL, retain_entry=None):
     """Answer passage requests in order: the original text that starts at the first occurrence of the anchor and has
     at most the requested number of characters, within the session allowance; the stored text is found as for
     check_excerpts. Return the answers and the allowances after them.
@@ -344,6 +355,7 @@ def answer_passages(records, artifacts, requests, allowances, *, unit_sources=No
     sources = _read_sources(records, artifacts, {find_identity(request) for request in requests}, unit_sources)
     answers = []
     for request in requests:
+        previous_used = allowance['used']
         answer = {'request': request, 'reading_credit': False}
         source = sources.get(find_identity(request))
         span = None if source is None else _locate(source, normalize_with_offsets(request['anchor'])[0])
@@ -362,12 +374,16 @@ def answer_passages(records, artifacts, requests, allowances, *, unit_sources=No
             anchor = _describe_bounded_text(request['anchor'])
             answer['request'] = dict(request, anchor=anchor['head'], anchor_sha256=anchor['sha256'],
                                      anchor_characters=anchor['characters'])
+        if retain_entry is not None and not retain_entry(answer, dict(allowances, passages=dict(allowance))):
+            allowance['used'] = previous_used
+            continue
         answers.append(answer)
     return answers, dict(allowances, passages=allowance)
 
 
-def _require_record_kind(value, code, *, path):
-    if 'record_kind' in value and value['record_kind'] not in RECORD_KINDS:
+def _require_record_kind(value, code, *, path, kinds=None):
+    record_kinds = RECORD_KINDS_V6 if kinds == UNIT_KINDS_V6 else RECORD_KINDS
+    if 'record_kind' in value and value['record_kind'] not in record_kinds:
         raise ResearchError(code, 'A record_kind is literature_search, reading or problem_statement',
                             {'path': path + '/record_kind'})
 
@@ -385,7 +401,7 @@ def validate_excerpts(values, code, kinds=None, *, path='/excerpts'):
             if key in value:
                 with describe_error_at(item_path + '/' + key):
                     text(value[key], 'Excerpt ' + key, code=code)
-        _require_record_kind(value, code, path=item_path)
+        _require_record_kind(value, code, path=item_path, kinds=kinds)
 
 
 def validate_passage_request(request, code, kinds=None, *, path=''):
@@ -400,7 +416,7 @@ def validate_passage_request(request, code, kinds=None, *, path=''):
                 require_exact_version(request[key], code)
             elif key in request:
                 text(request[key], 'Passage ' + key, code=code)
-    _require_record_kind(request, code, path=path)
+    _require_record_kind(request, code, path=path, kinds=kinds)
     with describe_error_at(path + '/anchor'):
         text(request['anchor'], 'Passage anchor', code=code)
     normalized_characters = len(normalize_with_offsets(request['anchor'])[0])

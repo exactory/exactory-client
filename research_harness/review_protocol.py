@@ -919,6 +919,10 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
         from .native_review import PROMPT
         reading_protocol = reading_protocol or openness_reading.PROTOCOL
         texts = openness_reading.PROMPTS[reading_protocol]
+        from .openness_reading import PROTOCOL_V6
+        if reading_protocol == PROTOCOL_V6:
+            from .native_review import PROBLEM_OPENNESS_PROMPT
+            PROMPT = PROBLEM_OPENNESS_PROMPT
         prompt = common + (texts['reading'] if reading_stage == 'reading' else PROMPT + texts['final'])
         return _build_prompt(reading_protocol + '/' + reading_stage, prompt,
                              {'role': role, 'reading_stage': reading_stage}, common_version)
@@ -969,6 +973,10 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
                     _PROBLEM_PROTOCOL if version in (2, 3, 4) else PROBLEM_PROTOCOL)
         return _build_prompt(template + '/' + role + suffix, prompt, parameters, common_version)
     if role == 'native_math':
+        if version == 7:
+            from .native_review import PROBLEM_OPENNESS_PROMPT
+            return _build_prompt('exactory-review-v7/native_math', common + PROBLEM_OPENNESS_PROMPT
+                + openness_reading.V6_FINAL_PARAGRAPH, {'role': role}, common_version)
         from .native_review import (PROMPT, LEGACY_PROMPT, OPENNESS_PROMPT, MINIMUM_PROMPT,
                                     RESOLUTIONS_PROMPT, STRATEGY_PROMPT, TRIMMED_STRATEGY_PROMPT)
         prompt = common + (LEGACY_PROMPT if legacy else OPENNESS_PROMPT if version == 1
@@ -2470,7 +2478,7 @@ def is_previous_prompt(assignment):
     candidates = [canonical_prompt(assignment['role'], repair=repair, version=1, common_version=common_version)]
     if assignment['role'] == 'native_math':
         candidates.extend(canonical_prompt('native_math', version=version, common_version=common_version)
-                          for version in (2, 3, 4, 5))
+                          for version in (2, 3, 4, 5, 6))
     if not repair and assignment['role'] in bar_sources.ROLES + ('adjudicator',):
         candidates.append(canonical_prompt(assignment['role'], legacy=True, version=1, common_version=common_version))
     return assignment['prompt'] in candidates
@@ -2625,9 +2633,9 @@ def _prompt_matches(assignment, packet=None):
     if (assignment['prompt'] == canonical_prompt(assignment['role'], repair=repair, common_version=common_version)
             or is_previous_prompt(assignment) or _uses_previous_repair_suffix(assignment)):
         return True
-    # Native assignments recorded before the openness finding keep their exact prompt.
-    return assignment['role'] == 'native_math' and assignment['prompt'] == canonical_prompt(
-        'native_math', legacy=True, common_version=common_version)
+    # The problem finding contract and older native result contracts remain independently verifiable.
+    return assignment['role'] == 'native_math' and any(assignment['prompt'] == canonical_prompt(
+        'native_math', common_version=common_version, **parameters) for parameters in (dict(version=7), dict(legacy=True)))
 
 
 def _repair_packet(records, artifacts, value, repair):
@@ -3323,6 +3331,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if staged_repair and value['role'] == 'adjudicator':
             base_prompt_parameters['repair'] = True
         base_prompt_parameters.update(prompt_paragraphs.select_prompt_parameters(value['role'], packet))
+        if (value['role'] == 'native_math' and openness_reading.find_stage(packet) is None
+                and openness_reading.is_openness_packet(packet['native'])
+                and packet['native']['scientific_context']['openness_minimum']['schema_version'] == 2):
+            base_prompt_parameters['version'] = 7
         prompt = canonical_prompt(value['role'], **base_prompt_parameters)
         history = []
         session_id = value['id']
@@ -3498,7 +3510,10 @@ def record_attempt(store, payload, *, expected_revision, request_id):
         fields(value, ('id', 'assignment_id', 'status', 'output', 'reason', 'usage'),
                ('observed_at', 'provider_diagnostic'))
         validate_observation_fields(value)
-        _get(records, 'review_assignment', value['assignment_id'])
+        text(value['id'], 'Attempt ID')
+        assignment = _get(records, 'review_assignment', value['assignment_id'])
+        from .openness_reading import require_reserved_identifier
+        require_reserved_identifier(value['id'], assignment['prompt']['template_id'].rsplit('/', 1)[0])
         from .review_task_execution import has_call_terminated, identify_call
         if value['id'] in records.get('review_invocation', {}):
             lifecycle_id = identify_call('review.invoke', value['id'])
@@ -3559,6 +3574,8 @@ def invoke_assignment(store, payload, *, expected_revision, request_id, credenti
         artifacts = Evaluation.of(records, store_artifacts)
         fields(value, ('id', 'assignment_id'))
         assignment = _get(records, 'review_assignment', value['assignment_id'])
+        from .openness_reading import require_reserved_identifier
+        require_reserved_identifier(value['id'], assignment['prompt']['template_id'].rsplit('/', 1)[0])
         from .problem_delivery import require_unposted_review
         require_unposted_review(records, assignment, artifacts)
         require_verified_assignment(records, artifacts, assignment)

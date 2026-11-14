@@ -4,6 +4,7 @@ from pathlib import Path
 
 from test_research_problem_claims import ProblemCase
 from test_research_problem_delivery import ProblemDeliveryCase
+from openness_legacy_fixtures import export_as_0_85_3
 from research_harness import problem_evidence, research_decisions as decisions, review_protocol
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -132,10 +133,18 @@ class ProblemOpennessTests(ProblemCase):
         directory = self.root / 'intermediate/reviews/packets/open-review'
         legacy = namespace['export_openness'](self.store, spec, directory)
         before = (directory / 'inputs.json').read_bytes()
-        actual = problem_openness.export_openness(self.store, spec)
+        from research_harness.review_delivery import deliver_packet
+        native_bytes = self.artifacts.read(legacy['native_packet'])
+        # Current delivery still reuses a stored manifest; a fresh export now has a different versioned contract.
+        actual = deliver_packet(self.store, directory, json.loads(before), transitive=True, reuse=True)
         self.assertEqual(Path(actual['destination']).resolve(), Path(legacy['destination']).resolve())
-        self.assertEqual(actual['native_packet'], legacy['native_packet'])
-        self.assertEqual(self.artifacts.read(actual['native_packet']), self.artifacts.read(legacy['native_packet']))
+        self.assertEqual(self.artifacts.read(legacy['native_packet']), native_bytes)
+        self.assertEqual((directory / 'inputs.json').read_bytes(), before)
+        current = problem_openness.export_openness(self.store, spec)
+        current_packet = json.loads(self.artifacts.read(current['native_packet']))
+        self.assertEqual(current_packet['scientific_context']['openness_minimum']['schema_version'], 2)
+        self.assertIn('audit_forecast', current_packet['scientific_context'])
+        self.assertNotEqual(current['native_packet'], legacy['native_packet'])
         self.assertEqual((directory / 'inputs.json').read_bytes(), before)
 
     def test_new_neighbour_and_material_search_make_finding_stale(self):
@@ -269,10 +278,13 @@ class ProblemOpennessExportCheckTests(ProblemCase):
         records = self.store.snapshot()["records"]
         reading = records["reading"]["read-full"]
         self.assertEqual(packet["scientific_context"]["openness_minimum"], {
-            "schema_version": 1, "statement": self.statement, "neighbours": [self.neighbour],
+            "schema_version": 2, "statement": self.statement, "neighbours": [self.neighbour],
             "searches": [{"formulation": self.statement, "search_digest": digest(exact)},
                          {"formulation": self.neighbour, "search_digest": digest(neighbour)}],
-            "reading_digests": [digest(reading)], "settling_work_id": None, "duplicate_resolutions": []})
+            "reading_digests": [digest(reading)], "settling_work_id": None, "duplicate_resolutions": [],
+            "family_readings": [], "supporting_reading_digests": [], "results": []})
+        self.assertEqual(packet["scientific_context"]["audit_forecast"], result["audit_forecast"])
+        self.assertEqual(packet["scientific_context"]["minimum_gaps"], result["audit_forecast"]["gaps"])
         self.assertEqual({entry["digest"] for entry in packet["evidence"]},
                          {digest(exact), digest(neighbour), digest(reading), digest(self.selected)}
                          | {row["sha256"] for row in collect_reading_artifacts(records, self.artifacts, reading)})
@@ -410,7 +422,8 @@ class ProblemOpennessExportCheckTests(ProblemCase):
         namespace = vars(problem_openness).copy()
         exec(compile(source, str(fixture), "exec"), namespace)
         baseline = namespace["export_openness"](self.store, spec, self.root / "baseline-packet")["native_packet"]
-        actual = self.export(spec)["native_packet"]
+        # Compare stored release builders; new exports intentionally use the minimum-v2 envelope.
+        actual = export_as_0_85_3(self.store, spec, self.root / "historical-packet")["native_packet"]
         self.assertEqual(self.artifacts.read(actual), self.artifacts.read(baseline))
         self.assertEqual(actual["sha256"], baseline["sha256"])
         return json.loads(self.artifacts.read(actual))
@@ -490,7 +503,7 @@ class ProblemNativeResultShapeTests(ProblemCase):
         self.initialize_problem()
         self.selected = self.select_statement()
         self.prepare_review_route = fixtures.ProblemReviewTests.prepare_review_route.__get__(self)
-        real_export = problem_openness.export_openness
+        real_export = export_as_0_85_3
         def replace_subject(store, spec, destination):
             exported = real_export(store, spec, destination)
             packet = json.loads(self.artifacts.read(exported["native_packet"]))
@@ -510,7 +523,7 @@ class ProblemNativeResultShapeTests(ProblemCase):
         self.initialize_problem()
         self.selected = self.select_statement()
         self.prepare_review_route = fixtures.ProblemReviewTests.prepare_review_route.__get__(self)
-        real_export = problem_openness.export_openness
+        real_export = export_as_0_85_3
         def declare_unbound_neighbour(store, spec, destination):
             exported = real_export(store, spec, destination)
             packet = json.loads(self.artifacts.read(exported["native_packet"]))
@@ -601,13 +614,12 @@ class ProblemNativeResultShapeTests(ProblemCase):
     def test_resolved_finding_cannot_claim_reading_records_without_delivered_source_bytes(self):
         import test_research_problem_reviews as reviewers
         import test_research_problem_openness_minimum as minimum_fixtures
-        from research_harness.problem_openness import export_openness
         from research_harness import review_protocol
         self.initialize_problem()
         self.selected = self.select_statement()
         evidence = self.record_full_reading()
         search = minimum_fixtures.ProblemOpennessMinimumTests.search(self, [evidence["version_id"]])
-        exported = export_openness(self.store, {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
+        exported = export_as_0_85_3(self.store, {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
             "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
                         "settling_work_id": None, "duplicate_resolutions": []}}, self.root / "packet")
         native = json.loads(self.artifacts.read(exported["native_packet"]))
@@ -616,7 +628,7 @@ class ProblemNativeResultShapeTests(ProblemCase):
         native["evidence"] = [row for row in native["evidence"] if row["digest"] in record_digests]
         forged = self.artifacts.put(json.dumps(native).encode(), "application/json")
         reviewers.ProblemReviewTests.prepare_review_route(self)
-        self.mutate(review_protocol.record_assignment, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
+        reviewers.record_historical_openness_assignment(self, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
             "role": "native_math", "reviewer_id": "native-reviewer", "author_id": "problem-author", "context": {"native_packet": forged}})
         output = {"schema_version": 2, "subject_digest": native["subject_digest"], "claim_digest": native["claim_digest"],
             "reviewer": native["reviewer"], "decision": "approve", "findings": {
@@ -730,8 +742,8 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
     def test_legacy_assessment_reading_keeps_its_identity_through_observed_finding(self):
         from research_harness import reading, review_protocol
         from research_harness.literature import import_bundle
-        from research_harness.problem_openness import export_openness
         from test_research_problem_openness_minimum import ProblemOpennessMinimumTests
+        from test_research_problem_reviews import record_historical_openness_assignment
 
         version = self.metadata()
         bundle = self.bundle(version)
@@ -747,12 +759,12 @@ class ProblemOpennessMinimumSchemaTests(ProblemCase):
         self.assertTrue(coverage["complete"])
         self.assertNotEqual(coverage["readings"][note["id"]]["assessment"], original["assessment"])
         search = ProblemOpennessMinimumTests.search(self, [version])
-        exported = export_openness(self.store, {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
+        exported = export_as_0_85_3(self.store, {"assignment_id": "openness-assignment", "reviewer_id": "native-reviewer",
             "minimum": {"searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
                         "settling_work_id": None, "duplicate_resolutions": []}}, self.root / "legacy-packet")
         packet = json.loads(self.artifacts.read(exported["native_packet"]))
         self.prepare_review_route()
-        self.mutate(review_protocol.record_assignment, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
+        record_historical_openness_assignment(self, {"id": "openness-assignment", "route_id": "route", "dossier_id": None,
             "role": "native_math", "reviewer_id": "native-reviewer", "author_id": "problem-author",
             "context": {"native_packet": exported["native_packet"]}})
         output = {"schema_version": 2, "subject_digest": packet["subject_digest"], "claim_digest": packet["claim_digest"],

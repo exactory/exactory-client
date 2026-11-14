@@ -1,15 +1,19 @@
 """Observed native openness findings over this problem's common evidence."""
 
+import copy
 import json
 
 from .artifacts import ArtifactStore
 from .errors import ResearchError
 from .evidence import digest
 from .graph import obligation
-from .native_review import ATTESTATION_PREFIX, PROTOCOL, load_packet
+from .native_review import ATTESTATION_PREFIX, PROTOCOL, GROUND_NEXT_STEPS, load_packet, uses_finding_contract
 from .operations import fields, immutable_record, iso_date, strings, text
 from .problem_claims import find_current_statement, find_latest, require_problem, compute_statement_digest
 from .reading import fulltext_coverage
+
+GAPPED_EXPORT_MESSAGE = ("Both resolved outcomes are blocked by this minimum. Protocol v6 can record an "
+                         "unresolved finding with these gaps.")
 
 
 FAMILY_READING_REPORT_FIELD = "derived_family_readings"
@@ -62,37 +66,46 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("review_context_unverified", "Obtain the observed native_math openness result", {"obligations": state["obligations"]})
     packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
     output = state["output"]
-    from .openness_reading import PROTOCOL_V5, find_protocol, find_stage, verify_chain, verify_problem_coverage
+    from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, find_protocol, find_stage, verify_chain, verify_problem_coverage
     supplied = json.loads(artifacts.read(assignment["packet"]))
     stage = find_stage(supplied)
     if stage == "reading" or (stage == "final" and output.get("stage") == "reading"):
         raise ResearchError("openness_reading_incomplete", "This turn of the reading chain returned no native result; "
                             "continue the chain to a final turn that returns it", {"assignment_id": assignment["id"]})
-    fields(output, ("schema_version", "subject_digest", "claim_digest", "reviewer", "decision", "findings"), code="invalid_record")
-    fields(output["findings"], ("statement", "assumptions", "scope", "dependencies", "policy", "openness"), code="invalid_record")
-    for key in ("statement", "assumptions", "scope", "dependencies", "policy"):
-        text(output["findings"][key], "Native result finding " + key, code="invalid_record")
-    if (output.get("schema_version") != 2 or output.get("decision") != "approve"
-            or output.get("subject_digest") != packet["subject_digest"] or output.get("claim_digest") != packet["claim_digest"]
-            or output.get("reviewer") != packet["reviewer"] or packet["kind"] != "result"):
-        raise ResearchError("review_packet_mismatch", "Use the observed version 2 native result bound to the problem packet")
-    finding = output.get("findings", {}).get("openness")
-    fields(finding, ("outcome", "statement_digest", "evidence", "searched_at", "coverage", "reason"), ("minimum",))
-    if "minimum" in finding:
-        from .openness_minimum import validate_minimum
-        validate_minimum(finding["minimum"])
-    if finding["outcome"] not in {"supported_open", "already_solved", "unresolved"}:
-        raise ResearchError("invalid_input", "Use a native openness outcome")
-    iso_date(finding["searched_at"])
-    text(finding["reason"], "Openness finding reason")
-    # The observed finding is recorded as given; a reviewer that reports the dated coverage per formulation as a
-    # nonempty structure is accepted alongside plain text.
-    if isinstance(finding["coverage"], (list, dict)):
-        if not finding["coverage"]:
-            raise ResearchError("invalid_record", "Openness coverage must be nonempty")
+    finding_contract = uses_finding_contract(assignment)
+    if finding_contract:
+        # The observed answer was checked against this assignment's immutable contract at ingestion.
+        finding = copy.deepcopy(output["findings"]["openness"])
+        context = packet["scientific_context"]
+        finding.update(statement_digest=packet["claim_digest"],
+                       searched_at=context["audit_forecast"]["searched_through"],
+                       minimum=context["openness_minimum"], minimum_gaps=context["minimum_gaps"])
     else:
-        text(finding["coverage"], "Openness coverage", code="invalid_record")
-    strings(finding["evidence"], "Openness evidence", nonempty=True, code="invalid_record")
+        fields(output, ("schema_version", "subject_digest", "claim_digest", "reviewer", "decision", "findings"), code="invalid_record")
+        fields(output["findings"], ("statement", "assumptions", "scope", "dependencies", "policy", "openness"), code="invalid_record")
+        for key in ("statement", "assumptions", "scope", "dependencies", "policy"):
+            text(output["findings"][key], "Native result finding " + key, code="invalid_record")
+        if (output.get("schema_version") != 2 or output.get("decision") != "approve"
+                or output.get("subject_digest") != packet["subject_digest"] or output.get("claim_digest") != packet["claim_digest"]
+                or output.get("reviewer") != packet["reviewer"] or packet["kind"] != "result"):
+            raise ResearchError("review_packet_mismatch", "Use the observed version 2 native result bound to the problem packet")
+        finding = output.get("findings", {}).get("openness")
+        fields(finding, ("outcome", "statement_digest", "evidence", "searched_at", "coverage", "reason"), ("minimum",))
+        if "minimum" in finding:
+            from .openness_minimum import validate_minimum
+            validate_minimum(finding["minimum"])
+        if finding["outcome"] not in {"supported_open", "already_solved", "unresolved"}:
+            raise ResearchError("invalid_input", "Use a native openness outcome")
+        iso_date(finding["searched_at"])
+        text(finding["reason"], "Openness finding reason")
+        # The observed finding is recorded as given; a reviewer that reports the dated coverage per formulation as a
+        # nonempty structure is accepted alongside plain text.
+        if isinstance(finding["coverage"], (list, dict)):
+            if not finding["coverage"]:
+                raise ResearchError("invalid_record", "Openness coverage must be nonempty")
+        else:
+            text(finding["coverage"], "Openness coverage", code="invalid_record")
+        strings(finding["evidence"], "Openness evidence", nonempty=True, code="invalid_record")
     statement = find_current_statement(records)
     if (statement is None or finding["statement_digest"] != compute_statement_digest(statement)
             or finding["statement_digest"] != packet["claim_digest"]
@@ -100,11 +113,15 @@ def prepare_openness(records, artifacts, value, revision):
         raise ResearchError("openness_statement_mismatch", "The finding must name the exact current problem claim")
     delivered = {entry["digest"] for entry in packet["evidence"]}
     verified = None
-    if stage == "final" and find_protocol(supplied) == PROTOCOL_V5:
+    if stage == "final" and find_protocol(supplied) in (PROTOCOL_V5, PROTOCOL_V6):
         verified = verify_problem_coverage(records, artifacts, assignment, final=True)
         delivered.difference_update(row["search_digest"] for row in
                                     packet["scientific_context"]["openness_minimum"]["searches"])
         delivered.update(verified["searches"])
+    if finding_contract:
+        # Whole-body receipt credit covers split reading units and reconstructed original searches.
+        # The packet's remaining artifacts are delivered whole by the ordinary native evidence boundary.
+        finding["evidence"] = sorted(delivered)
     if not isinstance(finding["evidence"], list) or not set(finding["evidence"]) <= delivered:
         raise ResearchError("openness_evidence_mismatch", "Use evidence delivered to the observed reviewer")
     if finding["outcome"] != "unresolved":
@@ -157,8 +174,8 @@ def assess_openness(records, artifacts):
         try:
             assignment, state, packet = observed_review(records, artifacts, finding["assignment_id"])
             if "reading_turns" in finding:
-                from .openness_reading import PROTOCOL_V5, find_protocol, verify_chain, verify_problem_coverage
-                if find_protocol(json.loads(artifacts.read(assignment["packet"]))) == PROTOCOL_V5:
+                from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, find_protocol, verify_chain, verify_problem_coverage
+                if find_protocol(json.loads(artifacts.read(assignment["packet"]))) in (PROTOCOL_V5, PROTOCOL_V6):
                     verified = verify_problem_coverage(records, artifacts, assignment, final=True)
                 turns = verified["turns"] if verified is not None else verify_chain(records, artifacts, assignment)
                 if turns != finding["reading_turns"]:
@@ -175,6 +192,7 @@ def assess_openness(records, artifacts):
         except ResearchError as error:
             return [obligation("problem_openness_stale", "Reassess changed or unavailable observed openness evidence.",
                                cause=error.code, **affected)]
+    grounds = [dict(ground, next=GROUND_NEXT_STEPS[ground["kind"]]) for ground in finding.get("grounds", [])]
     minimum = finding.get("minimum")
     if minimum is None:
         assignment = records.get("review_assignment", {}).get(finding.get("assignment_id"))
@@ -182,7 +200,7 @@ def assess_openness(records, artifacts):
             packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
             minimum = packet["scientific_context"].get("openness_minimum")
     if minimum is None:
-        return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", gaps=[], **affected)]
+        return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", gaps=[], grounds=grounds, **affected)]
     actual = {minimum.get("statement"), *minimum.get("neighbours", [])}
     expected = {statement["statement"], *statement["neighbours"]}
     if actual != expected:
@@ -199,7 +217,7 @@ def assess_openness(records, artifacts):
                                search_ids=unbound, **affected)]
         from .openness_minimum import list_minimum_gaps
         gaps = list_minimum_gaps(minimum, statement["statement"], records, artifacts)
-        return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", gaps=gaps, **affected)]
+        return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", gaps=gaps, grounds=grounds, **affected)]
     from .openness_minimum import audit_minimum
     try:
         delivered = set(finding["evidence"])
@@ -351,9 +369,7 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
             continue
         for reading_id in coverage["readings"]:
             readings[reading_id] = records["reading"][reading_id]
-    # UB6 and reading-forecast activate v2 together. Current packets keep v1.
-    minimum = build_minimum(statement, bound, readings, spec["minimum"], records=records, artifacts=artifacts,
-                            schema_version=1)
+    minimum = build_minimum(statement, bound, readings, spec["minimum"], records=records, artifacts=artifacts)
     # The declaration is checked against the store before the export writes anything.
     from .openness_minimum import validate_minimum_bindings
     validate_minimum_bindings(minimum, statement["statement"], records)
@@ -378,7 +394,10 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
             evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
     include_record(statement)
     from .capture_selection import describe_capture_selections
-    scientific_context = {"openness_minimum": minimum, **describe_capture_selections(records)}
+    scientific_context = {"openness_minimum": minimum, "minimum_gaps": gaps, "audit_forecast": forecast,
+                          "decisive_work_ids": sorted({reading["version_id"] for reading in readings.values()
+                                                       if reading["version_id"] in decisive}),
+                          **describe_capture_selections(records)}
     if "source_evidence" in spec:
         from .problem_openness_screening import resolve_source_evidence
         source_evidence, source_artifacts = resolve_source_evidence(records, artifacts, spec["source_evidence"], materialize=True)
@@ -429,9 +448,7 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
     if minimum["schema_version"] == 2:
         result[FAMILY_READING_REPORT_FIELD] = describe_family_readings(minimum, records, spec["minimum"])
     if blocked:
-        result["warnings"] = [{"code": "openness_minimum_gaps", "message":
-            "The bound minimum blocks both resolved outcomes. A reading chain over this packet still uses protocol "
-            "v5 and can end without a recorded finding until the finding contract ships in v6.", "details": forecast}]
+        result["warnings"] = [{"code": "openness_minimum_gaps", "message": GAPPED_EXPORT_MESSAGE, "details": forecast}]
     if not spec["minimum"].get("text_priority"):
         # A lower bound of the reviewer input: the packet and its text evidence bodies as JSON strings. Without a
         # priority no body gives way, so a route whose limit is below it refuses the run.

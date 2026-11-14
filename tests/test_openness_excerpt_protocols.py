@@ -12,6 +12,7 @@ from research_harness import openness_reading as reading, review_excerpts, revie
 
 class ExcerptProtocolTests(OpennessReadingCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (3000, 3000)
 
     def complete_chain(self, *, released=None, replay=False):

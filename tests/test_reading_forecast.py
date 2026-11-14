@@ -14,6 +14,7 @@ from test_openness_final_preflight import FinalPreflightCase
 
 class ReadingProjectionTests(FinalPreflightCase):
     reading_protocol = None
+    historical_v5 = True
     input_limit = 1300000
 
     def build_projection_inputs(self):
@@ -103,10 +104,12 @@ class ReadingProjectionTests(FinalPreflightCase):
 
     def test_check_reports_nonfinite_projection_without_recording_an_assignment(self):
         from research_harness.check_mode import check_mutation
+        from openness_legacy_fixtures import load_0_87_0_openness_reading
         records, artifacts, value, route, packet, rows, record = self.build_projection_inputs()
         before = self.store.snapshot()
-        checked = check_mutation(self.store, protocol.record_assignment, value,
-            expected_revision=self.store.revision, request_id='check-projection', bounded_payload=value)
+        with patch.object(reading, 'prepare_packet', side_effect=load_0_87_0_openness_reading().prepare_packet):
+            checked = check_mutation(self.store, protocol.record_assignment, value,
+                expected_revision=self.store.revision, request_id='check-projection', bounded_payload=value)
         self.assertFalse(checked['reading_chain_admission']['projection']['finite'])
         self.assertEqual(checked['reading_chain_admission']['details']['reason'], 'no_enforceable_bound')
         self.assertEqual(self.store.snapshot(), before)
@@ -124,6 +127,7 @@ class ReadingProjectionTests(FinalPreflightCase):
 
 class MathForecastTests(FinalPreflightCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (125000, 125000, 125000)
     input_limit = 260000
 
@@ -248,6 +252,7 @@ class MathForecastTests(FinalPreflightCase):
 
 class AliasedDeliveryProjectionTests(FinalPreflightCase):
     reading_protocol = None
+    historical_v5 = True
     input_limit = 1300000
     text_sizes = (40000, 40000, 40000)
 
@@ -277,6 +282,7 @@ class AliasedDeliveryProjectionTests(FinalPreflightCase):
 
 class AdversarialProjectionTests(FinalPreflightCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (8000,) * 29
     input_limit = 1300000
 
@@ -426,6 +432,7 @@ class AdversarialProjectionTests(FinalPreflightCase):
 
 class LegacyReadingForecastTests(FinalPreflightCase):
     reading_protocol = None
+    historical_v5 = True
 
     def load_released_builders(self):
         from pathlib import Path
@@ -488,6 +495,7 @@ class LegacyReadingForecastTests(FinalPreflightCase):
 
 class SeriesReadingForecastTests(FinalPreflightCase):
     reading_protocol = None
+    historical_v5 = True
     text_sizes = (49000,)
 
     def test_a_forecast_read_failure_preserves_the_original_series_stop(self):

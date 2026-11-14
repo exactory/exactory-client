@@ -256,8 +256,8 @@ def _projection(supplied, *, projected, withheld_texts=None):
             require(entries[identity].get("delivery") == CONTAINED and entries[identity].get("content") == "",
                     "Identify each contained source explicitly in the actual request")
         spans[identity] = span
-    from .openness_reading import BODY_WITHHELD_DELIVERY, BODY_WITHHELD_NOTE, PROTOCOL_V5
-    final = supplied.get('reading_record', {}).get('protocol') == PROTOCOL_V5
+    from .openness_reading import BODY_WITHHELD_DELIVERY, BODY_WITHHELD_NOTE, PROTOCOL_V5, PROTOCOL_V6
+    final = supplied.get('reading_record', {}).get('protocol') in (PROTOCOL_V5, PROTOCOL_V6)
     for identity in selected - set(spans):
         entry = entries.get(identity)
         if final and entry is not None and entry.get('delivery') == BODY_WITHHELD_DELIVERY:
@@ -304,9 +304,9 @@ def validate_delivery(records, artifacts, packet, state):
     require(delivery == build_delivery(records, artifacts, packet, review=assignment), "Reassess changed source captures, readings or containment")
     from .problem_openness_reviews import actual_delivery
     supplied = actual_delivery(records, artifacts, state, packet, required_proof(packet))
-    from .openness_reading import PROTOCOL_V5, list_reading_rows, select_delivered_bodies, verify_problem_coverage
+    from .openness_reading import PROTOCOL_V5, PROTOCOL_V6, list_reading_rows, select_delivered_bodies, verify_problem_coverage
     withheld = {}
-    if supplied.get('reading_record', {}).get('protocol') == PROTOCOL_V5:
+    if supplied.get('reading_record', {}).get('protocol') in (PROTOCOL_V5, PROTOCOL_V6):
         coverage = verify_problem_coverage(records, artifacts, assignment, final=True)
         reasons = classify_selected_texts(records, artifacts, packet, list_reading_rows(records, artifacts, packet, review=assignment))
         withheld = {sha256: row['deliveries'] for sha256, row in select_delivered_bodies(coverage['units']).items()

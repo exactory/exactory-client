@@ -109,6 +109,7 @@ class RefusalNoticeTests(RefusalCase):
 
     def test_every_registered_validator_produces_a_notice_without_the_other_reviewers_markers(self):
         from research_harness import native_review, research_decisions as decisions
+        from test_openness_finding_answer import build_packet
         from research_harness import review_parts_study, review_protocol as protocol, review_staged
         from test_research_problem_reviews import ProblemReviewTests
         from test_review_composition import make_fixture
@@ -186,6 +187,7 @@ class RefusalNoticeTests(RefusalCase):
             'adjudication.evidence_delivery': (check_focused, focused_output),
             'verification.parts': (lambda records, output: review_parts_study.validate_verification_final(
                 records, artifacts, dict(assignment, role='verification'), output), {}),
+            'openness.finding': (lambda records, output: native_review.validate_finding(build_packet(), output), {}),
             'native.output': (lambda records, output: native_review.validate_output({'kind': 'result'}, output),
                               {'decision': 'reject', 'reason': ''}),
         }

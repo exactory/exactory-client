@@ -40,6 +40,7 @@ CONTRACT_CHECKS = {
     'adjudication.evidence_delivery': {'notice_fields': _DELIVERY_NOTICE_FIELDS},
     'verification.parts': {'notice_fields': _SHAPE_NOTICE_FIELDS},
     'native.output': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS + ('request_id',)},
+    'openness.finding': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('rule', 'forecast')},
 }
 
 
@@ -335,17 +336,20 @@ def classify_observed_output(records, artifacts, attempt_id):
             with contract_check('verification.parts'):
                 validate_verification_final(records, artifacts, assignment, output, attempt=attempt)
         elif assignment['role'] == 'native_math':
-            from .native_review import validate_output
+            from .native_review import uses_finding_contract, validate_finding, validate_output
             from .openness_reading import (INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, find_stage,
                                            has_deliverable_passage, validate_turn_output)
             with contract_check('native.output'):
                 packet = json.loads(artifacts.read(assignment['packet']))
                 if find_stage(packet) is None:
-                    validate_output(packet['native'], output)
+                    if uses_finding_contract(assignment):
+                        validate_finding(packet, output)
+                    else:
+                        validate_output(packet['native'], output)
                 else:
                     validate_turn_output(packet, output)
             # Reading the bound bodies stays outside the contract check: an unavailable body is not an output failure.
-            if not has_deliverable_passage(records, artifacts, packet, output):
+            if not has_deliverable_passage(records, artifacts, packet, output, assignment=assignment, attempt=attempt):
                 with contract_check('native.output'):
                     raise ResearchError(INVALID_RESPONSE, PASSAGE_PROGRESS_ERR_MSG, {'path': '/passage_requests'})
     except ResearchError as error:

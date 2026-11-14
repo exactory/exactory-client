@@ -104,6 +104,135 @@ PROMPT = TRIMMED_STRATEGY_PROMPT + (
     "not an object or an array. Keep structured search details inside those strings when needed."
 )
 
+FINDING_INVALID_MESSAGE = "Return the openness finding required by this assignment's forecast and answer contract."
+GROUND_RULES = {
+    "reviewer_gap": dict(
+        description="The evidence lacks something beyond the forecast's gaps, such as a needed unread work or a sufficiently broad search.",
+        next="Repair by search, fulltext and reading, then export."),
+    "source_settles": dict(
+        description="A decisive bound source, read in full, proves or refutes the statement while the forecast does not offer already_solved; work_id names that source.",
+        next="Export with this work as settling_work_id after repairing the gaps, or record a new statement."),
+    "settling_source_rejected": dict(
+        description="The declared settling work does not settle the statement.",
+        next="Export without the declared settling work."),
+    "own_argument": dict(
+        description="An argument of the reviewer, in no bound source, proves or refutes the statement.",
+        next="Check the argument, for example in a solver objective whose accepted result can be bound, or record a new statement."),
+    "packet_defect": dict(
+        description="The packet lacks or contradicts what a finding needs.",
+        next="Record the packet defect in the harness improvement records, then export again."),
+}
+GROUND_NEXT_STEPS = {kind: rule["next"] for kind, rule in GROUND_RULES.items()}
+# Both the validator and X1 read these rows in order.
+FINDING_RULES = (
+    dict(number=1, outcome="already_solved", forecast="already_solved", grounds="empty",
+         condition="The forecast offers already_solved as possible and the declared settling work, read in full, settles the statement"),
+    dict(number=2, outcome="supported_open", forecast="supported_open", grounds="empty",
+         condition="The forecast offers supported_open as possible and the reviewer holds no ground"),
+    dict(number=3, outcome="unresolved", forecast=None, grounds="present_or_both_blocked",
+         condition="Every other case: report each ground held; grounds may be empty when the forecast blocks both resolved outcomes"),
+)
+
+
+def render_finding_rule(row):
+    return "Rule {number}: {condition}. Return {outcome}; grounds: {grounds}.".format(**row)
+
+
+def render_finding_prompt():
+    """Render X1 from the same ordered rules and ground vocabulary used for validation."""
+    return (
+        "Report what the delivered evidence establishes about whether this exact statement is open. "
+        "An unresolved finding with its grounds is a complete and correct answer. "
+        "This finding assesses neither the worth of the problem nor permission to post it. "
+        "Return exactly {schema_version:3,subject_digest,claim_digest,reviewer,findings:{statement,assumptions,"
+        "scope,dependencies,policy,openness:{outcome,coverage,reason,grounds:[{kind,text,work_id?,turns?}]}}}. "
+        "Use the exact native.subject_digest, native.claim_digest and native.reviewer bindings. "
+        "The five text findings and reason are nonempty strings. coverage is a nonempty string or a nonempty "
+        "list with one entry for every formulation. outcome is supported_open, already_solved or unresolved. "
+        "native.scientific_context.audit_forecast reports possible and blocked outcomes, the minimum gaps and "
+        "searched_through. You may add grounds from your assessment of the delivered evidence. "
+        "The harness supplies the recorded statement digest, evidence, search date and minimum. "
+        + " ".join(render_finding_rule(row) for row in FINDING_RULES) + " "
+        + " ".join(kind + ": " + GROUND_RULES[kind]["description"] + " " + step
+                   for kind, step in GROUND_NEXT_STEPS.items())
+        + " Each ground has nonempty text. Optional turns names distinct reading assignment ids in this chain's "
+        "reading_record.turns whose notes hold the details; put an argument arising in this final turn in text."
+    )
+
+
+PROBLEM_OPENNESS_PROMPT = render_finding_prompt()
+
+
+def uses_finding_contract(assignment):
+    """The saved prompt, rather than today's packet shape, selects the answer contract."""
+    template = assignment.get("prompt", {}).get("template_id", "")
+    return template in ("exactory-openness-reading-v6/final", "exactory-review-v7/native_math")
+
+
+def _require_finding(condition, rule, path, forecast):
+    if not condition:
+        raise ResearchError("openness_finding_invalid", FINDING_INVALID_MESSAGE,
+                            dict(rule=rule, path=path, forecast=forecast))
+
+
+def validate_finding(packet, output):
+    """Check a v3 answer using only its immutable assignment packet and output."""
+    from .review_refusal import contract_check
+    native = packet.get("native", packet)
+    context = native["scientific_context"]
+    forecast = context["audit_forecast"]
+    with contract_check("openness.finding"):
+        def require(condition, rule, path):
+            _require_finding(condition, rule, path, forecast)
+
+        require(isinstance(output, dict) and set(output) == {
+            "schema_version", "subject_digest", "claim_digest", "reviewer", "findings"}, "answer_fields", "")
+        require(type(output["schema_version"]) is int and output["schema_version"] == 3,
+                "schema_version", "/schema_version")
+        for key in ("subject_digest", "claim_digest", "reviewer"):
+            require(output[key] == native[key], "binding", "/" + key)
+        findings = output["findings"]
+        require(isinstance(findings, dict) and set(findings) == set(RESULT_FINDINGS) | {"openness"},
+                "finding_fields", "/findings")
+        for key in RESULT_FINDINGS:
+            require(_nonempty(findings[key]), "nonempty_text", "/findings/" + key)
+        openness = findings["openness"]
+        base = "/findings/openness"
+        require(isinstance(openness, dict) and set(openness) == {"outcome", "coverage", "reason", "grounds"},
+                "openness_fields", base)
+        require(_nonempty(openness["reason"]), "nonempty_text", base + "/reason")
+        coverage = openness["coverage"]
+        minimum = context["openness_minimum"]
+        require(_nonempty(coverage) or isinstance(coverage, list)
+                and len(coverage) == 1 + len(minimum["neighbours"]), "coverage", base + "/coverage")
+        grounds = openness["grounds"]
+        require(isinstance(grounds, list), "grounds_list", base + "/grounds")
+        turns = {row["assignment_id"] for row in packet.get("reading_record", {}).get("turns", [])
+                 if row.get("stage") != "final"}
+        for index, ground in enumerate(grounds):
+            path = base + "/grounds/" + str(index)
+            require(isinstance(ground, dict) and {"kind", "text"} <= set(ground)
+                    and set(ground) <= {"kind", "text", "work_id", "turns"}, "ground_fields", path)
+            require(isinstance(ground["kind"], str) and ground["kind"] in GROUND_NEXT_STEPS, "ground_kind", path + "/kind")
+            require(_nonempty(ground["text"]), "nonempty_text", path + "/text")
+            if "work_id" in ground:
+                require(_nonempty(ground["work_id"]), "work_id", path + "/work_id")
+            if ground["kind"] == "source_settles":
+                require(ground.get("work_id") in context["decisive_work_ids"], "decisive_work", path + "/work_id")
+            if "turns" in ground:
+                references = ground["turns"]
+                require(isinstance(references, list) and all(isinstance(item, str) for item in references)
+                        and len(set(references)) == len(references) and set(references) <= turns,
+                        "reading_turns", path + "/turns")
+        outcomes = forecast["outcomes"]
+        rule = next((row for row in FINDING_RULES if row["outcome"] == openness["outcome"]), None)
+        require(rule is not None, "outcome", base + "/outcome")
+        if rule["grounds"] == "empty":
+            accepted = outcomes[rule["forecast"]] == "possible" and not grounds
+        else:
+            accepted = bool(grounds) or all(value == "blocked" for value in outcomes.values())
+        require(accepted, rule["number"], base + "/outcome")
+
 
 def _sha(value):
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
