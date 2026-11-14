@@ -2,6 +2,21 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "openness-export-accepts-a-minimum-that-can-only-end-unresolved",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "openness minimum assessment before export",
+      "summary": "Reading chains ran to unresolved findings although the bound search integrity and reading gaps already blocked both resolved outcomes at export.",
+      "expected": "One gap list drives the record-side audit and forecast. Export refuses before writing when both resolved outcomes are blocked, and --accept-gaps exports with the same forecast as a warning. Bounded enumeration remains a notice. Stored v1 audits and v5 packets retain their interpretation and bytes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_minimum_assessment.MinimumAssessmentTests.test_g1_forecast_and_audit_share_every_record_condition_and_legacy_order",
+        "test_minimum_assessment.MinimumAssessmentTests.test_g1_audit_has_no_record_condition_outside_the_gap_list",
+        "test_minimum_assessment.MinimumAssessmentTests.test_g2_incident_shape_refuses_without_writes_and_accepts_with_identical_warning",
+        "test_minimum_assessment.MinimumAssessmentTests.test_g2_bounded_enumeration_is_a_notice_and_keeps_legacy_packet_bytes"
+      ]
+    },
+    {
       "id": "override-automatic-harness-defect",
       "record": "20261106085323-override-of-harness-stops",
       "class": "controller continuation (harness defect)",

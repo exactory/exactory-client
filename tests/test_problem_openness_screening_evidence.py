@@ -29,7 +29,7 @@ class ScreeningEvidenceTests(unittest.TestCase):
         self.locator = {"kind": "span", "start": 18, "end": 51,
             "sha256": hashlib.sha256("Theorem α: only bipartite graphs.".encode()).hexdigest()}
 
-    def export(self, identifier="screen-review", *, bindings=None, native=False):
+    def export(self, identifier="screen-review", *, bindings=None, native=False, accept_gaps=False):
         f = self.case
         spec = {"assignment_id": identifier, "reviewer_id": "screen-assessor",
             "minimum": {"searches": [{"formulation": f.selected["statement"], "search_id": f.search["id"]}],
@@ -39,7 +39,8 @@ class ScreeningEvidenceTests(unittest.TestCase):
             spec["native_reviews"] = [{"attempt_id": f.attempt["id"], "assignment_id": "proof-review"}]
         f.sequence += 1
         try:
-            result = problem_openness.export_openness(f.store, spec, f.root / ("screen-packet-" + str(f.sequence)))
+            result = problem_openness.export_openness(f.store, spec, f.root / ("screen-packet-" + str(f.sequence)),
+                                                      accept_gaps=accept_gaps)
         except ResearchError as error:
             if error.code == "invalid_input":
                 self.fail("The exporter must support exact captured source evidence: " + error.message)
@@ -189,7 +190,7 @@ class ScreeningEvidenceTests(unittest.TestCase):
         f = self.case
         work = f.metadata()
         f.search = minimum_fixtures.ProblemOpennessMinimumTests.search(f, [work])
-        packet = self.export()
+        packet = self.export(accept_gaps=True)
         f.assert_error("openness_reading_gap", lambda: f.record_openness(packet, "screen-review"))
 
     def test_legacy_packet_has_no_screening_contract(self):

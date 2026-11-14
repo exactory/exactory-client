@@ -416,6 +416,7 @@ def build_parser():
         if command == "gate":
             item.add_argument("action", choices=GATES)
         if command == "export":
+            item.add_argument("--accept-gaps", action="store_true", help="Export a problem-openness minimum whose gaps block both resolved outcomes, and report them as a warning.")
             item.add_argument("--kind", choices=("workspace", "foundation", "readiness", "manuscript", "round", "native", "problem", "problem-override", "problem-openness", "outputs"), default="workspace")
             item.add_argument("--spec", help="JSON assignment identity, openness minimum, optional analytical native_reviews [{attempt_id,assignment_id}], and source_evidence [{source_id,reason,locator?}] for problem-openness.")
             item.add_argument("--destination", help=(
@@ -430,7 +431,7 @@ def build_parser():
             item.add_argument("--expected-revision", type=int, help="Optional check against the restored committed revision.")
     example = commands.add_parser("example", allow_abbrev=False,
         help="Print an illustrative exact JSON payload without opening a workspace.")
-    example.add_argument("operation", choices=sorted((*OPERATIONS, *ACQUISITION)))
+    example.add_argument("operation", choices=sorted((*OPERATIONS, *ACQUISITION, "problem-openness-export")))
     decision = commands.add_parser("research-decision-assess", allow_abbrev=False,
                                    help="Read the same scientific decision obligations used by managed entrypoints.")
     decision.add_argument("--workspace", default=".")
@@ -1006,7 +1007,8 @@ def run(args):
         if not args.spec:
             raise ResearchError("invalid_input", "Problem openness export requires --spec")
         from .problem_openness import export_openness
-        return export_openness(store, strict_json(Path(args.spec).read_bytes()), args.destination)
+        return export_openness(store, strict_json(Path(args.spec).read_bytes()), args.destination,
+                               accept_gaps=args.accept_gaps)
     if args.kind == "workspace":
         return export_workspace(store)
     if args.kind == "outputs":

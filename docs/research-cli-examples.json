@@ -75,6 +75,15 @@
   "problem-openness": {
     "assignment_id": "problem-openness-review"
   },
+  "problem-openness-export": {
+    "assignment_id": "problem-openness-review",
+    "reviewer_id": "openness-reviewer",
+    "minimum": {
+      "searches": [{"formulation": "The exact recorded statement.", "search_id": "statement-search"}],
+      "settling_work_id": null,
+      "duplicate_resolutions": []
+    }
+  },
   "problem-value": {
     "id": "problem-value-1",
     "statement_id": "statement-1",

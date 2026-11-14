@@ -147,7 +147,7 @@ class ResearchGuidanceTests(unittest.TestCase):
             # The staging directory can itself be below PLUGIN through TMPDIR.
             shutil.copytree(PLUGIN, plugin, ignore=shutil.ignore_patterns(
                 ".git", ".superpowers", ".lake", "__pycache__", ".coverage*",
-                ".lane-scratch", root.name))
+                ".lane-scratch", ".lane-tmp", root.name))
             workspace = root / "Independent workspace"
             workspace.mkdir()
             environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
@@ -161,7 +161,7 @@ class ResearchGuidanceTests(unittest.TestCase):
                 return result.stdout
 
             examples = json.loads((plugin / "docs/research-cli-examples.json").read_text())
-            self.assertEqual(set(examples), set(OPERATIONS) | set(ACQUISITION))
+            self.assertEqual(set(examples), set(OPERATIONS) | set(ACQUISITION) | {"problem-openness-export"})
             for operation, expected in examples.items():
                 with self.subTest(operation=operation):
                     self.assertEqual(json.loads(invoke("exactory-research", "example", operation)), expected)

@@ -218,7 +218,10 @@ class ProblemOpennessExportCheckTests(ProblemCase):
                                text_priority=priority)
 
     def export_priority(self, spec):
-        packet = json.loads(self.artifacts.read(self.export(spec)["native_packet"]))
+        from research_harness.problem_openness import export_openness
+        # A priority can name a read body while another main body remains unread.
+        result = export_openness(self.store, spec, self.root / "packet", accept_gaps=True)
+        packet = json.loads(self.artifacts.read(result["native_packet"]))
         priority = packet["scientific_context"]["text_delivery_priority"]
         self.assertTrue(set(priority) <= {entry["digest"] for entry in packet["evidence"]})
         return packet, priority
@@ -312,6 +315,7 @@ class ProblemOpennessExportCheckTests(ProblemCase):
         self.assertEqual(raised.exception.message, "Text delivery priority cannot contain duplicates")
 
     def test_text_priority_does_not_translate_artifact_integrity_errors(self):
+        from research_harness.problem_openness import export_openness
         version = self.record_full_reading()["version_id"]
         spec = self.priority_spec([version], [version])
         capture = self.store.snapshot()["records"]["work"][version]["fulltexts"][0]
@@ -319,10 +323,11 @@ class ProblemOpennessExportCheckTests(ProblemCase):
         path = self.root / reference["path"]
         path.chmod(0o644)
         path.write_bytes(b"Corrupted extracted body.")
-        with self.assertRaises(ResearchError) as raised:
-            self.export(spec)
-        self.assertEqual(raised.exception.code, "artifact_corrupt")
-        self.assertEqual(raised.exception.details, {"path": reference["path"]})
+        for accept_gaps in (False, True):
+            with self.subTest(accept_gaps=accept_gaps), self.assertRaises(ResearchError) as raised:
+                export_openness(self.store, spec, self.root / "packet", accept_gaps=accept_gaps)
+            self.assertEqual(raised.exception.code, "artifact_corrupt")
+            self.assertEqual(raised.exception.details, {"path": reference["path"]})
 
     def assert_native_packet_matches_0_69_15(self, spec):
         from research_harness import problem_openness
