@@ -177,9 +177,7 @@ class MinimumV2StoreTests(ProblemCase):
         for field in ("family_readings", "supporting_reading_ids", "results"):
             spec["minimum"][field] = []
         problem_openness.export_openness(self.store, spec, self.root / "packet")
-        for field, row in (("family_readings", build_v2_minimum()["family_readings"][0]),
-                           ("results", {"native_attempt_digest": "d" * 64,
-                                        "acceptance_id": "acceptance-1", "cited_as": "Lemma A"})):
+        for field, row in (("family_readings", build_v2_minimum()["family_readings"][0]),):
             for value in ([row], None, {}, "invalid", False):
                 candidate = copy.deepcopy(spec)
                 candidate["minimum"][field] = value

@@ -186,6 +186,8 @@ def prepare_openness(records, artifacts, value, revision):
         finding["evidence"] = sorted(delivered)
     if not isinstance(finding["evidence"], list) or not set(finding["evidence"]) <= delivered:
         raise ResearchError("openness_evidence_mismatch", "Use evidence delivered to the observed reviewer")
+    from .problem_openness_reviews import validate_bound_results
+    validate_bound_results(packet["scientific_context"].get("openness_minimum", {}), records, artifacts)
     if finding["outcome"] != "unresolved":
         from .openness_minimum import audit_minimum
         audit_minimum(finding, statement["statement"], records, artifacts, delivered)
@@ -231,6 +233,20 @@ def assess_openness(records, artifacts):
     if statement is None or finding["statement_digest"] != compute_statement_digest(statement):
         return [obligation("problem_openness_stale", "Reassess openness of the current exact claim.", **affected)]
     verified = None
+    minimum = finding.get("minimum")
+    if minimum and minimum.get("results"):
+        from .problem_openness_reviews import has_result_changed, validate_bound_results
+        try:
+            bodies = validate_bound_results(minimum, records, artifacts)
+            changed = any(has_result_changed(records, binding, body)
+                          for binding, body in zip(minimum["results"], bodies))
+        except ResearchError as error:
+            return [obligation("problem_openness_stale", "Reassess changed or unavailable observed openness evidence.",
+                               cause=error.code, **affected)]
+        if changed:
+            from .problem_openness_reviews import RESULT_CHANGED_MESSAGE
+            return [obligation("problem_openness_stale", RESULT_CHANGED_MESSAGE,
+                               cause="openness_result_changed", **affected)]
     if "native_reviews" in finding or "source_evidence" in finding or "reading_turns" in finding:
         from .problem_openness_reviews import observed_review, validate_native_reviews
         try:
@@ -426,9 +442,8 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
     if missing:
         raise ResearchError("openness_reading_gap", "Bind supporting reading IDs recorded in this store.",
                             {"reading_ids": missing})
-    if spec["minimum"].get("results", []) != []:
-        raise ResearchError("invalid_input", "The additional minimum bindings must be empty until their "
-                            "delivery ships with protocol v6.", {"field": "results"})
+    from .problem_openness_reviews import bind_results, validate_result_specs
+    validate_result_specs(spec["minimum"].get("results", []))
     statement = find_current_statement(records)
     if statement is None:
         raise ResearchError("problem_statement_missing", "Record the exact statement before openness review")
@@ -463,7 +478,9 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
         for reading_id in coverage["readings"]:
             readings[reading_id] = records["reading"][reading_id]
     minimum = build_minimum(statement, bound, readings, spec["minimum"], records=records, artifacts=artifacts)
-    # The declaration is checked against the store before the export writes anything.
+    minimum["results"], result_evidence = bind_results(records, artifacts, spec["minimum"].get("results", []))
+    evidence.update(result_evidence)
+    # Check the declaration against the store before writing the packet.
     from .openness_minimum import validate_minimum_bindings
     validate_minimum_bindings(minimum, statement["statement"], records)
     if minimum["schema_version"] == 2:

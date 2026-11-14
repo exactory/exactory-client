@@ -93,6 +93,12 @@ STOP_REGISTRY['search_completion_invalid'] = dict(code='search_completion_invali
     owner='D3', next=dict(kind='handoff', command='search'))
 STOP_REGISTRY['openness_finding_invalid'] = dict(code='openness_finding_invalid', **{'class': 'decision'},
     owner='D3', next=dict(kind='continue', command='review-run'))
+STOP_REGISTRY['openness_result_unlinked'] = dict(code='openness_result_unlinked', **{'class': 'decision'},
+    owner='D3', next=dict(kind='handoff', command='search deliver-attempt', then=[dict(command='export')]))
+STOP_REGISTRY['openness_minimum_gaps'] = dict(code='openness_minimum_gaps', **{'class': 'decision'},
+    owner='D3', next=dict(kind='handoff', step=4, command='export'))
+for _code in ('openness_result_gap', 'openness_result_changed'):
+    STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D3', next=dict(kind='continue'))
 
 
 def validate_registry(rows):

@@ -677,18 +677,21 @@ def _read_json(artifacts, reference):
     return json.loads(artifacts.read(reference))
 
 
-def collect_references(value):
+def collect_references(value, *, result_material=False):
     """The artifact references in a value. A passage's citation names its original without delivering it."""
+    from .problem_openness_reviews import find_result_metadata_fields, has_bound_results
     if isinstance(value, dict):
+        result_material = result_material or has_bound_results(value)
         if {'path', 'sha256', 'media_type'} <= value.keys():
             yield value
         else:
+            metadata = find_result_metadata_fields(value) if result_material else ()
             for key, item in value.items():
-                if key != 'citation':
-                    yield from collect_references(item)
+                if key != 'citation' and key not in metadata:
+                    yield from collect_references(item, result_material=result_material)
     elif isinstance(value, list):
         for item in value:
-            yield from collect_references(item)
+            yield from collect_references(item, result_material=result_material)
 
 
 def collect_result_artifacts(value):
@@ -706,6 +709,8 @@ def collect_result_artifacts(value):
 
 
 def _evidence(artifacts, value, *, transitive=False, records=None):
+    from .problem_openness_reviews import has_bound_results
+    result_material = has_bound_results(value)
     contents, pending = {}, list(collect_references(value))
     result_hashes = {reference['sha256'] for reference in collect_result_artifacts(value)}
     if records is not None:
@@ -723,7 +728,7 @@ def _evidence(artifacts, value, *, transitive=False, records=None):
             from .scientific_json import parse_scientific_json
             is_json, structured = parse_scientific_json(data, reference['media_type'])
             if is_json:
-                pending.extend(collect_references(structured))
+                pending.extend(collect_references(structured, result_material=result_material))
                 result_hashes.update(reference['sha256'] for reference in collect_result_artifacts(structured))
     included = []
     for key in sorted(contents):

@@ -429,6 +429,9 @@ def check_acceptance_reviews(records, artifacts):
                                 'and acceptance_id of the details with the failed step.',
                                 {'link_id': identifier, 'acceptance_id': link['acceptance_id']})
         verified[identifier] = review
+    from .problem_openness_reviews import validate_bound_results
+    for finding in records.get('problem_openness', {}).values():
+        validate_bound_results(finding.get('minimum', {}), records, artifacts)
     return verified
 
 

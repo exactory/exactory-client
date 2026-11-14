@@ -446,6 +446,18 @@ SEARCH_COMPLETION_SENTENCE = (' For completes, the harness checked matching prof
     'contribute no gaps to this review, and closed_gaps is the author\'s statement of how the gaps were closed.')
 SUPPLIED_ORIGIN_SENTENCE = (' A full-text unit with origin contains a text saved by a person. The harness did not '
     'fetch it or verify its reported origin. Its full reading counts; state when a decisive judgment rests on it.')
+RESULT_READING_RULE = (
+    ' An accepted_result record identifies the solver objective, accepted checkpoint, linked review and evidence '
+    'closure cited by the searches. Read its manifests and UTF-8 artifacts in result_text units; PDF artifacts '
+    'arrive as extracted text with the PDF and text digests. Both kinds of unit may arrive in consecutive parts. '
+    'A described proof or theorem artifact is a result_undelivered gap; other described binary parts, executables '
+    'and toolchains carry notices and are not scientific text. A certificate or lean manifest includes the '
+    'verification record. Acceptance in that objective establishes no openness finding for this statement.')
+RESULT_FINAL_RULE = (
+    ' Judge each accepted result from its accepted_result record and delivered result_text units, including '
+    'their verified parts and the retained reading notes. Described proof or theorem artifacts remain gaps; '
+    'other described binary parts, executables and toolchains are notices. The solver acceptance carries no '
+    'finding about the openness of the statement under review.')
 RECORD_ALLOWANCE_SENTENCE = (' The third allowance, record, counts serialized characters of every retained excerpt, '
     'passage answer and extra final reading turn, including fields and escapes.')
 RECORD_PASSAGE_LIMIT_MESSAGE = 'The record allowance cannot retain another final reading turn and a delivered passage; return the finding.'
@@ -453,12 +465,12 @@ RECORD_NOT_RETAINED_SENTENCE = (' An entry beyond the remaining record total is 
     'allowances.record.not_retained and is absent from later inputs; it uses no other allowance.')
 PROMPTS[PROTOCOL_V6] = {
     'reading': READING_PROMPT + SEARCH_READING_RULE + V6_READING_PARAGRAPH + SUPPORTING_READING_SENTENCE
-               + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE
+               + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE + RESULT_READING_RULE
                + RECORD_ALLOWANCE_SENTENCE + RECORD_NOT_RETAINED_SENTENCE,
     'final': (FINAL_PROMPT + FINAL_PROGRESS_RULE + SEARCH_FINAL_RULE).replace(
         'native result review described above', 'finding described above').replace(
         'native result review', 'finding described above') + V6_FINAL_PARAGRAPH + SUPPORTING_READING_SENTENCE
-        + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE,
+        + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE + RESULT_FINAL_RULE,
 }
 
 

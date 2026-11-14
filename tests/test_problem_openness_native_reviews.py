@@ -69,7 +69,11 @@ class NativeOpennessReviewTests(ProblemCase):
         assignment = self.mutate(review_protocol.record_assignment, {"id": identifier, "route_id": "route",
             "dossier_id": None, "role": "native_math", "reviewer_id": packet["reviewer"]["actor_id"],
             "author_id": "problem-author", "context": {"native_packet": reference}})["result"]
-        output = self.output(packet, "supported_open" if packet["objective_id"] == self.selected["id"] else "unresolved")
+        if packet["objective_id"] == self.selected["id"]:
+            from test_openness_finding_answer import build_answer
+            output = build_answer(packet)
+        else:
+            output = self.output(packet)
         if change_output:
             change_output(output)
         if invoke:

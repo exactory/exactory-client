@@ -29,18 +29,22 @@ from .scientific_delivery import encode_delivery
 from .workspace import checked_parent, find_entry_kind, read_file, strict_json, write_projection
 
 
-def references(value):
+def references(value, *, result_material=False):
+    from .problem_openness_reviews import find_result_metadata_fields, has_bound_results
     found = {}
-    def visit(item):
+    def visit(item, result_material):
         if isinstance(item, dict):
+            result_material = result_material or has_bound_results(item)
             if {"path", "sha256", "size", "media_type"} <= item.keys() and not is_sealed_artifact(item):
                 found[(item["path"], digest(item))] = item
-            for child in item.values():
-                visit(child)
+            metadata = find_result_metadata_fields(item) if result_material else ()
+            for key, child in item.items():
+                if key not in metadata:
+                    visit(child, result_material)
         elif isinstance(item, list):
             for child in item:
-                visit(child)
-    visit(value)
+                visit(child, result_material)
+    visit(value, result_material)
     return [found[key] for key in sorted(found)]
 
 
@@ -92,6 +96,7 @@ def _stage_delivery(root, relative):
 
 
 def deliver_packet(store, destination, manifest, *, derived=None, transitive=False, empty_captures=(), reuse=False):
+    from .problem_openness_reviews import has_bound_results
     destination = Path(destination).absolute()
     existing = destination.exists() or destination.is_symlink()
     if existing and not (reuse and transitive and has_packet_manifest(destination, encode_delivery(manifest))):
@@ -99,6 +104,7 @@ def deliver_packet(store, destination, manifest, *, derived=None, transitive=Fal
     artifacts = ArtifactStore(destination if existing else store.root)
     derived = derived or {}
     values, pending, seen = [], references(manifest), set()
+    result_material = has_bound_results(manifest)
     try:
         with (nullcontext(destination) if existing else _stage_delivery(destination.parent.resolve(), destination.name)) as staging:
             while pending:
@@ -141,7 +147,7 @@ def deliver_packet(store, destination, manifest, *, derived=None, transitive=Fal
                                 _copy_stream(frozen.stream, encoded, ref)
                                 is_json, structured = parse_scientific_json(encoded.getvalue(), ref["media_type"])
                             if is_json:
-                                pending.extend(references(structured))
+                                pending.extend(references(structured, result_material=result_material))
                             del structured
             if not existing:
                 data = encode_delivery(manifest) if transitive else (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()

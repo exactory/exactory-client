@@ -237,6 +237,10 @@ def audit_minimum(finding, statement, records, artifacts, delivered):
     require_unblocked_outcome(gaps, finding["outcome"], {"reading_missing", "reading_deferred"})
     require_unblocked_outcome(gaps, finding["outcome"],
                               {"settling_undeclared", "settling_not_decisive", "settling_declared"})
+    result_digests = {row["result_digest"] for row in minimum.get("results", [])}
+    _require(result_digests <= bound & delivered,
+             "The finding and observed packet must bind every accepted result", "openness_evidence_mismatch")
+    require_unblocked_outcome(gaps, finding["outcome"], {"result_undelivered", "result_changed"})
 
 
 # Keep the historic audit messages and their codes in one place. The two
@@ -252,6 +256,11 @@ GAP_REFUSALS = {
     "settling_undeclared": ("openness_settling_source", "Already solved requires the fully read settling work from a bound search"),
     "settling_declared": ("openness_settling_source", "A declared settling source cannot support an open finding"),
 }
+from .problem_openness_reviews import RESULT_UNDELIVERED_MESSAGE, RESULT_CHANGED_MESSAGE
+GAP_REFUSALS.update({
+    "result_undelivered": ("openness_result_gap", RESULT_UNDELIVERED_MESSAGE),
+    "result_changed": ("openness_result_changed", RESULT_CHANGED_MESSAGE),
+})
 
 
 def require_unblocked_outcome(gaps, outcome, conditions, binding=None):
@@ -421,6 +430,13 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
     else:
         item, search = required[settling]
         add_gap("settling_declared", item, search, settling, outcomes=["supported_open"])
+    from .problem_openness_reviews import has_result_changed, PROOF_ROLES, validate_bound_results
+    for binding, body in zip(minimum.get("results", []), validate_bound_results(minimum, records, artifacts)):
+        if has_result_changed(records, binding, body):
+            add_gap("result_changed", command="search deliver-attempt", result=binding)
+        for part in body["artifacts"]:
+            if part["delivery"] == "described" and part["role"] in PROOF_ROLES:
+                add_gap("result_undelivered", command="export", result=binding, artifact=part)
     return gaps
 
 
@@ -466,6 +482,11 @@ def list_minimum_notices(minimum, records, artifacts):
     bound = set(minimum['reading_digests'])
     notices.extend(dict(kind='supplied_text', **row) for row in describe_supplied_readings(records,
         [reading for reading in records.get('reading', {}).values() if digest(reading) in bound]))
+    from .problem_openness_reviews import PROOF_ROLES, RESULT_DESCRIBED_MESSAGE, validate_bound_results
+    for binding, body in zip(minimum.get("results", []), validate_bound_results(minimum, records, artifacts)):
+        notices.extend(dict(condition="result_described", result=binding, artifact=part,
+                            message=RESULT_DESCRIBED_MESSAGE) for part in body["artifacts"]
+                       if part["delivery"] == "described" and part["role"] not in PROOF_ROLES)
     return notices
 
 

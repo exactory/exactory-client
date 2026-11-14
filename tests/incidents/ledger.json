@@ -4785,11 +4785,17 @@
     {
       "id": "openness-packet-cannot-deliver-an-accepted-result-of-the-record",
       "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
-      "class": "accepted result review provenance",
-      "summary": "Search records cite an accepted solver result, but the delivered attempt does not identify the review that accepted it. Two approving reviews of the same checkpoint cannot be distinguished by that summary.",
-      "fixed_in": "open",
-      "expected": "An audited attempt delivery writes immutable links from every observed accepted acceptance to its own review and terminal output. Repeating a legacy delivery adds missing links while retaining the attempt digest, record and current pointer. Unobserved and invalidated acceptances produce no new links. Openness result binding and proof delivery are the following unit's work.",
+      "class": "accepted result openness delivery",
+      "summary": "Bound searches cited an accepted result of another solver objective without delivering its claim or proof.",
+      "expected": "The export pins the acceptance-review link and delivers its descriptor and scientific closure through verified v6 result units. Unreadable proof bytes are gaps, other binary parts are notices, and later acceptance changes stale the finding without rewriting its immutable binding.",
+      "fixed_in": "0.90.0",
       "test_kind": "real_shape",
+      "further_occurrences": [
+        {
+          "record": "20261114000100-openness-review-provisional-flag-and-web-sources",
+          "item": 2
+        }
+      ],
       "tests": [
         "tests.test_search_acceptance_links.AcceptanceLinkTests.test_two_approvals_link_each_acceptance_to_its_own_review",
         "tests.test_search_acceptance_links.AcceptanceLinkTests.test_stored_attempt_digest_survives_link_recovery_without_moving_its_pointer",
@@ -4797,7 +4803,18 @@
         "tests.test_search_acceptance_links.AcceptanceLinkTests.test_corrupt_proof_blocks_link_recovery_and_preserves_the_stored_attempt",
         "tests.test_search_acceptance_links.AcceptanceLinkTests.test_qualification_authenticates_the_link_and_refuses_changed_references",
         "tests.test_openness_reading_chain.MathOpennessReadingTests.test_attempt_links_the_attested_reading_chain_to_its_observed_final",
-        "tests.test_review_parts_native.NativePartsAcceptanceTests.test_attempt_links_the_attested_parts_series_to_its_observed_final"
+        "tests.test_review_parts_native.NativePartsAcceptanceTests.test_attempt_links_the_attested_parts_series_to_its_observed_final",
+        "test_openness_result_binding.ResultBindingTests.test_g3_analytical_incident_delivers_cited_claim_and_proof",
+        "test_openness_result_binding.ResultBindingTests.test_g3_result_beside_the_current_attempt_reaches_the_finding",
+        "test_openness_result_binding.ResultBindingTests.test_g3_pdf_proof_uses_real_extraction_and_keeps_both_digests",
+        "test_openness_result_binding.ResultBindingTests.test_g3_pdf_without_text_is_a_gap_and_can_record_unresolved",
+        "test_openness_result_binding.ResultBindingTests.test_g3_lean_result_delivers_verification_and_text_proof",
+        "test_openness_result_binding.ResultBindingTests.test_g3_certificate_binary_is_described_with_notice",
+        "test_openness_result_binding.ResultBindingTests.test_g3_binary_proof_is_a_gap",
+        "test_openness_result_binding.ResultBindingTests.test_g3_extended_objective_binds_without_a_value_extension_reason",
+        "test_openness_result_binding.ResultBindingTests.test_g3_missing_link_hands_off_to_delivery_then_export",
+        "test_openness_result_binding.ResultBindingTests.test_g3_two_approvals_keep_the_review_of_the_acceptance",
+        "test_openness_result_binding.ResultBindingTests.test_result_text_and_descriptor_larger_than_one_turn_deliver_every_part"
       ]
     },
     {
