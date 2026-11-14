@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 from pathlib import Path
 
 from .artifacts import ArtifactStore
@@ -711,18 +712,14 @@ def export_problem(store, destination=None):
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
     require_ready(assess_post(records, artifacts), "post")
     files, manifest = build_projection(records, artifacts)
-    return write_problem_export(store, files, manifest, destination)
+    return write_problem_export(store, records, files, manifest, destination)
 
 
 def export_problem_override(store, destination=None):
     """Compose the exact post material on a recorded instruction, with no reviewed decision claim."""
     records = store.snapshot()["records"]
     require_problem(records)
-    statement = find_current_statement(records)
-    statement_digest = None if statement is None else compute_statement_digest(statement)
-    override = max((row for row in records.get("gate_override", {}).values()
-                    if row["gate"] == "post" and row.get("statement_digest") == statement_digest),
-                   key=lambda row: row["recorded_revision"], default=None)
+    override = find_post_override(records)
     if override is None:
         raise ResearchError("gate_override_required", "This export needs a recorded post override whose statement digest "
                             "matches the current statement text and resolution criteria. If the user has instructed you to "
@@ -731,33 +728,86 @@ def export_problem_override(store, destination=None):
         raise ResearchError("problem_value_missing", "Record the problem's motivation and current state with problem-value "
                             "before this export")
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
+    files, manifest = build_override_projection(records, artifacts, override)
+    return write_problem_export(store, records, files, manifest, destination)
+
+
+def find_post_override(records):
+    statement = find_current_statement(records)
+    statement_digest = None if statement is None else compute_statement_digest(statement)
+    return max((row for row in records.get("gate_override", {}).values()
+                if row["gate"] == "post" and row.get("statement_digest") == statement_digest),
+               key=lambda row: row["recorded_revision"], default=None)
+
+
+def build_override_projection(records, artifacts, override):
+    """Compose the existing override export format without changing its file or manifest bytes."""
+    statement = find_current_statement(records)
     files = {name: (content + "\n").encode("utf-8") for name, content in build_post_files(records, artifacts).items()}
     formal = statement["formal_statement"]
-    manifest = dict(statement_id=statement["id"], statement_digest=statement_digest, area=statement["area"],
+    manifest = dict(statement_id=statement["id"], statement_digest=compute_statement_digest(statement), area=statement["area"],
                     formal_statement_language=None if formal is None else formal["language"],
                     files={name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())},
                     decision_id=None, problem_evidence_digest=None, override_id=override["id"], gate="bypassed")
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
-    return write_problem_export(store, files, manifest, destination)
+    return files, manifest
 
 
-def write_problem_export(store, files, manifest, destination):
+def write_problem_export(store, records, files, manifest, destination):
     """Write or reuse the exact file set under the export's digest."""
+    use_default_destination = destination is None
     if destination is None:
         from .output_views import PROBLEM_EXPORTS_FOLDER, find_workspace_root
         destination = find_workspace_root(store.root) / PROBLEM_EXPORTS_FOLDER / compute_export_digest(files)
     directory = Path(destination).absolute()
     result = dict(manifest, destination=str(directory))
-    if directory.exists() or directory.is_symlink():
-        if has_exported_files(directory, files):
-            return result
-        raise ResearchError("review_destination_exists",
-                            "The destination already holds files that differ from this export. Export into a new directory",
-                            {"destination": str(directory)})
-    from .workspace import write_projection
-    directory.mkdir(mode=0o700, parents=True)
-    for name, content in files.items():
-        write_projection(directory, name, content)
+    from .problem_export_history import archive_problem_exports, record_export_sources
+    from .output_views import PROBLEM_EXPORT_HISTORY_FOLDER, _hold_lock, find_workspace_root, render_workspace_views
+    artifacts = Evaluation.of(records, ArtifactStore(store.root))
+    workspace_root = find_workspace_root(store.root)
+    # The receipt and its file set share the renderer's ownership lock. A renderer
+    # holding an older snapshot cannot retire a newly published export.
+    with _hold_lock(store.root):
+        current = store.snapshot()['records']
+        archive_problem_exports(store.root, workspace_root, current, ArtifactStore(store.root))
+        if use_default_destination:
+            from .workspace import checked_parent
+            relative = directory.relative_to(workspace_root).as_posix()
+            with checked_parent(workspace_root, relative, create=True) as (parent, name):
+                try:
+                    os.mkdir(name, mode=0o700, dir_fd=parent)
+                except FileExistsError:
+                    existing = True
+                else:
+                    existing = False
+        else:
+            existing = directory.exists() or directory.is_symlink()
+            if not existing:
+                directory.mkdir(mode=0o700, parents=True)
+        if existing:
+            if not has_exported_files(directory, files):
+                raise ResearchError("review_destination_exists",
+                                    "The destination already holds files that differ from this export. Export into a new directory",
+                                    {"destination": str(directory)})
+            # Equal bytes may have been exported from a newer source snapshot.
+            # Keep that export's binding instead of replacing it with this one.
+        else:
+            from .workspace import write_projection
+            for name, content in files.items():
+                if use_default_destination:
+                    write_projection(workspace_root, relative + '/' + name, content)
+                else:
+                    write_projection(directory, name, content)
+            source_digest = manifest.get('problem_evidence_digest') or compute_problem_evidence_digest(records, artifacts)
+            record_export_sources(store.root, workspace_root, directory, files, source_digest)
+    render_workspace_views(store.root, full=True)
+    if not directory.exists():
+        # A concurrent source mutation can retire this consistent snapshot while
+        # its views render. Return the retained bytes at their actual location.
+        for path in sorted((workspace_root / PROBLEM_EXPORT_HISTORY_FOLDER).rglob('problem-export.json')):
+            if has_exported_files(path.parent, files):
+                result['destination'] = str(path.parent)
+                break
     return result
 
 

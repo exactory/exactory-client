@@ -6,6 +6,7 @@ proof. Requested formal support is bound to a delivered native completion.
 
 from datetime import datetime, timezone
 from contextlib import ExitStack
+import re
 
 from .artifacts import ArtifactStore, validate_reference
 from .errors import ResearchError
@@ -266,7 +267,10 @@ def record_post_external(store, payload, *, expected_revision, request_id):
         from .problem_delivery import find_post
         require_problem(records)
         fields(value, ("id", "problem_id", "statement_digest", "reason", "evidence"),
-               optional=("posted_at",))
+               optional=("posted_at", "export_digest"))
+        if "export_digest" in value and (not isinstance(value["export_digest"], str)
+                                         or not re.fullmatch(r"[0-9a-f]{64}", value["export_digest"])):
+            raise ResearchError("invalid_input", "External post export_digest must be a lowercase SHA-256 digest")
         if "posted_at" in value:
             timestamp(value["posted_at"])
         for key in ("id", "problem_id", "statement_digest", "reason"):
