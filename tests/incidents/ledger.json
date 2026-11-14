@@ -5396,6 +5396,19 @@
         "test_slate_forming_descriptors.SlateFormingTests.test_a_slate_repair_keeps_v3_for_unrequested_imported_artifacts",
         "test_slate_forming_descriptors.SlateFormingTests.test_a_slate_without_forming_records_and_stored_v2_sessions_keep_their_bytes"
       ]
+    },
+    {
+      "id": "bar-final-credits-union-of-delivered-parts",
+      "record": "20261114054500-bar-cannot-be-recorded-after-instalment-deliveries",
+      "class": "review session citation coverage",
+      "summary": "Ordinary full-text parts were checked one mapping at a time, so a v3 final could not cite the union of two authenticated deliveries.",
+      "expected": "A bar records a citation spanning characters 0 to 97404 after different turns deliver 0 to 60000 and 60000 to 97404. A citation ending at 97405 is refused with review_evidence_undelivered when the remaining text is held but undelivered. V2 projections and stored input bytes stay unchanged, and receipt inspection does not require the unsupplied original. Informed correction and exhausted-slot recovery belong to other units.",
+      "fixed_in": "0.89.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_delivery.SessionDeliveryTests.test_final_citations_follow_the_union_of_two_delivered_parts",
+        "test_review_session_delivery.SessionDeliveryProjectionTests.test_part_union_citations_preserve_v2_and_stored_inputs"
+      ]
     }
   ]
 }
