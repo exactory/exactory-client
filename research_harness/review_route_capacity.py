@@ -1105,8 +1105,9 @@ def describe_assignment_task(records, artifacts, assignment):
             request = build_assignment_request(records, artifacts, assignment)
             return describe_task(assignment['role'], read_sent_packet(request) or {},
                                  route=records['review_route'][assignment['route_id']], request=request)
-        except ResearchError:
-            # A capacity report must preserve the scientific report's existing refusal.
+        except (ResearchError, ValueError):
+            # A capacity report must preserve the scientific report's existing refusal, also when the stored
+            # packet does not decode (JSONDecodeError and UnicodeDecodeError are ValueErrors).
             pass
     return dict(kind=kind)
 
