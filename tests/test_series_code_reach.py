@@ -1,8 +1,10 @@
 """Static error-code coverage and the scoped R56 constructor recorder."""
 
 from contextlib import contextmanager, ExitStack
+import ast
 import inspect
-import tempfile
+from functools import wraps
+from types import FunctionType
 import json
 from pathlib import Path
 import sys
@@ -17,20 +19,34 @@ FIXTURE = ROOT / 'tests/fixtures/series_code_reach.json'
 
 
 @contextmanager
-def record_reachable_errors(path, reachable=None):
+def record_reachable_errors(path, reachable=None, *, injected=frozenset()):
     """Assert constructor codes are reachable while running a named planner/action path.
 
     Patching __init__ keeps imported aliases and exception subclasses intact. Import
     this helper in G1/G7 tests and scope it to the actual planner or series action.
     ``path`` is a command name (or ``plan_next``/``run_series``); the yielded list
     contains the codes constructed, including errors caught by the action itself.
+    Plans and emitted lines need registry rows or pending entries. Only codes
+    absent from both source packages may be supplied as ``injected``.
     """
     from research_harness.errors import ResearchError
+    from research_harness import review_continuation, review_series
+    from research_harness.stop_classes import STOP_REGISTRY
 
+    report = json.loads(FIXTURE.read_text())
     if reachable is None:
-        report = json.loads(FIXTURE.read_text())
         reachable = reach.read_command_codes(report, path)
     allowed = frozenset(reachable)
+    injected = frozenset(injected)
+    source_codes = set(report['code_vocabulary'])
+    if injected - source_codes:
+        for source in reach.read_sources(ROOT).values():
+            source_codes.update(node.value for node in ast.walk(ast.parse(source))
+                                if isinstance(node, ast.Constant) and isinstance(node.value, str))
+    written = injected & source_codes
+    if written:
+        raise ValueError('Injected codes must be absent from source files: ' + ', '.join(sorted(written)))
+    pending = frozenset(report['unreviewed_rows'])
     observed = []
     violations = []
     constructors = [ResearchError]
@@ -43,7 +59,7 @@ def record_reachable_errors(path, reachable=None):
     def build_recorder(original):
         def record(error, code, *args, **kwargs):
             observed.append(code)
-            if code not in allowed:
+            if code not in injected and code not in allowed:
                 frames = inspect.stack()[1:9]
                 route = ' -> '.join('%s:%s:%s' % (
                     Path(frame.filename).name, frame.function, frame.lineno) for frame in frames)
@@ -53,7 +69,72 @@ def record_reachable_errors(path, reachable=None):
             original(error, code, *args, **kwargs)
         return record
 
+    def check_line(row):
+        code = row.get('code')
+        if code and code not in injected and code not in STOP_REGISTRY and code not in pending:
+            diagnostic = '%s returned an unlisted code %r without a registry row or unreviewed_rows entry' % (path, code)
+            violations.append(diagnostic)
+            raise AssertionError(diagnostic)
+        return row
+
+    original_plan = review_continuation.plan_next
+    original_series = review_series.run_series
+
+    def clone_function(function):
+        if not isinstance(function, FunctionType):
+            return function
+        clone = FunctionType(function.__code__, function.__globals__, function.__name__,
+                             function.__defaults__, function.__closure__)
+        clone.__kwdefaults__ = function.__kwdefaults__
+        return clone
+
+    plan_body = clone_function(original_plan)
+    series_body = clone_function(original_series)
+
+    def create_router_code(function):
+        # Match closure arity without reading the original cells. The hook is
+        # a temporary keyword default, so saved aliases keep the same object.
+        slots = ['slot_' + str(index) for index in range(len(function.__closure__ or ()))]
+        lines = ['def factory():'] + ['    ' + slot + ' = None' for slot in slots]
+        lines += ['    def route(*args, _record_reachable_hook=None, **kwargs):',
+                  '        if _record_reachable_hook is None:',
+                  '            return (' + ', '.join(slots) + ',)' if slots else '            return None',
+                  '        return _record_reachable_hook(*args, **kwargs)',
+                  '    return route']
+        namespace = {}
+        exec('\n'.join(lines), namespace)
+        return namespace['factory']().__code__
+
+    @wraps(original_plan)
+    def record_plan(*args, **kwargs):
+        return check_line(plan_body(*args, **kwargs))
+
+    @wraps(original_series)
+    def record_series(*args, **kwargs):
+        emit = kwargs.pop('emit', review_series._emit_json)
+        def record_line(row):
+            check_line(row)
+            emit(row)
+        return series_body(*args, emit=record_line, **kwargs)
+
     with ExitStack() as stack:
+        for function, callback in ((original_plan, record_plan), (original_series, record_series)):
+            if isinstance(function, FunctionType):
+                defaults = dict(function.__kwdefaults__ or {}, _record_reachable_hook=callback)
+                for attribute, value in (('__kwdefaults__', defaults), ('__code__', create_router_code(function)),
+                                         ('__defaults__', None)):
+                    previous = getattr(function, attribute)
+                    setattr(function, attribute, value)
+                    stack.callback(setattr, function, attribute, previous)
+        # Patch existing aliases too; later imports receive the patched home.
+        for module in tuple(sys.modules.values()):
+            if module is None:
+                continue
+            for name, value in tuple(vars(module).items()):
+                if value is original_plan:
+                    stack.enter_context(patch.object(module, name, record_plan))
+                elif value is original_series:
+                    stack.enter_context(patch.object(module, name, record_series))
         for constructor in constructors:
             stack.enter_context(patch.object(constructor, '__init__', build_recorder(constructor.__init__)))
         try:
@@ -427,28 +508,20 @@ def shadow(helper):
         self.assertEqual(result['by_command']['entry'], ['chosen'])
         self.assertNotIn('other', result['by_command']['shadow'])
 
-    def test_classifies_codes_by_all_source_homes_and_preserves_provenance(self):
-        sources = {
-            'research_harness/review_checks.py': """
+    def test_code_sites_ignore_mere_mentions_and_include_forwarded_literals(self):
+        sources = {'pkg/core.py': """
+def guard(code):
+    raise ResearchError(code, '')
 def entry():
-    from . import storage
-    storage.check()
-    ResearchError('review_code', '')
-    return dict(code='report_code')
-""",
-            'research_harness/storage.py': """
-def check():
-    ResearchError('outside_code', '')
-    ResearchError('review_code', '')
+    guard('forwarded')
+    return dict(code='planned')
+def mention():
+    return 'forwarded'
 """}
-        report = reach.analyze_sources(sources, {'entry': ['research_harness/review_checks.py:entry']})
-        parts = reach.build_coverage_parts(report, {}, {
-            'report_code': dict(reason='report_entry', builder='research_harness/review_checks.py:entry')})
-        self.assertEqual(set(parts['unreviewed_rows']), {'review_code'})
-        self.assertEqual(parts['unreviewed_rows']['review_code']['functions'], [
-            'research_harness/review_checks.py:entry', 'research_harness/storage.py:check'])
-        self.assertEqual(set(parts['no_stop_of_own']), {'report_code'})
-        self.assertEqual(set(parts['outside_review_modules']), {'outside_code'})
+        report = reach.analyze_sources(sources, {'entry': ['pkg/core.py:entry']})
+        self.assertEqual(report['code_sites'], {'forwarded': ['pkg/core.py:entry'], 'planned': ['pkg/core.py:entry']})
+        self.assertEqual(reach.build_unreviewed_rows(report, {})['forwarded'], dict(
+            unit='registry-rows', sites=['pkg/core.py:entry'], status_obligation=False))
 
     def test_resolves_inheritance_through_empty_and_enclosing_classes(self):
         result = reach.analyze_sources({'pkg/core.py': """
@@ -534,19 +607,16 @@ def outside(callbacks):
         self.assertEqual(result['by_command']['entry'], [])
         self.assertEqual(result['by_command']['outside'], ['global'])
 
-    def test_accepts_payload_reason_for_a_declared_computed_constructor(self):
+    def test_declared_computed_producers_are_code_sites(self):
         sources = {'pkg/core.py': """
 def producer():
-    raise ResearchError('payload_code', '')
+    raise ResearchError('computed', '')
 def check(status):
     raise ResearchError(status['code'], '')
 """}
         report = reach.analyze_sources(sources, {'entry': ['pkg/core.py:check']}, {
             "pkg/core.py:check:status['code']": {'sources': ['pkg/core.py:producer']}})
-        row = {'payload_code': dict(reason='payload', check='pkg/core.py:check')}
-        with tempfile.TemporaryDirectory() as folder:
-            (Path(folder) / 'lane.json').write_text(json.dumps(row))
-            self.assertEqual(reach.read_no_stop_entries(Path(folder), sources, report, {}), row)
+        self.assertEqual(report['code_sites']['computed'], ['pkg/core.py:check'])
 
     def test_computed_producers_follow_the_new_edges(self):
         sources = {'pkg/core.py': """
@@ -570,7 +640,7 @@ def entry(status):
     def test_declared_edges_require_an_existing_uninferred_call_and_a_reason(self):
         sources = {'pkg/core.py': """
 def entry(obj):
-    getattr(obj, 'hidden')()
+    obj.invoke()
 def hidden():
     ResearchError('declared', '')
 """}
@@ -587,7 +657,7 @@ def hidden():
                 reach.analyze_sources(sources, roots, declared_edges=invalid)
         with self.assertRaisesRegex(ValueError, 'Unused declared edge'):
             reach.analyze_sources(dict(sources, **{'pkg/core.py': sources['pkg/core.py'].replace(
-                "getattr(obj, 'hidden')()", 'hidden()')}), roots, declared_edges=declaration)
+                'obj.invoke()', 'hidden()')}), roots, declared_edges=declaration)
 
     def test_series_roots_use_only_the_commands_declared_by_driver_source(self):
         sources = {
@@ -622,64 +692,30 @@ def handoff():
         self.assertEqual(result['by_command']['run_series'], ['executed'])
         self.assertEqual(result['by_command']['review-series'], ['executed'])
 
-    def test_registry_coverage_rejects_overlaps_and_entries_outside_reach(self):
-        fixture = dict(reachable=['row', 'pending', 'payload', 'outside'],
-                       unreviewed_rows={'pending': {}}, no_stop_of_own={'payload': {}},
-                       outside_review_modules={'outside': {}})
+    def test_registry_coverage_rejects_reviewed_and_outside_pending_entries(self):
+        fixture = dict(reachable=['row', 'pending'], unreviewed_rows={'pending': {}})
         reach.validate_registry_coverage(fixture, {'row': {}})
-        for field in ('unreviewed_rows', 'no_stop_of_own', 'outside_review_modules'):
-            for code in ('row', 'absent'):
-                with self.subTest(field=field, code=code), self.assertRaisesRegex(AssertionError, code):
-                    reach.validate_registry_coverage(dict(fixture, **{field: dict(fixture[field], **{code: {}})}),
-                                                     {'row': {}})
-        with self.assertRaisesRegex(AssertionError, 'outside'):
-            reach.validate_registry_coverage(dict(fixture, no_stop_of_own={'payload': {}, 'outside': {}}), {'row': {}})
+        for code in ('row', 'absent'):
+            with self.subTest(code=code), self.assertRaisesRegex(AssertionError, code):
+                reach.validate_registry_coverage(dict(fixture, unreviewed_rows={'pending': {}, code: {}}), {'row': {}})
 
-    def test_checks_no_stop_reasons_against_the_named_source_functions(self):
-        sources = {'research_harness/review_checks.py': """
-from .errors import ResearchError as Failure
-def check():
-    raise Failure('payload_code', '')
-def builder():
-    return dict(code='entry_code')
-def handler():
-    try:
-        check()
-    except Failure:
-        return dict(state='stop', code='replacement')
-def ordinary():
-    check()
+    def test_status_obligation_flag_uses_only_obligation_arguments_in_status_reach(self):
+        sources = {'research_harness/cli.py': """
+def obligation(code):
+    return dict(code=code)
+def status_report():
+    return obligation('status_entry')
+def outside():
+    return obligation('outside_entry')
+def entry():
+    status_report()
+    return dict(code='ordinary_plan')
 """}
-        report = reach.analyze_sources(sources, {'entry': ['research_harness/review_checks.py:handler']})
-        rows = {
-            'payload_code': dict(reason='payload', check='research_harness/review_checks.py:check'),
-            'entry_code': dict(reason='report_entry', builder='research_harness/review_checks.py:builder'),
-        }
-        with tempfile.TemporaryDirectory() as folder:
-            path = Path(folder) / 'lane.json'
-            path.write_text(json.dumps(rows))
-            self.assertEqual(reach.read_no_stop_entries(Path(folder), sources, report, {'replacement': {}}), rows)
-            invalid = [
-                {'payload_code': dict(reason='unknown')},
-                {'payload_code': dict(reason='payload', check='missing')},
-                {'payload_code': dict(reason='payload', check='research_harness/review_checks.py:builder')},
-                {'payload_code': dict(reason='report_entry', builder='research_harness/review_checks.py:ordinary')},
-                {'payload_code': dict(reason='replaced', handler='research_harness/review_checks.py:ordinary', becomes='plan')},
-                {'entry_code': dict(reason='replaced', handler='research_harness/review_checks.py:handler', becomes='plan')},
-                {'payload_code': dict(reason='replaced', handler='research_harness/review_checks.py:handler', becomes='absent')},
-            ]
-            for row in invalid:
-                path.write_text(json.dumps(row))
-                with self.subTest(row=row), self.assertRaises(ValueError):
-                    reach.read_no_stop_entries(Path(folder), sources, report, {'replacement': {}})
-            for becomes in ('plan', 'replacement'):
-                row = {'payload_code': dict(reason='replaced', handler='research_harness/review_checks.py:handler',
-                                            becomes=becomes)}
-                path.write_text(json.dumps(row))
-                self.assertEqual(reach.read_no_stop_entries(Path(folder), sources, report, {'replacement': {}}), row)
-            (Path(folder) / 'duplicate.json').write_text(json.dumps(row))
-            with self.assertRaisesRegex(ValueError, 'Duplicate'):
-                reach.read_no_stop_entries(Path(folder), sources, report, {'replacement': {}})
+        report = reach.analyze_sources(sources, {'entry': ['research_harness/cli.py:entry']})
+        rows = reach.build_unreviewed_rows(report, {})
+        self.assertTrue(rows['status_entry']['status_obligation'])
+        self.assertFalse(rows['ordinary_plan']['status_obligation'])
+        self.assertNotIn('outside_entry', rows)
 
     def test_fixture_regenerates_and_names_every_unreviewed_registry_row(self):
         expected = json.loads(FIXTURE.read_text())
@@ -712,6 +748,62 @@ def ordinary():
             reach.validate_registry_coverage(fixture, {})
         with self.assertRaisesRegex(AssertionError, 'pending'):
             reach.validate_registry_coverage(dict(fixture, unreviewed_rows={}), {'listed': {}})
+
+    def test_recorder_checks_lines_and_allows_only_source_absent_injections(self):
+        from research_harness import review_continuation, review_series
+        from research_harness.errors import ResearchError
+        plan = dict(state='stop', code='synthetic_unlisted', head_id='head', details={})
+        def return_plan(*args, **kwargs):
+            return dict(plan)
+        with patch.object(review_continuation, 'plan_next', side_effect=return_plan):
+            with self.assertRaisesRegex(AssertionError, 'unlisted'):
+                with record_reachable_errors('synthetic', set()):
+                    review_continuation.plan_next()
+            with record_reachable_errors('synthetic', set(), injected={'synthetic_unlisted'}):
+                ResearchError('synthetic_unlisted', '')
+                self.assertEqual(review_continuation.plan_next()['code'], 'synthetic_unlisted')
+        def emit_line(*args, **kwargs):
+            kwargs['emit'](plan)
+            return 3
+        with patch.object(review_series, 'run_series', side_effect=emit_line):
+            with self.assertRaisesRegex(AssertionError, 'unlisted'):
+                with record_reachable_errors('synthetic', set()):
+                    review_series.run_series(None, 'head', emit=lambda row: None)
+            rows = []
+            with record_reachable_errors('synthetic', set(), injected={'synthetic_unlisted'}):
+                ResearchError('synthetic_unlisted', '')
+                review_series.run_series(None, 'head', emit=rows.append)
+            self.assertEqual(rows, [plan])
+        for code in ('openness_search_stale', 'explicit-packet-only-v1'):
+            with self.subTest(code=code), self.assertRaisesRegex(ValueError, 'source'):
+                with record_reachable_errors('synthetic', set(), injected={code}):
+                    self.fail('A source-written code was accepted as injected')
+
+    def test_recorder_checks_saved_local_aliases_of_its_boundaries(self):
+        from research_harness import review_continuation, review_series
+        def return_plan(*args, **kwargs):
+            return dict(code='synthetic_saved_alias')
+        def emit_line(*args, **kwargs):
+            kwargs['emit'](dict(code='synthetic_saved_alias'))
+        with patch.object(review_continuation, 'plan_next', return_plan):
+            saved_plan = review_continuation.plan_next
+            with self.assertRaisesRegex(AssertionError, 'unlisted'):
+                with record_reachable_errors('synthetic', set()):
+                    saved_plan()
+        with patch.object(review_series, 'run_series', emit_line):
+            saved_series = review_series.run_series
+            with self.assertRaisesRegex(AssertionError, 'unlisted'):
+                with record_reachable_errors('synthetic', set()):
+                    saved_series(None, 'head', emit=lambda row: None)
+
+    def test_recorder_accepts_pending_source_codes_without_an_exemption(self):
+        from research_harness import review_continuation
+        from research_harness.errors import ResearchError
+        plan = dict(state='stop', code='openness_search_stale')
+        with patch.object(review_continuation, 'plan_next', return_value=plan):
+            with record_reachable_errors('plan_next'):
+                ResearchError('openness_search_stale', '')
+                self.assertEqual(review_continuation.plan_next(), plan)
 
     def test_recorder_checks_both_constructors_and_reports_the_action_path(self):
         from research_harness.errors import ResearchError

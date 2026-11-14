@@ -5551,13 +5551,19 @@
       "record": "20261113110022-every-open-record-and-review-capacity",
       "class": "review continuity source reach",
       "summary": "Module closures, name-only matches and shared callback pointers gave all planned commands the same code domain.",
-      "expected": "Only executable commands join series reach; source rules isolate callbacks and lexical scopes, and checked coverage parts retain the unlisted stop and offline diagnostic.",
+      "expected": "Only executable commands join series reach; source rules retain lexical and callback scope, list unfollowed lookups, and keep every found code in the registry or pending table. Group entries match source sites, and the recorder checks constructors and lines with only source-absent injections.",
       "fixed_in": "open",
       "test_kind": "real_shape",
       "tests": [
-        "test_review_unlisted_stops.UnlistedStopTests.test_no_stop_and_outside_codes_keep_the_unlisted_series_and_offline_boundary",
+        "test_review_unlisted_stops.UnlistedStopTests.test_readable_store_keeps_the_last_line_and_reports_the_unlisted_continuation",
         "test_review_unlisted_stops.UnlistedStopTests.test_driver_refuses_an_executable_state_with_a_command_outside_its_set",
-        "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row"
+        "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row",
+        "test_series_reach_rules.SourceRulesTests.test_computed_module_lookup_reaches_functions_added_to_that_module",
+        "test_series_reach_rules.SourceRulesTests.test_unfollowed_lookup_forms_are_listed_without_adding_edges",
+        "test_series_code_groups.GroupEntryTests.test_refuses_added_removed_or_moved_member_sites",
+        "test_series_code_reach.CodeReachTests.test_recorder_checks_lines_and_allows_only_source_absent_injections",
+        "test_review_unlisted_stops.UnlistedStopTests.test_driver_refuses_an_expired_unchanged_wait_with_a_command_outside_its_set",
+        "test_review_unlisted_stops.UnlistedStopTests.test_driver_refuses_a_wait_refreshed_to_an_executable_command_outside_its_set"
       ]
     }
   ]

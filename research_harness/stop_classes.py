@@ -89,14 +89,46 @@ for _code in ('stale_revision', 'review_task_dependency_changed'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2', next=dict(kind='continue'))
 
 
-def validate_registry(rows):
+STOP_GROUPS = {
+    'stored_state': dict(id='stored_state', **{'class': 'decision'}, owner='D2',
+        next=copy.deepcopy(STOP_REGISTRY['artifact_corrupt']['next']),
+        conditions=dict(
+            store='It checks the store itself: its files, its lock, its schema, its history or its journal.',
+            content='It compares stored content with other stored content, a schema, a digest or a version, '
+                    'and the state is one that the commands of the harness do not produce in their ordinary order.',
+            payload='It reads only the payload of an executed command, and the planner built that payload.')),
+}
+
+# Each review lane adds its own (group, codes) tuple here with its evidence file.
+for _group, _codes in (
+        ('stored_state', ()),
+):
+    for _code in _codes:
+        _row = copy.deepcopy(STOP_GROUPS[_group])
+        _row.pop('id')
+        _row.pop('conditions')
+        STOP_REGISTRY[_code] = dict(_row, code=_code, group=_group)
+
+
+def validate_registry(rows, groups=None):
     """Require a next step and an executable proof for every defect classification."""
+    if groups is None:
+        groups = STOP_GROUPS
     for code, row in rows.items():
         if (row['code'] != code or row['class'] not in ('waiting', 'harness_defect', 'decision', 'requested')
                 or not row.get('owner') or not row.get('next')):
             raise ValueError('A stop registry row needs its code, class, owner and next step: ' + code)
         if row['class'] == 'harness_defect' and not row.get('proof'):
             raise ValueError('A harness-defect row needs its guard test: ' + code)
+        if 'group' in row:
+            group = row['group']
+            if group not in groups:
+                raise ValueError('Unknown stop group for registry row: ' + code + ': ' + str(group))
+            expected = {key: value for key, value in groups[group].items()
+                        if key not in ('id', 'conditions')}
+            expected.update(code=code, group=group)
+            if row != expected:
+                raise ValueError('Registry row does not match its stop group: ' + code)
 
 
 validate_registry(STOP_REGISTRY)

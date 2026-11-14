@@ -35,13 +35,13 @@ from .evidence import digest
 from . import review_preflight, review_protocol as protocol, review_transport as transport
 from .review_continuation import list_chain_heads, plan_next
 from .review_failure_class import classify_attempt
+from .review_series import EXECUTABLE_COMMANDS
 from .storage import Store, _RecordHistory, _RecordedSnapshot, _validate
 from .stop_classes import (EXPECTED_STOP_CODES as EXPECTED_STOP_CODES, STOP_REGISTRY,
                            classify_stop, describe_terminal)
 
 
-LOCAL_OPERATIONS = frozenset(('review-assignment', 'value-review',
-                              'review-adjudication', 'problem-openness'))
+LOCAL_OPERATIONS = EXECUTABLE_COMMANDS - {'review-run'}
 DEFAULT_TIME_BUDGET_SECONDS = 10800
 # A limit of the harness inside the range that macOS accepts for an interval timer (setitimer refuses 100000001 s).
 MAXIMUM_TIME_BUDGET_SECONDS = 100_000_000

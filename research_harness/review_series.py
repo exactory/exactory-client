@@ -34,8 +34,10 @@ def _identify_action(plan):
 
 
 def _describe_stop(plan, code, details):
-    terminal = describe_terminal(code, action={key: copy.deepcopy(plan[key])
-        for key in ('command', 'state', 'payload') if key in plan})
+    action = {key: copy.deepcopy(plan[key]) for key in ('command', 'state', 'payload') if key in plan}
+    terminal = describe_terminal(code, action=action)
+    if 'command' in action and 'payload' in action:
+        terminal['details'].setdefault('refused_action', action)
     if code in HARNESS_DEFECT_CODES:
         terminal.pop('command', None)
         terminal['details']['step'] = dict(command='gate-auto-pass', chooses=['stop_id'])
@@ -114,12 +116,16 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 and head in capacity_records.get('review_assignment', {})):
             from .review_route_capacity import describe_assignment_warning, describe_assignment_capacity
             assignment = capacity_records['review_assignment'][head]
-            if 'capacity_plan_kind' in assignment:
-                forecast = describe_assignment_capacity(capacity_records, store.build_artifact_store(), assignment)
-                row = dict(row, capacity_forecast=forecast['capacity_forecast'])
-            warning = describe_assignment_warning(capacity_records, head, artifacts=store.build_artifact_store())
-            if warning is not None:
-                row = dict(row, capacity_warning=dict(row.get('capacity_warning', {}), **warning))
+            try:
+                if 'capacity_plan_kind' in assignment:
+                    forecast = describe_assignment_capacity(capacity_records, store.build_artifact_store(), assignment)
+                    row = dict(row, capacity_forecast=forecast['capacity_forecast'])
+                warning = describe_assignment_warning(capacity_records, head, artifacts=store.build_artifact_store())
+                if warning is not None:
+                    row = dict(row, capacity_warning=dict(row.get('capacity_warning', {}), **warning))
+            except (ResearchError, ValueError):
+                # Advisory reads cannot replace the action's result or prevent its terminal line.
+                pass
         if head in capacity_records.get('review_assignment', {}):
             assignment = capacity_records['review_assignment'][head]
             if assignment.get('reading_chain'):
@@ -201,8 +207,6 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             snapshot, plan = fresh_snapshot, fresh_plan
         elif plan['state'] not in EXECUTABLE_STATES:
             raise ValueError('Unknown review continuation state: ' + plan['state'])
-        if plan['command'] not in EXECUTABLE_COMMANDS:
-            raise ValueError('Unknown executable review continuation command: ' + plan['command'])
         action = _identify_action(plan)
         position = (action, digest(plan['progress']))
         if not waiting and position in executed:
@@ -213,6 +217,8 @@ def run_series(store, assignment_id, *, emit=_emit_json):
         request_id = plan.get('request_id') or 'review-series:' + uuid.uuid4().hex
         try:
             try:
+                if plan['command'] not in EXECUTABLE_COMMANDS:
+                    raise ValueError('Unknown executable review continuation command: ' + plan['command'])
                 OPERATIONS[plan['command']](store, plan['payload'],
                     expected_revision=snapshot['revision'], request_id=request_id)
             finally:

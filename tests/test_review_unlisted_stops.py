@@ -1,11 +1,7 @@
 """Retain the refused series action when a reachable code awaits its registry row."""
 
-import json
-from pathlib import Path
-import tempfile
+import sqlite3
 import unittest
-
-from ci import series_code_reach as reach
 from unittest.mock import patch
 
 from research_harness import cli, record_check, review_continuation, review_series
@@ -24,71 +20,150 @@ class UnlistedStopTests(unittest.TestCase):
     @record_reachable_errors('run_series')
     def test_driver_refuses_an_executable_state_with_a_command_outside_its_set(self):
         plan = dict(state='run', command='record-check', payload={}, head_id='bar-first', progress={})
-        with patch.object(review_series, '_read_plan', return_value=(self.case.store.snapshot(), plan)):
+        calls = []
+        def operate(*args, **kwargs):
+            calls.append((args, kwargs))
+            raise AssertionError('An operation outside EXECUTABLE_COMMANDS was called')
+        with patch.object(review_series, '_read_plan', return_value=(self.case.store.snapshot(), plan)), \
+                patch.dict(cli.OPERATIONS, {'record-check': operate}):
             with self.assertRaisesRegex(ValueError, 'record-check'):
                 review_series.run_series(self.case.store, 'bar-first', emit=lambda row: None)
+        self.assertEqual(calls, [])
+
+    @record_reachable_errors('run_series')
+    def test_driver_refuses_an_expired_unchanged_wait_with_a_command_outside_its_set(self):
+        plan = dict(state='wait', command='record-check', payload={}, head_id='bar-first', progress={},
+                    not_before='2000-01-01T00:00:00+00:00')
+        calls = []
+        def operate(*args, **kwargs):
+            calls.append((args, kwargs))
+            raise AssertionError('An operation outside EXECUTABLE_COMMANDS was called')
+        with patch.object(review_series, '_read_plan', return_value=(self.case.store.snapshot(), plan)), \
+                patch.dict(cli.OPERATIONS, {'record-check': operate}):
+            with self.assertRaisesRegex(ValueError, 'record-check'):
+                review_series.run_series(self.case.store, 'bar-first', emit=lambda row: None)
+        self.assertEqual(calls, [])
+
+    @record_reachable_errors('run_series')
+    def test_driver_refuses_a_wait_refreshed_to_an_executable_command_outside_its_set(self):
+        waiting = dict(state='wait', command='review-run', payload={}, head_id='bar-first', progress={},
+                       not_before='2000-01-01T00:00:00+00:00')
+        running = dict(state='run', command='record-check', payload={}, head_id='bar-first', progress={})
+        snapshot = self.case.store.snapshot()
+        calls = []
+        def operate(*args, **kwargs):
+            calls.append((args, kwargs))
+            raise AssertionError('An operation outside EXECUTABLE_COMMANDS was called')
+        with patch.object(review_series, '_read_plan', side_effect=[(snapshot, waiting), (snapshot, running)]), \
+                patch.dict(cli.OPERATIONS, {'record-check': operate}):
+            with self.assertRaisesRegex(ValueError, 'record-check'):
+                review_series.run_series(self.case.store, 'bar-first', emit=lambda row: None)
+        self.assertEqual(calls, [])
 
     @record_reachable_errors('run_series')
     def test_every_executable_command_is_a_public_operation(self):
         self.assertEqual(review_series.EXECUTABLE_COMMANDS, frozenset((
             'review-run', 'review-assignment', 'value-review', 'review-adjudication', 'problem-openness')))
         self.assertTrue(review_series.EXECUTABLE_COMMANDS <= set(cli.OPERATIONS))
+        self.assertEqual(record_check.LOCAL_OPERATIONS, review_series.EXECUTABLE_COMMANDS - {'review-run'})
 
-    def test_no_stop_and_outside_codes_keep_the_unlisted_series_and_offline_boundary(self):
-        # The lane's production no-stop file starts empty. Validate a representative
-        # report-entry reason here before exercising its real-store fallback.
-        sources = {
-            'research_harness/review_checks.py': """
-def builder():
-    return dict(code='review_output_pending')
-""",
-            'research_harness/artifacts.py': """
-def check():
-    raise ResearchError('artifact_sealed', '')
-"""}
-        analysis = reach.analyze_sources(sources, {'entry': [
-            'research_harness/review_checks.py:builder', 'research_harness/artifacts.py:check']})
-        no_stop = {'review_output_pending': dict(reason='report_entry',
-            builder='research_harness/review_checks.py:builder')}
-        with tempfile.TemporaryDirectory() as folder:
-            (Path(folder) / 'lane.json').write_text(json.dumps(no_stop))
-            entries = reach.read_no_stop_entries(Path(folder), sources, analysis, {})
-        parts = reach.build_coverage_parts(analysis, {}, entries)
-        self.assertEqual(set(parts['no_stop_of_own']), {'review_output_pending'})
-        self.assertEqual(set(parts['outside_review_modules']), {'artifact_sealed'})
-        for code in ('review_output_pending', 'artifact_sealed'):
-            for place in ('planner', 'operation'):
-                with self.subTest(code=code, place=place):
-                    def refuse(*args, **kwargs):
-                        raise ResearchError(code, 'Synthetic refusal at a checked boundary.')
-                    if place == 'operation' and not self.case.read_records().get('review_attempt'):
-                        with patch('research_harness.review_transport.send_request', return_value=
-                                   self.case.build_provider_response(self.case.build_review_output('bar'))):
-                            self.fixture.execute(self.fixture.plan())
-                    target = (patch.object(review_continuation, '_plan_head', side_effect=refuse)
-                              if place == 'planner' else patch.dict(cli.OPERATIONS, {'value-review': refuse}))
-                    with target:
-                        rows = []
-                        with record_reachable_errors('run_series'):
-                            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
-                        self.assertEqual(result, 3)
-                        terminal = rows[-1]
-                        self.assertEqual((terminal['state'], terminal['code'], terminal['stop_class']),
-                                         ('stop', code, 'decision'))
-                        self.assertTrue(terminal['details']['unlisted'])
-                        action = terminal['details']['refused_action']
-                        self.assertEqual(action['command'], 'plan_next' if place == 'planner' else 'value-review')
-                        with record_reachable_errors('record-check'):
-                            report = record_check.run_timed_check('continuation',
-                                lambda: record_check.check_continuation(self.case.store))
-                        self.assertEqual(report['status'], 'failed')
-                        self.assertEqual(report['error']['code'], 'record_unlisted_stop')
-                        self.assertEqual(report['error']['details']['code'], code)
-                        boundary = report['error']['details']
-                        self.assertEqual(boundary['chain'], terminal['chain'])
-                        self.assertEqual(boundary['head_id'], terminal['head_id'])
-                        refused = boundary['details']['refused_action'] if place == 'planner' else boundary['refused_action']
-                        self.assertEqual(refused, action)
+    def test_readable_store_keeps_the_last_line_and_reports_the_unlisted_continuation(self):
+        output = self.case.build_review_output('bar')
+        self.fixture.invoke(output)
+        action = dict(command='value-review', state='record', payload=dict(output,
+            id='review:bar-first', assignment_id='bar-first', dossier_id=None))
+        rows = []
+        with patch.dict(cli.OPERATIONS, {'value-review': self.refuse_stale_search}):
+            with record_reachable_errors('run_series'):
+                result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            with record_reachable_errors('record-check'):
+                report = record_check.check_record(self.case.root, isolate=False)
+        self.assertEqual(result, 3)
+        terminal = rows[-1]
+        self.assertEqual((terminal['head_id'], terminal['code']), ('bar-first', 'openness_search_stale'))
+        self.assertEqual(terminal['details']['refused_action'], action)
+        self.assertEqual([row['step'] for row in report['steps']],
+                         ['snapshot', 'integrity', 'reconstruction', 'authentication', 'continuation'])
+        self.assertTrue(all(row['status'] == 'passed' for row in report['steps'][:-1]))
+        failure = report['steps'][-1]
+        self.assertEqual((failure['status'], failure['error']['code']), ('failed', 'record_unlisted_stop'))
+        boundary = failure['error']['details']
+        self.assertEqual((boundary['head_id'], boundary['code']), ('bar-first', 'openness_search_stale'))
+        self.assertEqual(boundary['chain'], terminal['chain'])
+        self.assertEqual(boundary['refused_action'], action)
+
+    def test_changed_artifact_keeps_the_last_line_and_fails_record_integrity(self):
+        operation = cli.OPERATIONS['review-run']
+        packet = self.fixture.assignment['packet']
+        def damage_packet(store, payload, **identity):
+            path = store.root / packet['path']
+            path.chmod(0o600)
+            path.write_bytes(b'Damaged retained review packet.')
+            return operation(store, payload, **identity)
+        rows = []
+        with patch.dict(cli.OPERATIONS, {'review-run': damage_packet}):
+            with record_reachable_errors('run_series'):
+                result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+        self.assertEqual(result, 3)
+        terminal = rows[-1]
+        self.assertEqual((terminal['head_id'], terminal['code']), ('bar-first', 'artifact_corrupt'))
+        self.assertEqual(terminal['details']['refused_action'], dict(command='review-run', state='run',
+            payload=dict(id='bar-first-run-1', assignment_id='bar-first')))
+        self.assertEqual(terminal['error']['code'], 'artifact_corrupt')
+        with record_reachable_errors('record-check'):
+            report = record_check.check_record(self.case.root, isolate=False)
+        self.assertEqual([row['step'] for row in report['steps']], ['snapshot', 'integrity'])
+        self.assertEqual(report['steps'][0]['status'], 'passed')
+        self.assertEqual((report['steps'][-1]['status'], report['steps'][-1]['error']['code']),
+                         ('failed', 'artifact_corrupt'))
+
+    def test_operation_damaged_store_keeps_the_last_line_when_capacity_reads_fail(self):
+        from research_harness import review_protocol, review_route_capacity
+        from research_harness.evidence import digest
+        from test_review_capacity_plan import build_inputs
+        capacity_fixture = fixtures.ContinuationTests()
+        original_builder = review_protocol.build_packet
+        def build_packet(*args, **kwargs):
+            packet = original_builder(*args, **kwargs)
+            packet[review_route_capacity.CAPACITY_REQUEST_KEY] = dict(build_inputs(1), kind='reading')
+            packet.pop('digest', None)
+            packet['digest'] = digest(packet)
+            return packet
+        with patch.object(review_protocol, 'build_packet', side_effect=build_packet):
+            capacity_fixture.setUp()
+        self.addCleanup(capacity_fixture.doCleanups)
+        case = capacity_fixture.case
+        assignment = capacity_fixture.assignment
+        operation = cli.OPERATIONS['review-run']
+        def damage_store(store, payload, **identity):
+            # The first plan has already been read. Persist both failed store
+            # metadata and an unreadable advisory artifact before the real call.
+            with sqlite3.connect(str(store.root / '.exactory/research.sqlite3')) as connection:
+                connection.execute('UPDATE metadata SET revision = revision + 1')
+            path = store.root / assignment['capacity_plan']['artifact']['path']
+            path.chmod(0o600)
+            path.write_bytes(b'Damaged retained capacity plan.')
+            return operation(store, payload, **identity)
+        rows = []
+        with patch.dict(cli.OPERATIONS, {'review-run': damage_store}):
+            with record_reachable_errors('run_series'):
+                result = review_series.run_series(case.store, 'bar-first', emit=rows.append)
+        self.assertEqual(result, 3)
+        terminal = rows[-1]
+        self.assertEqual((terminal['head_id'], terminal['code']), ('bar-first', 'corrupt_state'))
+        self.assertEqual(terminal['details']['refused_action'], dict(command='review-run', state='run',
+            payload=dict(id='bar-first-run-1', assignment_id='bar-first')))
+        self.assertEqual(terminal['error']['code'], 'corrupt_state')
+        self.assertEqual(terminal['read_error']['code'], 'corrupt_state')
+        self.assertEqual(terminal['stop_record_error']['code'], 'corrupt_state')
+        self.assertNotIn('capacity_forecast', terminal)
+        with record_reachable_errors('record-check'):
+            report = record_check.check_record(case.root, isolate=False)
+        self.assertEqual([row['step'] for row in report['steps']], ['snapshot'])
+        failure = report['steps'][0]
+        self.assertEqual((failure['status'], failure['error']['code']), ('failed', 'record_snapshot_inconsistent'))
+        self.assertEqual([attempt['code'] for attempt in failure['error']['details']['attempts']],
+                         ['corrupt_state', 'corrupt_state', 'corrupt_state'])
 
     @record_reachable_errors('run_series')
     def test_series_retains_unlisted_code_and_refused_action(self):
