@@ -7,6 +7,11 @@ from .errors import ResearchError
 from .evidence import digest
 
 
+FAMILY_READING_SPEC_REFUSAL = (
+    "Bind a decisive work from this search, without a complete full reading of its own, "
+    "to another record of the same work with a complete full reading.")
+
+
 class OpennessError(ResearchError):
     """A minimum refusal, distinct from failures of the common evidence store."""
 
@@ -255,6 +260,7 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
     from .evaluation import Evaluation
     from .reading import fulltext_coverage
     from .source_deferrals import assess_deferrals
+    from .identities import find_work_family_link
 
     artifacts = Evaluation.of(records, artifacts)
     searches = {digest(row): row for row in records.get("literature_search", {}).values()}
@@ -321,6 +327,21 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
             add_gap("duplicate_source_not_decisive", item, search, work, command="export", canonical_work_id=canonical)
         else:
             required.setdefault(canonical, (item, search))
+    family_versions = {}
+    if minimum["schema_version"] == 2:
+        for row in minimum["family_readings"]:
+            identity, work, version = row["search_digest"], row["work_id"], row["version_id"]
+            search = searches.get(identity)
+            item = next((item for item, _ in selected if item["search_digest"] == identity), None)
+            if (item is None or work == version or work not in records.get("work", {})
+                    or version not in records.get("work", {})
+                    or not any(disposition["work_id"] == work and disposition["disposition"] in {"relevant", "contradictory"}
+                               for disposition in search["dispositions"])
+                    or find_work_family_link(records, work, version) is None):
+                add_gap("reading_missing", item, search, work, command="export", version_id=version,
+                        assessment_error={"code": "openness_reading_gap", "message": FAMILY_READING_SPEC_REFUSAL})
+            else:
+                family_versions[(identity, work)] = version
     pinned = dict(records, reading={key: row for key, row in records.get("reading", {}).items()
                                    if digest(row) in minimum["reading_digests"]})
     pinned_artifacts = Evaluation.of(pinned, artifacts)
@@ -333,16 +354,24 @@ def list_minimum_gaps(minimum, statement, records, artifacts):
         add_gap("reading_deferred", command="resume-source", assessment_error=error.as_dict())
         deferred = {}
     for work in sorted(required):
-        item, search = required[work]
-        if work in deferred:
-            add_gap("reading_deferred", item, search, work, command="resume-source", status=deferred[work]["status"])
-        try:
-            coverage = fulltext_coverage(pinned, pinned_artifacts, work)
-        except ResearchError as error:
-            add_gap("reading_missing", item, search, work, command="reading", assessment_error=error.as_dict())
-            continue
-        if not coverage["complete"]:
-            add_gap("reading_missing", item, search, work, command="reading", missing=coverage["missing"])
+        bindings = ([required[work]] if minimum["schema_version"] == 1 else
+                    [(item, search) for item, search in selected if any(
+                        row["work_id"] == work and row["disposition"] in {"relevant", "contradictory"}
+                        for row in search["dispositions"])])
+        for item, search in bindings:
+            version = family_versions.get((item["search_digest"], work), work)
+            for deferred_work in sorted({work, version}.intersection(deferred)):
+                add_gap("reading_deferred", item, search, work, command="resume-source",
+                        status=deferred[deferred_work]["status"])
+            try:
+                coverage = fulltext_coverage(pinned, pinned_artifacts, version)
+            except ResearchError as error:
+                details = ({} if minimum["schema_version"] == 2 and error.code == "missing_version" else
+                           {"assessment_error": error.as_dict()})
+                add_gap("reading_missing", item, search, work, command="reading", **details)
+                continue
+            if not coverage["complete"]:
+                add_gap("reading_missing", item, search, work, command="reading", missing=coverage["missing"])
     settling = minimum["settling_work_id"]
     if settling is None:
         add_gap("settling_undeclared", outcomes=["already_solved"])

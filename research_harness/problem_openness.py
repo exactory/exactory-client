@@ -12,6 +12,13 @@ from .problem_claims import find_current_statement, find_latest, require_problem
 from .reading import fulltext_coverage
 
 
+FAMILY_READING_REPORT_FIELD = "derived_family_readings"
+FAMILY_READING_LINK_FIELD = "link"
+FAMILY_READING_AUTHOR_COMPARISON_FIELD = "authors_compared"
+FAMILY_READING_V1_REFUSAL = "Family readings require a version 2 openness minimum delivered with protocol v6."
+FAMILY_READING_LIST_REFUSAL = "Family reading selections must be a list."
+
+
 def collect_reading_artifacts(records, artifacts, reading):
     """Collect inspected originals and visuals, using the bound main extraction for a chosen original."""
     from .source_links import validate_link
@@ -214,16 +221,87 @@ def serialize_record(record):
     return json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
-def build_minimum(statement, bound, readings, spec, *, schema_version=2):
-    """Build the declaration; later stage-B units bind the additional evidence."""
+def build_minimum(statement, bound, readings, spec, *, records, artifacts, schema_version=2):
+    """Build the declaration and bind complete readings of linked work records."""
     minimum = {"schema_version": schema_version, "statement": statement["statement"], "neighbours": statement["neighbours"],
                "searches": [{"formulation": formulation, "search_digest": digest(search)}
                             for formulation, search in bound],
                "reading_digests": sorted(digest(row) for row in readings.values()),
                "settling_work_id": spec["settling_work_id"], "duplicate_resolutions": spec["duplicate_resolutions"]}
     if schema_version == 2:
-        minimum.update(family_readings=[], supporting_reading_digests=[], results=[])
+        minimum.update(family_readings=spec.get("family_readings", []), supporting_reading_digests=[], results=[])
+        from .openness_minimum import validate_minimum
+        validate_minimum(minimum)
+        bind_family_readings(minimum, records, artifacts)
+    elif spec.get("family_readings"):
+        raise ResearchError("invalid_input", FAMILY_READING_V1_REFUSAL, {"field": "family_readings"})
     return minimum
+
+
+def bind_family_readings(minimum, records, artifacts):
+    """Select the latest completely read linked version, or the spec's choice."""
+    from .evaluation import Evaluation
+    from .identities import find_work_family_link, version_of
+    from .openness_minimum import FAMILY_READING_SPEC_REFUSAL
+
+    artifacts = Evaluation.of(records, artifacts)
+    searches = {digest(search): search for search in records.get("literature_search", {}).values()}
+    required = dict.fromkeys((binding["search_digest"], row["work_id"]) for binding in minimum["searches"]
+                             for row in searches[binding["search_digest"]]["dispositions"]
+                             if row["disposition"] in {"relevant", "contradictory"})
+    choices = {(row["search_digest"], row["work_id"]): row["version_id"] for row in minimum["family_readings"]}
+    for key, version in choices.items():
+        if key not in required or version not in records.get("work", {}) or version == key[1]:
+            raise ResearchError("openness_reading_gap", FAMILY_READING_SPEC_REFUSAL,
+                                {"search_digest": key[0], "work_id": key[1], "version_id": version})
+    candidates = {row["version_id"] for row in records.get("reading", {}).values() if row["depth"] == "fulltext"}
+    reading_digests = set(minimum["reading_digests"])
+    bindings = []
+    for identity, work in required:
+        try:
+            own = fulltext_coverage(records, artifacts, work)
+        except ResearchError as error:
+            if error.code != "missing_version":
+                raise
+            own = {"complete": False, "readings": {}}
+        if own["complete"]:
+            reading_digests.update(digest(row) for row in own["readings"].values())
+        selected = choices.get((identity, work))
+        available = []
+        if not own["complete"]:
+            for version in sorted(candidates if selected is None else [selected]):
+                if version == work or find_work_family_link(records, work, version) is None:
+                    continue
+                coverage = fulltext_coverage(records, artifacts, version)
+                if coverage["complete"]:
+                    number = version_of(version)
+                    available.append((int(number[1:]) if number else 0, version, coverage))
+        if selected is not None and not available:
+            raise ResearchError("openness_reading_gap", FAMILY_READING_SPEC_REFUSAL,
+                                {"search_digest": identity, "work_id": work, "version_id": selected})
+        if available:
+            _, version, coverage = max(available, key=lambda row: (row[0], row[1]))
+            bindings.append({"search_digest": identity, "work_id": work, "version_id": version})
+            reading_digests.update(digest(row) for row in coverage["readings"].values())
+    minimum["family_readings"] = bindings
+    minimum["reading_digests"] = sorted(reading_digests)
+
+
+def describe_family_readings(minimum, records, spec):
+    """Report automatic bindings with the link and whether authors were compared."""
+    from .identities import ARXIV_VERSION_LINK_KIND, find_work_family_link
+
+    explicit = {(row["search_digest"], row["work_id"]) for row in spec.get("family_readings", [])}
+    report = []
+    for row in minimum.get("family_readings", []):
+        if (row["search_digest"], row["work_id"]) in explicit:
+            continue
+        link = find_work_family_link(records, row["work_id"], row["version_id"])
+        compared = link["kind"] != ARXIV_VERSION_LINK_KIND and all(
+            records["work"][identifier].get("authors") for identifier in (row["work_id"], row["version_id"]))
+        report.append(dict(row, **{FAMILY_READING_LINK_FIELD:
+            dict(link, **{FAMILY_READING_AUTHOR_COMPARISON_FIELD: bool(compared)})}))
+    return report
 
 
 def export_openness(store, spec, destination=None, *, accept_gaps=False):
@@ -234,7 +312,9 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
     text(spec["reviewer_id"], "Openness reviewer ID")
     fields(spec["minimum"], ("searches", "settling_work_id", "duplicate_resolutions"),
            ("text_priority", "family_readings", "supporting_reading_ids", "results"))
-    for field in ("family_readings", "supporting_reading_ids", "results"):
+    if "family_readings" in spec["minimum"] and not isinstance(spec["minimum"]["family_readings"], list):
+        raise ResearchError("invalid_input", FAMILY_READING_LIST_REFUSAL, {"field": "family_readings"})
+    for field in ("supporting_reading_ids", "results"):
         if field in spec["minimum"] and spec["minimum"][field] != []:
             raise ResearchError("invalid_input", "The additional minimum bindings must be empty until their "
                                 "delivery ships with protocol v6.", {"field": field})
@@ -272,10 +352,15 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
         for reading_id in coverage["readings"]:
             readings[reading_id] = records["reading"][reading_id]
     # UB6 and reading-forecast activate v2 together. Current packets keep v1.
-    minimum = build_minimum(statement, bound, readings, spec["minimum"], schema_version=1)
+    minimum = build_minimum(statement, bound, readings, spec["minimum"], records=records, artifacts=artifacts,
+                            schema_version=1)
     # The declaration is checked against the store before the export writes anything.
     from .openness_minimum import validate_minimum_bindings
     validate_minimum_bindings(minimum, statement["statement"], records)
+    if minimum["schema_version"] == 2:
+        reading_digests = set(minimum["reading_digests"])
+        readings = {identifier: row for identifier, row in records.get("reading", {}).items()
+                    if digest(row) in reading_digests}
     from .openness_minimum import (find_searched_through, forecast_outcomes, list_minimum_gaps, list_minimum_notices)
     gaps = list_minimum_gaps(minimum, statement["statement"], records, artifacts)
     forecast = {"outcomes": forecast_outcomes(gaps), "gaps": gaps,
@@ -341,6 +426,8 @@ def export_openness(store, spec, destination=None, *, accept_gaps=False):
     delivered = deliver_packet(store, destination, packet, transitive=True, reuse=True)
     result = dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"],
                   audit_forecast=forecast)
+    if minimum["schema_version"] == 2:
+        result[FAMILY_READING_REPORT_FIELD] = describe_family_readings(minimum, records, spec["minimum"])
     if blocked:
         result["warnings"] = [{"code": "openness_minimum_gaps", "message":
             "The bound minimum blocks both resolved outcomes. A reading chain over this packet still uses protocol "

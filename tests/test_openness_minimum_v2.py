@@ -154,7 +154,8 @@ class MinimumV2StoreTests(ProblemCase):
         original = self.artifacts.read(result["native_packet"])
         self.assertEqual(packet["scientific_context"]["openness_minimum"]["schema_version"], 1)
         bound = [(self.selected["statement"], search)]
-        v2 = problem_openness.build_minimum(self.selected, bound, {reading["id"]: reading}, spec["minimum"])
+        v2 = problem_openness.build_minimum(self.selected, bound, {reading["id"]: reading}, spec["minimum"],
+            records=self.store.snapshot()["records"], artifacts=self.artifacts)
         expected = {"schema_version": 2, "statement": self.selected["statement"], "neighbours": [],
                     "searches": [{"formulation": self.selected["statement"], "search_digest": digest(search)}],
                     "reading_digests": [digest(reading)], "settling_work_id": None, "duplicate_resolutions": [],
