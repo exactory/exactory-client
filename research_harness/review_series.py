@@ -60,6 +60,7 @@ def run_series(store, assignment_id, *, emit=_emit_json):
     from .cli import OPERATIONS
 
     output = emit
+    capacity_records = {}
 
     def emit(row, *, terminal=False, usage_snapshot=None):
         if row.get('error'):
@@ -102,6 +103,13 @@ def run_series(store, assignment_id, *, emit=_emit_json):
         if row.get('state') in ('stop', 'wait') and row.get('code'):
             from .stop_classes import classify_stop
             row = dict(row, stop_class=classify_stop(row['code']))
+        head = row.get('head_id')
+        if (row.get('state') not in ('done', 'handoff') and head is not None
+                and head in capacity_records.get('review_assignment', {})):
+            from .review_route_capacity import describe_assignment_warning
+            warning = describe_assignment_warning(capacity_records, head, artifacts=store.build_artifact_store())
+            if warning is not None:
+                row = dict(row, capacity_warning=warning)
         output(row)
 
     executed = {}
@@ -123,6 +131,7 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 return 3
             emit(row)
             continue
+        capacity_records = snapshot['records']
         last_plan = plan
         waiting = plan['state'] == 'wait'
         if plan['state'] == 'stop' and plan.get('code') in REPLAN_CODES:

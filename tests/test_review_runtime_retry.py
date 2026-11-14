@@ -27,6 +27,9 @@ class RuntimeRetryTests(LiteratureCase):
     def setUp(self):
         super().setUp()
         self.route()
+        self.observation_request = transport.request_body(
+            self.records()['review_route']['route'], 'Return JSON.',
+            dict(allowed_control='A' * 32, evidence_control='B' * 32, evidence=[]))
         fingerprint = patch('research_harness.review_state_evaluation._runtime_fingerprint', return_value=None)
         fingerprint.start()
         self.addCleanup(fingerprint.stop)
@@ -132,7 +135,7 @@ class RuntimeRetryTests(LiteratureCase):
         route = self.records()['review_route']['route']
         with patch.object(transport, 'runtime', side_effect=[self.missing(), route['runtime'], route['runtime']]), \
                 patch.object(transport, 'send_request', return_value=self.response({})) as send:
-            self.assertEqual(protocol._observed(self.artifacts, route, {}, 'fixture')['status'], 'completed')
+            self.assertEqual(protocol._observed(self.artifacts, route, self.observation_request, 'fixture')['status'], 'completed')
         send.assert_called_once()
         self.assertEqual(self.sleeper.call_args_list, [call(1)])
 
@@ -142,7 +145,7 @@ class RuntimeRetryTests(LiteratureCase):
             self.sleeper.reset_mock()
             outcomes = [self.missing()] * 6 if persistent else [self.missing(), self.response({})]
             with patch.object(transport, 'send_request', side_effect=outcomes) as send:
-                result = protocol._observed(self.artifacts, route, {}, 'fixture')
+                result = protocol._observed(self.artifacts, route, self.observation_request, 'fixture')
             self.assertEqual(result['status'], 'failed' if persistent else 'completed')
             self.assertEqual(send.call_count, 6 if persistent else 2)
             delays = (1, 2, 4, 8, 16) if persistent else (1,)
@@ -150,7 +153,7 @@ class RuntimeRetryTests(LiteratureCase):
         self.sleeper.reset_mock()
         failure = ResearchError('review_input_too_large', 'Size')
         with patch.object(transport, 'send_request', side_effect=failure) as send:
-            result = protocol._observed(self.artifacts, route, {}, 'fixture')
+            result = protocol._observed(self.artifacts, route, self.observation_request, 'fixture')
         self.assertEqual(result['error']['code'], 'review_input_too_large')
         send.assert_called_once()
         self.sleeper.assert_not_called()
@@ -158,11 +161,11 @@ class RuntimeRetryTests(LiteratureCase):
     def test_no_sleep_on_success_and_no_retry_for_changed_runtime(self):
         route = self.records()['review_route']['route']
         with patch.object(transport, 'send_request', return_value=self.response({})):
-            protocol._observed(self.artifacts, route, {}, 'fixture')
+            protocol._observed(self.artifacts, route, self.observation_request, 'fixture')
         self.sleeper.assert_not_called()
         failure = ResearchError('review_route_runtime_stale', 'Changed')
         with patch.object(transport, 'runtime', side_effect=failure) as runtime:
-            result = protocol._observed(self.artifacts, route, {}, 'fixture')
+            result = protocol._observed(self.artifacts, route, self.observation_request, 'fixture')
         self.assertEqual(result['error']['code'], 'review_route_runtime_stale')
         runtime.assert_called_once()
         self.sleeper.assert_not_called()

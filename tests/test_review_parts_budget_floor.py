@@ -297,11 +297,17 @@ class BudgetFloorReplacementTests(PartsResultCase):
             self.assertEqual(stop['details'][key], value, key)
         after = self.case.store.snapshot()
         recorded_stop, = after['records']['review_series_stop'].values()
+        warning = stop['capacity_warning']
+        self.assertEqual({key: warning['output'][key] for key in (
+            'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
+            dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['read']))
         self.assertEqual(stop, dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
                                    provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                                   revision_after_stop=after['revision']))
+                                   revision_after_stop=after['revision'], capacity_warning=warning))
         self.assertEqual(recorded_stop['plan'], plan)
         self.assertEqual(recorded_stop['recorded_revision'], after['revision'])
+        self.assertEqual(self.case.store.committed_request(recorded_stop['request_id'])['response']['result'],
+                         recorded_stop)
         operations = dict(before['records']['literature_operation'])
         operations[recorded_stop['request_id']] = dict(operation='review.series_stop',
                                                       runtime=self.case.store.describe_runtime())

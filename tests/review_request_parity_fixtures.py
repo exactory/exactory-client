@@ -103,6 +103,7 @@ def fix_external_inputs():
             patch("time.monotonic", return_value=1000.0), \
             patch("research_harness.problem_claims.datetime", FixtureDatetime), \
             patch("research_harness.integration.datetime", FixtureDatetime), \
+            patch.object(protocol, "datetime", FixtureDatetime), \
             patch.object(transport, "observe", side_effect=observe):
         yield emitted
 

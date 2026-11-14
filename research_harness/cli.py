@@ -513,6 +513,21 @@ def acquisition_command(store, command, payload, identity, *, preview=False, res
     return acquisition.import_response_file(store, **values, **identity)
 
 
+def describe_review_receipt(store, command, payload, receipt):
+    """Keep current capacity diagnostics outside the stored mutation receipt and record."""
+    from .review_route_capacity import describe_assignment_warning, describe_route_report
+    records = store.snapshot()['records']
+    if command == 'review-assignment':
+        assignment = records.get('review_assignment', {}).get(payload['id'])
+        if assignment is None:
+            return receipt
+        warning = describe_assignment_warning(records, payload['id'], artifacts=store.build_artifact_store())
+        return dict(receipt, capacity_warning=warning) if warning is not None else receipt
+    routes = records.get('review_route', {})
+    route = routes.get(payload['id'], payload) if command == 'review-route' else routes[payload['route_id']]
+    return dict(receipt, **describe_route_report(records, route))
+
+
 def _review_status(records, artifacts):
     from . import review_parts, review_refusal
     from .report_views import describe_parts_turn
@@ -555,6 +570,10 @@ def _review_status(records, artifacts):
         progress = result['assignments'][identifier]['review_parts']
         if progress['next']:
             progress['next'] = describe_next_actions(records, artifacts, identifier, progress['next'])
+    from .review_route_capacity import describe_open_route_reports
+    routes = describe_open_route_reports(records, artifacts)
+    if routes:
+        result['routes'] = routes
     # Legacy status remains a cheap refusal listing. Staged science is selected
     # by assignment_state, never by treating a raw answer page as a final.
     if not records.get("review_epoch"):
@@ -934,10 +953,14 @@ def run(args):
                     return record_reconciliation(store, value, None, **identity)
                 replay = replay_reconciliation
             try:
-                return check_mutation(Store(find_workspace(root)), operation, payload,
-                                      expected_revision=args.expected_revision, request_id=args.request_id,
-                                      bounded_payload=bounded_payload, replay=replay,
-                                      prepare_payload=normalize_check_payload)
+                checking_store = Store(find_workspace(root))
+                receipt = check_mutation(checking_store, operation, payload,
+                                         expected_revision=args.expected_revision, request_id=args.request_id,
+                                         bounded_payload=bounded_payload, replay=replay,
+                                         prepare_payload=normalize_check_payload)
+                if args.command in ('review-route', 'review-probe', 'review-assignment'):
+                    return describe_review_receipt(checking_store, args.command, payload, receipt)
+                return receipt
             except ResearchError as error:
                 if args.command == "review-budget":
                     describe_review_budget_refusal(error)
@@ -981,7 +1004,10 @@ def run(args):
         identity = {"expected_revision": args.expected_revision, "request_id": args.request_id}
         if args.command in OPERATIONS:
             try:
-                return OPERATIONS[args.command](store, payload, **identity)
+                receipt = OPERATIONS[args.command](store, payload, **identity)
+                if args.command in ('review-route', 'review-probe', 'review-assignment'):
+                    return describe_review_receipt(store, args.command, payload, receipt)
+                return receipt
             except ResearchError as error:
                 if args.command == "review-budget":
                     describe_review_budget_refusal(error)
@@ -1001,7 +1027,9 @@ def run(args):
                 return dict(research_decisions.decision_state(snapshot["records"], artifacts, args.boundary,
                                                              decision_id=args.decision_id), revision=snapshot["revision"])
             if args.command == "review-route-assess":
-                return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id), revision=snapshot["revision"])
+                return dict(review_protocol.route_state(snapshot["records"], artifacts, args.route_id),
+                            **review_protocol.describe_route_report(snapshot["records"], args.route_id),
+                            revision=snapshot["revision"])
             context = strict_json(Path(args.context_file).read_bytes()) if args.context_file else {}
             if not isinstance(context, dict):
                 raise ResearchError("invalid_input", "Reviewer context must be a JSON object")

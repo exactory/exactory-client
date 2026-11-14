@@ -16,24 +16,9 @@ _ESTIMATE_REASON_MSG = 'No bounded usage profile exists yet; the estimate is not
 
 
 def describe_work(role, packet):
-    """Count existing work units without inventing a new partition protocol."""
-    from . import openness_reading, review_problem_parts
-    if packet.get('protocol') == 'exactory-reassessment-disposition-correction-v1':
-        return {'type': 'correction', 'unit': 'finding', 'count': len(packet['diagnostic']['findings'])}
-    plan = packet.get(review_problem_parts.KEY, {})
-    if plan.get('stage') == 'part':
-        count = sum(end - start for key, ranges in plan['delivered_now'].items() if key != 'passages'
-                    for start, end in ranges)
-        return {'type': 'result_part', 'unit': 'required_note', 'count': count}
-    turn = packet.get(openness_reading.TURN_KEY)
-    if turn is not None:
-        return {'type': 'openness_reading', 'unit': 'reading_unit',
-                'count': len(turn['reading_plan']['delivered_now'])}
-    kind = ('result_final' if plan else 'openness_final' if openness_reading.RECORD_KEY in packet
-            else 'probe' if role == 'probe' else 'ordinary')
-    if kind == 'ordinary' and role == 'native_math':
-        kind = 'native_' + str(packet.get('native', {}).get('kind', 'unknown'))
-    return {'type': kind, 'unit': 'response', 'count': 1}
+    """Keep the v1 report vocabulary while task measurement has its own canonical home."""
+    from .review_route_capacity import describe_work_units
+    return describe_work_units(role, packet)
 
 
 def build_report(records, artifacts, route, role, prompt, packet, request):

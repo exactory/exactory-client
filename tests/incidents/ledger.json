@@ -5248,6 +5248,32 @@
         "test_post_override_attribution.PostOverrideAttributionTests.test_g13_recording_observation_reports_unmet_condition_without_refusing_the_post",
         "test_post_override_attribution.PostOverrideAttributionTests.test_stored_post_has_no_new_inferred_authority_and_preserves_digest_and_view"
       ]
+    },
+    {
+      "id": "bar-max-output-profile-warning",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "review route output profile",
+      "summary": "An effort-max bar exceeded its output cap without a route-capacity warning.",
+      "fixed_in": "open",
+      "expected": "Route and probe receipts report the effective model output limit and measured task-size state. Route assessment names large stored attempts; status warns for an open chain while the reviewer effort and historical request bindings stay unchanged. Smaller-task recovery belongs to later D1 and D2 units.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_output_profile.ProfileIntegrationTests.test_real_shape_max_bar_warns_and_assessment_names_large_attempts",
+        "test_review_output_profile.ProfileIntegrationTests.test_new_attempt_records_profile_fields_and_old_attempt_stays_verifiable"
+      ]
+    },
+    {
+      "id": "reading-chain-route-limit-measure",
+      "record": "20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns",
+      "class": "review route size measure",
+      "summary": "A long reading chain reached a final input larger than its route could admit.",
+      "fixed_in": "open",
+      "expected": "The shared route-capacity measure reports character and token limits with provenance, including conservative unknown-model defaults. This unit supplies the measure; the reading forecast and final delivery recovery remain in their own units.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_route_capacity.RouteLimitTests.test_request_measure_counts_native_packet_and_instructions",
+        "test_review_route_capacity.RouteLimitTests.test_model_and_transport_limits_keep_their_sources"
+      ]
     }
   ]
 }

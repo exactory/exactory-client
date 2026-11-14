@@ -2222,6 +2222,13 @@ def _observed(artifacts, route, request, credential):
             if diagnostic is not None:
                 observed['provider_diagnostic'] = diagnostic
     record_disabled_exec_notices(route, response)
+    from .review_route_capacity import describe_attempt
+    packet = review_excerpts.read_sent_packet(request) or {}
+    measured = describe_attempt(route, packet.get('role', 'unknown'), packet, request, response,
+                                observed_at=observed['observed_at'])
+    observed.update({key: value for key, value in measured.items() if key != 'usage'})
+    observed['usage'].update({key: value for key, value in measured['usage'].items()
+                              if value is not None or key not in ('input_tokens', 'output_tokens')})
     record = {key: value for key, value in observed.items() if key not in ('request', 'response', 'output')}
     record['request'] = _put_json(artifacts, request)
     record['response'] = None if response is None else _put_json(artifacts, response)
@@ -2351,6 +2358,12 @@ def probe_route(store, payload, *, expected_revision, request_id, credential=Non
         return [immutable_record(records, 'review_route_probe', value['id'], result)], result
     return _invoke_once(store, payload, 'review.route_probe', start, finish,
                         expected_revision=expected_revision, request_id=request_id, credential=credential)
+
+
+def describe_route_report(records, route_id):
+    """Report size forecasts separately from authenticated route state."""
+    from .review_route_capacity import describe_route_report as describe_capacity_report
+    return describe_capacity_report(records, records['review_route'][route_id])
 
 
 def route_state(records, artifacts, route_id):

@@ -1,0 +1,1199 @@
+"""Route size limits and measured task profiles, outside the pinned transport identity.
+
+These are forecasts, never authentication inputs. A stored capacity plan must pin its own snapshot.
+The calibrated token ratios are assumptions measured on the source records, not tokenizer guarantees.
+"""
+import base64
+import copy
+import heapq
+import json
+import math
+import os
+from pathlib import Path
+import tempfile
+from . import review_transport as transport
+from .evidence import digest
+POLICY = 'exactory-route-capacity-policy-v1'
+PROFILE_PROTOCOL = 'exactory-route-output-profile-v1'
+PROFILE_ATTEMPT_LIMIT = 500
+DEFAULT_INPUT_TOKENS = 150000
+CLAUDE_CHARACTERS_PER_TOKEN = 1.36
+CODEX_CHARACTERS_PER_TOKEN = 2.10
+TOKEN_RATIO_MARGIN = 0.05
+COUNT_CARRIED_STATE = True
+FRAME_PROBE_EVIDENCE = (
+    ('max', 'lists', 4, 4, ('Q1', 'Q3'), 0, 'no effect', 395305, 36127, None),
+    ('max', 'record', 4, 4, ('Q1', 'Q3'), 0, 'effect', 587724, 36127, None),
+    ('xhigh', 'lists', 2, 2, ('Q1', 'Q3'), 0, 'no effect', 395305, 36127, None),
+    ('xhigh', 'record', 2, 2, ('Q1', 'Q3'), 0, 'effect', 587724, 36127, None),
+)
+FRAME_PROBE_SUMMARY_SHA256 = 'fd031720ed0e8becea9ce34045922339fc840b8753af744c421865759f633f9f'
+FRAME_PROBE_FIELDS = (
+    'effort',
+    'part',
+    'calls',
+    'valid_observations',
+    'quarters',
+    'calls_left',
+    'reading',
+    'largest_text_characters',
+    'largest_material_characters',
+    'frame_limit',
+)
+CAPACITY_ADAPTERS = (
+    'openai_responses_v1',
+    'claude_cli_v1',
+    'codex_cli_v1',
+    'codex_cli_framed_v1',
+    'codex_cli_visual_v1',
+)
+MEASUREMENT_DATE = '2026-11-13'
+MEASUREMENT_SOURCE = '20261113110022-every-open-record-and-review-capacity'
+CLAUDE_MODELS_URL = 'https://platform.claude.com/docs/en/models/overview'
+CLAUDE_WINDOW_URL = 'https://code.claude.com/docs/en/model-config'
+CLAUDE_OUTPUT_URL = 'https://code.claude.com/docs/en/env-vars'
+OPENAI_MODELS_URL = 'https://developers.openai.com/api/docs/models/'
+# API limits are documented; local Codex input room is established by verified sends.
+MODEL_LIMITS = (
+    ('claude-opus-5-5', 1000000, 967000, 128000, CLAUDE_MODELS_URL),
+    ('claude-fable-5-2', 1000000, 967000, 128000, CLAUDE_MODELS_URL),
+    (
+        'claude-fable-5-1',
+        1000000,
+        967000,
+        128000,
+        'https://platform.claude.com/docs/en/models/fable-5-1/overview',
+    ),
+    ('claude-sonnet-5-5', 1000000, 967000, 128000, CLAUDE_MODELS_URL),
+    ('gpt-6-astra', 1050000, None, 128000, OPENAI_MODELS_URL + 'gpt-6-astra'),
+    ('gpt-6.1-sol', 1050000, None, 128000, OPENAI_MODELS_URL + 'gpt-6.1-sol'),
+    ('gpt-6-luna', 1050000, None, 128000, OPENAI_MODELS_URL + 'gpt-6-luna'),
+)
+VERIFIED_INPUT_TOKENS = (
+    ('codex_cli_v1', 'gpt-6-astra', 359900),
+    ('codex_cli_v1', 'gpt-6.1-sol', 316707),
+    ('codex_cli_v1', 'gpt-6-luna', 193797),
+    ('codex_cli_framed_v1', 'gpt-6-astra', 307507),
+    ('codex_cli_visual_v1', 'gpt-6-astra', 364458),
+    ('codex_cli_visual_v1', 'gpt-6.1-sol', 358029),
+)
+
+
+def describe_route_class(route):
+    adapter = route['adapter']
+    effort = 'high' if adapter.startswith('codex_cli_') else route['configuration'].get('effort') if adapter == 'claude_cli_v1' else None
+    return dict(adapter=adapter, model=route['model'], effort=effort)
+
+
+def _describe_limit(value, source, **evidence):
+    return dict(value=value, source=source, **evidence)
+
+
+def describe_route_capacity(route, profile=None):
+    """Report the effective route limits, with documentation or measurement provenance."""
+    adapter, config = (route['adapter'], route['configuration'])
+    model = next((row for row in MODEL_LIMITS if row[0] == route['model']), None)
+    output = config['max_output_tokens']
+    output_limit = _describe_limit(output, 'route_configuration', field='max_output_tokens')
+    if adapter == 'claude_cli_v1' and output >= (model[3] if model else 128000):
+        output = model[3] if model else 128000
+        output_limit = _describe_limit(
+            output,
+            'documented',
+            url=model[4] if model else CLAUDE_OUTPUT_URL,
+            date=MEASUREMENT_DATE,
+        )
+    if adapter == 'claude_cli_v1':
+        from .review_claude_transport import INPUT_LIMIT_CHARACTERS
+        characters = _describe_limit(
+            INPUT_LIMIT_CHARACTERS,
+            'transport',
+            file='research_harness/review_claude_transport.py',
+            constant='INPUT_LIMIT_CHARACTERS',
+        )
+        tokens = _describe_limit(
+            (model[2] if model else 200000) - output,
+            'documented' if model else 'default',
+            url=CLAUDE_WINDOW_URL,
+            date=MEASUREMENT_DATE,
+        )
+    elif adapter in transport.LOCAL_ADAPTERS:
+        if adapter == 'codex_cli_visual_v1':
+            from .review_codex_visual_transport import MAX_USER_TEXT
+            characters = _describe_limit(
+                MAX_USER_TEXT,
+                'transport',
+                file='research_harness/review_codex_visual_transport.py',
+                constant='MAX_USER_TEXT',
+            )
+        else:
+            characters = _describe_limit(
+                transport.CODEX_INPUT_LIMIT_CHARS,
+                'transport',
+                file='research_harness/review_transport.py',
+                constant='CODEX_INPUT_LIMIT_CHARS',
+            )
+        prior_input_tokens = next(
+            (value for name, name_model, value in VERIFIED_INPUT_TOKENS if (name, name_model) == (adapter, route['model'])),
+            None,
+        )
+        verified = max(prior_input_tokens or 0, (profile or {}).get('verified_input_tokens') or 0)
+        tokens = _describe_limit(
+            verified,
+            'observed',
+            source_record=MEASUREMENT_SOURCE,
+            date=MEASUREMENT_DATE,
+        ) if prior_input_tokens is not None or verified > DEFAULT_INPUT_TOKENS else _describe_limit(DEFAULT_INPUT_TOKENS, 'default')
+    else:
+        characters = _describe_limit(None, 'transport', file='research_harness/review_transport.py')
+        tokens = _describe_limit(
+            max(0, model[1] - output),
+            'documented',
+            url=model[4],
+            date=MEASUREMENT_DATE,
+        ) if model else _describe_limit(DEFAULT_INPUT_TOKENS, 'default')
+    reservation_basis = 'compaction_threshold' if adapter == 'claude_cli_v1' and model is not None else 'model_window' if tokens['source'] == 'documented' else 'completed_answer' if tokens['source'] == 'observed' else 'adapter_default'
+    tokens.update(output_reservation_tokens=output, reservation_basis=reservation_basis)
+    calibrated = model is not None and (adapter == 'claude_cli_v1' or any(
+        ((name, name_model) == (adapter, route['model']) for name, name_model, _ in VERIFIED_INPUT_TOKENS),
+    ))
+    ratio = CLAUDE_CHARACTERS_PER_TOKEN if adapter == 'claude_cli_v1' else CODEX_CHARACTERS_PER_TOKEN
+    text_room = math.floor(tokens['value'] * ratio) if calibrated else tokens['value']
+    return dict(
+        protocol=POLICY,
+        listed=model is not None,
+        route_class=describe_route_class(route),
+        input_text_characters=_describe_limit(
+            text_room,
+            'estimated',
+            characters_per_token=ratio if calibrated else None,
+            margin=TOKEN_RATIO_MARGIN if calibrated else None,
+        ),
+        input_characters=characters,
+        input_tokens=tokens,
+        output_tokens=output_limit,
+        effort=describe_route_class(route)['effort'],
+        request_measure='calibrated' if calibrated else 'bytes',
+        provider_enforces_output=not adapter.startswith('codex_cli_'),
+        binary_inputs='unmeasured' if adapter in (transport.ADAPTER, 'codex_cli_visual_v1') else 'unsupported',
+        raises_capacity=['Add documented model limits with their URLs.', 'Record a verified single-send attempt to raise the observed input size and output profile.'],
+    )
+
+
+def _read_text_parts(content):
+    if isinstance(content, str):
+        return content
+    return ''.join(
+        (part['text'] for part in content if part.get('type') in ('input_text', 'output_text', 'text')),
+    )
+
+
+def measure_request(route, request):
+    """Measure the exact native text, excluding unmeasured binary inputs."""
+    capacity = describe_route_capacity(route)
+    adapter = transport._local_adapter(route)
+    representation = 'adapter_packet_text' if adapter is not None else 'serialized_request'
+    native_images = None
+    if route['adapter'] == 'codex_cli_visual_v1':
+        from . import review_codex_transport as codex
+        environment = codex.clean_environment(os.environ)
+        directory = Path(environment.get('TMPDIR') or tempfile.gettempdir()).resolve() / ('review-visual-' + 'x' * 8)
+        native_images = len(adapter.validated_images(request))
+        packet = adapter.packet_text(request) + ''.join(
+            ('<image name=[Image #' + str(index) + '] path="' + str(directory / ('image-' + str(index).zfill(3) + '.png')) + '"></image>' for index in range(1, native_images + 1)),
+        )
+        representation = 'native_user_text'
+    elif adapter is not None:
+        packet = adapter.packet_text(request)
+    else:
+        packet = ''.join((_read_text_parts(item['content']) for item in request['input']))
+    characters = len(packet) if adapter is not None else len(json.dumps(request, sort_keys=True, ensure_ascii=False))
+    text = request.get('instructions', '') + packet
+    non_ascii_share = (len(text) - len(text.encode('ascii', errors='ignore'))) / max(1, len(text))
+    calibrated = capacity['request_measure'] == 'calibrated' and non_ascii_share <= 0.05
+    utf8_bytes = len(text.encode('utf-8'))
+    ratio = CLAUDE_CHARACTERS_PER_TOKEN if route['adapter'] == 'claude_cli_v1' else CODEX_CHARACTERS_PER_TOKEN
+    tokens_upper = math.ceil(len(text) / ratio) if calibrated else utf8_bytes
+    limit = capacity['input_characters']['value']
+    result = dict(
+        characters=characters,
+        text_characters=len(text),
+        utf8_bytes=utf8_bytes,
+        non_ascii_share=non_ascii_share,
+        tokens_upper=tokens_upper,
+        measure='calibrated' if calibrated else 'bytes',
+        character_limit=limit,
+        token_limit=capacity['input_tokens']['value'],
+        representation=representation,
+        binary_inputs=capacity['binary_inputs'],
+        token_estimate=True,
+        ratio_margin=TOKEN_RATIO_MARGIN if calibrated else None,
+        characters_per_token=ratio if calibrated else None,
+        fits=(limit is None or characters <= limit) and tokens_upper <= capacity['input_tokens']['value'],
+    )
+    if native_images is not None:
+        result['native_images'] = native_images
+    return result
+TASK_LEVELS = (15000, 30000, 60000, 120000, 240000, 480000, None)
+TURN_KINDS = (
+    'reading',
+    'read',
+    'combine',
+    'check',
+    'final',
+    'request',
+    'single',
+    'staged',
+    'probe',
+    'correction',
+)
+PROFILE_ROW_FIELDS = (
+    'kind',
+    'task_level',
+    'attempts',
+    'completed_attempts',
+    'other_attempts',
+    'measurement_attempts',
+    'at_or_over_limit',
+    'thinking_attempts',
+    'largest_thinking_tokens',
+    'largest_output_tokens',
+    'largest_answer_tokens',
+    'cli_versions',
+    'source',
+    'date',
+    'thinking_method',
+)
+# Frozen numeric measurements only; fields and per-CLI date ranges are named above.
+OUTPUT_PROFILE_PRIORS = (
+    ('claude_cli_v1', 'claude-fable-5-1', 'high', 'single', 30000, 1, 1, 0, 0, 0, 0, None, 1332, None, (('2.1.306 (Claude Code)', 1, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-fable-5-1', 'high', 'single', 60000, 1, 1, 0, 0, 0, 0, None, 11377, None, (('2.1.307 (Claude Code)', 1, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-fable-5-1', 'high', 'single', 120000, 1, 1, 0, 0, 0, 0, None, 8192, None, (('2.1.307 (Claude Code)', 1, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-fable-5-1', 'high', 'single', 480000, 6, 6, 0, 0, 0, 0, None, 14489, None, (('2.1.306 (Claude Code)', 1, None, None), ('2.1.307 (Claude Code)', 5, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-fable-5-1', 'high', 'single', None, 8, 6, 2, 0, 0, 0, None, 23696, None, ((None, 1, None, None), ('2.1.306 (Claude Code)', 4, None, None), ('2.1.307 (Claude Code)', 3, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-fable-5-1', 'high', 'probe', 15000, 2, 2, 0, 0, 0, 0, None, 199, None, (('2.1.306 (Claude Code)', 2, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-fable-5-1', 'max', 'probe', 15000, 3, 3, 0, 0, 0, 0, None, 408, None, (('2.1.306 (Claude Code)', 3, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'high', 'single', 30000, 2, 2, 0, 0, 0, 0, None, 1808, None, (('2.1.306 (Claude Code)', 2, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'high', 'single', 120000, 2, 2, 0, 0, 0, 0, None, 11371, None, (('2.1.310 (Claude Code)', 2, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'high', 'single', 240000, 5, 5, 0, 0, 0, 0, None, 11705, None, (('2.1.310 (Claude Code)', 5, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'high', 'single', 480000, 5, 5, 0, 0, 0, 0, None, 7591, None, (('2.1.306 (Claude Code)', 1, None, None), ('2.1.310 (Claude Code)', 4, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'high', 'single', None, 10, 9, 1, 0, 0, 0, None, 25787, None, ((None, 1, None, None), ('2.1.306 (Claude Code)', 7, None, None), ('2.1.307 (Claude Code)', 2, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'high', 'probe', 15000, 3, 3, 0, 0, 0, 0, None, 126, None, (('2.1.306 (Claude Code)', 2, None, None), ('2.1.310 (Claude Code)', 1, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 60000, 1, 1, 0, 0, 0, 1, 76800, 86759, None, (('2.1.316 (Claude Code)', 1, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 120000, 13, 9, 3, 0, 1, 9, 109100, 122697, None, (('2.1.314 (Claude Code)', 5, None, None), ('2.1.316 (Claude Code)', 8, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 240000, 23, 20, 1, 0, 2, 20, 110150, 123372, None, (('2.1.314 (Claude Code)', 8, None, None), ('2.1.316 (Claude Code)', 15, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'read', None, 19, 19, 0, 0, 0, 19, 101150, 123721, None, (('2.1.316 (Claude Code)', 19, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'final', None, 1, 1, 0, 0, 0, 1, 95350, 110191, None, (('2.1.316 (Claude Code)', 1, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'request', 240000, 3, 2, 1, 0, 0, 2, 87100, 98481, None, (('2.1.322 (Claude Code)', 3, '2026-11-12', '2026-11-12'),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'request', 480000, 4, 1, 0, 0, 3, 1, 55900, 61747, None, (('2.1.314 (Claude Code)', 1, None, None), ('2.1.322 (Claude Code)', 3, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'request', None, 23, 16, 1, 0, 6, 16, 108800, 121467, None, (('2.1.314 (Claude Code)', 7, None, None), ('2.1.316 (Claude Code)', 16, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'single', 30000, 2, 2, 0, 0, 0, 2, 15850, 18192, None, (('2.1.322 (Claude Code)', 2, '2026-11-12', '2026-11-12'),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'single', 60000, 4, 2, 0, 0, 2, 0, None, 93818, None, (('2.1.310 (Claude Code)', 4, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'single', 120000, 6, 5, 0, 0, 1, 0, None, 115766, None, (('2.1.310 (Claude Code)', 6, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'single', 240000, 8, 8, 0, 0, 1, 0, None, 130982, None, (('2.1.310 (Claude Code)', 8, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'single', 480000, 12, 12, 0, 0, 0, 0, None, 117571, None, (('2.1.310 (Claude Code)', 12, None, None),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'single', None, 10, 6, 3, 0, 1, 0, None, 103372, None, ((None, 3, None, None), ('2.1.306 (Claude Code)', 1, None, None), ('2.1.310 (Claude Code)', 6, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'probe', 15000, 15, 15, 0, 0, 0, 6, 517, 633, None, (('2.1.306 (Claude Code)', 3, None, None), ('2.1.310 (Claude Code)', 6, None, None), ('2.1.314 (Claude Code)', 2, None, None), ('2.1.316 (Claude Code)', 2, None, None), ('2.1.322 (Claude Code)', 2, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 60000, 4, 4, 0, 0, 0, 4, 31850, 40406, None, (('2.1.316 (Claude Code)', 2, None, None), ('2.1.317 (Claude Code)', 1, None, None), ('2.1.318 (Claude Code)', 1, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 120000, 108, 107, 1, 0, 0, 107, 51000, 62066, None, (('2.1.316 (Claude Code)', 33, None, None), ('2.1.317 (Claude Code)', 58, None, None), ('2.1.318 (Claude Code)', 10, None, None), ('2.1.322 (Claude Code)', 1, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 6, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 240000, 256, 242, 14, 0, 0, 242, 37850, 50297, None, (('2.1.316 (Claude Code)', 60, None, None), ('2.1.317 (Claude Code)', 88, None, None), ('2.1.318 (Claude Code)', 44, None, None), ('2.1.322 (Claude Code)', 45, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 19, '2026-11-12', '2026-11-13')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 480000, 129, 126, 3, 0, 0, 126, 56500, 66578, None, (('2.1.322 (Claude Code)', 68, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 61, '2026-11-13', '2026-11-13')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', None, 13, 13, 0, 0, 0, 13, 36750, 51314, None, (('2.1.323 (Claude Code)', 13, '2026-11-13', '2026-11-13'),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'read', None, 191, 180, 11, 0, 0, 180, 53450, 68664, None, ((None, 1, None, None), ('2.1.316 (Claude Code)', 93, None, None), ('2.1.318 (Claude Code)', 95, None, None), ('2.1.322 (Claude Code)', 2, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'combine', 480000, 1, 1, 0, 0, 0, 1, 17300, 25926, None, (('2.1.322 (Claude Code)', 1, '2026-11-12', '2026-11-12'),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'check', None, 1, 1, 0, 0, 0, 1, 62200, 76858, None, (('2.1.322 (Claude Code)', 1, '2026-11-12', '2026-11-12'),), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'final', None, 13, 13, 0, 0, 0, 13, 47250, 72468, None, (('2.1.316 (Claude Code)', 4, None, None), ('2.1.317 (Claude Code)', 4, None, None), ('2.1.318 (Claude Code)', 1, None, None), ('2.1.322 (Claude Code)', 3, '2026-11-12', '2026-11-12'), ('2.1.323 (Claude Code)', 1, '2026-11-13', '2026-11-13')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'request', 120000, 5, 5, 0, 0, 0, 5, 7250, 12309, None, (('2.1.316 (Claude Code)', 3, None, None), ('2.1.322 (Claude Code)', 2, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'request', 240000, 11, 11, 0, 0, 0, 11, 25450, 35221, None, (('2.1.316 (Claude Code)', 1, None, None), ('2.1.317 (Claude Code)', 2, None, None), ('2.1.322 (Claude Code)', 8, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'request', 480000, 21, 21, 0, 0, 0, 21, 46600, 64400, None, (('2.1.316 (Claude Code)', 5, None, None), ('2.1.317 (Claude Code)', 4, None, None), ('2.1.322 (Claude Code)', 12, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'request', None, 91, 91, 0, 0, 0, 91, 62650, 84151, None, (('2.1.316 (Claude Code)', 29, None, None), ('2.1.317 (Claude Code)', 23, None, None), ('2.1.318 (Claude Code)', 4, None, None), ('2.1.322 (Claude Code)', 35, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'single', 30000, 13, 13, 0, 0, 0, 13, 1700, 3697, None, (('2.1.316 (Claude Code)', 2, None, None), ('2.1.317 (Claude Code)', 2, None, None), ('2.1.322 (Claude Code)', 9, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'single', 60000, 11, 11, 0, 0, 0, 11, 28800, 32009, None, (('2.1.316 (Claude Code)', 4, None, None), ('2.1.317 (Claude Code)', 7, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'single', 120000, 19, 19, 0, 0, 0, 19, 23400, 27939, None, (('2.1.316 (Claude Code)', 6, None, None), ('2.1.317 (Claude Code)', 7, None, None), ('2.1.322 (Claude Code)', 6, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'single', 240000, 18, 18, 0, 0, 0, 18, 29250, 33816, None, (('2.1.316 (Claude Code)', 3, None, None), ('2.1.317 (Claude Code)', 5, None, None), ('2.1.322 (Claude Code)', 10, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'single', 480000, 17, 17, 0, 0, 0, 17, 36700, 41658, None, (('2.1.316 (Claude Code)', 5, None, None), ('2.1.317 (Claude Code)', 5, None, None), ('2.1.322 (Claude Code)', 7, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'single', None, 23, 17, 6, 0, 0, 3, 70200, 80732, None, ((None, 6, None, None), ('2.1.307 (Claude Code)', 14, None, None), ('2.1.322 (Claude Code)', 3, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'probe', 15000, 27, 27, 0, 0, 0, 26, 276, 216, None, (('2.1.307 (Claude Code)', 1, None, None), ('2.1.316 (Claude Code)', 7, None, None), ('2.1.317 (Claude Code)', 6, None, None), ('2.1.322 (Claude Code)', 13, '2026-11-12', '2026-11-12')), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-sonnet-5-5', 'high', 'single', None, 12, 11, 1, 0, 0, 0, None, 25660, None, ((None, 1, None, None), ('2.1.306 (Claude Code)', 5, None, None), ('2.1.307 (Claude Code)', 6, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-sonnet-5-5', 'high', 'probe', 15000, 2, 2, 0, 0, 0, 0, None, 225, None, (('2.1.306 (Claude Code)', 1, None, None), ('2.1.307 (Claude Code)', 1, None, None)), 'live-records', '2026-11-13', 'cli_estimate'),
+    ('codex_cli_framed_v1', 'gpt-6-astra', 'high', 'single', None, 1, 1, 0, 0, 0, 1, 317, 4732, 4415, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_framed_v1', 'gpt-6-astra', 'high', 'probe', 15000, 1, 1, 0, 0, 0, 1, 0, 54, 54, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 30000, 2, 2, 0, 0, 0, 2, 108, 996, 900, (('codex-cli 0.163.0', 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 60000, 5, 0, 5, 0, 0, 0, None, None, None, (('codex-cli 0.163.0', 5, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 120000, 39, 39, 0, 0, 0, 39, 853, 11563, 11061, (('codex-cli 0.163.0', 39, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', 240000, 82, 79, 3, 0, 0, 79, 1034, 15030, 14514, (('codex-cli 0.163.0', 82, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'reading', None, 1, 0, 1, 0, 0, 0, None, None, None, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'final', None, 2, 2, 0, 0, 0, 2, 1331, 1583, 597, (('codex-cli 0.163.0', 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'request', 240000, 2, 2, 0, 0, 0, 2, 271, 5344, 5083, (('codex-cli 0.163.0', 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'request', 480000, 5, 5, 0, 0, 0, 5, 285, 3501, 3216, (('codex-cli 0.163.0', 5, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'request', None, 25, 24, 1, 0, 0, 24, 1962, 7613, 5651, (('codex-cli 0.163.0', 25, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'single', 15000, 1, 1, 0, 0, 0, 1, 0, 263, 263, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'single', 30000, 1, 1, 0, 0, 0, 1, 48, 352, 304, (('codex-cli 0.162.1', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'single', 60000, 4, 3, 1, 0, 0, 3, 437, 1250, 813, (('codex-cli 0.163.0', 4, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'single', 120000, 12, 12, 0, 0, 0, 12, 1395, 2078, 1116, (('codex-cli 0.162.1', 2, None, None), ('codex-cli 0.163.0', 10, None, None)), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'single', 240000, 11, 11, 0, 0, 0, 11, 1016, 2103, 1087, (('codex-cli 0.162.1', 8, None, None), ('codex-cli 0.163.0', 3, None, None)), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'single', 480000, 17, 17, 0, 0, 0, 17, 1829, 3072, 2556, (('codex-cli 0.162.1', 3, None, None), ('codex-cli 0.163.0', 14, None, None)), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'single', None, 40, 31, 9, 0, 0, 31, 937, 5663, 4745, (('codex-cli 0.162.1', 8, None, None), ('codex-cli 0.163.0', 32, None, None)), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'single', 'unmeasured', 1, 0, 1, 0, 0, 0, None, None, None, (('codex-cli 0.162.1', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'probe', 15000, 18, 17, 1, 0, 0, 17, 19, 70, 63, (('codex-cli 0.162.1', 3, None, None), ('codex-cli 0.163.0', 15, None, None)), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-astra', 'high', 'correction', 60000, 1, 1, 0, 0, 0, 1, 0, 137, 137, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-luna', 'high', 'single', 240000, 1, 1, 0, 0, 0, 1, 234, 487, 253, (('codex-cli 0.162.1', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-luna', 'high', 'single', 480000, 1, 1, 0, 0, 0, 1, 991, 2822, 1831, (('codex-cli 0.162.1', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-luna', 'high', 'single', None, 5, 3, 2, 0, 0, 3, 3097, 5142, 3088, (('codex-cli 0.162.1', 5, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6-luna', 'high', 'probe', 15000, 1, 1, 0, 0, 0, 1, 95, 152, 57, (('codex-cli 0.162.1', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6.1-sol', 'high', 'single', 15000, 1, 1, 0, 0, 0, 1, 50, 305, 255, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6.1-sol', 'high', 'single', 30000, 1, 1, 0, 0, 0, 1, 120, 347, 227, (('codex-cli 0.162.1', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6.1-sol', 'high', 'single', 60000, 1, 1, 0, 0, 0, 1, 283, 833, 550, (('codex-cli 0.162.1', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6.1-sol', 'high', 'single', 480000, 3, 3, 0, 0, 0, 3, 1420, 3763, 2412, (('codex-cli 0.163.0', 3, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6.1-sol', 'high', 'single', None, 10, 5, 5, 0, 0, 5, 1552, 4778, 3226, (('codex-cli 0.162.1', 6, None, None), ('codex-cli 0.163.0', 4, None, None)), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_v1', 'gpt-6.1-sol', 'high', 'probe', 15000, 12, 12, 0, 0, 0, 12, 50, 102, 64, (('codex-cli 0.162.1', 2, None, None), ('codex-cli 0.163.0', 10, None, None)), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_visual_v1', 'gpt-6-astra', 'high', 'single', None, 3, 2, 1, 0, 0, 2, 403, 4462, 4059, (('codex-cli 0.163.0', 3, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_visual_v1', 'gpt-6-astra', 'high', 'probe', 15000, 2, 2, 0, 0, 0, 2, 58, 119, 61, (('codex-cli 0.163.0', 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_visual_v1', 'gpt-6.1-sol', 'high', 'single', None, 1, 1, 0, 0, 0, 1, 792, 3662, 2870, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('codex_cli_visual_v1', 'gpt-6.1-sol', 'high', 'probe', 15000, 1, 1, 0, 0, 0, 1, 66, 128, 62, (('codex-cli 0.163.0', 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('openai_responses_v1', 'gpt-6-astra', None, 'probe', 15000, 2, 0, 2, 0, 0, 0, None, None, None, ((None, 2, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('openai_responses_v1', 'gpt-6.1-sol', None, 'probe', 15000, 1, 0, 1, 0, 0, 0, None, None, None, ((None, 1, None, None),), 'live-records', '2026-11-13', 'provider_usage'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 120000, 8, 8, 0, 8, 0, 8, 70550, 78441, None, (('2.1.325 (Claude Code)', 8, '2026-11-13', '2026-11-13'),), 'probe', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 240000, 4, 4, 0, 4, 0, 4, 85250, 97134, None, (('2.1.325 (Claude Code)', 4, '2026-11-13', '2026-11-13'),), 'probe', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 120000, 4, 4, 0, 4, 0, 4, 15050, 21583, None, (('2.1.325 (Claude Code)', 4, '2026-11-13', '2026-11-13'),), 'probe', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 240000, 2, 2, 0, 2, 0, 2, 12550, 19990, None, (('2.1.325 (Claude Code)', 2, '2026-11-13', '2026-11-13'),), 'probe', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 120000, 4, 4, 0, 4, 0, 4, 88050, 101855, None, (('2.1.325 (Claude Code)', 4, '2026-11-13', '2026-11-13'),), 'probe-frame', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'max', 'reading', 480000, 4, 4, 0, 4, 0, 4, 62300, 72066, None, (('2.1.325 (Claude Code)', 4, '2026-11-13', '2026-11-13'),), 'probe-frame', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 120000, 2, 2, 0, 2, 0, 2, 21050, 31769, None, (('2.1.325 (Claude Code)', 2, '2026-11-13', '2026-11-13'),), 'probe-frame', '2026-11-13', 'cli_estimate'),
+    ('claude_cli_v1', 'claude-opus-5-5', 'xhigh', 'reading', 480000, 2, 2, 0, 2, 0, 2, 14900, 19977, None, (('2.1.325 (Claude Code)', 2, '2026-11-13', '2026-11-13'),), 'probe-frame', '2026-11-13', 'cli_estimate'),
+)
+
+
+def render_profile_json(value):
+    return json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        allow_nan=False,
+        separators=(',', ':'),
+    )
+
+
+def describe_text_room(route, instructions_characters=0, *, legacy_protocol=False):
+    """Room for new plans; an earlier protocol retains its own transport admission."""
+    capacity = describe_route_capacity(route)
+    transport_limit = capacity['input_characters']['value']
+    if legacy_protocol:
+        return transport_limit
+    room = max(0, capacity['input_text_characters']['value'] - instructions_characters)
+    return min(room, transport_limit) if transport_limit is not None else room
+
+
+def describe_task_kind(role, packet, operation='review.invoke'):
+    if operation == 'review.route_probe' or 'visual_probe' in packet or ('allowed_control' in packet and 'evidence_control' in packet):
+        return 'probe'
+    if operation == 'review.output_correction' or packet.get('protocol') == 'exactory-reassessment-disposition-correction-v1':
+        return 'correction'
+    if 'staged_review' in packet:
+        return 'staged'
+    if 'reading_turn' in packet:
+        return 'reading'
+    if 'reading_record' in packet:
+        return 'final'
+    header = packet.get('review_parts', {})
+    if header.get('kind') in ('read', 'combine', 'check', 'final'):
+        return header['kind']
+    if packet.get('problem_evidence_parts', {}).get('stage') == 'part':
+        return 'read'
+    if 'reviewer_excerpts' in packet:
+        return 'request'
+    return 'single'
+
+
+def _read_encoded_sources(codec, encoded):
+    """Read already-validated visible source blocks for a diagnostic projection."""
+    if codec.PROTOCOL.endswith('-v2'):
+        from .review_exact_text_cost_v1 import _sources
+        return _sources(encoded)
+    line, remaining = encoded[len(codec.PREFIX):].split('\n', 1)
+    selected = set(json.loads(line)['source_sha256'])
+    import hashlib
+    sources = {}
+    while remaining:
+        line, remaining = remaining.split('\n', 1)
+        length = int(line.split()[3])
+        body, remaining = (remaining[:length], remaining[length + 1:])
+        checksum = hashlib.sha256(body.encode('utf-8')).hexdigest()
+        if checksum in selected:
+            sources[checksum] = body
+    return sources
+
+
+def _collect_strings(value):
+    if isinstance(value, str):
+        yield value
+        if value.startswith(transport.PACKET_LABEL):
+            yield from _collect_strings(json.loads(value[len(transport.PACKET_LABEL):]))
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from _collect_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _collect_strings(item)
+
+
+def _project_request(request, packet):
+    """Project only the current packet for accounting; never save or dispatch the result."""
+    from . import review_exact_text, review_exact_text_v2
+    messages = copy.deepcopy(transport.logical_messages(request))
+    current = messages[-1]['content']
+    text = current if isinstance(current, str) else next((part['text'] for part in current if part['type'] == 'input_text'))
+    original = json.loads(text[len(transport.PACKET_LABEL):])
+    compact = text[len(transport.PACKET_LABEL):] == render_profile_json(original)
+    changed = transport.PACKET_LABEL + (render_profile_json(packet) if compact else json.dumps(packet, sort_keys=True, ensure_ascii=False))
+    if isinstance(current, str):
+        messages[-1]['content'] = changed
+    else:
+        next((part for part in current if part['type'] == 'input_text'))['text'] = changed
+    result = dict(request, input=messages)
+    if len(request['input']) == 1 and isinstance(request['input'][0].get('content'), str):
+        encoded = request['input'][0]['content']
+        codec = next(
+            (codec for codec in (review_exact_text, review_exact_text_v2) if codec.is_encoded(encoded)),
+            None,
+        )
+        if codec is not None:
+            sources = _read_encoded_sources(codec, encoded)
+            strings = list(_collect_strings(messages))
+            sources = {key: body for key, body in sources.items() if any((body in text for text in strings))}
+            result['input'] = [dict(role='user', content=codec.encode(messages, sources))]
+            if codec is review_exact_text_v2:
+                from .review_exact_text_cost_v1 import optimize_request
+                baseline = dict(
+                    request,
+                    input=[dict(
+                        role='user',
+                        content=codec.encode(transport.logical_messages(request), _read_encoded_sources(codec, encoded)),
+                    )],
+                )
+                if baseline['input'] != request['input'] and optimize_request(baseline)['input'] == request['input']:
+                    result = optimize_request(result)
+    return result
+
+
+def _clear_carried_answers(packet, kind):
+    record = packet.get('reading_turn', {}).get('reading_record') if kind == 'reading' else packet.get('reading_record')
+    if record is not None:
+        has_turns = bool(record.get('turns'))
+        for key in ('turns', 'sources', 'excerpts', 'passages', 'search_receipts'):
+            if key in record:
+                record[key] = []
+        for allowance in record.get('allowances', {}).values():
+            allowance['used'] = 0
+        if kind == 'reading' and has_turns:
+            packet['reading_turn'].get('reading_plan', {})['delivered_before'] = []
+    state = packet.get('review_parts_state')
+    if state is not None:
+        for key in state:
+            state[key] = []
+
+
+def _clear_material(packet, kind):
+    for row in packet.get('evidence', []) if isinstance(packet.get('evidence'), list) else []:
+        if isinstance(row.get('content'), str) and row.get('encoding') != 'base64':
+            row['content'] = ''
+    if kind in ('final', 'combine', 'check'):
+        _clear_carried_answers(packet, kind)
+
+
+def describe_task(role, packet, *, route, request, operation='review.invoke', count_carried_state=False):
+    """Count native request text, separating its serialized material, frame and carried answers."""
+    from .review_excerpts import read_sent_packet
+    actual = read_sent_packet(request)
+    actual = packet if actual is None else actual
+    kind = describe_task_kind(role, actual, operation)
+    total = measure_request(route, request)['text_characters']
+    projected = copy.deepcopy(actual)
+    seen = set()
+    duplicates = False
+    for row in projected.get('evidence', []) if isinstance(projected.get('evidence'), list) else []:
+        checksum = row.get('artifact', {}).get('sha256')
+        if checksum and row.get('content') and (row.get('encoding') != 'base64'):
+            if checksum in seen:
+                row['content'] = ''
+                duplicates = True
+            seen.add(checksum)
+    material_sources = copy.deepcopy(projected.get('evidence', []))
+
+    def measure(value):
+        from .errors import ResearchError
+        try:
+            return measure_request(route, _project_request(request, value))['text_characters']
+        except ResearchError as error:
+            if error.code != 'review_verbatim_evidence_invalid':
+                raise
+            # Preserve the pinned verbatim wrappers when an empty-body counterfactual is invalid.
+            framed = copy.deepcopy(value)
+            visible = 0
+            for original, destination in zip(material_sources, framed.get('evidence', [])):
+                if original.get('encoding') == 'utf-8' and original.get('content') and (original.get('delivery') is None):
+                    destination['content'] = original['content']
+                    visible += len(original['content'])
+            if not visible:
+                raise
+            return measure_request(route, _project_request(request, framed))['text_characters'] - visible
+    unique = min(total, measure(projected)) if duplicates else total
+    count_carried = COUNT_CARRIED_STATE if count_carried_state is None else count_carried_state
+    without_carried = unique
+    if kind in ('reading', 'read'):
+        _clear_carried_answers(projected, kind)
+        without_carried = min(unique, measure(projected)) if projected != actual else unique
+    carried = unique - without_carried
+    characters = unique if count_carried else without_carried
+    frame = copy.deepcopy(projected)
+    _clear_material(frame, kind)
+    frame_characters = min(without_carried, measure(frame)) if frame != projected else without_carried
+    minimum = actual.get('native', {}).get('scientific_context', {}).get('openness_minimum', {})
+    targets = len(actual.get('review_parts', {}).get('targets', [])) if kind == 'final' and 'review_parts' in actual else 1 + len(minimum.get('neighbours', [])) if kind in ('single', 'final') else 0
+    return dict(
+        kind=kind,
+        characters=characters,
+        frame_characters=frame_characters,
+        material_characters=without_carried - frame_characters,
+        carried_characters=carried,
+        duplicate_characters=total - unique,
+        targets=targets,
+        count_carried_state=count_carried,
+    )
+
+
+def describe_attempt(route, role, packet, request, response, *, operation='review.invoke', observed_at=None, count_carried_state=None):
+    """Record last-send estimates and generation outcomes, without losing malformed failures."""
+    from .review_answer_recovery import extract_answer_text
+    response = response if isinstance(response, dict) else {}
+    usage = response.get('usage')
+    usage = usage if isinstance(usage, dict) else {}
+    context = response.get('context_evidence')
+    context = context if isinstance(context, dict) else {}
+    execution = response.get('execution')
+    execution = execution if isinstance(execution, dict) else {}
+    thinking, method, sends = (None, None, None)
+    completed = response.get('status') == 'completed'
+    if route['adapter'] == 'claude_cli_v1':
+        retention = execution.get('system_events')
+        try:
+            if retention is not None:
+                total, estimates, retries = (0, 0, 0)
+                for entry in retention['events']:
+                    event = json.loads(base64.b64decode(entry['raw_base64']))
+                    if event.get('subtype') == 'api_retry':
+                        total, estimates, retries = (0, 0, retries + 1)
+                    elif event.get('subtype') == 'thinking_tokens' and type(event.get('estimated_tokens_delta')) is int:
+                        total += event['estimated_tokens_delta']
+                        estimates += 1
+                if estimates and (not retention.get('truncated')):
+                    thinking, method = (total, 'cli_estimate')
+                users = execution.get('event_types', []).count('user')
+                if users and (not retention.get('truncated')):
+                    sends = users + retries
+                completed = completed and users == 1
+        except (KeyError, ValueError, TypeError, AttributeError):
+            thinking, method, sends, completed = (None, None, None, False)
+    elif response:
+        details = usage.get('output_tokens_details')
+        details = details if isinstance(details, dict) else {}
+        value = usage.get('reasoning_output_tokens', details.get('reasoning_tokens'))
+        if type(value) is int and value >= 0:
+            thinking, method = (value, 'provider_usage')
+        sends = 1 if route['adapter'] == transport.ADAPTER or context.get('input_verified') is True else None
+        completed = completed and (route['adapter'] == transport.ADAPTER or context.get('input_verified') is True)
+    answer_text = extract_answer_text(response) if response else None
+    output = usage.get('output_tokens')
+    answer_tokens = output - thinking if method == 'provider_usage' and type(output) is int and (output >= thinking) else None
+    counts = {key: value if type(value) is int and value >= 0 else None for key, value in ((key, usage.get(key)) for key in ('input_tokens', 'output_tokens'))}
+    return dict(
+        usage=dict(
+            counts,
+            thinking_tokens=thinking,
+            thinking_method=method,
+            sends=sends,
+            request_characters=measure_request(route, request)['text_characters'],
+        ),
+        task=describe_task(
+            role,
+            packet,
+            route=route,
+            request=request,
+            operation=operation,
+            count_carried_state=False,
+        ),
+        answer=dict(
+            characters=len(answer_text) if answer_text is not None else None,
+            tokens=answer_tokens,
+            bound=packet.get('review_parts', {}).get('output_allowance'),
+        ),
+        completed_generation=completed,
+        cli_version=context.get('cli_version') or (context.get('runtime') or {}).get('version') or execution.get('cli_version'),
+        observed_at=observed_at,
+        verified_input_tokens=usage.get('input_tokens') if completed and context.get('input_verified') is True and (sends == 1) and (type(usage.get('input_tokens')) is int) and (usage['input_tokens'] >= 0) else None,
+    )
+
+
+def _find_task_level(characters):
+    if characters is None:
+        return 'unmeasured'
+    return next((level for level in TASK_LEVELS if level is None or characters <= level), None)
+
+
+def _create_profile_row(kind, level):
+    return dict(
+        kind=kind,
+        task_level=level,
+        attempts=0,
+        completed_attempts=0,
+        other_attempts=0,
+        measurement_attempts=0,
+        at_or_over_limit=0,
+        thinking_attempts=0,
+        largest_thinking_tokens=None,
+        largest_output_tokens=None,
+        largest_answer_tokens=None,
+        cli_versions=[],
+    )
+
+
+def _merge_version_dates(versions, version, count, first, last):
+    target = next((row for row in versions if row['version'] == version), None)
+    if target is None:
+        target = dict(version=version, attempts=0, first_date=None, last_date=None)
+        versions.append(target)
+    target['attempts'] += count
+    if first is not None:
+        target['first_date'] = min(target['first_date'] or first, first)
+    if last is not None:
+        target['last_date'] = max(target['last_date'] or last, last)
+    versions.sort(key=lambda row: row['version'] or '')
+
+
+def _sort_profile_row(row):
+    level = row['task_level']
+    return (
+        TURN_KINDS.index(row['kind']),
+        level if type(level) is int else float('inf'),
+        level == 'unmeasured',
+    )
+
+
+def build_profile_rows(samples):
+    """Keep every attempt; only completed generations supply the usage maxima."""
+    groups = {}
+    for sample in samples:
+        usage = sample['usage']
+        output = usage.get('output_tokens')
+        over = type(output) is int and output >= sample['output_limit']
+        complete = sample.get('completed_generation', False)
+        task = sample['task']
+        key = (task['kind'], _find_task_level(task['characters']))
+        row = groups.setdefault(key, _create_profile_row(*key))
+        row['attempts'] += 1
+        row['completed_attempts'] += int(complete)
+        row['at_or_over_limit'] += int(over)
+        row['other_attempts'] += int(not complete and (not over))
+        row['measurement_attempts'] += int(sample.get('source') in ('probe', 'probe-frame'))
+        if complete:
+            row['thinking_attempts'] += int(usage.get('thinking_tokens') is not None)
+            for name, value in (
+                ('thinking', usage.get('thinking_tokens')),
+                ('output', output),
+                ('answer', sample['answer'].get('tokens')),
+            ):
+                if value is not None:
+                    field = 'largest_' + name + '_tokens'
+                    row[field] = max(row[field] or 0, value)
+        date = (sample.get('observed_at') or '')[:10] or None
+        _merge_version_dates(row['cli_versions'], sample.get('cli_version'), 1, date, date)
+    return sorted(groups.values(), key=_sort_profile_row)
+
+
+def merge_profile_rows(rows):
+    groups = {}
+    for source in rows:
+        key = (source['kind'], source['task_level'])
+        row = groups.setdefault(key, _create_profile_row(*key))
+        for name in (
+            'attempts',
+            'completed_attempts',
+            'other_attempts',
+            'measurement_attempts',
+            'at_or_over_limit',
+            'thinking_attempts',
+        ):
+            row[name] += source[name]
+        for name in ('largest_thinking_tokens', 'largest_output_tokens', 'largest_answer_tokens'):
+            if source[name] is not None:
+                row[name] = max(row[name] or 0, source[name])
+        for version in source.get('cli_versions', []):
+            _merge_version_dates(
+                row['cli_versions'],
+                version['version'],
+                version['attempts'],
+                version['first_date'],
+                version['last_date'],
+            )
+    return sorted(groups.values(), key=_sort_profile_row)
+
+
+def pack_profile_prior(row):
+    values = []
+    for field in PROFILE_ROW_FIELDS:
+        value = row[field]
+        if field == 'cli_versions':
+            value = tuple(
+                ((item['version'], item['attempts'], item['first_date'], item['last_date']) for item in value),
+            )
+        values.append(value)
+    return tuple((row['route_class'][field] for field in ('adapter', 'model', 'effort'))) + tuple(values)
+
+
+def read_profile_priors(route):
+    selected = []
+    route_class = describe_route_class(route)
+    for values in OUTPUT_PROFILE_PRIORS:
+        if dict(zip(('adapter', 'model', 'effort'), values[:3])) != route_class:
+            continue
+        row = dict(zip(PROFILE_ROW_FIELDS, values[3:]), source_record=MEASUREMENT_SOURCE)
+        row['cli_versions'] = [dict(zip(('version', 'attempts', 'first_date', 'last_date'), value)) for value in row['cli_versions']]
+        selected.append(row)
+    return selected
+
+
+def describe_frame_policy(route):
+    route_class = describe_route_class(route)
+    measured_class = route_class['adapter'] == 'claude_cli_v1' and route_class['model'] == 'claude-opus-5-5'
+    rows = [dict(zip(FRAME_PROBE_FIELDS, row)) for row in FRAME_PROBE_EVIDENCE if row[0] == route_class['effort']] if measured_class else []
+    lists = next((row for row in rows if row['part'] == 'lists'), None)
+    return dict(
+        count_carried_state=COUNT_CARRIED_STATE,
+        borrowing_ready=lists is not None and lists['reading'] == 'no effect',
+        largest_text_characters=lists['largest_text_characters'] if lists else 0,
+        largest_material_characters=lists['largest_material_characters'] if lists else 0,
+        frame_limit=lists['frame_limit'] if lists else None,
+        readings=rows,
+        summary_sha256=FRAME_PROBE_SUMMARY_SHA256,
+        source='probe-frame',
+    )
+
+
+def read_output_profile(records, route, *, priors=None):
+    route_class = describe_route_class(route)
+    assignments = records.get('review_assignment', {})
+    routes = records.get('review_route', {})
+    recent_heap = []
+    verified = 0
+    completions = ((kind, attempt) for kind in ('review_attempt', 'review_route_probe', 'review_output_correction') for attempt in records.get(kind, {}).values())
+    for completion_kind, attempt in completions:
+        if completion_kind != 'review_route_probe' and attempt.get('origin') != 'instrumented':
+            continue
+        if not all((name in attempt for name in ('task', 'answer'))):
+            continue
+        if 'characters' not in attempt['task']:
+            continue
+        assignment = assignments.get(attempt.get('assignment_id'), {})
+        candidate = routes.get(attempt.get('route_id') or assignment.get('route_id'))
+        if candidate is None or describe_route_class(candidate) != route_class:
+            continue
+        if attempt.get('completed_generation'):
+            verified = max(verified, attempt.get('verified_input_tokens') or 0)
+        entry = (attempt.get('recorded_revision', 0), completion_kind + ':' + attempt['id'], attempt, candidate)
+        if len(recent_heap) < PROFILE_ATTEMPT_LIMIT:
+            heapq.heappush(recent_heap, entry)
+        else:
+            heapq.heappushpop(recent_heap, entry)
+    samples = [dict(entry[2], output_limit=describe_route_capacity(entry[3])['output_tokens']['value']) for entry in sorted(recent_heap)]
+    prior_rows = read_profile_priors(route) if priors is None else copy.deepcopy(list(priors))
+    frame_rows = [row for row in prior_rows if row.get('source') == 'probe-frame']
+    rows = merge_profile_rows(
+        [row for row in prior_rows if row.get('source') != 'probe-frame'] + build_profile_rows(samples),
+    )
+    return dict(
+        protocol=PROFILE_PROTOCOL,
+        route_class=route_class,
+        rows=rows,
+        priors=prior_rows,
+        digest=digest(rows),
+        store_attempts=len(samples),
+        verified_input_tokens=verified,
+        frame_policy=describe_frame_policy(route),
+        frame_measurements=frame_rows,
+    )
+
+
+def describe_material_levels(kind, *, block_room=480000):
+    if kind in ('reading', 'request'):
+        return (120000, 60000, 30000, 15000)
+    if kind == 'probe':
+        return (15000,)
+    if kind == 'staged':
+        return (0,)
+    floor = 15000 if kind in ('read', 'single', 'correction') else 60000
+    value = 600000 if kind in ('read', 'single', 'correction') else max(floor, block_room)
+    levels = []
+    while value > floor:
+        levels.append(value)
+        value //= 2
+    return tuple(levels + [floor])
+
+
+def _describe_answer_bounds(kind, targets, card_minimum):
+    if kind == 'probe':
+        return (5000, 1000)
+    if kind in ('reading', 'request', 'correction'):
+        return (67000, 18000)
+    if kind == 'read':
+        return (80000, card_minimum)
+    if kind in ('final', 'single'):
+        return (min(80000, 20000 + 1500 * targets), 6000 + 1500 * targets)
+    return (60000, 15000)
+
+
+def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, calibrated=None, block_room=480000, frame_characters=40000, carried_characters=0, frame_matches_reading=False):
+    """Report each material level against its serialized frame plus task, at unchanged effort."""
+    if kind == 'staged':
+        return dict(
+            state='planner_sized',
+            sizing='joint_fit',
+            material_allowance=None,
+            task_characters=None,
+            answer_bound=None,
+            levels=[],
+            sample_size=0,
+            largest_output_tokens=None,
+        )
+    levels = describe_material_levels(kind, block_room=block_room)
+    if calibrated is None:
+        calibrated = describe_route_capacity(route)['request_measure'] == 'calibrated'
+    target_levels = [max(1, targets)] if kind in ('final', 'single') else [0]
+    while target_levels[-1] > 1:
+        target_levels.append(max(1, target_levels[-1] // 2))
+    usable = [row for row in profile['rows'] if row['kind'] == kind and row['task_level'] != 'unmeasured' and (row['attempts'] >= 4) and (row['completed_attempts'] >= 4 and row['largest_thinking_tokens'] is not None or row['at_or_over_limit'] > 0)]
+    borrowed = None
+    frame_policy = profile.get('frame_policy', {})
+    borrowing = frame_policy.get('borrowing_ready', False) and frame_matches_reading
+    frame_limit = frame_policy.get('frame_limit')
+    if frame_limit is not None and frame_characters > frame_limit:
+        borrowing = False
+    if not usable and kind != 'reading' and borrowing:
+        usable = [row for row in profile['rows'] if row['kind'] == 'reading' and row['task_level'] != 'unmeasured' and (row['attempts'] >= 4) and (row['completed_attempts'] >= 4 and row['largest_thinking_tokens'] is not None or row['at_or_over_limit'] > 0)]
+        borrowed = 'reading'
+    output_limit = describe_route_capacity(route)['output_tokens']['value']
+    text_room = describe_route_capacity(route)['input_text_characters']['value']
+    candidates = []
+    for level in levels:
+        task_characters = frame_characters + level + (carried_characters if profile.get('frame_policy', {}).get('count_carried_state', COUNT_CARRIED_STATE) else 0)
+        row_level = _find_task_level(task_characters)
+        scoped = borrowed is None or (task_characters <= frame_policy.get('largest_text_characters', 0) and level <= frame_policy.get('largest_material_characters', 0))
+        larger = [row for row in usable if row['task_level'] is None or (row_level is not None and row['task_level'] >= row_level)] if scoped else []
+        row = min(larger, key=lambda row: row['task_level'] or float('inf')) if larger else None
+        thinking = row['largest_thinking_tokens'] if row is not None else None
+        reserve = (thinking * 115 + 99) // 100 if thinking is not None else None
+        room = output_limit - reserve if reserve is not None else None
+        if room is not None and calibrated:
+            room = room * 18 // 10
+        for target_count in target_levels:
+            default, minimum = _describe_answer_bounds(kind, target_count, card_minimum)
+            attempts = row['attempts'] if row is not None else 0
+            over = row['at_or_over_limit'] if row is not None else 0
+            qualifies = row is not None and over == 0 and (room is not None) and (room >= minimum) and (task_characters <= text_room)
+            state = 'fits' if qualifies else 'over_limit_expected' if row is not None else 'unmeasured'
+            candidates.append(
+                dict(
+                    state=state,
+                    qualifies=qualifies,
+                    material_allowance=level,
+                    frame_characters=frame_characters,
+                    task_characters=task_characters,
+                    task_level=row['task_level'] if row else row_level,
+                    target_allowance=target_count,
+                    thinking_reserve_tokens=reserve,
+                    answer_room_characters=room,
+                    default_answer_bound=default,
+                    smallest_answer_bound=minimum,
+                    sample_size=attempts,
+                    measurement_attempts=row['measurement_attempts'] if row else 0,
+                    at_or_over_limit=over,
+                    at_or_over_limit_share=over / attempts if attempts else None,
+                    largest_thinking_tokens=thinking,
+                    largest_output_tokens=row['largest_output_tokens'] if row else None,
+                    cli_versions=copy.deepcopy(row['cli_versions']) if row else [],
+                ),
+            )
+    selected = next((row for row in candidates if row['qualifies']), None)
+    if selected is None:
+        measured = [row for row in candidates if row['sample_size']]
+        viable = [row for row in measured if row['at_or_over_limit_share'] < 1 and row['task_characters'] <= text_room]
+        selected = min(
+            viable,
+            key=lambda row: 1 / ((1 - row['at_or_over_limit_share']) * max(1, row['material_allowance'])),
+        ) if viable else measured[-1] if measured else candidates[-1]
+    bound = min(selected['default_answer_bound'], selected['answer_room_characters']) if selected['qualifies'] else selected['smallest_answer_bound']
+    reported = []
+    for level in levels:
+        choices = [row for row in candidates if row['material_allowance'] == level]
+        reported.append(
+            copy.deepcopy(next((row for row in choices if row['qualifies']), choices[0])),
+        )
+    return dict(
+        selected,
+        answer_bound=bound,
+        borrowed_kind=borrowed if selected['sample_size'] else None,
+        policy=POLICY,
+        levels=reported,
+    )
+
+
+def derive_material_allowance(kind, start, observations, output_limit):
+    levels = describe_material_levels(kind)
+    allowance = start['material_allowance']
+    ceiling = levels[0] if start['state'] == 'unmeasured' else allowance
+    for observation in observations:
+        value = observation['material_allowance'] if 'material_allowance' in observation else observation['material_characters']
+        current = next((index for index in range(len(levels) - 1, -1, -1) if levels[index] >= value), 0)
+        output = observation.get('output_tokens')
+        if output is not None and output * 100 >= output_limit * 75:
+            current = min(current + 1, len(levels) - 1)
+        elif output is not None and output * 100 <= output_limit * 35:
+            current = max(0, current - 1)
+        allowance = min(ceiling, levels[current])
+    return allowance
+OUTPUT_WARNING_MESSAGE = 'The measured output profile does not establish a fitting task size for the listed turn kinds. Keep the route effort; use a smaller task after an answer reaches the output limit.'
+
+
+def describe_output_warning(limits):
+    uncertain = {kind: value for kind, value in limits.items() if value['state'] in ('unmeasured', 'over_limit_expected')}
+    if not uncertain:
+        return None
+    state = 'over_limit_expected' if any((row['state'] == 'over_limit_expected' for row in uncertain.values())) else 'unmeasured'
+    row = next((value for value in uncertain.values() if value['state'] == state))
+    return dict(
+        output=dict(
+            state=state,
+            sample_size=row['sample_size'],
+            measurement_attempts=row['measurement_attempts'],
+            at_or_over_limit=row['at_or_over_limit'],
+            largest_output_tokens=row['largest_output_tokens'],
+            at_or_over_limit_share=row['at_or_over_limit_share'],
+            kinds=list(uncertain),
+            message=OUTPUT_WARNING_MESSAGE,
+        ),
+    )
+
+
+def describe_near_limit_attempts(records, route):
+    assignments = records.get('review_assignment', {})
+    limit = describe_route_capacity(route)['output_tokens']['value']
+    return [dict(
+        attempt_id=attempt['id'],
+        assignment_id=attempt['assignment_id'],
+        output_tokens=output,
+        output_limit=limit,
+        share=output / limit,
+    ) for attempt in records.get('review_attempt', {}).values() if assignments.get(attempt.get('assignment_id'), {}).get('route_id') == route['id'] for output in [(attempt.get('usage') or {}).get('output_tokens')] if output is not None and output * 100 >= limit * 75]
+
+
+def describe_final_projection(final, reading, *, entries=520000, minimums=12400):
+    allowance = final.get('task_characters')
+    if allowance is None:
+        return None
+    pool = max(0, allowance - final['frame_characters'] - minimums)
+    remaining = max(0, entries - pool)
+    reading_room = reading.get('material_allowance') or 15000
+    return dict(
+        state=final['state'],
+        task_characters=allowance,
+        frame_characters=final['frame_characters'],
+        sample_size=final['sample_size'],
+        largest_output_tokens=final['largest_output_tokens'],
+        minimums=minimums,
+        carried_entries=entries,
+        entry_pool=pool,
+        carried_reading_characters=remaining,
+        reading_turns_lower_bound=math.ceil(remaining / reading_room),
+        source_record='20261112235500-openness-chain-final-turn-over-route-limit-after-57-turns',
+    )
+
+
+def read_installed_cli_version(route):
+    """Read the local version only when comparing an actual pinned plan."""
+    adapter = transport._local_adapter(route)
+    if adapter is None:
+        return None
+    if route['adapter'] == 'claude_cli_v1':
+        return adapter._cli()[1]
+    return adapter.runtime().get('version')
+
+
+def describe_cli_version_status(profile, installed_version):
+    versions = {row['version'] for item in profile['rows'] for row in item['cli_versions']}
+    return dict(
+        installed=installed_version,
+        measured=installed_version in versions if installed_version is not None else None,
+        state='unmeasured_version' if installed_version is not None and installed_version not in versions else 'measured' if installed_version is not None else 'unknown',
+    )
+
+
+def describe_route_report(records, route):
+    profile = read_output_profile(records, route)
+    limits = {kind: select_task_limits(route, profile, kind) for kind in TURN_KINDS}
+    result = dict(
+        route_capacity=describe_route_capacity(route, profile),
+        output_profile=profile,
+        task_limits=limits,
+        final_reference_projection=describe_final_projection(limits['final'], limits['reading']),
+        near_limit_attempts=describe_near_limit_attempts(records, route),
+    )
+    warning = describe_output_warning(limits)
+    if warning is not None:
+        result['capacity_warning'] = warning
+    return result
+
+
+def describe_assignment_kind(assignment):
+    if 'task' in assignment:
+        return assignment['task']['kind']
+    header = assignment.get('review_parts', {})
+    if header.get('kind') in TURN_KINDS:
+        return header['kind']
+    parameters = assignment.get('prompt', {}).get('parameters', {})
+    if parameters.get('reading_stage') == 'reading':
+        return 'reading'
+    if parameters.get('reading_stage') == 'final':
+        return 'final'
+    if str(parameters.get('evidence_parts', '')).endswith('/part'):
+        return 'read'
+    if assignment.get('staged_review'):
+        return 'staged'
+    if parameters.get('excerpts'):
+        return 'request'
+    return 'single'
+
+
+def describe_assignment_limits(route, profile, assignment):
+    task = assignment.get('task', {})
+    return select_task_limits(
+        route,
+        profile,
+        describe_assignment_kind(assignment),
+        targets=task.get('targets', 1),
+        frame_characters=task.get('frame_characters', 40000),
+        carried_characters=task.get('carried_characters', 0),
+    )
+
+
+def describe_assignment_task(records, artifacts, assignment):
+    """Measure advisory work without changing the assignment that scientific digests bind."""
+    if 'task' in assignment:
+        return assignment['task']
+    kind = describe_assignment_kind(assignment)
+    if kind == 'staged':
+        return dict(kind=kind, sizing='joint_fit')
+    latest = max((attempt for attempt in records.get('review_attempt', {}).values()
+                  if attempt.get('assignment_id') == assignment['id']
+                  and attempt.get('origin') == 'instrumented' and 'task' in attempt),
+                 key=lambda attempt: attempt['recorded_revision'], default=None)
+    if latest is not None:
+        return latest['task']
+    if artifacts is not None and assignment.get('packet'):
+        from .errors import ResearchError
+        from .review_protocol import build_assignment_request
+        from .review_excerpts import read_sent_packet
+        try:
+            request = build_assignment_request(records, artifacts, assignment)
+            return describe_task(assignment['role'], read_sent_packet(request) or {},
+                                 route=records['review_route'][assignment['route_id']], request=request)
+        except ResearchError:
+            # A capacity report must preserve the scientific report's existing refusal.
+            pass
+    return dict(kind=kind)
+
+
+def describe_assignment_warning(records, assignment_id, *, artifacts=None):
+    assignment = records['review_assignment'][assignment_id]
+    assignment = dict(assignment, task=describe_assignment_task(records, artifacts, assignment))
+    route = records['review_route'][assignment['route_id']]
+    limits = describe_assignment_limits(route, read_output_profile(records, route), assignment)
+    return describe_output_warning({describe_assignment_kind(assignment): limits})
+
+
+def describe_open_route_reports(records, artifacts=None):
+    from .errors import ResearchError
+    from .review_continuation import list_chain_heads, _list_lineage, _list_recorded_finals
+    assignments = records.get('review_assignment', {})
+    open_ids = set()
+    heads = []
+    for head in list_chain_heads(records, None):
+        lineage = {row['id'] for row in _list_lineage(records, assignments[head])}
+        if not _list_recorded_finals(records, lineage):
+            open_ids.update(lineage)
+            heads.append(assignments[head])
+    routes = {assignments[key]['route_id'] for key in open_ids if assignments[key]['route_id'] in records.get('review_route', {})}
+    result = {}
+    for route_id in sorted(routes):
+        report = describe_route_report(records, records['review_route'][route_id])
+        report.pop('capacity_warning', None)
+        selected = {}
+        for head in heads:
+            if head['route_id'] != route_id:
+                continue
+            head = dict(head, task=describe_assignment_task(records, artifacts, head))
+            kind = describe_assignment_kind(head)
+            limits = describe_assignment_limits(
+                records['review_route'][route_id],
+                report['output_profile'],
+                head,
+            )
+            if kind not in selected or limits['state'] == 'over_limit_expected' or (selected[kind]['state'] == 'fits' and limits['state'] == 'unmeasured'):
+                selected[kind] = limits
+        report['task_limits'].update(selected)
+        warning = describe_output_warning(selected)
+        if warning is not None:
+            report['capacity_warning'] = warning
+        report['near_limit_attempts'] = [row for row in report['near_limit_attempts'] if row['assignment_id'] in open_ids]
+        plans = [head for head in heads if head['route_id'] == route_id and head.get('capacity_plan')]
+        if plans and artifacts is not None:
+            route = records['review_route'][route_id]
+            try:
+                installed = read_installed_cli_version(route)
+            except (OSError, ValueError, KeyError, ResearchError):
+                installed = None
+            statuses = []
+            for head in plans:
+                plan = json.loads(artifacts.read(head['capacity_plan']['artifact']))
+                statuses.append(
+                    dict(assignment_id=head['id'], **describe_cli_version_status(plan['profile'], installed)),
+                )
+            report['cli_profile_status'] = dict(
+                installed=installed,
+                plans=statuses,
+                state='unmeasured_version' if any((row['state'] == 'unmeasured_version' for row in statuses)) else 'measured' if installed is not None else 'unknown',
+            )
+        result[route_id] = report
+    return result
+
+
+def describe_work_units(role, packet):
+    """Count existing work units without inventing a new partition protocol."""
+    from . import openness_reading, review_problem_parts
+    if packet.get('protocol') == 'exactory-reassessment-disposition-correction-v1':
+        return {'type': 'correction', 'unit': 'finding', 'count': len(packet['diagnostic']['findings'])}
+    plan = packet.get(review_problem_parts.KEY, {})
+    if plan.get('stage') == 'part':
+        count = sum(
+            (end - start for key, ranges in plan['delivered_now'].items() if key != 'passages' for start, end in ranges),
+        )
+        return {'type': 'result_part', 'unit': 'required_note', 'count': count}
+    turn = packet.get(openness_reading.TURN_KEY)
+    if turn is not None:
+        return {
+            'type': 'openness_reading',
+            'unit': 'reading_unit',
+            'count': len(turn['reading_plan']['delivered_now']),
+        }
+    kind = 'result_final' if plan else 'openness_final' if openness_reading.RECORD_KEY in packet else 'probe' if role == 'probe' else 'ordinary'
+    if kind == 'ordinary' and role == 'native_math':
+        kind = 'native_' + str(packet.get('native', {}).get('kind', 'unknown'))
+    return {'type': kind, 'unit': 'response', 'count': 1}

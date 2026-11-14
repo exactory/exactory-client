@@ -173,13 +173,19 @@ class ContinuationRegressionTests(unittest.TestCase):
         expected_records['literature_operation'][stop['request_id']] = dict(
             operation='review.series_stop', runtime=case.store.describe_runtime())
         self.assertEqual(after['records'], expected_records)
-        self.assertEqual([json.loads(line) for line in output.getvalue().splitlines()],
+        lines = [json.loads(line) for line in output.getvalue().splitlines()]
+        warning = lines[0]['capacity_warning']
+        self.assertEqual({key: warning['output'][key] for key in (
+            'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
+            dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['single']))
+        self.assertEqual(lines,
                          [dict(plan, stop_id=stop['id'], revision_after_stop=after['revision'],
                                provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
-                               stop_class='decision')])
+                               stop_class='decision', capacity_warning=warning)])
         receipt = case.store.committed_request(stop['request_id'])
         self.assertEqual(receipt['operation'], 'review.series_stop')
         self.assertEqual(receipt['payload'], {'stop': stop})
+        self.assertEqual(receipt['response']['result'], stop)
 
     def test_two_reassessment_mismatches_hand_off_eligible_correction(self):
         from research_harness import review_output_correction
