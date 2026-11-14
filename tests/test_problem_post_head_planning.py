@@ -210,8 +210,7 @@ class PostedHeadPlanningTests(unittest.TestCase):
         case.selected = case.select_statement(identifier='second-statement',
                                                statement='A distinct complete synthetic problem.')
         for index, search in enumerate(case.searches):
-            search = dict(search, question=case.selected['statement'],
-                          queries=search['queries'] + [case.selected['statement']])
+            search = dict(search, question=case.selected['statement'])
             case.put('literature_search', search['id'], search)
             case.searches[index] = search
         for identifier in ('pending-openness', 'rejected-openness'):
