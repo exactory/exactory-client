@@ -5545,6 +5545,20 @@
         "test_certificate_path_example.CertificatePathExampleTests.test_native_certificate_journey_and_six_refusals",
         "test_certificate_path_example.CertificatePathExampleTests.test_common_probe_examples_retain_the_residue_certificate"
       ]
+    },
+    {
+      "id": "series-reach-follows-executable-source-paths",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review continuity source reach",
+      "summary": "Module closures, name-only matches and shared callback pointers gave all planned commands the same code domain.",
+      "expected": "Only executable commands join series reach; source rules isolate callbacks and lexical scopes, and checked coverage parts retain the unlisted stop and offline diagnostic.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_unlisted_stops.UnlistedStopTests.test_no_stop_and_outside_codes_keep_the_unlisted_series_and_offline_boundary",
+        "test_review_unlisted_stops.UnlistedStopTests.test_driver_refuses_an_executable_state_with_a_command_outside_its_set",
+        "test_series_code_reach.CodeReachTests.test_fixture_regenerates_and_names_every_unreviewed_registry_row"
+      ]
     }
   ]
 }

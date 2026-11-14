@@ -2,8 +2,8 @@
 """Read-only, conservative error-code analysis for the D2 continuity guard.
 
 This is a function/reference graph, not an import closure. Resolved imports and
-lexical names take precedence; unresolved attribute calls include every function
-of that name. Function references include callbacks and locally imported aliases.
+lexical names take precedence; unresolved attributes reach methods and functions
+of modules used as values. Function references include callbacks and locally imported aliases.
 Code parameters propagate to a fixed point before their call arguments are read.
 No harness or controller module is imported to perform the source analysis.
 
@@ -16,11 +16,24 @@ import argparse
 import ast
 from collections import defaultdict
 import json
+from fnmatch import fnmatchcase
 from pathlib import Path
 import sys
 
 
 SOURCE_FOLDERS = ('research_harness', 'skills/math-solver/harness')
+REVIEW_MODULE_PATTERNS = (
+    'research_harness/review_*.py', 'research_harness/openness_*.py',
+    'research_harness/problem_openness*.py', 'research_harness/native_*.py',
+    'research_harness/bar_sources.py', 'research_harness/source_links.py',
+    'research_harness/scientific_delivery.py', 'research_harness/automatic_overrides.py',
+    'research_harness/research_decisions.py', 'research_harness/problem_claims.py',
+    'skills/math-solver/harness/search_controller/reviewer.py',
+    'skills/math-solver/harness/search_controller/openness.py',
+)
+# Only calls hidden from the source rules belong here. Each target needs its reason.
+DECLARED_EDGES = {}
+
 PLANNER_MODULES = frozenset(('research_harness.review_continuation',
                             'research_harness.review_failure_class',
                             'research_harness.review_plan_steps',
@@ -330,6 +343,7 @@ def build_index(sources):
                     register(child, qualified + '.', key)
                 elif isinstance(child, ast.ClassDef):
                     class_symbols.add(module + '.' + prefix + child.name)
+                    classes[module + '.' + prefix + child.name]
                     register(child, prefix + child.name + '.', parent)
                 else:
                     register(child, prefix, parent)
@@ -340,7 +354,7 @@ def build_index(sources):
             bindings=modules[module]['bindings'], imports=modules[module]['imports'])
     return dict(functions=functions, modules=modules, by_name=by_name,
                 by_symbol=by_symbol, classes=classes, constructors=constructors, sources=sources,
-                references={})
+                references={}, code_references={})
 
 
 def resolve_symbol(expression, function, index):
@@ -354,13 +368,13 @@ def resolve_symbol(expression, function, index):
     return None
 
 
-def resolve_references(expression, function, index, seen=frozenset()):
+def resolve_code_references(expression, function, index, seen=frozenset()):
     """Resolve lexical/import aliases, then conservatively match a terminal name."""
     marker = (function['key'], ast.dump(expression))
     if not seen:
-        if marker not in index['references']:
-            index['references'][marker] = resolve_references(expression, function, index, {('root', '')})
-        return index['references'][marker]
+        if marker not in index['code_references']:
+            index['code_references'][marker] = resolve_code_references(expression, function, index, {('root', '')})
+        return index['code_references'][marker]
     if marker in seen:
         return set()
     seen = seen | {marker}
@@ -372,7 +386,7 @@ def resolve_references(expression, function, index, seen=frozenset()):
         if module in index['modules'] and name in index['modules'][module]['bindings']:
             owner = dict(function, module=module, bindings={}, imports={})
             values = index['modules'][module]['bindings'][name]
-            return set().union(*(resolve_references(child, owner, index, seen)
+            return set().union(*(resolve_code_references(child, owner, index, seen)
                 for value in values for child in ast.walk(value)
                 if isinstance(value, (ast.Name, ast.Attribute, ast.List, ast.Tuple, ast.Dict, ast.Set))
                 and isinstance(child, (ast.Name, ast.Attribute))))
@@ -387,7 +401,7 @@ def resolve_references(expression, function, index, seen=frozenset()):
         if bindings is None:
             bindings = index['modules'][function['module']]['bindings'].get(expression.id)
         if bindings:
-            return set().union(*(resolve_references(child, function, index, seen)
+            return set().union(*(resolve_code_references(child, function, index, seen)
                 for value in bindings for child in ast.walk(value)
                 if isinstance(value, (ast.Name, ast.Attribute, ast.List, ast.Tuple, ast.Dict, ast.Set))
                 and isinstance(child, (ast.Name, ast.Attribute))))
@@ -398,6 +412,219 @@ def resolve_references(expression, function, index, seen=frozenset()):
             return methods
     name = getattr(expression, 'id', getattr(expression, 'attr', ''))
     return set(index['by_name'].get(name, ()))
+
+
+def iter_reference_scopes(function, index):
+    """Visit lexical functions followed by their module namespace."""
+    scope = function
+    while scope is not None:
+        yield scope
+        if scope['key'].endswith(':<module>'):
+            return
+        scope = index['functions'].get(scope.get('parent'))
+    yield index['functions'][function['path'] + ':<module>']
+
+
+def collect_reference_bindings(function, index):
+    """Keep opaque local bindings and expression-local comprehension scopes."""
+    names = set(function['parameters'])
+    arguments = getattr(function['node'], 'args', None)
+    if arguments is not None:
+        names.update(argument.arg for argument in (arguments.vararg, arguments.kwarg) if argument is not None)
+
+    def visit(node, shadowed=frozenset()):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node is not function['node']:
+            return
+        if shadowed:
+            index['expression_shadows'][id(node)] = shadowed
+        if isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)):
+            targets = {child.id for generator in node.generators for child in ast.walk(generator.target)
+                       if isinstance(child, ast.Name)}
+            inner = shadowed | targets
+            for position, generator in enumerate(node.generators):
+                visit(generator.iter, shadowed if position == 0 else inner)
+                visit(generator.target, inner)
+                for condition in generator.ifs:
+                    visit(condition, inner)
+            for field in ('elt', 'key', 'value'):
+                if hasattr(node, field):
+                    visit(getattr(node, field), inner)
+            return
+        if isinstance(node, ast.Lambda):
+            for value in node.args.defaults + [value for value in node.args.kw_defaults if value is not None]:
+                visit(value, shadowed)
+            parameters = {arg.arg for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs}
+            parameters.update(arg.arg for arg in (node.args.vararg, node.args.kwarg) if arg is not None)
+            visit(node.body, shadowed | parameters)
+            return
+        if not shadowed and isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+            names.add(node.id)
+        if isinstance(node, ast.ExceptHandler) and node.name:
+            names.add(node.name)
+        for child in ast.iter_child_nodes(node):
+            visit(child, shadowed)
+    visit(function['node'])
+    function['scope_names'] = names
+
+
+def resolve_reference_symbol(expression, function, index, seen=frozenset()):
+    """Resolve imported receivers through lexical scopes without guessing types."""
+    marker = (function['key'], ast.dump(expression))
+    if marker in seen:
+        return None
+    seen = seen | {marker}
+    if isinstance(expression, ast.Attribute):
+        parent = resolve_reference_symbol(expression.value, function, index, seen)
+        return parent + '.' + expression.attr if parent else None
+    if isinstance(expression, ast.Name):
+        if expression.id in index['expression_shadows'].get(id(expression), ()):
+            return None
+        for scope in iter_reference_scopes(function, index):
+            prefix = '' if scope['key'].endswith(':<module>') else scope['qualified'] + '.'
+            symbol = scope['module'] + '.' + prefix + expression.id
+            if symbol in index['classes'] or symbol in index['by_symbol']:
+                return symbol
+            if expression.id in scope['imports']:
+                return scope['imports'][expression.id]
+            if expression.id in scope['bindings']:
+                values = scope['bindings'][expression.id]
+                if len(values) == 1 and isinstance(values[0], (ast.Name, ast.Attribute)):
+                    return resolve_reference_symbol(values[0], scope, index, seen)
+                return None
+            if expression.id in scope['scope_names']:
+                return None
+        return None
+    return None
+
+
+def collect_reference_context(index):
+    """Index class families and modules passed as values for the edge rules."""
+    bases, children = defaultdict(set), defaultdict(set)
+    index['expression_shadows'] = {}
+    for function in index['functions'].values():
+        collect_reference_bindings(function, index)
+    for module, definition in index['modules'].items():
+        path = definition['path']
+        owner = index['functions'][path + ':<module>']
+
+        def visit(node, prefix='', scope=owner):
+            for child in ast.iter_child_nodes(node):
+                if isinstance(child, ast.ClassDef):
+                    symbol = module + '.' + prefix + child.name
+                    for base in child.bases:
+                        target = resolve_reference_symbol(base, scope, index)
+                        if target in index['classes']:
+                            bases[symbol].add(target)
+                            children[target].add(symbol)
+                    visit(child, prefix + child.name + '.', scope)
+                elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    visit(child, prefix + child.name + '.', index['functions'][path + ':' + prefix + child.name])
+                else:
+                    visit(child, prefix, scope)
+        visit(owner['node'])
+    value_modules = set()
+    for function in index['functions'].values():
+        receivers = {id(node.value) for node in function['nodes'] if isinstance(node, ast.Attribute)}
+        for node in function['nodes']:
+            if (isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)
+                    and id(node) not in receivers and not function['key'].endswith(':<module>')):
+                symbol = resolve_reference_symbol(node, function, index)
+                if symbol in index['modules']:
+                    value_modules.add(symbol)
+    index.update(bases=bases, children=children, value_modules=value_modules)
+
+
+def collect_closure(entries, graph):
+    seen, pending = set(), list(entries)
+    while pending:
+        key = pending.pop()
+        if key not in seen:
+            seen.add(key)
+            pending.extend(graph.get(key, set()) - seen)
+    return seen
+
+
+def resolve_references(expression, function, index, seen=frozenset()):
+    """Resolve stated scope, class-family, module-value and table references."""
+    marker = (function['key'], id(expression))
+    if not seen:
+        if marker not in index['references']:
+            index['references'][marker] = resolve_references(expression, function, index, {('root', 0)})
+        return index['references'][marker]
+    if marker in seen:
+        return set()
+    seen = seen | {marker}
+    # Dynamic dispatch is supplied by EXECUTABLE_COMMANDS, never the whole CLI.
+    if (isinstance(expression, ast.Name) and expression.id == 'OPERATIONS'
+            and function['key'].startswith('research_harness/review_series.py:run_series')):
+        return set()
+
+    def resolve_values(values, owner):
+        return set().union(*(resolve_references(child, owner, index, seen)
+            for value in values for child in ast.walk(value)
+            if isinstance(value, (ast.Name, ast.Attribute, ast.List, ast.Tuple, ast.Dict, ast.Set))
+            and isinstance(child, (ast.Name, ast.Attribute))))
+
+    def resolve_target(symbol):
+        if symbol in index['by_symbol']:
+            return set(index['by_symbol'][symbol])
+        if symbol in index['classes']:
+            return set(index['classes'][symbol])
+        module, _, name = symbol.rpartition('.')
+        if module in index['modules']:
+            values = index['modules'][module]['bindings'].get(name, ())
+            owner = index['functions'][index['modules'][module]['path'] + ':<module>']
+            return resolve_values(values, owner)
+        return set()
+
+    result = set()
+    if isinstance(expression, ast.Name):
+        if expression.id in index['expression_shadows'].get(id(expression), ()):
+            return set()
+        for scope in iter_reference_scopes(function, index):
+            prefix = '' if scope['key'].endswith(':<module>') else scope['qualified'] + '.'
+            symbol = scope['module'] + '.' + prefix + expression.id
+            if symbol in index['by_symbol'] or symbol in index['classes']:
+                result = resolve_target(symbol)
+                break
+            if expression.id in scope['imports']:
+                result = resolve_target(scope['imports'][expression.id])
+                break
+            if expression.id in scope['bindings']:
+                result = resolve_values(scope['bindings'][expression.id], scope)
+                break
+            if expression.id in scope['scope_names']:
+                break
+    elif isinstance(expression, ast.Attribute):
+        symbol = resolve_reference_symbol(expression, function, index)
+        module = symbol.rpartition('.')[0] if symbol else None
+        if module in index['modules'] or symbol in index['by_symbol'] or symbol in index['classes']:
+            result = resolve_target(symbol)
+        else:
+            cls = None
+            parts = function['qualified'].split('.')
+            for size in range(len(parts) - 1, 0, -1):
+                candidate = function['module'] + '.' + '.'.join(parts[:size])
+                if candidate in index['classes']:
+                    cls = candidate
+                    break
+            receiver = expression.value
+            if cls and isinstance(receiver, ast.Name) and receiver.id in ('self', 'cls'):
+                family = ({cls} | collect_closure(index['bases'][cls], index['bases'])
+                          | collect_closure(index['children'][cls], index['children']))
+            elif (cls and isinstance(receiver, ast.Call) and isinstance(receiver.func, ast.Name)
+                  and receiver.func.id == 'super'):
+                family = collect_closure(index['bases'][cls], index['bases'])
+            else:
+                family = None
+            if family is not None:
+                result = {key for symbol in family for key in index['classes'][symbol]
+                          if key.rsplit('.', 1)[-1] == expression.attr}
+            else:
+                result = {key for key in index['by_name'].get(expression.attr, ())
+                          if key in index['methods'] or (index['functions'][key]['module'] in index['value_modules']
+                              and '.' not in index['functions'][key]['qualified'])}
+    return result
 
 
 def evaluate_code(expression, function, index, seen=frozenset()):
@@ -466,7 +693,7 @@ def resolve_call_targets(call, function, index):
         imported = name in function['imports'] or name in index['modules'][function['module']]['imports']
         if not known and not imported and name not in function['bindings']:
             return set()
-    return resolve_references(call.func, function, index)
+    return resolve_code_references(call.func, function, index)
 
 
 def resolve_callback_targets(expression, function, index, pointers, seen=frozenset()):
@@ -630,25 +857,27 @@ def prove_code_selection(expression, function, index, allow_parameters=True, see
     return False
 
 
-def analyze_sources(sources, roots, computed_sites=None):
+def analyze_sources(sources, roots, computed_sites=None, declared_edges=None, series_commands=None):
     """Analyze source strings and explicit public-operation roots without execution."""
     declarations = {} if computed_sites is None else computed_sites
     index = build_index(sources)
     functions = index['functions']
     sinks = {key: collect_sinks(function, index) for key, function in functions.items()}
-    calls, graph = collect_resolved_calls(functions, index), {}
-    for key, function in functions.items():
-        graph[key] = set().union(*(resolve_references(node, function, index)
-            for node in function['nodes'] if isinstance(node, (ast.Name, ast.Attribute))))
-        graph[key].update(set().union(*(targets for _, targets in calls[key])))
-        module_key = function['path'] + ':<module>'
-        if key != module_key:
-            graph[key].add(module_key)
-        for target in function['imports'].values():
-            while target and target not in index['modules']:
-                target = target.rpartition('.')[0]
-            if target:
-                graph[key].add(index['modules'][target]['path'] + ':<module>')
+    calls = collect_resolved_calls(functions, index)
+    collect_reference_context(index)
+    index['methods'] = set().union(*index['classes'].values())
+    graph = {key: set().union(*(resolve_references(node, function, index)
+        for node in function['nodes'] if isinstance(node, (ast.Name, ast.Attribute)) and isinstance(node.ctx, ast.Load)))
+        for key, function in functions.items()}
+    for caller, targets in (declared_edges or {}).items():
+        if caller not in functions:
+            raise ValueError('Unknown declared edge caller: ' + caller)
+        for target, reason in targets.items():
+            if target not in functions or not isinstance(reason, str) or not reason.strip():
+                raise ValueError('Declared edge needs an existing target and a reason: ' + caller + ' -> ' + target)
+            if target in graph[caller]:
+                raise ValueError('Unused declared edge: ' + caller + ' -> ' + target)
+            graph[caller].add(target)
 
     nested_functions = defaultdict(list)
     for key, definition in functions.items():
@@ -716,6 +945,7 @@ def analyze_sources(sources, roots, computed_sites=None):
     unused = set(declarations) - used
     if unused:
         raise ValueError('Unused computed code declaration(s):\n' + '\n'.join(sorted(unused)))
+    direct_codes = {key: {kind: set(values) for kind, values in row.items()} for key, row in codes.items()}
     changed = True
     while changed:
         changed = False
@@ -755,15 +985,27 @@ def analyze_sources(sources, roots, computed_sites=None):
         missing = set(entries) - set(functions)
         if missing:
             raise ValueError('Unknown operation root for %s: %s' % (command, ', '.join(sorted(missing))))
-        seen, pending = set(), list(entries)
-        while pending:
-            key = pending.pop()
-            if key not in seen:
-                seen.add(key)
-                pending.extend(graph[key] - seen)
-        by_command[command] = sorted(set().union(*(set().union(*codes[key].values()) for key in seen)))
+        seen = collect_closure(entries, graph)
+        module_codes = set().union(*(row['emitted'] for key, row in codes.items() if key.endswith(':<module>')))
+        by_command[command] = sorted(module_codes | set().union(*(set().union(*codes[key].values()) for key in seen)))
+    if series_commands is None:
+        reachable = set().union(*(set(values) for values in by_command.values()))
+    else:
+        series_roots = ('plan_next', 'run_series') + tuple(series_commands)
+        reachable = set().union(*(set(by_command[command]) for command in series_roots))
+        for command in ('run_series', 'review-series'):
+            by_command[command] = sorted(reachable)
+    vocabulary = emitted | planned
+    origins = defaultdict(set)
+    for key, function in functions.items():
+        literals = {node.value for node in function['nodes'] if isinstance(node, ast.Constant)
+                    and isinstance(node.value, str) and node.value in vocabulary}
+        for code in literals | set().union(*direct_codes[key].values()):
+            origins[code].add(key)
     return dict(emitted=sorted(emitted), planned=sorted(planned),
-        reachable=sorted(set().union(*(set(values) for values in by_command.values()))),
+        reachable=sorted(reachable),
+        code_origins={code: sorted(keys) for code, keys in sorted(origins.items())},
+        graph=graph, codes_by_function=codes, direct_codes=direct_codes,
         by_command=by_command, forwarding={key: sorted(row['emitted']) for key, row in sorted(forwarding.items())
                                          if row['emitted']},
         computed_sites=resolved_declarations,
@@ -827,12 +1069,26 @@ def validate_command_roots(commands, roots, unavailable):
         raise ValueError('Planned commands need public operation roots: ' + ', '.join(sorted(missing)))
 
 
+def read_executable_commands(sources):
+    """Read the driver's single command vocabulary without importing runtime code."""
+    tree = ast.parse(sources['research_harness/review_series.py'])
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(target, ast.Name)
+                and target.id == 'EXECUTABLE_COMMANDS' for target in node.targets):
+            value = node.value
+            if isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == 'frozenset':
+                value = value.args[0] if value.args else ast.Tuple(elts=[], ctx=ast.Load())
+            return frozenset(ast.literal_eval(value))
+    raise ValueError('Driver source must declare EXECUTABLE_COMMANDS')
+
+
 def collect_command_roots(sources):
     """Read the real CLI dispatch table instead of maintaining duplicate wrappers."""
     index = build_index(sources)
+    collect_reference_context(index)
+    index['methods'] = set().union(*index['classes'].values())
     module = index['modules']['research_harness.cli']
-    owner = dict(key='research_harness/cli.py:<module>', module='research_harness.cli',
-                 path='research_harness/cli.py', qualified='', imports={}, bindings={}, parameters=[])
+    owner = index['functions'][module['path'] + ':<module>']
     operations = {}
     tree = ast.parse(sources[module['path']])
     for node in tree.body:
@@ -851,67 +1107,148 @@ def collect_command_roots(sources):
                     operations[key.value] = tuple(sorted(resolve_references(value, owner, index)))
     roots = dict(EXTERNAL_COMMAND_ROOTS)
     planned = discover_planned_commands(sources)
-    for command in sorted(set(SERIES_COMMANDS) | planned):
+    executable = read_executable_commands(sources)
+    for command in sorted(set(SERIES_COMMANDS) | planned | executable):
         if command in roots or (command in UNAVAILABLE_COMMANDS and command not in operations):
             continue
         if command not in operations or not operations[command]:
             raise ValueError('No public operation found for planned command ' + command)
         roots[command] = operations[command]
     validate_command_roots(planned, roots, UNAVAILABLE_COMMANDS)
-    # The driver indexes OPERATIONS dynamically. Attach the discovered action
-    # entries explicitly so a scoped driver recorder covers its dispatched calls.
-    action_entries = {entry for command in planned for entry in roots.get(command, ())
-                      if command not in ('plan_next', 'run_series', 'review-series')}
-    for command in ('run_series', 'review-series'):
-        roots[command] = tuple(sorted(set(roots[command]) | action_entries))
     return roots
 
 
 def analyze_repository(root):
     sources = read_sources(Path(root))
-    return analyze_sources(sources, collect_command_roots(sources), COMPUTED_CODE_SITES)
+    return analyze_sources(sources, collect_command_roots(sources), COMPUTED_CODE_SITES,
+                           DECLARED_EDGES, read_executable_commands(sources))
+
+
+def read_no_stop_entries(folder, sources, report, registry):
+    """Check lane-owned reasons against the same source graph used for reach."""
+    index = build_index(sources)
+    functions = index['functions']
+    entries = {}
+    for path in sorted(folder.glob('*.json')):
+        for code, row in json.loads(path.read_text(encoding='utf-8')).items():
+            if code in entries:
+                raise ValueError('Duplicate no-stop entry: ' + code)
+            reason = row.get('reason')
+            field = {'replaced': 'handler', 'payload': 'check', 'report_entry': 'builder'}.get(reason)
+            if field is None:
+                raise ValueError('Unknown no-stop reason for ' + code)
+            key = row.get(field)
+            if key not in functions:
+                raise ValueError('Unknown no-stop function for ' + code + ': ' + str(key))
+            if reason == 'payload':
+                valid = code in report['codes_by_function'][key]['emitted']
+            elif reason == 'report_entry':
+                valid = key in report['code_origins'].get(code, ())
+            else:
+                function = functions[key]
+                handlers = [handler for node in function['nodes'] if isinstance(node, ast.Try)
+                            for handler in node.handlers if handler.type is not None]
+                catches_error = any(getattr(member, 'id', getattr(member, 'attr', '')) in index['constructors']
+                                    for handler in handlers for member in ast.walk(handler.type))
+                reached = collect_closure([key], report['graph'])
+                values = set().union(*(set().union(*report['codes_by_function'][target].values()) for target in reached))
+                valid = catches_error and code in values and (row.get('becomes') == 'plan' or row.get('becomes') in registry)
+            if not valid:
+                raise ValueError('No-stop reason does not match source for ' + code + ': ' + key)
+            entries[code] = row
+    return entries
+
+
+def build_coverage_parts(report, registry, no_stop):
+    """Partition pending codes by reviewed reason or their source homes."""
+    parts = dict(unreviewed_rows={}, no_stop_of_own=no_stop, outside_review_modules={})
+    for code in report['reachable']:
+        if code in registry or code in no_stop:
+            continue
+        origins = report['code_origins'].get(code, [])
+        if not origins:
+            raise ValueError('Reachable code needs a source home: ' + code)
+        reviewed = any(fnmatchcase(key.split(':', 1)[0], pattern)
+                       for key in origins for pattern in REVIEW_MODULE_PATTERNS)
+        if reviewed:
+            parts['unreviewed_rows'][code] = dict(unit='registry-rows', functions=origins)
+        else:
+            parts['outside_review_modules'][code] = dict(functions=origins)
+    validate_registry_coverage(dict(reachable=report['reachable'], **parts), registry)
+    return parts
 
 
 def build_fixture(root):
     report = analyze_repository(root)
     # Read the one real registry only after the static source analysis succeeds.
     from research_harness.stop_classes import STOP_REGISTRY
-    report['unreviewed_rows'] = {code: dict(unit='registry-rows')
-        for code in report['reachable'] if code not in STOP_REGISTRY}
+    sources = read_sources(Path(root))
+    no_stop = read_no_stop_entries(Path(root) / 'tests/fixtures/series_code_no_stop', sources, report, STOP_REGISTRY)
+    report.update(build_coverage_parts(report, STOP_REGISTRY, no_stop))
+    for field in ('graph', 'codes_by_function', 'direct_codes', 'code_origins'):
+        del report[field]
     report['unavailable_commands'] = {command: reason for command, reason in UNAVAILABLE_COMMANDS.items()
                                       if command not in report['by_command']}
     report['planned_commands'] = sorted(discover_planned_commands(read_sources(Path(root))))
-    # Equal conservative domains share one named set, leaving the command and
-    # computed-site tables reviewable without repeating thousands of codes.
+    # Share identical sets. Additional sets use indices into one vocabulary so
+    # distinct command domains do not repeat long code strings in the fixture.
     names = {tuple(report[field]): field for field in ('emitted', 'planned', 'reachable')}
     additional = {}
+    vocabulary = sorted(set(report['emitted']) | set(report['planned']) | set(report['reachable']))
+    positions = {code: position for position, code in enumerate(vocabulary)}
 
     def retain_codes(values):
         values = tuple(values)
         if values not in names:
             name = 'codes_' + str(len(additional) + 1)
             names[values] = name
-            additional[name] = list(values)
+            additional[name] = [positions[code] for code in values]
         return names[values]
 
     report['by_command'] = {command: retain_codes(values) for command, values in report['by_command'].items()}
     report['computed_sites'] = {site: dict(row, values=retain_codes(row['values']))
                                 for site, row in report['computed_sites'].items()}
     report['code_sets'] = additional
+    report['code_vocabulary'] = vocabulary
     return report
 
 
 def read_command_codes(fixture, command):
     """Expand a command's named code set in the generated fixture."""
     name = fixture['by_command'][command]
-    return fixture[name] if name in fixture else fixture['code_sets'][name]
+    return read_code_set(fixture, name)
+
+
+def read_code_set(fixture, name):
+    """Expand one named fixture set, whose indices share a single vocabulary."""
+    if name in fixture:
+        return fixture[name]
+    return [fixture['code_vocabulary'][position] for position in fixture['code_sets'][name]]
 
 
 def validate_registry_coverage(fixture, registry):
-    missing = set(fixture['reachable']) - set(registry) - set(fixture['unreviewed_rows'])
-    assert not missing, 'Reachable codes need reviewed rows or R55 owners: ' + ', '.join(sorted(missing))
-    stale = set(fixture['unreviewed_rows']) & set(registry)
-    assert not stale, 'Reviewed codes must leave the R55 table: ' + ', '.join(sorted(stale))
+    reachable = set(fixture['reachable'])
+    parts = [set(registry) & reachable] + [set(fixture.get(field, {})) for field in (
+        'unreviewed_rows', 'no_stop_of_own', 'outside_review_modules')]
+    missing = reachable - set().union(*parts)
+    assert not missing, 'Reachable codes need exactly one coverage entry: ' + ', '.join(sorted(missing))
+    stale = set().union(*parts[1:]) - reachable
+    assert not stale, 'Coverage entries outside reachable: ' + ', '.join(sorted(stale))
+    duplicates = {code for code in reachable if sum(code in part for part in parts) > 1}
+    assert not duplicates, 'Codes have multiple coverage entries: ' + ', '.join(sorted(duplicates))
+
+
+def format_fixture(report):
+    """Keep code lists compact while leaving the tables readable for review."""
+    def render(value, level=0):
+        if not isinstance(value, dict):
+            return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(',', ':'))
+        if not value:
+            return '{}'
+        prefix = '  ' * (level + 1)
+        return '{\n' + ',\n'.join(prefix + json.dumps(key) + ': ' + render(value[key], level + 1)
+                                     for key in sorted(value)) + '\n' + '  ' * level + '}'
+    return render(report) + '\n'
 
 
 def run_cli(argv=None):
@@ -923,9 +1260,11 @@ def run_cli(argv=None):
     report = build_fixture(args.root)
     if args.write_fixture:
         destination = args.root / 'tests/fixtures/series_code_reach.json'
-        destination.write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
+        destination.write_text(format_fixture(report), encoding='utf-8')
     summary = dict(emitted=len(report['emitted']), reachable=len(report['reachable']),
                    unreviewed_rows=len(report['unreviewed_rows']),
+                   no_stop_of_own=len(report['no_stop_of_own']),
+                   outside_review_modules=len(report['outside_review_modules']),
                    by_command={command: dict(reachable=len(read_command_codes(report, command)), unreviewed_rows=len(
                        set(read_command_codes(report, command)) & set(report['unreviewed_rows'])))
                        for command in report['by_command']})

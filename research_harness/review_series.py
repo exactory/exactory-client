@@ -17,6 +17,8 @@ from .stop_classes import HARNESS_DEFECT_CODES, REPLAN_CODES, describe_terminal
 MAX_WAIT_SECONDS = 30 * 60
 MAX_CONSECUTIVE_REFUSALS = 8
 EXECUTABLE_STATES = frozenset(('run', 'resume', 'continue', 'replace', 'plan', 'record'))
+EXECUTABLE_COMMANDS = frozenset(('review-run', 'review-assignment', 'value-review',
+                                 'review-adjudication', 'problem-openness'))
 
 
 def _emit_json(row):
@@ -199,6 +201,8 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             snapshot, plan = fresh_snapshot, fresh_plan
         elif plan['state'] not in EXECUTABLE_STATES:
             raise ValueError('Unknown review continuation state: ' + plan['state'])
+        if plan['command'] not in EXECUTABLE_COMMANDS:
+            raise ValueError('Unknown executable review continuation command: ' + plan['command'])
         action = _identify_action(plan)
         position = (action, digest(plan['progress']))
         if not waiting and position in executed:
