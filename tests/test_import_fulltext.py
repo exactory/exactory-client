@@ -1,4 +1,4 @@
-"""Supplied originals keep their bytes and reported origin before UC4 admits them."""
+"""Supplied originals keep their bytes and reported origin."""
 
 import copy
 import hashlib
@@ -82,7 +82,8 @@ class ImportFulltextTests(unittest.TestCase):
         for phrase in ('person', 'did not fetch', 'did not verify', 'decisive'):
             self.assertIn(phrase, note)
         for use in source_links.CAPTURE_CLASSES_BY_USE:
-            self.assertFalse(source_links.admits_capture_class(source, use), use)
+            self.assertEqual(source_links.admits_capture_class(source, use), use in (
+                'article_bundle', 'complete_original', 'session_source_delivery', 'openness_packet_source'), use)
         report = cli.status_report(self.store)
         row = report['supplied_texts'][0]
         self.assertEqual((row['version_id'], row['source_id']), (self.payload['identifier'], source['id']))
@@ -110,7 +111,7 @@ class ImportFulltextTests(unittest.TestCase):
                 self.assertEqual(capture['extraction']['media_type'], 'text/plain; charset=utf-8')
                 self.assertEqual(capture['extraction']['text_bytes'], len(self.file.read_bytes()))
 
-    def test_origin_requires_exact_fields_nonempty_text_https_and_zoned_time(self):
+    def test_origin_requires_exact_fields_nonempty_text_public_url_and_zoned_time(self):
         cases = []
         for key in ORIGIN:
             for value in ('', '   ', None, [], 7):
@@ -118,7 +119,7 @@ class ImportFulltextTests(unittest.TestCase):
             cases.append(({name: value for name, value in ORIGIN.items() if name != key}, 'invalid_input'))
         cases.extend([(dict(ORIGIN, extra='unreported'), 'invalid_input'),
                       (dict(ORIGIN, obtained_at='2026-11-12T16:30:00'), 'invalid_input'),
-                      (dict(ORIGIN, obtained_from='http://publisher.example/work'), 'unsafe_url'),
+                      (dict(ORIGIN, obtained_from='ftp://publisher.example/work'), 'unsafe_url'),
                       (dict(ORIGIN, obtained_from='https://localhost/work'), 'unsafe_url'),
                       (dict(ORIGIN, obtained_from='https://user:secret@publisher.example/work'), 'unsafe_url')])
         for origin, code in cases:

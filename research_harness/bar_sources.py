@@ -162,6 +162,8 @@ def prior_context(records, artifacts, links):
         entry = {'version_id': link['version_id'], 'inspection': inspection,
             'origin': {'source_id': link['source_id'], 'artifact_descriptor': descriptor(link['artifact']), 'locator': location},
             'excerpt': artifacts.put(data, media), 'scientific_truth_certified': False}
+        if 'supplied' in context['source']:
+            entry['supplied'] = context['source']['supplied']
         from .review_supplied_evidence import deliver_passage
         result.append(deliver_passage(records, artifacts, entry))
     return result
@@ -555,6 +557,7 @@ def _source(records, artifacts, request, original_rows):
             'original_descriptor': descriptor(source['response']), 'completeness': capture['completeness'],
             'capture_method': source.get('capture_method'), 'origin_verified': source.get('origin_verified'),
             'content_scope': source.get('content_scope'),
+            **({'supplied': source['supplied']} if 'supplied' in source else {}),
             **{key: capture[key] for key in ('kind', 'url', 'html_sha256', 'unit_id', 'bundle_id') if key in capture},
             'delivery_mode': 'extracted-text-only' if text_only else 'exact-bytes',
             'delivered_sha256': [a['sha256'] for a in capture['artifacts']]})
@@ -656,7 +659,13 @@ def _answer_fulltext(records, artifacts, request, original_rows, delivered_bodie
             continue
         if used + end - start > characters_left:
             break
-        deliveries.append(_describe_part(artifacts, request, capture, content, delivery['status'], part, spans))
+        part_delivery = _describe_part(artifacts, request, capture, content, delivery['status'], part, spans)
+        source = records['source'][capture['source_id']]
+        if 'supplied' in source:
+            part_delivery['source_provenance'] = [dict(row,
+                delivered_sha256=[part_delivery['excerpt']['sha256']]) for row in delivery['source_provenance']
+                if row['source_id'] == source['id'] and 'kind' not in row]
+        deliveries.append(part_delivery)
         used += end - start
     if not deliveries:
         return [deferral], 0, True, True
@@ -686,6 +695,12 @@ def continuation(records, artifacts, previous_packet, output, delivered_bodies=N
     answers, session['allowances'] = review_excerpts.answer_passages(
         records, artifacts, [request for request in requested if request['kind'] == 'passage'], session['allowances'],
         protocol=session['protocol'])
+    for answer in answers:
+        if answer['status'] == 'delivered':
+            capture = review_excerpts.find_fulltext_capture(records, answer['request']['version_id'])
+            source = records['source'][capture['source_id']] if capture is not None else {}
+            if 'supplied' in source:
+                answer['supplied'] = source['supplied']
     answered = {answer['request']['id']: answer for answer in answers}
     characters_left, fulltexts = review_excerpts.TURN_FULLTEXT_CHARACTERS, {}
     for request in requested:

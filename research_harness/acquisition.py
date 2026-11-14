@@ -695,7 +695,7 @@ def validate_supplied_origin(origin):
     text(origin['saved_by'], 'Who saved the full text')
     text(origin['statement'], 'How the full text was saved')
     timestamp(origin['obtained_at'])
-    return dict(origin, obtained_from=safe_url(origin['obtained_from']))
+    return dict(origin, obtained_from=safe_url(origin['obtained_from'], allow_http=True))
 
 
 def read_supplied_fulltext(root, file):

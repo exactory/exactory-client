@@ -5429,12 +5429,15 @@
       "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
       "class": "supplied full-text provenance",
       "summary": "T3: a browser-saved full text could not become a capture after automated publisher access failed.",
-      "fixed_in": "open",
-      "expected": "Import the saved PDF or UTF-8 text with its original bytes, SHA-256, reported origin and unverified supplied_file label; status lists it. UC3 adds no admission at the UC2 uses. UC4 completes bundle and review delivery before the two units release together.",
+      "fixed_in": "0.90.0",
+      "expected": "Import a saved PDF or UTF-8 text with its bytes, SHA-256 and reported origin; admit its full reading at the four R31 uses, retaining the unverified label and note in chain units, session deliveries, export manifests and post records. A fetched main body takes priority; an identical original preserves reading credit.",
       "test_kind": "real_shape",
       "tests": [
         "test_import_fulltext.ImportFulltextTests.test_browser_saved_pdf_after_403_retains_original_origin_and_unverified_class",
-        "test_import_fulltext.ImportFulltextTests.test_record_check_requires_the_retained_origin_fixed_note_and_capture_labels"
+        "test_import_fulltext.ImportFulltextTests.test_record_check_requires_the_retained_origin_fixed_note_and_capture_labels",
+        "test_capture_classes.CaptureClassTests.test_supplied_capture_is_admitted_at_the_four_uses_and_never_elided",
+        "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post",
+        "test_supplied_eligibility.SuppliedEligibilityTests.test_fetched_main_replaces_supplied_and_identical_original_keeps_reading_credit"
       ]
     },
     {
@@ -5634,6 +5637,19 @@
         "test_search_completes.SearchCompletionExportTests.test_two_query_repair_binds_only_later_search_and_delivers_notice_to_v6",
         "test_search_completes.SearchCompletionTests.test_rows_refuses_invalid_row_lost_to_a_smaller_bound_or_changed_order",
         "test_search_completes.SearchCompletionTests.test_only_bound_completers_remove_transitive_ancestors_and_explicit_binding_is_allowed"
+      ]
+    },
+    {
+      "id": "openness-web-source-supplied-full-reading",
+      "record": "20261114000100-openness-review-provisional-flag-and-web-sources",
+      "class": "supplied web full-text provenance",
+      "summary": "T3: repository Markdown and question pages could not be bound as full readings; an HTTP-only reported origin was refused.",
+      "expected": "Supply the local UTF-8 bytes with their HTTP or HTTPS reported origin and checksum, bind a full reading to a search, and deliver its origin and note without fetching the reported address.",
+      "fixed_in": "0.90.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_supplied_eligibility.SuppliedEligibilityTests.test_supplied_reading_journey_keeps_origin_in_chain_session_export_and_post",
+        "test_supplied_eligibility.SuppliedEligibilityTests.test_http_reported_origins_keep_url_guards_and_never_relax_fetch_urls"
       ]
     }
   ]

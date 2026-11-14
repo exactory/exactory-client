@@ -667,6 +667,13 @@ def build_post_files(records, artifacts, *, include_references=False, citation_p
     return files
 
 
+def describe_cited_supplied_texts(records):
+    """Label the supplied originals behind the ordinary public citations."""
+    from .problem_evidence import collect_readings
+    from .source_links import describe_supplied_readings
+    return describe_supplied_readings(records, collect_readings(records))
+
+
 def build_projection(records, artifacts, *, include_references=False):
     statement = find_current_statement(records)
     decision = find_latest(records, "problem_decision")
@@ -703,6 +710,9 @@ def build_projection(records, artifacts, *, include_references=False):
                 "files": {name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())}}
     if include_references:
         manifest["schema"] = _REFERENCE_EXPORT_SCHEMA
+    supplied = describe_cited_supplied_texts(records)
+    if supplied:
+        manifest['supplied_texts'] = supplied
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     return files, manifest
 
@@ -799,6 +809,9 @@ def build_override_projection(records, artifacts, override, *, include_reference
         manifest.update(citation_metadata, schema=_OVERRIDE_CITATIONS_EXPORT_SCHEMA)
     if authority is not None:
         manifest["authority"] = authority
+    supplied = projected.get('supplied_texts', []) if projected is not None else describe_cited_supplied_texts(records)
+    if supplied:
+        manifest['supplied_texts'] = supplied
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     return files, manifest
 
@@ -911,4 +924,6 @@ def prepare_posted(records, artifacts, value, recorded_revision=None, *, source_
     if type(recorded_revision) is not int or recorded_revision < 1:
         raise ResearchError('invalid_input', 'A new post needs its local recording revision')
     record['recorded_revision'] = recorded_revision
+    if 'supplied_texts' in manifest:
+        record['supplied_texts'] = manifest['supplied_texts']
     return [immutable_record(records, "problem_post", identifier, record)], record

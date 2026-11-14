@@ -440,6 +440,8 @@ SEARCH_COMPLETION_SENTENCE = (' For completes, the harness checked matching prof
     'or prefix coverage where earlier pages do not join, every returned row and found work, reasons for changed '
     'material judgments and a closure statement for every earlier gap; completed searches omitted from this packet '
     'contribute no gaps to this review, and closed_gaps is the author\'s statement of how the gaps were closed.')
+SUPPLIED_ORIGIN_SENTENCE = (' A full-text unit with origin contains a text saved by a person. The harness did not '
+    'fetch it or verify its reported origin. Its full reading counts; state when a decisive judgment rests on it.')
 RECORD_ALLOWANCE_SENTENCE = (' The third allowance, record, counts serialized characters of every retained excerpt, '
     'passage answer and extra final reading turn, including fields and escapes.')
 RECORD_PASSAGE_LIMIT_MESSAGE = 'The record allowance cannot retain another final reading turn and a delivered passage; return the finding.'
@@ -447,12 +449,12 @@ RECORD_NOT_RETAINED_SENTENCE = (' An entry beyond the remaining record total is 
     'allowances.record.not_retained and is absent from later inputs; it uses no other allowance.')
 PROMPTS[PROTOCOL_V6] = {
     'reading': READING_PROMPT + SEARCH_READING_RULE + V6_READING_PARAGRAPH + SUPPORTING_READING_SENTENCE
-               + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE
+               + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE
                + RECORD_ALLOWANCE_SENTENCE + RECORD_NOT_RETAINED_SENTENCE,
     'final': (FINAL_PROMPT + FINAL_PROGRESS_RULE + SEARCH_FINAL_RULE).replace(
         'native result review described above', 'finding described above').replace(
         'native result review', 'finding described above') + V6_FINAL_PARAGRAPH + SUPPORTING_READING_SENTENCE
-        + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE,
+        + SEARCH_FIELD_GUIDE_TEXT + SEARCH_COMPLETION_SENTENCE + SUPPLIED_ORIGIN_SENTENCE,
 }
 
 
@@ -543,6 +545,9 @@ def list_reading_texts(records, native, *, artifacts=None, review=None):
                     and reference['sha256'] in carried):
                 rows[version, reference['sha256']] = {'kind': 'fulltext', 'version_id': version,
                                                       'text_sha256': reference['sha256'], 'artifact': reference}
+                source = records['source'][capture['source_id']]
+                if 'supplied' in source:
+                    rows[version, reference['sha256']]['origin'] = source['supplied']
     return sorted(rows.values(), key=lambda row: (ranks[row['version_id']], row['version_id'], row['text_sha256']))
 
 
@@ -594,6 +599,9 @@ def list_math_text_rows(records, native, *, artifacts=None, review=None):
                                 {'reading_id': reading['id'], 'version_id': reading['version_id']})
         rows[reading['version_id'], texts[0]['sha256']] = {'kind': 'fulltext', 'version_id': reading['version_id'],
                                                            'text_sha256': texts[0]['sha256'], 'artifact': texts[0]}
+        source = records['source'][bundle['source_id']]
+        if 'supplied' in source:
+            rows[reading['version_id'], texts[0]['sha256']]['origin'] = source['supplied']
     return [rows[key] for key in sorted(rows)]
 
 

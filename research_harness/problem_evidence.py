@@ -786,10 +786,13 @@ def project_override_citations(records, artifacts, spec):
                   omitted=max(0, len(groups) - POST_CITATION_LIMIT))
     uncited = [{"work_id": work_id, "search_ids": sorted(judgment["search_ids"])}
                for work_id, judgment in sorted(judgments.items()) if not judgment["reading_ids"]]
+    from .source_links import describe_supplied_readings
+    supplied = describe_supplied_readings(records, selected[:POST_CITATION_LIMIT])
     return {"citations": [project_citations(records, artifacts, readings=[row])[0] for row in selected],
             "references": [project_citations(records, artifacts, readings=[row], for_lookup=True)[0]
                            for row in selected[:POST_CITATION_LIMIT]],
-            "citation_counts": counts, "uncited_relevant_works": uncited}
+            "citation_counts": counts, "uncited_relevant_works": uncited,
+            **({'supplied_texts': supplied} if supplied else {})}
 
 
 def compute_override_source_digest(records):

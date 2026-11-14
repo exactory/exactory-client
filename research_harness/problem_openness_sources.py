@@ -118,7 +118,8 @@ def build_delivery(records, artifacts, packet, *, review=None):
             source = captured_source(records, artifacts, row["source_id"])
             representations.append(dict(row, captured_at=source.get("captured_at"),
                 capture_method=source["capture_method"], origin_verified=source["origin_verified"],
-                observed_identifier=source.get("observed_identifier")))
+                observed_identifier=source.get("observed_identifier"),
+                **({'supplied': source['supplied']} if 'supplied' in source else {})))
         sources.append({"version_id": version, "selected_source_id": selected["source_id"],
             "selected_text_sha256": selected_text, "selected_original_sha256": selected["original_descriptor"]["sha256"],
             "capture_digest": _capture_digest(records["work"][version], records),

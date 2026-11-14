@@ -38,7 +38,7 @@ from .components import is_component
 from .evidence import digest
 from .identities import family_versions, normalize_identifier, select_family
 from .operations import fields, iso_date, prepared_mutation, profile_name, strings
-from .source_links import exact_work, fulltext_capture
+from .source_links import admits_capture_class, exact_work, fulltext_capture
 
 
 def obligation(code, explanation, **affected):
@@ -172,8 +172,12 @@ def main_captures(records, work, target=None, *, bundle_index=None):
     from .capture_selection import find_capture_selections
     choices = {choice["original_sha256"]: choice["source_id"]
                for choice in find_capture_selections(records, work["id"])}
-    for capture in work["fulltexts"]:
-        if is_component(capture) or capture["availability"] != "available" or capture["source_id"] in supplements:
+    available = [capture for capture in work['fulltexts'] if not is_component(capture)
+                 and capture['availability'] == 'available' and capture['source_id'] not in supplements]
+    fetched = any(admits_capture_class(records.get('source', {}).get(capture['source_id'], {}), 'complete_original')
+                  and 'supplied' not in records['source'][capture['source_id']] for capture in available)
+    for capture in available:
+        if fetched and 'supplied' in records.get('source', {}).get(capture['source_id'], {}):
             continue
         if target and target.get("id") == work["id"] and capture["original"]["sha256"] != target.get("sha256"):
             continue

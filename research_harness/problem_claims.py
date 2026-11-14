@@ -314,6 +314,14 @@ def record_post_external(store, payload, *, expected_revision, request_id):
             authority = dict(source="recording", override_ids=assessment["override_ids"],
                              conditions=assessment["conditions"])
         record["authority"] = authority
+        from .problem_delivery import describe_cited_supplied_texts
+        from .problem_export_history import find_export_supplied_texts
+        supplied = (find_export_supplied_texts(store.root, records, value['export_digest'], statement_digest)
+                    if 'export_digest' in value else None)
+        if supplied is None:
+            supplied = describe_cited_supplied_texts(records)
+        if supplied:
+            record['supplied_texts'] = supplied
         return [immutable_record(records, "problem_post", value["id"], record)], record
 
     return prepared_mutation(store, "problem.post_external", payload, prepare,

@@ -40,10 +40,10 @@ from .storage import _canonical
 TEXT_KINDS = ("text", "span")
 EXCERPT_LENGTH = 200
 CAPTURE_CLASSES_BY_USE = MappingProxyType({
-    'article_bundle': (('http', True),),
-    'complete_original': (('http', True), ('http_range_v1', True)),
-    'session_source_delivery': (('http', True), ('http_range_v1', True)),
-    'openness_packet_source': (('http', True),),
+    'article_bundle': (('http', True), ('supplied_file', False)),
+    'complete_original': (('http', True), ('http_range_v1', True), ('supplied_file', False)),
+    'session_source_delivery': (('http', True), ('http_range_v1', True), ('supplied_file', False)),
+    'openness_packet_source': (('http', True), ('supplied_file', False)),
     'complete_source_route': (('http', True), ('http_range_v1', True)),
     # review_transport.py keeps its own check because its bytes identify routes.
     'html_original_elision': (('http', True),),
@@ -54,6 +54,21 @@ def admits_capture_class(source, use):
     """Test capture provenance against the classes admitted for this use."""
     return any(source.get('capture_method') == method and source.get('origin_verified') is verified
                for method, verified in CAPTURE_CLASSES_BY_USE[use])
+
+
+def describe_supplied_readings(records, readings):
+    """Retain the reported origins of the supplied originals used by full readings."""
+    rows = {}
+    for reading in readings:
+        bundle = records.get('source_bundle', {}).get(reading.get('bundle_id'))
+        if reading['depth'] != 'fulltext' or bundle is None:
+            continue
+        source = records['source'][bundle['source_id']]
+        if 'supplied' in source:
+            key = (reading['version_id'], source['id'])
+            rows[key] = dict(version_id=reading['version_id'], source_id=source['id'],
+                             original_sha256=bundle['original_sha256'], supplied=source['supplied'])
+    return [rows[key] for key in sorted(rows)]
 
 
 def span_locator(content, start, end, excerpt_length=EXCERPT_LENGTH):

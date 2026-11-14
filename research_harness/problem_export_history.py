@@ -78,6 +78,8 @@ def read_problem_export(directory, records):
         return None
     base_fields = {'statement_id', 'statement_digest', 'area', 'formal_statement_language', 'files',
                    'decision_id', 'problem_evidence_digest'}
+    if 'supplied_texts' in manifest:
+        base_fields.add('supplied_texts')
     expanded_citations = manifest.get('schema') == _OVERRIDE_CITATIONS_EXPORT_SCHEMA
     include_references = expanded_citations or manifest.get('schema') == _REFERENCE_EXPORT_SCHEMA
     if include_references:
@@ -181,6 +183,15 @@ def find_export_authority(store_root, records, export_digest, statement_digest):
                 and 'authority' in manifest):
             return dict(source='export', export_digest=export_digest,
                         **{key: manifest['authority'][key] for key in ('override_ids', 'conditions')})
+    return None
+
+
+def find_export_supplied_texts(store_root, records, export_digest, statement_digest):
+    """Read the supplied-text labels of the exact export that was posted, even after retirement."""
+    from .problem_delivery import compute_export_digest
+    for manifest, files in iterate_problem_exports(store_root, records):
+        if manifest['statement_digest'] == statement_digest and compute_export_digest(files) == export_digest:
+            return manifest.get('supplied_texts', [])
     return None
 
 

@@ -462,6 +462,10 @@ def list_minimum_notices(minimum, records, artifacts):
                             incomplete_responses=receipt["incomplete_responses"],
                             excluded_item_count=receipt["excluded_item_count"], excluded_items=receipt["excluded_items"],
                             warnings=receipt["warnings"]))
+    from .source_links import describe_supplied_readings
+    bound = set(minimum['reading_digests'])
+    notices.extend(dict(kind='supplied_text', **row) for row in describe_supplied_readings(records,
+        [reading for reading in records.get('reading', {}).values() if digest(reading) in bound]))
     return notices
 
 
