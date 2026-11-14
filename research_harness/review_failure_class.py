@@ -383,13 +383,28 @@ def list_turn_assignments(records, assignment):
     return result
 
 
-def plan_output_replacement(records, artifacts, assignment):
+def plan_output_replacement(records, artifacts, assignment, *, allow_single=True):
     """Prove the existing handler produces a smaller request that passes preflight."""
     from .review_staged_protocol import ControllerArtifacts
     from . import review_preflight
     from .review_problem_parts import _measure
 
     packet = protocol._read_json(artifacts, assignment['packet'])
+    from .review_route_capacity import describe_task_kind
+    if describe_task_kind(assignment['role'], packet) == 'single':
+        if not allow_single:
+            return None
+        from .review_single_request import build_output_replacement
+        staged = ControllerArtifacts(artifacts)
+        try:
+            replacement = build_output_replacement(records, staged, assignment)
+        except ResearchError:
+            return None
+        if replacement is None:
+            return None
+        return dict(state='replace', code=OUTCOME_CODES['output_over_cap'], handler='single_request_series',
+                    unit_characters=replacement['packet'][parts.KEY]['unit_characters'],
+                    context=replacement['context'], preflight=replacement['preflight'])
     is_read = parts.find_kind(packet) == 'read'
     is_repair = repair.applies(assignment, packet)
     if not is_read and not is_repair:
@@ -460,7 +475,7 @@ def plan_scheduled_retry(attempt, failure_count, reset_at=None):
 
 def plan_capacity_recovery(records, artifacts, assignment, outcome) -> RecoveryResult:
     """Adapt the existing smaller-request proof to D2's shared recovery result."""
-    replacement = (plan_output_replacement(records, artifacts, assignment)
+    replacement = (plan_output_replacement(records, artifacts, assignment, allow_single=outcome == 'output_over_cap')
                    if outcome in ('output_over_cap', 'timeout', 'provider_refused') else None)
     if replacement is not None and replacement['state'] == 'replace':
         payload = {key: copy.deepcopy(assignment[key]) for key in

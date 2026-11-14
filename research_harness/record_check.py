@@ -409,7 +409,8 @@ def check_acceptance_reviews(records, artifacts):
         if assignment is not None:
             if 'reading_chain' in assignment:
                 final = openness_reading.find_final_assignment(records, artifacts, assignment_id)
-            elif review_parts.KEY in assignment:
+            elif (review_parts.KEY in assignment
+                  or (protocol.find_replacement(records, assignment) or {}).get('capacity_replacement_of') == assignment_id):
                 final = review_parts_native.find_final_assignment(records, artifacts, assignment_id)
         observed = protocol.assignment_state(records, artifacts, final['id']) if final is not None else {}
         key = {name: link[name] for name in ('attack_root', 'objective_id', 'acceptance_digest')}

@@ -929,11 +929,11 @@ def select_task_limits(route, profile, kind, *, targets=1, card_minimum=4000, ca
     frame_limit = frame_policy.get('frame_limit')
     if frame_limit is not None and frame_characters > frame_limit:
         borrowing = False
-    if not usable and kind != 'reading' and borrowing:
+    if not usable and kind not in ('reading', 'single') and borrowing:
         usable = [row for row in profile['rows'] if row['kind'] == 'reading' and row['task_level'] != 'unmeasured' and (row['attempts'] >= 4) and (row['completed_attempts'] >= 4 and row['largest_thinking_tokens'] is not None or row['at_or_over_limit'] > 0)]
         borrowed = 'reading'
     output_limit = describe_route_capacity(route)['output_tokens']['value']
-    text_room = describe_route_capacity(route)['input_text_characters']['value']
+    text_room = describe_route_capacity(route, profile)['input_text_characters']['value']
     candidates = []
     for level in levels:
         task_characters = frame_characters + level + (carried_characters if profile.get('frame_policy', {}).get('count_carried_state', COUNT_CARRIED_STATE) else 0)

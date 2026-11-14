@@ -101,6 +101,9 @@ class _CheckingStore:
         if operation == 'review.assignment' and 'reading_chain_admission' in result:
             response.update({key: result[key] for key in
                 ('reading_chain_admission', 'capacity_forecast', 'capacity_warning', 'diagnostics')})
+        if operation == 'review.assignment' and result.get('packet') is not None:
+            from .review_single_request import describe_assignment_delivery
+            response['review_delivery'] = describe_assignment_delivery(self._records, self._artifacts, result)
         raise _CheckComplete(response)
 
 

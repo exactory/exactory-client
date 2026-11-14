@@ -528,6 +528,17 @@ def describe_review_receipt(store, command, payload, receipt):
             from .review_route_capacity import describe_assignment_capacity
             receipt = dict(receipt, **describe_assignment_capacity(records, store.build_artifact_store(), assignment))
         warning = describe_assignment_warning(records, payload['id'], artifacts=store.build_artifact_store())
+        from .review_single_request import describe_assignment_delivery
+        try:
+            delivery = describe_assignment_delivery(records, store.build_artifact_store(), assignment)
+        except ResearchError:
+            # Advisory delivery details do not prevent replay of a recorded receipt.
+            return dict(receipt, capacity_warning=warning) if warning is not None else receipt
+        if 'capacity_warning' in delivery:
+            extra = delivery['capacity_warning']['output']
+            output = dict(extra, **(warning or {}).get('output', {}))
+            output.update(above_start=True, message=extra['message'])
+            warning = dict(warning or {}, output=output)
         return dict(receipt, capacity_warning=warning) if warning is not None else receipt
     routes = records.get('review_route', {})
     route = routes.get(payload['id'], payload) if command == 'review-route' else routes[payload['route_id']]

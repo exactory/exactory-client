@@ -337,7 +337,9 @@ def requires_parts(records, artifacts, value, route, packet, prompt, history, sl
     if not _supports_parts_route(records, value, route, packet):
         return False
     ordinary = transport.request_body(route, prompt['text'], packet, history)
-    return (has_over_cap_attempt(records, value, slot_id, packet.get('context_repair', {}).get('assignment_id'))
+    from .review_single_request import describe_task_entry
+    return (describe_task_entry(records, route, value['role'], packet, ordinary) is not None
+            or has_over_cap_attempt(records, value, slot_id, packet.get('context_repair', {}).get('assignment_id'))
             or value['role'] == 'adjudicator' and packet.get('context_repair') is not None
             and not packet.get('staged_review')
             or _measure(route, ordinary) > transport.local_input_limit(route)
@@ -354,6 +356,9 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
         return packet
     prior = records.get('review_assignment', {}).get(value.get('context', {}).get('prior_assignment_id'))
     continuing = prior is not None and prior.get(parts.KEY, {}).get('adapter') == 'context_repair'
+    from .review_single_request import describe_task_entry
+    entry = (None if continuing else describe_task_entry(records, route, value['role'], packet,
+        transport.request_body(route, prompt['text'], packet, history)))
     if not continuing and not requires_parts(records, artifacts, value, route, packet, prompt, history, slot_id):
         return packet
     if continuing:
@@ -420,15 +425,27 @@ def prepare_packet(records, artifacts, value, route, packet, prompt, history, *,
     series_id = observations[0]['packet'][parts.KEY]['series_assignment_id'] if observations else value['id']
     replacement = parts.find_failed_replacement(records, artifacts, value, 'context_repair', series_key,
         slot_id, value.get('context', {}).get('prior_assignment_id'), route['configuration']['max_output_tokens'])
+    if continuing:
+        entry = observations[0]['packet'][parts.KEY].get('entry') if observations else None
+    read_allowance = None
+    if entry is not None and not continuing:
+        from .review_route_capacity import read_output_profile, select_task_limits
+        read_allowance = select_task_limits(route, read_output_profile(records, route), 'read')['material_allowance']
 
     def measure(candidate):
         turn_prompt = parts.build_turn_prompt(value['role'], base_prompt_parameters, candidate[parts.KEY])
-        return _measure(route, transport.request_body(route, turn_prompt['text'], candidate, [], order=()))
+        request = transport.request_body(route, turn_prompt['text'], candidate, [], order=())
+        measured = _measure(route, request)
+        if entry is not None:
+            from .review_single_request import measure_parts_request
+            measured = measure_parts_request(records, route, request, measured)
+        return measured
 
     planned = parts.plan_turn(packet, inventory, observations, series_id=series_id,
         input_limit=transport.local_input_limit(route), measure=measure,
         output_tokens=route['configuration']['max_output_tokens'], replacement=replacement,
-        inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key)
+        inventory_reference=inventory_reference, logical_reference=logical_reference, series_key=series_key,
+        entry=entry, read_allowance=read_allowance)
     planned = prioritize_fill(packet, inventory, planned, measure, transport.local_input_limit(route))
     for entry in planned.get('evidence', []):
         if entry.get('segment'):

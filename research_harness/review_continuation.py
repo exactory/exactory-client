@@ -35,7 +35,7 @@ def _find_parent(records, assignment):
     # different phase, not another turn of the result chain.
     if history_parent.get('role') != assignment['role']:
         history_id = None
-    return (context.get('prior_assignment_id') or history_id
+    return (assignment.get('capacity_replacement_of') or context.get('prior_assignment_id') or history_id
             or (context.get('context_repair') or {}).get('assignment_id')
             or (context.get('staged_upgrade') or {}).get('assignment_id'))
 
@@ -492,7 +492,9 @@ def _plan_head(records, artifacts, assignment):
         if result['state'] == 'stop' and result.get('code') == 'review_route_runtime_stale':
             return plan_route_handoff(assignment)
         if result['state'] == 'replace':
-            if assignment['role'] == 'native_math' and not assignment.get('context', {}).get('prior_assignment_id'):
+            single_replacement = result.get('details', {}).get('recovery', {}).get('details', {}).get('handler') == 'single_request_series'
+            if (not single_replacement and assignment['role'] == 'native_math'
+                    and not assignment.get('context', {}).get('prior_assignment_id')):
                 from .native_review import load_packet
                 packet = load_packet(artifacts, assignment['context']['native_packet'], assignment['reviewer_id'])
                 common = openness_reading.is_openness_packet(packet)
@@ -500,7 +502,7 @@ def _plan_head(records, artifacts, assignment):
                             code='native_review_attestation_required',
                             details=dict(assignment_id=assignment['id'],
                                          **(dict(kind='problem-openness') if common else {})))
-            if (assignment['role'] in bar_sources.ROLES
+            if (not single_replacement and assignment['role'] in bar_sources.ROLES
                     and not assignment.get('context', {}).get('prior_assignment_id')
                     and not assignment.get('context', {}).get('context_repair')
                     and not (initial and protocol._initial_size_failure(

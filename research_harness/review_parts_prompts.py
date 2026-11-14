@@ -80,6 +80,11 @@ PARTS_COMMON = (
     'output that names a handle the inventory does not hold; two refusals exhaust the assignment.'
 )
 
+# Only capacity-entry templates use this preamble; stored input-entry prompts keep PARTS_COMMON.
+PARTS_CAPACITY_COMMON = PARTS_COMMON.replace(
+    'The evidence of this review does not fit one input of this route, so the review runs as a series of turns',
+    'The output profile or an attempt at the output limit requires a smaller task, so this review runs as a series of turns')
+
 READ = (
     'This is a read turn. For every unit of review_parts.delivered_units, read all the content that this turn '
     'delivers for it: its item or its item segments, and its bodies or body segments. Interpret that content against '

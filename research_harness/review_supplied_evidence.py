@@ -20,6 +20,8 @@ PROMPT = (
 
 def find_scientific_predecessor(assignment):
     """Follow a fixed scientific slot across continuations, repairs and upgrades."""
+    if assignment.get('capacity_replacement_of') is not None:
+        return assignment['capacity_replacement_of']
     context = assignment.get('context', {})
     repair = context.get('context_repair')
     if isinstance(repair, dict):

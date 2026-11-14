@@ -886,10 +886,14 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
         base = canonical_prompt(role, **base_parameters)
         answer = kind == 'final' and bool(review_parts.get('answer'))
         binding = dict(adapter=adapter, kind=kind, protocol=parts.PROTOCOL, answer=answer)
+        entry = review_parts.get('entry')
+        if entry is not None:
+            binding['entry'] = entry
         descriptor = dict(parameters=base_parameters, template_id=base['template_id'],
                           rendered_prompt_hash=base['rendered_prompt_hash'])
         parameters = dict(base['parameters'], base_prompt=descriptor, review_parts=binding)
-        sections = [base['text'], texts.PARTS_COMMON, texts.PROMPTS[kind]]
+        sections = [base['text'], texts.PARTS_CAPACITY_COMMON if entry is not None else texts.PARTS_COMMON,
+                    texts.PROMPTS[kind]]
         if kind == 'final':
             if answer:
                 sections.append(texts.FINAL_ANSWER)
@@ -897,6 +901,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
             sections.append(final_prompt(role, base_parameters) if callable(final_prompt) else final_prompt)
         rendered = '\n\n'.join(sections)
         variant = 'final-answer' if answer else kind
+        if entry is not None:
+            variant += '-capacity-v1'
         return _build_prompt(parts.PROTOCOL + '/' + adapter + '/' + variant,
                              rendered, parameters,
                              COMMON_VERSION if common_version is None else common_version)
@@ -2726,14 +2732,19 @@ def _repair_packet(records, artifacts, value, repair):
     return packet
 
 
+def has_pending_invocation(records, assignment_id):
+    """Whether an assignment has an invocation without its recorded attempt."""
+    attempt_ids = records.get('review_attempt', {})
+    return any(invocation['assignment_id'] == assignment_id and invocation['id'] not in attempt_ids
+               for invocation in read_filtered_records(records, 'review_invocation', assignment_id=assignment_id).values())
+
+
 def has_ended_without_output(records, assignment_id):
     """Whether an assignment ran and every recorded attempt ended without a completed output, with no invocation still
     pending: such a turn, for example one stopped at the route timeout, does not hold its session."""
     attempts = [attempt for attempt in read_filtered_records(records, 'review_attempt', assignment_id=assignment_id).values()
                 if attempt['assignment_id'] == assignment_id]
-    attempt_ids = records.get('review_attempt', {})
-    pending = any(invocation['assignment_id'] == assignment_id and invocation['id'] not in attempt_ids
-                  for invocation in read_filtered_records(records, 'review_invocation', assignment_id=assignment_id).values())
+    pending = has_pending_invocation(records, assignment_id)
     return bool(attempts) and not pending and all(attempt['status'] != 'completed' for attempt in attempts)
 
 
@@ -2769,6 +2780,12 @@ def is_dead_assignment(records, assignment):
 
 def find_replacement(records, assignment):
     """Find a later replacement of the same parent or initial slot."""
+    capacity_replacement = next((other for other in read_filtered_records(
+        records, 'review_assignment', role=assignment['role'],
+        slot_id=assignment.get('slot_id', assignment['id'])).values()
+        if other.get('capacity_replacement_of') == assignment['id']), None)
+    if capacity_replacement is not None:
+        return capacity_replacement
     parent = assignment.get('context', {}).get('prior_assignment_id')
     if parent is None:
         if (assignment['role'] != 'adjudicator'
@@ -3059,6 +3076,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
             intent = _payload(_get(records, 'research_intent', d['intent_id']))
             if normalized_text(value['reviewer_id']) in {normalized_text(a) for a in intent.get('authors', [])}:
                 raise ResearchError('review_not_independent', 'An intent author cannot provide an independent assessment')
+        if 'capacity_replacement' in value['context']:
+            from .review_single_request import prepare_replacement
+            return prepare_replacement(records, artifacts, value, expected_revision + 1)
         if 'controller_assignment_id' in value['context']:
             from .review_staged_protocol import prepare_child
             return prepare_child(records, artifacts, value, expected_revision + 1)
@@ -3476,6 +3496,10 @@ def record_assignment(store, payload, *, expected_revision, request_id):
         if review_parts.find_kind(packet) is not None:
             record[review_parts.KEY] = {key: packet[review_parts.KEY][key] for key in
                 ('protocol', 'adapter', 'kind', 'series_assignment_id', 'turn', 'inventory_digest')}
+            if 'replaces_assignment_id' in packet[review_parts.KEY]:
+                origin = packet[review_parts.KEY]['replaces_assignment_id']
+                record[review_parts.KEY]['replaces_assignment_id'] = origin
+                record['slot_id'] = context_repair.slot_id(records, _get(records, 'review_assignment', origin))
             record['review_parts_plan'] = review_parts.describe_plan(packet)
         if not controller and review_parts.find_kind(packet) is None and route['adapter'] != 'codex_cli_visual_v1':
             previous = records.get('review_assignment', {}).get(history_assignment_id)

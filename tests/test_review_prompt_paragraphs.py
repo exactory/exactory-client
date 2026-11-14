@@ -466,6 +466,16 @@ class ParagraphPathTests(ResultPartsCase):
 class CurrentParagraphPathTests(ParagraphPathTests):
     use_parts_v2 = True
 
+    def setUp(self):
+        super().setUp()
+        from research_harness import review_route_capacity
+        from test_review_output_profile import build_row
+        # Ordinary paragraph paths fit their start; oversized cases still force input parts.
+        profile = patch.object(review_route_capacity, 'read_profile_priors', return_value=[
+            dict(build_row(level=None, kind='single', thinking=1), largest_output_tokens=12)])
+        profile.start()
+        self.addCleanup(profile.stop)
+
     def output(self, assignment):
         from review_parts_fixtures import make_output
         return make_output(self.packet(assignment))
