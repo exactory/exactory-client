@@ -1,4 +1,4 @@
-"""Direction coverage comes from each reviewer's actual deciding input."""
+"""Direction coverage comes from the authenticated actual turns of each session."""
 
 import json
 from unittest.mock import patch
@@ -77,7 +77,7 @@ class DirectionActualDeliveryTests(StrategyCase):
         request = json.loads(self.artifacts.read(attempt['request']))
         return saved, packets_from_request(request)
 
-    def test_elided_decisive_passage_is_unassessed_for_its_reviewer(self):
+    def test_earlier_actual_turn_supplies_a_decisive_passage_lost_from_replay(self):
         def omit_current_bodies(packet):
             packet['evidence'] = [entry for entry in packet['evidence'] if entry['artifact'] == self.evidence]
 
@@ -90,13 +90,9 @@ class DirectionActualDeliveryTests(StrategyCase):
         self.assertEqual(len(actual), 1)
         self.assertTrue(all(not entry.get('content') for packet in actual
                             for entry in packet['evidence'] if entry['artifact'] == excerpt))
-        obligations = self.assess_reviews()
-        self.assertEqual([(row['code'], row['review_id'], row['missing']) for row in obligations],
-                         [('direction_evidence_unassessed', 'slate-a', [])])
-        self.assertEqual(obligations[0]['reading_ids'],
-                         sorted(row['id'] for row in saved['direction_evidence']['readings']))
+        self.assertEqual(self.assess_reviews(), [])
 
-    def test_elided_history_cannot_restore_direction_bindings(self):
+    def test_earlier_actual_turn_supplies_direction_bindings_lost_from_replay(self):
         def omit_bindings(packet):
             for key in ('claim', 'search', 'standards', 'grand_challenge'):
                 packet['direction_evidence'].pop(key)
@@ -110,11 +106,7 @@ class DirectionActualDeliveryTests(StrategyCase):
         for key in ('claim', 'search', 'standards', 'grand_challenge'):
             self.assertNotIn(key, saved['direction_evidence'])
             self.assertIsNotNone(historical['direction_evidence'][key])
-        obligations = self.assess_reviews()
-        self.assertEqual([(row['code'], row['review_id'], row['missing'], row['reading_ids'])
-                          for row in obligations],
-                         [('direction_evidence_unassessed', 'slate-a',
-                           ['claim', 'grand_challenge', 'search', 'standards'], [])])
+        self.assertEqual(self.assess_reviews(), [])
 
     def test_current_delivery_keeps_direction_coverage_after_history_elision(self):
         self.reviewed_dossier()

@@ -264,10 +264,8 @@ def collect_delivery_packets(records, artifacts, assignment, packets, series):
 
 def read_review_citation_delivery(records, artifacts, assignment, *, attempt=None):
     """Read authenticated citation history independently of current scientific readiness."""
-    from .review_delivered_evidence import read_attempt_delivery, read_selected_delivery
-    if assignment.get('staged_review', {}).get('kind') == 'controller':
-        return read_selected_delivery(records, artifacts, assignment['id'], require_ready=False)['citation_history']
-    return read_attempt_delivery(records, artifacts, assignment, attempt)['citation_history']
+    from .review_delivered_evidence import read_chain_delivery
+    return read_chain_delivery(records, artifacts, assignment, attempt=attempt)
 
 
 def find_review_undelivered_references(records, artifacts, evidence, delivery, *, require_complete_artifacts=False):

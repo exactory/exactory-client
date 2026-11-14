@@ -19,6 +19,17 @@ PARAMETER = 'problem_paragraphs'
 CONDITIONS = 'problem_prompt_conditions'
 FORMING_RECORD_KINDS = ('forming_call', 'form_outcome')
 INVALID_CONTEXT = 'Use admitted problem prompt paragraph versions once, in their registered order and roles'
+DELIVERY_NOTICE_KEY = 'delivery_notice'
+DELIVERY_NOTICE_PROTOCOL = 'exactory-review-delivery-notice-v1'
+# Placeholder for the writer's pass. A text change requires a new registered version.
+DELIVERY_NOTICE_PROMPT = (
+    '\n\nDelivery notice (exactory-review-delivery-notice-v1). '
+    'delivery_notice.sources lists source bodies delivered in earlier authenticated turns of this session '
+    'that this request no longer holds. Each row names the version, depth, text digest, delivering turns '
+    'with their missing-character counts, '
+    'missing characters and number of verified excerpts retained for that text. '
+    'Those bodies were delivered for reading in the named turns. Cite them through the verified excerpts '
+    'in reviewer_excerpts; request a passage if the retained excerpts do not contain what you need.')
 
 
 def _has_carry(role, packet):
@@ -47,6 +58,10 @@ def _has_replacement(role, packet):
 
 def _has_areas(role, packet):
     return bool(packet.get('problem_areas'))
+
+
+def _has_delivery_notice(role, packet):
+    return packet.get(DELIVERY_NOTICE_KEY, {}).get('protocol') == DELIVERY_NOTICE_PROTOCOL
 
 
 @dataclass(frozen=True)
@@ -365,17 +380,27 @@ PARAGRAPHS = (
           'to that area then enters no grade. '
           'No item, level or threshold changes. '
           'The response shape of this turn is unchanged: an intermediate, source-request or staged task response gives '
-          'only the fields that its task owns.'),)))
+          'only the fields that its task owns.'),)),
+    PromptParagraph('delivery-notice', ('bar', 'slate', 'result'), _has_delivery_notice,
+                    ((DELIVERY_NOTICE_PROTOCOL, DELIVERY_NOTICE_PROMPT),)))
+
+
+def has_only_shared_paragraphs(versions):
+    shared = [version for paragraph in PARAGRAPHS if paragraph.name == 'delivery-notice'
+              for version, _ in paragraph.versions]
+    return isinstance(versions, list) and all(version in shared for version in versions)
 
 
 def select_prompt_parameters(role, packet):
     """Select the paragraphs called for by this delivered packet, including compact task contexts."""
-    if packet.get('subject', {}).get('kind') != 'problem':
+    problem = packet.get('subject', {}).get('kind') == 'problem'
+    if not problem and not _has_delivery_notice(role, packet):
         return {}
     conditions = (packet.get(CONDITIONS) if 'value' not in packet.get('problem_evidence', {}) else None)
     versions = [paragraph.versions[-1][0] for paragraph in PARAGRAPHS[1:]
-                if role in paragraph.roles and
-                (paragraph.name in conditions if conditions is not None else paragraph.condition(role, packet))]
+                if role in paragraph.roles and (problem or paragraph.name == 'delivery-notice') and
+                (paragraph.name in conditions if conditions is not None and paragraph.name != 'delivery-notice'
+                 else paragraph.condition(role, packet))]
     if role in PARAGRAPHS[0].roles and _has_carry(role, packet):
         carry_version = PARAGRAPHS[0].versions[-1][0]
         if carry_version != CARRY_PROTOCOL:
@@ -437,8 +462,13 @@ def _append_selected_paragraphs(base, carried, versions, selected):
     if versions:
         parameters[PARAMETER] = list(versions)
     text = base['text'] + ''.join(text for _, text in selected)
-    return dict(template_id=base['template_id'] + ''.join('/' + version[len('exactory-problem-'):] for version, _ in selected),
+    return dict(template_id=base['template_id'] + _describe_template_suffix(selected),
                 template_hash=digest(text), rendered_prompt_hash=digest(text), parameters=parameters, text=text)
+
+
+def _describe_template_suffix(selected):
+    return ''.join('/' + version[len('exactory-problem-') if version.startswith('exactory-problem-')
+                               else len('exactory-'):] for version, _ in selected)
 
 
 def strip_prompt_paragraphs(prompt, role):
@@ -454,7 +484,7 @@ def strip_prompt_paragraphs(prompt, role):
     except (ResearchError, TypeError, KeyError):
         return None
     suffix = ''.join(text for _, text in selected)
-    template_suffix = ''.join('/' + version[len('exactory-problem-'):] for version, _ in selected)
+    template_suffix = _describe_template_suffix(selected)
     if not selected or not prompt.get('text', '').endswith(suffix) or not prompt.get('template_id', '').endswith(template_suffix):
         return None
     base_parameters = {key: value for key, value in parameters.items() if key not in (PARAMETER, CARRY_PARAMETER)}

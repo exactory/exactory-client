@@ -5078,6 +5078,21 @@
       "class": "workspace payload file boundary",
       "fixed_in": "0.88.0",
       "test_kind": "real_shape"
+    },
+    {
+      "id": "bar-final-delivered-source-lost-from-replay",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "review session (coverage and reduced history)",
+      "summary": "A final assessment was refused for citing a text delivered by an authenticated earlier turn after its body disappeared from replayed history.",
+      "fixed_in": "0.87.0",
+      "expected": "Citation and result coverage count selected verified actual turns of the session. An undelivered text stays refused. A new continuation whose fitted input loses earlier source bodies names those texts, their delivering turns, missing characters and retained verified excerpts under a versioned delivery notice; intact continuations and stored inputs keep their bytes. Exhausted-slot recovery and input-size reports belong to other units.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_session_delivery.SessionDeliveryTests.test_final_credits_the_actual_delivering_turn_after_history_reduction",
+        "test_review_session_delivery.SessionDeliveryTests.test_chain_view_keeps_current_input_separate_and_excludes_undelivered_sources",
+        "test_review_session_delivery.SessionDeliveryTests.test_notice_lists_lost_texts_with_verified_excerpts_and_the_final_can_cite_them",
+        "test_review_session_delivery.SessionDeliveryTests.test_an_intact_continuation_keeps_its_packet_prompt_and_request_bytes"
+      ]
     }
   ]
 }

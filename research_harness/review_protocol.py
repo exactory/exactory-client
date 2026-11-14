@@ -850,7 +850,8 @@ def canonical_prompt(role, *, legacy=False, repair=False, version=None, orchestr
     protocol of its prompts, by default the current one. common_version names the common text that opens the prompt,
     by default the current one; it is independent of version, which names the scientific contract."""
     if problem_objection_carry is not None or problem_paragraphs is not None:
-        if problem_paragraphs and orchestration != 'problem_creation':
+        if (problem_paragraphs and orchestration != 'problem_creation'
+                and not prompt_paragraphs.has_only_shared_paragraphs(problem_paragraphs)):
             raise ResearchError('invalid_review_context', prompt_paragraphs.INVALID_CONTEXT)
         base = canonical_prompt(role, legacy=legacy, repair=repair, version=version, orchestration=orchestration,
             repair_prompt=repair_prompt, adjudicator_prompt=adjudicator_prompt, excerpts=excerpts,
@@ -2619,6 +2620,7 @@ def _repair_packet(records, artifacts, value, repair):
     packet.pop(review_parts.KEY, None)
     packet.pop(review_parts.STATE_KEY, None)
     packet.pop(review_problem_parts.KEY, None)
+    packet.pop(prompt_paragraphs.DELIVERY_NOTICE_KEY, None)
     from .review_source_capacity import BODY_DELIVERY, MARKER
     # The prior capacity receipt stays in scientific_history. Its actual pending
     # requests are inherited below, rather than labelling this new packet with it.
@@ -3270,8 +3272,9 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 packet['problem_refresh'].update(template_id=prompt['template_id'], prompt_hash=prompt['rendered_prompt_hash'])
                 packet.pop('digest')
                 packet['digest'] = digest(packet)
-        from .review_source_batches import plan_packet
-        packet = plan_packet(records, artifacts, route, packet, prompt, history)
+        from .review_delivery_notice import prepare_notice
+        packet, prompt, history = prepare_notice(records, artifacts, route,
+            dict(value, session_id=session_id, history_assignment_id=history_assignment_id), packet, prompt, history)
         controller = packet.get('staged_review', {}).get('kind') == 'controller'
         record = dict(value, packet=None if controller else _put_json(artifacts, packet), packet_digest=packet['digest'],
                       prompt=prompt, prompt_hash=prompt['rendered_prompt_hash'], route_digest=digest(route),
