@@ -23,6 +23,7 @@
     "run_series": "reachable",
     "search": "reachable",
     "search accept": "reachable",
+    "search deliver-attempt": "reachable",
     "search review-packet": "reachable",
     "select-main-capture": "reachable",
     "value-review": "reachable"
@@ -43,76 +44,10 @@
       "gate_override_user_required"
     ],
     "codes_10": [
-      "direction_evidence_unassessed",
-      "research_decision_required"
+      "openness_native_evidence_missing",
+      "openness_native_review_mismatch"
     ],
     "codes_11": [
-      "review_composition_conflict",
-      "review_composition_pending"
-    ],
-    "codes_12": [
-      "review_context_contaminated",
-      "review_context_unverified"
-    ],
-    "codes_13": [
-      "assessment_incomplete",
-      "review_resampling_forbidden"
-    ],
-    "codes_14": [
-      "invalid_round"
-    ],
-    "codes_15": [
-      "configuration_missing",
-      "constitution_revalidation_required",
-      "objective_mismatch",
-      "profile_mismatch"
-    ],
-    "codes_16": [
-      "context_missing",
-      "innovation_missing",
-      "rationale_missing",
-      "standards_missing"
-    ],
-    "codes_17": [
-      "exploratory_evidence",
-      "missing_evidence"
-    ],
-    "codes_18": [
-      "openness_reading_incomplete",
-      "review_parts_incomplete"
-    ],
-    "codes_2": [
-      "http_status",
-      "rate_limited"
-    ],
-    "codes_3": [
-      "fulltext_storage_limit",
-      "fulltext_transfer_changed",
-      "response_too_large"
-    ],
-    "codes_4": [
-      "openness_reading_gap",
-      "openness_search_gap",
-      "openness_settling_source"
-    ],
-    "codes_5": [
-      "storage_io",
-      "unsafe_path"
-    ],
-    "codes_6": [
-      "invalid_input",
-      "problem_answer_evidence_missing",
-      "problem_boundary_evidence_missing",
-      "problem_explanatory_evidence_missing",
-      "problem_relation_evidence_missing"
-    ],
-    "codes_7": [
-      "problem_relation_evidence_missing"
-    ],
-    "codes_8": [
-      "invalid_input"
-    ],
-    "codes_9": [
       "BlockingIOError",
       "BrokenPipeError",
       "ChildProcessError",
@@ -136,6 +71,82 @@
       "SameFileError",
       "SpecialFileError",
       "TimeoutError"
+    ],
+    "codes_12": [
+      "direction_evidence_unassessed",
+      "research_decision_required"
+    ],
+    "codes_13": [
+      "review_composition_conflict",
+      "review_composition_pending"
+    ],
+    "codes_14": [
+      "review_context_contaminated",
+      "review_context_unverified"
+    ],
+    "codes_15": [
+      "assessment_incomplete",
+      "review_resampling_forbidden"
+    ],
+    "codes_16": [
+      "invalid_round"
+    ],
+    "codes_17": [
+      "configuration_missing",
+      "constitution_revalidation_required",
+      "objective_mismatch",
+      "profile_mismatch"
+    ],
+    "codes_18": [
+      "context_missing",
+      "innovation_missing",
+      "rationale_missing",
+      "standards_missing"
+    ],
+    "codes_19": [
+      "exploratory_evidence",
+      "missing_evidence"
+    ],
+    "codes_2": [
+      "http_status",
+      "rate_limited"
+    ],
+    "codes_20": [
+      "openness_reading_incomplete",
+      "review_parts_incomplete"
+    ],
+    "codes_3": [
+      "fulltext_storage_limit",
+      "fulltext_transfer_changed",
+      "response_too_large"
+    ],
+    "codes_4": [
+      "openness_reading_gap",
+      "openness_result_changed",
+      "openness_result_gap",
+      "openness_search_gap",
+      "openness_settling_source"
+    ],
+    "codes_5": [
+      "storage_io",
+      "unsafe_path"
+    ],
+    "codes_6": [
+      "invalid_input",
+      "problem_answer_evidence_missing",
+      "problem_boundary_evidence_missing",
+      "problem_explanatory_evidence_missing",
+      "problem_relation_evidence_missing"
+    ],
+    "codes_7": [
+      "problem_relation_evidence_missing"
+    ],
+    "codes_8": [
+      "invalid_input"
+    ],
+    "codes_9": [
+      "openness_native_evidence_missing",
+      "openness_native_evidence_unsupported"
     ]
   },
   "computed_sites": {
@@ -259,6 +270,14 @@
       ],
       "values": "reachable"
     },
+    "research_harness/problem_openness_reviews.py:required_evidence.visit:MISSING if result_kinds else \"openness_native_evidence_unsupported\"": {
+      "sources": [],
+      "values": "codes_9"
+    },
+    "research_harness/problem_openness_reviews.py:required_evidence.visit:MISSING if result_kinds else MISMATCH": {
+      "sources": [],
+      "values": "codes_10"
+    },
     "research_harness/publication_files.py:find_bundle_drift:code": {
       "sources": [
         "research_harness/publication_files.py:find_bundle_drift"
@@ -285,7 +304,7 @@
     },
     "research_harness/record_check.py:check_record:type(error).__name__": {
       "sources": [],
-      "values": "codes_9"
+      "values": "codes_11"
     },
     "research_harness/record_check.py:describe_capacity_decision:error.code": {
       "sources": [
@@ -319,7 +338,7 @@
     },
     "research_harness/research_decisions.py:prepare_objective_commitment:code": {
       "sources": [],
-      "values": "codes_10"
+      "values": "codes_12"
     },
     "research_harness/review_call_capture.py:capture_call:getattr(error, 'code', 'review_correction_invalid')": {
       "sources": [
@@ -335,7 +354,7 @@
     },
     "research_harness/review_composition.py:_reject:'review_composition_pending' if pending else 'review_composition_conflict'": {
       "sources": [],
-      "values": "codes_11"
+      "values": "codes_13"
     },
     "research_harness/review_continuation.py:_plan_head:blocking[0]['code']": {
       "sources": [
@@ -399,7 +418,7 @@
     },
     "research_harness/review_protocol.py:_assignment_state:'review_context_' + state['context_status']": {
       "sources": [],
-      "values": "codes_12"
+      "values": "codes_14"
     },
     "research_harness/review_refusal.py:refused_attempts:failure['code']": {
       "sources": [
@@ -427,11 +446,11 @@
     },
     "research_harness/review_staged_followups.py:_raise_composition_error:'review_composition_pending' if pending else 'review_composition_conflict'": {
       "sources": [],
-      "values": "codes_11"
+      "values": "codes_13"
     },
     "research_harness/review_staged_protocol.py:build_state:'review_context_' + state['context_status']": {
       "sources": [],
-      "values": "codes_12"
+      "values": "codes_14"
     },
     "research_harness/review_staged_protocol.py:collect_current_planning_records:obligations[0]['code']": {
       "sources": [
@@ -453,7 +472,7 @@
     },
     "research_harness/review_staged_protocol.py:invoke_task:'assessment_incomplete' if head['state'] == 'incomplete' else 'review_resampling_forbidden'": {
       "sources": [],
-      "values": "codes_13"
+      "values": "codes_15"
     },
     "research_harness/review_staged_protocol.py:plan_frontier.prepare:obligations[0]['code']": {
       "sources": [
@@ -511,7 +530,7 @@
     },
     "research_harness/rounds.py:_RoundEvidence.many:self.error_code": {
       "sources": [],
-      "values": "codes_14"
+      "values": "codes_16"
     },
     "research_harness/rounds.py:_canonical_adapter.prepare:item['code']": {
       "sources": [
@@ -533,11 +552,11 @@
     },
     "research_harness/synthesis.py:_record.prepare:item[\"code\"]": {
       "sources": [],
-      "values": "codes_15"
+      "values": "codes_17"
     },
     "research_harness/synthesis.py:_synthesis_state:kind + \"_missing\"": {
       "sources": [],
-      "values": "codes_16"
+      "values": "codes_18"
     },
     "skills/math-solver/harness/search_controller/attempt_delivery.py:deliver_snapshot:error.code": {
       "sources": [
@@ -573,11 +592,11 @@
     },
     "skills/math-solver/harness/search_controller/provenance.py:collect_import_sources:\"exploratory_evidence\" if state[\"service\"].get(\"probe_origins\", {}).get(current) else \"missing_evidence\"": {
       "sources": [],
-      "values": "codes_17"
+      "values": "codes_19"
     },
     "skills/math-solver/harness/search_controller/reviewer.py:require_review:\"review_parts_incomplete\" if review_parts.KEY in assignment else \"openness_reading_incomplete\"": {
       "sources": [],
-      "values": "codes_18"
+      "values": "codes_20"
     }
   },
   "emitted": [
@@ -952,6 +971,9 @@
     "openness_packet_outdated",
     "openness_reading_gap",
     "openness_reading_incomplete",
+    "openness_result_changed",
+    "openness_result_gap",
+    "openness_result_unlinked",
     "openness_review_not_approved",
     "openness_review_required",
     "openness_screening_evidence_mismatch",
@@ -2101,6 +2123,9 @@
     "openness_packet_outdated",
     "openness_reading_gap",
     "openness_reading_incomplete",
+    "openness_result_changed",
+    "openness_result_gap",
+    "openness_result_unlinked",
     "openness_review_not_approved",
     "openness_review_required",
     "openness_screening_evidence_mismatch",
@@ -2806,6 +2831,7 @@
     "review-stop",
     "search",
     "search accept",
+    "search deliver-attempt",
     "search review-packet",
     "select-main-capture",
     "value-review"
@@ -3180,6 +3206,9 @@
     "openness_packet_outdated",
     "openness_reading_gap",
     "openness_reading_incomplete",
+    "openness_result_changed",
+    "openness_result_gap",
+    "openness_result_unlinked",
     "openness_review_not_approved",
     "openness_review_required",
     "openness_screening_evidence_mismatch",
@@ -5151,9 +5180,6 @@
       "unit": "registry-rows"
     },
     "openness_evidence_mismatch": {
-      "unit": "registry-rows"
-    },
-    "openness_minimum_gaps": {
       "unit": "registry-rows"
     },
     "openness_minimum_required": {

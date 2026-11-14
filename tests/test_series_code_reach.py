@@ -281,6 +281,84 @@ def plan_next(role):
         with self.assertRaisesRegex(ValueError, 'new-public-command'):
             reach.validate_command_roots(commands, {'value-review': [], 'review-adjudication': []}, {})
 
+    def test_bound_result_gap_refusals_are_in_the_audit_constructor_domain(self):
+        path = 'research_harness/openness_minimum.py'
+        sources = {path: '''
+def require_unblocked_outcome(condition):
+    code, message = GAP_REFUSALS[condition]
+    raise ResearchError(code, message)
+def list_minimum_gaps(condition):
+    def add_gap(condition):
+        code = GAP_REFUSALS[condition][0]
+        return dict(code=code)
+    return add_gap(condition)
+'''}
+        functions = ('require_unblocked_outcome', 'list_minimum_gaps.add_gap')
+        declarations = {path + ':' + function + ':code': reach.COMPUTED_CODE_SITES[
+            path + ':' + function + ':code'] for function in functions}
+        report = reach.analyze_sources(sources, {
+            'audit': [path + ':require_unblocked_outcome'],
+            'gaps': [path + ':list_minimum_gaps']}, declarations)
+        for command in ('audit', 'gaps'):
+            with self.subTest(command=command):
+                self.assertEqual(set(report['by_command'][command]),
+                    {'openness_search_gap', 'openness_reading_gap', 'openness_settling_source',
+                     'openness_result_gap', 'openness_result_changed'})
+
+    def test_result_manifest_modes_declare_both_refusal_domains(self):
+        path = 'research_harness/problem_openness_reviews.py'
+        sources = {path: '''
+from .operations import require
+def required_evidence(result_kinds):
+    def visit():
+        require(False, 'Manifest kind', MISSING if result_kinds else "openness_native_evidence_unsupported")
+        require(False, 'Claim binding', MISSING if result_kinds else MISMATCH)
+    return visit()
+''', 'research_harness/operations.py': '''
+def require(condition, message, code):
+    if not condition:
+        raise ResearchError(code, message)
+'''}
+        expressions = ('MISSING if result_kinds else "openness_native_evidence_unsupported"',
+                       'MISSING if result_kinds else MISMATCH')
+        sites = {path + ':required_evidence.visit:' + expression: reach.COMPUTED_CODE_SITES[
+            path + ':required_evidence.visit:' + expression] for expression in expressions}
+        report = reach.analyze_sources(sources, {'manifest': [path + ':required_evidence']}, sites)
+        self.assertEqual(set(report['by_command']['manifest']),
+                         {'openness_native_evidence_missing', 'openness_native_evidence_unsupported',
+                          'openness_native_review_mismatch'})
+
+    def test_native_attempt_delivery_reaches_dispatch_and_delivery_refusals(self):
+        controller = 'skills/math-solver/harness/search_controller/service.py'
+        delivery = 'skills/math-solver/harness/search_controller/attempt_delivery.py'
+        sources = {
+            'research_harness/cli.py': 'OPERATIONS = {}\n',
+            'research_harness/review_continuation.py': '''
+def plan_next():
+    return dict(command='search deliver-attempt')
+''',
+            controller: '''
+from .attempt_delivery import deliver_attempt
+class Controller:
+    def command(self, denied):
+        if denied:
+            raise ResearchError('native_dispatch_refusal', 'Dispatch refused')
+        return deliver_attempt()
+''',
+            delivery: '''
+def deliver_attempt():
+    raise ResearchError('native_delivery_refusal', 'Delivery refused')
+'''}
+        with patch.object(reach, 'SERIES_COMMANDS', ()):
+            try:
+                roots = reach.collect_command_roots(sources)
+            except ValueError as error:
+                self.fail(str(error))
+        self.assertEqual(roots['search deliver-attempt'], (controller + ':Controller.command',))
+        report = reach.analyze_sources(sources, {'search deliver-attempt': roots['search deliver-attempt']})
+        self.assertEqual(set(report['by_command']['search deliver-attempt']),
+                         {'native_dispatch_refusal', 'native_delivery_refusal'})
+
     def test_a_previously_unavailable_command_gets_its_implemented_root(self):
         sources = {'research_harness/cli.py': """
 def action():

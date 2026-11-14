@@ -4832,7 +4832,10 @@
         "test_openness_result_binding.ResultBindingTests.test_g3_extended_objective_binds_without_a_value_extension_reason",
         "test_openness_result_binding.ResultBindingTests.test_g3_missing_link_hands_off_to_delivery_then_export",
         "test_openness_result_binding.ResultBindingTests.test_g3_two_approvals_keep_the_review_of_the_acceptance",
-        "test_openness_result_binding.ResultBindingTests.test_result_text_and_descriptor_larger_than_one_turn_deliver_every_part"
+        "test_openness_result_binding.ResultBindingTests.test_result_text_and_descriptor_larger_than_one_turn_deliver_every_part",
+        "test_series_code_reach.CodeReachTests.test_native_attempt_delivery_reaches_dispatch_and_delivery_refusals",
+        "test_series_code_reach.CodeReachTests.test_bound_result_gap_refusals_are_in_the_audit_constructor_domain",
+        "test_series_code_reach.CodeReachTests.test_result_manifest_modes_declare_both_refusal_domains"
       ]
     },
     {

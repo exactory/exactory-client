@@ -48,7 +48,8 @@ COMPUTED_CODE_SITES = {
     'research_harness/oai_cohort.py:validate_chain:error.code': {
         'sources': ['research_harness/oai_cohort.py:validate_chain']},
     'research_harness/openness_minimum.py:require_unblocked_outcome:code': {
-        'codes': ['openness_search_gap', 'openness_reading_gap', 'openness_settling_source']},
+        'codes': ['openness_search_gap', 'openness_reading_gap', 'openness_settling_source',
+                  'openness_result_gap', 'openness_result_changed']},
     'research_harness/openness_minimum.py:require_unblocked_outcome:error["code"]': {
         'sources': ['research_harness/openness_minimum.py:list_minimum_gaps']},
     'research_harness/probe_provenance.py:read_probe_pin_source:code': {'codes': ['unsafe_path', 'storage_io']},
@@ -64,6 +65,10 @@ COMPUTED_CODE_SITES = {
         'sources': ['research_harness/problem_delivery.py:prepare_decision']},
     'research_harness/publication_files.py:restore_bundle:error.code': {
         'sources': ['research_harness/publication_files.py:restore_bundle']},
+    'research_harness/problem_openness_reviews.py:required_evidence.visit:MISSING if result_kinds else "openness_native_evidence_unsupported"': {
+        'codes': ['openness_native_evidence_missing', 'openness_native_evidence_unsupported']},
+    'research_harness/problem_openness_reviews.py:required_evidence.visit:MISSING if result_kinds else MISMATCH': {
+        'codes': ['openness_native_evidence_missing', 'openness_native_review_mismatch']},
     "research_harness/record_check.py:check_continuation:plan.get('code') or 'record_unknown_stop'": {
         'codes': ['record_unknown_stop'], 'sources': ['research_harness/review_continuation.py:plan_next']},
     'research_harness/research_decisions.py:prepare_objective_commitment:code': {
@@ -130,7 +135,8 @@ COMPUTED_CODE_SITES = {
     'research_harness/cli.py:run:args.code': {
         'sources': ['research_harness/cli.py:status_report']},
     'research_harness/openness_minimum.py:list_minimum_gaps.add_gap:code': {
-        'codes': ['openness_search_gap', 'openness_reading_gap', 'openness_settling_source']},
+        'codes': ['openness_search_gap', 'openness_reading_gap', 'openness_settling_source',
+                  'openness_result_gap', 'openness_result_changed']},
     'research_harness/problem_delivery.py:assess_source_requests:task["code"]': {
         'sources': ['research_harness/problem_delivery.py:assess_source_requests']},
     'research_harness/publication_files.py:find_bundle_drift:code': {
@@ -206,6 +212,7 @@ EXTERNAL_COMMAND_ROOTS = {
     'review-series': ('research_harness/review_series.py:run_series',),
     'search review-packet': ('skills/math-solver/harness/search_controller/reviewer.py:export_packet',),
     'search accept': ('skills/math-solver/harness/search_controller/service.py:Controller.command',),
+    'search deliver-attempt': ('skills/math-solver/harness/search_controller/service.py:Controller.command',),
     'export': ('research_harness/integration.py:export_workspace',
                'research_harness/problem_openness.py:export_openness',
                'research_harness/native_export.py:export_native'),
