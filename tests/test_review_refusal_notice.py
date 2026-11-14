@@ -163,7 +163,10 @@ class RefusalNoticeTests(RefusalCase):
         def check_focused(records, output):
             protocol.validate_adjudication_contract(records, artifacts, focused, focused_packet, output)
 
+        abstract_link = next(iter(case.supporting_links.values()))
         cases = {
+            'evidence.fulltext': (check_ordinary, dict(ordinary, value=dict(ordinary['value'],
+                evidence=[dict(kind='source', link=abstract_link)]))),
             'evidence.shape': (check_ordinary, dict(ordinary, value=dict(ordinary['value'], evidence=[{}]))),
             'evidence.locator': (check_ordinary,
                                  dict(ordinary, value=dict(ordinary['value'], evidence=[self.evidence]))),
@@ -210,6 +213,11 @@ class RefusalNoticeTests(RefusalCase):
                     notice = self.notices.build_refusal_notice(records, artifacts, (attempt_id,), form=form)
                     self.assertNotIn('OTHER-REVIEWER-', serialize(notice))
                     self.assertEqual(notice['refused'][0]['code'], error.code)
+                    if check == 'evidence.fulltext':
+                        self.assertEqual(notice['refused'][0]['details']['artifact'], abstract_link['artifact'])
+                        self.assertEqual(notice['refused'][0]['details']['delivered_depth'], 'passage')
+                        self.assertEqual(notice['refused'][0]['details']['notice'],
+                                         refusal.SOURCE_LINK_ACCEPTED_FORMS_NOTICE)
 
     def test_bounded_notice_limits_serialized_entries_details_and_part_for_large_outputs(self):
         for characters in (10_000, 2_000_000, 5_000_000):
@@ -456,8 +464,7 @@ class UndeliveredNoticeTests(unittest.TestCase):
         self.addCleanup(case.doCleanups)
         case.setUp()
         fixture = case.case
-        reference = {'kind': 'record', 'record_kind': 'problem_value', 'id': 'value-1'}
-        fixture.put('problem_value', 'value-1', dict(fixture.expected['value']))
+        reference = {'kind': 'record', 'record_kind': 'problem_value', 'id': 'unseen-value'}
         case.fit_local_requests()
         first = fixture.assign('result', 'first', identifier='history')
         request_output = fixture.build_review_output('result')
@@ -474,6 +481,9 @@ class UndeliveredNoticeTests(unittest.TestCase):
                            credential='test-only')
         self.assertTrue(any('packet-elided-route-limit' in message.get('content', '')
                             for message in case.read_request('continued')['input']))
+        # A record delivered in an earlier authenticated turn is still citable.
+        # This record first exists after the final call, so no turn delivered it.
+        fixture.put('problem_value', 'unseen-value', dict(fixture.expected['value'], id='unseen-value'))
         payload = dict(output, id='review-continued', dossier_id=None, assignment_id=assignment['id'])
         with self.assertRaises(ResearchError) as caught:
             fixture.mutate(decisions.record_value_review, payload)
@@ -489,5 +499,6 @@ class UndeliveredNoticeTests(unittest.TestCase):
         self.assertEqual(row['check'], 'review.evidence_delivery')
         self.assertEqual(row['path'], '/value/evidence')
         self.assertEqual(row['details']['record_kind'], 'problem_value')
+        self.assertEqual(row['details']['id'], 'unseen-value')
         self.assertNotIn('OTHER-SLOT-JUDGMENT', serialize(notice))
         self.assertEqual(digest(fixture.read_records()), before)

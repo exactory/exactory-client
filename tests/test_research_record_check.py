@@ -655,11 +655,8 @@ class RecordCheckTests(unittest.TestCase):
         self.assertEqual(entry['sha256'], self.case.read_records()['review_probe_invocation']['probe']['request']['sha256'])
 
     def test_fingerprint_matches_0724_on_the_same_snapshot(self):
-        self.observe()
-        from research_harness.record_check import copy_snapshot
         with tempfile.TemporaryDirectory() as directory:
             clone = Path(directory) / 'snapshot'
-            copy_snapshot(self.case.root, clone)
             previous = Path(directory) / 'previous'
             previous.mkdir()
             # Preserve the real baseline readers even in CI's shallow checkout.
@@ -672,6 +669,29 @@ class RecordCheckTests(unittest.TestCase):
                     source.extractall(previous, filter='data')
                 else:
                     source.extractall(previous)
+            # Generate the snapshot with the archived release itself. New prompts need not
+            # be understood by old readers; old records must remain authenticated by both.
+            build = """
+import json
+from pathlib import Path
+import shutil
+import sys
+sys.path[:0] = sys.argv[1:3]
+from test_research_review_protocol import ReviewProtocolTests
+case = ReviewProtocolTests()
+case.setUp()
+try:
+    case.route()
+    case.run_probe()
+    case.assign()
+    case.invoke(dict(decision='approve', reason='The supplied synthetic evidence is consistent.'))
+    shutil.copytree(case.root, Path(sys.argv[3]))
+finally:
+    case.doCleanups()
+"""
+            completed = subprocess.run([sys.executable, '-c', build, str(previous), str(PLUGIN / 'tests'),
+                                        str(clone)], cwd=PLUGIN, capture_output=True, text=True, timeout=60)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
             results = []
             for harness in (previous, PLUGIN):
                 completed = subprocess.run([
@@ -680,6 +700,9 @@ class RecordCheckTests(unittest.TestCase):
                 self.assertEqual(completed.returncode, 0, completed.stderr)
                 results.append(json.loads(completed.stdout))
             self.assertEqual(results[0], results[1])
+            saved = results[0]['assignments']['assignment']
+            self.assertTrue(saved['authentication']['attempt'])
+            self.assertTrue(saved['assignment_state']['ready'])
 
     def test_math_roots_ignore_registry_paths_and_keep_command_cwd_outside_clone(self):
         from research_harness.record_check import check_math_roots
@@ -994,6 +1017,8 @@ class RecordCheckFollowupTests(unittest.TestCase):
         for version, decision in ((2, 'revise'), (None, 'revise'), (None, 'reject')):
             with self.subTest(version=version, decision=decision):
                 case = self.build_openness_case()
+                # UB6/UB7 keep decision-based final answers on stored v5 packets.
+                case.historical_v5 = True
                 reference = case.export()
                 case.assign('turn-1', reference)
                 packet = case.read_packet('turn-1')['native']

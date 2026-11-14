@@ -9,6 +9,8 @@ import unittest
 from unittest.mock import patch
 
 from unbound_packet_fixtures import open_stored_case
+import test_openness_capture_binding as binding_fixtures
+from research_harness.capture_selection import bind_packet_selections
 from research_harness import openness_reading as reading, problem_openness as openness
 from research_harness import review_excerpts, review_protocol as protocol, review_transport as transport
 from research_harness.capture_selection import select_main_capture
@@ -35,7 +37,17 @@ class UnboundStoppedPacketTests(unittest.TestCase):
         with transport.text_only_delivery(True):
             ordinary = protocol.build_packet(records, case.artifacts, None, 'native_math', assignment['reviewer_id'],
                                              native_packet=metadata['native'])
-            rebuilt, _ = reading.prepare_packet(records, case.artifacts, assignment, route, ordinary)
+            prepare = reading.prepare_packet
+            if reading.is_openness_packet(native):
+                # Rebuild a stored first turn with its released builder. R71 now
+                # refuses this old packet when starting a new chain.
+                records = bind_packet_selections(records, native['scientific_context'],
+                                                 artifacts=case.artifacts, review=assignment)
+                namespace = dict(vars(reading))
+                exec(compile(binding_fixtures.BUILDERS_PATH.read_bytes(),
+                             str(binding_fixtures.BUILDERS_PATH), 'exec'), namespace)
+                prepare = namespace['prepare_packet']
+            rebuilt, _ = prepare(records, case.artifacts, assignment, route, ordinary)
         self.assertEqual(json.dumps(rebuilt, sort_keys=True, ensure_ascii=False).encode(), packet_bytes)
         manifest = (reading._plan_search_delivery(case.artifacts, native)['manifest']
                     if metadata['protocol'] == 5 else None)

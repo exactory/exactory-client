@@ -172,7 +172,7 @@ class MinimumV2StoreTests(ProblemCase):
 
     def test_invalid_or_unshipped_v2_spec_bindings_are_refused_before_writes(self):
         search = self.search()
-        # Empty fields are valid during schema staging. New evidence cannot be silently omitted.
+        # UB6 delivers v2 bindings. Invalid or unshipped evidence must refuse before writing.
         spec = self.build_spec([search])
         for field in ("family_readings", "supporting_reading_ids", "results"):
             spec["minimum"][field] = []

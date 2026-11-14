@@ -22,6 +22,7 @@ _TEXT_NOTICE_FIELDS = ('characters', 'minimum_characters', 'maximum_characters',
 _DELIVERY_NOTICE_FIELDS = ('record_kind', 'id', 'digest', 'sha256', 'locator')
 CONTRACT_CHECKS = {
     'evidence.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
+    'evidence.fulltext': {'notice_fields': ('version_id', 'source_id', 'artifact', 'delivered_depth', 'notice')},
     'evidence.locator': {'notice_fields': _SHAPE_NOTICE_FIELDS + ('part_relative_span',)},
     'review.shape': {'notice_fields': _SHAPE_NOTICE_FIELDS},
     'review.value': {'notice_fields': _SHAPE_NOTICE_FIELDS + _TEXT_NOTICE_FIELDS +
@@ -193,7 +194,7 @@ def validate_source_links_contract(records, output, packets):
                               == link['artifact']['sha256']]
                 error.details.update(path=path + '/' + str(index),
                     delivered_depth=depths[0] if depths else None, notice=SOURCE_LINK_ACCEPTED_FORMS_NOTICE)
-                error.contract_check = 'evidence.fulltext'
+                error.contract_check = require_contract_check('evidence.fulltext')
                 raise
 
 

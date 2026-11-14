@@ -5403,7 +5403,9 @@
         "test_record_reading_handoff.FocusedReadingHandoffTests.test_adjudication_final_hands_off_a_stale_reading_then_records_the_same_output",
         "test_record_reading_handoff.FocusedReadingHandoffTests.test_adjudication_abstract_refusal_is_bounded_and_uses_its_role_handoff",
         "test_record_reading_handoff.ReadingHandoffTests.test_catalog_gap_keeps_the_pure_refusal_before_the_corrected_output_needs_reading",
-        "test_record_reading_handoff.ReadingHandoffTests.test_a_reading_completed_during_the_recording_error_records_without_a_reviewer_call"
+        "test_record_reading_handoff.ReadingHandoffTests.test_a_reading_completed_during_the_recording_error_records_without_a_reviewer_call",
+        "test_review_refusal_notice.RefusalNoticeTests.test_every_registered_validator_produces_a_notice_without_the_other_reviewers_markers",
+        "test_review_refusal_notice.ContractCheckRegistryTests.test_every_check_attribution_is_registered_and_registry_fields_are_explicit"
       ]
     },
     {
