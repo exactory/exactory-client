@@ -50,7 +50,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness import providers
 from research_harness.errors import ResearchError
+from research_harness.http import SystemClock
 from research_harness.native_writes import write_atomic
+from research_harness.provider_pacing import ProviderPacing, group_provider
 
 _CROSSREF_API_URL = "https://api.crossref.org/works"
 _DATACITE_API_URL = "https://api.datacite.org/dois"
@@ -99,39 +101,39 @@ def _exit_with_error(message: str, code: int = 1) -> None:
 
 # ------------------------------------------------------------- network seam
 
-_last_request_monotonic = 0.0
-
-
-def _open_url(url: str, accept: str = "application/json", *, headers=None) -> tuple[int | None, str | None]:
+def _open_url(url: str, accept: str = "application/json", *, headers=None,
+              clock=None, pacing=None) -> tuple[int | None, str | None]:
     """Send one polite GET request. Returns (status, body), where (None, None)
-    means the network failed. Keeps a shared minimum interval between live
-    requests and retries 429/503 with the Retry-After delay. Tests replace this
-    function; nothing else touches the network."""
-    global _last_request_monotonic
+    means the network failed. Durable provider admission spaces arXiv requests
+    and holds its single connection through body reads. Retry 429/503 with the
+    Retry-After delay. The injected clock supplies monotonic time and sleep."""
+    clock = clock if clock is not None else SystemClock()
+    if pacing is None:
+        intervals = None if group_provider(url) == "arxiv" else {url: _MIN_REQUEST_INTERVAL_SECONDS}
+        pacing = ProviderPacing(clock=clock, intervals=intervals)
     request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT, "Accept": accept,
                                                  **(headers or {})})
     backoff_seconds = 1.0
     for attempt in range(_MAX_RETRIES + 1):
-        wait_seconds = _MIN_REQUEST_INTERVAL_SECONDS - (time.monotonic() - _last_request_monotonic)
-        if wait_seconds > 0:
-            time.sleep(wait_seconds)
-        _last_request_monotonic = time.monotonic()
         try:
-            with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
-                return response.getcode(), response.read().decode("utf-8", "replace")
-        except urllib.error.HTTPError as error:
-            if error.code in (429, 503) and attempt < _MAX_RETRIES:
-                retry_after = error.headers.get("Retry-After") if error.headers else None
+            with pacing.admit(url, deadline=clock.monotonic() + _TIMEOUT_SECONDS, max_wait=_TIMEOUT_SECONDS):
                 try:
-                    delay_seconds = float(retry_after) if retry_after else backoff_seconds
-                except ValueError:
-                    delay_seconds = backoff_seconds
-                time.sleep(min(delay_seconds, _MAX_BACKOFF_SECONDS))
-                backoff_seconds *= 2
-                continue
-            return error.code, None
-        except OSError:
+                    with urllib.request.urlopen(request, timeout=_TIMEOUT_SECONDS) as response:
+                        return response.getcode(), response.read().decode("utf-8", "replace")
+                except urllib.error.HTTPError as error:
+                    code = error.code
+                    retry_after = error.headers.get("Retry-After") if error.headers else None
+                    error.close()
+        except (OSError, ResearchError):
             return None, None
+        if code not in (429, 503) or attempt == _MAX_RETRIES:
+            return code, None
+        try:
+            delay_seconds = float(retry_after) if retry_after else backoff_seconds
+        except ValueError:
+            delay_seconds = backoff_seconds
+        clock.sleep(min(delay_seconds, _MAX_BACKOFF_SECONDS))
+        backoff_seconds *= 2
     raise AssertionError("unreachable")
 
 
@@ -202,7 +204,7 @@ def _parse_entry_fields(body: str) -> dict[str, str]:
             while end < length and body[end] != ",":
                 end += 1
             value, index = body[index:end], end
-        fields[field_name] = _clean_field_value(value)
+        fields[field_name] = value if field_name == "title" else _clean_field_value(value)
     return fields
 
 
@@ -422,7 +424,8 @@ def _normalize_for_match(text: str) -> str:
     is rendered first and markup tags separate words, so a tagged and a LaTeX title
     compare equal."""
     text = _MARKUP_TAG_RE.sub(" ", _MATHML_RE.sub(_convert_mathml_to_latex, text or ""))
-    return re.sub(r"[^a-z0-9]+", " ", _fold_to_ascii(_strip_tex_commands(text)).lower()).strip()
+    text = _clean_field_value(_strip_tex_commands(text))
+    return re.sub(r"[^a-z0-9]+", " ", _fold_to_ascii(text).lower()).strip()
 
 
 def _titles_match(bib_title: str, candidate_titles: list[str]) -> bool:
@@ -522,11 +525,11 @@ def _compare_author_lists(bib_author_field: str,
 
 
 def _normalize_crossref_work(work: dict) -> dict:
-    title = _convert_markup_to_latex(_clean_field_value((work.get("title") or [""])[0]))
-    subtitle = _convert_markup_to_latex(_clean_field_value((work.get("subtitle") or [""])[0]))
+    title = _convert_markup_to_latex((work.get("title") or [""])[0])
+    subtitle = _convert_markup_to_latex((work.get("subtitle") or [""])[0])
     # Handbook chapters often embed "Chapter NN" in the Crossref title; papers
     # legitimately cite them without it.
-    chapterless = re.sub(r"^chapter\s+\d+[:.\s]\s*", "", title, flags=re.IGNORECASE)
+    chapterless = re.sub(r"^\{?chapter\}?\s+\{?\d+\}?[:.\s]\s*", "", title, flags=re.IGNORECASE)
     titles = [t for t in (title, f"{title}: {subtitle}" if subtitle else "",
                           chapterless if chapterless != title else "") if t]
     authors = []
@@ -542,7 +545,8 @@ def _normalize_crossref_work(work: dict) -> dict:
         if date_parts and date_parts[0]:
             year = int(date_parts[0])
             break
-    return {"source": "crossref", "title": title, "titles": titles, "authors": authors,
+    return {"source": "crossref", "title": title, "registry_title": (work.get("title") or [""])[0],
+            "titles": titles, "authors": authors,
             "year": year, "doi": work.get("DOI", ""),
             "container": _clean_field_value((work.get("container-title") or [""])[0]),
             "type": work.get("type", ""), "volume": work.get("volume", ""),
@@ -579,7 +583,9 @@ def _normalize_datacite_record(attributes: dict) -> dict:
                 full_name = (given.strip() + " " + family.strip()).strip()
         if full_name:
             authors.append(full_name)
-    return {"source": "datacite", "title": titles[0] if titles else "", "titles": titles,
+    return {"source": "datacite", "title": titles[0] if titles else "",
+            "registry_title": next((t["title"] for t in attributes.get("titles") or [] if t.get("title")), ""),
+            "titles": titles,
             "authors": authors, "year": attributes.get("publicationYear"),
             "doi": attributes.get("doi", ""), "container": "", "type": ""}
 
@@ -615,7 +621,7 @@ _ARXIV_TAG_PREFIX = "{http://arxiv.org/schemas/atom}"
 
 
 def _normalize_arxiv_entry(entry_element) -> dict:
-    title = _clean_field_value(entry_element.findtext(f"{_ATOM_TAG_PREFIX}title") or "")
+    title = entry_element.findtext(f"{_ATOM_TAG_PREFIX}title") or ""
     authors = [_clean_field_value(author.findtext(f"{_ATOM_TAG_PREFIX}name") or "")
                for author in entry_element.findall(f"{_ATOM_TAG_PREFIX}author")]
     published = entry_element.findtext(f"{_ATOM_TAG_PREFIX}published") or ""
@@ -623,7 +629,7 @@ def _normalize_arxiv_entry(entry_element) -> dict:
     id_match = re.search(r"abs/(\S+?)(v\d+)?$", entry_id)
     primary_category = entry_element.find(f"{_ARXIV_TAG_PREFIX}primary_category")
     published_doi = (entry_element.findtext(f"{_ARXIV_TAG_PREFIX}doi") or "").strip()
-    return {"source": "arxiv", "title": title, "titles": [title],
+    return {"source": "arxiv", "title": title, "registry_title": title, "titles": [title],
             "authors": [author for author in authors if author],
             "year": int(published[:4]) if published[:4].isdigit() else None,
             "doi": "", "container": "", "type": "",
@@ -730,7 +736,8 @@ def _normalize_pubmed_summary(summary: dict) -> dict:
         initials = [letter for group in initial_groups for letter in group]
         authors.append(" ".join(initials + [family]))
     year_match = re.search(r"\d{4}", summary.get("pubdate", ""))
-    return {"source": "pubmed", "title": title, "titles": [title], "authors": authors,
+    return {"source": "pubmed", "title": title, "registry_title": summary.get("title", ""),
+            "titles": [title], "authors": authors,
             "year": int(year_match.group(0)) if year_match else None,
             "doi": "", "container": "", "type": ""}
 
@@ -759,7 +766,7 @@ def _normalize_openalex_work(work: dict) -> dict:
     authors = [authorship.get("author", {}).get("display_name", "")
                for authorship in work.get("authorships") or []]
     doi = (work.get("doi") or "").replace("https://doi.org/", "")
-    return {"source": "openalex", "title": title, "titles": [title],
+    return {"source": "openalex", "title": title, "registry_title": title, "titles": [title],
             "authors": [author for author in authors if author],
             "year": work.get("publication_year"), "doi": doi, "container": "", "type": ""}
 
@@ -773,8 +780,9 @@ def _compare_entry_with_meta(entry: dict, meta: dict) -> dict:
     title = entry.get("title", "")
     if title and not _titles_match(title, meta.get("titles") or [meta.get("title", "")]):
         return {"status": "title_mismatch",
-                "detail": f"the id resolves to '{meta.get('title')}'"
-                          " but the entry's title differs"}
+                "detail": f"the id resolves to a work titled '{meta.get('registry_title', meta.get('title'))}'"
+                          f" but the entry gives the title '{title}'. Find out which work the citation"
+                          " means, correct its id or its title, and run the check again."}
     authors_ok, why = _compare_author_lists(entry.get("author", ""), meta.get("authors") or [])
     if not authors_ok:
         return {"status": "author_mismatch", "detail": why}
@@ -1063,7 +1071,7 @@ def _read_refs_json_entries(path: Path, text: str) -> list[dict]:
         bibliography = item.get("bibliography") or {}
         entry = {
             "key": f"ref-{index}",
-            "title": (bibliography.get("title") or "").strip(),
+            "title": bibliography.get("title") or "",
             "author": " and ".join(bibliography.get("authors") or []),
             "year": str(bibliography.get("year") or ""),
             "doi": (bibliography.get("doi") or "").strip(),
@@ -1338,9 +1346,14 @@ def _run_lookup(args: argparse.Namespace) -> None:
     for entry in entries:
         cache_key = _build_cache_key(entry)
         cached_meta = cache.get(cache_key) if cache_key else None
+        result = None
         if isinstance(cached_meta, dict):
             result = _compare_entry_with_meta(entry, cached_meta)
-        else:
+            # Older caches discarded registry title text. Fetch it again when a
+            # mismatch needs to quote that text, while retaining usable cache hits.
+            if result["status"] == "title_mismatch" and "registry_title" not in cached_meta:
+                result = None
+        if result is None:
             result = _classify_entry(entry, args.search_pages)
             meta = result.pop("_meta", None)
             if meta is not None and cache_key and result["status"] in ("verified", "year_mismatch"):

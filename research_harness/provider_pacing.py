@@ -12,7 +12,9 @@ from urllib.parse import urlsplit
 from .errors import ResearchError
 
 
-_PROVIDER_POLICIES = {"arxiv": {"interval": 3.0, "connection_limit": 1}}
+# https://info.arxiv.org/help/api/tou.html: one request every three seconds, one connection at a time.
+_ARXIV_REQUEST_INTERVAL_SECONDS = 3.0
+_PROVIDER_POLICIES = {"arxiv": {"interval": _ARXIV_REQUEST_INTERVAL_SECONDS, "connection_limit": 1}}
 _DATABASE = "provider-pacing.sqlite3"
 
 

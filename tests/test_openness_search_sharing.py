@@ -75,6 +75,11 @@ class FifteenSearchChainTests(OpennessReadingCase):
     def record_searches(self):
         searches = [binding['search'] for binding in build_fifteen_searches()]
         for search in searches:
+            # The delivery-only fixture also declares the coverage assessed at export.
+            search.update(captured_at='2026-10-15T12:00:00Z',
+                          found_work_ids=[row['work_id'] for row in search['dispositions']],
+                          coverage=[{'query': search['queries'][0], 'kind': 'bounded_unordered',
+                                     'inspected_count': len(search['dispositions'])}])
             self.put('literature_search', search['id'], search)
         return searches
 

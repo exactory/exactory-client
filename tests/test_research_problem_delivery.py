@@ -242,6 +242,89 @@ class CitationMetadataDeliveryTests(CitationMetadataCase, ProblemDeliveryCase):
 
 
 class ProblemDeliveryTests(ProblemDeliveryCase):
+    def test_both_exports_write_checkable_references_with_initialed_authors(self):
+        import contextlib
+        import hashlib
+        import io
+        from research_fixtures import atom, entry
+        from research_harness import overrides, problem_delivery
+        from test_check import _check
+        registry_entry = entry().replace("A. Researcher", "Katherine E. Stange")
+        def build_entry(*args, **kwargs):
+            return entry(*args, **kwargs).replace("A. Researcher", "Katherine E. Stange")
+        with mock.patch("literature_fixtures.entry", side_effect=build_entry):
+            self.prepare_ready()
+        self.record_post_decision()
+        (self.root / "context").mkdir(exist_ok=True)
+        (self.root / "context/instruction.txt").write_text("Synthetic fixture authorization for the post gate.")
+        self.mutate(overrides.record_override, {"id": "override-refs", "gate": "post",
+            "instruction": "context/instruction.txt", "reason": "Exercise the synthetic export override."})
+        for kind, export in (("problem", problem_delivery.export_problem),
+                             ("problem-override", problem_delivery.export_problem_override)):
+            with self.subTest(kind=kind):
+                result = export(self.store, self.root / kind)
+                directory = Path(result["destination"])
+                refs_path = directory / "citation-refs.json"
+                self.assertTrue(refs_path.is_file())
+                self.assertEqual(json.loads(refs_path.read_text()), [{
+                    "referenceString": "Katherine E. Stange. An authored example",
+                    "bibliography": {"arxivId": "2601.00001v1", "title": "An authored example",
+                                     "authors": ["Katherine E. Stange"]}}])
+                self.assertEqual(result["files"]["citation-refs.json"], hashlib.sha256(refs_path.read_bytes()).hexdigest())
+                args = _check._build_parser().parse_args(["lookup", "--refs-json", str(refs_path),
+                    "--out", str(directory / ".check/report.json")])
+                with mock.patch.object(_check, "_open_url", return_value=(200, atom([registry_entry]).decode())), \
+                        contextlib.redirect_stdout(io.StringIO()):
+                    args.handler(args)
+                report = json.loads((directory / ".check/report.json").read_text())
+                self.assertEqual([row["status"] for row in report["entries"]], ["verified"])
+
+    def test_legacy_export_keeps_its_digest_post_record_and_final_index(self):
+        from research_harness import output_views, problem_delivery, record_check
+        self.prepare_ready()
+        self.record_post_decision()
+        records = self.store.snapshot()["records"]
+        # The default projection is the format written before structured reference exports.
+        files, manifest = problem_delivery.build_projection(records, self.artifacts)
+        self.assertNotIn("citation-refs.json", files)
+        legacy_digest = problem_delivery.compute_export_digest(files)
+        directory = self.root / "final/problem/exports" / legacy_digest
+        problem_delivery.write_problem_export(self.store, records, files, manifest, directory)
+        original = {path.name: path.read_bytes() for path in directory.iterdir()}
+        current = problem_delivery.export_problem(self.store)
+        self.assertIn("citation-refs.json", current["files"])
+        self.assertNotEqual(Path(current["destination"]), directory)
+        self.assert_error("review_destination_exists", lambda: problem_delivery.export_problem(self.store, directory))
+        post = self.mutate(self.load_problem_module().record_posted,
+            {"problem_id": "legacy-post", "export_directory": str(directory)})["result"]
+        self.assertEqual(post["export_digest"], legacy_digest)
+        output_views.render_all(self.store)
+        index = json.loads((self.root / "final/index.json").read_text())
+        self.assertIn({"path": "problem/exports/" + legacy_digest, "type": "export"}, index["files"])
+        self.assertNotIn("problem/exports/" + legacy_digest, index["unowned"])
+        self.assertEqual({path.name: path.read_bytes() for path in directory.iterdir()}, original)
+        self.assertEqual(record_check.check_snapshot(self.root)["revision"], self.store.revision)
+        record_check.check_integrity(self.store)
+        record_check.check_reconstruction(self.store)
+        record_check.check_authentication(self.store)
+
+    def test_reference_list_tampering_or_removal_refuses_recording_the_post(self):
+        from research_harness.problem_delivery import export_problem
+        self.prepare_ready()
+        self.record_post_decision()
+        directory = Path(export_problem(self.store)["destination"])
+        path = directory / "citation-refs.json"
+        self.assertTrue(path.is_file())
+        original = path.read_bytes()
+        path.chmod(0o600)
+        path.write_text("[]\n")
+        payload = {"problem_id": "changed-refs", "export_directory": str(directory)}
+        self.assert_error("problem_export_mismatch", lambda: self.mutate(self.load_problem_module().record_posted, payload))
+        path.unlink()
+        self.assert_error("problem_export_mismatch", lambda: self.mutate(self.load_problem_module().record_posted, payload))
+        path.write_bytes(original)
+        self.mutate(self.load_problem_module().record_posted, payload)
+
     def test_post_decision_export_and_posted_are_bound_to_the_observed_claim(self):
         from research_harness.problem_delivery import export_problem
         self.prepare_ready(formal=True)
@@ -257,7 +340,8 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         self.assertEqual(manifest["decision_id"], decision["id"])
         self.assertEqual(manifest["statement_digest"], self.load_problem_module().compute_statement_digest(self.selected))
         self.assertEqual(manifest["formal_statement_language"], "Lean")
-        self.assertEqual(set(manifest["files"]), {"title.txt", "statement.md", "motivation.md", "state.md", "criteria.md", "citations.json", "formal-statement.txt"})
+        self.assertEqual(set(manifest["files"]), {"title.txt", "statement.md", "motivation.md", "state.md", "criteria.md",
+                                                "citations.json", "citation-refs.json", "formal-statement.txt"})
         self.assertEqual((destination / "statement.md").read_text(), self.selected["statement"] + "\n")
         self.assertTrue(json.loads((destination / "citations.json").read_text())[0]["locator"].startswith("2601."))
         post = self.mutate(self.load_problem_module().record_posted, {"problem_id": "posted-id", "export_directory": str(destination)})["result"]

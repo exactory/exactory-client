@@ -1,0 +1,2248 @@
+{
+  "producer": "exactory-client 0.85.3 (26d8294)",
+  "events": [
+    {
+      "revision": 1,
+      "request_id": "metadata-1",
+      "operation": "response.import",
+      "payload": {
+        "captured_at": "2026-09-07T12:00:00Z",
+        "mappings": null,
+        "media_type": "application/atom+xml",
+        "provider": "arxiv",
+        "response_sha256": "b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+        "source_url": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+      },
+      "changes": [
+        {
+          "key": "metadata-1",
+          "kind": "acquisition_operation",
+          "value": {
+            "admission_revision": 1,
+            "operation": "response.import",
+            "payload": {
+              "captured_at": "2026-09-07T12:00:00Z",
+              "mappings": null,
+              "media_type": "application/atom+xml",
+              "provider": "arxiv",
+              "response_sha256": "b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+              "source_url": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+            },
+            "result": {
+              "pending": [
+                {
+                  "code": "operation_incomplete"
+                }
+              ],
+              "request_id": "metadata-1",
+              "revision": 1,
+              "status": "admitted",
+              "target": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+            },
+            "runtime": {
+              "constitution": {
+                "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+                "version": "7"
+              },
+              "dirty": null,
+              "executable": "bin/exactory-research",
+              "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+              "plugin_version": "0.85.3",
+              "schema_version": 1,
+              "source_commit": null
+            },
+            "state": "admitted",
+            "target": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+          }
+        }
+      ],
+      "result": {
+        "pending": [
+          {
+            "code": "operation_incomplete"
+          }
+        ],
+        "request_id": "metadata-1",
+        "revision": 1,
+        "status": "admitted",
+        "target": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+      }
+    },
+    {
+      "revision": 2,
+      "request_id": "acq:f67dc47fe2c277868622b2e74e3e7741f94ca4807ad3560034d9f91904cb496f",
+      "operation": "acquisition.finish",
+      "payload": {
+        "operation_id": "metadata-1",
+        "result": {
+          "identity_conflicts": [],
+          "pending": [],
+          "request_id": "metadata-1",
+          "revision": 2,
+          "scope": "metadata_import",
+          "source_ids": [
+            "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34"
+          ],
+          "status": "complete",
+          "work_ids": [
+            "arxiv:2601.00001v1"
+          ]
+        }
+      },
+      "changes": [
+        {
+          "key": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+          "kind": "source",
+          "value": {
+            "attempt_ordinal": 0,
+            "capture_method": "external_import",
+            "captured_at": "2026-09-07T12:00:00Z",
+            "content_scope": "provider_response",
+            "error": null,
+            "exact_version": null,
+            "headers": {
+              "content-type": "application/atom+xml"
+            },
+            "http_status": null,
+            "id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+            "imported": true,
+            "next_eligible_at": null,
+            "operation_id": "metadata-1",
+            "origin_verified": false,
+            "provider": "arxiv",
+            "requested_identifier": null,
+            "response": {
+              "media_type": "application/atom+xml",
+              "path": "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+              "sha256": "b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+              "size": 877
+            },
+            "response_complete": true,
+            "response_received_at": null,
+            "status": "captured",
+            "url": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+          }
+        },
+        {
+          "key": "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91",
+          "kind": "work_assertion",
+          "value": {
+            "abstract": {
+              "media_type": "text/plain; charset=utf-8",
+              "path": "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+              "sha256": "5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+              "size": 64
+            },
+            "abstract_representation": "original",
+            "abstract_status": "available",
+            "aliases": [],
+            "assertion_id": "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91",
+            "authors": [
+              "A. Researcher"
+            ],
+            "categories": [
+              "cs.LG"
+            ],
+            "category": "cs.LG",
+            "date_assertions": {
+              "published": "2026-01-03T12:00:00Z",
+              "updated": "2026-02-01T10:00:00Z"
+            },
+            "fulltext_urls": [
+              "https://arxiv.org/pdf/2601.00001v1",
+              "https://arxiv.org/html/2601.00001v1"
+            ],
+            "id": "arxiv:2601.00001v1",
+            "publication_date": "2026-01-03T12:00:00Z",
+            "reference_metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "references": [],
+            "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+            "source_locator": {
+              "identifier": "http://arxiv.org/abs/2601.00001v1",
+              "index": 0,
+              "type": "atom_entry"
+            },
+            "title": "An authored example",
+            "type": "paper",
+            "version": "v1",
+            "work_id": "arxiv:2601.00001"
+          }
+        },
+        {
+          "key": "arxiv:2601.00001v1",
+          "kind": "work",
+          "value": {
+            "abstract": {
+              "media_type": "text/plain; charset=utf-8",
+              "path": "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+              "sha256": "5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+              "size": 64
+            },
+            "abstract_status": "available",
+            "abstracts": [
+              {
+                "artifact": {
+                  "media_type": "text/plain; charset=utf-8",
+                  "path": "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+                  "sha256": "5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+                  "size": 64
+                },
+                "assertion_id": "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91",
+                "completeness": "complete",
+                "representation": "original",
+                "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+                "version": "v1"
+              }
+            ],
+            "aliases": [],
+            "assertion_ids": [
+              "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91"
+            ],
+            "authors": [
+              "A. Researcher"
+            ],
+            "categories": [
+              "cs.LG"
+            ],
+            "category": "cs.LG",
+            "date_assertions": [
+              {
+                "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+                "values": {
+                  "published": "2026-01-03T12:00:00Z",
+                  "updated": "2026-02-01T10:00:00Z"
+                }
+              }
+            ],
+            "fulltext_urls": [
+              "https://arxiv.org/pdf/2601.00001v1",
+              "https://arxiv.org/html/2601.00001v1"
+            ],
+            "fulltexts": [],
+            "id": "arxiv:2601.00001v1",
+            "publication_date": "2026-01-03T12:00:00Z",
+            "reference_metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "reference_sets": [
+              {
+                "assertion_id": "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91",
+                "metadata": {
+                  "bibliography_complete": false,
+                  "reported_count": null,
+                  "returned_count": 0,
+                  "scope": "provider_metadata",
+                  "status": "missing"
+                },
+                "occurrence_ids": [],
+                "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34"
+              }
+            ],
+            "references": [],
+            "source_ids": [
+              "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34"
+            ],
+            "title": "An authored example",
+            "type": "paper",
+            "version": "v1",
+            "work_id": "arxiv:2601.00001"
+          }
+        },
+        {
+          "key": "arxiv:2601.00001",
+          "kind": "work_family",
+          "value": {
+            "version_ids": [
+              "arxiv:2601.00001v1"
+            ],
+            "work_id": "arxiv:2601.00001"
+          }
+        },
+        {
+          "key": "metadata-1",
+          "kind": "source_import",
+          "value": {
+            "captured_at": "2026-09-07T12:00:00Z",
+            "failures": [],
+            "mappings": null,
+            "media_type": "application/atom+xml",
+            "provider": "arxiv",
+            "response_sha256": "b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+            "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+            "source_url": "https://export.arxiv.org/api/query?id_list=2601.00001v1",
+            "work_ids": [
+              "arxiv:2601.00001v1"
+            ]
+          }
+        },
+        {
+          "key": "metadata-1",
+          "kind": "acquisition_operation",
+          "value": {
+            "admission_revision": 1,
+            "operation": "response.import",
+            "payload": {
+              "captured_at": "2026-09-07T12:00:00Z",
+              "mappings": null,
+              "media_type": "application/atom+xml",
+              "provider": "arxiv",
+              "response_sha256": "b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+              "source_url": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+            },
+            "result": {
+              "identity_conflicts": [],
+              "pending": [],
+              "request_id": "metadata-1",
+              "revision": 2,
+              "scope": "metadata_import",
+              "source_ids": [
+                "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34"
+              ],
+              "status": "complete",
+              "work_ids": [
+                "arxiv:2601.00001v1"
+              ]
+            },
+            "runtime": {
+              "constitution": {
+                "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+                "version": "7"
+              },
+              "dirty": null,
+              "executable": "bin/exactory-research",
+              "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+              "plugin_version": "0.85.3",
+              "schema_version": 1,
+              "source_commit": null
+            },
+            "state": "finished",
+            "target": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+          }
+        }
+      ],
+      "result": {
+        "identity_conflicts": [],
+        "pending": [],
+        "request_id": "metadata-1",
+        "revision": 2,
+        "scope": "metadata_import",
+        "source_ids": [
+          "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34"
+        ],
+        "status": "complete",
+        "work_ids": [
+          "arxiv:2601.00001v1"
+        ]
+      }
+    },
+    {
+      "revision": 3,
+      "request_id": "task3-2",
+      "operation": "literature.roots",
+      "payload": {
+        "collection_ids": [],
+        "profile": "research",
+        "roots": [
+          "arxiv:2601.00001v1"
+        ]
+      },
+      "changes": [
+        {
+          "key": "research",
+          "kind": "literature_scope",
+          "value": {
+            "collection_ids": [],
+            "profile": "research",
+            "roots": [
+              "arxiv:2601.00001v1"
+            ]
+          }
+        },
+        {
+          "key": "task3-2",
+          "kind": "literature_operation",
+          "value": {
+            "operation": "literature.roots",
+            "runtime": {
+              "constitution": {
+                "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+                "version": "7"
+              },
+              "dirty": null,
+              "executable": "bin/exactory-research",
+              "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+              "plugin_version": "0.85.3",
+              "schema_version": 1,
+              "source_commit": null
+            }
+          }
+        }
+      ],
+      "result": {
+        "collection_ids": [],
+        "profile": "research",
+        "roots": [
+          "arxiv:2601.00001v1"
+        ]
+      }
+    },
+    {
+      "revision": 4,
+      "request_id": "legacy-openalex",
+      "operation": "response.import",
+      "payload": {
+        "captured_at": "2026-09-07T12:00:00Z",
+        "mappings": null,
+        "media_type": "application/json",
+        "provider": "openalex",
+        "response_sha256": "9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+        "source_url": "https://api.openalex.org/works?search=bounded&per_page=3"
+      },
+      "changes": [
+        {
+          "key": "legacy-openalex",
+          "kind": "acquisition_operation",
+          "value": {
+            "admission_revision": 4,
+            "operation": "response.import",
+            "payload": {
+              "captured_at": "2026-09-07T12:00:00Z",
+              "mappings": null,
+              "media_type": "application/json",
+              "provider": "openalex",
+              "response_sha256": "9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+              "source_url": "https://api.openalex.org/works?search=bounded&per_page=3"
+            },
+            "result": {
+              "pending": [
+                {
+                  "code": "operation_incomplete"
+                }
+              ],
+              "request_id": "legacy-openalex",
+              "revision": 4,
+              "status": "admitted",
+              "target": "https://api.openalex.org/works?search=bounded&per_page=3"
+            },
+            "runtime": {
+              "constitution": {
+                "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+                "version": "7"
+              },
+              "dirty": null,
+              "executable": "bin/exactory-research",
+              "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+              "plugin_version": "0.85.3",
+              "schema_version": 1,
+              "source_commit": null
+            },
+            "state": "admitted",
+            "target": "https://api.openalex.org/works?search=bounded&per_page=3"
+          }
+        }
+      ],
+      "result": {
+        "pending": [
+          {
+            "code": "operation_incomplete"
+          }
+        ],
+        "request_id": "legacy-openalex",
+        "revision": 4,
+        "status": "admitted",
+        "target": "https://api.openalex.org/works?search=bounded&per_page=3"
+      }
+    },
+    {
+      "revision": 5,
+      "request_id": "acq:2cd5f74d239e31174f3b6785e3ddb4ec2207c1ad50649bca344509a07bcda12d",
+      "operation": "acquisition.finish",
+      "payload": {
+        "operation_id": "legacy-openalex",
+        "result": {
+          "identity_conflicts": [],
+          "pending": [
+            {
+              "code": "invalid_work",
+              "index": 1
+            },
+            {
+              "code": "missing_abstract",
+              "work_id": "openalex:W100"
+            },
+            {
+              "code": "missing_abstract",
+              "work_id": "openalex:W102"
+            }
+          ],
+          "request_id": "legacy-openalex",
+          "revision": 5,
+          "scope": "metadata_import",
+          "source_ids": [
+            "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          ],
+          "status": "pending",
+          "work_ids": [
+            "openalex:W100",
+            "openalex:W102"
+          ]
+        }
+      },
+      "changes": [
+        {
+          "key": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+          "kind": "source",
+          "value": {
+            "attempt_ordinal": 0,
+            "capture_method": "external_import",
+            "captured_at": "2026-09-07T12:00:00Z",
+            "content_scope": "provider_response",
+            "error": null,
+            "exact_version": null,
+            "headers": {
+              "content-type": "application/json"
+            },
+            "http_status": null,
+            "id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "imported": true,
+            "next_eligible_at": null,
+            "operation_id": "legacy-openalex",
+            "origin_verified": false,
+            "provider": "openalex",
+            "requested_identifier": null,
+            "response": {
+              "media_type": "application/json",
+              "path": "research/sources/objects/9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+              "sha256": "9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+              "size": 378
+            },
+            "response_complete": true,
+            "response_received_at": null,
+            "status": "captured",
+            "url": "https://api.openalex.org/works?search=bounded&per_page=3"
+          }
+        },
+        {
+          "key": "acq:b88485be6d97983178620fc88ebe47f5fe59c17a1375cc80f1d6df6f280fa778",
+          "kind": "work_assertion",
+          "value": {
+            "abstract": null,
+            "abstract_representation": "reconstructed_inverted_index",
+            "abstract_status": "missing",
+            "aliases": [],
+            "assertion_id": "acq:b88485be6d97983178620fc88ebe47f5fe59c17a1375cc80f1d6df6f280fa778",
+            "authors": [],
+            "categories": [],
+            "category": null,
+            "date_assertions": {},
+            "fulltext_urls": [],
+            "id": "openalex:W100",
+            "publication_date": null,
+            "reference_metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "references": [],
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "source_locator": {
+              "pointer": "/results/0",
+              "type": "json_pointer"
+            },
+            "title": "A mathematical article",
+            "type": "article",
+            "version": null,
+            "work_id": "openalex:W100"
+          }
+        },
+        {
+          "key": "openalex:W100",
+          "kind": "work",
+          "value": {
+            "abstract": null,
+            "abstract_status": "missing",
+            "abstracts": [],
+            "aliases": [],
+            "assertion_ids": [
+              "acq:b88485be6d97983178620fc88ebe47f5fe59c17a1375cc80f1d6df6f280fa778"
+            ],
+            "authors": [],
+            "categories": [],
+            "category": null,
+            "date_assertions": [
+              {
+                "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+                "values": {}
+              }
+            ],
+            "fulltext_urls": [],
+            "fulltexts": [],
+            "id": "openalex:W100",
+            "publication_date": null,
+            "reference_metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "reference_sets": [
+              {
+                "assertion_id": "acq:b88485be6d97983178620fc88ebe47f5fe59c17a1375cc80f1d6df6f280fa778",
+                "metadata": {
+                  "bibliography_complete": false,
+                  "reported_count": null,
+                  "returned_count": 0,
+                  "scope": "provider_metadata",
+                  "status": "missing"
+                },
+                "occurrence_ids": [],
+                "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+              }
+            ],
+            "references": [],
+            "source_ids": [
+              "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+            ],
+            "title": "A mathematical article",
+            "type": "article",
+            "version": null,
+            "work_id": "openalex:W100"
+          }
+        },
+        {
+          "key": "openalex:W100",
+          "kind": "work_family",
+          "value": {
+            "version_ids": [
+              "openalex:W100"
+            ],
+            "work_id": "openalex:W100"
+          }
+        },
+        {
+          "key": "acq:11c3c103d359fcb555a2505b3eb9c85e70eec0a0a8ec1f6bbc21357c94e5f7c0",
+          "kind": "work_assertion",
+          "value": {
+            "abstract": null,
+            "abstract_representation": "reconstructed_inverted_index",
+            "abstract_status": "missing",
+            "aliases": [
+              "doi:10.1234/issue-titled"
+            ],
+            "assertion_id": "acq:11c3c103d359fcb555a2505b3eb9c85e70eec0a0a8ec1f6bbc21357c94e5f7c0",
+            "authors": [],
+            "categories": [],
+            "category": null,
+            "date_assertions": {},
+            "fulltext_urls": [],
+            "id": "openalex:W102",
+            "publication_date": null,
+            "reference_metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "references": [],
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "source_locator": {
+              "pointer": "/results/2",
+              "type": "json_pointer"
+            },
+            "title": "Issue front matter",
+            "type": "paratext",
+            "version": null,
+            "work_id": "openalex:W102"
+          }
+        },
+        {
+          "key": "openalex:W102",
+          "kind": "work",
+          "value": {
+            "abstract": null,
+            "abstract_status": "missing",
+            "abstracts": [],
+            "aliases": [
+              "doi:10.1234/issue-titled"
+            ],
+            "assertion_ids": [
+              "acq:11c3c103d359fcb555a2505b3eb9c85e70eec0a0a8ec1f6bbc21357c94e5f7c0"
+            ],
+            "authors": [],
+            "categories": [],
+            "category": null,
+            "date_assertions": [
+              {
+                "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+                "values": {}
+              }
+            ],
+            "fulltext_urls": [],
+            "fulltexts": [],
+            "id": "openalex:W102",
+            "publication_date": null,
+            "reference_metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "reference_sets": [
+              {
+                "assertion_id": "acq:11c3c103d359fcb555a2505b3eb9c85e70eec0a0a8ec1f6bbc21357c94e5f7c0",
+                "metadata": {
+                  "bibliography_complete": false,
+                  "reported_count": null,
+                  "returned_count": 0,
+                  "scope": "provider_metadata",
+                  "status": "missing"
+                },
+                "occurrence_ids": [],
+                "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+              }
+            ],
+            "references": [],
+            "source_ids": [
+              "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+            ],
+            "title": "Issue front matter",
+            "type": "paratext",
+            "version": null,
+            "work_id": "openalex:W102"
+          }
+        },
+        {
+          "key": "openalex:W102",
+          "kind": "work_family",
+          "value": {
+            "version_ids": [
+              "openalex:W102"
+            ],
+            "work_id": "openalex:W102"
+          }
+        },
+        {
+          "key": "doi:10.1234/issue-titled",
+          "kind": "alias",
+          "value": {
+            "assertions": [
+              {
+                "locator": {
+                  "pointer": "/results/2",
+                  "type": "json_pointer"
+                },
+                "relation": "same_work",
+                "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+                "work_id": "openalex:W102"
+              }
+            ],
+            "identifier": "doi:10.1234/issue-titled"
+          }
+        },
+        {
+          "key": "legacy-openalex",
+          "kind": "source_import",
+          "value": {
+            "captured_at": "2026-09-07T12:00:00Z",
+            "failures": [
+              {
+                "code": "invalid_work",
+                "index": 1
+              }
+            ],
+            "mappings": null,
+            "media_type": "application/json",
+            "provider": "openalex",
+            "response_sha256": "9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "source_url": "https://api.openalex.org/works?search=bounded&per_page=3",
+            "work_ids": [
+              "openalex:W100",
+              "openalex:W102"
+            ]
+          }
+        },
+        {
+          "key": "legacy-openalex",
+          "kind": "acquisition_operation",
+          "value": {
+            "admission_revision": 4,
+            "operation": "response.import",
+            "payload": {
+              "captured_at": "2026-09-07T12:00:00Z",
+              "mappings": null,
+              "media_type": "application/json",
+              "provider": "openalex",
+              "response_sha256": "9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+              "source_url": "https://api.openalex.org/works?search=bounded&per_page=3"
+            },
+            "result": {
+              "identity_conflicts": [],
+              "pending": [
+                {
+                  "code": "invalid_work",
+                  "index": 1
+                },
+                {
+                  "code": "missing_abstract",
+                  "work_id": "openalex:W100"
+                },
+                {
+                  "code": "missing_abstract",
+                  "work_id": "openalex:W102"
+                }
+              ],
+              "request_id": "legacy-openalex",
+              "revision": 5,
+              "scope": "metadata_import",
+              "source_ids": [
+                "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+              ],
+              "status": "pending",
+              "work_ids": [
+                "openalex:W100",
+                "openalex:W102"
+              ]
+            },
+            "runtime": {
+              "constitution": {
+                "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+                "version": "7"
+              },
+              "dirty": null,
+              "executable": "bin/exactory-research",
+              "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+              "plugin_version": "0.85.3",
+              "schema_version": 1,
+              "source_commit": null
+            },
+            "state": "finished",
+            "target": "https://api.openalex.org/works?search=bounded&per_page=3"
+          }
+        }
+      ],
+      "result": {
+        "identity_conflicts": [],
+        "pending": [
+          {
+            "code": "invalid_work",
+            "index": 1
+          },
+          {
+            "code": "missing_abstract",
+            "work_id": "openalex:W100"
+          },
+          {
+            "code": "missing_abstract",
+            "work_id": "openalex:W102"
+          }
+        ],
+        "request_id": "legacy-openalex",
+        "revision": 5,
+        "scope": "metadata_import",
+        "source_ids": [
+          "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+        ],
+        "status": "pending",
+        "work_ids": [
+          "openalex:W100",
+          "openalex:W102"
+        ]
+      }
+    },
+    {
+      "revision": 6,
+      "request_id": "task3-3",
+      "operation": "literature.search",
+      "payload": {
+        "captured_at": "2026-09-07T12:00:00Z",
+        "cited_work_ids": [],
+        "dispositions": [
+          {
+            "disposition": "out_of_scope",
+            "reason": "Outside the declared comparison.",
+            "work_id": "openalex:W100"
+          },
+          {
+            "disposition": "out_of_scope",
+            "reason": "Outside the declared comparison.",
+            "work_id": "openalex:W102"
+          }
+        ],
+        "found_work_ids": [
+          "openalex:W100",
+          "openalex:W102"
+        ],
+        "gaps": [],
+        "id": "legacy-search",
+        "impact": "Only the captured query was inspected.",
+        "profile": "research",
+        "purpose": "direct",
+        "queries": [
+          "bounded"
+        ],
+        "question": "Every bounded configuration has the stated property.",
+        "responses": [
+          {
+            "query": "bounded",
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "scope": "All results of this captured native query.",
+        "verdict": "nothing-new"
+      },
+      "changes": [
+        {
+          "key": "legacy-search",
+          "kind": "literature_search",
+          "value": {
+            "captured_at": "2026-09-07T12:00:00Z",
+            "cited_work_ids": [],
+            "coverage": [
+              {
+                "inspected_count": 2,
+                "kind": "bounded_unordered",
+                "ordering": null,
+                "page_positions": [
+                  0
+                ],
+                "provider": "openalex",
+                "query": "bounded",
+                "requested_k": 10,
+                "returned_count": 3
+              }
+            ],
+            "dispositions": [
+              {
+                "disposition": "out_of_scope",
+                "reason": "Outside the declared comparison.",
+                "work_id": "openalex:W100"
+              },
+              {
+                "disposition": "out_of_scope",
+                "reason": "Outside the declared comparison.",
+                "work_id": "openalex:W102"
+              }
+            ],
+            "evidence_digest": "4d34c939025005c8f9874b76f97708814561d1cca7429dc24b009a3c5cbde442",
+            "found_work_ids": [
+              "openalex:W100",
+              "openalex:W102"
+            ],
+            "frontier_digest": "74e8fdbd1674c301fa660ff9ca7ca20a3042508177a4280e1f2927b2e5514519",
+            "gaps": [],
+            "hits_per_query": 10,
+            "id": "legacy-search",
+            "impact": "Only the captured query was inspected.",
+            "integrity_errors": [
+              {
+                "code": "invalid_work",
+                "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+                "index": 1,
+                "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+              }
+            ],
+            "page_groups": [
+              {
+                "complete": false,
+                "cursor_page_size": null,
+                "endpoint": "https://api.openalex.org/works",
+                "id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+                "mode": "offset",
+                "parameters": [
+                  [
+                    "search",
+                    "bounded"
+                  ]
+                ],
+                "provider": "openalex",
+                "query": "bounded",
+                "reported_count": 3,
+                "returned_count": 3,
+                "scope": "All results of this captured native query.",
+                "source_ids": [
+                  "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+                ]
+              }
+            ],
+            "pending": [
+              {
+                "code": "invalid_work",
+                "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+                "index": 1,
+                "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+              }
+            ],
+            "profile": "research",
+            "purpose": "direct",
+            "queries": [
+              "bounded"
+            ],
+            "question": "Every bounded configuration has the stated property.",
+            "responses": [
+              {
+                "query": "bounded",
+                "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+              }
+            ],
+            "scope": "All results of this captured native query.",
+            "scope_digest": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977",
+            "verdict": "nothing-new"
+          }
+        },
+        {
+          "key": "research:direct",
+          "kind": "search_selection",
+          "value": {
+            "search_id": "legacy-search"
+          }
+        },
+        {
+          "key": "task3-3",
+          "kind": "literature_operation",
+          "value": {
+            "operation": "literature.search",
+            "runtime": {
+              "constitution": {
+                "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+                "version": "7"
+              },
+              "dirty": null,
+              "executable": "bin/exactory-research",
+              "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+              "plugin_version": "0.85.3",
+              "schema_version": 1,
+              "source_commit": null
+            }
+          }
+        }
+      ],
+      "result": {
+        "found_work_ids": [
+          "openalex:W100",
+          "openalex:W102"
+        ],
+        "id": "legacy-search",
+        "pending": [
+          {
+            "code": "invalid_work",
+            "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "index": 1,
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ]
+      }
+    }
+  ],
+  "receipt": {
+    "revision": 6,
+    "request_id": "task3-3",
+    "result": {
+      "found_work_ids": [
+        "openalex:W100",
+        "openalex:W102"
+      ],
+      "id": "legacy-search",
+      "pending": [
+        {
+          "code": "invalid_work",
+          "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+          "index": 1,
+          "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+        }
+      ]
+    }
+  },
+  "import_receipt": {
+    "identity_conflicts": [],
+    "pending": [
+      {
+        "code": "invalid_work",
+        "index": 1
+      },
+      {
+        "code": "missing_abstract",
+        "work_id": "openalex:W100"
+      },
+      {
+        "code": "missing_abstract",
+        "work_id": "openalex:W102"
+      }
+    ],
+    "request_id": "legacy-openalex",
+    "revision": 5,
+    "scope": "metadata_import",
+    "source_ids": [
+      "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+    ],
+    "status": "pending",
+    "work_ids": [
+      "openalex:W100",
+      "openalex:W102"
+    ]
+  },
+  "search_digest": "982e7854f7cedc2a78adc0848387a286cdef289940cf3730827c71ec189d94e2",
+  "foundation_report": {
+    "ready": false,
+    "digest": "74efe73861cbd5d83397beb5c82133fbc193ae8ce649e8f8d2ff5cf10321dd8f",
+    "obligations": [
+      {
+        "code": "bibliography_incomplete",
+        "explanation": "Import an evidence-linked complete article bibliography; registry counts are insufficient.",
+        "version_id": "arxiv:2601.00001v1",
+        "source_id": null
+      },
+      {
+        "code": "cohort_missing",
+        "explanation": "Select the complete frozen cohort collection."
+      },
+      {
+        "code": "fulltext_reading_missing",
+        "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+        "version_id": "arxiv:2601.00001v1",
+        "paths": [
+          "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+        ],
+        "source_id": null
+      },
+      {
+        "code": "search_pending",
+        "explanation": "Complete the captured search enumeration or parser obligations.",
+        "purpose": "direct",
+        "search_id": "legacy-search",
+        "pending": [
+          {
+            "code": "invalid_work",
+            "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "index": 1,
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ]
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "originals"
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "recent"
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "adjacent"
+      },
+      {
+        "code": "search_purpose_missing",
+        "explanation": "Record this purpose's saved search responses against the current literature scope.",
+        "purpose": "theory"
+      },
+      {
+        "code": "source_bundle_missing",
+        "explanation": "Import the boundaries and required units for this distinct original body.",
+        "version_id": "arxiv:2601.00001v1",
+        "source_id": null,
+        "paths": [
+          "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+        ]
+      },
+      {
+        "code": "source_bundle_missing",
+        "explanation": "Import the exact article boundaries and required source units.",
+        "version_id": "arxiv:2601.00001v1",
+        "paths": [
+          "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+        ]
+      }
+    ],
+    "notices": [],
+    "counts": {
+      "works": 3,
+      "versions": 3,
+      "cohort_families": 0,
+      "reference_occurrences": 0,
+      "obligations": 10,
+      "fulltext_read": 0,
+      "abstract_read": 0,
+      "tier_1": 1,
+      "tier_2": 0,
+      "tier_3": 0
+    },
+    "population_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "frontier_digest": "74e8fdbd1674c301fa660ff9ca7ca20a3042508177a4280e1f2927b2e5514519",
+    "judgments_digest": "80ed8b2e979bee03bab2a2b4c73d6e135b623a99eb170ee0dc0dddaf14998f74",
+    "requirements_digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "stable_digest": "955f75e7d90296e97cfec90a771302c8bf4d824739f72721565ae63be5b53365",
+    "passed": {
+      "graph": false,
+      "cohort": false,
+      "searches": false
+    },
+    "invalid_references": [],
+    "inventory": [
+      {
+        "version_id": "arxiv:2601.00001v1",
+        "work_id": "arxiv:2601.00001",
+        "title": "An authored example",
+        "tier": 1,
+        "required_depth": "fulltext",
+        "reasons": [
+          "tier_1"
+        ],
+        "source_paths": [
+          "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+        ],
+        "date_assertions": [
+          {
+            "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+            "values": {
+              "published": "2026-01-03T12:00:00Z",
+              "updated": "2026-02-01T10:00:00Z"
+            }
+          }
+        ],
+        "historical_status": "not_requested",
+        "fulltext_read": false,
+        "abstract_read": false,
+        "body_coverage": {
+          "complete": false,
+          "readings": {},
+          "missing": [
+            {
+              "source_id": null,
+              "original_sha256": null,
+              "paths": [],
+              "bundle_id": null,
+              "pending": []
+            }
+          ]
+        },
+        "bundle_id": null,
+        "required_units": [],
+        "visual_assets": [],
+        "retrievals": []
+      },
+      {
+        "version_id": "openalex:W100",
+        "work_id": "openalex:W100",
+        "title": "A mathematical article",
+        "tier": null,
+        "required_depth": null,
+        "reasons": [],
+        "source_paths": [
+          "research/sources/objects/9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897"
+        ],
+        "date_assertions": [
+          {
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "values": {}
+          }
+        ],
+        "historical_status": "not_requested",
+        "fulltext_read": false,
+        "abstract_read": false,
+        "body_coverage": null,
+        "bundle_id": null,
+        "required_units": [],
+        "visual_assets": [],
+        "retrievals": []
+      },
+      {
+        "version_id": "openalex:W102",
+        "work_id": "openalex:W102",
+        "title": "Issue front matter",
+        "tier": null,
+        "required_depth": null,
+        "reasons": [],
+        "source_paths": [
+          "research/sources/objects/9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897"
+        ],
+        "date_assertions": [
+          {
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "values": {}
+          }
+        ],
+        "historical_status": "not_requested",
+        "fulltext_read": false,
+        "abstract_read": false,
+        "body_coverage": null,
+        "bundle_id": null,
+        "required_units": [],
+        "visual_assets": [],
+        "retrievals": []
+      }
+    ],
+    "collections": [],
+    "cohort": {
+      "ready": false,
+      "digest": "9f92adebdd41aa23b9070b4fbf924524b394a4e9e699d4f74ed27eddc9f63d10",
+      "obligations": [
+        {
+          "code": "cohort_missing",
+          "explanation": "Select the complete frozen cohort collection."
+        }
+      ],
+      "notices": [],
+      "counts": {
+        "cohort_families": 0,
+        "abstract_obligations": 0,
+        "abstracts_read": 0,
+        "obligations": 1
+      },
+      "collections": [],
+      "inventory": [],
+      "readings": {},
+      "next": {
+        "code": "cohort_missing",
+        "explanation": "Select the complete frozen cohort collection."
+      },
+      "limits": "Mechanical source anchoring records inspection; it does not establish comprehension."
+    },
+    "availability_qualified": [],
+    "searches": [
+      {
+        "captured_at": "2026-09-07T12:00:00Z",
+        "cited_work_ids": [],
+        "coverage": [
+          {
+            "inspected_count": 2,
+            "kind": "bounded_unordered",
+            "ordering": null,
+            "page_positions": [
+              0
+            ],
+            "provider": "openalex",
+            "query": "bounded",
+            "requested_k": 10,
+            "returned_count": 3
+          }
+        ],
+        "dispositions": [
+          {
+            "disposition": "out_of_scope",
+            "reason": "Outside the declared comparison.",
+            "work_id": "openalex:W100"
+          },
+          {
+            "disposition": "out_of_scope",
+            "reason": "Outside the declared comparison.",
+            "work_id": "openalex:W102"
+          }
+        ],
+        "evidence_digest": "4d34c939025005c8f9874b76f97708814561d1cca7429dc24b009a3c5cbde442",
+        "found_work_ids": [
+          "openalex:W100",
+          "openalex:W102"
+        ],
+        "frontier_digest": "74e8fdbd1674c301fa660ff9ca7ca20a3042508177a4280e1f2927b2e5514519",
+        "gaps": [],
+        "hits_per_query": 10,
+        "id": "legacy-search",
+        "impact": "Only the captured query was inspected.",
+        "integrity_errors": [
+          {
+            "code": "invalid_work",
+            "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "index": 1,
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "page_groups": [
+          {
+            "complete": false,
+            "cursor_page_size": null,
+            "endpoint": "https://api.openalex.org/works",
+            "id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "mode": "offset",
+            "parameters": [
+              [
+                "search",
+                "bounded"
+              ]
+            ],
+            "provider": "openalex",
+            "query": "bounded",
+            "reported_count": 3,
+            "returned_count": 3,
+            "scope": "All results of this captured native query.",
+            "source_ids": [
+              "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+            ]
+          }
+        ],
+        "pending": [
+          {
+            "code": "invalid_work",
+            "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "index": 1,
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "profile": "research",
+        "purpose": "direct",
+        "queries": [
+          "bounded"
+        ],
+        "question": "Every bounded configuration has the stated property.",
+        "responses": [
+          {
+            "query": "bounded",
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "scope": "All results of this captured native query.",
+        "scope_digest": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977",
+        "verdict": "nothing-new"
+      }
+    ],
+    "search_history": [
+      {
+        "captured_at": "2026-09-07T12:00:00Z",
+        "cited_work_ids": [],
+        "coverage": [
+          {
+            "inspected_count": 2,
+            "kind": "bounded_unordered",
+            "ordering": null,
+            "page_positions": [
+              0
+            ],
+            "provider": "openalex",
+            "query": "bounded",
+            "requested_k": 10,
+            "returned_count": 3
+          }
+        ],
+        "dispositions": [
+          {
+            "disposition": "out_of_scope",
+            "reason": "Outside the declared comparison.",
+            "work_id": "openalex:W100"
+          },
+          {
+            "disposition": "out_of_scope",
+            "reason": "Outside the declared comparison.",
+            "work_id": "openalex:W102"
+          }
+        ],
+        "evidence_digest": "4d34c939025005c8f9874b76f97708814561d1cca7429dc24b009a3c5cbde442",
+        "found_work_ids": [
+          "openalex:W100",
+          "openalex:W102"
+        ],
+        "frontier_digest": "74e8fdbd1674c301fa660ff9ca7ca20a3042508177a4280e1f2927b2e5514519",
+        "gaps": [],
+        "hits_per_query": 10,
+        "id": "legacy-search",
+        "impact": "Only the captured query was inspected.",
+        "integrity_errors": [
+          {
+            "code": "invalid_work",
+            "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "index": 1,
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "page_groups": [
+          {
+            "complete": false,
+            "cursor_page_size": null,
+            "endpoint": "https://api.openalex.org/works",
+            "id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "mode": "offset",
+            "parameters": [
+              [
+                "search",
+                "bounded"
+              ]
+            ],
+            "provider": "openalex",
+            "query": "bounded",
+            "reported_count": 3,
+            "returned_count": 3,
+            "scope": "All results of this captured native query.",
+            "source_ids": [
+              "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+            ]
+          }
+        ],
+        "pending": [
+          {
+            "code": "invalid_work",
+            "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "index": 1,
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "profile": "research",
+        "purpose": "direct",
+        "queries": [
+          "bounded"
+        ],
+        "question": "Every bounded configuration has the stated property.",
+        "responses": [
+          {
+            "query": "bounded",
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "scope": "All results of this captured native query.",
+        "scope_digest": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977",
+        "verdict": "nothing-new"
+      }
+    ],
+    "next": {
+      "code": "fulltext_reading_missing",
+      "explanation": "Acquire/import and inspect every required unit of this exact source bundle.",
+      "version_id": "arxiv:2601.00001v1",
+      "paths": [
+        "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+        "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5"
+      ],
+      "source_id": null
+    },
+    "limits": "Mechanical source and inspection validation does not establish comprehension, source entailment, scientific truth, or universal novelty."
+  },
+  "coverage": [
+    {
+      "inspected_count": 2,
+      "kind": "bounded_unordered",
+      "ordering": null,
+      "page_positions": [
+        0
+      ],
+      "provider": "openalex",
+      "query": "bounded",
+      "requested_k": 10,
+      "returned_count": 3
+    }
+  ],
+  "check_search_coverage": false,
+  "finding": {
+    "outcome": "supported_open",
+    "searched_at": "2026-09-07",
+    "evidence": [
+      "982e7854f7cedc2a78adc0848387a286cdef289940cf3730827c71ec189d94e2"
+    ],
+    "minimum": {
+      "schema_version": 1,
+      "statement": "Every bounded configuration has the stated property.",
+      "neighbours": [],
+      "searches": [
+        {
+          "formulation": "Every bounded configuration has the stated property.",
+          "search_digest": "982e7854f7cedc2a78adc0848387a286cdef289940cf3730827c71ec189d94e2"
+        }
+      ],
+      "reading_digests": [],
+      "settling_work_id": null
+    }
+  },
+  "audit_code": "openness_search_gap",
+  "artifacts": [
+    {
+      "path": "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+      "base64": "U291cmNlIDEgc3R1ZGllcyBib3VuZGVkIHNlcXVlbmNlcyBhbmQgcmVwb3J0cyBhIGZpbml0ZSBleGFtcGxlLg=="
+    },
+    {
+      "path": "research/sources/objects/9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+      "base64": "eyJtZXRhIjogeyJjb3VudCI6IDN9LCAicmVzdWx0cyI6IFt7ImlkIjogImh0dHBzOi8vb3BlbmFsZXgub3JnL1cxMDAiLCAidGl0bGUiOiAiQSBtYXRoZW1hdGljYWwgYXJ0aWNsZSIsICJ0eXBlIjogImFydGljbGUifSwgeyJpZCI6ICJodHRwczovL29wZW5hbGV4Lm9yZy9XMTAxIiwgImRvaSI6ICJodHRwczovL2RvaS5vcmcvMTAuMTIzNC9pc3N1ZS1udWxsIiwgInRpdGxlIjogbnVsbCwgInR5cGUiOiAicGFyYXRleHQifSwgeyJpZCI6ICJodHRwczovL29wZW5hbGV4Lm9yZy9XMTAyIiwgImRvaSI6ICJodHRwczovL2RvaS5vcmcvMTAuMTIzNC9pc3N1ZS10aXRsZWQiLCAidGl0bGUiOiAiSXNzdWUgZnJvbnQgbWF0dGVyIiwgInR5cGUiOiAicGFyYXRleHQifV19"
+    },
+    {
+      "path": "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+      "base64": "PD94bWwgdmVyc2lvbj0iMS4wIj8+PGZlZWQgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDUvQXRvbSIgeG1sbnM6YXJ4aXY9Imh0dHA6Ly9hcnhpdi5vcmcvc2NoZW1hcy9hdG9tIiB4bWxuczpvcGVuc2VhcmNoPSJodHRwOi8vYTkuY29tLy0vc3BlYy9vcGVuc2VhcmNoLzEuMS8iPjxpZD5odHRwczovL2FyeGl2Lm9yZy9hcGkvYXV0aG9yZWQ8L2lkPjx0aXRsZT5BdXRob3JlZCBxdWVyeTwvdGl0bGU+PHVwZGF0ZWQ+MjAyNi0wOS0wN1QwMDowMDowMFo8L3VwZGF0ZWQ+PG9wZW5zZWFyY2g6dG90YWxSZXN1bHRzPjE8L29wZW5zZWFyY2g6dG90YWxSZXN1bHRzPjxvcGVuc2VhcmNoOnN0YXJ0SW5kZXg+MDwvb3BlbnNlYXJjaDpzdGFydEluZGV4PjxvcGVuc2VhcmNoOml0ZW1zUGVyUGFnZT4xMDA8L29wZW5zZWFyY2g6aXRlbXNQZXJQYWdlPjxlbnRyeT48aWQ+aHR0cDovL2FyeGl2Lm9yZy9hYnMvMjYwMS4wMDAwMXYxPC9pZD48dGl0bGU+QW4gYXV0aG9yZWQgZXhhbXBsZTwvdGl0bGU+PGF1dGhvcj48bmFtZT5BLiBSZXNlYXJjaGVyPC9uYW1lPjwvYXV0aG9yPjxwdWJsaXNoZWQ+MjAyNi0wMS0wM1QxMjowMDowMFo8L3B1Ymxpc2hlZD48dXBkYXRlZD4yMDI2LTAyLTAxVDEwOjAwOjAwWjwvdXBkYXRlZD48c3VtbWFyeT5Tb3VyY2UgMSBzdHVkaWVzIGJvdW5kZWQgc2VxdWVuY2VzIGFuZCByZXBvcnRzIGEgZmluaXRlIGV4YW1wbGUuPC9zdW1tYXJ5PjxhcnhpdjpwcmltYXJ5X2NhdGVnb3J5IHRlcm09ImNzLkxHIi8+PGNhdGVnb3J5IHRlcm09ImNzLkxHIi8+PGxpbmsgcmVsPSJyZWxhdGVkIiB0eXBlPSJhcHBsaWNhdGlvbi9wZGYiIGhyZWY9Imh0dHA6Ly9hcnhpdi5vcmcvcGRmLzI2MDEuMDAwMDF2MSIvPjwvZW50cnk+PC9mZWVkPg=="
+    }
+  ],
+  "records": {
+    "acquisition_operation": {
+      "metadata-1": {
+        "admission_revision": 1,
+        "operation": "response.import",
+        "payload": {
+          "captured_at": "2026-09-07T12:00:00Z",
+          "mappings": null,
+          "media_type": "application/atom+xml",
+          "provider": "arxiv",
+          "response_sha256": "b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+          "source_url": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+        },
+        "result": {
+          "identity_conflicts": [],
+          "pending": [],
+          "request_id": "metadata-1",
+          "revision": 2,
+          "scope": "metadata_import",
+          "source_ids": [
+            "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34"
+          ],
+          "status": "complete",
+          "work_ids": [
+            "arxiv:2601.00001v1"
+          ]
+        },
+        "runtime": {
+          "constitution": {
+            "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+            "version": "7"
+          },
+          "dirty": null,
+          "executable": "bin/exactory-research",
+          "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+          "plugin_version": "0.85.3",
+          "schema_version": 1,
+          "source_commit": null
+        },
+        "state": "finished",
+        "target": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+      },
+      "legacy-openalex": {
+        "admission_revision": 4,
+        "operation": "response.import",
+        "payload": {
+          "captured_at": "2026-09-07T12:00:00Z",
+          "mappings": null,
+          "media_type": "application/json",
+          "provider": "openalex",
+          "response_sha256": "9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+          "source_url": "https://api.openalex.org/works?search=bounded&per_page=3"
+        },
+        "result": {
+          "identity_conflicts": [],
+          "pending": [
+            {
+              "code": "invalid_work",
+              "index": 1
+            },
+            {
+              "code": "missing_abstract",
+              "work_id": "openalex:W100"
+            },
+            {
+              "code": "missing_abstract",
+              "work_id": "openalex:W102"
+            }
+          ],
+          "request_id": "legacy-openalex",
+          "revision": 5,
+          "scope": "metadata_import",
+          "source_ids": [
+            "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          ],
+          "status": "pending",
+          "work_ids": [
+            "openalex:W100",
+            "openalex:W102"
+          ]
+        },
+        "runtime": {
+          "constitution": {
+            "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+            "version": "7"
+          },
+          "dirty": null,
+          "executable": "bin/exactory-research",
+          "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+          "plugin_version": "0.85.3",
+          "schema_version": 1,
+          "source_commit": null
+        },
+        "state": "finished",
+        "target": "https://api.openalex.org/works?search=bounded&per_page=3"
+      }
+    },
+    "source": {
+      "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34": {
+        "attempt_ordinal": 0,
+        "capture_method": "external_import",
+        "captured_at": "2026-09-07T12:00:00Z",
+        "content_scope": "provider_response",
+        "error": null,
+        "exact_version": null,
+        "headers": {
+          "content-type": "application/atom+xml"
+        },
+        "http_status": null,
+        "id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+        "imported": true,
+        "next_eligible_at": null,
+        "operation_id": "metadata-1",
+        "origin_verified": false,
+        "provider": "arxiv",
+        "requested_identifier": null,
+        "response": {
+          "media_type": "application/atom+xml",
+          "path": "research/sources/objects/b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+          "sha256": "b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+          "size": 877
+        },
+        "response_complete": true,
+        "response_received_at": null,
+        "status": "captured",
+        "url": "https://export.arxiv.org/api/query?id_list=2601.00001v1"
+      },
+      "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee": {
+        "attempt_ordinal": 0,
+        "capture_method": "external_import",
+        "captured_at": "2026-09-07T12:00:00Z",
+        "content_scope": "provider_response",
+        "error": null,
+        "exact_version": null,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "http_status": null,
+        "id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+        "imported": true,
+        "next_eligible_at": null,
+        "operation_id": "legacy-openalex",
+        "origin_verified": false,
+        "provider": "openalex",
+        "requested_identifier": null,
+        "response": {
+          "media_type": "application/json",
+          "path": "research/sources/objects/9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+          "sha256": "9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+          "size": 378
+        },
+        "response_complete": true,
+        "response_received_at": null,
+        "status": "captured",
+        "url": "https://api.openalex.org/works?search=bounded&per_page=3"
+      }
+    },
+    "work_assertion": {
+      "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91": {
+        "abstract": {
+          "media_type": "text/plain; charset=utf-8",
+          "path": "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "sha256": "5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "size": 64
+        },
+        "abstract_representation": "original",
+        "abstract_status": "available",
+        "aliases": [],
+        "assertion_id": "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91",
+        "authors": [
+          "A. Researcher"
+        ],
+        "categories": [
+          "cs.LG"
+        ],
+        "category": "cs.LG",
+        "date_assertions": {
+          "published": "2026-01-03T12:00:00Z",
+          "updated": "2026-02-01T10:00:00Z"
+        },
+        "fulltext_urls": [
+          "https://arxiv.org/pdf/2601.00001v1",
+          "https://arxiv.org/html/2601.00001v1"
+        ],
+        "id": "arxiv:2601.00001v1",
+        "publication_date": "2026-01-03T12:00:00Z",
+        "reference_metadata": {
+          "bibliography_complete": false,
+          "reported_count": null,
+          "returned_count": 0,
+          "scope": "provider_metadata",
+          "status": "missing"
+        },
+        "references": [],
+        "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+        "source_locator": {
+          "identifier": "http://arxiv.org/abs/2601.00001v1",
+          "index": 0,
+          "type": "atom_entry"
+        },
+        "title": "An authored example",
+        "type": "paper",
+        "version": "v1",
+        "work_id": "arxiv:2601.00001"
+      },
+      "acq:b88485be6d97983178620fc88ebe47f5fe59c17a1375cc80f1d6df6f280fa778": {
+        "abstract": null,
+        "abstract_representation": "reconstructed_inverted_index",
+        "abstract_status": "missing",
+        "aliases": [],
+        "assertion_id": "acq:b88485be6d97983178620fc88ebe47f5fe59c17a1375cc80f1d6df6f280fa778",
+        "authors": [],
+        "categories": [],
+        "category": null,
+        "date_assertions": {},
+        "fulltext_urls": [],
+        "id": "openalex:W100",
+        "publication_date": null,
+        "reference_metadata": {
+          "bibliography_complete": false,
+          "reported_count": null,
+          "returned_count": 0,
+          "scope": "provider_metadata",
+          "status": "missing"
+        },
+        "references": [],
+        "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+        "source_locator": {
+          "pointer": "/results/0",
+          "type": "json_pointer"
+        },
+        "title": "A mathematical article",
+        "type": "article",
+        "version": null,
+        "work_id": "openalex:W100"
+      },
+      "acq:11c3c103d359fcb555a2505b3eb9c85e70eec0a0a8ec1f6bbc21357c94e5f7c0": {
+        "abstract": null,
+        "abstract_representation": "reconstructed_inverted_index",
+        "abstract_status": "missing",
+        "aliases": [
+          "doi:10.1234/issue-titled"
+        ],
+        "assertion_id": "acq:11c3c103d359fcb555a2505b3eb9c85e70eec0a0a8ec1f6bbc21357c94e5f7c0",
+        "authors": [],
+        "categories": [],
+        "category": null,
+        "date_assertions": {},
+        "fulltext_urls": [],
+        "id": "openalex:W102",
+        "publication_date": null,
+        "reference_metadata": {
+          "bibliography_complete": false,
+          "reported_count": null,
+          "returned_count": 0,
+          "scope": "provider_metadata",
+          "status": "missing"
+        },
+        "references": [],
+        "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+        "source_locator": {
+          "pointer": "/results/2",
+          "type": "json_pointer"
+        },
+        "title": "Issue front matter",
+        "type": "paratext",
+        "version": null,
+        "work_id": "openalex:W102"
+      }
+    },
+    "work": {
+      "arxiv:2601.00001v1": {
+        "abstract": {
+          "media_type": "text/plain; charset=utf-8",
+          "path": "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "sha256": "5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+          "size": 64
+        },
+        "abstract_status": "available",
+        "abstracts": [
+          {
+            "artifact": {
+              "media_type": "text/plain; charset=utf-8",
+              "path": "research/sources/objects/5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+              "sha256": "5047f9f233cd02c48ff1677f4d88122fe59e84a12e578321386467085255a2e7",
+              "size": 64
+            },
+            "assertion_id": "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91",
+            "completeness": "complete",
+            "representation": "original",
+            "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+            "version": "v1"
+          }
+        ],
+        "aliases": [],
+        "assertion_ids": [
+          "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91"
+        ],
+        "authors": [
+          "A. Researcher"
+        ],
+        "categories": [
+          "cs.LG"
+        ],
+        "category": "cs.LG",
+        "date_assertions": [
+          {
+            "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+            "values": {
+              "published": "2026-01-03T12:00:00Z",
+              "updated": "2026-02-01T10:00:00Z"
+            }
+          }
+        ],
+        "fulltext_urls": [
+          "https://arxiv.org/pdf/2601.00001v1",
+          "https://arxiv.org/html/2601.00001v1"
+        ],
+        "fulltexts": [],
+        "id": "arxiv:2601.00001v1",
+        "publication_date": "2026-01-03T12:00:00Z",
+        "reference_metadata": {
+          "bibliography_complete": false,
+          "reported_count": null,
+          "returned_count": 0,
+          "scope": "provider_metadata",
+          "status": "missing"
+        },
+        "reference_sets": [
+          {
+            "assertion_id": "acq:8cb91e1ae65da38b8eee3ced2c291b374858df130d76e16253b8e10ec2f05d91",
+            "metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "occurrence_ids": [],
+            "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34"
+          }
+        ],
+        "references": [],
+        "source_ids": [
+          "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34"
+        ],
+        "title": "An authored example",
+        "type": "paper",
+        "version": "v1",
+        "work_id": "arxiv:2601.00001"
+      },
+      "openalex:W100": {
+        "abstract": null,
+        "abstract_status": "missing",
+        "abstracts": [],
+        "aliases": [],
+        "assertion_ids": [
+          "acq:b88485be6d97983178620fc88ebe47f5fe59c17a1375cc80f1d6df6f280fa778"
+        ],
+        "authors": [],
+        "categories": [],
+        "category": null,
+        "date_assertions": [
+          {
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "values": {}
+          }
+        ],
+        "fulltext_urls": [],
+        "fulltexts": [],
+        "id": "openalex:W100",
+        "publication_date": null,
+        "reference_metadata": {
+          "bibliography_complete": false,
+          "reported_count": null,
+          "returned_count": 0,
+          "scope": "provider_metadata",
+          "status": "missing"
+        },
+        "reference_sets": [
+          {
+            "assertion_id": "acq:b88485be6d97983178620fc88ebe47f5fe59c17a1375cc80f1d6df6f280fa778",
+            "metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "occurrence_ids": [],
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "references": [],
+        "source_ids": [
+          "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+        ],
+        "title": "A mathematical article",
+        "type": "article",
+        "version": null,
+        "work_id": "openalex:W100"
+      },
+      "openalex:W102": {
+        "abstract": null,
+        "abstract_status": "missing",
+        "abstracts": [],
+        "aliases": [
+          "doi:10.1234/issue-titled"
+        ],
+        "assertion_ids": [
+          "acq:11c3c103d359fcb555a2505b3eb9c85e70eec0a0a8ec1f6bbc21357c94e5f7c0"
+        ],
+        "authors": [],
+        "categories": [],
+        "category": null,
+        "date_assertions": [
+          {
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "values": {}
+          }
+        ],
+        "fulltext_urls": [],
+        "fulltexts": [],
+        "id": "openalex:W102",
+        "publication_date": null,
+        "reference_metadata": {
+          "bibliography_complete": false,
+          "reported_count": null,
+          "returned_count": 0,
+          "scope": "provider_metadata",
+          "status": "missing"
+        },
+        "reference_sets": [
+          {
+            "assertion_id": "acq:11c3c103d359fcb555a2505b3eb9c85e70eec0a0a8ec1f6bbc21357c94e5f7c0",
+            "metadata": {
+              "bibliography_complete": false,
+              "reported_count": null,
+              "returned_count": 0,
+              "scope": "provider_metadata",
+              "status": "missing"
+            },
+            "occurrence_ids": [],
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "references": [],
+        "source_ids": [
+          "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+        ],
+        "title": "Issue front matter",
+        "type": "paratext",
+        "version": null,
+        "work_id": "openalex:W102"
+      }
+    },
+    "work_family": {
+      "arxiv:2601.00001": {
+        "version_ids": [
+          "arxiv:2601.00001v1"
+        ],
+        "work_id": "arxiv:2601.00001"
+      },
+      "openalex:W100": {
+        "version_ids": [
+          "openalex:W100"
+        ],
+        "work_id": "openalex:W100"
+      },
+      "openalex:W102": {
+        "version_ids": [
+          "openalex:W102"
+        ],
+        "work_id": "openalex:W102"
+      }
+    },
+    "source_import": {
+      "metadata-1": {
+        "captured_at": "2026-09-07T12:00:00Z",
+        "failures": [],
+        "mappings": null,
+        "media_type": "application/atom+xml",
+        "provider": "arxiv",
+        "response_sha256": "b8fc7aaa46f30d7c8cb945cfc78e169e3fd2923ae2ec2d3d14ab149fd07cf7b5",
+        "source_id": "acq:a28a6976528a74ef3be0876183e2b66429589773622b0b2870f82d8bce230a34",
+        "source_url": "https://export.arxiv.org/api/query?id_list=2601.00001v1",
+        "work_ids": [
+          "arxiv:2601.00001v1"
+        ]
+      },
+      "legacy-openalex": {
+        "captured_at": "2026-09-07T12:00:00Z",
+        "failures": [
+          {
+            "code": "invalid_work",
+            "index": 1
+          }
+        ],
+        "mappings": null,
+        "media_type": "application/json",
+        "provider": "openalex",
+        "response_sha256": "9178debb14376f6da1322e79a90280bf4515ef8d905530ff525ec9a696976897",
+        "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+        "source_url": "https://api.openalex.org/works?search=bounded&per_page=3",
+        "work_ids": [
+          "openalex:W100",
+          "openalex:W102"
+        ]
+      }
+    },
+    "literature_scope": {
+      "research": {
+        "collection_ids": [],
+        "profile": "research",
+        "roots": [
+          "arxiv:2601.00001v1"
+        ]
+      }
+    },
+    "literature_operation": {
+      "task3-2": {
+        "operation": "literature.roots",
+        "runtime": {
+          "constitution": {
+            "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+            "version": "7"
+          },
+          "dirty": null,
+          "executable": "bin/exactory-research",
+          "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+          "plugin_version": "0.85.3",
+          "schema_version": 1,
+          "source_commit": null
+        }
+      },
+      "task3-3": {
+        "operation": "literature.search",
+        "runtime": {
+          "constitution": {
+            "sha256": "fe3aa96dfa7935a2c50d92f85336f951b28e5af27b5b8820c4d017841ef4bd92",
+            "version": "7"
+          },
+          "dirty": null,
+          "executable": "bin/exactory-research",
+          "package_digest": "0d636baa9a443738d6d872651c0bd47428a7793700b2424c8d56ffa21464e0b6",
+          "plugin_version": "0.85.3",
+          "schema_version": 1,
+          "source_commit": null
+        }
+      }
+    },
+    "alias": {
+      "doi:10.1234/issue-titled": {
+        "assertions": [
+          {
+            "locator": {
+              "pointer": "/results/2",
+              "type": "json_pointer"
+            },
+            "relation": "same_work",
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee",
+            "work_id": "openalex:W102"
+          }
+        ],
+        "identifier": "doi:10.1234/issue-titled"
+      }
+    },
+    "literature_search": {
+      "legacy-search": {
+        "captured_at": "2026-09-07T12:00:00Z",
+        "cited_work_ids": [],
+        "coverage": [
+          {
+            "inspected_count": 2,
+            "kind": "bounded_unordered",
+            "ordering": null,
+            "page_positions": [
+              0
+            ],
+            "provider": "openalex",
+            "query": "bounded",
+            "requested_k": 10,
+            "returned_count": 3
+          }
+        ],
+        "dispositions": [
+          {
+            "disposition": "out_of_scope",
+            "reason": "Outside the declared comparison.",
+            "work_id": "openalex:W100"
+          },
+          {
+            "disposition": "out_of_scope",
+            "reason": "Outside the declared comparison.",
+            "work_id": "openalex:W102"
+          }
+        ],
+        "evidence_digest": "4d34c939025005c8f9874b76f97708814561d1cca7429dc24b009a3c5cbde442",
+        "found_work_ids": [
+          "openalex:W100",
+          "openalex:W102"
+        ],
+        "frontier_digest": "74e8fdbd1674c301fa660ff9ca7ca20a3042508177a4280e1f2927b2e5514519",
+        "gaps": [],
+        "hits_per_query": 10,
+        "id": "legacy-search",
+        "impact": "Only the captured query was inspected.",
+        "integrity_errors": [
+          {
+            "code": "invalid_work",
+            "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "index": 1,
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "page_groups": [
+          {
+            "complete": false,
+            "cursor_page_size": null,
+            "endpoint": "https://api.openalex.org/works",
+            "id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "mode": "offset",
+            "parameters": [
+              [
+                "search",
+                "bounded"
+              ]
+            ],
+            "provider": "openalex",
+            "query": "bounded",
+            "reported_count": 3,
+            "returned_count": 3,
+            "scope": "All results of this captured native query.",
+            "source_ids": [
+              "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+            ]
+          }
+        ],
+        "pending": [
+          {
+            "code": "invalid_work",
+            "group_id": "5b810e7ea5aaa24a17dad65d35c4c5efd054f4f3cdad80e86ae0b3d563757d87",
+            "index": 1,
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "profile": "research",
+        "purpose": "direct",
+        "queries": [
+          "bounded"
+        ],
+        "question": "Every bounded configuration has the stated property.",
+        "responses": [
+          {
+            "query": "bounded",
+            "source_id": "acq:d2e048effd4ac98c49299b9aee586372640d6b7ab035d7eeef5486472c1ea5ee"
+          }
+        ],
+        "scope": "All results of this captured native query.",
+        "scope_digest": "6e3bd29d881b3e7325dc8ea58af6dd725eca200243b8d981357459315fe58977",
+        "verdict": "nothing-new"
+      }
+    },
+    "search_selection": {
+      "research:direct": {
+        "search_id": "legacy-search"
+      }
+    }
+  },
+  "source": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards"
+}

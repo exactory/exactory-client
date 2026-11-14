@@ -1,5 +1,6 @@
 """Classify retained reviewer failures and plan bounded recoveries without writes."""
 
+import base64
 import copy
 from datetime import datetime, timedelta, timezone
 import json
@@ -35,6 +36,9 @@ PROVIDER_WAIT_SECONDS = (60, 120, 240, 480, 960, 1800)
 _PROVIDER_OUTCOMES = ('usage_limit', 'model_at_capacity', 'provider_unavailable')
 TURN_FAILURE_LIMIT = 8
 SINGLE_RETRY_LIMIT = 2
+# 18 safeguards stops in 1,114 retained CLI runs across LIVE-RECORDS (2026-11-13).
+# (1 - (18/1114)**3)**66 = 0.9997216, including the largest chain's planned final turn.
+PROVIDER_REFUSAL_ATTEMPT_LIMIT = 3
 CHEAP_FAILURE_SECONDS = 120
 _CODEX_ADAPTERS = ('codex_cli_v1', 'codex_cli_framed_v1', 'codex_cli_visual_v1')
 _MONTH_NUMBERS = {name: number for number, name in enumerate(
@@ -146,6 +150,20 @@ def find_output_cap_signal(records, artifacts, assignment, attempt):
     return None
 
 
+def find_safeguard_notice(response):
+    """Find the CLI's retained safeguard notice without granting input verification."""
+    for entry in response.get('execution', {}).get('system_events', {}).get('events', []):
+        try:
+            event = json.loads(base64.b64decode(entry['raw_base64'], validate=True))
+        except (KeyError, ValueError, TypeError):
+            continue
+        if (isinstance(event, dict) and event.get('type') == 'system'
+                and event.get('subtype') == 'informational' and isinstance(event.get('content'), str)
+                and 'safeguards' in event['content'].lower()):
+            return event
+    return None
+
+
 def classify_attempt(records, artifacts, attempt):
     """Return the first decided failure layer, or None for a usable completed output."""
     if (attempt['status'] == 'completed' and attempt.get('output') is not None
@@ -155,6 +173,7 @@ def classify_attempt(records, artifacts, attempt):
         return None
     assignment = records['review_assignment'][attempt['assignment_id']]
     response, answer = read_attempt_evidence(artifacts, attempt)
+    safeguard_notice = find_safeguard_notice(response)
     error_code = (attempt.get('error') or {}).get('code')
     diagnostic = attempt.get('provider_diagnostic') or {}
     usage_line = re.match(r"^You['’]ve (?:hit|reached) your\b[^\n]*\blimit\b", answer.strip())
@@ -165,6 +184,9 @@ def classify_attempt(records, artifacts, attempt):
                 'review_format_unsupported': 'format_unsupported', 'review_input_too_large': 'input_over_limit'}
     if error_code in dispatch:
         outcome, signal = dispatch[error_code], dict(source='attempt.error.code', value=error_code)
+    elif safeguard_notice is not None:
+        outcome = 'provider_refused'
+        signal = dict(source='response.execution.system_events', value=safeguard_notice)
     elif output_maximum is not None:
         outcome = 'output_over_cap'
         signal = dict(source='response.answer', value=answer,
@@ -361,7 +383,10 @@ def plan_after_failure(records, artifacts, assignment_id):
     elif outcome == 'runtime_unavailable':
         runtime_count = sum(item['outcome'] == outcome for _, item in failures)
         state, not_before = plan_scheduled_retry(last, runtime_count)
-    elif outcome in ('scientific_refused', 'provider_refused', 'execution_incomplete',
+    elif outcome == 'provider_refused':
+        outcome_count = sum(item['outcome'] == outcome for _, item in failures)
+        state = 'run' if outcome_count < PROVIDER_REFUSAL_ATTEMPT_LIMIT else 'stop'
+    elif outcome in ('scientific_refused', 'execution_incomplete',
                      'answer_malformed', 'context_unverified'):
         outcome_count = sum(item['outcome'] == outcome for _, item in failures)
         state = 'run' if outcome_count < SINGLE_RETRY_LIMIT else 'stop'

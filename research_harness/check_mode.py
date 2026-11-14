@@ -84,18 +84,26 @@ class _CheckingStore:
             transaction._active = False
         snapshot_digest = _digest(_canonical({"database": self._snapshot._identity, "revision": self.revision,
                                               "history": self._snapshot._fingerprint.hex()}))
-        raise _CheckComplete({"check": "accepted", "revision": self.revision, "recorded": False,
+        response = {"check": "accepted", "revision": self.revision, "recorded": False,
                               "operation": operation, "payload_digest": _digest(encoded_payload),
-                              "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()})
+                              "snapshot_digest": snapshot_digest, "artifact_digests": self._artifacts.read_digests()}
+        if operation == "literature.search":
+            response.update(result)
+        raise _CheckComplete(response)
 
 
-def check_mutation(store, operation, payload, *, expected_revision, request_id, bounded_payload, replay=None):
+def check_mutation(store, operation, payload, *, expected_revision, request_id, bounded_payload, replay=None,
+                   prepare_payload=None):
     checking_store = _CheckingStore(store, request_id)
+    within_bounds = True
     try:
         check_command_bounds(bounded_payload)
     except ResearchError:
         if checking_store.committed_request(request_id) is None:
             raise
+        within_bounds = False
+    if prepare_payload is not None and within_bounds:
+        payload = prepare_payload(checking_store, payload)
     if replay is not None:
         if checking_store._read_preparation()._original_request is None:
             raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects")

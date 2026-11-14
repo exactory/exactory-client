@@ -75,6 +75,15 @@
   "problem-openness": {
     "assignment_id": "problem-openness-review"
   },
+  "problem-openness-export": {
+    "assignment_id": "problem-openness-review",
+    "reviewer_id": "openness-reviewer",
+    "minimum": {
+      "searches": [{"formulation": "The exact recorded statement.", "search_id": "statement-search"}],
+      "settling_work_id": null,
+      "duplicate_resolutions": []
+    }
+  },
   "problem-value": {
     "id": "problem-value-1",
     "statement_id": "statement-1",
@@ -285,8 +294,9 @@
     "id": "external-post-1",
     "problem_id": "656c336e-e892-4c47-80d2-a71d022f4116",
     "statement_digest": "0000000000000000000000000000000000000000000000000000000000000000",
-    "reason": "The problem was posted on exactory.ai without gate post, on the owner's instruction.",
-    "evidence": "Owner instruction of 2026-11-04: \"Post this problem on exactory.ai now, without gate post.\"",
+    "export_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "reason": "Synthetic direct-publication request for this example, without gate post.",
+    "evidence": "Synthetic receipt: publication of this example was authorized.",
     "posted_at": "2026-11-04T14:49:22.236Z"
   },
   "problem-post-fact": {
@@ -984,18 +994,23 @@
     }
   },
   "import-response": {
-    "provider": "mcp",
-    "response_file": "/absolute/path/to/original-response.json",
-    "source_url": "https://example.org/search?q=finite+bound",
+    "provider": "web",
+    "response_file": "original-citations.json",
+    "source_url": "https://api.semanticscholar.org/graph/v1/paper/arXiv:1208.4714/citations",
     "captured_at": "2026-09-07T12:00:00Z",
     "media_type": "application/json",
-    "mappings": [
-      {
-        "id": "/results/0/id",
-        "title": "/results/0/title",
-        "abstract": "/results/0/abstract"
+    "mappings": {
+      "records": [
+        {
+          "id": "/data/0/citingPaper/url",
+          "title": "/data/0/citingPaper/title"
+        }
+      ],
+      "query_path": {
+        "template": "/graph/v1/paper/{paper_id}/citations",
+        "segment": "paper_id"
       }
-    ]
+    }
   },
   "roots": {
     "profile": "research",

@@ -242,8 +242,8 @@ class StudyOverrideTests(OverrideCommandMixin, ProblemCase):
         self.assertEqual(first["instruction"], second["instruction"])
         self.assert_override_refused(dict(self.build_override(), reason="Different content"))
 
-    def test_refuses_missing_empty_absolute_parent_symlink_outside_and_oversized_instructions(self):
-        paths = {"missing": "context/missing.txt", "absolute": str(self.root / "context/instruction.txt"),
+    def test_refuses_missing_empty_parent_symlink_outside_and_oversized_instructions(self):
+        paths = {"missing": "context/missing.txt",
                  "parent": "context/../context/instruction.txt", "outside": "instruction.txt",
                  "empty": "context/empty.txt", "oversized": "context/large.txt",
                  "symlink": "context/link.txt", "linked-parent": "context/linked/instruction.txt",
@@ -258,11 +258,27 @@ class StudyOverrideTests(OverrideCommandMixin, ProblemCase):
             with self.subTest(name=name):
                 payload = self.build_override()
                 payload["instruction"] = path
-                self.assert_override_refused(payload)
+                self.assert_override_refused(payload, code='unsafe_path'
+                                             if name in ('parent', 'symlink', 'linked-parent') else None)
         for missing in ("id", "gate", "instruction", "reason"):
             payload = self.build_override()
             del payload[missing]
             self.assert_override_refused(payload)
+
+    def test_absolute_instruction_pins_the_same_relative_record_and_replays_without_the_file(self):
+        relative = self.build_override()
+        absolute = dict(relative, instruction=str(self.root / relative['instruction']))
+        revision = self.store.revision
+        first = self.assert_accepted_check(self.invoke_command('gate-override', relative), revision)
+        second = self.assert_accepted_check(self.invoke_command('gate-override', absolute), revision)
+        self.assertEqual(first['payload_digest'], second['payload_digest'])
+        receipt = self.record_override(absolute, request='absolute-instruction')
+        self.assertEqual(receipt['result']['instruction']['path'], relative['instruction'])
+        (self.root / relative['instruction']).unlink()
+        replay = self.invoke_command('gate-override', relative, check=False, revision=revision,
+                                     request='absolute-instruction')
+        self.assertEqual(replay[0], 0, replay[2])
+        self.assertEqual(json.loads(replay[1]), receipt)
 
     def test_refuses_unknown_gate_backward_wrong_source_and_unknown_stage(self):
         self.assert_override_refused(self.build_override(gate="unknown"))
@@ -496,6 +512,35 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
         self.mutate(problem_claims.record_value, self.build_value([evidence]))
         return statement
 
+    def test_legacy_override_export_keeps_its_files_digest_and_final_index(self):
+        from research_harness import output_views, record_check
+        statement = self.prepare_problem()
+        override = self.record_override(self.build_override(gate="post"))["result"]
+        records = self.store.snapshot()["records"]
+        # Reconstruct the unversioned override manifest written by 0.85.3.
+        files = {name: (content + "\n").encode() for name, content in
+                 problem_delivery.build_post_files(records, self.artifacts).items()}
+        manifest = dict(statement_id=statement["id"], statement_digest=override["statement_digest"],
+            area=statement["area"], formal_statement_language=None,
+            files={name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())},
+            decision_id=None, problem_evidence_digest=None, override_id=override["id"], gate="bypassed")
+        files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
+        old_digest = problem_delivery.compute_export_digest(files)
+        directory = self.root / "final/problem/exports" / old_digest
+        problem_delivery.write_problem_export(self.store, records, files, manifest, directory)
+        current = problem_delivery.export_problem_override(self.store)
+        self.assertNotEqual(Path(current["destination"]), directory)
+        self.assertIn("citation-refs.json", current["files"])
+        self.assert_error("review_destination_exists", lambda: problem_delivery.export_problem_override(self.store, directory))
+        output_views.render_all(self.store)
+        stored = {path.name: path.read_bytes() for path in directory.iterdir()}
+        self.assertEqual(stored, files)
+        self.assertEqual(problem_delivery.compute_export_digest(stored), old_digest)
+        index = json.loads((self.root / "final/index.json").read_text())
+        self.assertIn({"path": "problem/exports/" + old_digest, "type": "export"}, index["files"])
+        self.assertEqual(record_check.check_snapshot(self.root)["revision"], self.store.revision)
+        record_check.check_integrity(self.store)
+
     def test_damaged_local_log_is_visible_in_problem_reports_summaries_and_deposit_disclosure(self):
         (self.root / ".exactory/unrecorded-overrides.jsonl").write_text("{broken line\n")
         self.assert_unreadable_log_is_reported(1, 1, ["unknown"])
@@ -531,12 +576,15 @@ class ProblemOverrideTests(OverrideCommandMixin, ProblemCase):
                     "motivation.md": "The bound would connect the finite constructions.\n",
                     "state.md": "Only bounded examples have been established.\n",
                     "formal-statement.txt": statement["formal_statement"]["text"] + "\n",
-                    "citations.json": json.dumps(problem_delivery.project_citations(before, self.artifacts), ensure_ascii=False, sort_keys=True, indent=2) + "\n"}
+                    "citations.json": json.dumps(problem_delivery.project_citations(before, self.artifacts), ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+                    "citation-refs.json": json.dumps([{"referenceString": "A. Researcher. An authored example",
+                        "bibliography": {"arxivId": "2601.00001v1", "title": "An authored example",
+                                         "authors": ["A. Researcher"]}}], ensure_ascii=False, sort_keys=True, indent=2) + "\n"}
         self.assertEqual(set(path.name for path in directory.iterdir()), set(expected) | {"problem-export.json"})
         for name, content in expected.items():
             self.assertEqual((directory / name).read_bytes(), content.encode())
         self.assertEqual(json.loads((directory / "problem-export.json").read_text()), manifest)
-        self.assertEqual(manifest, dict(statement_id=statement["id"], statement_digest=record["statement_digest"],
+        self.assertEqual(manifest, dict(schema="exactory-problem-export-v2", statement_id=statement["id"], statement_digest=record["statement_digest"],
             area="math.CO", formal_statement_language="Lean", files={name: hashlib.sha256(content.encode()).hexdigest() for name, content in expected.items()},
             decision_id=None, problem_evidence_digest=None, override_id="override-1", gate="bypassed"))
         self.assertNotEqual(self.export_problem("problem").returncode, 0)
@@ -590,8 +638,11 @@ class NormalProblemExportTests(OverrideCommandMixin, ProblemDeliveryCase):
         expected = {"title.txt": statement["title"] + "\n", "statement.md": statement["statement"] + "\n",
             "criteria.md": statement["resolution_criteria"] + "\n", "motivation.md": "The bound would connect the finite constructions.\n",
             "state.md": "Only bounded examples have been established.\n", "formal-statement.txt": statement["formal_statement"]["text"] + "\n",
-            "citations.json": json.dumps(problem_delivery.project_citations(records, self.artifacts), ensure_ascii=False, sort_keys=True, indent=2) + "\n"}
-        manifest = dict(statement_id=statement["id"], statement_digest=problem_claims.compute_statement_digest(statement),
+            "citations.json": json.dumps(problem_delivery.project_citations(records, self.artifacts), ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+            "citation-refs.json": json.dumps([{"referenceString": "A. Researcher. An authored example",
+                "bibliography": {"arxivId": "2601.00001v1", "title": "An authored example",
+                                 "authors": ["A. Researcher"]}}], ensure_ascii=False, sort_keys=True, indent=2) + "\n"}
+        manifest = dict(schema="exactory-problem-export-v2", statement_id=statement["id"], statement_digest=problem_claims.compute_statement_digest(statement),
             problem_evidence_digest=problem_claims.compute_problem_evidence_digest(records, self.artifacts), decision_id=decision["id"],
             area=statement["area"], formal_statement_language="Lean", files={name: hashlib.sha256(content.encode()).hexdigest() for name, content in sorted(expected.items())})
         expected["problem-export.json"] = json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n"

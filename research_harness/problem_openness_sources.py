@@ -5,6 +5,7 @@ import hashlib
 from .errors import ResearchError
 from .evidence import digest
 from .operations import fields, strings
+from .source_links import admits_capture_class
 
 MISMATCH = "openness_source_delivery_mismatch"
 CONTAINED = "complete-source-contained-in-required-proof"
@@ -38,7 +39,9 @@ def _containment(reference, data, containers):
 
 
 def build_delivery(records, artifacts, packet):
-    """Reconstruct selection from authenticated exact versions and current full readings."""
+    """Reconstruct the packet's selection from authenticated exact versions and full readings."""
+    from .capture_selection import bind_packet_selections
+    records = bind_packet_selections(records, packet["scientific_context"])
     from .bar_sources import _source, _capture_digest
     from .identities import version_of
     from .reading import fulltext_coverage
@@ -217,14 +220,13 @@ def _projection(supplied, *, projected, withheld_texts=None):
         choice = choices[0]
         selected_descriptors[source['selected_text_sha256']] = choice['extraction_descriptor']
         require(choice["main_representation"] and not choice["source_scope_pending"]
-                and choice["version_id"] == source["version_id"] and choice["origin_verified"] is True
-                and choice["capture_method"] == "http"
+                and choice["version_id"] == source["version_id"] and admits_capture_class(choice, 'openness_packet_source')
                 and choice["extraction_descriptor"]["sha256"] == source["selected_text_sha256"]
                 and choice["original_descriptor"]["sha256"] == source["selected_original_sha256"],
                 "Select a complete authenticated representation of the same exact version")
         for row in source["representations"]:
-            require(row["version_id"] == source["version_id"] and row["origin_verified"] is True
-                    and row["capture_method"] == "http", "Alternative representations must retain the same authenticated exact version")
+            require(row["version_id"] == source["version_id"] and admits_capture_class(row, 'openness_packet_source'),
+                    "Alternative representations must retain the same authenticated exact version")
             if row["main_representation"] and (source["version_id"].startswith("arxiv:")
                     or sum(item["main_representation"] for item in source["representations"]) > 1):
                 require(row.get("observed_identifier") == source["version_id"],

@@ -523,8 +523,27 @@ def describe_next_actions(records, artifacts, assignment_id, actions=()):
 def annotate_review_obligations(records, artifacts, report):
     """Attach the common action wherever a gate already names a review assignment."""
     if 'review' in report and 'obligations' in report:
-        rows = list(report['obligations'])
-        represented = {item.get('assignment_id') or item.get('controller_assignment_id') for item in rows}
+        from .problem_delivery import describe_after_post_obligations, find_review_post
+        rows = []
+        closed_rows = []
+        after_post = list(report.get('after_post', []))
+        for item in report['obligations']:
+            identifier = item.get('assignment_id') or item.get('controller_assignment_id')
+            assignment = records.get('review_assignment', {}).get(identifier)
+            if assignment is not None and find_review_post(records, assignment, artifacts) is not None:
+                closed_rows.append(item)
+                after_post.extend(describe_after_post_obligations([item]))
+            else:
+                rows.append(item)
+        if len(rows) != len(report['obligations']):
+            report = dict(report, obligations=rows, after_post=after_post)
+            if 'counts' in report:
+                report['counts'] = dict(report['counts'], obligations=len(rows))
+            if report.get('next') in closed_rows:
+                report['next'] = rows[0] if rows else None
+        represented = {item.get('assignment_id') or item.get('controller_assignment_id')
+                       for item in rows}
+        retained_findings = {digest(item) for item in after_post}
         for identifier in list_chain_heads(records, artifacts):
             if identifier in represented:
                 continue
@@ -538,19 +557,29 @@ def annotate_review_obligations(records, artifacts, report):
                 if not openness_reading.is_openness_packet(packet):
                     continue
             state = protocol.assignment_state(records, artifacts, identifier)
-            rows.extend(dict(item, assignment_id=identifier) for item in state.get('obligations', []))
+            pending = [dict(item, assignment_id=identifier) for item in state.get('obligations', [])]
             binding = records.get('review_attempt', {}).get(state.get('attempt_id'))
             if (not state.get('obligations') and binding is not None
                     and not state.get('output_correction_id')
                     and not protocol._context_observed(artifacts, binding)):
                 from .graph import obligation
-                rows.append(obligation('review_output_pending',
+                pending.append(obligation('review_output_pending',
                     'A complete observed reviewer response is required.', assignment_id=identifier))
             if state.get('pending_source_requests'):
                 from .graph import obligation
-                rows.append(obligation('review_sources_pending',
+                pending.append(obligation('review_sources_pending',
                     'Deliver the sources requested by the observed reviewer.',
                     assignment_id=identifier, requests=state['pending_source_requests']))
+            if find_review_post(records, assignment, artifacts) is not None:
+                for item in describe_after_post_obligations(pending):
+                    identity = digest(item)
+                    if identity not in retained_findings:
+                        after_post.append(item)
+                        retained_findings.add(identity)
+            else:
+                rows.extend(pending)
+        if after_post != report.get('after_post', []):
+            report = dict(report, after_post=after_post)
         if len(rows) != len(report['obligations']):
             from .report_views import order_obligations
             report = dict(report, obligations=order_obligations(rows))

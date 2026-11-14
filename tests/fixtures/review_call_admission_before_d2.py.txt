@@ -1,0 +1,137 @@
+# Frozen call admission and lifecycle writers from the lane base, before D2 extraction.
+# Loaded only by compatibility tests; no git history is required.
+
+
+def start_call(transaction, operation, invocation, authority, revision):
+    """Bind capacity and live ownership to the invocation's start transaction."""
+    check_admission(_TransactionRecords(transaction), operation, invocation['id'])
+    admit_call(transaction, invocation["route_id"])
+    record = {"protocol": PROTOCOL, "id": authority.reservation_id, "operation": operation, "invocation_id": invocation["id"],
+              "route_id": invocation["route_id"], "token": authority.token, "owner": authority.identity,
+              "children": [], "released": False, "termination": None, "state": "running",
+              "store_pool": "store", "route_pool": invocation["route_id"], "active": True, "recorded_revision": revision}
+    transaction.put(*immutable_record(_TransactionRecords(transaction), "review_pool_membership", record["id"], record))
+
+
+def admit_call(transaction, route_id):
+    """Check all covered live calls inside the transaction that records their start."""
+    records = _TransactionRecords(transaction)
+    policy = _policy(records)
+    route = _get(records, "review_route", route_id)
+    if route.get("adapter") not in policy["covered_adapters"]:
+        return
+    memberships = records.get("review_pool_membership", {})
+    active = [row for row in records.get("review_reservation", {}).values()
+              if row["id"] in memberships and not row["released"]]
+    active.extend(_active_legacy(records, policy))
+    route_active = [row for row in active if row["route_id"] == route_id]
+    if len(active) >= policy["store_limit"] or len(route_active) >= policy["route_limits"].get(
+            route_id, policy["store_limit"]):
+        raise ResearchError("review_capacity_wait", "Shared reviewer capacity is occupied; reconcile its reservations",
+                            {"reservations": [row["id"] for row in active], "scope": "store"})
+
+
+def reserve_task(store, payload, *, request_id, expected_revision=None):
+    """Check capacity, currency and duplicate invocation, then reserve every pool atomically."""
+    def apply(tx, value, revision):
+        records = _TransactionRecords(tx)
+        plan = _freeze_plan(store, records, value)
+        policy = _policy(records)
+        route = _get(records, "review_route", plan["route_id"])
+        if route["adapter"] not in policy["covered_adapters"]:
+            raise ResearchError("review_route_unsupported", "The capacity policy does not cover this route")
+        old = tx.get("review_task_execution", plan["task_id"])
+        if old is not None and old["plan_id"] != plan["id"]:
+            raise ResearchError("review_task_dependency_changed", "Use a new task identity for a changed frozen execution plan")
+        state = old if old is not None else _state(plan, revision)
+        if state["reservation_id"] is not None:
+            prior = _get(records, "review_reservation", state["reservation_id"])
+            observation = records.get("review_observation", {}).get(prior["id"])
+            if prior["state"] == "accepted" or (observation is not None and observation["observation"]["status"] == "completed"
+                    and prior["state"] != "refused"):
+                raise ResearchError("review_resampling_forbidden", "Resume the captured observation instead of repeating its reviewer call")
+            if not prior["released"]:
+                raise ResearchError("review_invocation_pending", "Reconcile the task's existing reservation before retrying")
+        exhaustion = _consume_resources(tx, records, plan, state, request_id, revision)
+        if exhaustion is not None:
+            return {"exhaustion": exhaustion}
+        reservation_id = "review-reservation:" + digest([plan["id"], request_id])
+        check_admission(records, 'review.task_reserve', reservation_id)
+        admit_call(tx, plan["route_id"])
+        reservation = {"protocol": PROTOCOL, "id": reservation_id, "plan_id": plan["id"],
+                       "task_id": plan["task_id"], "task_generation": plan["task_generation"],
+                       "epoch_id": plan["epoch_id"], "route_id": plan["route_id"], "attempt": state["attempts"] + 1,
+                       "generation": 1, "state": "reserved", "released": False, "token": uuid.uuid4().hex,
+                       "launch": None, "worker": None, "children": [], "termination": None,
+                       "observation_id": None, "recorded_revision": revision}
+        tx.put(*immutable_record(records, "review_execution_plan", plan["id"], plan))
+        tx.put(*immutable_record(records, "review_reservation", reservation_id, reservation))
+        _initialize_acceptance_indexes(tx, plan["epoch_id"])
+        tx.put("review_pool_membership", reservation_id, {"reservation_id": reservation_id, "store_pool": "store",
+               "route_pool": plan["route_id"], "active": True, "recorded_revision": revision})
+        tx.put("review_task_execution", plan["task_id"], dict(state, generation=state["generation"] + 1,
+               attempts=reservation["attempt"], reservation_id=reservation_id, state="reserved", recorded_revision=revision))
+        return reservation
+    result = _mutate_current(store, "review.task_reserve", payload, apply,
+                             request_id=request_id, expected_revision=expected_revision)
+    exhaustion = result["result"].get("exhaustion")
+    if exhaustion is not None:
+        raise ResearchError(exhaustion["code"], "The epoch exhausted its bounded execution resources", exhaustion)
+    return result
+
+
+def _claim_launch(store, reservation_id):
+    def apply(tx, value, revision):
+        reservation = _get(_TransactionRecords(tx), "review_reservation", reservation_id)
+        if reservation["released"] or reservation["launch"] is not None or reservation["state"] != "reserved":
+            raise ResearchError("review_invocation_pending", "Reconcile the original worker instead of launching twice")
+        _check_references(_TransactionRecords(tx), _get(_TransactionRecords(tx), "review_execution_plan", reservation["plan_id"]))
+        return _transition(tx, reservation, revision, launch={"authorized": False})
+    return _mutate_current(store, "review.worker_claim", {"reservation_id": reservation_id}, apply,
+                           request_id="review-worker-claim:" + reservation_id)["result"]
+
+
+def _start_worker(store, authority):
+    def apply(tx, value, revision):
+        records = _TransactionRecords(tx)
+        reservation = _get(records, "review_reservation", authority.reservation_id)
+        authority.verify(store, reservation)
+        if (reservation["released"] or reservation["state"] != "reserved" or not reservation["launch"]["authorized"]):
+            raise ResearchError("review_worker_reconciliation_required", "The worker's launch was not authorized")
+        plan = _get(records, "review_execution_plan", reservation["plan_id"])
+        _check_references(records, plan)
+        _transition(tx, reservation, revision, state="running")
+        return plan
+    return _mutate_current(store, "review.worker_running", {"reservation_id": authority.reservation_id}, apply,
+                           request_id="review-worker-running:" + authority.reservation_id)["result"]
+
+
+def _register_child(root, reservation_id, token, descriptor, *, call=False):
+    """The guardian commits its identity before executing any external command."""
+    store = Store(root)
+    identity = _identity()
+    if identity["pid"] != identity["pgid"]:
+        raise ResearchError("review_worker_reconciliation_required", "A transport child must own its process group")
+    # Verify the inherited lock's inode before registering the child.
+    with checked_parent(root, _directory(reservation_id) + "/worker.lock") as (directory, name):
+        lock_info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+    descriptor_info = os.fstat(descriptor)
+    if (lock_info.st_dev, lock_info.st_ino) != (descriptor_info.st_dev, descriptor_info.st_ino):
+        raise ResearchError("review_worker_reconciliation_required", "Transport child lost its ownership lock")
+    def apply(tx, value, revision):
+        if call:
+            current = _get(_TransactionRecords(tx), "review_pool_membership", reservation_id)
+            if (current["released"] or current["token"] != token
+                    or _identity(current["owner"]["pid"]) != current["owner"]):
+                raise ResearchError("review_worker_reconciliation_required", "The call's owner is no longer live")
+            tx.put("review_pool_membership", reservation_id, dict(current, children=current["children"] + [identity], recorded_revision=revision))
+            return current
+        reservation = _get(_TransactionRecords(tx), "review_reservation", reservation_id)
+        if (reservation["released"] or reservation["state"] != "running" or reservation["token"] != token
+                or _identity(reservation["worker"]["pid"]) != reservation["worker"]):
+            raise ResearchError("review_worker_reconciliation_required", "The transport child's worker is no longer live")
+        return _transition(tx, reservation, revision, children=reservation["children"] + [identity])
+    retry_store_write(lambda: _mutate_current(store, "review.call_child" if call else "review.worker_child",
+        {"reservation_id": reservation_id, "child": identity}, apply,
+        request_id=("review-call-child:" if call else "review-worker-child:") + digest([reservation_id, identity])))
+    return identity

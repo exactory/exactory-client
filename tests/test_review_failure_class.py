@@ -271,7 +271,10 @@ class FailureClassTests(unittest.TestCase):
                     self.attempt('{}', code='review_incomplete')
                 else:
                     self.attempt('{', provider_status='completed')
-                for assignment, state in [('head', 'run'), ('old', 'stop')]:
+                limit = failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT if outcome == 'provider_refused' else 2
+                positions = ['head', 'old'] + (['head'] if limit == 3 else [])
+                for index, assignment in enumerate(positions, 1):
+                    state = 'run' if index < limit else 'stop'
                     attempt = self.attempt(answer, assignment=assignment, **changes)
                     if outcome == 'context_unverified':
                         attempt['output'] = self.put({})
@@ -375,10 +378,11 @@ class FailureClassTests(unittest.TestCase):
             ('{', dict(provider_status='completed'), 'review_answer_malformed'),
         ]:
             self.records['review_attempt'].clear()
-            self.attempt(answer, **changes)
-            self.assertEqual(self.plan()['state'], 'run')
-            self.attempt(answer, **changes)
-            self.assertEqual((self.plan()['state'], self.plan()['code']), ('stop', code))
+            limit = failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT if code == 'review_provider_refused' else 2
+            for count in range(1, limit + 1):
+                self.attempt(answer, **changes)
+                self.assertEqual((self.plan()['state'], self.plan()['code']),
+                                 ('run' if count < limit else 'stop', code))
         self.records['review_attempt'].clear()
         for count in (1, 2):
             attempt = self.attempt('{}', status='completed', provider_status='completed', code=None)
@@ -644,3 +648,61 @@ class RepairReplacementTests(unittest.TestCase):
         plan = failures.plan_after_failure(records, fixture.artifacts, assignment['id'])
         self.assertEqual(plan['state'], 'stop', plan)
         self.assertEqual(plan['code'], 'review_output_over_cap')
+
+
+class SafeguardNoticeTests(unittest.TestCase):
+    setUp = FailureClassTests.setUp
+    put = FailureClassTests.put
+    attempt = FailureClassTests.attempt
+    classify = FailureClassTests.classify
+    plan = FailureClassTests.plan
+
+    def test_two_notice_shapes_name_provider_refusal_without_verifying_the_continuation(self):
+        from research_harness import review_claude_transport as claude
+        rows = json.loads((Path(__file__).parent / 'fixtures/claude-safeguard-responses.json').read_text())
+        for row in rows:
+            with self.subTest(attempt=row['attempt_id']):
+                self.records['review_attempt'].clear()
+                attempt = self.attempt(code=(row['error'] or {}).get('code'), status=row['status'])
+                attempt['response'] = self.put(row['response'])
+                if row['status'] == 'completed':
+                    attempt['output'] = self.put({})
+                before = self.artifacts.read(attempt['response'])
+                classification = self.classify(attempt)
+                self.assertEqual(classification['outcome'], 'provider_refused')
+                event = classification['signal']['value']
+                self.assertEqual(event, row['safeguards_events'][0])
+                self.assertEqual(event['subtype'], 'informational')
+                self.assertIn('safeguards stopped', event['content'])
+                self.assertEqual(self.plan()['code'], 'review_provider_refused')
+                self.assertFalse(claude.verify_context({}, {}, row['response']))
+                self.assertFalse(protocol._context_observed(self.artifacts, attempt))
+                self.assertEqual(self.artifacts.read(attempt['response']), before)
+
+    def test_notice_matches_safeguards_independently_of_the_model_name(self):
+        import base64
+        event = dict(type='system', subtype='informational', content='A future model’s SAFEGUARDS stopped the response')
+        attempt = self.attempt()
+        response = dict(status='incomplete', execution=dict(system_events=dict(events=[dict(
+            raw_base64=base64.b64encode(json.dumps(event).encode()).decode())])))
+        attempt['response'] = self.put(response)
+        self.assertEqual(self.classify(attempt)['signal']['value'], event)
+        for changed in (dict(event, subtype='thinking_tokens'), dict(event, content='A normal information notice'),
+                        dict(event, type='assistant'), dict(event, content=None)):
+            response['execution']['system_events']['events'][0]['raw_base64'] = base64.b64encode(
+                json.dumps(changed).encode()).decode()
+            attempt['response'] = self.put(response)
+            self.assertNotEqual(self.classify(attempt)['outcome'], 'provider_refused')
+
+    def test_measured_allowance_retries_twice_then_stops_below_the_turn_cap(self):
+        sample = json.loads((Path(__file__).parent / 'fixtures/claude-safeguard-sample.json').read_text())
+        rate = sample['stops'] / sample['rate_denominator']
+        turns = sample['largest_planned_chain']['planned_turns']
+        limit = failures.PROVIDER_REFUSAL_ATTEMPT_LIMIT
+        self.assertGreaterEqual((1 - rate ** limit) ** turns, .99)
+        self.assertLess((1 - rate ** (limit - 1)) ** turns, .99)
+        self.assertLess(limit, failures.TURN_FAILURE_LIMIT)
+        for count in range(1, limit + 1):
+            self.attempt('API Error: safeguards flagged this message')
+            self.assertEqual((self.plan()['state'], self.plan()['code']),
+                ('run' if count < limit else 'stop', 'review_provider_refused'))

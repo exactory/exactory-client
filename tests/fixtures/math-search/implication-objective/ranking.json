@@ -1,0 +1,10 @@
+{
+  "generated_from": "openings.json",
+  "order": [
+    {
+      "strategy": "work-conditionally-then-discharge",
+      "cites": ["shape.missing_input", "shape.proof_shape", "shape.known_bounds", "shape.base_theory"],
+      "reason": "Step 2 states the implication that is already the claim and adopts proof/adopted-cycle.md with threshold 3. It changes neither the object nor the obligations of this conditional objective. Proving (S) would be a separate objective. The labelled formulation is equivalent to (S), whereas its 2-regular case is only the restriction the deduction needs."
+    }
+  ]
+}

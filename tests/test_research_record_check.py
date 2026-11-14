@@ -589,7 +589,7 @@ class RecordCheckTests(unittest.TestCase):
     def test_cli_and_pinned_wrapper_report_running_tree_version(self):
         with tempfile.TemporaryDirectory() as directory:
             tree = Path(directory) / 'pinned'
-            shutil.copytree(PLUGIN, tree, ignore=shutil.ignore_patterns('.git', '.lane-scratch', '__pycache__'))
+            shutil.copytree(PLUGIN, tree, ignore=shutil.ignore_patterns('.git', '.lane-scratch', '.lane-tmp', '__pycache__'))
             (tree / '.claude-plugin/plugin.json').write_text('{"version":"0.0.123"}')
             wrapper = Path(directory) / 'xr.py'
             wrapper.write_text('import sys\nsys.path.insert(0, ' + repr(str(tree))

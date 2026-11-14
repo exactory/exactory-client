@@ -2,6 +2,76 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "problem-reference-exports-retain-current-and-history-formats",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "generated output views and export delivery",
+      "summary": "Merging structured reference exports with export retirement left v2 exports outside history handling and retired unchanged legacy override exports.",
+      "fixed_in": "0.88.0",
+      "expected": "New reviewed and override exports use v2 with citation-refs.json. Stored legacy exports keep their bytes and digests. Each format compares against its own current projection, then retires intact on changed content or source identity. Unknown formats and incomplete or edited exports stay in place.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_export_history.OverrideExportHistoryTests.test_stored_legacy_and_new_v2_override_exports_retire_on_source_identity_change",
+        "test_problem_export_history.OverrideExportHistoryTests.test_retirement_leaves_unknown_or_incomplete_v2_exports_in_place",
+        "test_problem_export_history.ReviewedExportHistoryTests.test_stored_legacy_and_new_v2_reviewed_exports_retire_without_changing_bytes"
+      ]
+    },
+    {
+      "id": "openness-series-views-between-turns",
+      "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
+      "summary": "T5: one review-series process advanced several turns while series.json and adopted-output views stayed behind.",
+      "expected": "Every operation renders outside store locks, including durable refusals; the recorded terminal stop and final adoption advance the output views before the next emitted step.",
+      "tests": [
+        "test_review_series.SeriesTests.test_views_are_current_between_turns_and_after_adoption",
+        "test_review_series.SeriesTests.test_refused_turns_and_terminal_stop_render_the_committed_views",
+        "test_review_series.SeriesTests.test_recorded_terminal_stop_advances_the_view_revision",
+        "test_review_series_journeys.SeriesJourneyTests.test_openness_chain_renders_native_views_before_the_next_turn"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "openness-packet-identical-export-reuse",
+      "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
+      "summary": "T4: exporting one openness specification twice created two identical packet folders.",
+      "expected": "An identical packet reuses the existing delivery without rewriting it, after verifying the delivered artifacts; changed packets retain separate folders and explicit destination conflicts stay refusals. A frozen 0.85.3 packet remains byte-identical.",
+      "tests": [
+        "test_research_problem_openness.ProblemOpennessTests.test_identical_packet_reuses_default_and_explicit_deliveries_without_writes",
+        "test_research_problem_openness.ProblemOpennessTests.test_changed_packet_gets_another_default_and_old_packet_still_reuses",
+        "test_research_problem_openness.ProblemOpennessTests.test_reuse_verifies_the_delivered_artifacts",
+        "test_research_problem_openness.ProblemOpennessTests.test_0853_packet_reuses_frozen_delivery_without_changing_packet_bytes"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "post-export-current-history-and-delivered-digest",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "summary": "T5: superseded exports stayed current and an external post could name no exported file set.",
+      "expected": "Changed source records retire intact problem exports into final/history while retaining their bytes and digest. An optional external-post export_digest records which file set was posted and appears in status. Old post receipts replay and render without inventing an export identity.",
+      "tests": [
+        "test_problem_export_history.OverrideExportHistoryTests.test_changed_value_archives_the_first_export_and_post_names_the_second",
+        "test_problem_export_history.OverrideExportHistoryTests.test_new_source_identity_retires_an_export_even_when_its_text_is_unchanged",
+        "test_problem_export_history.OverrideExportHistoryTests.test_history_conflict_preserves_both_folders_and_reports_the_view_error",
+        "test_problem_export_history.OverrideExportHistoryTests.test_0853_override_export_keeps_bytes_and_digest_then_retires_on_change",
+        "test_problem_export_history.ReviewedExportHistoryTests.test_changed_evidence_retires_an_approved_export_without_changing_its_bytes",
+        "test_problem_post_external.ExternalPostTests.test_export_digest_is_validated_recorded_rendered_and_replayed",
+        "test_problem_post_external.ExternalPostTests.test_0853_post_without_an_export_digest_keeps_receipt_digest_and_view",
+        "test_problem_export_history.OverrideExportHistoryTests.test_a_recreated_equal_export_can_be_retired_again",
+        "test_problem_export_history.OverrideExportHistoryTests.test_source_change_during_export_returns_its_retained_history_destination",
+        "test_problem_export_history.OverrideExportHistoryTests.test_old_equal_snapshot_does_not_replace_the_newer_exports_source_receipt",
+        "test_problem_export_history.OverrideExportHistoryTests.test_busy_renderer_refuses_export_before_writing_its_file_set",
+        "test_problem_export_history.OverrideExportHistoryTests.test_renderer_never_moves_an_export_through_a_symlinked_parent",
+        "test_problem_export_history.OverrideExportHistoryTests.test_forming_imports_are_present_in_the_renderers_export_source_snapshot",
+        "test_problem_export_history.OverrideExportHistoryTests.test_default_export_refuses_a_symlinked_exports_folder_before_writing",
+        "test_problem_export_history.OverrideExportHistoryTests.test_default_export_keeps_its_workspace_anchor_when_a_parent_changes_before_writing"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape"
+    },
+    {
       "id": "override-automatic-harness-defect",
       "record": "20261106085323-override-of-harness-stops",
       "class": "controller continuation (harness defect)",
@@ -3370,7 +3440,7 @@
       "class": "Provider API error",
       "summary": "Provider API errors included both unreachable-server messages and a safeguards refusal.",
       "fixed_in": "0.73.0",
-      "expected": "Unreachable API errors wait with durable bounded provider backoff; safeguards refusal gets one additional call and then review_provider_refused, with the total eight-failure allowance and original observations preserved.",
+      "expected": "Unreachable API errors wait with durable bounded provider backoff; safeguards refusal follows its measured three-run allowance and then review_provider_refused, with the total eight-failure allowance and original observations preserved.",
       "test_kind": "real_shape",
       "tests": [
         "test_review_failure_class.FailureClassTests.test_measured_failure_shapes",
@@ -4651,6 +4721,24 @@
       ]
     },
     {
+      "id": "openness-packet-cannot-deliver-an-accepted-result-of-the-record",
+      "record": "20261113074000-openness-packet-cannot-deliver-what-its-searches-cite",
+      "class": "accepted result review provenance",
+      "summary": "Search records cite an accepted solver result, but the delivered attempt does not identify the review that accepted it. Two approving reviews of the same checkpoint cannot be distinguished by that summary.",
+      "fixed_in": "open",
+      "expected": "An audited attempt delivery writes immutable links from every observed accepted acceptance to its own review and terminal output. Repeating a legacy delivery adds missing links while retaining the attempt digest, record and current pointer. Unobserved and invalidated acceptances produce no new links. Openness result binding and proof delivery are the following unit's work.",
+      "test_kind": "real_shape",
+      "tests": [
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_two_approvals_link_each_acceptance_to_its_own_review",
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_stored_attempt_digest_survives_link_recovery_without_moving_its_pointer",
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_conflicting_link_refuses_the_whole_delivery",
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_corrupt_proof_blocks_link_recovery_and_preserves_the_stored_attempt",
+        "tests.test_search_acceptance_links.AcceptanceLinkTests.test_qualification_authenticates_the_link_and_refuses_changed_references",
+        "tests.test_openness_reading_chain.MathOpennessReadingTests.test_attempt_links_the_attested_reading_chain_to_its_observed_final",
+        "tests.test_review_parts_native.NativePartsAcceptanceTests.test_attempt_links_the_attested_parts_series_to_its_observed_final"
+      ]
+    },
+    {
       "id": "layout-extraction-inflates-fulltext-delivery",
       "record": "20261111223126-layout-extraction-inflates-fulltext-delivery",
       "class": "source extraction and review continuation",
@@ -4670,6 +4758,311 @@
         "test_main_capture_selection.MainCaptureSelectionTests.test_main_choice_retains_component_text_from_the_same_original",
         "test_main_capture_selection.MainCaptureSelectionTests.test_main_choice_retains_inventoried_supplement_from_the_same_original"
       ]
+    },
+    {
+      "id": "search-receipt-reports-integrity-gaps",
+      "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
+      "class": "search receipt (unreported parser and enumeration gaps)",
+      "summary": "The search receipt left invalid returned rows and incomplete captured queries without counts or provider record types.",
+      "expected": "Search receipts count invalid items and incomplete responses with their queries and preserve supplied provider record types. Search --check returns every field of the same receipt, including zero counts and empty lists, without recording anything; historical receipt replay is unchanged.",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_search_receipts.SearchReceiptTests.test_receipt_counts_invalid_items_and_incomplete_responses_with_query_and_provider_type",
+        "test_search_receipts.SearchReceiptTests.test_check_returns_the_full_recorded_receipt_without_writing",
+        "test_search_receipts.SearchReceiptTests.test_check_returns_zero_counts_and_empty_items_for_a_complete_empty_search"
+      ]
+    },
+    {
+      "id": "search-capture-shapes-and-paratext-exclusions",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "search evidence (front matter, capture intervals and path queries)",
+      "summary": "OpenAlex front matter became integrity errors, pages captured a day apart received no check warning, and path-addressed citation captures could not bind their query.",
+      "expected": "New search pages retain identified paratext exclusions without integrity errors; acquire and single-work imports keep reading paratext metadata as before. Stored searches keep their old interpretation; check reports page groups over 15 minutes apart; web imports can declare a named query path segment.",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_search_receipts.SearchReceiptTests.test_new_search_excludes_null_and_titled_paratext_without_integrity_errors",
+        "test_search_receipts.SearchReceiptTests.test_stored_0853_search_retains_work_digest_projection_errors_and_audit",
+        "test_research_acquisition.AcquisitionTests.test_acquire_openalex_paratext_by_identifier_preserves_metadata_and_receipt_replay",
+        "test_research_acquisition.AcquisitionTests.test_import_single_openalex_paratext_keeps_the_work_and_original_response",
+        "test_search_receipts.SearchReceiptTests.test_check_reports_each_page_group_captured_more_than_fifteen_minutes_apart_without_writing",
+        "test_search_receipts.PathQueryTests.test_import_and_search_bind_the_declared_named_path_segment"
+      ]
+    },
+    {
+      "id": "openalex-capture-without-select-inflates-search-responses",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "search capture field selection",
+      "summary": "OpenAlex responses captured without select added about 15000 characters per work to search evidence.",
+      "expected": "A synthetic response with the recommended select fields imports and retains the original bytes. Pages with different select values remain separate incomplete groups, while titleless article rows are reported as invalid_work. A live capture must still confirm that select retains meta; sandbox DNS resolution was unavailable.",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openalex_select.OpenAlexSelectTests.test_selected_response_imports_exact_bytes_and_disposition_metadata",
+        "test_openalex_select.OpenAlexSelectTests.test_pages_with_different_select_values_report_separate_incomplete_groups",
+        "test_openalex_select.OpenAlexSelectTests.test_selected_work_without_either_title_is_reported_as_invalid_work"
+      ]
+    },
+    {
+      "id": "native-math-nonapproval-and-implication-objective",
+      "record": "20261113074306-math-solver-non-approval-review-and-implication-objective-gaps",
+      "class": "native review diagnostics and implication objective format",
+      "summary": "A native revise reassessment was reported as a malformed record, a native assignment did not identify the immutable problem authors, and implication objectives lacked a native-format regression.",
+      "fixed_in": "0.88.0",
+      "expected": "Each of search reassess, accept, review and complete refuses both the three-field non-approval prescribed by the native result/recovery prompts and the observed six-field revise or reject output with native_review_not_approved and preserves its decision, reason and objections, while malformed non-approvals keep invalid_record. The author_id refusal lists the original immutable problem authors. An independently authored implication fixture passes check-problem, plan and rank with the shipped strategies. Versioned proposal reviews retain their stored decisions and digests. Skill wording is handled in the release writer pass.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_math_native_refusals.MathNativeRefusalTests.test_native_nonapprovals_and_malformed_records_at_each_command",
+        "test_math_native_refusals.MathNativeRefusalTests.test_prompt_nonapprovals_at_each_command",
+        "test_math_native_refusals.MathNativeRefusalTests.test_malformed_prompt_nonapprovals_at_each_command",
+        "test_native_problem_author.NativeProblemAuthorTests.test_native_assignment_refusal_lists_original_problem_authors",
+        "test_math_implication_objective.ImplicationObjectiveTests.test_implication_passes_problem_plan_and_rank_with_the_shipped_strategies"
+      ]
+    },
+    {
+      "id": "citation-check-title-with-tex-braces",
+      "record": "20261112210200-citation-check-title-with-tex-braces",
+      "class": "citation integrity and registry pacing",
+      "summary": "Correct TeX titles were compared after one-sided brace stripping; problem exports lacked structured reference metadata, and citation lookups exceeded the arXiv request interval.",
+      "fixed_in": "0.88.0",
+      "expected": "Both titles use the same normalization, mismatch details quote original titles, and author-bearing DOI/arXiv reference lists verify. Both problem export kinds add citation-refs.json under a new manifest schema while legacy export bytes, post digests and final indexes remain valid. Shared arXiv admission spaces requests by at least three seconds and retries 429/503 within a fixed attempt bound.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_check.TestRefsJsonInput.test_incident_arxiv_titles_with_tex_braces_verify",
+        "test_check.TestRefsJsonInput.test_title_mismatch_quotes_both_original_titles",
+        "test_check.TestRefsJsonInput.test_doi_mismatch_quotes_registry_markup_and_the_original_bibtex_title",
+        "test_check.TestRefsJsonInput.test_prescribed_identifier_title_authors_shape_verifies_doi_and_arxiv",
+        "test_check.TestRefsJsonInput.test_https_only_reference_searches_registries_by_title_without_fetching_the_locator",
+        "test_check.TestCacheIdentity.test_old_brace_stripped_cache_is_refreshed_before_reporting_a_mismatch",
+        "test_check.TestRegistryRequests.test_lookup_paces_forty_arxiv_entries_and_retries_429_and_503",
+        "test_check.TestRegistryRequests.test_arxiv_retry_exhaustion_is_bounded_and_remains_incomplete",
+        "test_research_problem_delivery.ProblemDeliveryTests.test_both_exports_write_checkable_references_with_initialed_authors",
+        "test_research_problem_delivery.ProblemDeliveryTests.test_legacy_export_keeps_its_digest_post_record_and_final_index",
+        "test_research_problem_delivery.ProblemDeliveryTests.test_reference_list_tampering_or_removal_refuses_recording_the_post",
+        "test_research_problem_citations.RegistryCitationTests.test_registry_legacy_citation_bytes_and_binding_digest_are_unchanged",
+        "test_check.TestRegistryRequests.test_default_admission_paces_independent_arxiv_calls",
+        "test_research_problem_citations.RegistryCitationTests.test_lookup_projection_keeps_stored_titles_authors_and_registry_identifiers",
+        "test_gate_override.ProblemOverrideTests.test_legacy_override_export_keeps_its_files_digest_and_final_index",
+        "test_check.TestRefsJsonInput.test_doi_tex_titles_verify_and_keep_chapter_title_matching"
+      ]
+    },
+    {
+      "id": "claude-safeguard-notice-usage-window-fulltext-timeout",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "provider safeguards, account usage and full-text timeout evidence",
+      "summary": "Claude informational safeguard stops were classified as incomplete execution, subscription usage events were discarded, and full-text timeouts did not explain the effective limit.",
+      "fixed_in": "0.88.0",
+      "expected": "Retained safeguard notices yield provider_refused and review_provider_refused while their injected continuation stays unverified. Three total provider-refusal runs cover the measured chain size under independent runs and remain subject to the eight-failure cap. New Claude responses retain usage events; status and series show the latest windows and grounded remaining-chain warnings. Full-text timeout pending items retain the effective attempt limit, elapsed time and received bytes without changing stored evidence. Usage remains advisory step metadata and does not change recorded stop plans or identities.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_failure_class.SafeguardNoticeTests.test_two_notice_shapes_name_provider_refusal_without_verifying_the_continuation",
+        "test_review_failure_class.SafeguardNoticeTests.test_measured_allowance_retries_twice_then_stops_below_the_turn_cap",
+        "test_review_provider_usage.UsageRetentionTests.test_new_calls_retain_each_rate_event_and_still_verify_the_stream",
+        "test_review_provider_usage.ProviderUsageTests.test_remaining_chain_warning_counts_greedy_packing_and_the_final_turn",
+        "test_review_provider_usage.ProviderUsageTests.test_status_and_every_series_step_show_latest_retained_usage",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_fulltext_server_stalls_before_first_body_byte",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_resume_stall_reports_remaining_invocation_limit_and_received_range_prefix",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_legacy_timeout_receipt_and_source_stay_unchanged_after_new_timeout",
+        "test_review_provider_usage.ProviderUsageTests.test_run_step_immediately_shows_the_usage_event_of_the_call_it_just_executed",
+        "test_review_provider_usage.ProviderUsageTests.test_native_capture_order_survives_delayed_acceptance",
+        "test_review_provider_usage.ProviderUsageTests.test_staged_captures_and_probes_contribute_usage_without_an_ordinary_attempt",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_total_deadline_describes_latest_attempt_instead_of_prior_timeout",
+        "test_fulltext_timeout.FulltextTimeoutTests.test_resume_assembly_deadline_reports_invocation_limit_and_received_bytes",
+        "test_review_provider_usage.ProviderUsageTests.test_terminal_usage_does_not_change_the_recorded_stop_plan"
+      ]
+    },
+    {
+      "id": "posted-stopped-review-obligations",
+      "record": "20261113074404-next-after-post-keeps-a-stopped-turn-obligation",
+      "class": "review scheduling (harness defect)",
+      "summary": "A stopped or superseded review chain adds an invocation diagnostic after the posted-statement obligations have been moved to after_post.",
+      "expected": "The posted statement keeps only problem_already_posted as its main obligation; all its review findings remain under after_post without next actions, including an invocation without an attempt and an unverified stopped chain.",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_post_external.ExternalPostTests.test_graph_shaped_server_post_is_recorded_without_export_or_new_reviews",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_stopped_invocation_without_attempt_moves_after_external_post",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_unverified_stopped_chain_moves_after_replacement_export_and_external_post",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_stopped_invocation_without_attempt_moves_after_passed_post",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_closed_review_stays_after_post_when_another_statement_is_selected",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_closed_review_already_named_by_gate_moves_after_post_for_another_current_statement",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_status_closes_the_pending_openness_head_without_mutation",
+        "test_posted_closure_entrypoints.PostedClosureEntrypointTests.test_next_exposes_no_review_command_or_navigation",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_closing_an_old_review_preserves_a_current_no_post_decision",
+        "test_after_post_review_obligations.AfterPostReviewTests.test_closing_the_last_old_review_preserves_the_export_decision"
+      ]
+    },
+    {
+      "id": "payload-file-path-consistency",
+      "record": "20261113074404-next-after-post-keeps-a-stopped-turn-obligation",
+      "class": "payload admission (harness defect)",
+      "summary": "Artifact and response payloads accept different path forms and interpret relative paths from different roots.",
+      "expected": "Every payload file field accepts canonical workspace-relative or in-workspace absolute paths and stores the relative form; escapes, links and noncanonical paths share unsafe_path and one explanation.",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_input_validation.ResearchPayloadValidationTests.test_import_response_preview_refuses_a_non_path_before_opening_it",
+        "test_research_check_mode_audit.CommandTableCheckTests.test_check_preserves_every_command_workspace",
+        "test_payload_file_paths.PayloadFilePathTests.test_repeated_paper_bundle_keeps_frozen_paths_outside_new_input_admission",
+        "test_payload_file_paths.PayloadFilePathTests.test_absolute_input_keeps_the_workspace_parent_alias_in_both_modes",
+        "test_research_check_mode.ResearchCheckModeTests.test_check_authenticates_exactly_one_snapshot_and_never_opens_a_writer",
+        "test_payload_file_paths.PayloadFilePathTests.test_absolute_and_relative_artifact_paths_store_identical_payload_record_and_check_digest",
+        "test_payload_file_paths.PayloadFilePathTests.test_every_payload_file_field_refuses_escape_before_preparation_with_one_message",
+        "test_payload_file_paths.PayloadFilePathTests.test_noncanonical_and_symlink_paths_have_the_same_refusal_in_both_modes",
+        "test_payload_file_paths.PayloadFilePathTests.test_import_response_is_workspace_relative_and_absolute_replay_keeps_stored_bytes",
+        "test_gate_override.StudyOverrideTests.test_absolute_instruction_pins_the_same_relative_record_and_replays_without_the_file",
+        "test_research_check_claims.ResearchCheckClaimsTests.test_absolute_candidate_artifact_paths_match_relative_evidence_without_changing_store",
+        "test_research_import_scaling.ImportInputTests.test_workspace_response_reads_keep_missing_and_nonregular_input_refusals"
+      ]
+    },
+    {
+      "id": "result-review-account-search-record-units",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "review capacity (cited search records in the result frame)",
+      "summary": "Account-cited searches and their captured responses stayed in every result turn, even when openness also bound the same searches.",
+      "fixed_in": "0.88.0",
+      "expected": "New result series deliver each stored record once by kind, id and digest, reconstruct both account and openness occurrences exactly, and give each captured response one owner. Ten searches of 160000 characters plus their captures leave a frame below 1300000 characters. Stored series keep their original inventory rule and authenticated hashes. Size reports remain a separate unit.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_account_record_units.AccountRecordUnitTests.test_ten_large_searches_and_captures_leave_a_small_frame_and_arrive_once",
+        "test_review_account_record_units.AccountRecordUnitTests.test_search_and_source_records_have_one_identity_and_exact_occurrences",
+        "test_review_account_record_units.AccountRecordUnitTests.test_recorded_inventory_turn_prompt_and_request_keep_their_hashes",
+        "test_review_account_record_units.AccountRecordJourneyTests.test_authenticated_series_rebuilds_accounts_and_openness_for_coverage_and_citations",
+        "test_review_account_record_units.AccountRecordUnitTests.test_assessment_and_objection_occurrences_share_the_search_unit",
+        "test_review_account_record_units.AccountRecordUnitTests.test_imported_account_duplicates_rebuild_without_local_record_units"
+      ]
+    },
+    {
+      "id": "reviewer-call-admission-boundaries",
+      "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
+      "class": "review call admission and launch (continuity foundation)",
+      "summary": "Call starts and launches need one transactional boundary before stop and queue behavior can be added safely.",
+      "expected": "Call admission keeps budget-before-capacity checks and launch ownership, authorization and dependency checks in their existing transactions. Frozen pre-extraction writers produce the same records and digests, including replay. Queue ordering and stop semantics remain open for their later units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_budget_precedes_capacity_and_refusal_rolls_back_every_write",
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_uncovered_route_uses_the_budget_without_taking_local_capacity",
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_claim_and_worker_start_keep_dependency_and_launch_checks",
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_child_registration_checks_release_token_state_and_process_identity",
+        "test_review_call_admission_boundaries.CallAdmissionBoundaryTests.test_new_boundaries_match_frozen_record_writers_and_replay"
+      ]
+    },
+    {
+      "id": "openness-chain-reads-the-bound-main-capture",
+      "record": "20261111223126-layout-extraction-inflates-fulltext-delivery",
+      "class": "openness reading and capture selection",
+      "summary": "A main-capture choice after an openness finding made it stale, and a choice before export left the bound version without a full-text unit.",
+      "fixed_in": "0.88.0",
+      "expected": "An openness export binds the current main-capture choices and delivers their text. Reading plans, units, final results and staleness checks use that binding. An unbound packet keeps the first capture. Later choices preserve stored v4 and v5 packet, plan, prompt and request bytes and the standing of their findings.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_stored_v4_packets_plans_prompts_requests_and_finding_survive_a_later_choice",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_stored_v5_packets_plans_prompts_requests_and_finding_survive_a_later_choice",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_choice_before_prioritized_export_delivers_the_chosen_fulltext_unit",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_choice_before_export_without_priority_delivers_the_chosen_fulltext_unit",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_a_new_reading_on_the_chosen_capture_stays_bound_after_another_choice",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_math_and_legacy_text_rows_use_the_packet_binding_and_unbound_packets_keep_the_first",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_stored_source_delivery_contract_keeps_its_bound_capture_under_v4_and_v5",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_a_legacy_reading_continuation_checks_its_excerpts_against_the_first_capture",
+        "test_openness_capture_binding.OpennessCaptureBindingTests.test_export_refuses_missing_or_corrupt_chosen_text_without_changing_the_record"
+      ]
+    },
+    {
+      "id": "capture-class-admission-by-use",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "D3 UC2: complete-original uses admitted different capture classes through separate checks.",
+      "expected": "One table preserves each existing use's HTTP, range and external-import results, refusal codes and stored evidence digests. The unchanged HTML elision check agrees with its row, and every module naming capture provenance has a reviewed role.",
+      "tests": [
+        "test_capture_classes.CaptureClassTests.test_table_preserves_base_results_at_every_site_for_existing_classes",
+        "test_capture_classes.CaptureClassTests.test_each_nonruntime_site_reads_its_row_and_keeps_stored_identities",
+        "test_capture_classes.CaptureClassTests.test_capture_fields_stay_in_modules_with_reviewed_roles"
+      ],
+      "class": "source capture provenance and eligibility",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "openness-coverage-refuses-a-reading-of-another-record-of-the-work",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "openness evidence (work-family relation)",
+      "summary": "Versionless citation-list hits and registry records need an explicit link to a read exact version of the work.",
+      "fixed_in": "open",
+      "expected": "The R15 relation returns a versionless arXiv, registered DataCite DOI or shared DOI link when every asserted family of each participating identifier is one of the two linked families, with equal normalized authors for DOI links when both lists exist. A third family's assertion, differing authors and shared titles alone link nothing. UA2 supplies this relation; UB2 still owns coverage and export integration.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_work_families.WorkFamilyTests.test_versionless_citation_hit_links_to_its_acquired_version",
+        "test_research_work_families.WorkFamilyTests.test_datacite_doi_as_work_id_links_to_the_arxiv_version",
+        "test_research_work_families.WorkFamilyTests.test_datacite_doi_alias_links_a_registry_record_to_the_arxiv_version",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_links_exact_versions_with_one_asserted_family",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_may_be_a_work_id",
+        "test_research_work_families.WorkFamilyTests.test_conflicting_assertions_on_the_found_or_version_identifier_link_nothing",
+        "test_research_work_families.WorkFamilyTests.test_conflicting_datacite_doi_assertions_link_nothing",
+        "test_research_work_families.WorkFamilyTests.test_datacite_link_checks_the_resolved_arxiv_identifier",
+        "test_research_work_families.WorkFamilyTests.test_conflicting_arxiv_base_does_not_block_an_independent_shared_doi",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_links_normally_acquired_openalex_and_arxiv_records",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_asserted_also_by_a_third_family_links_nothing",
+        "test_research_work_families.WorkFamilyTests.test_shared_doi_between_provider_families_still_requires_matching_authors",
+        "test_research_work_families.WorkFamilyTests.test_found_and_version_identifiers_may_be_asserted_by_either_linked_family",
+        "test_research_work_families.WorkFamilyTests.test_datacite_doi_and_resolved_arxiv_id_may_be_asserted_by_either_linked_family",
+        "test_research_work_families.WorkFamilyTests.test_different_author_names_membership_or_order_block_doi_links"
+      ]
+    },
+    {
+      "id": "openness-export-accepts-a-minimum-that-can-only-end-unresolved",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "openness minimum assessment before export",
+      "summary": "Reading chains ran to unresolved findings although the bound search integrity and reading gaps already blocked both resolved outcomes at export.",
+      "expected": "One gap list drives the record-side audit and forecast. Export refuses before writing when both resolved outcomes are blocked, and --accept-gaps exports with the same forecast as a warning. Bounded enumeration remains a notice. Stored v1 audits and v5 packets retain their interpretation and bytes.",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_minimum_assessment.MinimumAssessmentTests.test_g1_forecast_and_audit_share_every_record_condition_and_legacy_order",
+        "test_minimum_assessment.MinimumAssessmentTests.test_g1_audit_has_no_record_condition_outside_the_gap_list",
+        "test_minimum_assessment.MinimumAssessmentTests.test_g2_incident_shape_refuses_without_writes_and_accepts_with_identical_warning",
+        "test_minimum_assessment.MinimumAssessmentTests.test_g2_bounded_enumeration_is_a_notice_and_keeps_legacy_packet_bytes"
+      ]
+    },
+    {
+      "id": "output-view-binding-kind-reads-make-progress",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "The W8 renderer repeated one binding-kind query indefinitely when a stored 0.82.0 fixture returned only populated kinds and omitted empty ones.",
+      "expected": "Track the requested kind set rather than returned dictionary keys, expand each subsequent read, and keep every snapshot at one revision. The 0.82.0 rendered views remain byte-identical.",
+      "tests": [
+        "test_research_problem_forming.ProblemFormingCompatibilityTests.test_data_only_0820_snapshot_renders_without_repeating_a_kind_query",
+        "test_research_problem_forming.ProblemFormingCompatibilityTests.test_0820_candidate_status_views_and_evidence_keep_their_bytes_and_meaning"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "output-render-failure-retains-advisory-path",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "Export-history discovery failed before the output writer when final/ was a regular file, leaving the render advisory without its failed path.",
+      "expected": "A blocked final/ directory leaves readiness unchanged and reports unsafe_path at final/README.md in both the advisory and warning. New-view checks and export discovery also name their failed paths. Removing the obstruction lets the next render recover.",
+      "tests": [
+        "test_research_output_views.RenderTests.test_a_failed_render_warns_and_stays_advisory",
+        "test_research_output_views.RenderTests.test_an_added_view_failure_names_the_failed_path_and_stays_advisory",
+        "test_research_output_views.RenderTests.test_export_discovery_failure_names_the_failed_path_and_stays_advisory"
+      ],
+      "class": "generated output views and export delivery",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape"
+    },
+    {
+      "id": "payload-absolute-path-accepts-workspace-ancestor-alias",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "An absolute payload file path through an ancestor symbolic link was refused when the CLI used the canonical workspace root.",
+      "expected": "Ancestor aliases normalize to the same workspace-relative payload, record and receipt. Links inside the workspace still refuse with unsafe_path, including exit and reentry after an external alias enters a workspace subdirectory.",
+      "tests": [
+        "test_payload_file_paths.PayloadFilePathTests.test_absolute_input_accepts_an_ancestor_alias_without_following_workspace_links",
+        "test_research_cli.ResearchCliTests.test_fresh_verifier_can_acquire_before_exact_target_initialization"
+      ],
+      "class": "workspace payload file boundary",
+      "fixed_in": "0.88.0",
+      "test_kind": "real_shape"
     }
   ]
 }

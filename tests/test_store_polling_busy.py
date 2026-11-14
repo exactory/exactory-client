@@ -3,6 +3,7 @@
 import os
 import time
 from itertools import chain, repeat
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from development_fixtures import DevelopmentCase
@@ -212,7 +213,14 @@ class RemotePollingTests(DevelopmentCase):
         else:
             attribute = '_read_preparation' if read_kind == '_read_preparation' else 'snapshot'
             patched_read = patch.object(self.store, attribute, side_effect=read)
-        with patched_read:
+        clock = PollClock()
+
+        def sleep(seconds):
+            clock.sleep(seconds)
+            time.sleep(seconds)
+
+        polling_time = SimpleNamespace(monotonic=clock.monotonic, sleep=sleep, time=time.time)
+        with patched_read, patch.object(remote_execution, 'time', polling_time):
             result = remote_execution.launch_colab(self.store, claim)
         thread.join(10)
         self.assertEqual(errors, [])

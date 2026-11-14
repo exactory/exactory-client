@@ -120,9 +120,15 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         self.assertFalse((self.root / 'final/problem/exports').exists())
         report = cli.status_report(self.store)
         self.assertEqual(report['next']['code'], 'problem_already_posted')
-        self.assertEqual(report['after_post'], [dict(
+        self.assertEqual([row['code'] for row in report['obligations']], ['problem_already_posted'])
+        retained = [dict(
             {key: value for key, value in row.items() if key != 'next'},
-            reason=row.get('reason', row['explanation'])) for row in before_findings])
+            reason=row.get('reason', row['explanation'])) for row in before_findings]
+        self.assertEqual(report['after_post'][:len(retained)], retained)
+        pending = report['after_post'][len(retained):]
+        self.assertEqual({row['assignment_id'] for row in pending},
+                         {'outstanding-bar', 'outstanding-second-bar'})
+        self.assertTrue(all(row['code'] == 'review_output_pending' and 'next' not in row for row in pending))
         self.assertEqual(review_continuation.plan_next(self.store.snapshot()['records'], self.artifacts,
                                                      assignment['id'])['state'], 'done')
         after = self.read_workspace()
@@ -177,6 +183,54 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
         evidence = self.artifacts.put(b"An authored instruction to post the exact statement.", "text/plain")
         post = self.record_external(dict(self.payload, evidence=evidence))["result"]
         self.assertEqual(post["evidence"], evidence)
+
+    def test_export_digest_is_validated_recorded_rendered_and_replayed(self):
+        payload = dict(self.payload, export_digest='ab' * 32)
+        for invalid in ('', 'not-a-digest', 'a' * 63, 'A' * 64, None, 17):
+            with self.subTest(export_digest=invalid):
+                self.assert_refusal_parity('problem-post-external', dict(payload, export_digest=invalid),
+                                          'invalid_input')
+        revision = self.store.revision
+        receipt = problem_claims.record_post_external(self.store, payload,
+            expected_revision=revision, request_id='export-post')
+        self.assertEqual(receipt['result']['export_digest'], 'ab' * 32)
+        self.assertEqual(cli.status_report(self.store)['post']['export_digest'], 'ab' * 32)
+        render_all(self.store)
+        view, = (self.root / 'final/problem/posts').glob('*.json')
+        self.assertEqual(json.loads(view.read_text())['export_digest'], 'ab' * 32)
+        self.assertEqual(problem_claims.record_post_external(self.store, payload,
+            expected_revision=revision, request_id='export-post'), receipt)
+
+    def test_0853_post_without_an_export_digest_keeps_receipt_digest_and_view(self):
+        from research_harness.evidence import digest
+        revision = self.store.revision
+        post = dict(self.payload, statement_id=self.statement['id'], gate='bypassed', posted_at=None,
+                    recorded_at='2026-11-12T12:00:00+00:00', recorded_revision=revision + 1)
+        receipt = operations.prepared_mutation(self.store, 'problem.post_external', self.payload,
+            lambda records, value: ([('problem_post', post['id'], post)], post),
+            expected_revision=revision, request_id='0853-post')
+        original_digest = digest(post)
+        render_all(self.store)
+        view, = (self.root / 'final/problem/posts').glob('*.json')
+        before = view.read_bytes()
+        self.assertEqual(json.loads(before), post)
+        self.assertEqual(cli.status_report(self.store)['post'], post)
+        self.assertEqual(problem_claims.record_post_external(self.store, self.payload,
+            expected_revision=revision, request_id='0853-post'), receipt)
+        self.assertEqual(digest(self.store.snapshot()['records']['problem_post'][post['id']]), original_digest)
+        render_all(self.store)
+        self.assertEqual(view.read_bytes(), before)
+        # Old and new shapes coexist: recording a later exported statement must
+        # leave the earlier receipt and raw historical view unchanged.
+        statement = self.select_statement(identifier='later-exported-statement', statement='A later exact statement.')
+        newer = dict(self.payload, id='export-aware-post', export_digest='cd' * 32,
+                     statement_digest=problem_claims.compute_statement_digest(statement))
+        self.record_external(newer)
+        render_all(self.store)
+        historical, = (self.root / 'final/history/problem/posts').glob('*.json')
+        self.assertEqual(historical.read_bytes(), before)
+        self.assertEqual(digest(self.store.snapshot()['records']['problem_post'][post['id']]), original_digest)
+        self.assertEqual(self.store.committed_request('0853-post')['response'], receipt)
 
     def test_a_missing_evidence_artifact_is_refused(self):
         self.assertIn("problem-post-external", cli.OPERATIONS)
@@ -233,9 +287,10 @@ class ExternalPostTests(checks.CheckCommandMixin, fixtures.ProblemCase):
     def test_the_cli_example_has_all_external_post_fields(self):
         self.assertIn("problem-post-external", cli.OPERATIONS)
         payload = cli.run(cli.build_parser().parse_args(["example", "problem-post-external"]))
-        self.assertEqual(set(payload), set(self.payload) | {"posted_at"})
+        self.assertEqual(set(payload), set(self.payload) | {"posted_at", "export_digest"})
         self.assertEqual(payload["posted_at"], "2026-11-04T14:49:22.236Z")
         self.assertEqual(len(payload["statement_digest"]), 64)
+        self.assertEqual(len(payload["export_digest"]), 64)
 
     def test_server_time_is_verbatim_and_recording_clock_is_separate(self):
         now = datetime(2026, 11, 5, 8, 31, 11, 654321, tzinfo=timezone.utc)

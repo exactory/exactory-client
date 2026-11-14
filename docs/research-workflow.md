@@ -532,7 +532,8 @@ resolution criteria (`gate_override_required` otherwise), and the value record
 (`problem_value_missing` otherwise). It writes
 `final/problem/exports/<export digest>/` with `title.txt`, `statement.md`,
 `criteria.md`, `motivation.md`, `state.md`, `formal-statement.txt` when the
-statement has one, `citations.json` and `problem-export.json`, whose manifest
+statement has one, `citations.json`, `citation-refs.json` (the reference list
+for the citation check before the post) and `problem-export.json`, whose manifest
 has `decision_id` and `problem_evidence_digest` null, the `override_id` and
 `gate: "bypassed"`. Run `exactory post-problem` on those files as the
 [math-conjecturer skill](../skills/math-conjecturer/SKILL.md#compose-and-post-a-problem)
@@ -542,8 +543,12 @@ back with `exactory problem <id>`, compare its statement, details, resolution
 criteria and area with the selected statement, and store that response with
 `artifact`. Record the post with `problem-post-external`: the returned `id` as
 `problem_id`, the manifest's `statement_digest`, that artifact as `evidence`,
-and the response's `createdAt` unchanged as `posted_at`; the override already
-keeps the user's instruction. `problem-posted` refuses this export, and
+the response's `createdAt` unchanged as `posted_at`, and the export digest as
+`export_digest`: the 64 lowercase hexadecimal characters that name the export
+folder under `final/problem/exports/`. When the export command returns a
+folder of the history whose name has a suffix such as `-2` after the digest,
+leave the suffix out. The override already keeps the user's instruction.
+`problem-posted` refuses this export, and
 `status` shows the post with `gate` `bypassed`.
 
 ### The math-solver controller
@@ -769,11 +774,15 @@ the copies that its tools wrote (for example `reviews/outputs/`) to
 `legacy`. The exports keep their own folders. `export --kind problem` writes to
 `final/problem/exports/<export digest>/`, where the export digest is the digest
 of all exported files, the value that the post records as `export_digest`, and
-refuses a `--destination` outside that folder. The packet exports write to
+refuses a `--destination` outside that folder. An export whose source records
+changed moves to `final/history/problem/exports/` with its files unchanged.
+The packet exports write to
 `intermediate/reviews/packets/<assignment id>/` (`problem-openness`) or
 `intermediate/reviews/packets/<kind>-r<revision>/` (`readiness`, `manuscript`,
 `round`), with `-2`, `-3`, ... added when the folder exists, and accept any
-`--destination`, so that a reviewer can run outside the workspace.
+`--destination`, so that a reviewer can run outside the workspace. A
+`problem-openness` export whose packet a folder already holds returns that
+folder and writes no second one.
 `export --kind foundation` writes to `intermediate/literature/exports/`.
 
 A render never changes a command's result. When it fails or falls behind,
@@ -1427,6 +1436,28 @@ choice too (the CLI reference, `bundle`). A `nothing-new` result still needs the
 actual empty results array when that is what the search returned. Under
 `lineage-v1` these five captures are stage 1 of the bounded loop described at
 the end of this section.
+
+Capture an OpenAlex list request that a search will bind with the `select`
+parameter, so that the response holds only the fields that the import reads:
+
+```text
+select=id,doi,title,display_name,type,authorships,publication_date,publication_year,abstract_inverted_index
+```
+
+Without `select`, OpenAlex returns every field of each work, and a review
+that receives the search also receives its captured responses. On one page of
+25 works, measured on 2026-11-13, the response had 2,446 characters for each
+work with this list and 14,283 without it, and the import read the same 25
+works from both. The list keeps `type`, because a search leaves out a work of
+type `paratext`, and both `title` and `display_name`, because a work without
+either is an `invalid_work` (the CLI reference, the search coverage section).
+A capture with this list does not import the references and the full-text
+locations of its works. Acquire a work that becomes relevant by its
+identifier with `acquire`, which reads the whole record. Give every page of
+one query the same `select`. The pages of one query share every parameter
+except paging, so pages with different lists form separate page groups. Each
+group must enumerate its results by itself, and the search records a group
+that does not as an incomplete response.
 
 ```sh
 exactory-research example search > direct-search.json

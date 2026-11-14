@@ -13,16 +13,33 @@ from .reading import fulltext_coverage
 
 
 def collect_reading_artifacts(records, artifacts, reading):
-    """Collect inspected originals, extracted text and explicitly named visuals."""
+    """Collect inspected originals and visuals, using the bound main extraction for a chosen original."""
     from .source_links import validate_link
-    found = {}
+    found, originals = {}, set()
     for inspection in reading["inspections"]:
         link = inspection["link"]
         context = validate_link(records, artifacts, link)
-        references = [link["artifact"], (context["capture"] or {}).get("original")]
+        original = (context["capture"] or {}).get("original")
+        if original is not None:
+            originals.add(original["sha256"])
+        references = [link["artifact"], original]
         references.extend(asset["artifact"] for asset in link["locator"].get("assets", []))
         for reference in references:
             if reference is not None:
+                artifacts.read(reference)
+                found[reference["sha256"]] = reference
+    from .capture_selection import find_capture_selections, find_replaced_texts
+    if find_capture_selections(records, reading["version_id"]):
+        from .graph import main_captures
+        work = records["work"][reading["version_id"]]
+        inspected = set(found)
+        visuals = {asset["artifact"]["sha256"] for inspection in reading["inspections"]
+                   for asset in inspection["link"]["locator"].get("assets", [])}
+        for sha256 in find_replaced_texts(records, work) - visuals - originals:
+            found.pop(sha256, None)
+        for capture in main_captures(records, work):
+            if capture["original"]["sha256"] in inspected and capture.get("text") is not None:
+                reference = capture["text"]
                 artifacts.read(reference)
                 found[reference["sha256"]] = reference
     return list(found.values())
@@ -93,9 +110,11 @@ def prepare_openness(records, artifacts, value, revision):
         if finding["minimum"] != packet["scientific_context"].get("openness_minimum"):
             raise ResearchError("openness_evidence_mismatch", "Return the exact minimum supplied to the reviewer")
         reading_digests = set(finding["minimum"]["reading_digests"])
-        required_artifacts = {reference["sha256"] for reading in records.get("reading", {}).values()
+        from .capture_selection import bind_packet_selections
+        bound_records = bind_packet_selections(records, packet["scientific_context"])
+        required_artifacts = {reference["sha256"] for reading in bound_records.get("reading", {}).values()
                               if digest(reading) in reading_digests
-                              for reference in collect_reading_artifacts(records, artifacts, reading)}
+                              for reference in collect_reading_artifacts(bound_records, artifacts, reading)}
         if not required_artifacts <= delivered:
             raise ResearchError("openness_evidence_mismatch", "Deliver every decisive reading's inspected original and visual bytes",
                                 {"artifact_digests": sorted(required_artifacts - delivered)})
@@ -156,7 +175,7 @@ def assess_openness(records, artifacts):
             packet = load_packet(artifacts, assignment["context"]["native_packet"], assignment["reviewer_id"])
             minimum = packet["scientific_context"].get("openness_minimum")
     if minimum is None:
-        return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", **affected)]
+        return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", gaps=[], **affected)]
     actual = {minimum.get("statement"), *minimum.get("neighbours", [])}
     expected = {statement["statement"], *statement["neighbours"]}
     if actual != expected:
@@ -171,7 +190,9 @@ def assess_openness(records, artifacts):
         if (unbound or not bound_searches <= searches or not set(minimum.get("reading_digests", [])) <= readings):
             return [obligation("problem_openness_stale", "Reassess changed or newly material search and reading evidence.",
                                search_ids=unbound, **affected)]
-        return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", **affected)]
+        from .openness_minimum import list_minimum_gaps
+        gaps = list_minimum_gaps(minimum, statement["statement"], records, artifacts)
+        return [obligation("problem_openness_unresolved", "Resolve the literature and reading gaps before claiming openness.", gaps=gaps, **affected)]
     from .openness_minimum import audit_minimum
     try:
         delivered = set(finding["evidence"])
@@ -193,7 +214,7 @@ def serialize_record(record):
     return json.dumps(record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
-def export_openness(store, spec, destination=None):
+def export_openness(store, spec, destination=None, *, accept_gaps=False):
     records = store.snapshot()["records"]
     marker = require_problem(records)
     fields(spec, ("assignment_id", "reviewer_id", "minimum"), ("native_reviews", "source_evidence"))
@@ -218,11 +239,19 @@ def export_openness(store, spec, destination=None):
             raise ResearchError("openness_search_missing", "Bind this store's exact search", binding)
         bound.append((binding["formulation"], search))
         required.update(row["work_id"] for row in search["dispositions"] if row["disposition"] in {"relevant", "contradictory"})
+    decisive = set(required)
     if spec["minimum"]["settling_work_id"] is not None:
         required.add(spec["minimum"]["settling_work_id"])
     readings = {}
     for work in sorted(required):
-        coverage = fulltext_coverage(records, artifacts, work)
+        try:
+            coverage = fulltext_coverage(records, artifacts, work)
+        except ResearchError as error:
+            if error.code != "missing_version" and not (error.code == "unknown_work" and work not in decisive):
+                raise
+            # The assessment reports a versionless source or an unacquired
+            # declared settling work. Stored artifact failures keep their code.
+            continue
         for reading_id in coverage["readings"]:
             readings[reading_id] = records["reading"][reading_id]
     minimum = {"schema_version": 1, "statement": statement["statement"], "neighbours": statement["neighbours"],
@@ -234,6 +263,15 @@ def export_openness(store, spec, destination=None):
     # The declaration is checked against the store before the export writes anything.
     from .openness_minimum import validate_minimum_bindings
     validate_minimum_bindings(minimum, statement["statement"], records)
+    from .openness_minimum import (find_searched_through, forecast_outcomes, list_minimum_gaps, list_minimum_notices)
+    gaps = list_minimum_gaps(minimum, statement["statement"], records, artifacts)
+    forecast = {"outcomes": forecast_outcomes(gaps), "gaps": gaps,
+                "notices": list_minimum_notices(minimum, records, artifacts),
+                "searched_through": find_searched_through(minimum, records)}
+    blocked = all(outcome == "blocked" for outcome in forecast["outcomes"].values())
+    if blocked and not accept_gaps:
+        raise ResearchError("openness_minimum_gaps", "The bound minimum blocks both resolved outcomes. Repair the "
+                            "reported gaps, or use --accept-gaps to export for an unresolved finding.", forecast)
     for _, search in bound:
         include_record(search)
     for reading in readings.values():
@@ -241,7 +279,8 @@ def export_openness(store, spec, destination=None):
         for artifact in collect_reading_artifacts(records, artifacts, reading):
             evidence[artifact["sha256"]] = {"digest": artifact["sha256"], "kind": "artifact", "artifact": artifact}
     include_record(statement)
-    scientific_context = {"openness_minimum": minimum}
+    from .capture_selection import describe_capture_selections
+    scientific_context = {"openness_minimum": minimum, **describe_capture_selections(records)}
     if "source_evidence" in spec:
         from .problem_openness_screening import resolve_source_evidence
         source_evidence, source_artifacts = resolve_source_evidence(records, artifacts, spec["source_evidence"], materialize=True)
@@ -285,9 +324,14 @@ def export_openness(store, spec, destination=None):
     load_packet(artifacts, reference, spec["reviewer_id"])
     from .review_delivery import deliver_packet, find_packet_destination
     if destination is None:
-        destination = find_packet_destination(store, spec["assignment_id"])
-    delivered = deliver_packet(store, destination, packet, transitive=True)
-    result = dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"])
+        destination = find_packet_destination(store, spec["assignment_id"], packet=packet)
+    delivered = deliver_packet(store, destination, packet, transitive=True, reuse=True)
+    result = dict(delivered, native_packet=reference, subject_digest=packet["subject_digest"], claim_digest=packet["claim_digest"],
+                  audit_forecast=forecast)
+    if blocked:
+        result["warnings"] = [{"code": "openness_minimum_gaps", "message":
+            "The bound minimum blocks both resolved outcomes. A reading chain over this packet still uses protocol "
+            "v5 and can end without a recorded finding until the finding contract ships in v6.", "details": forecast}]
     if not spec["minimum"].get("text_priority"):
         # A lower bound of the reviewer input: the packet and its text evidence bodies as JSON strings. Without a
         # priority no body gives way, so a route whose limit is below it refuses the run.
@@ -298,13 +342,13 @@ def export_openness(store, spec, destination=None):
         routes = sorted(identifier for identifier, route in records.get("review_route", {}).items()
                         if (review_transport.local_input_limit(route) or estimate) < estimate)
         if routes:
-            result["warnings"] = [{"code": "review_input_too_large", "message":
+            result.setdefault("warnings", []).append({"code": "review_input_too_large", "message":
                 "The estimated size of this packet exceeds the input limit of the text routes in route_ids, and "
                 "without minimum.text_priority a route withholds no full text by priority. List the version ids of the "
                 "read works in minimum.text_priority, the decisive ones first, so that a route withholds full-text bodies "
                 "from the end of the list. The estimate counts the packet and its UTF-8 evidence as JSON strings, so a "
                 "delivery projection or a framed route can send less.",
-                "details": {"route_ids": routes, "estimated_characters": estimate}}]
+                "details": {"route_ids": routes, "estimated_characters": estimate}})
     return result
 
 

@@ -341,7 +341,7 @@ class ResearchCliTests(unittest.TestCase):
         store = Store(self.root)
         self.assertNotIn("configuration", store.snapshot()["records"])
         self.assertNotIn("source", store.snapshot()["records"])
-        metadata = self.root / "metadata.xml"
+        metadata = self.root.resolve() / "metadata.xml"
         metadata.write_bytes(atom([entry()], total=1))
         imported = self.research_mutation("import-response", {"provider": "arxiv", "response_file": str(metadata),
             "source_url": "https://export.arxiv.org/api/query?id_list=2601.00001v1",

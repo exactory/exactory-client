@@ -6,7 +6,7 @@ reach a manuscript reviewer, and a readiness reviewer sees the six checks'
 evidence without labels."""
 
 import codecs
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import io
 import json
 import os
@@ -26,7 +26,7 @@ from .publication import _bundle, publication_state
 from .review_packets import manuscript_packet, readiness_packet, round_packet, find_round_investigation_responses
 from .scientific_json import is_json_media_type, parse_scientific_json
 from .scientific_delivery import encode_delivery
-from .workspace import checked_parent, strict_json, write_projection
+from .workspace import checked_parent, find_entry_kind, read_file, strict_json, write_projection
 
 
 def references(value):
@@ -44,16 +44,29 @@ def references(value):
     return [found[key] for key in sorted(found)]
 
 
-def find_packet_destination(store, name):
+def find_packet_destination(store, name, *, packet=None):
     """The default directory of a reviewer packet: intermediate/reviews/packets/<name>/ of the workspace root, or
     <name>-2, <name>-3, ... when that directory exists. A name that is not a portable file name is replaced by its
-    digest, as the output views name records."""
+    digest, as the output views name records. When packet is supplied, first reuse a directory whose inputs.json
+    equals that packet; deliver_packet verifies its artifact bytes before returning it."""
     folder, name = find_workspace_root(store.root) / PACKETS_FOLDER, _format_file_name(name)
+    if packet is not None and folder.is_dir():
+        manifest_bytes = encode_delivery(packet)
+        for directory in sorted(folder.iterdir()):
+            if has_packet_manifest(directory, manifest_bytes):
+                return directory
     destination, number = folder / name, 1
     while destination.exists() or destination.is_symlink():
         number += 1
         destination = folder / (name + "-" + str(number))
     return destination
+
+
+def has_packet_manifest(directory, manifest_bytes):
+    """Whether an independent directory holds this exact transitive packet manifest."""
+    return (directory.is_dir() and not directory.is_symlink()
+            and find_entry_kind(directory, "inputs.json") == "regular"
+            and read_file(directory, "inputs.json") == manifest_bytes)
 
 
 @contextmanager
@@ -78,27 +91,29 @@ def _stage_delivery(root, relative):
                 shutil.rmtree(staging)
 
 
-def deliver_packet(store, destination, manifest, *, derived=None, transitive=False, empty_captures=()):
+def deliver_packet(store, destination, manifest, *, derived=None, transitive=False, empty_captures=(), reuse=False):
     destination = Path(destination).absolute()
-    if destination.exists() or destination.is_symlink():
+    existing = destination.exists() or destination.is_symlink()
+    if existing and not (reuse and transitive and has_packet_manifest(destination, encode_delivery(manifest))):
         raise ResearchError("review_destination_exists", "Deliver into a new independent directory")
-    artifacts = ArtifactStore(store.root)
+    artifacts = ArtifactStore(destination if existing else store.root)
     derived = derived or {}
     values, pending, seen = [], references(manifest), set()
     try:
-        with _stage_delivery(destination.parent.resolve(), destination.name) as staging:
+        with (nullcontext(destination) if existing else _stage_delivery(destination.parent.resolve(), destination.name)) as staging:
             while pending:
                 ref = pending.pop()
                 key = digest(ref)
                 if key in seen:
                     continue
                 seen.add(key)
-                source = (freeze_file(io.BytesIO(derived[ref["path"]]), ref) if ref["path"] in derived
+                source = (freeze_file(io.BytesIO(derived[ref["path"]]), ref) if not existing and ref["path"] in derived
                           else artifacts.open_verified(ref))
                 with source as frozen:
-                    with checked_parent(staging, ref["path"], create=True) as (directory, name):
-                        with atomic_output(name, directory_fd=directory) as target:
-                            _copy_stream(frozen.stream, target, ref)
+                    if not existing:
+                        with checked_parent(staging, ref["path"], create=True) as (directory, name):
+                            with atomic_output(name, directory_fd=directory) as target:
+                                _copy_stream(frozen.stream, target, ref)
                     values.append(ref)
                     if transitive and (frozen.size or ref not in empty_captures):
                         if frozen.size > 64 * 1024 * 1024:
@@ -128,8 +143,9 @@ def deliver_packet(store, destination, manifest, *, derived=None, transitive=Fal
                             if is_json:
                                 pending.extend(references(structured))
                             del structured
-            data = encode_delivery(manifest) if transitive else (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
-            write_projection(staging, "inputs.json", data)
+            if not existing:
+                data = encode_delivery(manifest) if transitive else (json.dumps(manifest, indent=2, ensure_ascii=False) + "\n").encode()
+                write_projection(staging, "inputs.json", data)
     except OSError as error:
         raise _filesystem_error(error) from error
     return {"destination": str(destination), "artifacts": values,

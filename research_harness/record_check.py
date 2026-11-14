@@ -385,8 +385,48 @@ def check_authentication(store):
             state = protocol.assignment_state(records, artifacts, identifier)
             assignments[identifier] = {'ready': state['ready'], 'attempt_id': state.get('attempt_id'),
                                        'refusal_codes': sorted(row['code'] for row in state['obligations'])}
-    return {'attempts': attempts, 'assignments': assignments, 'probes': probes,
-            'captures': captures, 'corrections': corrections}
+        links = check_acceptance_reviews(records, artifacts)
+    result = {'attempts': attempts, 'assignments': assignments, 'probes': probes,
+              'captures': captures, 'corrections': corrections}
+    if links:
+        result['acceptance_reviews'] = links
+    return result
+
+
+def check_acceptance_reviews(records, artifacts):
+    """Qualify each acceptance link against its attested series and observed final."""
+    from . import openness_reading, review_parts, review_parts_native
+    from .native_review import ATTESTATION_PREFIX
+    verified = {}
+    for identifier, link in sorted(records.get('native_acceptance_review', {}).items()):
+        review = link['review']
+        assignment_id = review['assignment_id']
+        assignment = records.get('review_assignment', {}).get(assignment_id)
+        final = assignment
+        if assignment is not None:
+            if 'reading_chain' in assignment:
+                final = openness_reading.find_final_assignment(records, artifacts, assignment_id)
+            elif review_parts.KEY in assignment:
+                final = review_parts_native.find_final_assignment(records, artifacts, assignment_id)
+        observed = protocol.assignment_state(records, artifacts, final['id']) if final is not None else {}
+        key = {name: link[name] for name in ('attack_root', 'objective_id', 'acceptance_digest')}
+        if (identifier != digest(key) or final is None or final['role'] != 'native_math'
+                or final['id'] != review['final_assignment_id'] or not observed.get('ready')
+                or observed.get('attempt_id') != review['attempt_id']
+                or observed.get('output_digest') != review['output_digest']
+                or observed['output'].get('reviewer', {}).get('attestation_id') != ATTESTATION_PREFIX + assignment_id):
+            raise ResearchError('record_acceptance_review_changed',
+                                'A native_acceptance_review record does not match the review that it links. The '
+                                'record links an accepted result of a math-solver objective to the final turn of '
+                                'the review that accepted it. In this store, at least one of three things is wrong. '
+                                '(1) That turn is missing, is not a native mathematical review, or is not ready. '
+                                '(2) Its id, attempt, output digest or reviewer attestation differs from the '
+                                'record. (3) The key of the record is not the digest of its attack_root, '
+                                'objective_id and acceptance_digest. record-check changed nothing. Report link_id '
+                                'and acceptance_id of the details with the failed step.',
+                                {'link_id': identifier, 'acceptance_id': link['acceptance_id']})
+        verified[identifier] = review
+    return verified
 
 
 def describe_observation(records, artifacts, assignment, attempt):

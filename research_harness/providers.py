@@ -60,6 +60,8 @@ class Page:
     start: object = None
     next_cursor: object = None
     complete: bool = False
+    excluded_items: list = field(default_factory=list)
+    query_binding: object = None
 
 
 def _work(identifier, title, authors, *, locator, kind="paper"):
@@ -339,7 +341,7 @@ class OpenAlex:
         query.update({"cursor": cursor, "per_page": page_size})
         return self._request("", query)
 
-    def parse(self, data, *, page_size=100):
+    def parse(self, data, *, page_size=100, legacy=False):
         document = _json(data)
         multiple = "results" in document
         items = document.get("results") if multiple else [document]
@@ -357,6 +359,10 @@ class OpenAlex:
                 identifier = normalize_identifier(item.get("id"))
                 if not identifier.startswith("openalex:"):
                     _invalid("id")
+                if multiple and not legacy and item.get("type") == "paratext":
+                    page.excluded_items.append({"index": index, "id": item["id"], "doi": item.get("doi"),
+                                                "record_type": "paratext", "reason": "openalex_paratext"})
+                    continue
                 _array(item.get("authorships", []), "authorships")
                 authors = []
                 for authorship in item.get("authorships", []):
@@ -418,7 +424,10 @@ class OpenAlex:
                                                          if isinstance(location, dict) and location.get("pdf_url")))
                 page.works.append(work)
             except (KeyError, TypeError, ValueError, ResearchError):
-                page.failures.append({"index": index, "code": "invalid_work"})
+                failure = {"index": index, "code": "invalid_work"}
+                if not legacy and isinstance(item, dict) and isinstance(item.get("type"), str):
+                    failure["record_type"] = item["type"]
+                page.failures.append(failure)
         return page
 
 
@@ -444,7 +453,7 @@ class Crossref:
         query.update({"cursor": cursor, "rows": page_size})
         return self._request("", query)
 
-    def parse(self, data, *, page_size=100):
+    def parse(self, data, *, page_size=100, legacy=False):
         document = _json(data)
         message = document.get("message")
         if not isinstance(message, dict):
@@ -512,5 +521,8 @@ class Crossref:
                     if link.get("content-type") in ("application/pdf", "text/html")))
                 page.works.append(work)
             except (KeyError, TypeError, ValueError, IndexError, ResearchError):
-                page.failures.append({"index": index, "code": "invalid_work"})
+                failure = {"index": index, "code": "invalid_work"}
+                if not legacy and isinstance(item, dict) and isinstance(item.get("type"), str):
+                    failure["record_type"] = item["type"]
+                page.failures.append(failure)
         return page

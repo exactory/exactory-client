@@ -49,7 +49,7 @@ class ProblemOpennessTests(ProblemCase):
         packets = self.store.root / "intermediate/reviews/packets"
         self.assertEqual(export_openness(self.store, spec)["destination"], str(packets / "open-review"))
         self.assertTrue((packets / "open-review/inputs.json").is_file())
-        self.assertEqual(export_openness(self.store, spec)["destination"], str(packets / "open-review-2"))
+        self.assertEqual(export_openness(self.store, spec)["destination"], str(packets / "open-review"))
         path = self.root.parent / "openness-spec.json"
         path.write_text(json.dumps(spec))
 
@@ -57,7 +57,7 @@ class ProblemOpennessTests(ProblemCase):
             return cli.run(cli.build_parser().parse_args(["export", "--workspace", str(self.root), "--kind",
                                                           "problem-openness", "--spec", str(path), *arguments]))
 
-        self.assertEqual(export()["destination"], str(packets / "open-review-3"))
+        self.assertEqual(export()["destination"], str(packets / "open-review"))
         isolated = self.root.parent / "isolated-reviewer"
         self.assertEqual(export("--destination", str(isolated))["destination"], str(isolated))
         self.assertTrue((isolated / "inputs.json").is_file())
@@ -65,6 +65,78 @@ class ProblemOpennessTests(ProblemCase):
         unportable = export_openness(self.store, dict(spec, assignment_id="open review/1"))
         self.assertEqual(Path(unportable["destination"]).parent, packets)
         self.assertRegex(Path(unportable["destination"]).name, r"^id-[0-9a-f]{32}$")
+
+    def test_identical_packet_reuses_default_and_explicit_deliveries_without_writes(self):
+        import test_research_problem_openness_minimum as fixtures
+        from research_harness.problem_openness import export_openness
+        search = fixtures.ProblemOpennessMinimumTests.search(self)
+        spec = {"assignment_id": "open-review", "reviewer_id": "openness-reviewer", "minimum": {
+            "searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
+            "settling_work_id": None, "duplicate_resolutions": []}}
+        first = export_openness(self.store, spec)
+        directory = Path(first["destination"])
+        before = {str(path.relative_to(directory)): (path.read_bytes(), path.stat().st_mtime_ns)
+                  for path in directory.rglob('*') if path.is_file()}
+        # An unrelated record changes the store revision, but no packet bytes.
+        self.put('unrelated', 'later', {"note": "No change to the bound evidence."})
+        for destination in (None, directory):
+            result = export_openness(self.store, spec, destination)
+            self.assertEqual(result["destination"], first["destination"])
+            self.assertEqual(result["native_packet"], first["native_packet"])
+            self.assertEqual(result["artifacts"], first["artifacts"])
+        self.assertEqual({str(path.relative_to(directory)): (path.read_bytes(), path.stat().st_mtime_ns)
+                          for path in directory.rglob('*') if path.is_file()}, before)
+        self.assertEqual(list(directory.parent.iterdir()), [directory])
+
+    def test_changed_packet_gets_another_default_and_old_packet_still_reuses(self):
+        import test_research_problem_openness_minimum as fixtures
+        from research_harness.problem_openness import export_openness
+        search = fixtures.ProblemOpennessMinimumTests.search(self)
+        spec = {"assignment_id": "open-review", "reviewer_id": "openness-reviewer", "minimum": {
+            "searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
+            "settling_work_id": None, "duplicate_resolutions": []}}
+        first = export_openness(self.store, spec)
+        changed = dict(spec, reviewer_id="another-reviewer")
+        second = export_openness(self.store, changed)
+        self.assertEqual(Path(second["destination"]).name, "open-review-2")
+        self.assertEqual(export_openness(self.store, changed)["destination"], second["destination"])
+        self.assertEqual(export_openness(self.store, spec)["destination"], first["destination"])
+        self.assert_error("review_destination_exists", lambda: export_openness(self.store, changed, first["destination"]))
+
+    def test_reuse_verifies_the_delivered_artifacts(self):
+        import test_research_problem_openness_minimum as fixtures
+        from research_harness.problem_openness import export_openness
+        search = fixtures.ProblemOpennessMinimumTests.search(self)
+        spec = {"assignment_id": "open-review", "reviewer_id": "openness-reviewer", "minimum": {
+            "searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
+            "settling_work_id": None, "duplicate_resolutions": []}}
+        first = export_openness(self.store, spec)
+        directory = Path(first["destination"])
+        artifact = directory / first["artifacts"][0]["path"]
+        artifact.unlink()
+        self.assert_error("artifact_missing", lambda: export_openness(self.store, spec))
+        self.assertEqual(list(directory.parent.iterdir()), [directory])
+
+    def test_0853_packet_reuses_frozen_delivery_without_changing_packet_bytes(self):
+        import test_research_problem_openness_minimum as fixtures
+        from research_harness import problem_openness
+        search = fixtures.ProblemOpennessMinimumTests.search(self)
+        spec = {"assignment_id": "open-review", "reviewer_id": "openness-reviewer", "minimum": {
+            "searches": [{"formulation": self.selected["statement"], "search_id": search["id"]}],
+            "settling_work_id": None, "duplicate_resolutions": []}}
+        fixture = Path(__file__).parent / 'fixtures/openness_export_0_85_3.py.txt'
+        self.assertEqual(hashlib.sha256(fixture.read_bytes()).hexdigest(),
+                         '300a91030ed7034ce6abd065d01be6a70caca4a045d67abe08af254508eeabb2')
+        namespace = vars(problem_openness).copy()
+        exec(compile(fixture.read_bytes(), str(fixture), 'exec'), namespace)
+        directory = self.root / 'intermediate/reviews/packets/open-review'
+        legacy = namespace['export_openness'](self.store, spec, directory)
+        before = (directory / 'inputs.json').read_bytes()
+        actual = problem_openness.export_openness(self.store, spec)
+        self.assertEqual(Path(actual['destination']).resolve(), Path(legacy['destination']).resolve())
+        self.assertEqual(actual['native_packet'], legacy['native_packet'])
+        self.assertEqual(self.artifacts.read(actual['native_packet']), self.artifacts.read(legacy['native_packet']))
+        self.assertEqual((directory / 'inputs.json').read_bytes(), before)
 
     def test_new_neighbour_and_material_search_make_finding_stale(self):
         from research_harness.problem_openness import assess_openness
@@ -218,7 +290,10 @@ class ProblemOpennessExportCheckTests(ProblemCase):
                                text_priority=priority)
 
     def export_priority(self, spec):
-        packet = json.loads(self.artifacts.read(self.export(spec)["native_packet"]))
+        from research_harness.problem_openness import export_openness
+        # A priority can name a read body while another main body remains unread.
+        result = export_openness(self.store, spec, self.root / "packet", accept_gaps=True)
+        packet = json.loads(self.artifacts.read(result["native_packet"]))
         priority = packet["scientific_context"]["text_delivery_priority"]
         self.assertTrue(set(priority) <= {entry["digest"] for entry in packet["evidence"]})
         return packet, priority
@@ -312,6 +387,7 @@ class ProblemOpennessExportCheckTests(ProblemCase):
         self.assertEqual(raised.exception.message, "Text delivery priority cannot contain duplicates")
 
     def test_text_priority_does_not_translate_artifact_integrity_errors(self):
+        from research_harness.problem_openness import export_openness
         version = self.record_full_reading()["version_id"]
         spec = self.priority_spec([version], [version])
         capture = self.store.snapshot()["records"]["work"][version]["fulltexts"][0]
@@ -319,10 +395,11 @@ class ProblemOpennessExportCheckTests(ProblemCase):
         path = self.root / reference["path"]
         path.chmod(0o644)
         path.write_bytes(b"Corrupted extracted body.")
-        with self.assertRaises(ResearchError) as raised:
-            self.export(spec)
-        self.assertEqual(raised.exception.code, "artifact_corrupt")
-        self.assertEqual(raised.exception.details, {"path": reference["path"]})
+        for accept_gaps in (False, True):
+            with self.subTest(accept_gaps=accept_gaps), self.assertRaises(ResearchError) as raised:
+                export_openness(self.store, spec, self.root / "packet", accept_gaps=accept_gaps)
+            self.assertEqual(raised.exception.code, "artifact_corrupt")
+            self.assertEqual(raised.exception.details, {"path": reference["path"]})
 
     def assert_native_packet_matches_0_69_15(self, spec):
         from research_harness import problem_openness

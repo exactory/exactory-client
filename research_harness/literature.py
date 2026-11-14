@@ -61,8 +61,9 @@ from .providers import _json
 from . import resources
 from . import screening
 from .reading import bundle_digest, current_readings, fulltext_coverage, registry_abstract_present, required_unit_obligations
-from .search_pages import QUERY_PARAMETER_NAMES, build_search_coverage, enumerate_pages, find_captured_ordering, native_page
-from .source_links import captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
+from .search_pages import (NATIVE_PARSE_VERSION, QUERY_PARAMETER_NAMES, build_search_coverage, enumerate_pages,
+                           find_capture_interval_warnings, find_captured_ordering, native_page)
+from .source_links import admits_capture_class, captured_source, complete_original, contains, covers_text, exact_work, fulltext_capture, original_identity, read_locator, validate_link
 
 
 SEARCH_PURPOSES = ("direct", "originals", "theory", "adjacent", "recent")
@@ -109,7 +110,7 @@ def import_bundle(store, payload, *, expected_revision, request_id):
         if is_component(capture):
             raise ResearchError("invalid_bundle", "A supplement component cannot be an article main source")
         if value["scope"] == "article" and (capture is None or capture["availability"] != "available"
-                or source["capture_method"] != "http" or source["origin_verified"] is not True):
+                or not admits_capture_class(source, 'article_bundle')):
             raise ResearchError("invalid_bundle", "Article bundles require acquired original full text; tool responses remain passages")
         if value["scope"] == "passage" and value["completeness"] == "complete":
             raise ResearchError("invalid_bundle", "A passage cannot certify a complete article bundle")
@@ -232,20 +233,29 @@ def import_bundle(store, payload, *, expected_revision, request_id):
     return prepared_mutation(store, "literature.bundle", payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
 
-def _search_response(records, artifacts, response, scope):
+def _search_response(records, artifacts, response, scope, *, parse_version=1):
     fields(response, ("source_id", "query"), ("query_locator", "results_pointer"), code="invalid_search")
     source = captured_source(records, artifacts, response["source_id"])
     text(response["query"], "Search query", code="invalid_search")
+    imports = ([r for r in records.get("source_import", {}).values() if r["source_id"] == source["id"]]
+               if source["provider"] in ("web", "mcp") else [])
+    path_query = imports[0].get("query_binding") if source["provider"] == "web" and len(imports) == 1 else None
     if response.get("query_locator") is not None:
         if read_locator(artifacts, source["response"], response["query_locator"]) != response["query"]:
             raise ResearchError("invalid_search", "The recorded query must equal its original response value")
     else:
         names = QUERY_PARAMETER_NAMES.get(source["provider"], {"q", "query", "search", "search_query"})
         actual = [value for key, value in parse_qsl(urlsplit(source["url"]).query) if key in names]
-        if response["query"] not in actual:
-            raise ResearchError("invalid_search", "Bind the exact search-query parameter or a saved response query value; URL path fragments are insufficient")
+        if response["query"] not in actual and (path_query is None or response["query"] != path_query["value"]):
+            raise ResearchError("invalid_search",
+                                "query does not equal the value of a search-query parameter of the captured URL "
+                                "of this response, or the path segment that a web import bound with query_path. "
+                                "Give one of these exact values. The search row of the CLI reference names the "
+                                "parameters of each provider. For a web or MCP capture, you can instead name a "
+                                "saved value of the response with query_locator. A capture from arXiv, OpenAlex "
+                                "or Crossref needs the value of its URL parameter in every case.")
     if source["provider"] in ("arxiv", "openalex", "crossref"):
-        page = native_page(source, artifacts.read(source["response"]), response["query"], scope)
+        page = native_page(source, artifacts.read(source["response"]), response["query"], scope, parse_version=parse_version)
         found, pending = page["found"], []
     elif source["provider"] in ("web", "mcp"):
         page = None
@@ -255,19 +265,21 @@ def _search_response(records, artifacts, response, scope):
             raise ResearchError("invalid_search", "Tool searches require a locator into the original JSON result array") from error
         if not isinstance(raw, list):
             raise ResearchError("invalid_search", "The original search results must be an array, including an actual empty array")
-        imports = [r for r in records.get("source_import", {}).values() if r["source_id"] == source["id"]]
         if len(imports) != 1:
             raise ResearchError("invalid_search", "Import the original tool response and result mappings first")
         imported = imports[0]
         prefix = response["results_pointer"].rstrip("/") + "/"
         covered = set()
-        for mapping in imported["mappings"]:
+        mappings = imported["mappings"]
+        if isinstance(mappings, dict):
+            mappings = mappings["records"]
+        for mapping in mappings:
             pointer = mapping["id"]
             if pointer.startswith(prefix):
                 index, separator, _ = pointer[len(prefix):].partition("/")
                 if separator:
                     covered.add(index)
-        if len(imported["mappings"]) != len(raw) or covered != {str(i) for i in range(len(raw))}:
+        if len(mappings) != len(raw) or covered != {str(i) for i in range(len(raw))}:
             raise ResearchError("invalid_search", "Preserve an explicit imported work mapping for every returned result")
         found, pending = imported["work_ids"], list(imported["failures"])
     else:
@@ -436,7 +448,8 @@ def find_search_coverage(search, records=None, artifacts=None):
         evaluation = Evaluation.of(records, artifacts)
         captures, pages, pending = [], [], []
         for response in search["responses"]:
-            source, found, gaps, page = _search_response(records, evaluation, response, search["scope"])
+            source, found, gaps, page = _search_response(records, evaluation, response, search["scope"],
+                                                       parse_version=search.get("native_parse_version", 1))
             captures.append(build_search_capture(evaluation, response, source, found, page))
             pending.extend(gaps)
             if page is not None:
@@ -496,6 +509,19 @@ def validate_search_binding(records, value, scope):
             "reason": binding["reason"]}
 
 
+def build_search_receipt(value, found, pending, page_groups, pages):
+    queries = {group["id"]: group["query"] for group in page_groups}
+    invalid = [dict(item, query=queries.get(item.get("group_id"))) for item in pending if item["code"] == "invalid_work"]
+    incomplete = [dict(item, query=queries[item["group_id"]]) for item in pending
+                  if item["code"] == "search_response_incomplete"]
+    excluded = [dict(item, query=group["query"]) for group in page_groups for item in group.get("excluded_items", [])]
+    return {"id": value["id"], "pending": pending, "found_work_ids": sorted(found),
+            "invalid_work_count": len(invalid), "invalid_works": invalid,
+            "incomplete_response_count": len(incomplete), "incomplete_responses": incomplete,
+            "excluded_item_count": len(excluded), "excluded_items": excluded,
+            "warnings": find_capture_interval_warnings(pages)}
+
+
 def record_search(store, payload, *, expected_revision, request_id):
     def prepare(records, value):
         fields(value, ("id", "profile", "purpose", "queries", "responses", "captured_at", "found_work_ids", "verdict",
@@ -536,7 +562,8 @@ def record_search(store, payload, *, expected_revision, request_id):
         amount = effective["hits_per_query"]
         bounded = preparation_policy(records) in (LINEAGE, SAMPLED)
         for response in value["responses"]:
-            source, identifiers, gaps, page = _search_response(records, evaluation, response, value["scope"])
+            source, identifiers, gaps, page = _search_response(records, evaluation, response, value["scope"],
+                                                             parse_version=NATIVE_PARSE_VERSION)
             if timestamp(source["captured_at"]) > date:
                 raise ResearchError("invalid_search", "A search cannot precede its captured responses")
             found.update(identifiers)
@@ -561,10 +588,12 @@ def record_search(store, payload, *, expected_revision, request_id):
         coverage = build_search_coverage(value["queries"], amount, captures, page_groups, pending)
         base = dict(value, hits_per_query=amount, coverage=coverage, pending=pending, page_groups=page_groups,
                     integrity_errors=find_search_integrity_errors({"pending": pending}))
+        if pages:
+            base["native_parse_version"] = NATIVE_PARSE_VERSION
+        result = build_search_receipt(value, found, pending, page_groups, pages)
         if provisional:
             record = dict(base, scope_digest=None, provisional=True)
-            return [immutable_record(records, "literature_search", value["id"], record)], {
-                "id": value["id"], "pending": pending, "found_work_ids": sorted(found)}
+            return [immutable_record(records, "literature_search", value["id"], record)], result
         judged_evaluation = Evaluation.of(_build_judged_records(records, value), evaluation)
         record = dict(base, scope_digest=digest(current_scope),
                       evidence_digest=_search_evidence_digest(judged_evaluation, current_scope, found,
@@ -581,7 +610,7 @@ def record_search(store, payload, *, expected_revision, request_id):
             if current_scope.get("historical_cutoff") and value["purpose"] != "recent":
                 requirement["historical_cutoff"] = current_scope["historical_cutoff"]
             changes.append(immutable_record(records, "fulltext_requirement", identifier, requirement))
-        return changes, {"id": value["id"], "pending": pending, "found_work_ids": sorted(found)}
+        return changes, result
 
     return prepared_mutation(store, "literature.search", payload, prepare, expected_revision=expected_revision, request_id=request_id)
 
@@ -713,7 +742,8 @@ def _foundation_state(evaluation, profile):
                 "Record this purpose's saved search responses against the current literature scope.", purpose=purpose))
         for search in current:
             for response in search["responses"]:
-                _search_response(records, artifacts, response, search["scope"])
+                _search_response(records, artifacts, response, search["scope"],
+                                 parse_version=search.get("native_parse_version", 1))
             pending = search["pending"]
             if profile == "research" and "integrity_errors" in search:
                 pending = find_search_integrity_errors(search)

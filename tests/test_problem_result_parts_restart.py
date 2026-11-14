@@ -15,6 +15,7 @@ from review_parts_fixtures import PartsResultCase
 from research_harness import problem_delivery, output_views, report_views
 from research_harness import research_decisions as decisions
 from research_harness import review_parts as parts, review_problem_parts as legacy
+from research_harness import review_parts_problem_result as result_parts
 from research_harness import review_problem_history as history, review_protocol as protocol
 from research_harness import review_transport as transport
 from research_harness.evidence import digest
@@ -284,7 +285,9 @@ class ProblemResultRestartTests(PartsResultCase):
         self.assertTrue(any('output-elided-from-replayed-history' in message['content']
                             for message in read_history(self.case.artifacts, assignment)[1::2]))
 
+    @patch.dict(result_parts.ADAPTER, unit_rule=None)
     def test_measured_21_turn_history_restarts_and_finishes_with_search_bodies_withheld(self):
+        # Reproduce the inventory rule used by the earlier withholding repair.
         final = self.create_legacy(count=2, characters=750000, limit=1300000, closed=True)
         self.oversized(count=21, characters=50000, limit=1300000)
         bodies = [self.case.artifacts.put((str(index) + ' owned body ' * 7500).encode(), 'text/plain')
@@ -353,6 +356,7 @@ class ProblemResultRestartTests(PartsResultCase):
         self.assertFalse(parts.verify_series(changed, self.case.artifacts, final['id'])['complete'])
         self.assertTrue(self.coverage(review, records=changed))
 
+    @patch.dict(result_parts.ADAPTER, unit_rule=None)
     def test_prospective_withholding_protects_unit_and_requested_bodies(self):
         from review_parts_fixtures import make_packet
         packet = make_packet(count=3, characters=100000)
@@ -394,6 +398,7 @@ class CurrentResultSlotTests(PartsResultCase):
         self.assertEqual(slots['occupied'], 2)
         self.assertEqual(len(slots['pending']), 1)
 
+    @patch.dict(result_parts.ADAPTER, unit_rule=None)
     def test_later_read_withholds_newly_available_search_body(self):
         self.oversized(count=12, characters=24000, limit=200000)
         capture = self.case.artifacts.put(b'captured provenance ' * 50000, 'text/plain')

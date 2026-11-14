@@ -11,6 +11,7 @@ from unittest.mock import patch
 from codex_route_fixtures import bind_codex_response, build_codex_response
 from research_harness import cli, report_views, review_parts as parts, review_transport as transport
 from research_harness import review_protocol as protocol
+from research_harness import review_parts_problem_result as result_parts
 from research_harness.artifacts import describe_artifact
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -185,7 +186,9 @@ class BudgetFloorPlanningTests(unittest.TestCase):
         ]
         self.assert_journey_keeps_plans(packet, input_limit, expected, hashes)
 
+    @patch.dict(result_parts.ADAPTER, unit_rule=None)
     def assert_journey_keeps_plans(self, packet, input_limit, expected, hashes=None):
+        # These journeys retain the inventory rule captured on 0.72.4.
         actual = []
         observations = []
         for _ in expected:
@@ -289,6 +292,7 @@ class BudgetFloorReplacementTests(PartsResultCase):
         after = self.case.store.snapshot()
         recorded_stop, = after['records']['review_series_stop'].values()
         self.assertEqual(stop, dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
+                                   provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
                                    revision_after_stop=after['revision']))
         self.assertEqual(recorded_stop['plan'], plan)
         self.assertEqual(recorded_stop['recorded_revision'], after['revision'])

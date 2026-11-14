@@ -122,12 +122,15 @@ class RemoteExecutionTests(DevelopmentCase):
 
     def test_remote_byte_tampering_refuses_observation_after_the_actual_run(self):
         admission = admit_lab(self, backend="colab", timeout=5, body="print('{\"metric\": 9}')\n")
-        thread, errors = self.runner()
+        identity = {"expected_revision": self.store.revision, "request_id": "lost-result"}
+        claim = execution._claim(self.store, admission["id"], **identity)["result"]
+        root, job = remote_execution._publish_job(self.store, claim)
+        self.assertFalse(remote_execution.serve_scan_once(self.sync))
+        remote_execution._release(self.store, claim, root, job)
+        self.assertTrue(remote_execution.serve_scan_once(self.sync))
         with mock.patch.object(remote_execution, "collect_colab", side_effect=OSError("Lost collection response")):
             with self.assertRaises(OSError):
-                execution.launch_execution(self.store, admission["id"], expected_revision=self.store.revision, request_id="lost-result")
-        thread.join(10)
-        self.assertEqual(errors, [])
+                execution.launch_execution(self.store, admission["id"], **identity)
         self.assert_error("execution_recovery_required", lambda: execution.reconcile_execution(self.store,
             {"admission_id": admission["id"], "resolution": "not_released", "reason": "A released worker may already have run."},
             expected_revision=self.store.revision, request_id="cannot-cancel-released"))

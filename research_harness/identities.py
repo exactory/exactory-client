@@ -120,6 +120,51 @@ def resolve_family(records, identifier):
     return next(iter(candidates))
 
 
+def find_work_family_link(records, work_id, version_id):
+    """Return the R15 link from an acquired work to an exact version, or None.
+
+    Inputs are canonical acquired ids. The result is {kind, identifier}, where
+    kind is arxiv_version, datacite_doi or shared_doi, in that priority order,
+    and identifier is the versionless arXiv id or DOI establishing the link.
+    Participating identifiers may be asserted by either linked family, but no
+    third family (ruling 13).
+    DOI links compare author lists only when both records have authors. No
+    title is compared, and no stored identity or version is changed.
+    """
+    work = records["work"][work_id]
+    version = records["work"][version_id]
+    if version_id.startswith("arxiv:") and version_of(version_id) is None:
+        return None
+    target_family = family_id(version_id)
+    linked_families = {family_id(work_id), target_family}
+    if any(not find_family_candidates(records, identifier).issubset(linked_families)
+           for identifier in (work_id, version_id)):
+        return None
+    if work_id.startswith("arxiv:") and work_id == target_family:
+        return {"kind": "arxiv_version", "identifier": work_id}
+
+    author_lists = []
+    for record in (work, version):
+        names = [author if isinstance(author, str) else author.get("name", "")
+                 for author in record.get("authors", [])]
+        author_lists.append(tuple(" ".join(name.split()).casefold() for name in names))
+    if all(author_lists) and author_lists[0] != author_lists[1]:
+        return None
+
+    dois = sorted(identifier for identifier in {work_id, *work.get("aliases", [])}
+                  if identifier.startswith("doi:")
+                  and find_family_candidates(records, identifier).issubset(linked_families))
+    for identifier in dois:
+        if (version_id.startswith("arxiv:") and resolve_arxiv_family(identifier) == target_family
+                and find_family_candidates(records, target_family).issubset(linked_families)):
+            return {"kind": "datacite_doi", "identifier": identifier}
+    version_dois = {version_id, *version.get("aliases", [])}
+    for identifier in dois:
+        if identifier in version_dois:
+            return {"kind": "shared_doi", "identifier": identifier}
+    return None
+
+
 def select_family(records, identifier, target_family):
     """Validate an explicit choice without modifying the competing identity assertions."""
     try:

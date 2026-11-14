@@ -1192,7 +1192,11 @@ still be proved as an obligation inside it.
    for the statement, the whole `statement` field, with its `---` line and details when they
    are present; for a neighbour, the text declared in `neighbours`. A new search record can
    reuse the captured responses of an earlier search and carry the new `question`, without a
-   new capture. Give each search a date and bounded or complete coverage.
+   new capture. Give each search a date and bounded or complete coverage. Capture each OpenAlex
+   list request that a search will bind with the `select` parameter of
+   [Literature tools](../../docs/research-workflow.md#literature-tools-search-read-expand-and-synthesize),
+   on every page of the query, so that the captured response holds only the fields that the
+   import reads.
 2. Read every decisive prior or settling work in full. Keep an unavailable source as a gap.
 3. Write the openness spec `{assignment_id, reviewer_id, minimum: {searches: [{formulation,
    search_id}], settling_work_id, duplicate_resolutions}}`. Each `searches` entry binds one
@@ -1234,7 +1238,8 @@ still be proved as an obligation inside it.
 4. Run `exactory-research export --kind problem-openness --spec openness-spec.json`. Without
    `--destination` the export writes the packet to
    `intermediate/reviews/packets/<assignment id>/` (`<assignment id>-2`, `-3`, ... when that
-   folder exists) and names the directory under `destination` in its output; give
+   folder exists) and names the directory under `destination` in its output. An export whose
+   packet a folder already holds returns that folder and writes no second one. Give
    `--destination` only to place the packet outside the workspace, for a reviewer that must
    not see it. Before it writes anything, the export checks the declaration against the
    store. A refusal names what to repair in its details:
@@ -2110,7 +2115,13 @@ accounts with the parts that the harness derives, and the records that their ent
    keeps the observed output, and `value-review` refuses a final assessment while the inherited
    requests stay pending (`review_sources_pending`). Change the source state first, for example
    by acquiring the missing source, and then continue the session, or report the unresolved
-   source gap to the user.
+   source gap to the user. When a requested text arrives in many parts that are almost all white
+   space, its main capture holds a PDF text that layout mode padded. Acquire the PDF again and
+   choose the new capture with `select-main-capture` (the CLI reference gives its conditions):
+   the next continuation delivers the chosen text, and the parts already delivered stay
+   delivered. An openness export after the choice carries the chosen text without a new
+   reading. An openness chain that was exported before the choice, and a recorded openness
+   finding, keep the text of their packet and stay current.
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
    repaired with evidence changes the evidence digest, and the result reviews are refreshed for
    the same reviewers. A value record with accounts becomes stale when the record gains a later
@@ -2191,7 +2202,12 @@ files is returned as it is; one that holds other files is refused with
 is refused (`export_destination_outside_final`). Use the exported `title.txt`,
 `statement.md`, `motivation.md`, `state.md`, `criteria.md` and `citations.json`;
 `problem-export.json` identifies the approved claim, evidence, decision and area.
-Keep an exported `formal-statement.txt` when the record includes one. Run the
+Keep an exported `formal-statement.txt` when the record includes one. The export
+also writes `citation-refs.json`, the reference list of the same citations for
+the citation check: one entry for each entry of `citations.json`, in the same
+order, with the title and the authors that the record holds for the work and,
+when the work has one, with its DOI or its arXiv id. That file is not sent with
+the post. Run the
 citation and duplicate checks below on those exported files unchanged. A change
 to any part after export requires a new statement record and starts the post gate
 again.
@@ -2247,17 +2263,64 @@ and display a long definition or inequality with `$$...$$` on its own line.
 
 Check every citation locator before posting, exactly as `/exactory:propose-grand-challenge` does:
 
-1. Write DOI and arXiv locators to `problem-refs.json` as a reference list.
-   Use `[{"referenceString": "<citation>", "bibliography": {"doi": "<doi>"}}]` for a DOI.
-   For an arXiv locator, replace `{"doi": "<doi>"}` with `{"arxivId": "<arxiv-id>"}`.
-   If the citation names a title, include it as `bibliography.title`.
+1. Write the citations that have a DOI or an arXiv locator to `problem-refs.json` as a reference
+   list: a JSON array with one entry for each citation. For a DOI, the file with one entry is
+   `[{"referenceString": "<citation>", "bibliography": {"doi": "<doi>", "title": "<title>", "authors": ["<author>", "<author>"]}}]`.
+   For an arXiv locator, give `"arxivId": "<arxiv-id>"` in place of `"doi"`. Give the title
+   and every author of the work, one name in each string, in the order of the work. The check
+   compares both with the registry record of the identifier, the title first and then the
+   authors. An entry whose title agrees and that has no `authors` is blocking
+   (`author_mismatch`) whenever the registry record lists authors, because the author
+   comparison catches a fabricated citation that carries a real identifier.
+   For a problem with a research record, do not write this file: the reference list is the
+   exported `citation-refs.json`. Do not build a list from the `citation` strings of
+   `citations.json` either, because a split of such a string at a full stop breaks a name that
+   has an initial.
 2. Run `exactory-check lookup --refs-json problem-refs.json --out problem-citation-report.json`.
-   Always give `--out`. The default path belongs to a draft workspace's citation gate.
+   For a problem with a research record, give the exported list in place of `problem-refs.json`:
+   `--refs-json "$EXPORT/citation-refs.json"`, where `EXPORT` is the export directory.
+   Always give `--out`, with a path outside the export directory. The default path belongs to
+   a draft workspace's citation gate, and a report inside the export directory changes the
+   file set that `problem-posted` compares.
 3. Fix or remove every blocking entry. Run the check again until all entries pass. The check
    also fails while an entry is incomplete (`no_query`, `network_error` or `search_incomplete`).
    A `search_incomplete` entry is a title search that stopped at its page bound; the output
    prints the command with twice the pages (`--search-pages`), but the reliable fix is the DOI
    or the arXiv id in `bibliography`, which is resolved without a search.
+   The exported list is not edited. An entry of it that has an identifier and is blocking
+   shows a difference between the record and the registry: the title or the authors that the
+   record holds for the work differ from the registry record of the identifier, or the
+   registry holds another work, or no work, under the identifier. The entry's `detail` states
+   the difference. No command changes a title, an author list or an identifier that a work
+   record already holds: a new acquisition of the work fills only a title or an author list
+   that is empty, and `problem-citation-metadata` refuses a work that has a DOI or an arXiv
+   identity (`problem_citation_work_ineligible`). So do not acquire the work again and do not
+   export again to change a value that the record holds, because both give the same entry.
+   Fetch the registry record of the identifier and compare it with the document that the
+   record read, so that you know which of the two differs. The entry stays blocking and the
+   post waits: keep the report, and report the entry, its `detail` and the result of your
+   comparison to the user.
+   An entry of the exported list without `doi` and without `arxivId` is a work whose locator
+   is an https URL. The check searches Crossref and OpenAlex for its title and compares the
+   authors of each work that it finds under that title. A work whose authors agree verifies
+   the entry, also when another work under that title has other authors. When no work
+   verifies the entry and a search is not complete, the entry is incomplete (`network_error`
+   or `search_incomplete`, as above), also when a work under that title with other authors
+   was found. When no work verifies the entry and both searches are complete, the entry is
+   `unresolved` if neither lists a work with that title, and `author_mismatch` if every work
+   that they list under that title has other authors. For `unresolved` and for
+   `author_mismatch`, fetch the locator under step 4 and compare the title and every author
+   of the entry with the document that it returns. An `unresolved` entry whose title and
+   authors agree with that document does not hold the post back. When the title or the
+   authors of the entry differ
+   from the document, the record holds wrong metadata. For a `url:` work, record the title
+   and the authors of the document with `problem-citation-metadata` (a correction is a new
+   id with the complete payload; the CLI reference gives its conditions). The new record
+   changes the evidence digest, so export again after `exactory-research gate post` reports
+   ready.
+   In the two other cases, wrong metadata of a work that is not a `url:` work and an
+   `author_mismatch` entry whose authors agree with the document, the entry stays blocking:
+   report it to the user as above.
 4. Fetch every https locator. Check that it returns the cited document.
 
 Check that the problem is not already posted:

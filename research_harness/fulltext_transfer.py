@@ -132,7 +132,8 @@ class FulltextTransfer:
             if type(use_ranges) is not bool or type(allow_complete_restart) is not bool:
                 raise ResearchError("invalid_input", "Transfer mode flags must be boolean")
             url = safe_url(url)
-            deadline = self.client.clock.monotonic() + total_timeout
+            started = self.client.clock.monotonic()
+            deadline = started + total_timeout
             budget = budget if budget is not None else RequestBudget()
             units = list(self.units.read_units(job_id))
             ranges, complete = self._validate_units(units, url)
@@ -250,4 +251,10 @@ class FulltextTransfer:
                 raise ResearchError("fulltext_transfer_changed", "Assembly does not cover the whole original")
             return self._build_result(ranges[0], response, attempts, len(units), deadline, assembled=True)
         except ResearchError as error:
-            raise HttpFailure(error.code, error.message, attempts, error.details) from error
+            details = error.details
+            if error.code == "timeout" and details is None:
+                details = {"timeout_seconds": total_timeout,
+                           "elapsed_seconds": self.client.clock.monotonic() - started,
+                           "bytes_received": sum(attempt["response"]["size"] for attempt in attempts
+                                                 if attempt.get("response") is not None)}
+            raise HttpFailure(error.code, error.message, attempts, details) from error
