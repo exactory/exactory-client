@@ -28,11 +28,17 @@ def select_main_capture(store, payload, *, expected_revision, request_id):
         if (capture is None or is_component(capture) or capture.get("availability") != "available"
                 or capture.get("extraction_status") != "extracted"
                 or capture.get("original") is None or capture.get("text") is None):
-            raise ResearchError("invalid_main_capture", "Choose an available main-document capture of this exact version")
+            raise ResearchError("invalid_main_capture",
+                                "source_id does not name a capture that can be the main capture of this version. "
+                                "A main capture is a full-text capture of this exact version that is available, has "
+                                "an extracted text and is not a component. Give the source_id of such a capture.")
         from .graph import index_bundles
         supplements = index_bundles(records).get(work["id"], {}).get("supplements", set())
         if capture["source_id"] in supplements:
-            raise ResearchError("invalid_main_capture", "A declared supplement cannot be selected as the main document")
+            raise ResearchError("invalid_main_capture",
+                                "source_id names a capture that a source bundle of this version links as a "
+                                "supplement, and a supplement cannot be the main capture. Give the source_id of a "
+                                "capture that no source bundle of this version links as a supplement.")
         artifacts = store.build_artifact_store()
         artifacts.read(capture["original"])
         artifacts.read(capture["text"])

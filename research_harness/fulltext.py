@@ -11,10 +11,19 @@ extraction recognizes their normalized base types. PDF extractor injection
 accepts bytes and returns {status, text}; its successful status is 'extracted'.
 extraction_measures(text, original_size) describes an extraction (bytes, pages,
 longest line, whitespace fraction, expansion) so a coordinator sees layout
-padding before a reader does. Default PDF extraction retries without layout when
-padding exceeds the measured thresholds; explicit layout options remain authoritative.
-Neither mode truncates text. Missing, scanned, malformed or timed-out extraction remains
-pending.
+padding before a reader does. With layout=None, no injected extractor and no
+OCR, extract chooses the PDF mode itself. It extracts with layout mode and
+measures the text. When the whitespace fraction is greater than
+LAYOUT_WHITESPACE_THRESHOLD, or the expansion is greater than
+LAYOUT_EXPANSION_THRESHOLD, it extracts again without layout mode and returns
+the plain text. When the plain extraction fails, it returns that status and no
+text, never the padded text. When the layout extraction succeeds, the result
+has layout_selection: {protocol, kept_mode ('layout', 'plain', or None after a
+failed plain extraction), thresholds, measurements: {layout}}, and after a
+second extraction also plain_status and, when the plain extraction gave text,
+measurements['plain']. An explicit layout value, an injected extractor and OCR
+extract once and return no layout_selection. Neither mode truncates text.
+Missing, scanned, malformed or timed-out extraction remains pending.
 The default pdftotext invocation uses explicit argv, a timeout, a private temp
 directory, and a bounded output read. HTML requires article-body structure with
 nonempty content blocks beyond titles, metadata and abstracts. XML

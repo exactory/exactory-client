@@ -135,9 +135,10 @@ def read_locator(artifacts, artifact, locator, *, capture=None, result=False, pa
                         and part['start'] <= locator['start'] < locator['end'] <= part['end']):
                     relative = {'start': locator['start'] - part['start'], 'end': locator['end'] - part['start']}
                     raise ResearchError('invalid_locator',
-                        f"This part occupies whole-text character range [{part['start']}, {part['end']}). "
-                        'A span on a part artifact counts from the start of the part; for the supplied whole-text '
-                        f"span, use part-relative start {relative['start']} and end {relative['end']}.",
+                        'The span lies outside the saved text. The cited artifact is one part of the extracted text '
+                        f"of this version and holds the characters [{part['start']}, {part['end']}) of the whole "
+                        'text. A span on a part counts from the start of the part, not from the start of the whole '
+                        f"text. For the same passage, use start {relative['start']} and end {relative['end']}.",
                         {'part_relative_span': relative})
                 raise ResearchError("invalid_locator", "The span must lie within the saved text")
             span = content[locator["start"]:locator["end"]]

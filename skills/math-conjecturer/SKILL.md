@@ -2110,7 +2110,14 @@ accounts with the parts that the harness derives, and the records that their ent
    keeps the observed output, and `value-review` refuses a final assessment while the inherited
    requests stay pending (`review_sources_pending`). Change the source state first, for example
    by acquiring the missing source, and then continue the session, or report the unresolved
-   source gap to the user.
+   source gap to the user. When a requested text arrives in many parts that are almost all white
+   space, its main capture holds a PDF text that layout mode padded. Acquire the PDF again and
+   choose the new capture with `select-main-capture` (the CLI reference gives its conditions):
+   the next continuation delivers the chosen text, and the parts already delivered stay
+   delivered. For a version that the openness review binds, also record a new `bundle` and a
+   full reading on the chosen capture before the openness export, so that its packet carries the
+   chosen text. A choice after a recorded openness finding that read the earlier text makes that
+   finding stale (`problem_openness_stale`).
 5. Repair a below-threshold rubric grade with evidence, or obtain a focused adjudication. A grade
    repaired with evidence changes the evidence digest, and the result reviews are refreshed for
    the same reviewers. A value record with accounts becomes stale when the record gains a later
