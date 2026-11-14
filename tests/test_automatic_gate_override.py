@@ -1102,8 +1102,16 @@ class AutomaticStudyPassTests(DevelopmentCase):
             store = Store(root, create=True)
             (root / "context").mkdir()
             (root / "context/old-instruction.txt").write_text("Continue to local writing.")
-            receipt = overrides.record_override(store, fixture["payload"], expected_revision=0,
-                                                request_id="released-user-override")
+            instruction = fixture["receipt"]["result"]["instruction"]
+            self.assertEqual(store.build_artifact_store().put(instruction["text"].encode("utf-8"),
+                             "text/plain; charset=utf-8"), instruction["artifact"])
+            def restore_user_override(transaction):
+                # Restore the released record; new instructions use the current form.
+                row = fixture["receipt"]["result"]
+                transaction.put("gate_override", row["id"], row)
+                return row
+            receipt = store.mutate(fixture["event"][0], fixture["payload"], restore_user_override,
+                                   expected_revision=0, request_id="released-user-override")
             self.assertEqual(receipt, fixture["receipt"])
             with sqlite3.connect(root / ".exactory/research.sqlite3") as connection:
                 event = connection.execute("SELECT operation,payload,changes,result FROM events").fetchone()

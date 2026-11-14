@@ -189,12 +189,14 @@ def _summarize_record(record, entry, data):
             "fields": fields}
 
 
-def _encode_record(record, entry):
-    """The bytes of a view file that shows one record: the record, or its summary when it is over COPY_LIMIT_BYTES."""
+def _encode_record(record, entry, *, retain_fields=()):
+    """Render a record or its summary, retaining any named bounded fields in that summary."""
     data = _encode_canonical(record)
     if len(data) <= COPY_LIMIT_BYTES:
         return _encode_indented(record)
-    return _encode(_summarize_record(record, entry, data))
+    summary = _summarize_record(record, entry, data)
+    summary["fields"].update((name, record[name]) for name in retain_fields)
+    return _encode(summary)
 
 
 def _bound_embedded_record(kind, key, record):
@@ -391,7 +393,13 @@ def _build_records(records, artifacts, inputs):
                 status = "historical"
             path = _STATUS_FOLDERS[status] + tree + "/" + _format_file_name(key) + ".json"
             entry = _describe(kind, key, record, status)
-            content = _encode(record) if kind == "problem_report" else _encode_record(record, entry)
+            retain_fields = ()
+            if kind == "gate_override" and record.get("authority") == "user":
+                from .overrides import describe_instruction
+                record = dict(record, **describe_instruction(record["instruction"]))
+                if record["instruction"].get("form") == "parts":
+                    retain_fields = ("instruction", "user_words", "selections")
+            content = _encode(record) if kind == "problem_report" else _encode_record(record, entry, retain_fields=retain_fields)
             files[path] = ViewFile(content, entry)
     return files
 

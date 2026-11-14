@@ -607,7 +607,7 @@ def status_report(store, *, counters=False):
             status_scope.callback(scope.pop, 'review_closure_roots', None)
         scope['review_closure_roots'] = {}
         records = snapshot["records"]
-        override_status = overrides.describe_overrides(records, store.root)
+        override_status = overrides.describe_overrides(records, store.root, artifacts=evaluation)
         # The views of the outputs are advisory: they never change readiness, the obligations or the next action.
         advisories = find_view_advisories(store, snapshot["revision"])
         if "problem" in records.get("workspace", {}):

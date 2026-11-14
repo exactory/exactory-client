@@ -242,9 +242,8 @@ def record_automatic_override(store, payload, *, expected_revision, request_id, 
 
 
 def _covers_public_write(rows, gate, public_action):
-    return any(row.get("authority") == "user" and (
-        row.get("public_action") == public_action if row.get("public_action") is not None else
-        gate is not None and row["gate"] == gate) for row in rows)
+    from .overrides import covers_public_write
+    return any(covers_public_write(row, gate, public_action) for row in rows)
 
 
 def require_public_write_instruction(store, gate, *, public_action=None, precheck=False):

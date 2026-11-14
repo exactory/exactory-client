@@ -206,6 +206,18 @@ def summarize_overrides(report):
             example["truncated_fields"] = [name for name, value in strings.items()
                                             if isinstance(value, str) and len(value) > limits[name]]
             example["transition"] = row.get("transition")
+            if "user_words" in row:
+                example["user_words"] = [dict(at=part["at"], text=_short(part["text"], 120))
+                                         for part in row["user_words"][:3]]
+                example["omitted_user_words"] = max(0, len(row["user_words"]) - 3)
+                example["selections"] = [dict(
+                    author=part["author"], asked_at=part["asked_at"], answered_at=part["answered_at"],
+                    question=_short(part["question"], 120),
+                    **{name: [{key: _short(option[key], 120) for key in ("label", "text")} for option in part[name][:3]]
+                       for name in ("selected", "unselected")},
+                    omitted_selected=max(0, len(part["selected"]) - 3),
+                    omitted_unselected=max(0, len(part["unselected"]) - 3)) for part in row["selections"][:3]]
+                example["omitted_selections"] = max(0, len(row["selections"]) - 3)
             if "obligations" in row:
                 codes = row["obligations"]
                 example["obligations"] = [_short(code, 48) for code in codes[:6]]
@@ -221,7 +233,14 @@ def bound_override_summaries(result, limit):
     while len(json.dumps(result, ensure_ascii=False, indent=2).encode("utf-8")) > limit:
         removable = [key for key in ("overrides", "unrecorded_overrides") if len(result.get(key, [])) > 1]
         if not removable:
-            break
+            previews = [(row, key) for group in ("overrides", "unrecorded_overrides") for row in result.get(group, [])
+                        for key in ("user_words", "selections") if row.get(key)]
+            if not previews:
+                break
+            row, key = max(previews, key=lambda pair: len(json.dumps(pair[0][pair[1]], ensure_ascii=False)))
+            row[key].pop()
+            row["omitted_" + key] += 1
+            continue
         key = max(removable, key=lambda key: len(result[key]))
         result[key].pop()
         result["omitted_" + key] += 1

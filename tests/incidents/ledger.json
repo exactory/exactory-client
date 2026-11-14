@@ -5189,6 +5189,36 @@
         "test_problem_override_citations.OverrideCitationTests.test_versionless_search_work_uses_its_read_version_and_spec_can_select_v2",
         "test_problem_override_citations.OverrideCitationTests.test_stored_v2_keeps_its_bytes_and_digest_beside_the_enriched_export"
       ]
+    },
+    {
+      "id": "override-instruction-given-by-a-selection-has-no-form",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "instruction attribution",
+      "summary": "A selection was saved with user messages and session text in a single undifferentiated instruction file.",
+      "expected": "The parts form retains every message, dialog option, choice and note, pins the original bytes and separates user words from session-authored selections in status, next and final views. Stored text instructions keep their digests and views.",
+      "fixed_in": "0.87.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_override_instruction_parts.InstructionPartsTests.test_selection_keeps_three_messages_apart_from_all_options_in_reports_and_view",
+        "test_override_instruction_parts.InstructionPartsTests.test_new_text_form_and_stored_text_and_local_shapes_keep_their_meaning"
+      ]
+    },
+    {
+      "id": "override-holds-no-condition-and-no-order-of-instructions",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "override authority",
+      "summary": "A conditional selection followed by a general instruction had no structured condition or explicit lifting relation in the override record.",
+      "expected": "All applicable user overrides retain their conditions across overlapping actions and changed statements. Named or after-report lifts identify the earlier condition. Authority computes current check states and evidence without changing stored overrides or legacy coverage. Enforcement by export and public transports follows in UA5.",
+      "fixed_in": "0.87.0",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_override_authority.OverrideAuthorityTests.test_incident_step_one_selection_records_unmet_condition_and_its_obligation",
+        "test_override_authority.OverrideAuthorityTests.test_incident_step_two_general_message_lifts_nothing_while_finding_is_pending",
+        "test_override_authority.OverrideAuthorityTests.test_incident_step_three_chain_without_finding_retains_unmet_condition_without_new_record",
+        "test_override_authority.OverrideAuthorityTests.test_incident_step_four_after_report_lift_authorizes_export_and_post",
+        "test_override_authority.OverrideAuthorityTests.test_condition_on_previous_statement_stands_after_new_statement_is_covered",
+        "test_override_authority.OverrideAuthorityTests.test_legacy_authority_equals_coverage_for_recorded_and_local_shapes_and_all_scopes"
+      ]
     }
   ]
 }
