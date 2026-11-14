@@ -218,6 +218,9 @@ def _review_output_correction(store, payload, **identity):
     return invoke_correction(store, payload, credential=os.environ.get("OPENAI_API_KEY"), **identity)
 
 
+from .review_stop import stop_review
+OPERATIONS["review-stop"] = stop_review
+
 OPERATIONS.update({"review-probe": _review_probe, "review-run": _review_run,
                    "review-output-correction": _review_output_correction})
 
@@ -541,6 +544,22 @@ def _review_status(records, artifacts):
     result = {"assignments": {identifier: {"refused_attempts": review_refusal.refused_attempts(
                                 records, artifacts, by_assignment.get(identifier, []))}
                             for identifier in records.get("review_assignment", {})}}
+    from .review_call_admission import list_waiting_calls
+    queue = list_waiting_calls(records)
+    if queue:
+        result['queue'] = queue
+    from .review_stop import find_stop, describe_stop, list_live_drivers, _matches_call_scope
+    running_drivers = list_live_drivers(records, dict(kind='store'))
+    scoped_entries = result['assignments'].items() if records.get('review_stop') or running_drivers else ()
+    for identifier, entry in scoped_entries:
+        stop = (find_stop(records, assignment_id=identifier)
+                or find_stop(records, standing=False, assignment_id=identifier))
+        if stop is not None:
+            entry['last_stop'] = describe_stop(records, stop)
+        drivers = [row for row in running_drivers
+                   if _matches_call_scope(records, row['scope'], dict(assignment_id=identifier))]
+        if drivers:
+            entry['drivers'] = drivers
     from .review_provider_usage import describe_usage
     usage = describe_usage(records, artifacts)
     if usage['windows']:
@@ -883,7 +902,7 @@ def run(args):
         examples = strict_json((Path(__file__).resolve().parents[1] / "docs/research-cli-examples.json").read_bytes())
         return examples[args.operation]
     if getattr(args, "check", False) and args.command in (
-            "batches", "export", "recover", "restore", "strategy-packet", "review-series"):
+            "batches", "export", "recover", "restore", "strategy-packet", "review-series", "review-stop"):
         raise ResearchError("check_unsupported", "Check mode cannot run commands with external or recovery effects",
                             {"command": args.command})
     preview = args.command == "import-response" and args.preview

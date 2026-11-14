@@ -5462,6 +5462,49 @@
         "test_review_request_parity.ReviewRequestParityTests.test_result_parts_v2_preserves_stored_inputs_under_the_v3_default",
         "test_review_request_parity.ReviewRequestParityTests.test_result_parts_v2"
       ]
+    },
+    {
+      "id": "chain-stop-leaves-call-without-attempt",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "requested review stop and closed calls",
+      "summary": "T6: stopping a running chain required manual process termination and left its final invocation unexplained after the post.",
+      "expected": "One durable boundary prevents admission and launch, settles owned calls without losing captured outputs, and requires an explicit release after drivers acknowledge. Posted calls expose administrative closure steps; historical invocations retain their documented failed-attempt import.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_stop_processes.StopProcessTests.test_now_ends_registered_transport_and_owner_records_attempt_before_return",
+        "test_review_stop_processes.StopProcessTests.test_sigterm_driver_records_signal_stop_attempt_and_acknowledgement",
+        "test_review_stop_processes.StopProcessTests.test_sigint_driver_records_signal_stop_attempt_and_acknowledgement",
+        "test_review_stop_processes.StopProcessTests.test_sigkill_leaves_no_boundary_and_the_call_remains_interrupted",
+        "test_review_stop_processes.StopProcessTests.test_now_kills_an_owned_transport_after_ten_seconds_when_it_ignores_sigterm",
+        "test_review_stop_queue.CapturedStopTests.test_dead_owner_capture_finishes_original_operation_and_preserves_old_bindings",
+        "test_review_stop_queue.DriverStopTests.test_sleeping_driver_acknowledges_and_release_waits_for_it",
+        "test_review_stop_queue.ClosedCallTests.test_posted_calls_keep_each_state_and_only_administrative_steps",
+        "test_review_stop_processes.StopProcessTests.test_now_ends_a_staged_worker_and_reconciles_its_reservation",
+        "test_review_stop_processes.StopProcessTests.test_twenty_minute_waiting_driver_acknowledges_within_ten_seconds",
+        "test_review_stop_queue.CapturedStopTests.test_release_continues_the_same_chain_to_a_recorded_final",
+        "test_review_stop_queue.DriverStopTests.test_stopped_plan_acknowledges_even_when_the_additional_boundary_read_is_busy",
+        "test_review_stop_queue.StagedCaptureSettlementTests.test_old_failed_capture_finishes_after_a_retry_completes_the_epoch",
+        "test_review_stop_queue.StagedCaptureSettlementTests.test_retained_completed_attempt_still_finishes_its_scientific_acceptance_after_post",
+        "test_review_stop_queue.StagedCaptureSettlementTests.test_accepted_staged_call_reconciles_capacity_instead_of_replaying_its_finished_receipt",
+        "test_review_stop_queue.StagedCaptureSettlementTests.test_ineligible_completed_capture_keeps_output_and_replays_a_committed_refusal_after_post",
+        "test_review_stop_queue.StopQueueTests.test_now_returns_an_unsettled_step_and_a_fresh_request_continues_it",
+        "test_review_stop_queue.ClosedCallTests.test_usable_accepted_call_stays_visible_until_capacity_is_released"
+      ]
+    },
+    {
+      "id": "single-review-waits-behind-running-chain",
+      "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
+      "class": "review call ordering",
+      "summary": "A chain could repeatedly take capacity while an independent review had no durable place to wait.",
+      "expected": "Covered calls wait in request order among eligible routes. A dead waiter is abandoned, a stop withdraws only its scope, and an uncontended call writes no wait record.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_stop_processes.StopProcessTests.test_single_waits_then_starts_before_a_chains_next_call",
+        "test_review_stop_queue.QueueTests.test_stop_withdraws_only_its_waits_and_no_call_starts",
+        "test_review_stop_queue.QueueTests.test_dead_wait_is_abandoned_but_a_live_slow_wait_keeps_its_place"
+      ]
     }
   ]
 }

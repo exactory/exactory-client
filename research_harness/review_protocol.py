@@ -2332,6 +2332,7 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
     from .review_task_execution import start_call
     from .review_worker import own_call, _own_transport_processes
     from .review_call_capture import capture_call
+    from .review_stop import ReviewStopSignal
     from contextlib import nullcontext
     with own_call(store, operation, text(payload.get('id'), 'Invocation ID')) as authority:
         route = None
@@ -2340,14 +2341,29 @@ def _invoke_once(store, payload, operation, start, finish, *, expected_revision,
             changes, result = start(records, value)
             route = _get(records, 'review_route', result['route_id'])
             return changes, result
-        invocation = _prepare_review_mutation(store, operation + '_start', payload, prepare_start,
-                                       expected_revision=expected_revision, request_id=beginning,
-                                       _snapshot=snapshot, scoped=True,
-                                       validate_commit=lambda tx, result, revision: start_call(tx, operation, result, authority, revision))['result']
+        from .review_call_admission import wait_for_admission
+        def attempt_start(waiting):
+            current = store._read_scoped_preparation() if waiting else snapshot
+            return _prepare_review_mutation(store, operation + '_start', payload, prepare_start,
+                expected_revision=current.revision if waiting else expected_revision, request_id=beginning,
+                _snapshot=current, scoped=True,
+                validate_commit=lambda tx, result, revision: start_call(tx, operation, result, authority, revision))['result']
+        invocation = wait_for_admission(store, attempt_start)
         artifacts = store.build_artifact_store()
         request = _read_json(artifacts, invocation['request'])
         with _own_transport_processes(authority) if route['adapter'] in transport.LOCAL_ADAPTERS else nullcontext():
-            observation = _observed(artifacts, route, request, credential)
+            try:
+                observation = _observed(artifacts, route, request, credential)
+            except (ResearchError, ReviewStopSignal) as error:
+                if error.code != 'review_chain_stopped':
+                    raise
+                if (error.details or {}).get('stop_request') is not None:
+                    from .review_stop import record_signal_boundary
+                    record_signal_boundary(store, error)
+                error_row = error.as_dict() if isinstance(error, ResearchError) else error.describe_error()
+                observation = dict(status='failed', output=None, response=None, request=invocation['request'],
+                    request_digest=digest(request), route_digest=digest(route), runtime=route.get('runtime'),
+                    usage={}, error=error_row)
         capture_call(store, operation, payload, invocation, route, observation,
                      request_id=request_id, _authority=authority)
         authority.finish_transport()
@@ -2810,6 +2826,7 @@ def find_replacement(records, assignment):
         return next((other for other in read_filtered_records(records, 'review_assignment',
                      role='adjudicator', slot_id=slot_identifier).values()
                      if other['role'] == 'adjudicator' and other.get('slot_id') == slot_identifier
+                     and other.get('staged_review', {}).get('kind') != 'task'
                      and other.get('context', {}).get('prior_assignment_id') is None
                      and other['recorded_revision'] > assignment['recorded_revision']), None)
     return next((other for other in read_filtered_records(records, 'review_assignment',

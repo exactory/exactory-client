@@ -64,6 +64,7 @@ def list_chain_heads(records, artifacts):
             continue
         peers = [other for other in assignments.values()
                  if row.get('slot_id') is not None and other.get('slot_id') == row['slot_id']
+                 and other.get('staged_review', {}).get('kind') != 'task'
                  and other['role'] == row['role'] and other.get('dossier_id') == row.get('dossier_id')
                  and other.get('recorded_revision', 0) > row.get('recorded_revision', 0)]
         if not peers:
@@ -230,31 +231,41 @@ def _plan_pending_call(records, assignment):
 
 
 def _plan_capacity(records, assignment, action):
-    from .review_task_execution import _active_legacy, _policy
+    from .review_call_admission import list_active_calls, list_waiting_calls, can_admit_route
+    from .review_task_execution import _policy, read_call_kinds
+    from .review_stop import describe_call, build_reconciliation_step
     policy = _policy(records)
     route = records.get('review_route', {}).get(assignment['route_id'], {})
     if route.get('adapter') not in policy['covered_adapters']:
         return action
-    memberships = records.get('review_pool_membership', {})
-    active = [row for row in records.get('review_reservation', {}).values()
-              if row['id'] in memberships and not row['released']]
-    active.extend(_active_legacy(records, policy))
-    route_active = [row for row in active if row['route_id'] == assignment['route_id']]
-    if (len(active) < policy['store_limit'] and len(route_active) < policy['route_limits'].get(
-            assignment['route_id'], policy['store_limit'])):
+    active = list_active_calls(records, policy)
+    from .review_stop import CALL_COMMANDS
+    waits = list_waiting_calls(records)
+    own = next((row for row in waits if row['invocation_id'] == action['payload'].get('id')
+                and CALL_COMMANDS.get(row['operation']) == action['command']), None)
+    ahead = [row for row in waits if own is None or row['requested_revision'] < own['requested_revision']]
+    eligible = [row for row in ahead if can_admit_route(active, policy, row['route_id'])]
+    if can_admit_route(active, policy, assignment['route_id']) and not eligible:
         return action
-    owned = active[0]
-    if owned['id'] in records.get('review_reservation', {}):
-        epoch = records['review_epoch'][owned['epoch_id']]
-        payload = dict(assignment_id=epoch['controller_assignment_id'], epoch_id=epoch['id'],
-                       task_id=owned['task_id'], action='reconcile')
-    else:
-        operation = next(operation for operation in
-                         ('review.invoke', 'review.route_probe', 'review.output_correction')
-                         if identify_call(operation, owned['id']) in memberships)
-        payload = dict(action='reconcile', operation=operation, invocation_id=owned['id'])
-    return dict(state='wait', not_before=_describe_wait(), command='review-run', payload=payload,
-                code='review_capacity_wait', details=dict(reservations=[row['id'] for row in active]))
+    for owned in active:
+        if owned['id'] in records.get('review_reservation', {}):
+            call = dict(operation='review.task_reserve', reservation_id=owned['id'])
+        else:
+            member = next(row for row in records['review_pool_membership'].values()
+                          if row.get('invocation_id') == owned['id'] and not row.get('released', True)
+                          and records[read_call_kinds(row['operation'])[0]].get(owned['id']) == owned)
+            call = dict(operation=member['operation'], invocation_id=owned['id'])
+        row = describe_call(records, call)
+        if row['state'] in ('interrupted', 'captured', 'accepted'):
+            # Reconcile only an ended owner's call. A live owner's current turn is
+            # served by waiting on this head's own run instead.
+            from .review_stop import _describe_call_step, has_live_call_processes
+            lifecycle = _describe_call_step(records, call)[0]
+            if row['state'] == 'interrupted' or not has_live_call_processes(lifecycle):
+                return dict(state='wait', not_before=_describe_wait(), code='review_capacity_wait',
+                            details=dict(calls_before=len(active) + len(ahead)), **build_reconciliation_step(records, call))
+    return dict(action, state='wait', not_before=_describe_wait(), code='review_capacity_wait',
+                details=dict(calls_before=len(active) + len(ahead), reservations=[row['id'] for row in active]))
 
 
 def _plan_recording(records, artifacts, assignment, state):
@@ -491,19 +502,37 @@ def plan_next(records, artifacts, head_id):
     """Describe one exact action; the named operation retains every mutation validator."""
     artifacts = Evaluation.of(records, artifacts)
     result = dict(state='stop', chain=None, head_id=head_id, progress=None)
+    initial_assignment = None
     assignment = None
+    stop = None
     try:
+        from .review_stop import find_stop, describe_stop
+        if records.get('review_stop'):
+            initial_assignment = records.get('review_assignment', {}).get(head_id)
+            if initial_assignment is not None:
+                stop = find_stop(records, assignment_id=head_id)
         assignment = _find_head(records, artifacts, head_id)
         result.update(chain=_describe_chain(assignment), head_id=assignment['id'],
                       progress=_describe_progress(records, artifacts, assignment))
         from .problem_delivery import find_review_post
         if find_review_post(records, assignment, artifacts) is not None:
-            result['state'] = 'done'
+            from .review_stop import describe_closed_calls
+            result.update(state='done', details=dict(closed_calls=describe_closed_calls(records, artifacts, assignment)))
+        elif stop is not None:
+            result.update(state='handoff', command='review-stop', code='review_chain_stopped',
+                          details=dict(stop_id=stop['id'], **describe_stop(records, stop)))
         else:
             result.update(_plan_head(records, artifacts, assignment))
         from .review_plan_steps import complete_plan
         result = complete_plan(records, artifacts, assignment, result)
     except (ResearchError, json.JSONDecodeError) as error:
+        if stop is not None and isinstance(error, ResearchError) and error.code == 'review_source_continuation_fork':
+            from .review_plan_steps import complete_plan
+            assignment = assignment or initial_assignment
+            result.update(state='handoff', chain=_describe_chain(assignment), head_id=assignment['id'],
+                command='review-stop', code='review_chain_stopped',
+                details=dict(stop_id=stop['id'], **describe_stop(records, stop)))
+            return copy.deepcopy(complete_plan(records, artifacts, assignment, result))
         if isinstance(error, ResearchError):
             result.update(state='stop', code=error.code, details=error.details or {})
         else:
@@ -569,10 +598,17 @@ def describe_next_actions(records, artifacts, assignment_id, actions=()):
 def annotate_review_obligations(records, artifacts, report):
     """Attach the common action wherever a gate already names a review assignment."""
     if 'review' in report and 'obligations' in report:
-        from .problem_delivery import describe_after_post_obligations, find_review_post
+        from .problem_delivery import describe_after_post_obligations, describe_posted_calls, find_review_post
         rows = []
         closed_rows = []
         after_post = list(report.get('after_post', []))
+        seen_calls = {(row.get('operation'), row.get('invocation_id'), row.get('reservation_id'))
+                      for row in after_post if row.get('operation') is not None}
+        for call in describe_posted_calls(records, artifacts):
+            identity = (call['operation'], call.get('invocation_id'), call.get('reservation_id'))
+            if identity not in seen_calls:
+                after_post.append(call)
+                seen_calls.add(identity)
         for item in report['obligations']:
             identifier = item.get('assignment_id') or item.get('controller_assignment_id')
             assignment = records.get('review_assignment', {}).get(identifier)

@@ -22,6 +22,13 @@ from .operations import _read_preparation, fields, immutable_record, prepared_mu
 from .storage import _canonical, read_epoch_tasks
 
 
+CAPTURE_INELIGIBILITY_CODES = frozenset((
+    'review_task_dependency_changed', 'review_epoch_stale', 'review_route_retired', 'review_context_contaminated',
+    'review_context_repair_required', 'review_context_repair_stale', 'review_context_repair_mismatch',
+    'review_context_repair_unverified', 'assessment_incomplete', 'review_resampling_forbidden',
+))
+
+
 class _GuardReviewStarts:
     """Check prospective staged admissions inside their serialized writes."""
 
@@ -1211,6 +1218,40 @@ def build_capture_attempt(assignment, captured, attempt_id):
                 recorded_revision=captured['recorded_revision'])
 
 
+def prepare_capture_attempt(records, assignment, captured, attempt_id):
+    selected = records.get('review_capture_attempt', {}).get(captured['reservation_id'])
+    if selected is not None and selected['attempt_id'] != attempt_id:
+        raise ResearchError('review_resampling_forbidden', 'Resume the originally named captured attempt')
+    attempt = build_capture_attempt(assignment, captured, attempt_id)
+    persisted = protocol._get(records, 'review_observation', captured['reservation_id'])
+    if (digest(persisted) != digest(captured) or captured['origin'] != 'instrumented'
+            or captured['task_id'] != assignment['staged_review']['task_id']):
+        raise ResearchError('review_invocation_unverified', 'Retain only the exact owned task capture')
+    return [immutable_record(records, 'review_attempt', attempt_id, attempt),
+            immutable_record(records, 'review_capture_attempt', captured['reservation_id'],
+                             dict(attempt_id=attempt_id))], attempt
+
+
+def finish_retained_capture(store, assignment, captured, payload, request_id, *, refusal=None):
+    from .operations import prepared_task_mutation
+    finish_worker(store, captured['reservation_id'], None, request_id)
+    def prepare(records, value):
+        attempt = build_capture_attempt(assignment, captured, value['id'])
+        result = dict(attempt)
+        if refusal is not None:
+            result['refusal'] = {key:value for key,value in refusal.items() if key != 'recorded_revision'}
+        result['next'] = [describe_planning_command(assignment['staged_review']['controller_assignment_id'])]
+        return [immutable_record(records, 'review_attempt', value['id'], attempt)], result
+    return prepared_task_mutation(store, 'review.invoke', payload, prepare, request_id=request_id)
+
+
+def finalize_capture_recovery(changes, result, revision):
+    for _, _, record in changes:
+        record['recorded_revision'] = revision
+    result['recorded_revision'] = revision
+    return changes, result
+
+
 def accept_capture(records, artifacts, assignment, captured, attempt_id):
     """Build a task receipt from the captured actual request and exact raw output."""
     from . import review_staged as staged
@@ -1311,43 +1352,76 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         raise ResearchError('review_task_pending', 'Assign and run a child of this staged controller')
     state = records.get('review_task_execution', {}).get(binding['task_id'])
     reservation = records.get('review_reservation', {}).get(state['reservation_id']) if state else None
+    if request_id in records.get('review_task_dispatch', {}):
+        reservation = next((row for row in records.get('review_reservation', {}).values()
+            if row['id'] == execution.identify_reservation(row['plan_id'], request_id + ':reserve')), reservation)
     previous_capture = records.get('review_observation', {}).get(reservation['observation_id']) if reservation else None
     retained = records.get('review_capture_attempt', {}).get(reservation['id'], {}) if reservation else {}
-    retryable = (reservation is not None and reservation['released'] and retained.get('attempt_id') != payload['id']
+    dispatch = execution.find_reservation_dispatch(records, reservation) if reservation is not None else None
+    owns_reservation = dispatch is not None and dispatch[0] == request_id and dispatch[1]['id'] == payload['id']
+    replaying_capture = owns_reservation and previous_capture is not None
+    if replaying_capture:
+        def replay_dispatch(current_records, value):
+            plan = protocol._get(current_records, 'review_execution_plan', previous_capture['plan_id'])
+            row = dict(value, task_id=previous_capture['task_id'], request_digest=plan['request_digest'])
+            return [immutable_record(current_records, 'review_task_dispatch', request_id, row)], row
+        prepared_task_mutation(store, 'review.task_dispatch', payload, replay_dispatch,
+                               request_id=request_id + ':dispatch', expected_revision=expected_revision)
+        prepared_task_mutation(store, 'review.task_attempt', payload,
+            lambda current_records, value: prepare_capture_attempt(current_records, assignment, previous_capture, value['id']),
+            request_id=request_id + ':attempt')
+        if previous_capture['observation']['status'] != 'completed':
+            return finish_retained_capture(store, assignment, previous_capture, payload, request_id)
+        refusal = records.get('review_task_refusal', {}).get(reservation['id'])
+        if refusal is not None:
+            return finish_retained_capture(store, assignment, previous_capture, payload, request_id, refusal=refusal)
+    retryable = (not owns_reservation and reservation is not None and reservation['released'] and retained.get('attempt_id') != payload['id']
                  and (reservation['state'] == 'refused' or previous_capture is None or previous_capture['observation']['status'] != 'completed'))
     requires_unposted = (reservation is None or retryable
                          or reservation['launch'] is None and previous_capture is None
                          or retained and retained.get('attempt_id') != payload['id'])
     if requires_unposted:
         require_unposted_review(records, assignment, store.build_artifact_store())
-    route = protocol._get(records, 'review_route', assignment['route_id'])
-    controller_id = binding['controller_assignment_id']
-    from .review_context_repair import validate_repair_binding
-    validate_repair_binding(records, store.build_artifact_store(),
-                            protocol._get(records, 'review_assignment', controller_id))
-    if any(row['assignment_id'] in (assignment['id'], controller_id) and row['kind'] == 'contamination'
-           for row in records.get('review_context_event', {}).values()):
-        raise ResearchError('review_context_contaminated', 'Repair the contaminated epoch before dispatch')
-    if assignment['route_id'] in protocol.retired_routes(records):
-        raise ResearchError('review_route_retired', 'Repair the slot on an eligible route')
-    packet = protocol._read_json(store.build_artifact_store(), assignment['packet'])
-    if not protocol._prompt_matches(assignment, packet=packet) or digest(route) != assignment['route_digest']:
-        raise ResearchError('review_task_dependency_changed', 'The frozen route or staged prompt changed')
-    epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
-    contexts = derive_current_contexts(records, store.build_artifact_store(), epoch)
-    if not match_task_contexts(assignment['staged_task'], contexts):
-        raise ResearchError('review_task_dependency_changed', 'Replan this task under the current discovered claim closure')
-    protocol._require_route_runtime(route)
-    request = protocol.build_assignment_request(records, store.build_artifact_store(), assignment)
-    epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
-    head = protocol._get(records, 'review_slot_head', epoch['slot_id'])
-    if not matches_currency(records, store.build_artifact_store(), epoch):
-        raise ResearchError('review_epoch_stale', 'The frozen scientific evidence changed before dispatch')
-    if head['epoch_id'] != epoch['id']:
-        raise ResearchError('review_epoch_stale', 'The current slot has a successor epoch')
-    if head['state'] != 'pending':
-        raise ResearchError('assessment_incomplete' if head['state'] == 'incomplete' else 'review_resampling_forbidden',
-                            'The epoch already selected its immutable slot outcome')
+    try:
+        route = protocol._get(records, 'review_route', assignment['route_id'])
+        controller_id = binding['controller_assignment_id']
+        from .review_context_repair import validate_repair_binding
+        validate_repair_binding(records, store.build_artifact_store(),
+                                protocol._get(records, 'review_assignment', controller_id))
+        if any(row['assignment_id'] in (assignment['id'], controller_id) and row['kind'] == 'contamination'
+               for row in records.get('review_context_event', {}).values()):
+            raise ResearchError('review_context_contaminated', 'Repair the contaminated epoch before dispatch')
+        if assignment['route_id'] in protocol.retired_routes(records):
+            raise ResearchError('review_route_retired', 'Repair the slot on an eligible route')
+        packet = protocol._read_json(store.build_artifact_store(), assignment['packet'])
+        if not protocol._prompt_matches(assignment, packet=packet) or digest(route) != assignment['route_digest']:
+            raise ResearchError('review_task_dependency_changed', 'The frozen route or staged prompt changed')
+        epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
+        contexts = derive_current_contexts(records, store.build_artifact_store(), epoch)
+        if not match_task_contexts(assignment['staged_task'], contexts):
+            raise ResearchError('review_task_dependency_changed', 'Replan this task under the current discovered claim closure')
+        if not replaying_capture:
+            protocol._require_route_runtime(route)
+        request = protocol.build_assignment_request(records, store.build_artifact_store(), assignment)
+        epoch = protocol._get(records, 'review_epoch', binding['epoch_id'])
+        head = protocol._get(records, 'review_slot_head', epoch['slot_id'])
+        if not matches_currency(records, store.build_artifact_store(), epoch):
+            raise ResearchError('review_epoch_stale', 'The frozen scientific evidence changed before dispatch')
+        if head['epoch_id'] != epoch['id']:
+            raise ResearchError('review_epoch_stale', 'The current slot has a successor epoch')
+        if head['state'] != 'pending':
+            raise ResearchError('assessment_incomplete' if head['state'] == 'incomplete' else 'review_resampling_forbidden',
+                                'The epoch already selected its immutable slot outcome')
+    except ResearchError as error:
+        if (not replaying_capture or error.code not in CAPTURE_INELIGIBILITY_CODES
+                or reservation['id'] in records.get('review_task_acceptance', {})
+                or reservation['id'] in records.get('review_task_refusal', {})):
+            raise
+        refusal = prepared_task_mutation(store, 'review.task_recovery', payload,
+            lambda current_records, value: prepare_capture_recovery(current_records, previous_capture, error,
+                require_current=False), request_id=request_id + ':recovery',
+            finalize=finalize_capture_recovery)['result']['refusal']
+        return finish_retained_capture(store, assignment, previous_capture, payload, request_id, refusal=refusal)
     plan = dict(task_id=binding['task_id'], task_generation=1, epoch_id=epoch['id'], route_id=assignment['route_id'],
                 request=protocol._put_json(store.build_artifact_store(), request), max_attempts=epoch['budgets']['max_retries'] + 1,
                 dependencies=[dict(kind='review_assignment', key=assignment['id'], digest=digest(assignment))],
@@ -1366,8 +1440,9 @@ def invoke_task(store, payload, *, expected_revision, request_id):
                            request_id=request_id + ':dispatch', expected_revision=expected_revision)
     if reservation is None or retryable:
         try:
-            reserved = execution.reserve_task(_GuardReviewStarts(store, assignment['id']), plan,
-                                              request_id=request_id + ':reserve')
+            from .review_call_admission import wait_for_admission
+            reserved = wait_for_admission(store, lambda waiting: execution.reserve_task(
+                _GuardReviewStarts(store, assignment['id']), plan, request_id=request_id + ':reserve'))
         except ResearchError as error:
             if error.code not in ('assessment_incomplete', 'review_task_exhausted'):
                 raise
@@ -1379,17 +1454,7 @@ def invoke_task(store, payload, *, expected_revision, request_id):
         reservation = reserved['result']
     captured, process, current = wait_for_capture(store, route, reservation, request_id)
     def prepare_capture(current_records, value):
-        selected = current_records.get('review_capture_attempt', {}).get(captured['reservation_id'])
-        if selected is not None and selected['attempt_id'] != value['id']:
-            raise ResearchError('review_resampling_forbidden', 'Resume the originally named captured attempt')
-        attempt = build_capture_attempt(assignment, captured, value['id'])
-        persisted = protocol._get(current_records, 'review_observation', captured['reservation_id'])
-        if (digest(persisted) != digest(captured) or captured['origin'] != 'instrumented'
-                or captured['task_id'] != binding['task_id']):
-            raise ResearchError('review_invocation_unverified', 'Retain only the exact owned task capture')
-        return [immutable_record(current_records, 'review_attempt', value['id'], attempt),
-                immutable_record(current_records, 'review_capture_attempt', captured['reservation_id'],
-                                 dict(attempt_id=value['id']))], attempt
+        return prepare_capture_attempt(current_records, assignment, captured, value['id'])
     def validate_capture(current_records, capture):
         artifacts = store.build_artifact_store()
         receipt = accept_capture(current_records, artifacts, assignment, capture, payload['id'])
@@ -1417,18 +1482,17 @@ def invoke_task(store, payload, *, expected_revision, request_id):
                     validate_capture,
                     request_id=request_id + ':accept')['result']
             except ResearchError as error:
-                if (error.code != 'review_invocation_unverified'
-                        or not isinstance(error.details, dict)
-                        or error.details.get('capture_verification') != current['id']):
+                verification_failure = (error.code == 'review_invocation_unverified'
+                    and isinstance(error.details, dict) and error.details.get('capture_verification') == current['id'])
+                preparation_conflict = (isinstance(error.details, dict) and 'prepared_revision' in error.details)
+                ineligible_replay = (replaying_capture and error.code in CAPTURE_INELIGIBILITY_CODES
+                                     and not preparation_conflict)
+                if not verification_failure and not ineligible_replay:
                     raise
-                def finalize_recovery(changes, result, revision):
-                    for _, _, record in changes:
-                        record['recorded_revision'] = revision
-                    result['recorded_revision'] = revision
-                    return changes, result
                 receipt = prepared_task_mutation(store, 'review.task_recovery', payload,
-                    lambda current_records, value: prepare_capture_recovery(current_records, captured, error),
-                    request_id=request_id + ':recovery', finalize=finalize_recovery)['result']
+                    lambda current_records, value: prepare_capture_recovery(current_records, captured, error,
+                        require_current=not ineligible_replay),
+                    request_id=request_id + ':recovery', finalize=finalize_capture_recovery)['result']
             if 'refusal' not in receipt and receipt['receipt']['attempt']['id'] != payload['id']:
                 raise ResearchError('review_resampling_forbidden', 'Resume the originally named task attempt')
     finally:
@@ -1447,8 +1511,8 @@ def invoke_task(store, payload, *, expected_revision, request_id):
     return prepared_task_mutation(store, 'review.invoke', payload, prepare, request_id=request_id)
 
 
-def prepare_capture_recovery(records, captured, error):
-    """Make a retained unverified capture retryable only after owned termination.
+def prepare_capture_recovery(records, captured, error, *, require_current=True):
+    """Retain a capture's refusal without replacing newer selected work.
 
     Refusal is an eligibility outcome, never an alteration of the transport
     observation. The shared execution layer still requires released capacity.
@@ -1456,15 +1520,17 @@ def prepare_capture_recovery(records, captured, error):
     reservation = protocol._get(records, 'review_reservation', captured['reservation_id'])
     state = protocol._get(records, 'review_task_execution', captured['task_id'])
     persisted = protocol._get(records, 'review_observation', captured['reservation_id'])
-    if (digest(persisted) != digest(captured) or state['reservation_id'] != reservation['id']
+    if (digest(persisted) != digest(captured) or (require_current and state['reservation_id'] != reservation['id'])
             or records.get('review_task_acceptance', {}).get(reservation['id']) is not None):
-        raise ResearchError('review_task_dependency_changed', 'Recover only the current unaccepted capture')
+        raise ResearchError('review_task_dependency_changed', 'Recover only the exact unaccepted capture')
     refusal = dict(reservation_id=reservation['id'], task_id=captured['task_id'], plan_id=captured['plan_id'],
         observation_digest=digest(captured), code=error.code, message=str(error), details=error.details,
         recovery='retry_after_termination')
-    return [immutable_record(records, 'review_task_refusal', reservation['id'], refusal),
-            ('review_reservation', reservation['id'], dict(reservation, state='refused', generation=reservation['generation'] + 1)),
-            ('review_task_execution', captured['task_id'], dict(state, state='refused', generation=state['generation'] + 1))], dict(refusal=refusal)
+    changes = [immutable_record(records, 'review_task_refusal', reservation['id'], refusal),
+               ('review_reservation', reservation['id'], dict(reservation, state='refused', generation=reservation['generation'] + 1))]
+    if state['reservation_id'] == reservation['id']:
+        changes.append(('review_task_execution', captured['task_id'], dict(state, state='refused', generation=state['generation'] + 1)))
+    return changes, dict(refusal=refusal)
 
 
 def finish_worker(store, reservation_id, process, request_id):

@@ -69,6 +69,8 @@ class _TransactionKind(Mapping):
         self._transaction, self._kind = transaction, kind
 
     def __getitem__(self, key):
+        if key is None:
+            raise KeyError(key)
         value = self._transaction.get(self._kind, key)
         if value is None:
             raise KeyError(key)
@@ -320,7 +322,7 @@ def _active_legacy(records, policy):
 
 def start_call(transaction, operation, invocation, authority, revision):
     """Bind capacity and live ownership to the invocation's start transaction."""
-    admit_review_call(transaction, operation, invocation['id'], invocation["route_id"])
+    admit_review_call(transaction, operation, invocation['id'], invocation["route_id"], invocation=invocation)
     record = {"protocol": PROTOCOL, "id": authority.reservation_id, "operation": operation, "invocation_id": invocation["id"],
               "route_id": invocation["route_id"], "token": authority.token, "owner": authority.identity,
               "children": [], "released": False, "termination": None, "state": "running",
@@ -484,6 +486,17 @@ def _consume_resources(transaction, records, plan, state, request_id, revision):
     return None
 
 
+def identify_reservation(plan_id, request_id):
+    return 'review-reservation:' + digest([plan_id, request_id])
+
+
+def find_reservation_dispatch(records, reservation):
+    for request_id, dispatch in records.get('review_task_dispatch', {}).items():
+        if reservation['id'] == identify_reservation(reservation['plan_id'], request_id + ':reserve'):
+            return request_id, dispatch
+    return None
+
+
 def reserve_task(store, payload, *, request_id, expected_revision=None):
     """Check capacity, currency and duplicate invocation, then reserve every pool atomically."""
     def apply(tx, value, revision):
@@ -508,8 +521,8 @@ def reserve_task(store, payload, *, request_id, expected_revision=None):
         exhaustion = _consume_resources(tx, records, plan, state, request_id, revision)
         if exhaustion is not None:
             return {"exhaustion": exhaustion}
-        reservation_id = "review-reservation:" + digest([plan["id"], request_id])
-        admit_review_call(tx, 'review.task_reserve', reservation_id, plan["route_id"])
+        reservation_id = identify_reservation(plan["id"], request_id)
+        admit_review_call(tx, 'review.task_reserve', reservation_id, plan["route_id"], epoch_id=plan['epoch_id'], task_id=plan['task_id'])
         reservation = {"protocol": PROTOCOL, "id": reservation_id, "plan_id": plan["id"],
                        "task_id": plan["task_id"], "task_generation": plan["task_generation"],
                        "epoch_id": plan["epoch_id"], "route_id": plan["route_id"], "attempt": state["attempts"] + 1,

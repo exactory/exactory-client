@@ -167,11 +167,16 @@ class ContinuationRegressionTests(unittest.TestCase):
         stop = next(iter(stops.values()))
         self.assertEqual(stop['plan'], plan)
         self.assertIsNone(stop['retry'])
-        self.assertEqual(after['revision'], before['revision'] + 1)
-        expected_records = dict(before['records'], review_series_stop=stops)
+        self.assertEqual(after['revision'], before['revision'] + 3)
+        runs = after['records']['review_series_run']
+        driver, = runs.values()
+        self.assertEqual(driver['ended']['stop_id'], stop['id'])
+        expected_records = dict(before['records'], review_series_stop=stops, review_series_run=runs)
         expected_records['literature_operation'] = dict(before['records']['literature_operation'])
         expected_records['literature_operation'][stop['request_id']] = dict(
             operation='review.series_stop', runtime=case.store.describe_runtime())
+        for request_id, operation in ((driver['id'], 'review.series_start'), (driver['id'] + ':end', 'review.series_end')):
+            expected_records['literature_operation'][request_id] = dict(operation=operation, runtime=case.store.describe_runtime())
         self.assertEqual(after['records'], expected_records)
         lines = [json.loads(line) for line in output.getvalue().splitlines()]
         warning = lines[0]['capacity_warning']
@@ -179,7 +184,8 @@ class ContinuationRegressionTests(unittest.TestCase):
             'state', 'sample_size', 'at_or_over_limit_share', 'kinds')},
             dict(state='unmeasured', sample_size=0, at_or_over_limit_share=None, kinds=['single']))
         self.assertEqual(lines,
-                         [dict(plan, stop_id=stop['id'], revision_after_stop=after['revision'],
+                         [dict(plan, stop_id=stop['id'], revision_after_stop=stop['recorded_revision'],
+                               revision_after_driver=after['revision'],
                                provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
                                stop_class='decision', capacity_warning=warning)])
         receipt = case.store.committed_request(stop['request_id'])

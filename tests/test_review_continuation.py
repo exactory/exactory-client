@@ -283,7 +283,8 @@ class ContinuationTests(unittest.TestCase):
         records['review_route']['route']['adapter'] = 'codex_cli_v1'
         records['review_invocation'] = dict(other=dict(id='other', assignment_id='other-chain', route_id='route'))
         records['review_pool_membership'] = {identify_call('review.invoke', 'other'):
-            dict(released=False, invocation_id='other', operation='review.invoke')}
+            dict(released=False, invocation_id='other', operation='review.invoke', state='running', children=[],
+                 owner=dict(pid=987654321, pgid=987654321, started='gone'))}
         with patch.object(protocol, 'assignment_state', return_value=dict(output=None, obligations=[])):
             plan = self.plan(records)
         self.assertEqual(plan['state'], 'wait')

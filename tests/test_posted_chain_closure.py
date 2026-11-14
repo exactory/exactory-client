@@ -91,7 +91,7 @@ class PostedOpennessClosureTests(ClosureCase):
         records = self.store.snapshot()['records']
         hints = review_continuation.describe_next_actions(records, self.artifacts, self.assignment['id'],
             [dict(kind='review', workflow='review-assignment', scope=dict(assignment_id=self.assignment['id']))])
-        self.assertEqual(hints, [dict(kind='review', state='done')])
+        self.assertEqual(hints, [dict(kind='review', state='done', details=dict(closed_calls=[]))])
         self.assert_refused(protocol.invoke_assignment, dict(id='retry-retired', assignment_id=self.assignment['id']))
         self.assert_refused(review_output_correction.invoke_correction,
                             dict(id='correction', assignment_id=self.assignment['id'], route_id='route'))

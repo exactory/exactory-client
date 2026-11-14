@@ -85,6 +85,18 @@ class ProviderUsageTests(unittest.TestCase):
             json.dumps(packet).encode(), 'application/json'))
         return dict(head_id='head', state=state)
 
+    def run_usage_series(self, store, *, emit):
+        """Exercise emission with usage-only records; real stores test driver ownership."""
+        def end_driver(unused_store, identifier, last_line):
+            ended = dict(last_line)
+            if 'revision_after_stop' in ended:
+                ended['revision_after_driver'] = ended['revision_after_stop'] + 1
+            return dict(ended=ended)
+        driver = dict(id='usage-driver', assignment_id='head', scope=dict(kind='store'))
+        with patch('research_harness.review_stop.end_driver', side_effect=end_driver), \
+                patch.object(review_series, 'render_workspace_views', return_value=None):
+            return review_series._run_series(store, 'head', driver, emit=emit)
+
     def test_latest_window_uses_the_last_event_of_each_call_and_reports_its_ground(self):
         self.add_call(.7)
         self.add_call(events=[make_rate_event(.72), make_rate_event(.75)])
@@ -153,7 +165,7 @@ class ProviderUsageTests(unittest.TestCase):
         store = type('UsageStore', (), dict(root=self.artifacts.root, snapshot=lambda unused: snapshot))()
         with patch.object(review_series, 'plan_next', return_value=dict(state='done', head_id='head')):
             rows = []
-            self.assertEqual(review_series.run_series(store, 'head', emit=rows.append), 0)
+            self.assertEqual(self.run_usage_series(store, emit=rows.append), 0)
         self.assertEqual(rows[0]['provider_usage']['windows'][0]['utilization'], .8)
 
     def test_terminal_usage_does_not_change_the_recorded_stop_plan(self):
@@ -166,7 +178,7 @@ class ProviderUsageTests(unittest.TestCase):
                 'research_harness.automatic_overrides.record_series_stop',
                 return_value=dict(id='stop', recorded_revision=2)) as record:
             rows = []
-            self.assertEqual(review_series.run_series(store, 'head', emit=rows.append), 3)
+            self.assertEqual(self.run_usage_series(store, emit=rows.append), 3)
         self.assertEqual(record.call_args.args[1], original)
         self.assertEqual(plan, original)
         self.assertEqual(rows[0]['provider_usage']['windows'][0]['utilization'], .8)
@@ -198,7 +210,7 @@ class ProviderUsageTests(unittest.TestCase):
         with patch.object(review_series, 'plan_next', side_effect=[running, done]), \
                 patch.dict(cli.OPERATIONS, {'review-run': invoke}):
             rows = []
-            self.assertEqual(review_series.run_series(store, 'head', emit=rows.append), 0)
+            self.assertEqual(self.run_usage_series(store, emit=rows.append), 0)
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]['provider_usage']['windows'][0]['utilization'], .8)
         self.assertEqual(rows[1]['provider_usage']['windows'][0]['utilization'], .8)
@@ -314,7 +326,7 @@ class ProviderUsageTests(unittest.TestCase):
         with patch.object(review_series, 'plan_next', side_effect=[running, done]), \
                 patch.dict(cli.OPERATIONS, {'review-run': invoke}):
             rows = []
-            self.assertEqual(review_series.run_series(store, 'head', emit=rows.append), 0)
+            self.assertEqual(self.run_usage_series(store, emit=rows.append), 0)
         self.assertEqual(rows[0]['error']['code'], 'review_invocation_pending')
         self.assertEqual(rows[0]['provider_usage']['windows'][0]['utilization'], .8)
 
@@ -332,5 +344,5 @@ class ProviderUsageTests(unittest.TestCase):
         with patch.object(review_series, 'plan_next', side_effect=[running, done]), \
                 patch.dict(cli.OPERATIONS, {'review-run': invoke}):
             rows = []
-            self.assertEqual(review_series.run_series(store, 'head', emit=rows.append), 0)
+            self.assertEqual(self.run_usage_series(store, emit=rows.append), 0)
         self.assertEqual(rows[0]['provider_usage']['windows'][0]['utilization'], .8)

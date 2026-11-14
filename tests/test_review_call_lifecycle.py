@@ -83,7 +83,9 @@ class PublicCallLifecycleTests(ResultPartsCase):
             'review-output-correction':'review.output_correction'}[command], invocation_id=payload['id']), request_id)
 
     def blocked_probe(self):
-        with patch.object(protocol, '_observed', side_effect=AssertionError('Occupied calls must prevent model I/O')):
+        with patch.object(protocol, '_observed', side_effect=AssertionError('Occupied calls must prevent model I/O')), \
+                patch('research_harness.review_call_admission.wait_for_admission',
+                      side_effect=lambda store, attempt: attempt(False)):
             self.assert_code('review_capacity_wait', lambda: self.command('review-probe',
                 dict(id='blocked', route_id='route'), 'blocked'))
 

@@ -87,6 +87,21 @@ class StagedReviewCliTests(unittest.TestCase):
         self.assertEqual(task["next"][0]["payload"]["task_id"], "other-task")
         self.assertEqual(task["next"][0]["payload"]["action"], "reconcile")
 
+    def test_capacity_wait_on_live_worker_names_its_own_run(self):
+        from research_harness import cli, review_protocol, review_worker
+        records, state, assigned = self.build_records()
+        live = review_worker._identity()
+        dead = dict(pid=987654321, pgid=987654321, started='gone')
+        for ownership in (dict(worker=live), dict(worker=dead, children=[live])):
+            with self.subTest(ownership=ownership):
+                records['review_reservation'] = {'busy': dict(id='busy', released=False, route_id='route-A',
+                    epoch_id='epoch-A', task_id='other-task', **ownership)}
+                with mock.patch.object(review_protocol, 'assignment_state', return_value=state):
+                    task = cli._review_status(records, object())['assignments']['assignment-A']['tasks'][0]
+                self.assertEqual(task['next'][0]['payload'], dict(assignment_id='assignment-A', epoch_id='epoch-A',
+                                                                task_id=assigned['id']))
+                self.assertEqual(task['calls_before'], 1)
+
     def test_review_run_preserves_task_and_resume_payload_for_versioned_protocol_dispatch(self):
         from research_harness import cli, review_protocol
         payload = {"assignment_id": "assignment-A", "epoch_id": "epoch-A", "task_id": "task", "action": "accept"}

@@ -62,7 +62,8 @@ class AfterPostReviewTests(ClosureCase):
         self.assertNotIn(self.assignment['id'], {row.get('assignment_id') for row in report['obligations']})
         self.assertIn('new-statement-review', {row.get('assignment_id') for row in report['obligations']})
         closed = [row for row in report['after_post'] if row.get('assignment_id') == self.assignment['id']]
-        self.assertEqual([row['code'] for row in closed], ['review_output_pending'])
+        self.assertEqual([row['code'] for row in closed], ['review_invocation_pending', 'review_output_pending'])
+        self.assertEqual(closed[0]['step']['command'], 'review-attempt')
         self.assertNotIn('next', closed[0])
 
     def test_unverified_stopped_chain_moves_after_replacement_export_and_external_post(self):
@@ -92,7 +93,8 @@ class AfterPostReviewTests(ClosureCase):
         with patch.object(problem_delivery, 'assess_source_requests', return_value=[pending]):
             report = cli.status_report(self.store)
         self.assertNotIn(pending['assignment_id'], {row.get('assignment_id') for row in report['obligations']})
-        self.assertEqual([row for row in report['after_post'] if row.get('assignment_id') == pending['assignment_id']],
+        self.assertEqual([row for row in report['after_post']
+                          if row.get('assignment_id') == pending['assignment_id'] and 'invocation_id' not in row],
                          [dict(pending, reason=pending['explanation'])])
         self.assertEqual(self.store.snapshot(), before)
 
