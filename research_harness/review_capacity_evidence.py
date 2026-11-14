@@ -76,8 +76,8 @@ def describe_capacity_members(route):
         else:
             runtime_rules += CODEX_RUNTIME_MEMBERS
     result = []
-    for scope, members, rules in [('runtime', route.get('runtime', {}), runtime_rules),
-                                   ('configuration', route['configuration'], config_rules)]:
+    for scope, members, rules in (('runtime', route.get('runtime', {}), runtime_rules),
+                                  ('configuration', route['configuration'], config_rules)):
         for member in members:
             rule = next((row for row in rules if row[0] == member), None)
             result.append(dict(scope=scope, member=member,

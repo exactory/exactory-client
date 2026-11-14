@@ -5569,6 +5569,31 @@
         "test_continuity_guard.ContinuityGuardTests.test_staged_refusal_preserves_the_slot_and_series_records_the_review",
         "test_continuity_guard.ContinuityGuardTests.test_size_kinds_execute_real_commands_to_preflight_or_all_stop_answers"
       ]
+    },
+    {
+      "id": "legacy-result-refresh-pins-source-session-rules",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "stored-review-replay",
+      "summary": "The legacy result-parts v1 fixture inherited the v3 source rules introduced in 0.89.1, so its refresh correctly retained the invoked v3 session instead of entering parts v2.",
+      "expected": "Construct only the historical v1 series under its original v2 source rules. Restore the current v3 default before refreshing changed evidence into a new parts-v2 series, and authenticate all stored v1 turns with unchanged packet, prompt and request bytes.",
+      "fixed_in": "0.89.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_review_parts_result_journey.ResultJourneyTests.test_v1_recorded_final_refresh_enters_v2"
+      ]
+    },
+    {
+      "id": "capacity-classifications-are-not-record-writes",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "output-view-registry",
+      "summary": "The keyed capacity classifier introduced a list of runtime and configuration metadata triples that the output-view registry scanner mistook for stored record changes.",
+      "expected": "Keep the classification table in an immutable tuple with identical classification output. The unchanged record-writer scanner finds no writes in the capacity evidence module, and every actual written record kind retains its placement.",
+      "fixed_in": "0.89.2",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_research_output_views.RegistryTests.test_capacity_member_classifications_are_not_record_writes",
+        "test_research_output_views.RegistryTests.test_every_written_kind_has_a_placement"
+      ]
     }
   ]
 }
