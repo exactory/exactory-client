@@ -1,0 +1,49 @@
+{
+  "inventory": {
+    "protocol": "exactory-review-parts-v2",
+    "adapter": "problem_result",
+    "units": [
+      {
+        "handle": "u1",
+        "digest": "25875651a9f099234e4c8b1b818fa48d83d1b9391a5dd4397d79aa3ac86db6a0",
+        "occurrences": [
+          {
+            "path": [
+              "problem_evidence",
+              "openness_searches"
+            ],
+            "index": 0
+          }
+        ],
+        "item_characters": 1089,
+        "characters": 1089,
+        "citations": [
+          {
+            "kind": "record",
+            "record_kind": "literature_search",
+            "id": "search-0"
+          }
+        ],
+        "bodies": []
+      }
+    ],
+    "characters": 1089,
+    "additional_occurrences": []
+  },
+  "frame_digest": "4912113ce2ba4ec7eeab07ab2300ee0bffe7cab378856f53db1ce8e4bed31dd5",
+  "turn_digest": "31a1e22455c7369fe71b0089834a14cd333d5236682b0eb40ad30308f8274c85",
+  "prompt_digest": "f151875c9545360bf7373a2b87ec635c25bd44955afcd9c7856d71b1c3df3f22",
+  "request_digest": "edabea07518780eae39507a7050f7716747db98b9636ba0f094aab014ab1e348",
+  "route": {
+    "adapter": "codex_cli_v1",
+    "endpoint": "codex://local",
+    "model": "fixture",
+    "configuration": {
+      "max_output_tokens": 128000,
+      "timeout_seconds": 5
+    }
+  },
+  "next_turn_digest": "5454d72f2620d764543dcaeb8bc596f67a479dc0c41c9713ebc62ec1665c8ec1",
+  "next_prompt_digest": "137f97dea1b0cc276e81609e6d34766ecbc3be44eb944e87d9edca6864cb3b4b",
+  "next_request_digest": "ba31d2ff9ea2a3f622ba2adcb75363c1c296de71fec70fc33157918d05274330"
+}

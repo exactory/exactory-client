@@ -29,6 +29,7 @@ from research_harness import cli, gates, openness_reading, review_protocol as pr
 from research_harness import review_request_evaluation, review_transport as transport
 from research_harness import review_codex_invocation, review_request_restoration
 from research_harness import review_codex_transport as codex
+from research_harness import review_parts_problem_result as result_parts
 from research_harness.errors import ResearchError
 from research_harness.evaluation import Evaluation
 from research_harness.evidence import digest
@@ -312,7 +313,9 @@ def build_local_adapter_case(name):
 
 def build_result_case(version, corrupted_history=False):
     kind = legacy_parts.ResultPartsCase if version == 1 else current_parts.PartsResultCase
-    with fix_external_inputs() as emitted, open_fixture(kind) as parts:
+    # The oracle predates record units; recreate its stored inventory rule.
+    with fix_external_inputs() as emitted, open_fixture(kind) as parts, \
+            patch.dict(result_parts.ADAPTER, unit_rule=None):
         if version == 1:
             parts.oversized(count=2, characters=50000, limit=105000)
             turns, final = parts.finish_parts()
