@@ -1,0 +1,7 @@
+A complete article with its theorem and many diagram labels.
+
+     An ordinary article with a theorem and its proof.
+     Theorem 1. Every finite bounded example has the stated property.
+     Proof. Apply the finite construction to each term.
+     References: none.
+

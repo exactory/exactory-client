@@ -990,6 +990,7 @@ VIEW_GROUPS = (
 _UNPLACED_KINDS = (
     "fulltext_job", "fulltext_unit", "source_assembly",
     "acquisition_operation", "alias", "availability", "bundle_selection", "cohort_abstract_selection",
+    "main_capture_selection",
     "cohort_enumeration", "cohort_enumeration_history", "cohort_exclusion", "cohort_member", "cohort_partition_entry",
     "cohort_partition_member", "cohort_sample", "cohort_sample_selection", "cohort_seen", "collection",
     "collection_page", "configuration", "constitution", "fulltext_requirement", "literature_operation",

@@ -419,6 +419,8 @@ def carry_session(records, artifacts, packet, output):
     """The excerpt record that a continuation carries: the parent packet's checked excerpts, then the parent output's
     excerpts checked in order, with the session allowances. A parent outside the excerpt rules starts an empty
     record."""
+    from .capture_selection import bind_packet_selections
+    records = bind_packet_selections(records, packet)
     earlier = packet.get(KEY)
     if earlier is None:
         return {'protocol': SESSION_PROTOCOL, 'excerpts': [], 'allowances': create_allowances()}

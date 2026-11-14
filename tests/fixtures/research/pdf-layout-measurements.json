@@ -1,0 +1,943 @@
+{
+  "extractor": "pdftotext version 26.02.0",
+  "selection": "First five available distinct original PDFs by version ID in each of six live problem records, with no measurement-based filtering. Source: incident record 20261111223126-layout-extraction-inflates-fulltext-delivery, which keeps the record of each row.",
+  "expansion_definition": "UTF-8 extracted bytes divided by original PDF bytes (the existing extraction.expansion_ratio).",
+  "rows": [
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1502.04482v4",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/a38cb2c1a79234004f25b46d5853ede6da485ebed707ca8db94d0348f8833efe",
+        "sha256": "a38cb2c1a79234004f25b46d5853ede6da485ebed707ca8db94d0348f8833efe",
+        "size": 492595
+      },
+      "measurements": {
+        "layout": {
+          "characters": 185115,
+          "text_bytes": 192534,
+          "whitespace_fraction": 0.5789860357075332,
+          "expansion_ratio": 0.39085658603924117,
+          "sha256": "99491d00a0a301d606d6f35fad5981f4fa47968cc10cafb49f481e3b82710dfc"
+        },
+        "plain": {
+          "characters": 102726,
+          "text_bytes": 110145,
+          "whitespace_fraction": 0.2414773280376925,
+          "expansion_ratio": 0.2236015387894721,
+          "sha256": "95cd1282b68c3ce851cb4476b0a645030f39fdb05f94748c4cf67b4cdfce2e8f"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1904.01088v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/c20f9ff2560c5990d87e3eef54973c414205b91124728328b53217f2a60929de",
+        "sha256": "c20f9ff2560c5990d87e3eef54973c414205b91124728328b53217f2a60929de",
+        "size": 690593
+      },
+      "measurements": {
+        "layout": {
+          "characters": 163016,
+          "text_bytes": 169021,
+          "whitespace_fraction": 0.45831697502085683,
+          "expansion_ratio": 0.2447476299354323,
+          "sha256": "771d00a697c76423c99c349564505c9597e8863045904e1c60f1382a14541efa"
+        },
+        "plain": {
+          "characters": 113317,
+          "text_bytes": 119322,
+          "whitespace_fraction": 0.2216260578730464,
+          "expansion_ratio": 0.17278194247552467,
+          "sha256": "041e14e6c908ba803e57689e072dc72571f04ca8ae21e1602a60f2135cba6f7d"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:2412.01489v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/8c4c9b76cd24d5c615a2fde051a374ca150f9747c61892bcca777996c86751d0",
+        "sha256": "8c4c9b76cd24d5c615a2fde051a374ca150f9747c61892bcca777996c86751d0",
+        "size": 1019333
+      },
+      "measurements": {
+        "layout": {
+          "characters": 243326,
+          "text_bytes": 255149,
+          "whitespace_fraction": 0.4716964072889868,
+          "expansion_ratio": 0.250309761383179,
+          "sha256": "b3796814971e86d5ed623a40b04baa6fc32aa475a04e2ef3e31d29388560b23d"
+        },
+        "plain": {
+          "characters": 162045,
+          "text_bytes": 173868,
+          "whitespace_fraction": 0.20701656947144312,
+          "expansion_ratio": 0.1705703631688565,
+          "sha256": "0805df6c9e7a95b2cb3f930b0def1af169d0d42110494bfea7dead6f4a0023fa"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:2505.02400v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/04d1a227f27b8af53a7074523a1c462950e448a1c3a7f3e07f62f574a495a94e",
+        "sha256": "04d1a227f27b8af53a7074523a1c462950e448a1c3a7f3e07f62f574a495a94e",
+        "size": 376339
+      },
+      "measurements": {
+        "layout": {
+          "characters": 101335,
+          "text_bytes": 105461,
+          "whitespace_fraction": 0.4336211575467509,
+          "expansion_ratio": 0.28022872994826475,
+          "sha256": "c2a4e98e0db037381d1699e910aaa8fca0d92b68c51e4fc5a7a4d6f78642d6b4"
+        },
+        "plain": {
+          "characters": 72142,
+          "text_bytes": 76268,
+          "whitespace_fraction": 0.2050677829835602,
+          "expansion_ratio": 0.20265771020276932,
+          "sha256": "51eccaf298c599e4a837a331508cb40550dac383e64354146da9b705577f90d1"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:2506.12816v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/bb96deafaf4e5e0984625ceb6f21c02920799405c07b51d880b66a688ee7b44a",
+        "sha256": "bb96deafaf4e5e0984625ceb6f21c02920799405c07b51d880b66a688ee7b44a",
+        "size": 470900
+      },
+      "measurements": {
+        "layout": {
+          "characters": 74547,
+          "text_bytes": 77778,
+          "whitespace_fraction": 0.46863052839148456,
+          "expansion_ratio": 0.1651688256530049,
+          "sha256": "4e247941ba30625168dddaca01c966a9f0af2d295627f45a56e39605155751fb"
+        },
+        "plain": {
+          "characters": 49984,
+          "text_bytes": 53215,
+          "whitespace_fraction": 0.20778649167733676,
+          "expansion_ratio": 0.11300700785729455,
+          "sha256": "88fada8082f2649d2b6bef726f37d5d475a1ac986c4d2459bc29dff81d8f5b8b"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1012.4131v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/e4652629010d2e9ee92802c09a5bf844a75460e0c0c9dd968717b13afd7f46c6",
+        "sha256": "e4652629010d2e9ee92802c09a5bf844a75460e0c0c9dd968717b13afd7f46c6",
+        "size": 173551
+      },
+      "measurements": {
+        "layout": {
+          "characters": 23568,
+          "text_bytes": 24094,
+          "whitespace_fraction": 0.3300661914460285,
+          "expansion_ratio": 0.13882950832896382,
+          "sha256": "44a74a320c108a37aff8f129be498e23a638adb79cbeffa8834ca79e825701a6"
+        },
+        "plain": {
+          "characters": 19652,
+          "text_bytes": 20178,
+          "whitespace_fraction": 0.19692652147364137,
+          "expansion_ratio": 0.11626553577910816,
+          "sha256": "92c1af068350cafc377b90eaa0197ff934f271159f6a35118eecdd9a228e7c51"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1203.3225v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/7b608522a0e7fb6e067f11b8f7415cdfca76b594a67758faa7a78dc43fb1a012",
+        "sha256": "7b608522a0e7fb6e067f11b8f7415cdfca76b594a67758faa7a78dc43fb1a012",
+        "size": 473029
+      },
+      "measurements": {
+        "layout": {
+          "characters": 121207,
+          "text_bytes": 124577,
+          "whitespace_fraction": 0.3494517643370432,
+          "expansion_ratio": 0.2633601745347537,
+          "sha256": "aaae887571a246c2cfe846dc6f459074df5c2d7cac67e5fc39e5cb1b25558a72"
+        },
+        "plain": {
+          "characters": 98396,
+          "text_bytes": 101766,
+          "whitespace_fraction": 0.19910362209845928,
+          "expansion_ratio": 0.2151369154956673,
+          "sha256": "2518607c25f9c688e42fe38a4778d2bbb2630eda7815dfed91a31928807f342a"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1305.3455v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/f76eab8912d040930bd46ecba32b5ae9711032b7fa74fcb096488cbaa8a544b2",
+        "sha256": "f76eab8912d040930bd46ecba32b5ae9711032b7fa74fcb096488cbaa8a544b2",
+        "size": 230248
+      },
+      "measurements": {
+        "layout": {
+          "characters": 52560,
+          "text_bytes": 54831,
+          "whitespace_fraction": 0.44490106544901065,
+          "expansion_ratio": 0.2381388763420312,
+          "sha256": "2fd5ba7b1b5ea86c8dc637e8ddf81ab6f33b82235d052ea5df36dfa11d1eb79e"
+        },
+        "plain": {
+          "characters": 37828,
+          "text_bytes": 40099,
+          "whitespace_fraction": 0.2289309506185894,
+          "expansion_ratio": 0.1741556929919044,
+          "sha256": "33d16d58cbfb9c85c755f0c3f193ee65f7d922e705fe1398d9303c42bc9274c9"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1308.6105v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/a883fb07c52f6eb74b0509591105538c13e0b7acbc025ca9e02b685670aba622",
+        "sha256": "a883fb07c52f6eb74b0509591105538c13e0b7acbc025ca9e02b685670aba622",
+        "size": 457311
+      },
+      "measurements": {
+        "layout": {
+          "characters": 220584,
+          "text_bytes": 222886,
+          "whitespace_fraction": 0.6440993000398941,
+          "expansion_ratio": 0.4873838591243158,
+          "sha256": "580aac23dd2e4feb9098a31a6f2858b021945ccd25e5160a765d68f90a1f9c16"
+        },
+        "plain": {
+          "characters": 95479,
+          "text_bytes": 97781,
+          "whitespace_fraction": 0.17807057049194064,
+          "expansion_ratio": 0.21381729282698209,
+          "sha256": "e4f1c66522272a96f1eb03a249dfb3e448a8f6629fd19307695102cbd7375380"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1705.05985v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/1257ca8355d4c44fb1c2da5889cc38087d6b869147a935058f73eed0e7166338",
+        "sha256": "1257ca8355d4c44fb1c2da5889cc38087d6b869147a935058f73eed0e7166338",
+        "size": 211568
+      },
+      "measurements": {
+        "layout": {
+          "characters": 50575,
+          "text_bytes": 52107,
+          "whitespace_fraction": 0.2928917449332674,
+          "expansion_ratio": 0.2462896090145958,
+          "sha256": "6d0e509a0300d09bcc0c76822d33b88a6a407ffa34d379e78bb5cb2307b5f4b1"
+        },
+        "plain": {
+          "characters": 44010,
+          "text_bytes": 45542,
+          "whitespace_fraction": 0.18795728243581003,
+          "expansion_ratio": 0.21525939650608789,
+          "sha256": "afd94082b2969129174f47147f26ed7be6700b757c0e28e8ed4253be33e3da04"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1402.5149v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/0e12d2fc84bf836603d719e8a7d5146b911ede1f582592325b98422d362cc90c",
+        "sha256": "0e12d2fc84bf836603d719e8a7d5146b911ede1f582592325b98422d362cc90c",
+        "size": 438931
+      },
+      "measurements": {
+        "layout": {
+          "characters": 140207,
+          "text_bytes": 145066,
+          "whitespace_fraction": 0.44243154764027476,
+          "expansion_ratio": 0.3304984154684905,
+          "sha256": "85ce8caa34a15db16f4363482998d704113249f45dd0929fe04378237ae613c6"
+        },
+        "plain": {
+          "characters": 99182,
+          "text_bytes": 104041,
+          "whitespace_fraction": 0.2121755963783751,
+          "expansion_ratio": 0.23703269990043993,
+          "sha256": "80c73df73d2043408a67fedc4e91b0c5c95b86c9d01ddf16c9fe3e42ee569db2"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1605.08131v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/d1429baecda69981449b15356801a591968b1c11f697817c12af60a2cae81b5b",
+        "sha256": "d1429baecda69981449b15356801a591968b1c11f697817c12af60a2cae81b5b",
+        "size": 125892
+      },
+      "measurements": {
+        "layout": {
+          "characters": 24644,
+          "text_bytes": 25364,
+          "whitespace_fraction": 0.3980279175458529,
+          "expansion_ratio": 0.20147427954119404,
+          "sha256": "053f1a9bfb711d5e89cfcf0340b949d4861141544469e6d57cc6e7ceaf8f9773"
+        },
+        "plain": {
+          "characters": 19068,
+          "text_bytes": 19788,
+          "whitespace_fraction": 0.22246696035242292,
+          "expansion_ratio": 0.15718234677342485,
+          "sha256": "30b2430da9051815f0f386acd29c2944182eee3eb18f3924c512163d2c5a77e2"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1705.07519v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/cbea8029592cba014c434d8a9b4d9eaf51eb6665421530034694edf85b8222c0",
+        "sha256": "cbea8029592cba014c434d8a9b4d9eaf51eb6665421530034694edf85b8222c0",
+        "size": 221812
+      },
+      "measurements": {
+        "layout": {
+          "characters": 54136,
+          "text_bytes": 55856,
+          "whitespace_fraction": 0.43691813211171865,
+          "expansion_ratio": 0.25181685391232217,
+          "sha256": "6cb2646ef3191b6940e93f29980aee69ca505714a7681e18f54209df16e6b414"
+        },
+        "plain": {
+          "characters": 39007,
+          "text_bytes": 40727,
+          "whitespace_fraction": 0.21890942651318995,
+          "expansion_ratio": 0.18361044488125078,
+          "sha256": "c07d8b24c4f8a010245bdda40b780b9ba6848dce3d5d0005a7d2fcce081fd5b5"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1710.05683v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/c5c24aef3c1995d80bb8489856b0e214b9e706f5ff6fe1c9784e12858a6cbc99",
+        "sha256": "c5c24aef3c1995d80bb8489856b0e214b9e706f5ff6fe1c9784e12858a6cbc99",
+        "size": 282532
+      },
+      "measurements": {
+        "layout": {
+          "characters": 70808,
+          "text_bytes": 71835,
+          "whitespace_fraction": 0.33232120664331716,
+          "expansion_ratio": 0.25425438534396105,
+          "sha256": "d09b5dd5f268005ec882e47f676a5ebcf12abea9f41228dce3ba73004de8082d"
+        },
+        "plain": {
+          "characters": 57811,
+          "text_bytes": 58838,
+          "whitespace_fraction": 0.18302745152306654,
+          "expansion_ratio": 0.20825251652910112,
+          "sha256": "27e1afea216bf46671756e062bcb153ebedd315290c3517c22ca60cd2ef7ef1b"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1806.00596v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/857dfec3befdc9f43e8218ff06e651330662d25c97753546a28c8627855b9cfc",
+        "sha256": "857dfec3befdc9f43e8218ff06e651330662d25c97753546a28c8627855b9cfc",
+        "size": 779518
+      },
+      "measurements": {
+        "layout": {
+          "characters": 211420,
+          "text_bytes": 218717,
+          "whitespace_fraction": 0.471998864818844,
+          "expansion_ratio": 0.28057979418050644,
+          "sha256": "3df54fbcf1d101dea20a4417bcab6dbbceb6fdc9940dc876220b3f19208495e1"
+        },
+        "plain": {
+          "characters": 143995,
+          "text_bytes": 151292,
+          "whitespace_fraction": 0.22483419563179277,
+          "expansion_ratio": 0.19408403654566025,
+          "sha256": "443fda74bcfad620fbeaf0057cdf20ecdead827e29ab5de24604740a39992e3b"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:0707.4000v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/fe898b71325ddd465218629b97e48f82a48ad058ea7c0471f80db5cdf3c74188",
+        "sha256": "fe898b71325ddd465218629b97e48f82a48ad058ea7c0471f80db5cdf3c74188",
+        "size": 207627
+      },
+      "measurements": {
+        "layout": {
+          "characters": 60017,
+          "text_bytes": 61397,
+          "whitespace_fraction": 0.38009230717963244,
+          "expansion_ratio": 0.29570816897609653,
+          "sha256": "e1dbdeec6dab8d589be535edbe6830f54aedd0654c7bc02c5b46e5c8cf607c82"
+        },
+        "plain": {
+          "characters": 46953,
+          "text_bytes": 48333,
+          "whitespace_fraction": 0.20816561242093157,
+          "expansion_ratio": 0.23278764322559203,
+          "sha256": "1c42fb2159d67e8627f47a71387e13296f2323e0bdb94334b2eb1c2cbe302c81"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:0709.1266v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/0aa5dd849cff1bf4f8386744f442a865510c105d155927980ba17acfb873acb9",
+        "sha256": "0aa5dd849cff1bf4f8386744f442a865510c105d155927980ba17acfb873acb9",
+        "size": 149960
+      },
+      "measurements": {
+        "layout": {
+          "characters": 39644,
+          "text_bytes": 39962,
+          "whitespace_fraction": 0.4176672384219554,
+          "expansion_ratio": 0.2664843958388904,
+          "sha256": "f73f0bde1aa333b87a2254c2e9e7629fe851f097766e31349f5ca934501438a2"
+        },
+        "plain": {
+          "characters": 28373,
+          "text_bytes": 28691,
+          "whitespace_fraction": 0.18722024459873823,
+          "expansion_ratio": 0.1913243531608429,
+          "sha256": "fce3f26d4a41c21ad9a622df27e5d08dd32d5135bd5c580b8608c9af960261de"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:0811.4262v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/7b08440c2cbda17452eb4eac8b6e786379b498eec3de361331a04aaff71e3ef6",
+        "sha256": "7b08440c2cbda17452eb4eac8b6e786379b498eec3de361331a04aaff71e3ef6",
+        "size": 119815
+      },
+      "measurements": {
+        "layout": {
+          "characters": 28531,
+          "text_bytes": 28629,
+          "whitespace_fraction": 0.43275735165258844,
+          "expansion_ratio": 0.23894337103033844,
+          "sha256": "cb80a03db94403e2a913308fc5201594de0b56ddb417e8f3dac8e861beda2dbb"
+        },
+        "plain": {
+          "characters": 19489,
+          "text_bytes": 19587,
+          "whitespace_fraction": 0.17307198932731285,
+          "expansion_ratio": 0.16347702708342027,
+          "sha256": "8b76bac496279bb7beef31808d27e0c3884d5daf96a688acaa73ec7bd11ec6cc"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:0909.5200v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/f160670dfbdb9d78dc3795f788610b24688b06654973998a31478b638c43ce59",
+        "sha256": "f160670dfbdb9d78dc3795f788610b24688b06654973998a31478b638c43ce59",
+        "size": 197905
+      },
+      "measurements": {
+        "layout": {
+          "characters": 47738,
+          "text_bytes": 48736,
+          "whitespace_fraction": 0.4868239138631698,
+          "expansion_ratio": 0.2462595689851191,
+          "sha256": "8c47fc15f1cbab80f61a2b5164e818a0274138815ceb48a71434eeabc2edfbf4"
+        },
+        "plain": {
+          "characters": 30521,
+          "text_bytes": 31519,
+          "whitespace_fraction": 0.19982962550375152,
+          "expansion_ratio": 0.15926328288825448,
+          "sha256": "b4baf584a058a1d798c00d4fb013c03c193a7c4753b70f3cf55daac3f432ac90"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:0911.1571v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/fbe5fd15bfe56cbef472bec7263695003b6d491eacdfad7b006e347e23d34637",
+        "sha256": "fbe5fd15bfe56cbef472bec7263695003b6d491eacdfad7b006e347e23d34637",
+        "size": 292022
+      },
+      "measurements": {
+        "layout": {
+          "characters": 96138,
+          "text_bytes": 97900,
+          "whitespace_fraction": 0.4838253344151116,
+          "expansion_ratio": 0.3352487141379759,
+          "sha256": "56abebdac25332768a7d41ee64fd826481d7d3e7fa680011327084840e04d2d5"
+        },
+        "plain": {
+          "characters": 62074,
+          "text_bytes": 63836,
+          "whitespace_fraction": 0.20267744949576313,
+          "expansion_ratio": 0.21859996849552432,
+          "sha256": "7973ea370fcae8b2e14db8d4a5610b8767609c952d0d358ff58e9460c375a7b6"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:0811.0949v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/9b960ea043e8808b1887d41d82d44c77bc58113e04b32e9e0960ac8951c707ad",
+        "sha256": "9b960ea043e8808b1887d41d82d44c77bc58113e04b32e9e0960ac8951c707ad",
+        "size": 187046
+      },
+      "measurements": {
+        "layout": {
+          "characters": 44679,
+          "text_bytes": 45438,
+          "whitespace_fraction": 0.3149354282772667,
+          "expansion_ratio": 0.24292420046405697,
+          "sha256": "281e1e303080ad396f608280922505c31dd7f661e910003d7fba2c45b119e19f"
+        },
+        "plain": {
+          "characters": 38562,
+          "text_bytes": 39321,
+          "whitespace_fraction": 0.20655049011980706,
+          "expansion_ratio": 0.21022101515135314,
+          "sha256": "3bcc54e97b609fe42eca1254ea3084b656067e7c4d8d3efa5f07b8427004cbb6"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1802.04694v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/932d254f5a69c2649676b6ae2382f60f06ef29f8025d896ebc4055ff63c4f9aa",
+        "sha256": "932d254f5a69c2649676b6ae2382f60f06ef29f8025d896ebc4055ff63c4f9aa",
+        "size": 214546
+      },
+      "measurements": {
+        "layout": {
+          "characters": 39866,
+          "text_bytes": 41552,
+          "whitespace_fraction": 0.4541965584708774,
+          "expansion_ratio": 0.19367408387944776,
+          "sha256": "1b94afb09a9e6c24900fe45f9a1a5bfb7fc6c8e91754b24d292c60c5dc4df15a"
+        },
+        "plain": {
+          "characters": 28596,
+          "text_bytes": 30282,
+          "whitespace_fraction": 0.23992866135123794,
+          "expansion_ratio": 0.1411445564121447,
+          "sha256": "a8b323f215c1014411f4b36001d9660f608934766565edf65900fd6e7fb3b831"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1803.07647v4",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/2dcdde4d4519402a9eb015217677ae16e6bfdb52341413ffa23c3e38ad203ecf",
+        "sha256": "2dcdde4d4519402a9eb015217677ae16e6bfdb52341413ffa23c3e38ad203ecf",
+        "size": 116079
+      },
+      "measurements": {
+        "layout": {
+          "characters": 14183,
+          "text_bytes": 14618,
+          "whitespace_fraction": 0.41302968342381724,
+          "expansion_ratio": 0.12593147770053154,
+          "sha256": "233417e74949bc9459c381bb8665c174f02ed0b01868f6c3e77f9fd2566fa4a4"
+        },
+        "plain": {
+          "characters": 10502,
+          "text_bytes": 10937,
+          "whitespace_fraction": 0.20757950866501618,
+          "expansion_ratio": 0.09422031547480596,
+          "sha256": "432a924227d851f64ed946d07569abb1eea54e53b3bcd78342e24402a46b6cfc"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:2110.00282v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/5af6db534630dbfc06ffb0067c1e186f008cfab23ba5fb6eabf76a3f52e0cbc1",
+        "sha256": "5af6db534630dbfc06ffb0067c1e186f008cfab23ba5fb6eabf76a3f52e0cbc1",
+        "size": 204441
+      },
+      "measurements": {
+        "layout": {
+          "characters": 41935,
+          "text_bytes": 42939,
+          "whitespace_fraction": 0.5677119351377131,
+          "expansion_ratio": 0.21003125596137762,
+          "sha256": "03a0f10476e555d6c89adf971745b6a611e2ac78900cf94fb24985fe13dce93c"
+        },
+        "plain": {
+          "characters": 23356,
+          "text_bytes": 24360,
+          "whitespace_fraction": 0.22418222298338758,
+          "expansion_ratio": 0.11915418140196928,
+          "sha256": "a4625990cf3981bcbdf2f748b1b0d3269385d34efd7bf778ad1e11a11df42594"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:2204.12183v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/ac6e69f7c24f950c3228bfef6d7895c9f8be3a24ccc31bc687c21d114e20085d",
+        "sha256": "ac6e69f7c24f950c3228bfef6d7895c9f8be3a24ccc31bc687c21d114e20085d",
+        "size": 220864
+      },
+      "measurements": {
+        "layout": {
+          "characters": 49666,
+          "text_bytes": 52294,
+          "whitespace_fraction": 0.384125961422301,
+          "expansion_ratio": 0.23677013909011882,
+          "sha256": "fa2c133e52cf96a173015ebc7ad12e222ed304762860d4b25fd5cb646c1aded4"
+        },
+        "plain": {
+          "characters": 39528,
+          "text_bytes": 42156,
+          "whitespace_fraction": 0.22675065776158673,
+          "expansion_ratio": 0.1908685888148363,
+          "sha256": "d429da86d84ad472ca4d26f8206bbd368c986a235ba401522cbb38163f68df72"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:0710.0926v5",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/c49f50a1a9df39e922df39f23e0fbc900445479acdf9cbd36aaceca6e29b15d0",
+        "sha256": "c49f50a1a9df39e922df39f23e0fbc900445479acdf9cbd36aaceca6e29b15d0",
+        "size": 698173
+      },
+      "measurements": {
+        "layout": {
+          "characters": 125467,
+          "text_bytes": 128229,
+          "whitespace_fraction": 0.28042433468561456,
+          "expansion_ratio": 0.18366364783513542,
+          "sha256": "ba6736a2da4b15b692264a3d3a94ed10a4a6b7035627805b1f3cc08d603fd0a3"
+        },
+        "plain": {
+          "characters": 112057,
+          "text_bytes": 114819,
+          "whitespace_fraction": 0.1946687846363904,
+          "expansion_ratio": 0.1644563739932653,
+          "sha256": "f991ac9bfced5665b0342d74be2f918517ed6e6c1aca2e49901b52167561b5eb"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1204.1228v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/cf7d9b8064db49bcecdbf49d979ef2e3f0d04b3755e2a05a9fc62e66167a4437",
+        "sha256": "cf7d9b8064db49bcecdbf49d979ef2e3f0d04b3755e2a05a9fc62e66167a4437",
+        "size": 540458
+      },
+      "measurements": {
+        "layout": {
+          "characters": 91958,
+          "text_bytes": 93873,
+          "whitespace_fraction": 0.30935862023967464,
+          "expansion_ratio": 0.17369157270315178,
+          "sha256": "e482e416177a85d0648c07b12234ce1e567cfe415a2681acabdbc443351ff07b"
+        },
+        "plain": {
+          "characters": 81758,
+          "text_bytes": 83673,
+          "whitespace_fraction": 0.22403923775043422,
+          "expansion_ratio": 0.1548186908140873,
+          "sha256": "ac222d024a7ec2a0d218881fe368ca0245bcff145ffb96234a434748cac386d7"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1207.1580v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/2f1825e60e5422fbd0f5e7f2a70f2b8f15ff2bab296bdafd06a918658d415368",
+        "sha256": "2f1825e60e5422fbd0f5e7f2a70f2b8f15ff2bab296bdafd06a918658d415368",
+        "size": 253868
+      },
+      "measurements": {
+        "layout": {
+          "characters": 58725,
+          "text_bytes": 59833,
+          "whitespace_fraction": 0.2897914005959983,
+          "expansion_ratio": 0.2356854743409961,
+          "sha256": "252db956f45324dcd9596fa6945948afcb47c732247218db277b5d44ae62449d"
+        },
+        "plain": {
+          "characters": 52455,
+          "text_bytes": 53563,
+          "whitespace_fraction": 0.20610046706700982,
+          "expansion_ratio": 0.21098759985504278,
+          "sha256": "0994e1c56b9ca60d66ed7a1f85d86de7d5d2a831963f1f0c5c43e3f5f4918726"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1212.6685v4",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/c99271a5bc60bf7bfcb72a5f132b3da2879f5d1851e85443d0c49c2857c9c52f",
+        "sha256": "c99271a5bc60bf7bfcb72a5f132b3da2879f5d1851e85443d0c49c2857c9c52f",
+        "size": 341468
+      },
+      "measurements": {
+        "layout": {
+          "characters": 70631,
+          "text_bytes": 72293,
+          "whitespace_fraction": 0.30128413869264203,
+          "expansion_ratio": 0.21171237129101408,
+          "sha256": "d8e10579821e4ab5fbd69cd682e7f8b779ccf7e684dd47434b1f80011acf56fb"
+        },
+        "plain": {
+          "characters": 61399,
+          "text_bytes": 63061,
+          "whitespace_fraction": 0.1965830062378866,
+          "expansion_ratio": 0.18467616292009792,
+          "sha256": "805e0eb64ac1ad63952844e0a80824fe8136b9d5f69779a49b73f3965213bb0b"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "ordinary",
+      "version_id": "arxiv:1311.4859v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/95048042cf4b521108e02d2f73f7795d2051b8196d02b0a684d85044f8f7ca67",
+        "sha256": "95048042cf4b521108e02d2f73f7795d2051b8196d02b0a684d85044f8f7ca67",
+        "size": 1042884
+      },
+      "measurements": {
+        "layout": {
+          "characters": 89519,
+          "text_bytes": 90127,
+          "whitespace_fraction": 0.29273115204593436,
+          "expansion_ratio": 0.0864209250501494,
+          "sha256": "70dbfd013da5e192e25596a3b181848c3abf900d51d48a717596518076f6b294"
+        },
+        "plain": {
+          "characters": 77795,
+          "text_bytes": 78403,
+          "whitespace_fraction": 0.18637444565846134,
+          "expansion_ratio": 0.07517902278681042,
+          "sha256": "09c05dc0bc1b30a029678fad2844fb3c53450d38664d4b60d7ba2123384f9cf3"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "incident",
+      "version_id": "arxiv:2307.02749v3",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/3fff50ab340c7c413bd7048a568d3cc2be544afcd3f183614c88e48f98579618",
+        "sha256": "3fff50ab340c7c413bd7048a568d3cc2be544afcd3f183614c88e48f98579618",
+        "size": 785095
+      },
+      "measurements": {
+        "layout": {
+          "characters": 2493595,
+          "text_bytes": 2495045,
+          "whitespace_fraction": 0.9789384402840077,
+          "expansion_ratio": 3.178016673141467,
+          "sha256": "44cba2be64be6fff4049439ab519776288a5effd3f4a689c3c58083f1406581b"
+        },
+        "plain": {
+          "characters": 67458,
+          "text_bytes": 68908,
+          "whitespace_fraction": 0.22158972990601558,
+          "expansion_ratio": 0.08777026983995567,
+          "sha256": "15dca0c1de83d623466f49d1d7644b7d3ceef23b839b4296859b1a117ede6441"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "incident",
+      "version_id": "arxiv:2401.01860v3",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/3a8289334010a950868e8a2ebd61d2036ce296c77c7fc8025d7b53f7cc439333",
+        "sha256": "3a8289334010a950868e8a2ebd61d2036ce296c77c7fc8025d7b53f7cc439333",
+        "size": 446421
+      },
+      "measurements": {
+        "layout": {
+          "characters": 137153,
+          "text_bytes": 139843,
+          "whitespace_fraction": 0.4772480368639403,
+          "expansion_ratio": 0.313253632781612,
+          "sha256": "d90c923ce340ba5ff2d64752a0373fad3c1c28db48a1c1e49526c96b8df64263"
+        },
+        "plain": {
+          "characters": 91375,
+          "text_bytes": 94065,
+          "whitespace_fraction": 0.21547469220246238,
+          "expansion_ratio": 0.21070917362758473,
+          "sha256": "67040fb35c0417e1730b01a160d023ec0f204b239e844718172a5be4ff9b4ec0"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "incident",
+      "version_id": "arxiv:2510.21702v2",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/dd118d0e39ae00a3711dd651747347cc89d12ad54826f30236493b9df352d442",
+        "sha256": "dd118d0e39ae00a3711dd651747347cc89d12ad54826f30236493b9df352d442",
+        "size": 1515914
+      },
+      "measurements": {
+        "layout": {
+          "characters": 3947312,
+          "text_bytes": 3949337,
+          "whitespace_fraction": 0.9703585629917271,
+          "expansion_ratio": 2.6052513533089607,
+          "sha256": "ecdfdaf5b315d8a41e3c362d5955d700f13b91e4ccf6fc069c6f9bf51322ebbb"
+        },
+        "plain": {
+          "characters": 156247,
+          "text_bytes": 158272,
+          "whitespace_fraction": 0.2513648262046631,
+          "expansion_ratio": 0.10440697823227439,
+          "sha256": "a1f29d90d1edaf9cd978d5db93855ebec2995272b9584218a3e0fa25c5c74e2c"
+        }
+      },
+      "stored_layout_matches": true
+    },
+    {
+      "group": "incident",
+      "version_id": "arxiv:2605.16053v1",
+      "original": {
+        "media_type": "application/pdf",
+        "path": "research/sources/objects/dad03a5b7da3321ce70113c48cde4cf948f65f168f9b9f5711f336e858b28373",
+        "sha256": "dad03a5b7da3321ce70113c48cde4cf948f65f168f9b9f5711f336e858b28373",
+        "size": 4620972
+      },
+      "measurements": {
+        "layout": {
+          "characters": 19073281,
+          "text_bytes": 19079069,
+          "whitespace_fraction": 0.9898684447631217,
+          "expansion_ratio": 4.128799958104053,
+          "sha256": "6925fe0e6b77d6626836115fb063d171134f8ed447cc5ba4f079e1d931dced48"
+        },
+        "plain": {
+          "characters": 259648,
+          "text_bytes": 265436,
+          "whitespace_fraction": 0.2558617821050037,
+          "expansion_ratio": 0.05744159453898444,
+          "sha256": "2aa38d0cc6759d8bb9d49ef11f06d721aa8f18b42e7c9af5a9f2ecbbd87e5ee7"
+        }
+      },
+      "stored_layout_matches": true
+    }
+  ],
+  "thresholds": {
+    "whitespace_fraction": 0.9,
+    "expansion_ratio": 2.0
+  },
+  "margins": {
+    "whitespace_fraction": {
+      "ordinary_max": 0.6440993000398941,
+      "ordinary_to_threshold": 0.2559006999601059,
+      "inflated_min": 0.9703585629917271,
+      "threshold_to_inflated": 0.07035856299172705
+    },
+    "expansion_ratio": {
+      "ordinary_max": 0.4873838591243158,
+      "ordinary_to_threshold": 1.5126161408756842,
+      "inflated_min": 2.6052513533089607,
+      "threshold_to_inflated": 0.6052513533089607
+    }
+  }
+}

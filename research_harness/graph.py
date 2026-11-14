@@ -169,12 +169,18 @@ def main_captures(records, work, target=None, *, bundle_index=None):
     else:
         supplements = bundle_index.get(work["id"], {}).get("supplements", set())
     captures = {}
+    from .capture_selection import find_capture_selections
+    choices = {choice["original_sha256"]: choice["source_id"]
+               for choice in find_capture_selections(records, work["id"])}
     for capture in work["fulltexts"]:
         if is_component(capture) or capture["availability"] != "available" or capture["source_id"] in supplements:
             continue
         if target and target.get("id") == work["id"] and capture["original"]["sha256"] != target.get("sha256"):
             continue
-        captures.setdefault(capture["original"]["sha256"], capture)
+        original = capture["original"]["sha256"]
+        captures.setdefault(original, capture)
+        if capture["source_id"] == choices.get(original):
+            captures[original] = capture
     return list(captures.values())
 
 
