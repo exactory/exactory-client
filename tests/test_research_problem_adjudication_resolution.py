@@ -1095,7 +1095,8 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
 
     def test_a_result_packet_offers_a_citation_only_for_a_passage_a_review_can_record(self):
         """R58: O1 cites a text passage and a JSON passage; the result packet carries a citation for the text passage
-        only. A link built to the JSON passage is refused with the typed reading code; the text citation is recorded."""
+        only. A link built to the JSON passage, which is no full-text capture of its version, is refused as an output
+        with source_link_not_fulltext (closure C12, ruling 28); the text citation is recorded."""
         self.prepare_problem_evidence()
         json_link = self.read_a_json_passage()
         unit = self.add_unbound_full_source()
@@ -1136,7 +1137,7 @@ class ProblemAdjudicationResolutionTests(delivery_fixtures.ProblemDeliveryCase):
                     with self.assertRaises(ResearchError) as caught:
                         self.mutate(decisions.record_value_review, dict(output, id="review-result-first", dossier_id=None,
                                                                         assignment_id="result-first"))
-                    self.assertEqual(caught.exception.code, "reading_missing")
+                    self.assertEqual(caught.exception.code, "source_link_not_fulltext")
                 else:
                     self.assertEqual(self.record_result(reviewer, output)["id"], "review-result-second")
 
