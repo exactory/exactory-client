@@ -4755,6 +4755,20 @@
       ]
     },
     {
+      "id": "openalex-capture-without-select-inflates-search-responses",
+      "record": "20261112150500-result-review-frame-holds-cited-search-records",
+      "class": "search capture field selection",
+      "summary": "OpenAlex responses captured without select added about 15000 characters per work to search evidence.",
+      "expected": "A synthetic response with the recommended select fields imports and retains the original bytes. Pages with different select values remain separate incomplete groups, while titleless article rows are reported as invalid_work. A live capture must still confirm that select retains meta; sandbox DNS resolution was unavailable.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_openalex_select.OpenAlexSelectTests.test_selected_response_imports_exact_bytes_and_disposition_metadata",
+        "test_openalex_select.OpenAlexSelectTests.test_pages_with_different_select_values_report_separate_incomplete_groups",
+        "test_openalex_select.OpenAlexSelectTests.test_selected_work_without_either_title_is_reported_as_invalid_work"
+      ]
+    },
+    {
       "id": "native-math-nonapproval-and-implication-objective",
       "record": "20261113074306-math-solver-non-approval-review-and-implication-objective-gaps",
       "class": "native review diagnostics and implication objective format",
