@@ -1,7 +1,7 @@
 """Execute a review chain through the public operation table."""
 
 import copy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import time
 import uuid
@@ -11,11 +11,11 @@ from .errors import ResearchError
 from .evidence import digest
 from .output_views import render_workspace_views
 from .review_continuation import plan_next, plan_route_handoff
+from .stop_classes import REPLAN_CODES, describe_terminal
 
 
 MAX_WAIT_SECONDS = 30 * 60
 MAX_CONSECUTIVE_REFUSALS = 8
-REPLAN_CODES = frozenset(('store_busy', 'stale_revision', 'review_task_dependency_changed'))
 EXECUTABLE_STATES = frozenset(('run', 'resume', 'continue', 'replace', 'plan', 'record'))
 
 
@@ -32,7 +32,18 @@ def _identify_action(plan):
 
 
 def _describe_stop(plan, code, details):
-    return dict(plan, state='stop', code=code, details=details)
+    terminal = describe_terminal(code)
+    if code == 'review_series_no_progress':
+        terminal.pop('command', None)
+        terminal['details']['step'] = dict(command='gate-auto-pass', chooses=['stop_id'])
+    if terminal['state'] == 'handoff' and terminal.get('command') != plan.get('command'):
+        plan = {key: value for key, value in plan.items() if key != 'payload'}
+    if terminal['state'] == 'continue':
+        terminal['state'] = 'stop'
+        terminal['details']['decision'] = dict(owner_decides='Whether to retry after the store changes.',
+            then=[dict(answer='Inspect the record', steps=[dict(command='record-check')])])
+    terminal['details'] = dict(details, **terminal['details'])
+    return dict(plan, **terminal)
 
 
 def _read_plan(store, assignment_id):
@@ -85,6 +96,9 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 row = dict(row, stop_record_error=recording_error)
             finally:
                 render_workspace_views(store.root)
+        if row.get('code') == 'review_series_no_progress' and row.get('stop_id'):
+            row = dict(row, details=dict(row['details'], step=dict(command='gate-auto-pass',
+                payload=dict(stop_id=row['stop_id']), chooses=[])))
         if row.get('state') in ('stop', 'wait') and row.get('code'):
             from .stop_classes import classify_stop
             row = dict(row, stop_class=classify_stop(row['code']))
@@ -169,7 +183,9 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             if error.code == 'review_route_runtime_stale':
                 assignment = snapshot['records']['review_assignment'][plan['head_id']]
                 handoff = {key: plan[key] for key in ('chain', 'head_id', 'progress')}
-                emit(dict(handoff, **plan_route_handoff(assignment)))
+                from .review_plan_steps import complete_plan
+                emit(complete_plan(snapshot['records'], ArtifactStore(store.root), assignment,
+                                   dict(handoff, **plan_route_handoff(assignment))))
                 return 3
             row = dict(plan, request_id=request_id, error=error.as_dict())
             if ((waiting or plan['state'] == 'resume') and error.code in (
@@ -206,8 +222,19 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                 emit(row, usage_snapshot=current)
                 refusals = 0
                 continue
-            emit(_describe_stop(row, error.code, error.details or {}), terminal=True, usage_snapshot=current)
-            return 3
+            terminal = _describe_stop(row, error.code, error.details or {})
+            if terminal['state'] == 'wait':
+                terminal['not_before'] = (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
+            if terminal['state'] in ('stop', 'handoff') and error.code != 'review_series_no_progress':
+                from .review_plan_steps import complete_plan
+                from .evaluation import Evaluation
+                records = current['records']
+                assignment = records.get('review_assignment', {}).get(plan['head_id'])
+                if assignment is not None:
+                    terminal = complete_plan(records, Evaluation(records, ArtifactStore(store.root)),
+                                             assignment, terminal)
+            emit(terminal, terminal=True, usage_snapshot=current)
+            return 4 if terminal['state'] == 'wait' else 0 if terminal['state'] == 'done' else 3
         # Waiting reconciliations can be successful polls of a still-live
         # owner. Only executable continuation states spend a progress position.
         if not waiting:

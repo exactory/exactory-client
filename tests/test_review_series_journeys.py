@@ -46,6 +46,14 @@ class SeriesJourneyTests(unittest.TestCase):
         with patch.object(protocol.transport, 'send_request', side_effect=provider):
             code = run_series(case.store, head, emit=emit)
         self.assertEqual(code, expected_exit, steps[-1])
+        terminal = steps[-1]
+        self.assertIn(terminal['state'], ('done', 'handoff', 'stop', 'wait'))
+        if terminal['state'] == 'handoff':
+            self.assertEqual(terminal['details']['step']['command'], terminal['command'])
+            self.assertIn('payload', terminal['details']['step'])
+            self.assertIn('prerequisites', terminal['details']['step'])
+        elif terminal['state'] == 'stop':
+            self.assertTrue(terminal['details']['decision']['then'])
         self.assertEqual(len(calls), len(case.store.snapshot()['records'].get('review_attempt', {}))
                          - getattr(self, 'earlier_calls', 0))
         return steps, kinds
@@ -288,7 +296,10 @@ class SeriesJourneyTests(unittest.TestCase):
             return codex_fixtures.build_codex_response(route, request, output)
         with patch.object(protocol.transport, 'send_request', side_effect=provider), patch(
                 'research_harness.review_failure_class.plan_after_failure',
-                return_value=dict(state='replace', code='review_output_over_cap', details={})):
+                side_effect=lambda records, artifacts, identifier: dict(
+                    state='replace' if any(row['assignment_id'] == identifier
+                        for row in records.get('review_attempt', {}).values()) else 'run',
+                    code='review_output_over_cap', details={})):
             code = run_series(fixture.store, first['id'], emit=steps.append)
         self.assertEqual(code, 0, steps[-1])
         self.assertEqual(steps[-1]['chain'], 'parts_v2:context_repair')

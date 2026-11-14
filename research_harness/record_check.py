@@ -36,26 +36,11 @@ from . import review_preflight, review_protocol as protocol, review_transport as
 from .review_continuation import list_chain_heads, plan_next
 from .review_failure_class import classify_attempt
 from .storage import Store, _RecordHistory, _RecordedSnapshot, _validate
+from .stop_classes import EXPECTED_STOP_CODES, describe_terminal
 
 
 LOCAL_OPERATIONS = frozenset(('review-assignment', 'value-review',
                               'review-adjudication', 'problem-openness'))
-# These are scientific limitations or explicit requests for external evidence or
-# an agent decision. Capacity refusals of allowed actions are handled separately.
-EXPECTED_STOP_CODES = frozenset((
-    'review_provider_unavailable', 'review_provider_refused', 'review_output_over_cap',
-    'review_execution_incomplete', 'review_timeout', 'review_answer_malformed',
-    'review_failure_unknown', 'review_turn_failures_exhausted', 'review_slot_exhausted',
-    'review_parts_budget_exhausted', 'review_quality_measurement_pending',
-    'review_context_unverified', 'review_context_contaminated', 'review_route_retired',
-    'review_route_runtime_stale', 'review_runtime_missing', 'review_invocation_unverified',
-    'review_resampling_forbidden', 'native_review_attestation_required',
-    'native_review_acceptance_required', 'verification_verdict_body_required',
-    'review_recording_required', 'review_worker_reconciliation_required',
-    'review_context_repair_required', 'review_context_repair_stale',
-    'assessment_incomplete',
-    'openness_review_not_approved',
-))
 DEFAULT_TIME_BUDGET_SECONDS = 10800
 # A limit of the harness inside the range that macOS accepts for an interval timer (setitimer refuses 100000001 s).
 MAXIMUM_TIME_BUDGET_SECONDS = 100_000_000
@@ -563,8 +548,13 @@ def check_continuation(store):
                     plan['refusal'] = error.as_dict()
                     continue
                 if error.code in EXPECTED_STOP_CODES:
-                    actions.append({'state': 'handoff', 'code': error.code, 'details': error.details})
-                    chain['boundary'] = 'handoff'
+                    from .review_plan_steps import complete_plan
+                    terminal = describe_terminal(error.code)
+                    terminal['details'].update(error.details or {})
+                    assignment = current['review_assignment'][plan['head_id']]
+                    terminal = complete_plan(current, artifacts, assignment, terminal)
+                    actions.append(terminal)
+                    chain['boundary'] = terminal['state']
                     break
                 raise
     return {'chains': chains, 'decision_stops': decision_stops}

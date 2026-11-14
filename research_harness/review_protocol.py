@@ -2839,6 +2839,17 @@ def _initial_size_failure(records, artifacts, prior, value):
         and attempt.get('response') is None and attempt.get('output') is None for attempt in attempts)
 
 
+def has_exhausted_position(records, artifacts, assignment):
+    """An exhausted head frees a blind slot while earlier source turns stay historical."""
+    attempts = list(read_filtered_records(records, 'review_attempt', assignment_id=assignment['id']).values())
+    pending = any(row['id'] not in records.get('review_attempt', {}) for row in
+                  read_filtered_records(records, 'review_invocation', assignment_id=assignment['id']).values())
+    from .review_refusal import refused_attempts
+    completed = [row for row in attempts if row['status'] == 'completed']
+    return (not pending and len(completed) >= 2
+            and len(refused_attempts(records, artifacts, completed)) == len(completed))
+
+
 def _initial_slot(records, artifacts, value):
     slot_records = _read_slot_records(records, value)
     slots = {}
@@ -2855,6 +2866,10 @@ def _initial_slot(records, artifacts, value):
                     and all(_initial_size_failure(records, artifacts, prior, value) for prior in members)):
                 return identifier
             raise ResearchError('review_resampling_forbidden', 'Retain the assigned or completed initial reviewer; record its observed output, or invoke its assignment again after a refusal')
+        head = max(members, key=lambda row: row['recorded_revision'])
+        if value['role'] == 'bar' and has_exhausted_position(records, artifacts, head):
+            replaceable.append((min(p['recorded_revision'] for p in members), identifier))
+            continue
         replaceable_members = True
         for prior in members:
             attempts = list(read_filtered_records(records, 'review_attempt', assignment_id=prior['id']).values())
@@ -3083,6 +3098,13 @@ def record_assignment(store, payload, *, expected_revision, request_id):
                 and previous['context'].get('objection_id') == value['context'].get('objection_id')
                 and (not problem or previous.get('subject') == value['subject'])]
             latest = max(previous_assignments, key=lambda previous: previous['recorded_revision'], default=None)
+            if latest is not None and has_exhausted_position(records, artifacts, latest):
+                if any(normalized_text(previous['reviewer_id']) == normalized_text(value['reviewer_id'])
+                       for previous in previous_assignments):
+                    raise ResearchError('review_resampling_forbidden',
+                                        'An exhausted focused review needs a new eligible reviewer.')
+                slot_identifier = context_repair.slot_id(records, latest)
+                previous_assignments = []
             for previous in previous_assignments:
                 if (problem and previous['id'] != latest['id'] and review_parts.KEY in latest
                         and (value['context'].get('prior_assignment_id') == latest['id']

@@ -381,32 +381,26 @@ def _plan_head(records, artifacts, assignment):
             from . import review_output_correction
             command = 'review-output-correction'
             details = dict(assignment_id=assignment['id'], refused_attempts=refused)
+            if any(row['assignment_id'] == assignment['id'] for row in
+                   records.get('review_output_correction_invocation', {}).values()):
+                return dict(state='stop', code='review_slot_exhausted', details=details)
             try:
                 review_output_correction.prepare_packet(records, artifacts, assignment['id'])
             except ResearchError:
-                if (assignment['role'] in ('bar', 'slate', 'result', 'adjudicator')
-                        and (assignment['role'] != 'bar'
-                             or assignment.get('context', {}).get('prior_assignment_id'))):
-                    return dict(state='stop', code='review_slot_exhausted', details=details)
-                command = 'review-assignment'
-                if assignment['role'] == 'native_math':
-                    from .native_review import load_packet
-                    native = load_packet(artifacts, assignment['context']['native_packet'],
-                                         assignment['reviewer_id'])
-                    if openness_reading.is_openness_packet(native):
-                        command = 'export'
-                        details['kind'] = 'problem-openness'
-                    else:
-                        command = 'search review-packet'
+                return dict(state='stop', code='review_slot_exhausted', details=details)
             return dict(state='handoff', command=command, code='review_slot_exhausted', details=details)
         if attempts and not usable:
             latest = max(attempts, key=lambda row: row.get('recorded_revision', 0))
-            failed = latest['status'] != 'completed' or not protocol._context_observed(artifacts, latest)
+            failed = bool(refused) or latest['status'] != 'completed' or not protocol._context_observed(artifacts, latest)
         if not observed:
             # The selector retains unobserved output for diagnostics. Invocation
             # eligibility ignores that attempt, including its binding diagnostic.
             state = dict(state, output=None, obligations=[item for item in state['obligations']
                 if item['code'] not in ('review_invocation_unverified', 'review_output_unavailable')])
+    if not attempts:
+        from .review_failure_class import list_turn_assignments
+        position = set(list_turn_assignments(records, assignment))
+        failed = any(row['assignment_id'] in position for row in records.get('review_attempt', {}).values())
     if failed or unverified:
         from .review_failure_class import plan_after_failure
         result = copy.deepcopy(plan_after_failure(records, artifacts, assignment['id']))
@@ -431,8 +425,14 @@ def _plan_head(records, artifacts, assignment):
                             details=dict(assignment_id=assignment['id'],
                                          failure_code=result.get('code'),
                                          failure_details=result.get('details', {})))
-            result.update(command='review-assignment',
-                          payload=_build_assignment_payload(records, assignment, replace=True))
+            payload = _build_assignment_payload(records, assignment, replace=True)
+            recovery = result.get('details', {}).get('recovery', {})
+            if recovery.get('kind') == 'replace':
+                payload = copy.deepcopy(recovery['payload'])
+                payload['id'] = _find_unused_id(records, payload['id'])
+            result.update(command='review-assignment', payload=payload)
+        elif result['state'] == 'handoff':
+            result['command'] = 'review-probe'
         elif result['state'] in ('run', 'wait'):
             result.update(command='review-run', payload=_build_run_payload(records, assignment))
             if result['state'] == 'run':
@@ -469,6 +469,7 @@ def plan_next(records, artifacts, head_id):
     """Describe one exact action; the named operation retains every mutation validator."""
     artifacts = Evaluation.of(records, artifacts)
     result = dict(state='stop', chain=None, head_id=head_id, progress=None)
+    assignment = None
     try:
         assignment = _find_head(records, artifacts, head_id)
         result.update(chain=_describe_chain(assignment), head_id=assignment['id'],
@@ -478,11 +479,34 @@ def plan_next(records, artifacts, head_id):
             result['state'] = 'done'
         else:
             result.update(_plan_head(records, artifacts, assignment))
+        from .review_plan_steps import complete_plan
+        result = complete_plan(records, artifacts, assignment, result)
     except (ResearchError, json.JSONDecodeError) as error:
         if isinstance(error, ResearchError):
             result.update(state='stop', code=error.code, details=error.details or {})
         else:
             result.update(state='stop', code='review_input_unreadable', details=dict(kind=type(error).__name__))
+        from .stop_classes import describe_terminal
+        terminal = describe_terminal(result['code'])
+        details = dict(result['details'], **terminal['details'])
+        for field in ('command', 'payload', 'not_before', 'request_id'):
+            result.pop(field, None)
+        result.update(terminal, details=details)
+        if result['state'] in ('wait', 'continue') and assignment is not None:
+            result.update(state='wait', command='review-run', not_before=_describe_wait(),
+                          payload=_build_run_payload(records, assignment))
+        elif assignment is not None:
+            try:
+                from .review_plan_steps import complete_plan
+                result = complete_plan(records, artifacts, assignment, result)
+            except (ResearchError, json.JSONDecodeError) as detail_error:
+                # A damaged binding cannot supply an executable repair payload.
+                decision = describe_terminal('unrecognized')['details']['decision']
+                result.update(state='stop', code=getattr(detail_error, 'code', 'review_input_unreadable'),
+                              details=dict(decision=decision, reason=str(detail_error)))
+                result.pop('command', None)
+        elif result['state'] not in ('done', 'stop'):
+            result.update(state='stop', details=describe_terminal('unrecognized')['details'])
     return copy.deepcopy(result)
 
 

@@ -9,7 +9,7 @@ from unittest.mock import patch
 from codex_route_fixtures import build_codex_response
 from problem_parts_fixtures import ResultPartsCase
 from openness_reading_fixtures import OpennessReadingCase
-from research_harness import cli, problem_claims, record_check, review_continuation
+from research_harness import cli, problem_claims, record_check, review_continuation, stop_classes
 from research_harness import review_protocol as protocol, review_series
 from research_harness.errors import ResearchError
 from research_harness.output_views import render_all
@@ -243,7 +243,8 @@ class PostedHeadPlanningTests(unittest.TestCase):
         self.assertEqual(checked, ['pending-openness'])
         self.assertTrue(chains['pending-openness']['request']['request_digest'])
         self.assertEqual(case.store.snapshot(), before)
-        self.assertNotIn('problem_already_posted', record_check.EXPECTED_STOP_CODES)
+        self.assertEqual(stop_classes.describe_terminal('problem_already_posted')['state'], 'done')
+        self.assertIs(record_check.EXPECTED_STOP_CODES, stop_classes.EXPECTED_STOP_CODES)
         for code in ('review_input_too_large', 'unknown_fixture_stop'):
             with self.subTest(unqualified=code), patch.object(record_check, 'check_prospective_request',
                     side_effect=ResearchError(code, 'Synthetic unqualified request refusal')):

@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from openness_reading_fixtures import OpennessReadingCase
 from research_harness import cli, native_review, problem_claims, problem_delivery
-from research_harness import record_check, review_continuation, review_output_correction
+from research_harness import record_check, review_continuation, review_output_correction, stop_classes
 from research_harness import review_protocol as protocol
 from research_harness import review_task_execution
 from codex_route_fixtures import build_codex_response
@@ -76,8 +76,10 @@ class PostedOpennessClosureTests(ClosureCase):
             report = record_check.check_continuation(self.store)
         self.assertEqual([chain['boundary'] for chain in report['chains']], ['done'])
         self.assertEqual(self.store.snapshot(), before)
-        self.assertNotIn('problem_already_posted', record_check.EXPECTED_STOP_CODES)
-        self.assertNotIn('review_input_too_large', record_check.EXPECTED_STOP_CODES)
+        self.assertEqual(stop_classes.describe_terminal('problem_already_posted')['state'], 'done')
+        self.assertEqual(stop_classes.STOP_REGISTRY['review_input_too_large']['next'],
+                         dict(kind='outcome', outcome='input_over_limit'))
+        self.assertIs(record_check.EXPECTED_STOP_CODES, stop_classes.EXPECTED_STOP_CODES)
 
     def test_kmp_retired_route_and_digest_alias_show_no_retry_or_repair_hint(self):
         alias = self.select_statement(identifier='alias', title='A renamed synthetic problem',

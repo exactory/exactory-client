@@ -214,6 +214,9 @@ class SeriesTests(unittest.TestCase):
             code, steps = self.drive()
         self.assertEqual(code, 3)
         operation.assert_called_once()
+        step = steps[0]['details'].pop('step')
+        self.assertEqual(step['id'], 7)
+        self.assertEqual(step['command'], 'review-route')
         self.assertEqual(steps, [dict(state='handoff', chain=initial['chain'],
             head_id='bar-first', progress=initial['progress'], command='review-route',
             code='review_route_runtime_stale',
@@ -315,7 +318,10 @@ class SeriesTests(unittest.TestCase):
                    self.case.build_provider_response(self.case.build_review_output('bar'))]
         with patch('research_harness.review_transport.send_request', side_effect=outputs) as send, patch(
                 'research_harness.review_failure_class.plan_after_failure',
-                return_value=dict(state='replace', code='fixture_failure', details={})):
+                side_effect=lambda records, artifacts, identifier: dict(
+                    state='replace' if any(row['assignment_id'] == identifier
+                        for row in records.get('review_attempt', {}).values()) else 'run',
+                    code='fixture_failure', details={})):
             code, steps = self.drive()
         self.assertEqual(code, 0, steps[-1])
         self.assertEqual(send.call_count, 2)

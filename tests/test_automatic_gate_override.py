@@ -70,8 +70,8 @@ class StopClassificationTests(unittest.TestCase):
                 elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
                     if any(isinstance(target, ast.Name) and target.id == "OUTCOME_CODES" for target in node.targets):
                         values.extend(node.value.values)
-                emitted.update(value.value for value in values
-                               if isinstance(value, ast.Constant) and isinstance(value.value, str))
+                emitted.update(child.value for value in values for child in ast.walk(value)
+                               if isinstance(child, ast.Constant) and isinstance(child.value, str))
         self.assertLessEqual(policy.WAITING_CODES | policy.HARNESS_DEFECT_CODES, emitted)
 
     def test_material_unknown_and_budget_codes_are_decisions(self):
@@ -116,7 +116,7 @@ class StopClassificationTests(unittest.TestCase):
 
         def advance(seconds):
             delays.append(seconds)
-            self.assertLessEqual(len(delays), 6, "Authentication failures waited forever")
+            self.assertLessEqual(len(delays), 20, "Authentication failures waited forever")
             now[0] += timedelta(seconds=seconds)
 
         response = fixture.case.build_provider_response({})
@@ -131,14 +131,15 @@ class StopClassificationTests(unittest.TestCase):
                 patch("research_harness.review_transport.send_request", return_value=response):
             result = run_series(fixture.case.store, fixture.assignment["id"], emit=steps.append)
         self.assertEqual(result, 3, steps)
-        self.assertEqual(delays, [60, 120, 240, 480, 960, 1800])
+        self.assertEqual(delays, [60, 120, 240, 480, 960, 1800, 1800] * 2
+                         + [60, 120, 240, 480, 960, 1800])
         waits = [step for step in steps if step["state"] == "wait"]
-        self.assertEqual(len(waits), 6)
+        self.assertEqual(len(waits), 20)
         self.assertTrue(all(step["stop_class"] == "waiting" for step in waits))
         self.assertEqual((steps[-1]["state"], steps[-1]["code"]),
-                         ("stop", "review_provider_unavailable"))
+                         ("stop", "review_turn_failures_exhausted"))
         attempts = fixture.case.read_records()["review_attempt"]
-        self.assertEqual(len(attempts), 7)
+        self.assertEqual(len(attempts), 21)
 
     def test_reentrant_store_access_is_a_prompt_decision_stop(self):
         import time

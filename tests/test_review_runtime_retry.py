@@ -108,7 +108,7 @@ class RuntimeRetryTests(LiteratureCase):
         self.assertEqual((classification['outcome'], plan['state'], plan['code'], plan['not_before']),
                          ('runtime_unavailable', 'wait', 'review_runtime_missing', deadline))
 
-    def test_observed_stale_runtime_stops_with_stale_code(self):
+    def test_observed_stale_runtime_hands_off_with_stale_code(self):
         self.run_probe()
         self.assign()
         runtime = self.records()['review_route']['route']['runtime']
@@ -126,7 +126,7 @@ class RuntimeRetryTests(LiteratureCase):
         classification = failures.classify_attempt(records, self.artifacts, attempt)
         plan = failures.plan_after_failure(records, self.artifacts, 'assignment')
         self.assertEqual((classification['outcome'], plan['state'], plan['code'], plan['not_before']),
-                         ('runtime_stale', 'stop', 'review_route_runtime_stale', None))
+                         ('runtime_stale', 'handoff', 'review_route_runtime_stale', None))
 
     def test_observed_transient_runtime_check_then_success(self):
         route = self.records()['review_route']['route']

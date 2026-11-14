@@ -18,7 +18,7 @@ from research_harness import cli, problem_claims, problem_delivery, review_proto
 from research_harness import review_output_correction as correction, review_staged_protocol as producer
 from research_harness import review_task_execution as execution, review_transport as transport, review_worker
 from research_harness import output_views, review_continuation, review_parts
-from research_harness import record_check, review_series
+from research_harness import record_check, review_series, stop_classes
 from research_harness.check_mode import check_mutation
 from research_harness.errors import ResearchError
 from research_harness.evidence import digest
@@ -438,7 +438,8 @@ class PostedReviewTests(ResultPartsCase):
         self.assertEqual(emitted[-1]['state'], 'done')
         self.assertTrue(continuation['chains'])
         self.assertTrue(all(chain['boundary'] == 'done' for chain in continuation['chains']))
-        self.assertNotIn('problem_already_posted', record_check.EXPECTED_STOP_CODES)
+        self.assertEqual(stop_classes.describe_terminal('problem_already_posted')['state'], 'done')
+        self.assertIs(record_check.EXPECTED_STOP_CODES, stop_classes.EXPECTED_STOP_CODES)
         self.assertEqual(self.case.store.snapshot(), before)
         changed = dict(self.case.statement, id='second-statement', statement='A distinct synthetic bound.')
         self.case.put('problem_statement', changed['id'], changed)

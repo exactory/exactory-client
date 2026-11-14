@@ -215,6 +215,28 @@ class LiveSeriesTests(unittest.TestCase):
         self.assertEqual(result['model_calls'], 1)
         self.assertEqual(digest_tree(self.case.root), self.before)
 
+    def test_an_exhausted_campaign_ends_before_a_new_sequence_wait(self):
+        from research_harness import review_protocol
+        records = self.case.read_records()
+        route = records['review_route']['route']
+        request = review_protocol.build_assignment_request(records, self.case.artifacts,
+            records['review_assignment']['bar-first'])
+        response = self.case.build_provider_response(self.case.build_review_output('bar'))
+
+        def series(store, head, emit):
+            review_transport.send_request(route, request, credential='fixture')
+            emit(dict(state='wait', code='review_sequence_wait'))
+            raise AssertionError('The exhausted campaign continued past its wait boundary.')
+
+        with patch.object(review_transport, 'send_request', return_value=response) as sender, \
+                patch.object(review_series, 'run_series', side_effect=series):
+            result = self.drive(maximum=1)
+        self.assertFalse(result['complete'])
+        self.assertEqual(result['code'], 'measurement_budget_exhausted')
+        self.assertEqual(result['model_calls'], 1)
+        self.assertEqual(sender.call_count, 1)
+        self.assertEqual(digest_tree(self.case.root), self.before)
+
     def test_usage_limit_stops_driver_before_wait_and_next_case(self):
         response = self.case.build_provider_response({})
         response['output'][0]['content'][0]['text'] = "You've hit your weekly limit"

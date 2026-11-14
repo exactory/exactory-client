@@ -2641,7 +2641,7 @@
       "expected": "Activation reports the wrapper, executable and route mismatch before dispatch; recording and probing a compatible route is an explicit handoff and old attempts continue authenticating under their pins.",
       "test_kind": "real_shape",
       "tests": [
-        "test_review_runtime_retry.RuntimeRetryTests.test_observed_stale_runtime_stops_with_stale_code",
+        "test_review_runtime_retry.RuntimeRetryTests.test_observed_stale_runtime_hands_off_with_stale_code",
         "test_review_continuation.ContinuationTests.test_stale_runtime_failure_hands_off_recording_a_new_route",
         "test_review_series.SeriesTests.test_stale_runtime_refusal_hands_off_recording_a_new_route"
       ]
@@ -3841,12 +3841,12 @@
       "class": "classification (route capacity)",
       "summary": "Both bunkbed copies failed the continuation step at assign-openness-4-t18, whose mandatory final input (1,303,063 characters) is over the route limit of 1,300,000, although the next step is a decision on the route or the material.",
       "fixed_in": "0.73.0",
-      "expected": "review_input_too_large in the phase final_preflight and the three parts planning refusals of an allowed action are decision stops listed with their head, command, code and details; every other refusal keeps its result.",
+      "expected": "review_input_too_large in the phase final_preflight and the three parts planning refusals of an allowed action are decision stops listed with their head, command, code and details. Other review_input_too_large refusals take D2's registered input_over_limit decision; every other refusal keeps its result.",
       "test_kind": "real_shape",
       "tests": [
         "test_research_record_check.RecordCheckTests.test_allowed_capacity_refusals_are_reported_as_decision_stops",
         "test_research_record_check.RecordCheckTests.test_final_preflight_capacity_is_a_decision_without_running_the_invocation",
-        "test_research_record_check.RecordCheckTests.test_nonfinal_input_capacity_refusal_still_fails"
+        "test_research_record_check.RecordCheckTests.test_nonfinal_input_capacity_refusal_reports_the_registered_route_decision"
       ]
     },
     {
@@ -5108,6 +5108,70 @@
         "test_openness_minimum_v2.MinimumV2StoreTests.test_controller_wrapper_and_stored_finding_readers_keep_v1_results_with_empty_v2_lists",
         "test_openness_minimum_v2.MinimumV2StoreTests.test_v2_search_date_uses_latest_instant_in_utc_while_v1_keeps_local_calendar_dates",
         "test_openness_minimum_v2.MinimumV2StoreTests.test_math_solver_exports_v1_and_refuses_v2_before_writing"
+      ]
+    },
+    {
+      "id": "bar-continuation-exhausted-without-command",
+      "record": "20261111235418-bar-final-refused-for-text-delivered-in-reduced-history",
+      "class": "exhausted blind review slot",
+      "summary": "Earlier successful source turns prevented a new reviewer after the final turn was refused twice.",
+      "expected": "An exhausted bar head hands off to a new eligible blind reviewer in the same slot, preserving the earlier records and excluding both earlier reviewers.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_exhausted_bar_continuation_accepts_a_new_blind_reviewer"
+      ]
+    },
+    {
+      "id": "exhausted-repaired-bar-needs-no-new-retirement",
+      "record": "20261112072628-bar-final-refused-for-part-citation-with-whole-text-offsets",
+      "class": "exhausted repaired bar slot",
+      "summary": "A repaired bar continuation had no accepted next step after two audit refusals.",
+      "expected": "Under D2 ruling Q4 a new eligible blind reviewer takes the exhausted slot. Same-reviewer refusal replacement and event-free slate or result repair remain later units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_event_repair_step_contains_the_complete_ordered_binding"
+      ]
+    },
+    {
+      "id": "session-turn-over-cap-ends-chain",
+      "record": "20261112043216-bar-turn-over-output-cap-at-effort-max",
+      "class": "output capacity recovery",
+      "summary": "One over-cap session answer ended its chain without a retry.",
+      "expected": "Without a smaller task the same assignment gets one identical retry, then review_output_over_cap with role-specific route choices. The harness retains the effort.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_over_cap_without_smaller_task_has_one_identical_retry",
+        "test_d2_outcomes.OutcomeTests.test_recovery_results_have_one_shape_and_keep_the_route"
+      ]
+    },
+    {
+      "id": "reading-chain-ended-by-provider-refusal",
+      "record": "20261112135015-openness-reading-turn-stopped-by-provider-safeguards",
+      "class": "provider refusal sequences",
+      "summary": "Two safeguard stops ended a reading chain and lost its earlier completed turns.",
+      "expected": "The current turn retains the measured three-attempt allowance and then waits for a new sequence, up to three sequences and later evidenced owner extensions. Cross-chain carried readings remain later units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_sequences_reset_outcome_counts_and_owner_grants_one_more",
+        "test_d2_outcomes.OutcomeTests.test_later_provider_reset_controls_sequence_wait",
+        "test_d2_outcomes.OutcomeTests.test_two_provider_refusals_at_turn_three_finish_without_rereading"
+      ]
+    },
+    {
+      "id": "reconciled-review-interruption-spends-only-turn-limit",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "interrupted call accounting",
+      "summary": "Reconciled calls without a capture used the shorter incomplete-execution allowance.",
+      "expected": "Three reconciled interruptions of a reading turn remain runnable without changing stored calls or requests. An explicitly stopped call spends no failure allowance, and a completed capture retains its meaning. Stop admission and driver settlement remain later units.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_d2_outcomes.OutcomeTests.test_three_reconciled_interruptions_continue_the_reading_chain",
+        "test_d2_outcomes.OutcomeTests.test_stopped_calls_spend_no_allowance_and_captured_completion_keeps_its_meaning"
       ]
     }
   ]

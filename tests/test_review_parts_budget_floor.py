@@ -270,7 +270,13 @@ class BudgetFloorReplacementTests(PartsResultCase):
         signal = actual.pop('signal')
         self.assertEqual(signal['source'], 'review_parts.find_failed_replacement')
         self.assertEqual(signal['value']['failed_assignment_id'], assignment['id'])
-        self.assertEqual(actual, details)
+        for field, value in details.items():
+            self.assertEqual(actual[field], value)
+            self.assertEqual(actual['recovery']['details'][field], value)
+        self.assertEqual((actual['recovery']['kind'], actual['recovery']['code']),
+                         ('decision', 'review_parts_budget_exhausted'))
+        self.assertTrue(actual['decision']['owner_decides'])
+        self.assertEqual([step['id'] for step in actual['decision']['then'][0]['steps']], [8, 7, 1])
         self.assertEqual(self.case.store.snapshot(), before)
 
     def test_series_ends_with_the_floor_budget_stop_without_another_call(self):
