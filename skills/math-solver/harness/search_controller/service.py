@@ -22,6 +22,31 @@ def require_checkable_command(name):
                           "retreat, interpret, render, set-aside and end-objective accept --check")
 
 
+def refuse_native_nonapproval(value):
+    if not isinstance(value, dict):
+        return
+    if value.get("decision") not in ("revise", "reject") and "reason" not in value and "objections" not in value:
+        return
+    # Proposal reviews retain their versioned findings and can record a non-approval.
+    if ("schema_version" in value and "findings" in value and "unresolved_objections" in value
+            and "reason" not in value and "objections" not in value):
+        return
+    s.closed(value, "subject_digest claim_digest reviewer decision reason objections")
+    s.choice(value["decision"], {"revise", "reject"})
+    s.digest_string(value["subject_digest"])
+    s.digest_string(value["claim_digest"])
+    s.validate_provenance(value["reviewer"])
+    s.text(value["reason"])
+    for objection in s.records(value["objections"]):
+        s.closed(objection, "blocking description")
+        s.require(type(objection["blocking"]) is bool, "Objection blocking flag must be boolean")
+        s.text(objection["description"])
+    raise SearchError("native_review_not_approved",
+                      "The native review did not approve this transition. Revise the assessment or the work it "
+                      "depends on, and obtain a new review.",
+                      {key: value[key] for key in ("decision", "reason", "objections")})
+
+
 class Controller:
     def __init__(self, root: Path, strategies_dir=None):
         self.root = Path(root).resolve()
@@ -114,6 +139,8 @@ class Controller:
             return action
         s.integer(expected_revision)
         s.text(request_id)
+        if name in {"reassess", "accept", "review", "complete"}:
+            refuse_native_nonapproval(spec.get("review"))
         if name in {"propose", "review", "admit", "adopt"}:
             # A recorded request can return before _build; terminal work commands refuse retries too.
             state = replay(self.store.read())

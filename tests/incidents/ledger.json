@@ -4631,6 +4631,20 @@
         "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_processor_clock",
         "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_defaults_to_10800_and_accepts_an_override"
       ]
+    },
+    {
+      "id": "native-math-nonapproval-and-implication-objective",
+      "record": "20261113074306-math-solver-non-approval-review-and-implication-objective-gaps",
+      "class": "native review diagnostics and implication objective format",
+      "summary": "A native revise reassessment was reported as a malformed record, a native assignment did not identify the immutable problem authors, and implication objectives lacked a native-format regression.",
+      "fixed_in": "open",
+      "expected": "Each of search reassess, accept, review and complete refuses the observed six-field revise or reject output with native_review_not_approved and preserves its decision, reason and objections, while malformed non-approvals keep invalid_record. The author_id refusal lists the original immutable problem authors. An independently authored implication fixture passes check-problem, plan and rank with the shipped strategies. Versioned proposal reviews retain their stored decisions and digests. Skill wording is handled in the release writer pass.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_math_native_refusals.MathNativeRefusalTests.test_native_nonapprovals_and_malformed_records_at_each_command",
+        "test_native_problem_author.NativeProblemAuthorTests.test_native_assignment_refusal_lists_original_problem_authors",
+        "test_math_implication_objective.ImplicationObjectiveTests.test_implication_passes_problem_plan_and_rank_with_the_shipped_strategies"
+      ]
     }
   ]
 }
