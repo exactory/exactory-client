@@ -24,6 +24,8 @@ BINDING_RECORD_KINDS = (
     "probe", "probe_artifact", "probe_launch", "local_artifact",
 )
 
+POST_CITATION_LIMIT = 50
+
 DISPOSITIONS_NOTE = (
     "Each entry holds text submitted as a user instruction and its submitted provenance. reported_by_agent means "
     "that the agent reports the text as the user's words. host or operator records a claim of authentication by "
@@ -549,17 +551,16 @@ def find_citation_locator(work, units):
                             if isinstance(unit.get("url"), str) and unit["url"].startswith("https://")), None)
 
 
-def project_citations(records, artifacts, *, for_lookup=False):
+def group_citation_readings(records, readings):
     from .identities import family_id, resolve_arxiv_family
-    from .problem_citation_metadata import find_citation_metadata, validate_citation_metadata
-    seen, seen_arxiv_works, citations = set(), set(), []
-    for reading in collect_readings(records):
+    families, arxiv_works, groups = {}, {}, []
+    for reading in readings:
         version = reading["version_id"]
         work = records["work"][version]
         family = family_id(version)
-        if family in seen:
+        if family in families:
+            families[family].append(reading)
             continue
-        seen.add(family)
         author_names = [a if isinstance(a, str) else a.get("name", "") for a in work.get("authors", [])]
         normalized_authors = tuple(" ".join(name.split()).casefold() for name in author_names)
         identifiers = [work["id"], *work.get("aliases", [])]
@@ -570,8 +571,30 @@ def project_citations(records, artifacts, *, for_lookup=False):
         # A work known by its arXiv id and one known by its DataCite DOI are cited once when their authors agree.
         arxiv_work_key = (next(iter(arxiv_families)), normalized_authors) if (
             len(arxiv_families) == 1 and linkable_families and normalized_authors and all(normalized_authors)) else None
-        if arxiv_work_key is not None and arxiv_work_key in seen_arxiv_works:
-            continue
+        group = arxiv_works.get(arxiv_work_key) if arxiv_work_key is not None else None
+        if group is None:
+            group = []
+            groups.append(group)
+            if arxiv_work_key is not None:
+                arxiv_works[arxiv_work_key] = group
+        families[family] = group
+        group.append(reading)
+    return groups
+
+
+def select_citation_readings(records, readings):
+    return [group[0] for group in group_citation_readings(records, readings)]
+
+
+def project_citations(records, artifacts, *, for_lookup=False, readings=None):
+    from .problem_citation_metadata import find_citation_metadata, validate_citation_metadata
+    citations = []
+    for reading in select_citation_readings(records, collect_readings(records) if readings is None else readings):
+        version = reading["version_id"]
+        work = records["work"][version]
+        author_names = [author if isinstance(author, str) else author.get("name", "")
+                        for author in work.get("authors", [])]
+        identifiers = [work["id"], *work.get("aliases", [])]
         bundle = records.get("source_bundle", {}).get(reading.get("bundle_id"))
         location = find_reading_locator(records, artifacts, reading)
         locator = find_citation_locator(work, (bundle or {}).get("units", []))
@@ -597,9 +620,181 @@ def project_citations(records, artifacts, *, for_lookup=False):
             citations.append({"referenceString": citation, "bibliography": bibliography})
         else:
             citations.append({"citation": citation, "locator": locator})
-        if arxiv_work_key is not None:
-            seen_arxiv_works.add(arxiv_work_key)
     return citations
+
+
+def validate_override_citation_spec(spec):
+    """Validate the optional export payload once, before composing any files."""
+    from .identities import normalize_identifier
+    fields(spec, (), ("citations",))
+    options = spec.get("citations", {})
+    fields(options, (), ("versions", "first"))
+    first = strings(options.get("first", []), "Works to cite first")
+    versions = options.get("versions", [])
+    if not isinstance(versions, list):
+        raise ResearchError("invalid_input", "Citation versions must be an array of work_id and version_id objects")
+    for entry in versions:
+        fields(entry, ("work_id", "version_id"))
+    try:
+        return {"first": [normalize_identifier(identifier) for identifier in first],
+                "versions": [{key: normalize_identifier(entry[key]) for key in ("work_id", "version_id")}
+                             for entry in versions]}
+    except ResearchError as error:
+        raise ResearchError("invalid_input", "Name citation works and versions by their registry identifiers", error.details)
+
+
+def collect_override_readings(records, artifacts):
+    """Extend the ordinary citation readings only for searches of today's formulations."""
+    from .identities import find_work_family_link
+    from .openness_minimum import find_material_searches
+    from .operations import timestamp
+    from .problem_attempt import find_attempt
+    artifacts = Evaluation.of(records, artifacts)
+    eligible = {}
+
+    def has_complete_reading(reading):
+        identifier = reading["id"]
+        if identifier not in eligible:
+            try:
+                validate_reading(records, artifacts, dict(kind="reading", version_id=reading["version_id"],
+                                                          reading_id=identifier))
+            except ResearchError as error:
+                if error.code != "problem_value_reading_missing":
+                    raise
+                eligible[identifier] = False
+            else:
+                eligible[identifier] = True
+        return eligible[identifier]
+
+    ordinary = [row for row in collect_readings(records) if has_complete_reading(row)]
+    readings = {row["id"]: row for row in ordinary}
+    origins = {"value": {item["reading_id"] for item in collect_value_items(find_value(records))
+                         if item["kind"] == "reading"}, "attempt": set(), "self_assessment": set(),
+               "openness": set(), "searches": set()}
+    for reference in resolve_assessment_evidence(records):
+        if reference.get("kind") == "source":
+            origins["self_assessment"].update(reference["reading_ids"])
+    minimum = (find_latest(records, "problem_openness") or {}).get("minimum") or {}
+    origins["openness"].update(row["id"] for row in ordinary if digest(row) in minimum.get("reading_digests", []))
+    statement, attempt = find_current_statement(records), find_attempt(records)
+    if attempt is not None and attempt["statement_id"] == statement["id"] and attempt["kind"] == "literature":
+        origins["attempt"].update(row["reading_id"] for row in attempt["literature"]["readings"])
+    searches = find_material_searches(records, {statement["statement"], *statement["neighbours"]})
+    judgments = {}
+    for search in searches:
+        exact = search.get("question") == statement["statement"] or statement["statement"] in search["queries"]
+        for row in search["dispositions"]:
+            if row["disposition"] not in {"contradictory", "relevant"}:
+                continue
+            work_id = row["work_id"]
+            rank = (0 if row["disposition"] == "contradictory" else 1,
+                    0 if row["disposition"] == "contradictory" or exact else 1,
+                    timestamp(search["captured_at"]), work_id)
+            judgment = judgments.setdefault(work_id, {"search_ids": set(), "rank": rank, "reading_ids": set()})
+            judgment["search_ids"].add(search["id"])
+            judgment["rank"] = min(judgment["rank"], rank)
+
+    def find_complete_readings(work_id, *, own):
+        found = []
+        for identifier, reading in sorted(records.get("reading", {}).items()):
+            version = reading["version_id"]
+            if reading["depth"] != "fulltext" or (version == work_id) != own:
+                continue
+            if not own and find_work_family_link(records, work_id, version) is None:
+                continue
+            if has_complete_reading(reading):
+                found.append(reading)
+        return found
+
+    for work_id, judgment in sorted(judgments.items()):
+        complete = find_complete_readings(work_id, own=True) or find_complete_readings(work_id, own=False)
+        for reading in complete:
+            readings[reading["id"]] = reading
+            judgment["reading_ids"].add(reading["id"])
+            origins["searches"].add(reading["id"])
+    return ordinary, [readings[key] for key in sorted(readings)], origins, judgments
+
+
+def project_override_citations(records, artifacts, spec):
+    """Select one read version per citation, with stable ordering and explicit overflow."""
+    from .identities import family_id, find_work_family_link
+    artifacts = Evaluation.of(records, artifacts)
+    ordinary, readings, origins, judgments = collect_override_readings(records, artifacts)
+    groups = [{"readings": group} for group in group_citation_readings(records, readings)]
+    ordinary_order = {row["id"]: index for index, group in enumerate(group_citation_readings(records, ordinary))
+                      for row in group}
+    for group in groups:
+        identifiers = {row["id"] for row in group["readings"]}
+        ranks = [(0, ordinary_order[key]) for key in identifiers if key in ordinary_order]
+        ranks.extend((1, *judgment["rank"]) for judgment in judgments.values()
+                     if identifiers.intersection(judgment["reading_ids"]))
+        group["rank"] = min(ranks)
+        group["selected"] = group["readings"][0]
+    groups.sort(key=lambda group: group["rank"])
+
+    def find_group(work_id):
+        matches = [group for group in groups if any(
+            family_id(work_id) == family_id(row["version_id"]) for row in group["readings"])]
+        if not matches and work_id in records["work"]:
+            matches = [group for group in groups if any(
+                find_work_family_link(records, work_id, row["version_id"]) is not None
+                for row in group["readings"])]
+        if len(matches) != 1:
+            raise ResearchError("invalid_input", "Name one work with an eligible full reading in this override export",
+                                {"work_id": work_id})
+        return matches[0]
+
+    selected_groups = []
+    for entry in spec.get("versions", []):
+        group = find_group(entry["work_id"])
+        selected = next((row for row in group["readings"] if row["version_id"] == entry["version_id"]), None)
+        if selected is None:
+            for _, reading in sorted(records.get("reading", {}).items()):
+                if (reading["version_id"] != entry["version_id"] or reading["depth"] != "fulltext"
+                        or not any(len(select_citation_readings(records, [member, reading])) == 1
+                                   for member in group["readings"])):
+                    continue
+                try:
+                    validate_reading(records, artifacts, dict(kind="reading", version_id=reading["version_id"],
+                                                              reading_id=reading["id"]))
+                except ResearchError as error:
+                    if error.code != "problem_value_reading_missing":
+                        raise
+                else:
+                    selected = reading
+                    break
+        if (selected is None or any(group is prior for prior in selected_groups)
+                or family_id(entry["work_id"]) != family_id(selected["version_id"])
+                and find_work_family_link(records, entry["work_id"], selected["version_id"]) is None):
+            raise ResearchError("invalid_input", "Choose one eligible read version per cited work",
+                                entry)
+        group["selected"] = selected
+        selected_groups.append(group)
+    first = []
+    for work_id in spec.get("first", []):
+        group = find_group(work_id)
+        if any(group is prior for prior in first):
+            raise ResearchError("invalid_input", "Name each work only once in citations.first", {"work_id": work_id})
+        first.append(group)
+    groups = first + [group for group in groups if not any(group is prior for prior in first)]
+    selected = [group["selected"] for group in groups]
+    if len({row["version_id"] for row in selected}) != len(selected):
+        raise ResearchError("invalid_input", "Choose distinct read versions for the cited works")
+    counts = {origin: sum(bool(identifiers.intersection(row["id"] for row in group["readings"])) for group in groups)
+              for origin, identifiers in origins.items()}
+    counts.update(total=len(groups), included=min(len(groups), POST_CITATION_LIMIT),
+                  omitted=max(0, len(groups) - POST_CITATION_LIMIT))
+    uncited = [{"work_id": work_id, "search_ids": sorted(judgment["search_ids"])}
+               for work_id, judgment in sorted(judgments.items()) if not judgment["reading_ids"]]
+    return {"citations": [project_citations(records, artifacts, readings=[row])[0] for row in selected],
+            "references": [project_citations(records, artifacts, readings=[row], for_lookup=True)[0]
+                           for row in selected[:POST_CITATION_LIMIT]],
+            "citation_counts": counts, "uncited_relevant_works": uncited}
+
+
+def compute_override_source_digest(records):
+    """Pin v3 source identities in its external receipt without rendering omitted citations."""
+    return digest({kind: records.get(kind, {}) for kind in sorted(collect_binding_record_kinds(records))})
 
 
 def describe_openness_searches(records, openness):

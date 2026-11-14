@@ -474,7 +474,8 @@ class ProblemFormingCompatibilityTests(ProblemCase):
         self.assertEqual(problem_claims.compute_problem_evidence_digest(records, self.artifacts), fixture["evidence_digest"])
         self.assertEqual(problem_evidence.describe_binding(records, self.artifacts), fixture["binding"])
         self.assertEqual(problem_evidence.describe_evidence(records, self.artifacts), fixture["evidence"])
-        with patch.object(self.store, "read_kinds", return_value=(fixture["revision"], "a" * 64, records)):
+        with patch.object(self.store, "read_kinds", side_effect=lambda kinds: (
+                fixture["revision"], "a" * 64, {kind: records.get(kind, {}) for kind in kinds})):
             output_views.render_all(self.store)
         rendered = {str(path.relative_to(self.root)): path.read_text() for folder in ("final", "intermediate")
                     for path in (self.root / folder).rglob("*") if path.is_file()}

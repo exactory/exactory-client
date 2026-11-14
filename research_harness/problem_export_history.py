@@ -40,7 +40,7 @@ def record_export_sources(store_root, workspace_root, directory, files, source_d
 
 def read_problem_export(directory, records):
     """Recognize a complete generated export; leave foreign or edited folders alone."""
-    from .problem_delivery import _REFERENCE_EXPORT_SCHEMA, has_exported_files
+    from .problem_delivery import _OVERRIDE_CITATIONS_EXPORT_SCHEMA, _REFERENCE_EXPORT_SCHEMA, has_exported_files
     if directory.is_symlink() or find_entry_kind(directory, 'problem-export.json') != 'regular':
         return None
     manifest_bytes = read_file(directory, 'problem-export.json')
@@ -52,10 +52,21 @@ def read_problem_export(directory, records):
         return None
     base_fields = {'statement_id', 'statement_digest', 'area', 'formal_statement_language', 'files',
                    'decision_id', 'problem_evidence_digest'}
-    include_references = manifest.get('schema') == _REFERENCE_EXPORT_SCHEMA
+    expanded_citations = manifest.get('schema') == _OVERRIDE_CITATIONS_EXPORT_SCHEMA
+    include_references = expanded_citations or manifest.get('schema') == _REFERENCE_EXPORT_SCHEMA
     if include_references:
         base_fields.add('schema')
+    if expanded_citations:
+        base_fields.update(('citation_counts', 'uncited_relevant_works', 'citation_spec'))
+        from .problem_evidence import validate_override_citation_spec
+        try:
+            if validate_override_citation_spec({'citations': manifest.get('citation_spec')}) != manifest.get('citation_spec'):
+                return None
+        except ResearchError:
+            return None
     bypassed = manifest.get('gate') == 'bypassed'
+    if expanded_citations and not bypassed:
+        return None
     if set(manifest) != base_fields | ({'gate', 'override_id'} if bypassed else set()):
         return None
     statement_id = manifest['statement_id']
@@ -75,7 +86,8 @@ def read_problem_export(directory, records):
         required_files.add('citation-refs.json')
     if formal is not None:
         required_files.add('formal-statement.txt')
-    if not required_files <= set(manifest['files']) <= required_files | ({'reviews.json'} if not bypassed else set()):
+    optional_files = {'citations-omitted.json'} if expanded_citations else ({'reviews.json'} if not bypassed else set())
+    if not required_files <= set(manifest['files']) <= required_files | optional_files:
         return None
     files = {'problem-export.json': manifest_bytes}
     for name, expected in manifest['files'].items():
@@ -94,7 +106,7 @@ def read_problem_export(directory, records):
     return (manifest, files) if has_exported_files(directory, files) else None
 
 
-def build_current_export(records, artifacts, bypassed, *, include_references=False):
+def build_current_export(records, artifacts, bypassed, *, include_references=False, citation_spec=None):
     """Build the current projection without reopening a post gate or altering any record."""
     from .problem_delivery import build_override_projection, build_projection, find_post_override
     statement, value = find_current_statement(records), find_value(records)
@@ -103,7 +115,7 @@ def build_current_export(records, artifacts, bypassed, *, include_references=Fal
     if bypassed:
         override = find_post_override(records)
         return None if override is None else build_override_projection(
-            records, artifacts, override, include_references=include_references)[0]
+            records, artifacts, override, include_references=include_references, citation_spec=citation_spec)[0]
     decision = find_latest(records, 'problem_decision')
     return None if decision is None or decision['action'] != 'post' else build_projection(
         records, artifacts, include_references=include_references)[0]
@@ -119,7 +131,7 @@ def archive_problem_exports(store_root, workspace_root, records, artifacts):
             return {}
     artifacts = Evaluation.of(records, artifacts)
     current, errors = {}, {}
-    source_digest = None
+    source_digest, override_source_digest = None, None
     for path in sorted(folder.rglob('problem-export.json')):
         directory = path.parent
         relative = directory.relative_to(workspace_root).as_posix()
@@ -130,23 +142,31 @@ def archive_problem_exports(store_root, workspace_root, records, artifacts):
             manifest, files = exported
             bypassed = manifest.get('gate') == 'bypassed'
             include_references = 'schema' in manifest
-            export_format = (bypassed, include_references)
+            citation_spec = manifest.get('citation_spec')
+            export_format = (bypassed, include_references, digest(citation_spec))
             if export_format not in current:
                 try:
                     current[export_format] = build_current_export(
-                        records, artifacts, bypassed, include_references=include_references)
+                        records, artifacts, bypassed, include_references=include_references, citation_spec=citation_spec)
                 except ResearchError:
                     # An export with unavailable source evidence has lost its standing.
                     current[export_format] = None
             stale = files != current[export_format]
             receipt_path = find_export_source_path(relative)
             if not stale:
-                if source_digest is None:
-                    source_digest = compute_problem_evidence_digest(records, artifacts)
+                if citation_spec is not None:
+                    if override_source_digest is None:
+                        from .problem_evidence import compute_override_source_digest
+                        override_source_digest = compute_override_source_digest(records)
+                    bound_source_digest = override_source_digest
+                else:
+                    if source_digest is None:
+                        source_digest = compute_problem_evidence_digest(records, artifacts)
+                    bound_source_digest = source_digest
                 if find_entry_kind(store_root, receipt_path) == 'regular':
                     receipt = strict_json(read_file(store_root, receipt_path))
                     stale = (receipt['export_digest'] != compute_export_digest(files)
-                             or receipt['source_digest'] != source_digest)
+                             or receipt['source_digest'] != bound_source_digest)
             if stale:
                 history = workspace_root / PROBLEM_EXPORT_HISTORY_FOLDER / directory.relative_to(folder)
                 destination, number = history, 1
@@ -167,7 +187,7 @@ def archive_problem_exports(store_root, workspace_root, records, artifacts):
                         os.rename(source_name, name, src_dir_fd=source_parent, dst_dir_fd=parent)
                     os.fsync(parent)
             else:
-                record_export_sources(store_root, workspace_root, directory, files, source_digest)
+                record_export_sources(store_root, workspace_root, directory, files, bound_source_digest)
         except (OSError, ResearchError) as error:
             errors[relative] = error.code if isinstance(error, ResearchError) else type(error).__name__
     return errors

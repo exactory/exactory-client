@@ -22,7 +22,7 @@
       "class": "generated output views and export delivery",
       "summary": "Merging structured reference exports with export retirement left v2 exports outside history handling and retired unchanged legacy override exports.",
       "fixed_in": "0.88.0",
-      "expected": "New reviewed and override exports use v2 with citation-refs.json. Stored legacy exports keep their bytes and digests. Each format compares against its own current projection, then retires intact on changed content or source identity. Unknown formats and incomplete or edited exports stay in place.",
+      "expected": "Reviewed exports use v2 with citation-refs.json, and stored v2 overrides keep that format when newer overrides expand their citations. Stored legacy exports keep their bytes and digests. Each format compares against its own current projection, then retires intact on changed content or source identity. Unknown formats and incomplete or edited exports stay in place.",
       "test_kind": "real_shape",
       "tests": [
         "test_problem_export_history.OverrideExportHistoryTests.test_stored_legacy_and_new_v2_override_exports_retire_on_source_identity_change",
@@ -5172,6 +5172,22 @@
       "tests": [
         "test_d2_outcomes.OutcomeTests.test_three_reconciled_interruptions_continue_the_reading_chain",
         "test_d2_outcomes.OutcomeTests.test_stopped_calls_spend_no_allowance_and_captured_completion_keeps_its_meaning"
+      ]
+    },
+    {
+      "id": "override-export-cites-fewer-works-than-the-record-read",
+      "record": "20261113074500-post-on-user-order-instruction-condition-export-and-chain-stop",
+      "class": "generated output views and export delivery",
+      "summary": "An override exported only the value citations although the statement searches had 29 relevant works read in full and no openness finding existed.",
+      "fixed_in": "open",
+      "expected": "Override citations extend the ordinary projection with complete full readings of relevant and contradictory search works for the current statement. Family readings, version choices, a stable order, a shared 50-citation limit, overflow entries and origin counts remain explicit, while stored export bytes and review digests keep their meaning.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_override_citations.OverrideCitationTests.test_four_value_citations_expand_to_29_of_40_full_readings",
+        "test_problem_override_citations.OverrideCitationTests.test_six_value_citations_expand_to_the_29_read_search_works",
+        "test_problem_override_citations.OverrideCitationTests.test_60_read_works_export_50_repeatably_and_first_can_promote_an_omitted_work",
+        "test_problem_override_citations.OverrideCitationTests.test_versionless_search_work_uses_its_read_version_and_spec_can_select_v2",
+        "test_problem_override_citations.OverrideCitationTests.test_stored_v2_keeps_its_bytes_and_digest_beside_the_enriched_export"
       ]
     }
   ]

@@ -28,6 +28,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from research_harness.citation_report import report_citation_gate
+from research_harness.problem_evidence import POST_CITATION_LIMIT
 from research_harness.cli import add_identity, select_managed_path
 from research_harness.errors import REMOVED_PROBLEM_LINK_EXIT_CODE, ResearchError, describe_tool_timeout
 from research_harness.exactory_api import _DEFAULT_API_URL, read_api_base_url
@@ -782,9 +783,9 @@ def _read_citations_file(path: str) -> list[dict]:
     if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
         _exit_with_error(f"The file {path} does not hold a JSON array of"
                          ' {"citation", "locator"} objects.')
-    if not 1 <= len(entries) <= 50:
+    if not 1 <= len(entries) <= POST_CITATION_LIMIT:
         _exit_with_error(f"The file {path} holds {len(entries)} citations."
-                         " Give between 1 and 50.")
+                         f" Give between 1 and {POST_CITATION_LIMIT}.")
     parsed = []
     for index, entry in enumerate(entries, start=1):
         unknown_keys = sorted(set(entry) - {"citation", "locator"})

@@ -28,6 +28,12 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
     def export(self, destination=None):
         return Path(problem_delivery.export_problem_override(self.store, destination)['destination'])
 
+    def export_v2(self):
+        records = self.store.snapshot()['records']
+        files, manifest = problem_delivery.build_override_projection(
+            records, self.artifacts, problem_delivery.find_post_override(records), include_references=True)
+        return Path(problem_delivery.write_problem_export(self.store, records, files, manifest, None)['destination'])
+
     def change_value(self, text=None, identifier='value-after-export'):
         value = copy.deepcopy(problem_claims.find_value(self.store.snapshot()['records']))
         value.pop('recorded_revision')
@@ -254,7 +260,7 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
         legacy.mkdir(parents=True)
         for name, data in legacy_files.items():
             (legacy / name).write_bytes(data)
-        current = self.export()
+        current = self.export_v2()
         manifest = json.loads((current / 'problem-export.json').read_bytes())
         self.assertEqual(manifest['schema'], 'exactory-problem-export-v2')
         self.assertEqual(json.loads((current / 'citation-refs.json').read_bytes()), [{
@@ -277,7 +283,7 @@ class OverrideExportHistoryTests(override_fixtures.OverrideCommandMixin, Problem
                              problem_delivery.compute_export_digest(files))
 
     def test_retirement_leaves_unknown_or_incomplete_v2_exports_in_place(self):
-        current = self.export()
+        current = self.export_v2()
         original = {path.name: path.read_bytes() for path in current.iterdir()}
         altered = []
         for kind in ['unknown-schema', 'unversioned-refs', 'missing-refs', 'changed-refs', 'extra-file']:

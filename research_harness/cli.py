@@ -1074,8 +1074,12 @@ def run(args):
                                 "--destination the export goes to " + PROBLEM_EXPORTS_FOLDER + "/<export digest>/.",
                                 {"destination": args.destination, "folder": str(folder)})
         from .problem_delivery import export_problem, export_problem_override
-        export = export_problem if args.kind == "problem" else export_problem_override
-        return export(store, args.destination)
+        if args.kind == "problem-override":
+            spec = {} if args.spec is None else strict_json(Path(args.spec).read_bytes())
+            if spec is None:
+                raise ResearchError("invalid_input", "The override export spec must be an object")
+            return export_problem_override(store, args.destination, spec=spec)
+        return export_problem(store, args.destination)
     if args.kind == "problem-openness":
         if not args.spec:
             raise ResearchError("invalid_input", "Problem openness export requires --spec")
