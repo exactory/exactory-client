@@ -721,6 +721,8 @@ def acquire_fulltext(store, identifier, url, *, request_id, expected_revision, h
             pending.append({"code": extracted["status"]})
     except HttpFailure as error:
         attempts, pending = error.attempts, [{"code": error.code}]
+        if error.code == "timeout":
+            pending[0].update(error.details or {})
     except ResearchError as error:
         pending.append({"code": error.code})
     sources = prepare_sources(artifacts, attempts, "fulltext", request_id, requested_identifier=identifier)

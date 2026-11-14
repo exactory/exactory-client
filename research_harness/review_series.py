@@ -36,7 +36,11 @@ def _describe_stop(plan, code, details):
 
 def _read_plan(store, assignment_id):
     snapshot = store.snapshot()
-    return snapshot, plan_next(snapshot['records'], ArtifactStore(store.root), assignment_id)
+    from .evaluation import Evaluation
+    from .review_provider_usage import describe_usage
+    artifacts = Evaluation(snapshot['records'], ArtifactStore(store.root))
+    plan = plan_next(snapshot['records'], artifacts, assignment_id)
+    return snapshot, dict(plan, provider_usage=describe_usage(snapshot['records'], artifacts, plan=plan))
 
 
 def run_series(store, assignment_id, *, emit=_emit_json):
@@ -45,7 +49,19 @@ def run_series(store, assignment_id, *, emit=_emit_json):
 
     output = emit
 
-    def emit(row, *, terminal=False):
+    def emit(row, *, terminal=False, usage_snapshot=None):
+        if row.get('error'):
+            from .evaluation import Evaluation
+            from .review_provider_usage import describe_usage
+            try:
+                current = store.snapshot() if usage_snapshot is None else usage_snapshot
+                artifacts = Evaluation(current['records'], ArtifactStore(store.root))
+                row = dict(row, provider_usage=describe_usage(current['records'], artifacts, plan=row))
+            except (ResearchError, json.JSONDecodeError):
+                # A diagnostic read failure keeps the original operation's error and last observed usage.
+                pass
+        if 'provider_usage' not in row:
+            row = dict(row, provider_usage=last_plan.get('provider_usage', dict(windows=[], warnings=[])))
         if terminal and row.get('state') == 'stop' and row.get('code') and row.get('head_id'):
             from .automatic_overrides import record_series_stop
             try:
@@ -53,7 +69,8 @@ def run_series(store, assignment_id, *, emit=_emit_json):
                     try:
                         # Each call takes a fresh snapshot and derives its own
                         # stop identity, scope and expected revision.
-                        stop = record_series_stop(store, row)
+                        stop = record_series_stop(store, {
+                            key: value for key, value in row.items() if key != 'provider_usage'})
                     except ResearchError as error:
                         if attempt == 0 and error.code == 'stale_revision':
                             continue
@@ -178,14 +195,22 @@ def run_series(store, assignment_id, *, emit=_emit_json):
             before_refusals = snapshot['records'].get('review_output_refusal', {})
             new_refusals = current['records'].get('review_output_refusal', {})
             if (new_refusals != before_refusals or error.code == 'review_invocation_pending'):
-                emit(row)
+                emit(row, usage_snapshot=current)
                 refusals = 0
                 continue
-            emit(_describe_stop(row, error.code, error.details or {}), terminal=True)
+            emit(_describe_stop(row, error.code, error.details or {}), terminal=True, usage_snapshot=current)
             return 3
         # Waiting reconciliations can be successful polls of a still-live
         # owner. Only executable continuation states spend a progress position.
         if not waiting:
             executed[position] = request_id
         refusals = 0
-        emit(dict(plan, request_id=request_id, revision=snapshot['revision']))
+        row = dict(plan, request_id=request_id, revision=snapshot['revision'])
+        try:
+            ready_step = _read_plan(store, assignment_id)
+        except ResearchError:
+            # The next loop owns read-error recovery, after this executed step is emitted.
+            ready_step = None
+        else:
+            row['provider_usage'] = ready_step[1]['provider_usage']
+        emit(row)

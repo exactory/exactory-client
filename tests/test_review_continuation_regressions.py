@@ -153,6 +153,7 @@ class ContinuationRegressionTests(unittest.TestCase):
         self.assertEqual(after['records'], expected_records)
         self.assertEqual([json.loads(line) for line in output.getvalue().splitlines()],
                          [dict(plan, stop_id=stop['id'], revision_after_stop=after['revision'],
+                               provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
                                stop_class='decision')])
         receipt = case.store.committed_request(stop['request_id'])
         self.assertEqual(receipt['operation'], 'review.series_stop')

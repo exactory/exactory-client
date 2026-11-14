@@ -1047,6 +1047,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         root = Path(__file__).resolve().parents[1]
         # Frozen from git 40690d5, independently of the working tree modules; the three
         # Codex transports are frozen at 0.85.1, which added the Codex 0.167.0 declarations.
+        # The Claude adapter pin includes new-call usage-event retention; historical runtime pins stay readable.
         expected = PINNED_SHA256
         for relative, sha in expected.items():
             self.assertEqual(hashlib.sha256((root / relative).read_bytes()).hexdigest(), sha, relative)
@@ -1181,7 +1182,7 @@ class ProblemResultHistoryTests(ResultPartsCase):
         print('Claude fourth-series final: baseline=1472433, compacted=%d, limit=1300000' % size)
 
 
-PINNED_SHA256 = {'research_harness/review_claude_transport.py': 'ee183e027eaad81de13cfab1149000c027b4504842070537a1068c93dfb1a7bf',
+PINNED_SHA256 = {'research_harness/review_claude_transport.py': 'a4f6f6aa5bc0d1b9f1a41254040a6a21f8f0c627428af1d64372889a88699f9a',
  'research_harness/review_codex_framed_transport.py': 'ea137cdc6999bf319cf3aa301dc86b6d4b4c68520bcb08db90b0a24729ecd6ec',
  'research_harness/review_codex_transport.py': 'acf50a8472feeae42ebf9d7e0fb9a473be35d3d42066c84abf65f301c078e7ad',
  'research_harness/review_codex_visual_transport.py': 'b20abb57e6549a90c172a4dc13f18f49f9bbb9ab11f6d011164abc64db063460',

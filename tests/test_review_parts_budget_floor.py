@@ -289,6 +289,7 @@ class BudgetFloorReplacementTests(PartsResultCase):
         after = self.case.store.snapshot()
         recorded_stop, = after['records']['review_series_stop'].values()
         self.assertEqual(stop, dict(plan, stop_id=recorded_stop['id'], stop_class='decision',
+                                   provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0),
                                    revision_after_stop=after['revision']))
         self.assertEqual(recorded_stop['plan'], plan)
         self.assertEqual(recorded_stop['recorded_revision'], after['revision'])
