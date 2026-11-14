@@ -1,0 +1,80 @@
+{
+  "source_record": "20261113110022-every-open-record-and-review-capacity",
+  "contract": "D3-r2-UC2-R31",
+  "results": {
+    "http": {
+      "verified": {
+        "article_bundle": true,
+        "complete_original": true,
+        "session_source_delivery": true,
+        "openness_packet_source": true,
+        "openness_packet_alternative": true,
+        "complete_source_route": true,
+        "html_original_elision": true
+      },
+      "unverified": {
+        "article_bundle": "invalid_bundle",
+        "complete_original": false,
+        "session_source_delivery": "review_source_binding_mismatch",
+        "openness_packet_source": "openness_source_delivery_mismatch",
+        "openness_packet_alternative": "openness_source_delivery_mismatch",
+        "complete_source_route": "review_complete_source_mismatch",
+        "html_original_elision": false
+      }
+    },
+    "http_range_v1": {
+      "verified": {
+        "article_bundle": "invalid_bundle",
+        "complete_original": true,
+        "session_source_delivery": true,
+        "openness_packet_source": "openness_source_delivery_mismatch",
+        "openness_packet_alternative": "openness_source_delivery_mismatch",
+        "complete_source_route": true,
+        "html_original_elision": false
+      },
+      "unverified": {
+        "article_bundle": "source_pending",
+        "complete_original": false,
+        "session_source_delivery": "source_pending",
+        "openness_packet_source": "openness_source_delivery_mismatch",
+        "openness_packet_alternative": "openness_source_delivery_mismatch",
+        "complete_source_route": "source_pending",
+        "html_original_elision": false
+      }
+    },
+    "external_import": {
+      "verified": {
+        "article_bundle": "invalid_bundle",
+        "complete_original": false,
+        "session_source_delivery": "review_source_binding_mismatch",
+        "openness_packet_source": "openness_source_delivery_mismatch",
+        "openness_packet_alternative": "openness_source_delivery_mismatch",
+        "complete_source_route": "review_complete_source_mismatch",
+        "html_original_elision": false
+      },
+      "unverified": {
+        "article_bundle": "invalid_bundle",
+        "complete_original": false,
+        "session_source_delivery": "review_source_binding_mismatch",
+        "openness_packet_source": "openness_source_delivery_mismatch",
+        "openness_packet_alternative": "openness_source_delivery_mismatch",
+        "complete_source_route": "review_complete_source_mismatch",
+        "html_original_elision": false
+      }
+    }
+  },
+  "stored_digests": {
+    "source": "4ba0b2dfc42779033430c07e18fc6aac94dd4ed66424e854ce6e34f038a73bc1",
+    "capture": "23af1308b505296914f2b865521d07f8860c2f4b5ea3e7faa7c80781334e1a97",
+    "bundle": "36a97c135081b0f95402f9bace669d0614f6ba7169fbbabc200de6854ff6efb1",
+    "reading": "3128d30c5a05db150a04df256cab3eb13681758d1ec24c66c9d790d7ef5e5e36",
+    "delivery": "17ea3a4407ec1f6d9c5da0119645a30c48cb0dc070cbd0212c494071dcabab8c"
+  },
+  "row_refusals": {
+    "article_bundle": "invalid_bundle",
+    "complete_original": false,
+    "session_source_delivery": "review_source_binding_mismatch",
+    "openness_packet_source": "openness_source_delivery_mismatch",
+    "complete_source_route": "review_complete_source_mismatch"
+  }
+}

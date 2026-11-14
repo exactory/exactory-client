@@ -2,6 +2,20 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "capture-class-admission-by-use",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "summary": "D3 UC2: complete-original uses admitted different capture classes through separate checks.",
+      "expected": "One table preserves each existing use's HTTP, range and external-import results, refusal codes and stored evidence digests. The unchanged HTML elision check agrees with its row, and every module naming capture provenance has a reviewed role.",
+      "tests": [
+        "test_capture_classes.CaptureClassTests.test_table_preserves_base_results_at_every_site_for_existing_classes",
+        "test_capture_classes.CaptureClassTests.test_each_nonruntime_site_reads_its_row_and_keeps_stored_identities",
+        "test_capture_classes.CaptureClassTests.test_capture_fields_stay_in_modules_with_reviewed_roles"
+      ],
+      "class": "source capture provenance and eligibility",
+      "fixed_in": "open",
+      "test_kind": "real_shape"
+    },
+    {
       "id": "openness-series-views-between-turns",
       "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
       "summary": "T5: one review-series process advanced several turns while series.json and adopted-output views stayed behind.",

@@ -25,6 +25,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from types import MappingProxyType
 
 from .errors import ResearchError
 from .fulltext import GENERIC_BINARY_MEDIA_TYPES, parse_base_media_type
@@ -38,6 +39,21 @@ from .storage import _canonical
 
 TEXT_KINDS = ("text", "span")
 EXCERPT_LENGTH = 200
+CAPTURE_CLASSES_BY_USE = MappingProxyType({
+    'article_bundle': (('http', True),),
+    'complete_original': (('http', True), ('http_range_v1', True)),
+    'session_source_delivery': (('http', True), ('http_range_v1', True)),
+    'openness_packet_source': (('http', True),),
+    'complete_source_route': (('http', True), ('http_range_v1', True)),
+    # review_transport.py keeps its own check because its bytes identify routes.
+    'html_original_elision': (('http', True),),
+})
+
+
+def admits_capture_class(source, use):
+    """Test capture provenance against the classes admitted for this use."""
+    return any(source.get('capture_method') == method and source.get('origin_verified') is verified
+               for method, verified in CAPTURE_CLASSES_BY_USE[use])
 
 
 def span_locator(content, start, end, excerpt_length=EXCERPT_LENGTH):
@@ -269,7 +285,7 @@ def complete_original(context):
     """Only acquired complete originals can establish article-unit scope."""
     source, capture = context["source"], context["capture"]
     return (capture is not None and capture["availability"] == "available"
-            and source["capture_method"] in ("http", "http_range_v1") and source["origin_verified"] is True
+            and admits_capture_class(source, 'complete_original')
             and source["response_complete"] is True and capture["original"] == source["response"])
 
 
