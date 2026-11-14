@@ -52,6 +52,7 @@ def entry(obj):
     def test_top_level_table_additions_follow_the_table_across_imports(self):
         sources = {'pkg/core.py': '''
 from .table import callbacks
+from . import extension
 def entry():
     callbacks['check']()
 ''', 'pkg/table.py': 'callbacks = dict()\n', 'pkg/extension.py': '''

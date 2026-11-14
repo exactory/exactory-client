@@ -5665,6 +5665,23 @@
         "test_series_code_rows_study.StudyRowTests.test_current_literature_comparison_step_records_a_distinct_plan",
         "test_series_code_rows_study.StudyRowTests.test_missing_prediction_is_a_scientific_output_refusal_that_can_retry"
       ]
+    },
+    {
+      "id": "series-reach-import-boundaries-and-writing-sites",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "class": "review continuity source boundaries",
+      "summary": "Untyped receiver edges crossed packages, forwarding sites obscured the writing checks, and computed codes lacked entry-flow evidence.",
+      "expected": "Each root stays within its import closure; member evidence names direct writers; entry and no_call evidence fails when the graph admits an ending or loses the named edge; literal automatic refusals retain their complete codes and evidence.",
+      "tests": [
+        "test_series_rows_close_foundation.ImportClosureTests.test_untyped_receiver_stays_within_each_roots_import_closure",
+        "test_series_rows_close_foundation.WritingSiteTests.test_only_direct_writers_are_sites_and_terminal_sites_take_precedence_over_entries",
+        "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_refuses_an_entry_that_a_computed_site_can_pass_on",
+        "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_refuses_an_entry_with_a_constructor_or_a_plan_site",
+        "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_no_call_edges_must_remain_in_the_series_graph_and_reach_the_site",
+        "test_series_rows_close_foundation.LiteralRefusalTests.test_all_twenty_refusals_preserve_their_complete_codes_messages_and_details"
+      ]
     }
   ]
 }

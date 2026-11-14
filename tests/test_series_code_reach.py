@@ -438,7 +438,7 @@ def entry():
     def test_untyped_attributes_reach_methods_and_modules_used_as_values(self):
         sources = {
             'pkg/core.py': """
-from . import chosen
+from . import chosen, other
 def select():
     return chosen
 def entry(receiver):
@@ -607,16 +607,17 @@ def outside(callbacks):
         self.assertEqual(result['by_command']['entry'], [])
         self.assertEqual(result['by_command']['outside'], ['global'])
 
-    def test_declared_computed_producers_are_code_sites(self):
+    def test_declared_computed_sources_do_not_make_forwarders_writing_sites(self):
         sources = {'pkg/core.py': """
 def producer():
     raise ResearchError('computed', '')
 def check(status):
+    producer()
     raise ResearchError(status['code'], '')
 """}
         report = reach.analyze_sources(sources, {'entry': ['pkg/core.py:check']}, {
-            "pkg/core.py:check:status['code']": {'sources': ['pkg/core.py:producer']}})
-        self.assertEqual(report['code_sites']['computed'], ['pkg/core.py:check'])
+            "pkg/core.py:check:status['code']": {'sources': ['pkg/core.py:producer'], 'passes': 'error'}})
+        self.assertEqual(report['code_sites']['computed'], ['pkg/core.py:producer'])
 
     def test_computed_producers_follow_the_new_edges(self):
         sources = {'pkg/core.py': """
@@ -634,7 +635,7 @@ def entry(status):
     ResearchError(status['code'], '')
 """}
         result = reach.analyze_sources(sources, {'entry': ['pkg/core.py:entry']}, {
-            "pkg/core.py:entry:status['code']": {'sources': ['pkg/core.py:producer']}})
+            "pkg/core.py:entry:status['code']": {'sources': ['pkg/core.py:producer'], 'passes': 'error'}})
         self.assertEqual(result['reachable'], ['produced'])
 
     def test_declared_edges_require_an_existing_uninferred_call_and_a_reason(self):

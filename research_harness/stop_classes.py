@@ -198,8 +198,7 @@ STOP_REGISTRY['problem_bar_calibration_required'] = dict(code='problem_bar_calib
 
 
 _STORED_STATE_CODES_STORE = (
-    'constitution_archive_missing', 'contract_changed', 'corrupt_artifact', 'corrupt_blob',
-    'corrupt_state', 'invalid_digest', 'invalid_profile', 'request_conflict', 'unsupported_schema',
+    'constitution_archive_missing', 'corrupt_state', 'invalid_profile', 'unsupported_schema',
 )
 STOP_REGISTRY['problem_already_posted'] = dict(code='problem_already_posted', **{'class': 'decision'},
                                              owner='D2', next=dict(kind='done'))
@@ -284,7 +283,53 @@ for _codes, _command, _payload, _chooses in (
                     payload=copy.deepcopy(_payload), chooses=list(_chooses))])]))
 
 
+def describe_unlisted_step():
+    """Return the R56 decision for a code without a reviewed registry row."""
+    return dict(kind='decision', owner_decides='How should the retained error be resolved?',
+        then=[dict(answer='Inspect the record', steps=[dict(command='record-check')])])
+
+
+_PREREQUISITE_CODES_CLOSE = ()
+_REMOVABLE_CAUSE_CODES_CLOSE = ()
+_NO_SERIES_ENDING_CODES_CLOSE = ()
+
+
 STOP_GROUPS = {
+    'prerequisite': dict(id='prerequisite', **{'class': 'decision'}, owner='D2',
+        next=dict(kind='handoff', command='status', payload={}, chooses=[],
+            then=[dict(command='review-series', prerequisites=[dict(condition=
+                'Complete the record that this line names with the command that owns it.')])]),
+        conditions=dict(
+            obligation='It writes the code as an obligation of a report: a record that a command of the harness '
+                       'writes is absent, stale, pending or incomplete. A place of the reach passes the '
+                       'obligation on to a refusal or a plan.',
+            record='It refuses because a record that another command of the harness writes is absent, '
+                   'stale, pending or incomplete.')),
+    'removable_cause': dict(id='removable_cause', **{'class': 'decision'}, owner='D2',
+        next=dict(kind='decision', owner_decides='Whether the cause that the refusal names is removed.',
+            then=[dict(answer='Remove the cause', steps=[dict(command='review-series',
+                       prerequisites=[dict(condition='Remove the cause that the refusal names.')])]),
+                  dict(answer='Check the retained record', steps=[dict(command='record-check')])]),
+        conditions=dict(
+            environment='It reads something outside the workspace: the network, a provider, a credential, '
+                        'the clock, a process, or a file or a store outside the workspace.',
+            form='It reads an input of a command, a source or a route, and the input has a form that the '
+                 'harness does not read.',
+            limit='It compares a size or a count with a bound.',
+            harness='It checks how the code of the harness uses an object of the store that a caller holds: '
+                    'a transaction, a snapshot guard, a preparation or the lock of the calling thread.',
+            record='The sentence of `prerequisite`. For a code that also has a site with another condition '
+                   'of this group.',
+            content='It compares content that the harness wrote, a stored record or a payload that the planner '
+                    'built, with other content, a schema, a digest or a version. For a code that also has a '
+                    'site with another condition of this group.')),
+    'no_series_ending': dict(id='no_series_ending', **{'class': 'decision'}, owner='D2',
+        next=describe_unlisted_step(),
+        conditions=dict(
+            entry='It writes the code as the code of an entry in a report, an obligation list or a member '
+                  'of a line, and no place of the reach passes that entry on to a refusal or a plan.',
+            no_call='No call of a series reaches the site. The analysis reaches it by an attribute of a '
+                    'receiver that the source does not type.')),
     'stored_state': dict(id='stored_state', **{'class': 'decision'}, owner='D2',
         next=copy.deepcopy(STOP_REGISTRY['artifact_corrupt']['next']),
         conditions=dict(
@@ -296,6 +341,8 @@ STOP_GROUPS = {
 
 # Each review lane adds its own (group, codes) tuple here with its evidence file.
 for _group, _codes in (
+        ('prerequisite', _PREREQUISITE_CODES_CLOSE),
+        ('removable_cause', _REMOVABLE_CAUSE_CODES_CLOSE),
         ('stored_state', _STORED_STATE_CODES_FIRST),
         ('stored_state', _STORED_CONTENT_CODES_REVIEW_A),
         ('stored_state', _STORED_CONTENT_CODES_REVIEW_B),
@@ -310,10 +357,15 @@ for _group, _codes in (
         STOP_REGISTRY[_code] = dict(_row, code=_code, group=_group)
 
 
-def validate_registry(rows, groups=None):
+def validate_registry(rows, groups=None, no_series_ending=None):
     """Require a next step and an executable proof for every defect classification."""
     if groups is None:
         groups = STOP_GROUPS
+    if no_series_ending is None:
+        no_series_ending = _NO_SERIES_ENDING_CODES_CLOSE
+    for code in no_series_ending:
+        if code in rows:
+            raise ValueError('A no_series_ending member must have no registry row: ' + code)
     for code, row in rows.items():
         if (row['code'] != code or row['class'] not in ('waiting', 'harness_defect', 'decision', 'requested')
                 or not row.get('owner') or not row.get('next')):
@@ -322,6 +374,8 @@ def validate_registry(rows, groups=None):
             raise ValueError('A harness-defect row needs its guard test: ' + code)
         if 'group' in row:
             group = row['group']
+            if group == 'no_series_ending':
+                raise ValueError('A no_series_ending member must have no registry row: ' + code)
             if group not in groups:
                 raise ValueError('Unknown stop group for registry row: ' + code + ': ' + str(group))
             expected = {key: value for key, value in groups[group].items()
@@ -347,9 +401,7 @@ def classify_stop(code):
 def describe_terminal(code, *, action=None):
     """Describe a refused action without changing its recorded error or evidence."""
     row = STOP_REGISTRY.get(code)
-    next_step = copy.deepcopy(row['next'] if row is not None else dict(kind='decision',
-        owner_decides='How should the retained error be resolved?',
-        then=[dict(answer='Inspect the record', steps=[dict(command='record-check')])]))
+    next_step = copy.deepcopy(row['next']) if row is not None else describe_unlisted_step()
     kind = next_step.pop('kind')
     state = dict(wait='wait', handoff='handoff', done='done', **{'continue': 'continue'}).get(kind, 'stop')
     if classify_stop(code) == 'harness_defect':

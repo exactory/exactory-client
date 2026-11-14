@@ -537,7 +537,7 @@ def plan_next(records, artifacts, head_id):
             result.update(state='stop', code=error.code, details=error.details or {})
         else:
             result.update(state='stop', code='review_input_unreadable', details=dict(kind=type(error).__name__))
-        from .stop_classes import describe_terminal
+        from .stop_classes import describe_terminal, describe_unlisted_step
         terminal = describe_terminal(result['code'])
         details = dict(result['details'], **terminal['details'])
         for field in ('command', 'payload', 'not_before', 'request_id'):
@@ -552,12 +552,15 @@ def plan_next(records, artifacts, head_id):
                 result = complete_plan(records, artifacts, assignment, result)
             except (ResearchError, json.JSONDecodeError) as detail_error:
                 # A damaged binding cannot supply an executable repair payload.
-                decision = describe_terminal('unrecognized')['details']['decision']
+                decision = describe_unlisted_step()
+                decision.pop('kind')
                 result.update(state='stop', code=getattr(detail_error, 'code', 'review_input_unreadable'),
                               details=dict(decision=decision, reason=str(detail_error)))
                 result.pop('command', None)
         elif result['state'] not in ('done', 'stop'):
-            result.update(state='stop', details=describe_terminal('unrecognized')['details'])
+            decision = describe_unlisted_step()
+            decision.pop('kind')
+            result.update(state='stop', details=dict(unlisted=True, decision=decision))
     if result.get('code'):
         from .stop_classes import describe_terminal
         action = ({key: copy.deepcopy(result[key]) for key in ('command', 'state', 'payload') if key in result}

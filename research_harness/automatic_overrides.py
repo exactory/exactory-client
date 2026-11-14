@@ -37,11 +37,11 @@ def _describe_plan_violation_proof(records, artifacts, assignment_id):
     from . import review_protocol, review_preflight
     assignment = records.get('review_assignment', {}).get(assignment_id, {})
     if 'capacity_plan_kind' not in assignment:
-        _refuse('stop_untrusted', 'Need a stored assignment with a pinned capacity plan.')
+        _refuse('gate_override_stop_untrusted', 'Need a stored assignment with a pinned capacity plan.')
     request = review_protocol.build_assignment_request(records, artifacts, assignment)
     report = review_preflight.build_assignment_report(records, artifacts, assignment, request)
     if report['plan_comparison']['fits']:
-        _refuse('stop_untrusted', 'Need an exact request that exceeds its stored capacity plan.')
+        _refuse('gate_override_stop_untrusted', 'Need an exact request that exceeds its stored capacity plan.')
     return dict(policy='stored_capacity_plan_bound', exhausted=True,
                 plan_digest=assignment['capacity_plan']['digest'], request_digest=digest(request),
                 sizes=report['plan_comparison']['sizes'])
@@ -72,14 +72,14 @@ def record_series_stop(store, plan):
 
 
 def _refuse(code, needed, **details):
-    raise ResearchError("gate_override_" + code, needed, details or None)
+    raise ResearchError(code, needed, details or None)
 
 
 def _trusted_stop(store, records, identifier):
     from .storage import Store
     stop = records.get("review_series_stop", {}).get(identifier)
     if stop is None:
-        _refuse("stop_missing", "Need the identity of a recorded review-series stop.")
+        _refuse("gate_override_stop_missing", "Need the identity of a recorded review-series stop.")
     # Check the authoritative event receipt, not an agent-supplied origin field.
     # This also works in --check, whose staged store intentionally exposes only
     # its own request. This second reader writes nothing; commit still uses CAS.
@@ -88,15 +88,15 @@ def _trusted_stop(store, records, identifier):
             or receipt["payload"] != {"stop": stop} or receipt["response"]["result"] != stop
             or receipt["response"]["revision"] != stop.get("recorded_revision")
             or stop.get("id") != identifier):
-        _refuse("stop_untrusted", "Need an unchanged stop written by the review-series harness.")
+        _refuse("gate_override_stop_untrusted", "Need an unchanged stop written by the review-series harness.")
     classification = classify_stop(stop["code"])
     if classification != "harness_defect":
-        _refuse("stop_class", "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",
+        _refuse("gate_override_stop_class", "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",
                 stop_code=stop["code"], stop_class=classification)
     if stop['code'] == 'review_route_capacity_plan_violated':
         proof = _describe_plan_violation_proof(records, store.build_artifact_store(), stop['assignment_id'])
         if stop.get('retry') != proof:
-            _refuse('stop_untrusted', 'Need the unchanged stored request and capacity-plan comparison.')
+            _refuse('gate_override_stop_untrusted', 'Need the unchanged stored request and capacity-plan comparison.')
         return stop
     retry = stop.get("retry") or {}
     from .review_series import _identify_action
@@ -109,7 +109,7 @@ def _trusted_stop(store, records, identifier):
             or retry.get("progress_digest") != digest(stop["plan"]["progress"])
             or not isinstance(retry.get("successful_request_id"), str)
             or Store(store.root).committed_request(retry["successful_request_id"]) is None):
-        _refuse("stop_untrusted", "Need the recorded successful dispatch and repeated progress position.")
+        _refuse("gate_override_stop_untrusted", "Need the recorded successful dispatch and repeated progress position.")
     return stop
 
 
@@ -123,12 +123,12 @@ def _check_limits(records):
     if (usage["remaining_calls"] == 0 or obligations(records, "research")
             or any(_exhausted(account) for account in records.get("strategy_account", {}).values())
             or study.get("loop", {}).get("budget") == 0):
-        _refuse("budget_exhausted", "Need a budget authorized for further work; otherwise report the stop.")
+        _refuse("gate_override_budget_exhausted", "Need a budget authorized for further work; otherwise report the stop.")
     # Free-text user conditions cannot be certified mechanically. Keep them
     # binding rather than letting the caller assert that one has been met.
     intent = current_intent(records)
     if intent and intent["payload"]["publication"].get("quality_condition") is not None:
-        _refuse("quality_condition", "The current intent contains an explicit quality condition, so automatic continuation is unavailable. "
+        _refuse("gate_override_quality_condition", "The current intent contains an explicit quality condition, so automatic continuation is unavailable. "
                 "Continue through the ordinary gates, or record a user instruction that expressly covers this stop.")
 
 
@@ -138,33 +138,33 @@ def _check_reviews(store, records, artifacts, stop):
     scope = stop.get("scope")
     if (scope is None or scope.get("gate") not in ("readiness", "manuscript-readiness")
             or scope.get("transition") != {"from": "experiment", "to": "write"}):
-        _refuse("internal_only", "Need a review stop for the next internal study step; public writes need the user's instruction.")
+        _refuse("gate_override_internal_only", "Need a review stop for the next internal study step; public writes need the user's instruction.")
     gate = scope["gate"]
     if any(row.get("authority") == "harness" and row.get("transition") == scope["transition"]
            for row in records.get("gate_override", {}).values()):
-        _refuse("user_required", "An automatic pass of this gate is already recorded. To continue on the user's instruction, "
+        _refuse("gate_override_user_required", "An automatic pass of this gate is already recorded. To continue on the user's instruction, "
                 "record a user override with `exactory-research gate-override`.")
     if _scope(records, artifacts, stop["assignment_id"]) != scope:
-        _refuse("stop_stale", "Need a recorded stop for the current stage and exact review target.")
+        _refuse("gate_override_stop_stale", "Need a recorded stop for the current stage and exact review target.")
     _check_limits(records)
     report = gate_state(records, artifacts, gate)
     missing = {"readiness": "independent_review_missing", "manuscript-readiness": "scoped_review_missing"}[gate]
     if not report["obligations"]:
-        _refuse("gate_ready", "The gate is ready; use the ordinary stage transition. No automatic pass is needed.")
+        _refuse("gate_override_gate_ready", "The gate is ready; use the ordinary stage transition. No automatic pass is needed.")
     if any(row["code"] != missing for row in report["obligations"]):
-        _refuse("other_obligations", "Need every remaining gate item satisfied except the reviews prevented by the defect.",
+        _refuse("gate_override_other_obligations", "Need every remaining gate item satisfied except the reviews prevented by the defect.",
                 obligations=report["obligations"])
     target = report.get("candidate_digest") if gate == "manuscript-readiness" else (report.get("candidate") or {}).get("digest")
     needed, accepted = 1, set()
     if target != scope["target_digest"]:
-        _refuse("stop_stale", "Need a stop for this exact current review target.")
+        _refuse("gate_override_stop_stale", "Need a stop for this exact current review target.")
     for kind in ("readiness_review", "scoped_readiness_review"):
         for row in records.get(kind, {}).values():
             review = row["payload"]
             if (review.get("candidate_digest") == target
                     and (review.get("verdict") != "ready"
                          or any(check["status"] != "passed" for check in review.get("checks", [])))):
-                _refuse("other_obligations", "Need retained rejecting reviews resolved through the ordinary gate.",
+                _refuse("gate_override_other_obligations", "Need retained rejecting reviews resolved through the ordinary gate.",
                         review_id=row["id"])
 
     def current(row):
@@ -179,7 +179,7 @@ def _check_reviews(store, records, artifacts, stop):
                 and plan.get("payload") == original.get("payload"))
 
     if not current(stop):
-        _refuse("stop_stale", "Need a new harness stop after the review's progress or next action changed.")
+        _refuse("gate_override_stop_stale", "Need a new harness stop after the review's progress or next action changed.")
     from .operations import normalized_text
     covered, basis = set(), []
     for identifier, row in sorted(records.get("review_series_stop", {}).items()):
@@ -194,7 +194,7 @@ def _check_reviews(store, records, artifacts, stop):
             covered.add(reviewer)
             basis.append(identifier)
     if len(covered) < needed:
-        _refuse("reviews_uncovered", "Need an exhausted harness-defect stop for every missing independent review.")
+        _refuse("gate_override_reviews_uncovered", "Need an exhausted harness-defect stop for every missing independent review.")
     return report, basis
 
 
@@ -302,7 +302,7 @@ def require_public_write_instruction(store, gate, *, public_action=None, prechec
     require_met_override_conditions(authority)
     if authority["authorized"] or not automatic:
         return
-    _refuse("public_write", "Need the user's instruction recorded for this public write.", gate=gate,
+    _refuse("gate_override_public_write", "Need the user's instruction recorded for this public write.", gate=gate,
             public_action=public_action, next="exactory-research gate-override")
 
 
@@ -332,6 +332,6 @@ def check_public_write(gate, *, public_action=None):
             require_met_override_conditions(authority)
             if authority["authorized"] or not (root / ".exactory/automatic-passes").exists():
                 return
-            _refuse("public_write", "Need a readable store or a local user instruction covering this public write.",
+            _refuse("gate_override_public_write", "Need a readable store or a local user instruction covering this public write.",
                     gate=gate, public_action=public_action)
         require_public_write_instruction(store, gate, public_action=public_action)
