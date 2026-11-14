@@ -739,7 +739,7 @@ def export_problem_override(store, destination=None):
         raise ResearchError("problem_value_missing", "Record the problem's motivation and current state with problem-value "
                             "before this export")
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
-    files, manifest = build_override_projection(records, artifacts, override)
+    files, manifest = build_override_projection(records, artifacts, override, include_references=True)
     return write_problem_export(store, records, files, manifest, destination)
 
 
@@ -751,17 +751,19 @@ def find_post_override(records):
                key=lambda row: row["recorded_revision"], default=None)
 
 
-def build_override_projection(records, artifacts, override):
-    """Compose the override export: the post files with the reference list, under the export schema v2."""
+def build_override_projection(records, artifacts, override, *, include_references=False):
+    """Compose an override projection in its stored format, or v2 with structured references."""
     statement = find_current_statement(records)
     files = {name: (content + "\n").encode("utf-8") for name, content in
-             build_post_files(records, artifacts, include_references=True).items()}
+             build_post_files(records, artifacts, include_references=include_references).items()}
     formal = statement["formal_statement"]
-    manifest = dict(schema=_REFERENCE_EXPORT_SCHEMA, statement_id=statement["id"],
+    manifest = dict(statement_id=statement["id"],
                     statement_digest=compute_statement_digest(statement), area=statement["area"],
                     formal_statement_language=None if formal is None else formal["language"],
                     files={name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())},
                     decision_id=None, problem_evidence_digest=None, override_id=override["id"], gate="bypassed")
+    if include_references:
+        manifest["schema"] = _REFERENCE_EXPORT_SCHEMA
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     return files, manifest
 

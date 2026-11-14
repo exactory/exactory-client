@@ -2,6 +2,20 @@
   "schema": "exactory-incident-ledger-v1",
   "incidents": [
     {
+      "id": "problem-reference-exports-retain-current-and-history-formats",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "generated output views and export delivery",
+      "summary": "Merging structured reference exports with export retirement left v2 exports outside history handling and retired unchanged legacy override exports.",
+      "fixed_in": "open",
+      "expected": "New reviewed and override exports use v2 with citation-refs.json. Stored legacy exports keep their bytes and digests. Each format compares against its own current projection, then retires intact on changed content or source identity. Unknown formats and incomplete or edited exports stay in place.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_problem_export_history.OverrideExportHistoryTests.test_stored_legacy_and_new_v2_override_exports_retire_on_source_identity_change",
+        "test_problem_export_history.OverrideExportHistoryTests.test_retirement_leaves_unknown_or_incomplete_v2_exports_in_place",
+        "test_problem_export_history.ReviewedExportHistoryTests.test_stored_legacy_and_new_v2_reviewed_exports_retire_without_changing_bytes"
+      ]
+    },
+    {
       "id": "openness-series-views-between-turns",
       "record": "20261112143000-openness-chain-ends-unresolved-on-search-integrity-gaps",
       "summary": "T5: one review-series process advanced several turns while series.json and adopted-output views stayed behind.",

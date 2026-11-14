@@ -40,7 +40,7 @@ def record_export_sources(store_root, workspace_root, directory, files, source_d
 
 def read_problem_export(directory, records):
     """Recognize a complete generated export; leave foreign or edited folders alone."""
-    from .problem_delivery import has_exported_files
+    from .problem_delivery import _REFERENCE_EXPORT_SCHEMA, has_exported_files
     if directory.is_symlink() or find_entry_kind(directory, 'problem-export.json') != 'regular':
         return None
     manifest_bytes = read_file(directory, 'problem-export.json')
@@ -52,6 +52,9 @@ def read_problem_export(directory, records):
         return None
     base_fields = {'statement_id', 'statement_digest', 'area', 'formal_statement_language', 'files',
                    'decision_id', 'problem_evidence_digest'}
+    include_references = manifest.get('schema') == _REFERENCE_EXPORT_SCHEMA
+    if include_references:
+        base_fields.add('schema')
     bypassed = manifest.get('gate') == 'bypassed'
     if set(manifest) != base_fields | ({'gate', 'override_id'} if bypassed else set()):
         return None
@@ -68,6 +71,8 @@ def read_problem_export(directory, records):
     if not isinstance(source_id, str) or source_id not in records.get(source_kind, {}):
         return None
     required_files = {'title.txt', 'statement.md', 'criteria.md', 'motivation.md', 'state.md', 'citations.json'}
+    if include_references:
+        required_files.add('citation-refs.json')
     if formal is not None:
         required_files.add('formal-statement.txt')
     if not required_files <= set(manifest['files']) <= required_files | ({'reviews.json'} if not bypassed else set()):
@@ -89,7 +94,7 @@ def read_problem_export(directory, records):
     return (manifest, files) if has_exported_files(directory, files) else None
 
 
-def build_current_export(records, artifacts, bypassed):
+def build_current_export(records, artifacts, bypassed, *, include_references=False):
     """Build the current projection without reopening a post gate or altering any record."""
     from .problem_delivery import build_override_projection, build_projection, find_post_override
     statement, value = find_current_statement(records), find_value(records)
@@ -97,9 +102,11 @@ def build_current_export(records, artifacts, bypassed):
         return None
     if bypassed:
         override = find_post_override(records)
-        return None if override is None else build_override_projection(records, artifacts, override)[0]
+        return None if override is None else build_override_projection(
+            records, artifacts, override, include_references=include_references)[0]
     decision = find_latest(records, 'problem_decision')
-    return None if decision is None or decision['action'] != 'post' else build_projection(records, artifacts)[0]
+    return None if decision is None or decision['action'] != 'post' else build_projection(
+        records, artifacts, include_references=include_references)[0]
 
 
 def archive_problem_exports(store_root, workspace_root, records, artifacts):
@@ -121,13 +128,16 @@ def archive_problem_exports(store_root, workspace_root, records, artifacts):
                 continue
             manifest, files = exported
             bypassed = manifest.get('gate') == 'bypassed'
-            if bypassed not in current:
+            include_references = 'schema' in manifest
+            export_format = (bypassed, include_references)
+            if export_format not in current:
                 try:
-                    current[bypassed] = build_current_export(records, artifacts, bypassed)
+                    current[export_format] = build_current_export(
+                        records, artifacts, bypassed, include_references=include_references)
                 except ResearchError:
                     # An export with unavailable source evidence has lost its standing.
-                    current[bypassed] = None
-            stale = files != current[bypassed]
+                    current[export_format] = None
+            stale = files != current[export_format]
             receipt_path = find_export_source_path(relative)
             if not stale:
                 if source_digest is None:

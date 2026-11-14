@@ -289,7 +289,7 @@ class ProblemDeliveryTests(ProblemDeliveryCase):
         self.assertNotIn("citation-refs.json", files)
         legacy_digest = problem_delivery.compute_export_digest(files)
         directory = self.root / "final/problem/exports" / legacy_digest
-        problem_delivery.write_problem_export(self.store, files, manifest, directory)
+        problem_delivery.write_problem_export(self.store, records, files, manifest, directory)
         original = {path.name: path.read_bytes() for path in directory.iterdir()}
         current = problem_delivery.export_problem(self.store)
         self.assertIn("citation-refs.json", current["files"])
