@@ -5803,7 +5803,7 @@
       "class": "review capacity by construction",
       "summary": "A single review above its output task start, or a failed single attempt at the output limit, had no entry into the registered parts series.",
       "fixed_in": "0.89.0",
-      "expected": "The first assignment above the start enters a task series. Output overflow replaces the frozen single at the same route and reviewer with a read bounded by the profile and half its units; the native result series reaches an authenticated final. Ordinary assignments within the start and stored requests keep their bytes.",
+      "expected": "The first assignment above the start enters a task series. Output overflow replaces the frozen single at the same route and reviewer with a read bounded by the profile and half its units; the native result series reaches an authenticated final. Ordinary assignments within the start and stored requests keep their bytes. A capacity failure before the first replacement read succeeds keeps the original attestation and acceptance-review link through a smaller read.",
       "test_kind": "real_shape",
       "tests": [
         "test_review_single_request.SingleEntryTests.test_each_adapter_enters_by_task_with_profile_read_start",
@@ -5812,7 +5812,9 @@
         "test_review_single_request.FrozenSingleTests.test_replacement_refuses_changed_reviewer_route_author_or_role_and_a_fork",
         "tests.test_review_parts_native.NativePartsAcceptanceTests.test_single_output_replacement_is_consumed_and_acceptance_link_is_audited",
         "test_review_single_request.SingleEntryTests.test_each_adapter_replacement_is_accepted_by_the_assignment_command",
-        "test_review_single_request.SingleEntryTests.test_no_units_has_no_output_replacement"
+        "test_review_single_request.SingleEntryTests.test_no_units_has_no_output_replacement",
+        "test_review_single_request.FrozenSingleTests.test_first_output_read_timeout_replaces_it_without_changing_the_frozen_origin",
+        "tests.test_review_parts_native.NativePartsAcceptanceTests.test_first_output_read_timeout_preserves_the_accepted_review_link"
       ]
     }
   ]

@@ -57,14 +57,25 @@ def measure_parts_request(records, route, request, characters):
     return characters
 
 
+def is_first_output_read(assignment, packet):
+    """Identify the first read of a frozen single-output replacement series."""
+    return (parts.find_kind(packet) == 'read' and packet[parts.KEY].get('entry') == 'output'
+            and bool(assignment.get('capacity_replacement_of'))
+            and not assignment.get('context', {}).get('prior_assignment_id'))
+
+
 def build_output_replacement(records, artifacts, assignment, *, identifier=None):
-    """Plan the first read of this exact single packet, or report no divisible task."""
+    """Plan or reduce the first read of a frozen single-output replacement."""
     from . import review_protocol as protocol, review_preflight
     from .review_parts_roles import find_adapter
 
     packet = protocol._read_json(artifacts, assignment['packet'])
     route = records['review_route'][assignment['route_id']]
-    if (capacity.describe_task_kind(assignment['role'], packet) != 'single'
+    retry_read = is_first_output_read(assignment, packet)
+    header = packet[parts.KEY] if retry_read else {}
+    if retry_read:
+        packet = parts.read_logical_packet(artifacts, header)
+    if (not retry_read and capacity.describe_task_kind(assignment['role'], packet) != 'single'
             or find_adapter(assignment, packet) is None
             or route['adapter'] not in protocol.transport.TEXT_ONLY_ADAPTERS):
         return None
@@ -75,7 +86,11 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
     profile = capacity.read_output_profile(records, route)
     allowance = min(inventory['characters'] // 2,
                     capacity.select_task_limits(route, profile, 'read')['material_allowance'])
+    if retry_read:
+        allowance = min(allowance, header['unit_characters'] // 2)
     base = assignment['prompt']['parameters']
+    if retry_read:
+        base = base['base_prompt']['parameters']
     parameters = dict(repair=bool(base.get('context_repair')),
         orchestration=base.get('orchestration'), excerpts='reviewer_excerpts' in base,
         common_version=protocol.find_common_prompt_version(assignment['prompt']))
@@ -87,7 +102,7 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
     planned = parts.prepare_packet(records, artifacts, value, route, packet, assignment['prompt'],
         protocol.read_history(artifacts, assignment), base_prompt_parameters=parameters,
         slot_id=protocol.context_repair.slot_id(records, assignment), entry='output', read_allowance=allowance,
-        replaces_assignment_id=assignment['id'])
+        replaces_assignment_id=header['replaces_assignment_id'] if retry_read else assignment['id'])
     if parts.find_kind(planned) != 'read':
         return None
     prompt = parts.build_turn_prompt(assignment['role'], parameters, planned[parts.KEY])
@@ -97,6 +112,11 @@ def build_output_replacement(records, artifacts, assignment, *, identifier=None)
         request, packet=planned, artifacts=artifacts)
     if planned[parts.KEY]['unit_characters'] > inventory['characters'] // 2:
         return None
+    if retry_read:
+        from .review_problem_parts import _measure
+        old_request = protocol.build_assignment_request(records, artifacts, assignment)
+        if _measure(route, request) >= _measure(route, old_request):
+            return None
     return dict(packet=planned, prompt=prompt, preflight=preflight,
                 context=dict(capacity_replacement=assignment['id']))
 
@@ -119,11 +139,15 @@ def prepare_replacement(records, artifacts, value, revision):
         raise ResearchError('review_source_continuation_fork', 'Continue the recorded capacity replacement.')
     attempts = protocol.read_filtered_records(records, 'review_attempt', assignment_id=identifier).values()
     classifications = [failures.classify_attempt(records, artifacts, row) for row in attempts]
+    eligible = any((outcome or {}).get('outcome') == 'output_over_cap' for outcome in classifications)
+    if is_first_output_read(previous, protocol._read_json(artifacts, previous['packet'])):
+        recovery = failures.plan_after_failure(records, artifacts, identifier)
+        eligible = (recovery['state'] == 'replace'
+                    and recovery.get('details', {}).get('handler') == 'single_request_series')
     if (protocol.has_pending_invocation(records, identifier)
-            or any(outcome is None for outcome in classifications)
-            or not any((outcome or {}).get('outcome') == 'output_over_cap' for outcome in classifications)):
+            or any(outcome is None for outcome in classifications) or not eligible):
         raise ResearchError('invalid_review_context',
-                            'A capacity replacement needs an output-limit failure, no pending invocation and no usable completed output.')
+                            'A capacity replacement needs an admissible smaller task, no pending invocation and no usable completed output.')
     planned = build_output_replacement(records, artifacts, previous, identifier=value['id'])
     if planned is None:
         raise ResearchError('invalid_review_context', 'This single review has no smaller parts task.')

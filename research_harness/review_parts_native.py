@@ -133,6 +133,10 @@ def find_final_assignment(records, artifacts, identifier):
     seen = set()
     while current['id'] not in seen:
         seen.add(current['id'])
+        replacement = find_replacement(records, current)
+        if replacement is not None:
+            current = replacement
+            continue
         live = [saved for saved in assignments.values()
                 if saved['role'] == 'native_math'
                 and (saved.get('capacity_replacement_of') or saved['context'].get('prior_assignment_id')) == current['id']

@@ -323,6 +323,57 @@ class FrozenSingleTests(unittest.TestCase):
         self.assertEqual(replacement['route_id'], self.first['route_id'])
         self.assertEqual(replacement['reviewer_id'], self.first['reviewer_id'])
 
+    def test_first_output_read_timeout_replaces_it_without_changing_the_frozen_origin(self):
+        from codex_route_fixtures import build_codex_response, bind_codex_response
+        from research_harness.review_continuation import plan_next
+        from test_review_output_profile import build_row
+        self.record_over_cap()
+        profile = dict(rows=[build_row(level=None, kind='single', thinking=1000),
+                             build_row(level=None, kind='read', thinking=1000)])
+        with patch.object(capacity, 'read_output_profile', return_value=profile):
+            planned = plan_next(self.case.store.snapshot()['records'], self.case.artifacts, 'first')
+            first_read = protocol.record_assignment(self.case.store, planned['payload'],
+                expected_revision=self.case.store.revision, request_id='replace-single')['result']
+            before = protocol.build_assignment_request(self.case.store.snapshot()['records'],
+                                                        self.case.artifacts, first_read)
+            old = self.case.read_packet(first_read)[parts.KEY]['unit_characters']
+            self.assertGreater(old, 30000)
+            def timeout(route, request, credential):
+                response = build_codex_response(route, request, {})
+                response['output'][0]['content'][0]['text'] = ''
+                response['usage']['output_tokens'] = 1
+                response['status'] = 'failed'
+                response['execution'] = dict(timeout=True)
+                return bind_codex_response(route, request, response)
+            for number in range(2):
+                with patch.object(protocol.transport, 'send_request', side_effect=timeout):
+                    protocol.invoke_assignment(self.case.store,
+                        dict(id='timeout-' + str(number), assignment_id=first_read['id']),
+                        expected_revision=self.case.store.revision, request_id='timeout-' + str(number))
+                if number == 0:
+                    revision = self.case.store.revision
+                    payload = {key: first_read[key] for key in
+                               ('role', 'route_id', 'dossier_id', 'reviewer_id', 'author_id')}
+                    payload.update(id='premature-replacement', context=dict(capacity_replacement=first_read['id']))
+                    with self.assertRaises(ResearchError) as caught:
+                        protocol.record_assignment(self.case.store, payload,
+                            expected_revision=revision, request_id='premature-replacement')
+                    self.assertEqual(caught.exception.code, 'invalid_review_context')
+                    self.assertEqual(self.case.store.revision, revision)
+            next_plan = plan_next(self.case.store.snapshot()['records'], self.case.artifacts, first_read['id'])
+            self.assertEqual(next_plan['state'], 'replace', next_plan)
+            replacement = protocol.record_assignment(self.case.store, next_plan['payload'],
+                expected_revision=self.case.store.revision, request_id='replace-read')['result']
+        header = self.case.read_packet(replacement)[parts.KEY]
+        self.assertEqual((header['entry'], header['replaces_assignment_id']), ('output', self.first['id']))
+        self.assertLessEqual(header['unit_characters'], old // 2)
+        self.assertEqual(replacement['slot_id'], first_read['slot_id'])
+        self.assertEqual(replacement['capacity_replacement_of'], first_read['id'])
+        self.assertEqual(replacement['context'], first_read['context'])
+        self.assertEqual(parts.read_logical_packet(self.case.artifacts, header), self.case.read_packet(self.first))
+        self.assertEqual(protocol.build_assignment_request(self.case.store.snapshot()['records'],
+                         self.case.artifacts, first_read), before)
+
     def test_completed_capped_answer_without_usable_output_enters_its_series(self):
         from research_harness.review_continuation import plan_next
         self.record_over_cap(completed=True)

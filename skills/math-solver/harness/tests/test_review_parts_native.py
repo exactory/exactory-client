@@ -20,9 +20,23 @@ from search_controller.storage import ContentSink
 
 class NativePartsAcceptanceTests(MathOpennessChainCase, unittest.TestCase):
     def test_single_output_replacement_is_consumed_and_acceptance_link_is_audited(self):
+        self.finish_output_replacement_journey()
+
+    def test_first_output_read_timeout_preserves_the_accepted_review_link(self):
+        self.finish_output_replacement_journey(retry_read=True)
+
+    def finish_output_replacement_journey(self, *, retry_read=False):
         from research_harness.review_continuation import plan_next
         from research_harness.record_check import check_authentication
         self.build_native_fixture()
+        if retry_read:
+            from research_harness import review_route_capacity as capacity
+            from test_review_output_profile import build_row
+            profile = patch.object(capacity, 'read_output_profile', return_value=dict(rows=[
+                build_row(level=None, kind='single', thinking=1000),
+                build_row(level=None, kind='read', thinking=1000)]))
+            profile.start()
+            self.addCleanup(profile.stop)
         limit_codex_input(self, 2000000)
         with patch.object(transport, 'CODEX_INPUT_LIMIT_CHARS', 2000000), \
                 patch.object(parts, 'prepare_packet', side_effect=lambda records, artifacts, value, route,
@@ -40,6 +54,25 @@ class NativePartsAcceptanceTests(MathOpennessChainCase, unittest.TestCase):
         self.assertEqual(plan['state'], 'replace', plan)
         assignment = protocol.record_assignment(self.store, plan['payload'],
             expected_revision=self.store.revision, request_id='replace-single')['result']
+        if retry_read:
+            from codex_route_fixtures import build_codex_response, bind_codex_response
+            def timeout(route, request, credential):
+                response = build_codex_response(route, request, {})
+                response['output'][0]['content'][0]['text'] = ''
+                response['usage']['output_tokens'] = 1
+                response['status'] = 'failed'
+                response['execution'] = dict(timeout=True)
+                return bind_codex_response(route, request, response)
+            for number in range(2):
+                with patch.object(transport, 'send_request', side_effect=timeout):
+                    protocol.invoke_assignment(self.store,
+                        dict(id='read-timeout-' + str(number), assignment_id=assignment['id']),
+                        expected_revision=self.store.revision, request_id='read-timeout-' + str(number))
+            next_plan = plan_next(self.store.snapshot()['records'], self.artifacts, assignment['id'])
+            self.assertEqual(next_plan['state'], 'replace', next_plan)
+            assignment = protocol.record_assignment(self.store, next_plan['payload'],
+                expected_revision=self.store.revision, request_id='replace-first-read')['result']
+            self.assertEqual(self.read_turn(assignment['id'])[parts.KEY]['replaces_assignment_id'], original['id'])
         for number in range(40):
             packet = self.read_turn(assignment['id'])
             self.invoke(assignment['id'], self.review if parts.find_kind(packet) == 'final' else make_output(packet))

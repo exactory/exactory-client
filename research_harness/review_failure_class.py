@@ -392,10 +392,11 @@ def plan_output_replacement(records, artifacts, assignment, *, allow_single=True
 
     packet = protocol._read_json(artifacts, assignment['packet'])
     from .review_route_capacity import describe_task_kind
-    if describe_task_kind(assignment['role'], packet) == 'single' and not repair.applies(assignment, packet):
-        if not allow_single:
+    from .review_single_request import build_output_replacement, is_first_output_read
+    single = describe_task_kind(assignment['role'], packet) == 'single'
+    if (single or is_first_output_read(assignment, packet)) and not repair.applies(assignment, packet):
+        if single and not allow_single:
             return None
-        from .review_single_request import build_output_replacement
         staged = ControllerArtifacts(artifacts)
         try:
             replacement = build_output_replacement(records, staged, assignment)
