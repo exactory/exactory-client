@@ -19,6 +19,7 @@ from .problem_openness import assess_openness
 
 _RECORD_RESULT_NOTE = ('Record the observed complete final of the current series with value-review from its '
                        'exact output. No further reviewer call is needed.')
+_REFERENCE_EXPORT_SCHEMA = "exactory-problem-export-v2"
 
 
 def assess_minimum(records, artifacts):
@@ -637,7 +638,7 @@ def prepare_decision(records, artifacts, value, revision, *, source_guards=None)
     return [immutable_record(records, "problem_decision", value["id"], record)], record
 
 
-def build_post_files(records, artifacts):
+def build_post_files(records, artifacts, *, include_references=False):
     """Compose the statement, value paragraphs and citations without claiming any decision or review."""
     statement, value = find_current_statement(records), find_value(records)
     files = {"title.txt": statement["title"], "statement.md": statement["statement"],
@@ -645,16 +646,19 @@ def build_post_files(records, artifacts):
              "motivation.md": "\n\n".join(row["text"] for row in value["motivation"]),
              "state.md": "\n\n".join(row["text"] for row in value["current_state"]),
              "citations.json": json.dumps(project_citations(records, artifacts), ensure_ascii=False, sort_keys=True, indent=2)}
+    if include_references:
+        files["citation-refs.json"] = json.dumps(project_citations(records, artifacts, for_lookup=True),
+                                                ensure_ascii=False, sort_keys=True, indent=2)
     formal = statement["formal_statement"]
     if formal is not None:
         files["formal-statement.txt"] = formal["text"]
     return files
 
 
-def build_projection(records, artifacts):
+def build_projection(records, artifacts, *, include_references=False):
     statement = find_current_statement(records)
     decision = find_latest(records, "problem_decision")
-    files = build_post_files(records, artifacts)
+    files = build_post_files(records, artifacts, include_references=include_references)
     formal = statement["formal_statement"]
     from .review_protocol import assignment_state
     from .research_decisions import _response
@@ -685,6 +689,8 @@ def build_projection(records, artifacts):
                 "problem_evidence_digest": compute_problem_evidence_digest(records, artifacts), "decision_id": decision["id"],
                 "area": statement["area"], "formal_statement_language": None if formal is None else formal["language"],
                 "files": {name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())}}
+    if include_references:
+        manifest["schema"] = _REFERENCE_EXPORT_SCHEMA
     files["problem-export.json"] = (json.dumps(manifest, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode()
     return files, manifest
 
@@ -710,7 +716,7 @@ def export_problem(store, destination=None):
     records = store.snapshot()["records"]
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
     require_ready(assess_post(records, artifacts), "post")
-    files, manifest = build_projection(records, artifacts)
+    files, manifest = build_projection(records, artifacts, include_references=True)
     return write_problem_export(store, files, manifest, destination)
 
 
@@ -731,9 +737,10 @@ def export_problem_override(store, destination=None):
         raise ResearchError("problem_value_missing", "Record the problem's motivation and current state with problem-value "
                             "before this export")
     artifacts = Evaluation.of(records, ArtifactStore(store.root))
-    files = {name: (content + "\n").encode("utf-8") for name, content in build_post_files(records, artifacts).items()}
+    files = {name: (content + "\n").encode("utf-8")
+             for name, content in build_post_files(records, artifacts, include_references=True).items()}
     formal = statement["formal_statement"]
-    manifest = dict(statement_id=statement["id"], statement_digest=statement_digest, area=statement["area"],
+    manifest = dict(schema=_REFERENCE_EXPORT_SCHEMA, statement_id=statement["id"], statement_digest=statement_digest, area=statement["area"],
                     formal_statement_language=None if formal is None else formal["language"],
                     files={name: hashlib.sha256(content).hexdigest() for name, content in sorted(files.items())},
                     decision_id=None, problem_evidence_digest=None, override_id=override["id"], gate="bypassed")
@@ -777,12 +784,16 @@ def prepare_posted(records, artifacts, value, recorded_revision=None, *, source_
     # view; they cannot erase the external delivery from the local record.
     require_ready(assess_post(records, artifacts, source_guards=source_guards,
                               check_source_freshness=False), "post")
-    files, manifest = build_projection(records, artifacts)
     directory = Path(value["export_directory"])
     if not directory.is_absolute():
         directory = artifacts.root / directory
     try:
+        files, manifest = build_projection(records, artifacts, include_references=True)
         valid = has_exported_files(directory, files)
+        if not valid:
+            # A pre-v2 export and its post retain their original bytes and digest.
+            files, manifest = build_projection(records, artifacts)
+            valid = has_exported_files(directory, files)
     except OSError as error:
         raise ResearchError("problem_export_mismatch", "Read the complete approved problem projection", {"export_directory": str(directory)}) from error
     if not valid:

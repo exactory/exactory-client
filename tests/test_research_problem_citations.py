@@ -30,6 +30,20 @@ def build_citation_records():
 
 
 class RegistryCitationTests(unittest.TestCase):
+    def test_lookup_projection_keeps_stored_titles_authors_and_registry_identifiers(self):
+        records = build_citation_records()
+        first = records["work"]["arxiv:2601.18757v1"]
+        first.update(title=r"A title in $\mathrm{SL}_2(\mathbf{Z})$", authors=["Katherine E. Stange"])
+        references = project_citations(records, None, for_lookup=True)
+        self.assertEqual(references[0], {
+            "referenceString": r"Katherine E. Stange. A title in $\mathrm{SL}_2(\mathbf{Z})$",
+            "bibliography": {"arxivId": "2601.18757v1", "title": first["title"], "authors": ["Katherine E. Stange"]}})
+        self.assertEqual(references[-1], {
+            "referenceString": "Chuichiro Hayashi, Miwa Hayashi, Tahl Nowik. A shared topology title",
+            "bibliography": {"doi": "10.1016/j.topol.2012.01.008", "title": "A shared topology title",
+                "authors": ["Chuichiro Hayashi", "Miwa Hayashi", "Tahl Nowik"]}})
+        self.assertEqual(len(references), 5)
+
     def test_registry_legacy_citation_bytes_and_binding_digest_are_unchanged(self):
         records = build_citation_records()
         self.assertEqual(json.dumps(project_citations(records, None), sort_keys=True, separators=(",", ":")).encode(),

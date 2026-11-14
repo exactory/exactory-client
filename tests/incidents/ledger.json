@@ -4631,6 +4631,32 @@
         "test_research_record_check.RecordCheckTests.test_command_over_budget_is_failed_with_patched_processor_clock",
         "test_research_record_check.RecordCheckFollowupTests.test_cli_time_budget_defaults_to_10800_and_accepts_an_override"
       ]
+    },
+    {
+      "id": "citation-check-title-with-tex-braces",
+      "record": "20261112210200-citation-check-title-with-tex-braces",
+      "class": "citation integrity and registry pacing",
+      "summary": "Correct TeX titles were compared after one-sided brace stripping; problem exports lacked structured reference metadata, and citation lookups exceeded the arXiv request interval.",
+      "fixed_in": "open",
+      "expected": "Both titles use the same normalization, mismatch details quote original titles, and author-bearing DOI/arXiv reference lists verify. Both problem export kinds add citation-refs.json under a new manifest schema while legacy export bytes, post digests and final indexes remain valid. Shared arXiv admission spaces requests by at least three seconds and retries 429/503 within a fixed attempt bound.",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_check.TestRefsJsonInput.test_incident_arxiv_titles_with_tex_braces_verify",
+        "test_check.TestRefsJsonInput.test_title_mismatch_quotes_both_original_titles",
+        "test_check.TestRefsJsonInput.test_doi_mismatch_quotes_registry_markup_and_the_original_bibtex_title",
+        "test_check.TestRefsJsonInput.test_prescribed_identifier_title_authors_shape_verifies_doi_and_arxiv",
+        "test_check.TestCacheIdentity.test_old_brace_stripped_cache_is_refreshed_before_reporting_a_mismatch",
+        "test_check.TestRegistryRequests.test_lookup_paces_forty_arxiv_entries_and_retries_429_and_503",
+        "test_check.TestRegistryRequests.test_arxiv_retry_exhaustion_is_bounded_and_remains_incomplete",
+        "test_research_problem_delivery.ProblemDeliveryTests.test_both_exports_write_checkable_references_with_initialed_authors",
+        "test_research_problem_delivery.ProblemDeliveryTests.test_legacy_export_keeps_its_digest_post_record_and_final_index",
+        "test_research_problem_delivery.ProblemDeliveryTests.test_reference_list_tampering_or_removal_refuses_recording_the_post",
+        "test_research_problem_citations.RegistryCitationTests.test_registry_legacy_citation_bytes_and_binding_digest_are_unchanged",
+        "test_check.TestRegistryRequests.test_default_admission_paces_independent_arxiv_calls",
+        "test_research_problem_citations.RegistryCitationTests.test_lookup_projection_keeps_stored_titles_authors_and_registry_identifiers",
+        "test_gate_override.ProblemOverrideTests.test_legacy_override_export_keeps_its_files_digest_and_final_index",
+        "test_check.TestRefsJsonInput.test_doi_tex_titles_verify_and_keep_chapter_title_matching"
+      ]
     }
   ]
 }
