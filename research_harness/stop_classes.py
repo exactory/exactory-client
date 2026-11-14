@@ -136,16 +136,13 @@ for _code, _command in (
                                 next=dict(kind='handoff', command=_command))
 _STORED_STATE_CODES_FIRST = ('review_input_unreadable',)
 
-for _code in _STORED_STATE_CODES_FIRST + ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
+for _code in ('review_turn_failures_exhausted', 'review_parts_budget_exhausted',
               'review_quality_measurement_pending', 'review_invocation_unverified',
               'review_output_unavailable', 'review_inventory_mismatch', 'review_source_parent_unverified',
-              'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted'
-              ) + _STORED_CONTENT_CODES_REVIEW_B:
+              'review_history_invalid', 'artifact_missing', 'artifact_corrupt', 'review_budget_exhausted'):
     STOP_REGISTRY[_code] = dict(code=_code, **{'class': 'decision'}, owner='D2',
         next=dict(kind='decision', owner_decides='How should this review boundary be resolved?',
                   then=[dict(answer='Check the retained record', steps=[dict(command='record-check')])]))
-for _code in _STORED_STATE_CODES_FIRST:
-    STOP_REGISTRY[_code]['group'] = 'stored_state'
 STOP_REGISTRY.update({
     'openness_minimum_gaps': dict(code='openness_minimum_gaps', **{'class': 'decision'}, owner='D3',
         next=dict(kind='handoff', command='export', payload=dict(kind='problem-openness'),
@@ -159,8 +156,6 @@ STOP_REGISTRY.update({
                             'Complete the work named by the condition-check obligations.')])])),
 })
 
-for _code in _STORED_CONTENT_CODES_REVIEW_B:
-    STOP_REGISTRY[_code]['group'] = 'stored_state'
 STOP_REGISTRY['problem_bar_calibration_required'] = dict(code='problem_bar_calibration_required',
     **{'class': 'decision'}, owner='D2',
     next=dict(kind='decision', owner_decides='Whether to refresh the bar for the current problem.',

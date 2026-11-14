@@ -73,14 +73,14 @@ class UnlistedStopTests(unittest.TestCase):
         action = dict(command='value-review', state='record', payload=dict(output,
             id='review:bar-first', assignment_id='bar-first', dossier_id=None))
         rows = []
-        with patch.dict(cli.OPERATIONS, {'value-review': self.refuse_stale_search}):
+        with patch.dict(cli.OPERATIONS, {'value-review': self.refuse_missing_search}):
             with record_reachable_errors('run_series'):
                 result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
             with record_reachable_errors('record-check'):
                 report = record_check.check_record(self.case.root, isolate=False)
         self.assertEqual(result, 3)
         terminal = rows[-1]
-        self.assertEqual((terminal['head_id'], terminal['code']), ('bar-first', 'openness_search_stale'))
+        self.assertEqual((terminal['head_id'], terminal['code']), ('bar-first', 'openness_search_missing'))
         self.assertEqual(terminal['details']['refused_action'], action)
         self.assertEqual([row['step'] for row in report['steps']],
                          ['snapshot', 'integrity', 'reconstruction', 'authentication', 'continuation'])
@@ -88,7 +88,7 @@ class UnlistedStopTests(unittest.TestCase):
         failure = report['steps'][-1]
         self.assertEqual((failure['status'], failure['error']['code']), ('failed', 'record_unlisted_stop'))
         boundary = failure['error']['details']
-        self.assertEqual((boundary['head_id'], boundary['code']), ('bar-first', 'openness_search_stale'))
+        self.assertEqual((boundary['head_id'], boundary['code']), ('bar-first', 'openness_search_missing'))
         self.assertEqual(boundary['chain'], terminal['chain'])
         self.assertEqual(boundary['refused_action'], action)
 
