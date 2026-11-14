@@ -398,9 +398,12 @@ class CapacityDefectEvidenceTests(CapacityAssignmentCase):
         declaration = dict(build_inputs(1), kind='reading')
         with patch.object(review_protocol, 'build_packet', side_effect=self.build_fixture_packet(declaration)):
             self.case.mutate(review_protocol.record_assignment, self.build_payload())
+        stop = automatic_overrides.record_series_stop(self.case.store, dict(
+            state='stop', head_id='planned', code='review_route_capacity_plan_violated', progress={}, details={}))
+        self.assertIsNone(stop['retry'])
+        self.assertEqual(stop['read_errors']['retry']['code'], 'gate_override_stop_untrusted')
         with self.assertRaises(ResearchError) as caught:
-            automatic_overrides.record_series_stop(self.case.store, dict(
-                state='stop', head_id='planned', code='review_route_capacity_plan_violated', progress={}, details={}))
+            automatic_overrides._trusted_stop(self.case.store, self.case.records(), stop['id'])
         self.assertEqual(caught.exception.code, 'gate_override_stop_untrusted')
 
 

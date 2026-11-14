@@ -6928,6 +6928,14 @@ A genuine hot SQLite rollback journal makes default reads return `store_recovery
 
 `record-check --workspace W [--keep-clone DIR] [--time-budget SECONDS]` qualifies a copy of a research record offline, in six steps, and prints a JSON report. `--workspace` is required, and the command has no `--check` flag. It never opens a SQLite connection on `W`. It copies `W` file by file (APFS `clonefile` on macOS) into a clone in a new temporary directory outside `W` and checks the copy (`PRAGMA integrity_check` and the store's full history validation); it copies up to three times until one copy is consistent, otherwise the `snapshot` step fails with `record_snapshot_inconsistent`. The clone is removed when the command ends. `--keep-clone DIR` keeps the clone at `DIR`, which must not exist and must be outside `W` (`unsafe_path` otherwise).
 
+| Ending or report member | Meaning |
+| --- | --- |
+| `series_stops` | Beside `steps`, list the latest retained ending per assignment and every ending without a registry row, from the store and `.exactory/series-endings/`. Each entry gives `place`, `id` or `path`, `assignment_id`, `state`, `code`, `stop_class`, `listed`, `refused_action` and `recorded_revision`. An unlisted code adds `finding: record_unlisted_stop` and keeps `ready` false regardless of the steps. Workspace files are read even when `snapshot` fails; a `place: store`, `status: not_read` entry then carries the snapshot error and states that store endings were not read. |
+| `details.omitted` of a final series line | Map each unavailable store-backed member to the error that prevented its addition. The ending keeps its original code, continues retaining the receipt and prints the line. |
+| `details.intended_step` | The row's step when a failed reading or an unavailable automatic-pass basis requires the fallback instead. The fallback step runs `record-check` with the workspace and then `review-series` with the workspace and head, with no fields to choose or prerequisites. |
+| `details.receipt` | Where the coded ending was retained: `place: store` with `id`, `place: workspace` with `path`, or `place: null` with the errors of both attempted places. `stop_id` and `stop_record_error` retain their meanings. |
+| `.exactory/series-endings/` | Atomic JSON receipts for coded series endings that the store could not retain. `record-check` reads these files directly from the workspace; no command removes them. |
+
 The six steps run in this order. The first failed step ends the check, and the later steps do not run:
 
 1. `snapshot`: the consistent copy, with its revision and the number of copies.

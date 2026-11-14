@@ -4,7 +4,9 @@ There is no command for authoring a stop. The series driver supplies its own
 terminal observation; the automatic-pass command accepts only its identity.
 """
 
+import copy
 import json
+import time
 
 from .errors import ResearchError
 from .evidence import digest
@@ -50,19 +52,50 @@ def _describe_plan_violation_proof(records, artifacts, assignment_id):
 def record_series_stop(store, plan):
     """Retain a terminal observation at the driver's current store revision."""
     snapshot = store.snapshot()
-    identifier = "series-stop:" + digest([snapshot["revision"], plan])
-    request_id = identifier
-    code = plan["code"]
-    retry = None
-    if code == "review_series_no_progress":
-        retry = dict(policy="one_execution_per_progress_position", executions=1, exhausted=True,
-                     **{key: plan["details"][key] for key in
-                        ("action_state", "action_digest", "progress_digest", "successful_request_id")})
+    plan = copy.deepcopy(plan)
+    code = plan['code']
+    from .review_series import _identify_ending, _complete_ending_step
+    retained = [row for row in snapshot['records'].get('review_series_stop', {}).values()
+                if row['assignment_id'] == plan['head_id']]
+    latest = max(retained, key=lambda row: row['recorded_revision']) if retained else None
+    if (latest is not None and not latest.get('read_errors')
+            and _identify_ending(latest['plan']) == _identify_ending(plan)):
+        return latest
+    retry, read_errors = None, {}
+    if code == 'review_series_no_progress':
+        keys = ('action_state', 'action_digest', 'progress_digest', 'successful_request_id')
+        if all(key in plan['details'] for key in keys):
+            retry = dict(policy='one_execution_per_progress_position', executions=1, exhausted=True,
+                         **{key: plan['details'][key] for key in keys})
     if code == 'review_route_capacity_plan_violated':
-        retry = _describe_plan_violation_proof(snapshot['records'], store.build_artifact_store(), plan['head_id'])
-    row = dict(id=identifier, origin="harness", code=code, assignment_id=plan["head_id"],
-               plan=plan, retry=retry, request_id=request_id, recorded_revision=snapshot["revision"] + 1)
-    row["scope"] = _scope(snapshot["records"], store.build_artifact_store(), plan["head_id"])
+        try:
+            retry = _describe_plan_violation_proof(snapshot['records'], store.build_artifact_store(), plan['head_id'])
+        except BaseException as error:
+            read_errors['retry'] = (error.as_dict() if isinstance(error, ResearchError) else
+                                    dict(code=type(error).__name__, message=str(error)))
+    scope = None
+    try:
+        scope = _scope(snapshot['records'], store.build_artifact_store(), plan['head_id'])
+    except BaseException as error:
+        read_errors['scope'] = (error.as_dict() if isinstance(error, ResearchError) else
+                                dict(code=type(error).__name__, message=str(error)))
+    if read_errors:
+        plan.setdefault('details', {}).setdefault('omitted', {}).update(read_errors)
+    if read_errors and plan.get('details', {}).get('step', {}).get('command') == 'gate-auto-pass':
+        from .review_series import _use_fallback_step
+        _use_fallback_step(store, plan)
+    identifier = 'series-stop:' + digest([snapshot['revision'], _identify_ending(plan)])
+    request_id = identifier
+    plan.setdefault('details', {})['receipt'] = dict(place='store', id=identifier, retained_at=time.time_ns())
+    plan.update(stop_id=identifier, revision_after_stop=snapshot['revision'] + 1)
+    if not read_errors and plan['details'].get('step', {}).get('command') == 'gate-auto-pass':
+        plan['details']['step'].update(payload=dict(stop_id=identifier), chooses=[], prerequisites=[])
+    _complete_ending_step(store, plan)
+    row = dict(id=identifier, origin='harness', code=code, assignment_id=plan['head_id'],
+               plan=plan, retry=retry, scope=scope, request_id=request_id,
+               recorded_revision=snapshot['revision'] + 1)
+    if read_errors:
+        row['read_errors'] = read_errors
 
     def prepare(records, value):
         return [immutable_record(records, "review_series_stop", identifier, row)], row
@@ -89,6 +122,11 @@ def _trusted_stop(store, records, identifier):
             or receipt["response"]["revision"] != stop.get("recorded_revision")
             or stop.get("id") != identifier):
         _refuse("gate_override_stop_untrusted", "Need an unchanged stop written by the review-series harness.")
+    if stop.get('read_errors'):
+        _refuse('gate_override_stop_untrusted', 'Need a stop whose scope and defect proof were read successfully.',
+                read_errors=stop['read_errors'])
+    if stop['plan'].get('state', 'stop') != 'stop':
+        _refuse('gate_override_stop_class', 'Need a retained stop; a handoff, wait or completed review is not an automatic-pass basis.')
     classification = classify_stop(stop["code"])
     if classification != "harness_defect":
         _refuse("gate_override_stop_class", "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",
@@ -183,7 +221,8 @@ def _check_reviews(store, records, artifacts, stop):
     from .operations import normalized_text
     covered, basis = set(), []
     for identifier, row in sorted(records.get("review_series_stop", {}).items()):
-        if row.get("scope") != scope or classify_stop(row.get("code")) != "harness_defect":
+        if (row.get("scope") != scope or classify_stop(row.get("code")) != "harness_defect"
+                or row['plan'].get('state', 'stop') != 'stop' or row.get('read_errors')):
             continue
         row = _trusted_stop(store, records, identifier)
         if not current(row):

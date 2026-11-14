@@ -214,14 +214,19 @@ class SeriesTests(unittest.TestCase):
             code, steps = self.drive()
         self.assertEqual(code, 3)
         operation.assert_called_once()
-        step = steps[0]['details'].pop('step')
+        step = steps[0]['details']['step']
         self.assertEqual(step['id'], 7)
         self.assertEqual(step['command'], 'review-route')
-        self.assertEqual(steps, [dict(state='handoff', chain=initial['chain'],
+        expected = dict(state='handoff', chain=initial['chain'],
             head_id='bar-first', progress=initial['progress'], command='review-route',
             code='review_route_runtime_stale',
-            provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=1),
-            details=dict(assignment_id='bar-first', route_id='route'))])
+            provider_usage=dict(windows=[], warnings=[], planned_remaining_turns=0))
+        self.assertEqual({key: steps[0][key] for key in expected}, expected)
+        self.assertEqual(steps[0]['details']['assignment_id'], 'bar-first')
+        self.assertEqual(steps[0]['details']['route_id'], 'route')
+        self.assertEqual(steps[0]['error']['code'], 'review_route_runtime_stale')
+        stop = self.case.read_records()['review_series_stop'][steps[0]['stop_id']]
+        self.assertEqual(stop['plan']['state'], 'handoff')
 
     def test_planner_refusal_is_replanned_from_fresh_snapshot(self):
         from research_harness.review_continuation import plan_next

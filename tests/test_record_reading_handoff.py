@@ -105,7 +105,12 @@ class ReadingHandoffTests(unittest.TestCase):
                              ['body', 'bibliography', 'abstract'])
             self.assertEqual(plan['details']['step']['id'], 13)
             self.assertEqual(plan['details']['then'], dict(command='review-series', assignment_id=final['id']))
-            self.assertEqual(self.case.read_records(), before)
+            after = self.case.read_records()
+            for kind, values in before.items():
+                if kind != 'literature_operation':
+                    self.assertEqual(after[kind], values, kind)
+            self.assertEqual(after['review_series_stop'][plan['stop_id']]['plan']['state'], 'handoff')
+            self.assertEqual(set(after['literature_operation']) - set(before['literature_operation']), {plan['stop_id']})
             self.read_source()
             record = self.plan()
             self.assertEqual(record, dict(state='record', chain='session', head_id='final',
@@ -221,7 +226,8 @@ class ReadingHandoffTests(unittest.TestCase):
         self.assertEqual((rows[-1]['state'], rows[-1]['code'], rows[-1]['command']),
                          ('handoff', 'reading_missing', 'read'))
         self.assertEqual(rows[-1]['details']['readings'][0]['captures'][0]['bundle_id'], 'updated-bundle')
-        self.assertNotIn('review_series_stop', self.case.read_records())
+        retained = self.case.read_records()['review_series_stop'][rows[-1]['stop_id']]
+        self.assertEqual(retained['plan']['state'], 'handoff')
         self.assertNotIn('review_output_refusal', self.case.read_records())
 
     def test_slate_and_result_finals_use_the_same_reading_step_and_recording_command(self):

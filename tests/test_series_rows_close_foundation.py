@@ -276,13 +276,14 @@ class NewGroupRowTests(unittest.TestCase):
 
 
 class LiteralRefusalTests(unittest.TestCase):
-    def test_all_twenty_refusals_preserve_their_complete_codes_messages_and_details(self):
+    def test_all_refusals_preserve_their_complete_codes_messages_and_details(self):
         expected = json.loads((Path(__file__).parent / 'fixtures/automatic_override_refusals.json').read_text())
         tree = ast.parse(inspect.getsource(automatic_overrides))
         calls = sorted((node for node in ast.walk(tree) if isinstance(node, ast.Call)
                         and isinstance(node.func, ast.Name) and node.func.id == '_refuse'), key=lambda node: node.lineno)
-        self.assertEqual(len(calls), 20)
-        values = dict(stop={'code': 'review_series_no_progress'}, classification='harness_defect',
+        self.assertEqual(len(calls), len(expected))
+        values = dict(stop={'code': 'review_series_no_progress', 'read_errors': {'scope': {'code': 'artifact_missing'}}},
+                      classification='harness_defect',
                       report={'obligations': [{'code': 'pending'}]}, row={'id': 'review'},
                       gate='submitted', public_action='POST /synthetic')
         for call, refusal in zip(calls, expected):

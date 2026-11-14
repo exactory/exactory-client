@@ -5682,6 +5682,28 @@
         "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_no_call_edges_must_remain_in_the_series_graph_and_reach_the_site",
         "test_series_rows_close_foundation.LiteralRefusalTests.test_all_twenty_refusals_preserve_their_complete_codes_messages_and_details"
       ]
+    },
+    {
+      "id": "series-refusals-always-end-with-a-readable-receipt",
+      "record": "20261113110022-every-open-record-and-review-capacity",
+      "class": "review series ending",
+      "summary": "Wait rereads, step completion and capacity diagnostics could escape without a final line; record-check did not read retained stops.",
+      "expected": "Every unanswered refusal prints its class, step and refused action, with diagnostic omissions and a receipt in the store or workspace; record-check lists receipts independently of replay and blocks unlisted codes.",
+      "fixed_in": "open",
+      "test_kind": "real_shape",
+      "tests": [
+        "test_series_ending.SeriesEndingTests.test_wait_second_read_refusal_ends_the_series",
+        "test_series_ending.SeriesEndingTests.test_refusal_receipt_survives_without_replaying_the_review_run",
+        "test_series_ending.SeriesEndingTests.test_missing_packet_keeps_a_null_scope_receipt_and_refuses_auto_pass",
+        "test_series_ending.SeriesEndingTests.test_two_unretained_refusals_in_the_same_store_stay_distinct",
+        "test_series_ending.SeriesEndingTests.test_every_ending_state_is_retained_once_at_the_same_progress",
+        "test_series_ending.SeriesEndingTests.test_failed_post_refusal_snapshot_never_replaces_the_refused_operation",
+        "test_series_ending.SeriesEndingTests.test_run_and_resume_at_one_progress_keep_distinct_receipts",
+        "test_series_ending.SeriesEndingTests.test_row_step_and_fallback_at_one_progress_get_distinct_receipts",
+        "test_series_ending.SeriesEndingTests.test_partial_output_recovers_exact_mandatory_values_for_row_and_fallback",
+        "test_series_ending.SeriesEndingTests.test_store_only_receipt_is_explicitly_unread_when_snapshot_fails",
+        "test_series_ending.SeriesEndingTests.test_nonending_print_failure_leaves_the_command_after_its_committed_step"
+      ]
     }
   ]
 }

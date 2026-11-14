@@ -16,6 +16,21 @@
     "message": "Need an unchanged stop written by the review-series harness."
   },
   {
+    "code": "gate_override_stop_untrusted",
+    "message": "Need a stop whose scope and defect proof were read successfully.",
+    "details": {
+      "read_errors": {
+        "scope": {
+          "code": "artifact_missing"
+        }
+      }
+    }
+  },
+  {
+    "code": "gate_override_stop_class",
+    "message": "Need a retained stop; a handoff, wait or completed review is not an automatic-pass basis."
+  },
+  {
     "code": "gate_override_stop_class",
     "message": "Need a harness-defect stop; follow its schedule or obtain the user's instruction.",
     "details": {
