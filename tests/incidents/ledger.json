@@ -4655,7 +4655,7 @@
       "record": "20261111223126-layout-extraction-inflates-fulltext-delivery",
       "class": "source extraction and review continuation",
       "summary": "Layout padding produces millions of whitespace characters and the first capture remains the delivered text after a compact recapture.",
-      "fixed_in": "open",
+      "fixed_in": "0.87.0",
       "expected": "Default PDF acquisition keeps complete plain extraction when layout whitespace exceeds 0.90 or extracted-byte expansion exceeds 2.0. A recorded main-capture choice changes the next pending version delivery while preserving captures, readings, earlier verified excerpts, exact requests and delivered part digests. Explicit layout flags remain authoritative. Request settlement and delivery-cost limits are separate later work.",
       "test_kind": "real_shape",
       "tests": [
