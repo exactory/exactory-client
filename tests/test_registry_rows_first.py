@@ -144,7 +144,9 @@ class RegistryRowsFirstTests(unittest.TestCase):
                 self.assertNotIn('unlisted', terminal['details'])
                 row = stop_classes.STOP_REGISTRY[code]
                 self.assertEqual(row['group'], 'stored_state')
-                decision = {key: value for key, value in row['next'].items() if key != 'kind'}
+                decision = copy.deepcopy({key: value for key, value in row['next'].items() if key != 'kind'})
+                decision['then'][0]['steps'] = [dict(command='record-check',
+                    arguments={'--workspace': str(fixture.case.store.root)}, payload={}, chooses=[], prerequisites=[])]
                 self.assertEqual(terminal['details']['decision'], decision)
                 self.assertEqual(terminal['details']['decision']['then'][0]['steps'][0]['command'], 'record-check')
 

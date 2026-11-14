@@ -41,10 +41,10 @@ class ReviewARowTests(unittest.TestCase):
                 self.assertNotIn('unlisted', terminal['details'])
                 self.assertEqual(stop_classes.STOP_REGISTRY[code]['group'], 'stored_state')
                 self.assertEqual(terminal['error']['details'], {'binding': 'synthetic'})
-                self.assertEqual(terminal['details']['decision'],
-                                 stop_classes.describe_terminal('review_history_invalid')['details']['decision'])
-                self.assertEqual(terminal['details']['decision']['then'][0]['steps'],
-                                 [{'command': 'record-check'}])
+                decision = stop_classes.describe_terminal('review_history_invalid')['details']['decision']
+                decision['then'][0]['steps'] = [dict(command='record-check',
+                    arguments={'--workspace': str(fixture.case.store.root)}, payload={}, chooses=[], prerequisites=[])]
+                self.assertEqual(terminal['details']['decision'], decision)
 
     def test_output_contract_codes_keep_the_scientific_refusal_outcome_and_retry(self):
         codes = (

@@ -90,10 +90,10 @@ class StoreRowTests(unittest.TestCase):
                 terminal = lines[-1]
                 self.assertEqual((terminal['state'], terminal['code'], terminal['stop_class']),
                                  ('stop', code, 'decision'))
-                self.assertEqual(terminal['details']['decision'],
-                                 {key: value for key, value in row['next'].items() if key != 'kind'})
-                self.assertEqual(terminal['details']['decision']['then'][0]['steps'],
-                                 [dict(command='record-check')])
+                decision = copy.deepcopy({key: value for key, value in row['next'].items() if key != 'kind'})
+                decision['then'][0]['steps'] = [dict(command='record-check',
+                    arguments={'--workspace': str(case.store.root)}, payload={}, chooses=[], prerequisites=[])]
+                self.assertEqual(terminal['details']['decision'], decision)
                 self.assertNotIn('unlisted', terminal['details'])
         # Registry additions never rewrite an assignment, packet, or earlier record.
         after = case.read_records()

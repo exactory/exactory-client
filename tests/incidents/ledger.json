@@ -5370,6 +5370,7 @@
       "fixed_in": "0.89.0",
       "test_kind": "real_shape",
       "tests": [
+        "test_capacity_signals.CapacitySignalTests.test_response_limit_has_one_retry_then_role_steps_and_no_profile_row",
         "test_capacity_signals.ResponseLimitJourneyTests.test_existing_bar_session_head_moves_by_retirement_probe_and_repair_to_recording",
         "test_capacity_signals.ResponseLimitJourneyTests.test_problem_openness_moves_by_probe_and_new_export_to_recorded_finding",
         "test_capacity_signals.ResponseLimitJourneyTests.test_verification_moves_by_probe_and_first_assignment_to_recorded_verdict",
@@ -5680,7 +5681,7 @@
         "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_refuses_an_entry_that_a_computed_site_can_pass_on",
         "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_refuses_an_entry_with_a_constructor_or_a_plan_site",
         "test_series_rows_close_foundation.NoSeriesEndingGuardTests.test_no_call_edges_must_remain_in_the_series_graph_and_reach_the_site",
-        "test_series_rows_close_foundation.LiteralRefusalTests.test_all_twenty_refusals_preserve_their_complete_codes_messages_and_details"
+        "test_series_rows_close_foundation.LiteralRefusalTests.test_all_refusals_preserve_their_complete_codes_messages_and_details"
       ]
     },
     {

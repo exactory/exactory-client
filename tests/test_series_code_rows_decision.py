@@ -92,9 +92,10 @@ class DecisionRowTests(unittest.TestCase):
                                  (3, 'stop', code, 'decision'))
                 self.assertNotIn('unlisted', last['details'])
                 self.assertEqual(stop_classes.STOP_REGISTRY[code]['group'], 'stored_state')
-                self.assertEqual(last['details']['decision'],
-                    stop_classes.describe_terminal('review_history_invalid')['details']['decision'])
-                self.assertEqual(last['details']['decision']['then'][0]['steps'], [{'command': 'record-check'}])
+                decision = stop_classes.describe_terminal('review_history_invalid')['details']['decision']
+                decision['then'][0]['steps'] = [dict(command='record-check',
+                    arguments={'--workspace': str(fixture.case.store.root)}, payload={}, chooses=[], prerequisites=[])]
+                self.assertEqual(last['details']['decision'], decision)
                 self.assertEqual(last['error']['details'], {'binding': 'retained'})
         self.assertEqual(fixture.case.read_records().get('review_attempt', {}), {})
 

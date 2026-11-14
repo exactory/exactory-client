@@ -25,10 +25,11 @@ class SeriesEndingTests(unittest.TestCase):
         self.case = self.fixture.case
         self.plan = self.fixture.plan()
         self.snapshot = self.case.store.snapshot()
+
+    def run_series(self, *args, **kwargs):
         from test_series_code_reach import record_reachable_errors
-        recorder = record_reachable_errors('run_series', injected=INJECTED_CODES)
-        recorder.__enter__()
-        self.addCleanup(recorder.__exit__, None, None, None)
+        with record_reachable_errors('run_series', injected=INJECTED_CODES):
+            return review_series.run_series(*args, **kwargs)
 
     def build_error(self, code=INJECTED_CODE):
         return ResearchError(code, 'Synthetic refusal.', dict(marker='retained'))
@@ -36,7 +37,7 @@ class SeriesEndingTests(unittest.TestCase):
     def run_refusal(self, code=INJECTED_CODE):
         rows = []
         with patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error(code)}):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 3)
         return rows[-1]
 
@@ -75,7 +76,7 @@ class SeriesEndingTests(unittest.TestCase):
         waiting = dict(self.plan, state='wait', not_before='2000-01-01T00:00:00Z')
         rows = []
         with patch.object(review_series, '_read_plan', side_effect=[(self.snapshot, waiting), self.build_error()]):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 3)
         self.assert_unlisted(rows[-1])
         self.assertNotIn('not_before', review_series._recover_ending_line(rows[-1]))
@@ -92,7 +93,7 @@ class SeriesEndingTests(unittest.TestCase):
         with patch.object(review_series, '_read_plan', return_value=(self.snapshot, self.plan)), \
                 patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error('review_route_runtime_stale')}), \
                 patch('research_harness.review_plan_steps.complete_plan', side_effect=self.build_error()):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 3)
         line = rows[-1]
         self.assertEqual((line['code'], line['command']), ('review_route_runtime_stale', 'record-check'))
@@ -116,7 +117,7 @@ class SeriesEndingTests(unittest.TestCase):
                 patch.object(self.case.store, 'snapshot', return_value=snapshot), \
                 patch('research_harness.review_route_capacity.describe_assignment_capacity', side_effect=self.build_error()), \
                 patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error()}):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 3)
         self.assert_unlisted(rows[-1])
         self.assertEqual(rows[-1]['details']['omitted']['capacity_forecast']['code'], INJECTED_CODE)
@@ -236,10 +237,10 @@ class SeriesEndingTests(unittest.TestCase):
         rows = []
         with patch.object(review_series, '_read_plan', return_value=(self.snapshot, plan)):
             if operation_error is None:
-                result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+                result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
             else:
                 with patch.dict(cli.OPERATIONS, {plan['command']: lambda *a, **k: self.raise_error(operation_error)}):
-                    result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+                    result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         return result, rows[-1]
 
     def test_every_ending_state_is_retained_once_at_the_same_progress(self):
@@ -365,7 +366,7 @@ class SeriesEndingTests(unittest.TestCase):
             return store.mutate('fixture.unchanged', {}, lambda tx: None, **identity)
         rows = []
         with patch.dict(cli.OPERATIONS, {'review-run': unchanged}):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 3)
         return rows[-1]
 
@@ -411,7 +412,7 @@ class SeriesEndingTests(unittest.TestCase):
             if len(calls) == 1:
                 raise RuntimeError('Synthetic output failure.')
         with patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error()}), patch('sys.stdout', io.StringIO()):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=output)
+            result = self.run_series(self.case.store, 'bar-first', emit=output)
         self.assertEqual(result, 3)
         recovered = calls[-1]
         self.assertEqual((recovered['state'], recovered['code']), ('stop', INJECTED_CODE))
@@ -425,7 +426,7 @@ class SeriesEndingTests(unittest.TestCase):
     def test_second_printing_failure_is_a_crash_after_one_receipt(self):
         with patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error()}):
             with self.assertRaises(ResearchError):
-                review_series.run_series(self.case.store, 'bar-first', emit=lambda row: self.raise_error())
+                self.run_series(self.case.store, 'bar-first', emit=lambda row: self.raise_error())
         stops = self.case.read_records()['review_series_stop']
         self.assertEqual(len(stops), 1)
         self.assertEqual(next(iter(stops.values()))['plan']['details']['receipt']['place'], 'store')
@@ -468,7 +469,7 @@ class SeriesEndingTests(unittest.TestCase):
                         datetime.now(timezone.utc) + timedelta(seconds=10)).isoformat())
                     stack.enter_context(patch.object(review_series, '_read_plan', return_value=(self.snapshot, waiting)))
                     stack.enter_context(patch.object(review_series.time, 'sleep', side_effect=self.build_error()))
-                result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+                result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
             self.assertEqual(result, 3)
             self.assert_unlisted(rows[-1])
 
@@ -713,7 +714,7 @@ class SeriesEndingTests(unittest.TestCase):
             return store.mutate('fixture.executed', {}, lambda tx: None, **identity)
         with patch.object(review_series, '_read_plan', side_effect=[(self.snapshot, known_plan),
                 self.build_error(), self.build_error()]), patch.dict(cli.OPERATIONS, {'review-run': succeed}):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 3)
         self.assertEqual(len(executed), 1)
         self.assertNotIn('refused_action', rows[-1]['details'])
@@ -736,7 +737,7 @@ class SeriesEndingTests(unittest.TestCase):
         with patch.object(review_series, '_read_plan', side_effect=[(self.snapshot, self.plan), (self.snapshot, done)]), \
                 patch.dict(cli.OPERATIONS, {'review-run': succeed}), \
                 patch.object(review_series, 'render_workspace_views', side_effect=RuntimeError('Synthetic renderer failure.')):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 0)
         self.assertEqual(len(executed), 1)
         self.assertIsNotNone(self.case.store.committed_request(executed[0]))
@@ -753,7 +754,7 @@ class SeriesEndingTests(unittest.TestCase):
             raise failure
         with patch.dict(cli.OPERATIONS, {'review-run': succeed}):
             with self.assertRaises(RuntimeError) as caught:
-                review_series.run_series(self.case.store, 'bar-first', emit=fail_output)
+                self.run_series(self.case.store, 'bar-first', emit=fail_output)
         self.assertIs(caught.exception, failure)
         self.assertIsNotNone(self.case.store.committed_request(requests[0]))
         self.assertNotIn('review_series_stop', self.case.read_records())
@@ -771,7 +772,7 @@ class SeriesEndingTests(unittest.TestCase):
                 raise failure
             rows.append(copy.deepcopy(row))
         with patch.dict(cli.OPERATIONS, {'review-run': succeed}):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=output)
+            result = self.run_series(self.case.store, 'bar-first', emit=output)
         self.assertEqual(result, 3)
         self.assertEqual(len(requests), 1)
         self.assertIsNotNone(self.case.store.committed_request(requests[0]))
@@ -800,7 +801,7 @@ class SeriesEndingTests(unittest.TestCase):
                 stack.enter_context(patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error('review_source_no_progress')}))
                 if fallback:
                     stack.enter_context(patch('research_harness.review_plan_steps.complete_plan', side_effect=self.build_error()))
-                result = review_series.run_series(self.case.store, 'bar-first', emit=print_partial_once)
+                result = self.run_series(self.case.store, 'bar-first', emit=print_partial_once)
                 recovered = json.loads(output.getvalue().splitlines()[-1])
                 expected = review_series._recover_ending_line(printed[0])
                 expected['details'].setdefault('omitted', {})['output'] = dict(code='RuntimeError', message='Synthetic partial write.')
@@ -854,7 +855,7 @@ class SeriesEndingTests(unittest.TestCase):
                     patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error('review_invocation_pending')}), \
                     patch.object(review_series.time, 'sleep', return_value=None), \
                     patch(target, side_effect=RuntimeError('Synthetic diagnostic failure.')):
-                result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+                result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
             self.assertEqual(result, 0)
             self.assertEqual(rows[0]['error']['code'], 'review_invocation_pending')
             self.assertEqual(rows[0]['details']['omitted'][member]['code'], 'RuntimeError')
@@ -902,14 +903,14 @@ class SeriesEndingTests(unittest.TestCase):
         for target in ('_identify_action', 'digest'):
             rows = []
             with self.subTest(target=target), patch.object(review_series, target, side_effect=self.build_error()):
-                result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+                result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
             self.assertEqual(result, 3)
             self.assertEqual(rows[-1]['code'], INJECTED_CODE)
             self.assertEqual(rows[-1]['details']['refused_action'],
                              {key: self.plan[key] for key in ('command', 'state', 'payload')})
         with patch.object(review_series, 'digest', side_effect=ValueError('Synthetic invalid JSON identity.')):
             with self.assertRaises(ValueError):
-                review_series.run_series(self.case.store, 'bar-first', emit=lambda row: None)
+                self.run_series(self.case.store, 'bar-first', emit=lambda row: None)
 
     def test_initial_and_wait_replans_keep_their_distinct_intermediate_lines(self):
         done = dict(self.plan, state='done', code='problem_already_posted', details={})
@@ -919,7 +920,7 @@ class SeriesEndingTests(unittest.TestCase):
                 self.build_error('store_busy'), (self.snapshot, done)]
             rows = []
             with self.subTest(after_wait=after_wait), patch.object(review_series, '_read_plan', side_effect=sequence):
-                result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+                result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
             self.assertEqual(result, 0)
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0].get('error', {}).get('code'), None if after_wait else 'store_busy')
@@ -939,7 +940,7 @@ class SeriesEndingTests(unittest.TestCase):
         with patch.object(review_series, '_read_plan', side_effect=[(self.snapshot, self.plan), (self.snapshot, done)]), \
                 patch.object(self.case.store, 'snapshot', side_effect=snapshot), \
                 patch.dict(cli.OPERATIONS, {'review-run': lambda *a, **k: self.raise_error()}):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 0)
         self.assertEqual(rows[0]['error']['code'], INJECTED_CODE)
         self.assertEqual(rows[0]['read_error']['code'], 'store_busy')
@@ -957,7 +958,7 @@ class SeriesEndingTests(unittest.TestCase):
                 patch.object(review_series.time, 'sleep', return_value=None), \
                 patch('research_harness.review_route_capacity.describe_assignment_warning', return_value=None), \
                 patch('research_harness.review_route_capacity.describe_assignment_capacity', side_effect=self.build_error()):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 0)
         self.assertEqual(rows[0]['details']['omitted']['capacity_forecast']['code'], INJECTED_CODE)
         self.assertNotIn('capacity_forecast', rows[0])
@@ -970,7 +971,7 @@ class SeriesEndingTests(unittest.TestCase):
                 patch('research_harness.review_provider_usage.describe_usage', return_value={}), \
                 patch('research_harness.review_route_capacity.describe_assignment_warning', return_value=None), \
                 patch('research_harness.review_protocol._read_json', side_effect=TypeError('Synthetic reading failure.')):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 0)
         self.assertEqual(rows[0]['details']['omitted']['capacity_forecast']['code'], 'TypeError')
         self.assertNotIn('capacity_forecast', rows[0])
@@ -985,7 +986,7 @@ class SeriesEndingTests(unittest.TestCase):
             return store.mutate('fixture.executed', {}, lambda tx: None, **identity)
         with patch.object(review_series, '_read_plan', side_effect=[(self.snapshot, plan), (self.snapshot, done)]), \
                 patch.dict(cli.OPERATIONS, {'review-run': succeed}):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 0)
         self.assertEqual(rows[-1]['provider_usage'], known)
         self.assertEqual(rows[-1]['details']['omitted']['provider_usage']['code'], INJECTED_CODE)
@@ -1001,7 +1002,7 @@ class SeriesEndingTests(unittest.TestCase):
                 patch.dict(cli.OPERATIONS, {'review-run': lambda store, payload, **identity:
                     store.mutate('fixture.executed', {}, lambda tx: None, **identity)}), \
                 patch.object(review_series, '_enrich_line', side_effect=self.build_error()):
-            result = review_series.run_series(self.case.store, 'bar-first', emit=rows.append)
+            result = self.run_series(self.case.store, 'bar-first', emit=rows.append)
         self.assertEqual(result, 0)
         self.assertEqual(rows[0]['details']['omitted']['diagnostics']['code'], INJECTED_CODE)
         self.assertEqual(rows[-1]['state'], 'done')

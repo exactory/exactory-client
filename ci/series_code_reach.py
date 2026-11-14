@@ -198,13 +198,13 @@ COMPUTED_CODE_SITES = {
 # RR8 forwards retained or observed codes without constructing a new refusal.
 COMPUTED_CODE_SITES.update({
     "research_harness/record_check.py:describe_series_stops:row['code']": {
-        'sources': ['research_harness/review_series.py:run_series']},
+        'passes': 'plan', 'sources': ['research_harness/review_series.py:run_series']},
     "research_harness/record_check.py:read_ending_files:line['code']": {
-        'sources': ['research_harness/review_series.py:run_series']},
+        'passes': 'plan', 'sources': ['research_harness/review_series.py:run_series']},
     'research_harness/review_series.py:_end_series:error.code': {
-        'sources': ['research_harness/review_series.py:run_series']},
+        'passes': 'error', 'sources': ['research_harness/review_series.py:run_series']},
     'research_harness/review_series.py:_end_series:code': {
-        'sources': ['research_harness/review_continuation.py:plan_next']},
+        'passes': 'plan', 'sources': ['research_harness/review_continuation.py:plan_next']},
     'research_harness/automatic_overrides.py:record_series_stop:type(error).__name__':
         COMPUTED_CODE_SITES['research_harness/record_check.py:check_record:type(error).__name__'],
     'research_harness/review_series.py:_record_omission:type(error).__name__':

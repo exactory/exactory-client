@@ -65,10 +65,10 @@ class StudyRowTests(unittest.TestCase):
                                  ('stop', code, 'decision'))
                 self.assertNotIn('unlisted', terminal['details'])
                 self.assertEqual(terminal['error']['details'], {'record': 'synthetic'})
-                self.assertEqual(terminal['details']['decision'],
-                                 stop_classes.describe_terminal('review_history_invalid')['details']['decision'])
-                self.assertEqual(terminal['details']['decision']['then'][0]['steps'],
-                                 [dict(command='record-check')])
+                decision = stop_classes.describe_terminal('review_history_invalid')['details']['decision']
+                decision['then'][0]['steps'] = [dict(command='record-check',
+                    arguments={'--workspace': str(fixture.case.store.root)}, payload={}, chooses=[], prerequisites=[])]
+                self.assertEqual(terminal['details']['decision'], decision)
         self.assertEqual(set(stop_classes._STORED_STATE_CODES_STUDY), set(members))
 
     def test_late_citation_locator_step_preserves_the_existing_reading(self):

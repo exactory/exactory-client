@@ -40,9 +40,10 @@ class ReviewBRowTests(unittest.TestCase):
                                  ('stop', code, 'decision'))
                 self.assertNotIn('unlisted', terminal['details'])
                 self.assertEqual(stop_classes.STOP_REGISTRY[code].get('group'), 'stored_state')
-                self.assertEqual(terminal['details']['decision'],
-                                 stop_classes.describe_terminal('review_history_invalid')['details']['decision'])
-                self.assertEqual(terminal['details']['decision']['then'][0]['steps'], [{'command': 'record-check'}])
+                decision = stop_classes.describe_terminal('review_history_invalid')['details']['decision']
+                decision['then'][0]['steps'] = [dict(command='record-check',
+                    arguments={'--workspace': str(fixture.case.store.root)}, payload={}, chooses=[], prerequisites=[])]
+                self.assertEqual(terminal['details']['decision'], decision)
                 self.assertEqual(terminal['error']['details'], {'binding': 'saved'})
                 self.assertEqual(fixture.case.read_records().get('review_attempt', {}), {})
 

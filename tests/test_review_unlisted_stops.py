@@ -154,7 +154,8 @@ class UnlistedStopTests(unittest.TestCase):
         self.assertEqual(terminal['details']['refused_action'], dict(command='review-run', state='run',
             payload=dict(id='bar-first-run-1', assignment_id='bar-first')))
         self.assertEqual(terminal['error']['code'], 'corrupt_state')
-        self.assertEqual(terminal['read_error']['code'], 'corrupt_state')
+        self.assertEqual(terminal['details']['omitted']['snapshot']['code'], 'corrupt_state')
+        self.assertEqual((terminal['state'], terminal['command']), ('handoff', 'record-check'))
         self.assertEqual(terminal['stop_record_error']['code'], 'corrupt_state')
         self.assertNotIn('capacity_forecast', terminal)
         with record_reachable_errors('record-check'):
